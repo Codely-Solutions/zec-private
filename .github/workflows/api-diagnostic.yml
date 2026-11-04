@@ -12,4 +12,4 @@ jobs:
         with:
           persist-credentials: false
       - name: Probe public API from the hosted runner
-        run: python3 .private/live_near.py
+        run: python3 .private/diagnose_near.py
