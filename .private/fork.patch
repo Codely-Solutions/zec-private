@@ -1660,27 +1660,34 @@ index d55620b20..63f4c089b 100644
 -                    affiliateAddress = AFFILIATE_ADDRESS
 +                    slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
-index c01988b65..e90873ab7 100644
+index c01988b65..559053e20 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
-@@ -404,0 +405,42 @@ class RequestSwapQuoteUseCaseTest {
+@@ -404,0 +405,56 @@ class RequestSwapQuoteUseCaseTest {
 +    @Test
 +    fun incomingQuotesUseIndependentShieldedRecipients() =
 +        runBlocking {
 +            val instance = useCase(SwapQuoteData.Error(SwapMode.FLEX_INPUT, TestException()))
-+            coEvery { accountDataSource.requestNextShieldedAddress() } returnsMany listOf("shielded-first", "shielded-second")
++            coEvery { accountDataSource.requestNextShieldedAddress() } returnsMany
++                listOf("shielded-first", "shielded-second")
 +            instance.flex()
 +            instance.flex()
 +            coVerify(exactly = 1) {
 +                swapRepository.requestFlexInputIntoZec(
-+                    amount = BigDecimal("1"), refundAddress = "refund", destinationAddress = "shielded-first",
-+                    originAsset = btc, slippage = BigDecimal("2")
++                    amount = BigDecimal("1"),
++                    refundAddress = "refund",
++                    destinationAddress = "shielded-first",
++                    originAsset = btc,
++                    slippage = BigDecimal("2")
 +                )
 +            }
 +            coVerify(exactly = 1) {
 +                swapRepository.requestFlexInputIntoZec(
-+                    amount = BigDecimal("1"), refundAddress = "refund", destinationAddress = "shielded-second",
-+                    originAsset = btc, slippage = BigDecimal("2")
++                    amount = BigDecimal("1"),
++                    refundAddress = "refund",
++                    destinationAddress = "shielded-second",
++                    originAsset = btc,
++                    slippage = BigDecimal("2")
 +                )
 +            }
 +        }
@@ -1689,19 +1696,26 @@ index c01988b65..e90873ab7 100644
 +    fun outgoingQuotesUseIndependentShieldedRefunds() =
 +        runBlocking {
 +            val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
-+            coEvery { accountDataSource.requestNextShieldedAddress() } returnsMany listOf("refund-first", "refund-second")
++            coEvery { accountDataSource.requestNextShieldedAddress() } returnsMany
++                listOf("refund-first", "refund-second")
 +            instance.exactInput()
 +            instance.exactInput()
 +            coVerify(exactly = 1) {
 +                swapRepository.requestExactInputQuote(
-+                    amount = BigDecimal("1"), address = "destination", refundAddress = "refund-first",
-+                    destinationAsset = btc, slippage = BigDecimal("2")
++                    amount = BigDecimal("1"),
++                    address = "destination",
++                    refundAddress = "refund-first",
++                    destinationAsset = btc,
++                    slippage = BigDecimal("2")
 +                )
 +            }
 +            coVerify(exactly = 1) {
 +                swapRepository.requestExactInputQuote(
-+                    amount = BigDecimal("1"), address = "destination", refundAddress = "refund-second",
-+                    destinationAsset = btc, slippage = BigDecimal("2")
++                    amount = BigDecimal("1"),
++                    address = "destination",
++                    refundAddress = "refund-second",
++                    destinationAsset = btc,
++                    slippage = BigDecimal("2")
 +                )
 +            }
 +        }

@@ -12,10 +12,14 @@ def version(tag):
     if not match: raise RuntimeError('Unsupported upstream version format; review required')
     return tuple(map(int,match.groups()))
 def critical(path):
-    return (path.startswith(('build-conventions/','buildSrc/','gradle/','feature-','sdk-')) or
+    return (path.startswith(('build-conventions','buildSrc/','gradle/','feature-','sdk-',
+                            'app/src/','tools/','preference-','crash-')) or
+            path in ('gradlew','gradlew.bat') or
             path.endswith(('.gradle.kts','gradle.lockfile','AndroidManifest.xml')) or
             path.startswith('ui-lib/src/main/java/co/electriccoin/zcash/ui/common/') or
-            '/network/' in path or '/security/' in path or '/di/' in path)
+            '/network/' in path or '/security/' in path or '/di/' in path or
+            'network_security' in path or
+            ('/src/test/' in path and any(word in path.lower() for word in ('swap','near','tor','wallet','sign'))))
 def output(**values):
     with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
         for key,value in values.items(): stream.write(f'{key}={value}\n')

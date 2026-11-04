@@ -2988,7 +2988,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoverFromSeedMismatchUseCaseTest.kt": "dfb8604fa0079b4f92cd3c94397910beb76599b19c95906d220ba368eacaa9c9",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RejectIfSelectedAccountCannotSpendUseCaseTest.kt": "17bd3aa5a020b1950bf7a0e0a9db520db5718b653eeb614ca50488d7d72d75cf",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RenameViewOnlyAccountUseCaseTest.kt": "17ecf5458a94159cbd293e8cd3040ca97cfbac2a77924613d0d02334ec3c7681",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt": "15695bc9167f0ecd27e4c94a44a8fb1cca785dd32f72ad6898ad0591823e88f7",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt": "9287f18388b6b73f22fc1fa40dcf6edcedc290fba75b3921a672c9f281f55db8",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCaseTest.kt": "5c5ef86852eef4add204b24e890b59f6420703216d47611b6766c56113e3ad90",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCaseTest.kt": "9dfafbbfef8e8be742c092be58bfbe65560df657691a84308f319c7d2e532651",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitKSProposalUseCaseTest.kt": "caa61cabbb072876ffa937e7683a3e854d0d7ca1725528549b2eb5f06630ac58",
