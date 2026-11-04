@@ -4,6 +4,7 @@ import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.FreshShieldedAddressUnavailableException
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
@@ -406,7 +407,7 @@ class RequestSwapQuoteUseCaseTest {
     fun incomingQuotesUseIndependentShieldedRecipients() =
         runBlocking {
             val instance = useCase(SwapQuoteData.Error(SwapMode.FLEX_INPUT, TestException()))
-            coEvery { accountDataSource.requestNextShieldedAddress() } returnsMany
+            coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returnsMany
                 listOf("shielded-first", "shielded-second")
             instance.flex()
             instance.flex()
@@ -434,7 +435,7 @@ class RequestSwapQuoteUseCaseTest {
     fun outgoingQuotesUseIndependentShieldedRefunds() =
         runBlocking {
             val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
-            coEvery { accountDataSource.requestNextShieldedAddress() } returnsMany
+            coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returnsMany
                 listOf("refund-first", "refund-second")
             instance.exactInput()
             instance.exactInput()
@@ -456,6 +457,23 @@ class RequestSwapQuoteUseCaseTest {
                     slippage = BigDecimal("2")
                 )
             }
+        }
+
+    @Test
+    fun addressGenerationFailureNeverRequestsASwapQuote() =
+        runBlocking {
+            val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
+            coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } throws
+                FreshShieldedAddressUnavailableException()
+            instance.exactInput()
+            instance.exactOutput()
+            instance.flex()
+            verify(exactly = 0) {
+                swapRepository.requestExactInputQuote(any(), any(), any(), any(), any())
+                swapRepository.requestExactOutputQuote(any(), any(), any(), any(), any())
+                swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any())
+            }
+            verify(exactly = 3) { navigateToError(any(), any()) }
         }
 
     // region helpers
@@ -547,7 +565,7 @@ class RequestSwapQuoteUseCaseTest {
         val shieldedAddress = "deposit"
         val synchronizer = mockk<Synchronizer> { coEvery { validateAddress(any()) } returns AddressType.Unified }
         val synchronizerProvider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer }
-        coEvery { accountDataSource.requestNextShieldedAddress() } returns shieldedAddress
+        coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returns shieldedAddress
         coEvery { accountDataSource.getSelectedAccount() } returns selectedAccount
         return RequestSwapQuoteUseCase(
             navigationRouter = navigationRouter,

@@ -18,7 +18,13 @@ def check(root=ROOT):
     need(provider.count('https://1click.chaindefuser.com/v0/')==4,'NEAR endpoint changed')
     need('httpClientProvider.create().use' in provider,'Tor preference routing changed')
     usecase=(root/COMMON/'usecase/RequestSwapQuoteUseCase.kt').read_text()
-    need(usecase.count('accountDataSource.requestNextShieldedAddress()')==3,'Fresh shielded recipient/refund derivation changed')
+    need(usecase.count('val newAddress = requestFreshAddress() ?: return')==3,
+         'Fresh shielded recipient/refund derivation changed')
+    need('accountDataSource.requestNextShieldedAddress(requireFresh = true)' in usecase,
+         'Swap address requests may fall back to an existing address')
+    accounts=(root/COMMON/'datasource/AccountDataSource.kt').read_text()
+    need('throw FreshShieldedAddressUnavailableException()' in accounts,
+         'Strict fresh-address failure behavior changed')
     need('destinationAddress = newAddress' in usecase and usecase.count('refundAddress = newAddress')==2,'Address routing changed')
     for p in (root/'ui-lib/src/main').rglob('*.kt'):
         text=p.read_text()

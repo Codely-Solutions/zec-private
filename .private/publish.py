@@ -29,6 +29,11 @@ def main():
     previous=[int(r['body'].split('Android versionCode: ')[1].split()[0]) for r in releases if not r['draft'] and 'Android versionCode: ' in (r['body'] or '')]
     if previous and proof['versionCode']<=max(previous): raise RuntimeError('Android versionCode must increase')
     tools=Path(os.environ['ANDROID_HOME'])/'build-tools/36.0.0'
+    manifest=run(str(tools/'aapt'),'dump','badging',str(apk))
+    package=re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'",manifest)
+    if (not package or package[1]!=proof['package'] or int(package[2])!=proof['versionCode'] or
+            package[3]!=proof['versionName'] or 'application-debuggable' in manifest):
+        raise RuntimeError('Signing job independently rejected APK manifest/proof mismatch')
     dist=ROOT/'dist';dist.mkdir(exist_ok=True)
     signed=dist/'zec-private-latest.apk'
     with tempfile.TemporaryDirectory() as temp:
@@ -54,8 +59,9 @@ def main():
     run('git','add','.private/upstream.json')
     run('git','-c','user.name=ZEC Private automation','-c','user.email=zec-private@users.noreply.github.com','commit','--allow-empty','-m','Record verified release '+tag)
     new=run('git','rev-parse','HEAD')
-    # A candidate has upstream ancestry, so use an exact compare-and-swap lease, never blind force.
-    run('git','push','--force-with-lease=refs/heads/main:'+os.environ['CONTROLLER_SHA'],'origin',new+':refs/heads/main')
+    # Candidate trees retain the controller as a parent. Normal fast-forward
+    # pushes preserve history and reject concurrent source/control modifications.
+    run('git','push','origin',new+':refs/heads/main')
     print('Published signed release '+tag+' SHA256 '+digest)
 
 if __name__=='__main__': main()

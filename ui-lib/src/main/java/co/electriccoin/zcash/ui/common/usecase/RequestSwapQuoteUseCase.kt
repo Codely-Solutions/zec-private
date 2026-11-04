@@ -7,6 +7,7 @@ import cash.z.ecc.android.sdk.model.ZecSend
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.FreshShieldedAddressUnavailableException
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
@@ -54,7 +55,7 @@ class RequestSwapQuoteUseCase(
         slippage: BigDecimal,
         canNavigateToSwapQuote: () -> Boolean
     ) {
-        val newAddress = accountDataSource.requestNextShieldedAddress()
+        val newAddress = requestFreshAddress() ?: return
         requestQuote(
             requestQuote = {
                 swapRepository.requestExactInputQuote(
@@ -77,7 +78,7 @@ class RequestSwapQuoteUseCase(
         slippage: BigDecimal,
         canNavigateToSwapQuote: () -> Boolean
     ) {
-        val newAddress = accountDataSource.requestNextShieldedAddress()
+        val newAddress = requestFreshAddress() ?: return
         requestQuote(
             requestQuote = {
                 swapRepository.requestExactOutputQuote(
@@ -100,7 +101,7 @@ class RequestSwapQuoteUseCase(
         slippage: BigDecimal,
         canNavigateToSwapQuote: () -> Boolean
     ) {
-        val newAddress = accountDataSource.requestNextShieldedAddress()
+        val newAddress = requestFreshAddress() ?: return
         requestQuote(
             requestQuote = {
                 swapRepository
@@ -116,6 +117,14 @@ class RequestSwapQuoteUseCase(
             canNavigateToSwapQuote = canNavigateToSwapQuote
         )
     }
+
+    private suspend fun requestFreshAddress(): String? =
+        try {
+            accountDataSource.requestNextShieldedAddress(requireFresh = true)
+        } catch (e: FreshShieldedAddressUnavailableException) {
+            navigateToErrorUseCase(ErrorArgs.General(e))
+            null
+        }
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun requestQuote(

@@ -88,6 +88,8 @@ def main():
         shutil.copytree(ROOT/'.github/workflows',candidate/'.github/workflows')
         shutil.copytree(ROOT/'.private',candidate/'.private')
         shutil.copy2(ROOT/'README.md',candidate/'README.md')
+        for path in ('docs/UPSTREAM-README.md','docs/UPSTREAM-dependabot.yml'):
+            shutil.copy2(ROOT/path,candidate/path)
         code=version(tag)[3]*1000+1
         props=candidate/'gradle.properties'
         props.write_text(re.sub(r'^ZCASH_VERSION_CODE=\d+$',f'ZCASH_VERSION_CODE={code}',props.read_text(),flags=re.M))
@@ -97,7 +99,13 @@ def main():
         (candidate/'.private/source-state.json').write_text(json.dumps(source_state(candidate),indent=2)+'\n')
         run('git','add','.private/source-state.json',cwd=candidate)
         run('git','-c','user.name=ZEC Private automation','-c','user.email=zec-private@users.noreply.github.com','commit','-m',f'Prepare upstream {tag} with private fork changes',cwd=candidate)
-        sha=run('git','rev-parse','HEAD',cwd=candidate)
+        tree=run('git','rev-parse','HEAD^{tree}',cwd=candidate)
+        controller=run('git','rev-parse','HEAD')
+        # The validated tree descends from the controller, allowing a normal
+        # fast-forward integration while recording the exact upstream parent.
+        sha=run('git','-c','user.name=ZEC Private automation','-c',
+                'user.email=zec-private@users.noreply.github.com','commit-tree',tree,
+                '-p',controller,'-p',commit,'-m',f'Integrate upstream {tag} with verified private patch',cwd=candidate)
         # Do not replace a previous candidate. A repeated poll can reuse only the exact same tree.
         existing=run('git','ls-remote','origin',f'refs/heads/{branch}')
         if existing:

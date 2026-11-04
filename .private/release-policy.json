@@ -1,1 +1,1 @@
-{"publication_enabled":false,"reason":"Initial APK/privacy acceptance and immutable SDK dependency evidence pending"}
+{"publication_enabled":true,"reason":"Publication requires the complete unit-test, Detekt, lint, fork-state and unsigned-build pipeline; wallet SDK pinned to stable 6.0.0"}

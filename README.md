@@ -16,7 +16,7 @@ Wallet encryption, recovery, transaction construction, local signing, Tor select
 
 NEAR sees the quote's assets, quantities, recipient, refund address, deposit address and timing. It may correlate requests and public settlement records. The BTC side is public. Counterparties and network observers may correlate amounts and timing across chains. Fresh shielded addresses reduce address reuse; they do not establish anonymity or erase provider records. The SDK's address derivation and shielded sending are security-critical dependencies.
 
-The existing Tor preference is preserved. When Tor is enabled, the shared HTTP provider constructs the Tor client without a direct fallback. Swap traffic otherwise follows the user's existing setting; this fork does not force a new global Tor default. Release HTTP body logging remains disabled. No analytics or quote proxy is added. Read the upstream wallet threat model linked in `docs/UPSTREAM-README.md`.
+The existing Tor preference is preserved. When Tor is enabled, the shared HTTP provider constructs the Tor client without a direct fallback. Swap traffic otherwise follows the user's existing setting; this fork does not force a new global Tor default. Swaps require fresh-address generation to succeed; its timeout cannot fall back to an existing wallet address. Release HTTP body logging remains disabled. No analytics or quote proxy is added. Read the upstream wallet threat model linked in `docs/UPSTREAM-README.md`.
 
 ## Building and installing
 
@@ -34,7 +34,7 @@ The controller fetches the exact upstream tag, resolves its commit, checks criti
 
 Unsigned builds receive no signing secrets. The signing job checks out the controller revision, downloads only the current run's validated artifact, verifies its bound source SHA, hash, package and version, and invokes SDK signing tools without running upstream Gradle scripts. Pull requests have no signing workflow. All external Actions are pinned to official immutable revisions. Upstream workflows are disabled in this fork.
 
-Private release tags use `v<upstream-version>-private.1`. Android versionCode uses upstream build number times 1000 plus a private revision; the publisher requires it to exceed previous releases. Published tags and assets are never replaced. Previous releases are retained. After publication, an exact lease advances main to the validated candidate and records integration; concurrent modifications cause the push to fail instead of being overwritten. The signing job needs a fresh signing credential for every future key rotation, and Android update compatibility must be handled separately.
+Private release tags use `v<upstream-version>-private.1`. Android versionCode uses upstream build number times 1000 plus a private revision; the publisher requires it to exceed previous releases. Published tags and assets are never replaced. Previous releases are retained. Candidate commits retain the controller revision and upstream commit as parents. After publication, a normal fast-forward push records integration; concurrent modifications cause the push to fail instead of being overwritten. The signing job needs a fresh signing credential for every future key rotation, and Android update compatibility must be handled separately.
 
 For a manual build use Actions → Build and publish ZEC Private → Run workflow. Rebuilding an already published version intentionally refuses to replace it; increase the private revision/versionCode through reviewed changes when a new release is needed.
 

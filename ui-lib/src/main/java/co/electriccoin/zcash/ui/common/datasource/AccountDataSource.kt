@@ -116,7 +116,7 @@ interface AccountDataSource {
         birthday: BlockHeight? = null
     ): Account
 
-    suspend fun requestNextShieldedAddress(): String
+    suspend fun requestNextShieldedAddress(requireFresh: Boolean = false): String
 
     suspend fun deleteAccount(account: WalletAccount)
 
@@ -353,7 +353,7 @@ class AccountDataSourceImpl(
         }
 
     @Suppress("TooGenericExceptionCaught")
-    override suspend fun requestNextShieldedAddress(): String {
+    override suspend fun requestNextShieldedAddress(requireFresh: Boolean): String {
         var result: String? = null
         scope
             .launch {
@@ -373,8 +373,10 @@ class AccountDataSourceImpl(
                     log("failed to receive address for $accountUuid", e)
                 }
             }.join()
-        return (result ?: getSelectedAccount().unifiedAddress).also {
-            log("returning address $it")
+        return result ?: if (requireFresh) {
+            throw FreshShieldedAddressUnavailableException()
+        } else {
+            getSelectedAccount().unifiedAddress
         }
     }
 
@@ -718,3 +720,6 @@ class AccountDeletionException(
     message: String,
     cause: Throwable? = null
 ) : Exception(message, cause)
+
+class FreshShieldedAddressUnavailableException :
+    IllegalStateException("A fresh shielded address is unavailable. Wait for wallet synchronization and retry.")

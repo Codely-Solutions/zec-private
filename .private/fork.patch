@@ -13,6 +13,27 @@ index ec56161b5..2a4e59269 100644
 @@ -208 +208 @@ ZCASH_BIP39_VERSION=1.0.9
 -ZCASH_SDK_VERSION=6.0.0-SNAPSHOT
 +ZCASH_SDK_VERSION=6.0.0
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
+index 4d388e80f..701e1d9d0 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
+@@ -119 +119 @@ interface AccountDataSource {
+-    suspend fun requestNextShieldedAddress(): String
++    suspend fun requestNextShieldedAddress(requireFresh: Boolean = false): String
+@@ -356 +356 @@ class AccountDataSourceImpl(
+-    override suspend fun requestNextShieldedAddress(): String {
++    override suspend fun requestNextShieldedAddress(requireFresh: Boolean): String {
+@@ -376,2 +376,4 @@ class AccountDataSourceImpl(
+-        return (result ?: getSelectedAccount().unifiedAddress).also {
+-            log("returning address $it")
++        return result ?: if (requireFresh) {
++            throw FreshShieldedAddressUnavailableException()
++        } else {
++            getSelectedAccount().unifiedAddress
+@@ -720,0 +723,3 @@ class AccountDeletionException(
++
++class FreshShieldedAddressUnavailableException :
++    IllegalStateException("A fresh shielded address is unavailable. Wait for wallet synchronization and retry.")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
 index a5bcffdcd..25c1e4a8a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
@@ -124,6 +145,30 @@ index 36d947b49..4602a8e12 100644
 -                            slippage = slippage,
 -                            affiliateAddress = AFFILIATE_ADDRESS
 +                            slippage = slippage
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
+index 76c590a49..d7153c359 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
+@@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.datasource.FreshShieldedAddressUnavailableException
+@@ -57 +58 @@ class RequestSwapQuoteUseCase(
+-        val newAddress = accountDataSource.requestNextShieldedAddress()
++        val newAddress = requestFreshAddress() ?: return
+@@ -80 +81 @@ class RequestSwapQuoteUseCase(
+-        val newAddress = accountDataSource.requestNextShieldedAddress()
++        val newAddress = requestFreshAddress() ?: return
+@@ -103 +104 @@ class RequestSwapQuoteUseCase(
+-        val newAddress = accountDataSource.requestNextShieldedAddress()
++        val newAddress = requestFreshAddress() ?: return
+@@ -119,0 +121,8 @@ class RequestSwapQuoteUseCase(
++    private suspend fun requestFreshAddress(): String? =
++        try {
++            accountDataSource.requestNextShieldedAddress(requireFresh = true)
++        } catch (e: FreshShieldedAddressUnavailableException) {
++            navigateToErrorUseCase(ErrorArgs.General(e))
++            null
++        }
++
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 index 717411935..03de94524 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
@@ -1636,15 +1681,17 @@ index d55620b20..63f4c089b 100644
 -                    affiliateAddress = AFFILIATE_ADDRESS
 +                    slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
-index c01988b65..559053e20 100644
+index c01988b65..9de3f9ace 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
-@@ -404,0 +405,56 @@ class RequestSwapQuoteUseCaseTest {
+@@ -6,0 +7 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.datasource.FreshShieldedAddressUnavailableException
+@@ -404,0 +406,73 @@ class RequestSwapQuoteUseCaseTest {
 +    @Test
 +    fun incomingQuotesUseIndependentShieldedRecipients() =
 +        runBlocking {
 +            val instance = useCase(SwapQuoteData.Error(SwapMode.FLEX_INPUT, TestException()))
-+            coEvery { accountDataSource.requestNextShieldedAddress() } returnsMany
++            coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returnsMany
 +                listOf("shielded-first", "shielded-second")
 +            instance.flex()
 +            instance.flex()
@@ -1672,7 +1719,7 @@ index c01988b65..559053e20 100644
 +    fun outgoingQuotesUseIndependentShieldedRefunds() =
 +        runBlocking {
 +            val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
-+            coEvery { accountDataSource.requestNextShieldedAddress() } returnsMany
++            coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returnsMany
 +                listOf("refund-first", "refund-second")
 +            instance.exactInput()
 +            instance.exactInput()
@@ -1696,3 +1743,23 @@ index c01988b65..559053e20 100644
 +            }
 +        }
 +
++    @Test
++    fun addressGenerationFailureNeverRequestsASwapQuote() =
++        runBlocking {
++            val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
++            coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } throws
++                FreshShieldedAddressUnavailableException()
++            instance.exactInput()
++            instance.exactOutput()
++            instance.flex()
++            verify(exactly = 0) {
++                swapRepository.requestExactInputQuote(any(), any(), any(), any(), any())
++                swapRepository.requestExactOutputQuote(any(), any(), any(), any(), any())
++                swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any())
++            }
++            verify(exactly = 3) { navigateToError(any(), any()) }
++        }
++
+@@ -494 +568 @@ class RequestSwapQuoteUseCaseTest {
+-        coEvery { accountDataSource.requestNextShieldedAddress() } returns shieldedAddress
++        coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returns shieldedAddress
