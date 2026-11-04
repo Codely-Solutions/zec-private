@@ -1592,12 +1592,12 @@ index c0be20563..17c9dbf60 100644
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt
-index cffe4775f..6d7ae97da 100644
+index cffe4775f..d11822df2 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.common.provider
 -import co.electriccoin.zcash.ui.common.model.near.AppFee
-@@ -16,0 +16 @@ import io.ktor.http.headersOf
+@@ -15,0 +15 @@ import io.ktor.http.HttpStatusCode
 +import io.ktor.http.content.TextContent
 @@ -18,0 +19,2 @@ import kotlinx.coroutines.runBlocking
 +import kotlinx.serialization.json.Json

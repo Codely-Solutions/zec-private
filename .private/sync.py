@@ -64,6 +64,7 @@ def main():
         run('git','apply','--unidiff-zero','--check',str(ROOT/'.private/fork.patch'),cwd=candidate)
         run('git','apply','--unidiff-zero',str(ROOT/'.private/fork.patch'),cwd=candidate)
         shutil.rmtree(candidate/'.github/workflows')
+        (candidate/'.github/dependabot.yml').unlink(missing_ok=True)
         shutil.copytree(ROOT/'.github/workflows',candidate/'.github/workflows')
         shutil.copytree(ROOT/'.private',candidate/'.private')
         shutil.copy2(ROOT/'README.md',candidate/'README.md')

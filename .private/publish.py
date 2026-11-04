@@ -35,12 +35,12 @@ def main():
         temp=Path(temp)
         key=temp/'release.p12';key.write_bytes(base64.b64decode(os.environ['RELEASE_KEYSTORE_BASE64'],validate=True));key.chmod(0o600)
         aligned=temp/'aligned.apk'
-        run(str(tools/'zipalign'),'-f','-p','4',str(apk),str(aligned))
+        run(str(tools/'zipalign'),'-f','-P','16','4',str(apk),str(aligned))
         run(str(tools/'apksigner'),'sign','--ks',str(key),'--ks-key-alias','zec-private','--ks-pass','env:RELEASE_STORE_PASSWORD','--key-pass','env:RELEASE_KEY_PASSWORD','--out',str(signed),str(aligned))
         report=run(str(tools/'apksigner'),'verify','--verbose','--print-certs',str(signed))
         fingerprint=re.search(r'certificate SHA-256 digest: ([0-9a-f]+)',report)
         if fingerprint is None or fingerprint[1]!=CERT: raise RuntimeError('Signing certificate mismatch')
-        run(str(tools/'zipalign'),'-c','-p','4',str(signed))
+        run(str(tools/'zipalign'),'-c','-P','16','4',str(signed))
     digest=hashlib.sha256(signed.read_bytes()).hexdigest()
     checksum=dist/'SHA256SUMS';checksum.write_text(digest+'  zec-private-latest.apk\n')
     notes=dist/'release-notes.md'
