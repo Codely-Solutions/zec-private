@@ -90,7 +90,9 @@ def main():
         shutil.copy2(ROOT/'README.md',candidate/'README.md')
         for path in ('docs/UPSTREAM-README.md','docs/UPSTREAM-dependabot.yml'):
             shutil.copy2(ROOT/path,candidate/path)
-        code=max(int(state.get('versionCode',0))+1,version(tag)[3]*1000+1)
+        revision=int(json.loads((ROOT/'.private/release-revision.json').read_text())['private_revision'])
+        if revision<1 or revision>999: raise RuntimeError('Invalid private revision')
+        code=max(int(state.get('versionCode',0))+1,version(tag)[3]*1000+revision)
         props=candidate/'gradle.properties'
         props.write_text(re.sub(r'^ZCASH_VERSION_CODE=\d+$',f'ZCASH_VERSION_CODE={code}',props.read_text(),flags=re.M))
         (candidate/'.private/candidate.json').write_text(json.dumps({'tag':tag,'sha':commit,'published_at':latest['published_at'],'versionCode':code},indent=2)+'\n')

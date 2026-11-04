@@ -33,6 +33,8 @@ def check(root=ROOT):
         need(not re.search(r'AFFILIATE_FEE_BPS|AFFILIATE_ADDRESS|eyJhbGciOiJSUzI1Ni',text),'Obsolete affiliate/JWT reference: '+str(p.relative_to(root)))
     quote=(root/COMMON/'model/near/NearSwapQuote.kt').read_text()
     need('override val affiliateFee: BigDecimal = BigDecimal.ZERO' in quote,'Affiliate display is nonzero')
+    fee_copy=(root/'ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml').read_text()
+    need('0.25%% platform' in fee_copy,'Fee note can crash Android formatted-resource rendering')
     props=(root/'gradle.properties').read_text()
     need('ZCASH_RELEASE_PACKAGE_NAME=com.personal.zecprivate\n' in props,'Package identity changed')
     need('IS_RELEASE_BUILD_DEBUGGABLE=false' in props,'Release debuggability enabled')

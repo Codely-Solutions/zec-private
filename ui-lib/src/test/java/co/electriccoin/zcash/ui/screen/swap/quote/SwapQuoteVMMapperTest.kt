@@ -1,5 +1,8 @@
 package co.electriccoin.zcash.ui.screen.swap.quote
 
+import androidx.compose.foundation.layout.Column
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
@@ -13,9 +16,12 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
+import co.electriccoin.zcash.ui.design.theme.ZcashTheme
+import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -29,7 +35,11 @@ import kotlin.test.assertEquals
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SwapQuoteVMMapperTest {
+    @get:Rule
+    val composeTestRule = createComposeRule()
+
     private val defaultUuid = AccountUuid.new(ByteArray(16) { it.toByte() })
     private val sdkAccount = Account.new(defaultUuid)
     private val mapper = SwapQuoteVMMapper()
@@ -64,6 +74,36 @@ class SwapQuoteVMMapperTest {
             emptyList(),
             items.filter { it.description.resourceId() == R.string.swapAndPay_swapFrom }
         )
+    }
+
+    @Test
+    fun incomingQuoteFeeNoteRendersWithoutFormatConversionFailure() {
+        assertQuoteRowsRender(SwapMode.FLEX_INPUT, SwapAssetTestFixture.zecAsset())
+    }
+
+    @Test
+    fun outgoingExactInputFeeNoteRendersWithoutFormatConversionFailure() {
+        assertQuoteRowsRender(SwapMode.EXACT_INPUT, destinationAsset)
+    }
+
+    @Test
+    fun outgoingExactOutputFeeNoteRendersWithoutFormatConversionFailure() {
+        assertQuoteRowsRender(SwapMode.EXACT_OUTPUT, destinationAsset)
+    }
+
+    private fun assertQuoteRowsRender(mode: SwapMode, asset: SwapAsset) {
+        val items = createItems(zashi(), asset, mode)
+        composeTestRule.setContent {
+            ZcashTheme {
+                Column {
+                    items.forEach { SwapQuoteInfo(it) }
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText(
+            "No affiliate fee. Unauthenticated quotes may include an extra 0.25% platform fee."
+        ).assertExists()
     }
 
     private fun createItems(

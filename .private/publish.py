@@ -57,7 +57,7 @@ def main():
         raise RuntimeError('Artifact identity/digest mismatch')
     if proof['package']!='com.personal.zecprivate.foss' or proof['debuggable']:
         raise RuntimeError('Unexpected APK manifest identity')
-    if proof.get('validation')!='unit-lint-detekt-live-fork-v2':
+    if proof.get('validation')!='unit-lint-detekt-live-ui-fork-v3':
         raise RuntimeError('Missing release validation evidence')
     contract_bytes=(artifact/'near-contract.json').read_bytes()
     contract=json.loads(contract_bytes)
