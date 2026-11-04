@@ -6,7 +6,7 @@ Revision 2 (`3234002`) escapes the literal percent as `%%`, adds three Compose q
 
 The initial release passed 1,383 unit tests, lint, Detekt, live unfunded API contracts, signature and manifest checks. These checks missed actual quote text rendering. The new regression tests address that coverage gap. No funded transaction or wallet secret has been used.
 
-The prior full synthetic upgrade was canceled after the device crash report and cleaned its disposable artifacts. It is being rerun on the corrected revision, including an explicit negative-control reproduction of the original resource crash. Real stable polling after the first release passed without creating a duplicate release: https://github.com/Sammy-Lastre/zec-private/actions/runs/41931770657.
+The prior full synthetic upgrade was canceled after the device crash report and cleaned its disposable artifacts. It is being rerun on the corrected revision at https://github.com/Sammy-Lastre/zec-private/actions/runs/41936825170, including an explicit negative-control reproduction of the original resource crash. Real stable polling after the first release passed without creating a duplicate release: https://github.com/Sammy-Lastre/zec-private/actions/runs/41931770657.
 
 Signing secrets were explicitly authorized and uploaded. The dedicated local key, password, backup and ntfy subscription details are outside Git under `D:\Data\Crypto\zec-private\signing`. Phone delivery and an independent offline key backup still require the user's setup.
 
