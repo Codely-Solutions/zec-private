@@ -1,5 +1,5 @@
 """Unfunded API contract checks using public SDK addresses, never a real wallet."""
-import datetime,json,re,subprocess,time,urllib.error,urllib.parse,urllib.request
+import datetime,json,re,subprocess,time,urllib.parse
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -9,30 +9,36 @@ FIXTURE=json.loads((ROOT/'.private/public-api-fixture.json').read_text())
 def request(path,body=None):
     data=None if body is None else json.dumps(body).encode()
     for attempt in range(3):
-        req=urllib.request.Request(BASE+path,data=data,
-                                   headers={} if data is None else {'Content-Type':'application/json'})
+        # curl is a documented, supported API client. The edge service rejects
+        # urllib's client signature (1010) on hosted runners; no identity is spoofed.
+        args=['curl','--silent','--show-error','--max-time','15','--max-filesize','4194304',
+              '--write-out','\n%{http_code}',BASE+path]
+        if data is not None: args+=['--header','Content-Type: application/json','--data-binary','@-']
         try:
-            with urllib.request.urlopen(req,timeout=15) as response:
-                raw=response.read(4*1024*1024+1)
-                if len(raw)>4*1024*1024: raise RuntimeError('Oversized API response')
-                return response.status,json.loads(raw)
-        except urllib.error.HTTPError as error:
-            raw=error.read(4096).decode('utf-8',errors='replace')
-            try:
-                parsed=json.loads(raw)
-                reason=str(parsed.get('message',parsed.get('error','HTTP error')))
-            except json.JSONDecodeError:
-                title=re.search(r'<title>(.*?)</title>',raw,re.I|re.S)
-                reason=title[1].strip() if title else 'Non-JSON HTTP error'
-            reason=re.sub(r'[A-Za-z0-9_-]{30,}','[redacted]',reason)[:400]
-            if error.code==429 or error.code>=500:
-                if attempt<2:
-                    time.sleep(attempt+1);continue
-            return error.code,{'http_error':reason}
-        except (urllib.error.URLError,TimeoutError):
+            result=subprocess.run(args,input=data,capture_output=True,timeout=20)
+        except subprocess.TimeoutExpired:
+            result=None
+        if result is None or result.returncode!=0:
             if attempt<2:
                 time.sleep(attempt+1);continue
-            raise RuntimeError('NEAR API unavailable; publication stopped') from None
+            raise RuntimeError('NEAR API transport unavailable; publication stopped')
+        raw,status_bytes=result.stdout.rsplit(b'\n',1)
+        status=int(status_bytes)
+        if len(raw)>4*1024*1024: raise RuntimeError('Oversized API response')
+        if status==429 or status>=500:
+            if attempt<2:
+                time.sleep(attempt+1);continue
+        if status>=400:
+            text=raw.decode('utf-8',errors='replace')
+            try:
+                parsed=json.loads(text)
+                reason=str(parsed.get('message',parsed.get('error','HTTP error')))
+            except json.JSONDecodeError:
+                title=re.search(r'<title>(.*?)</title>',text,re.I|re.S)
+                reason=title[1].strip() if title else text[:200]
+            reason=re.sub(r'[A-Za-z0-9_-]{30,}','[redacted]',reason)[:400]
+            return status,{'http_error':reason}
+        return status,json.loads(raw)
 
 def quote(mode,incoming,dry=True):
     body=dict(dry=dry,swapType=mode,slippageTolerance=100,
