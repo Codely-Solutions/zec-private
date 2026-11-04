@@ -1,5 +1,5 @@
 """Signing controller; never imports or executes candidate source/build scripts."""
-import base64, hashlib, json, os, re, subprocess, tempfile
+import base64, hashlib, json, os, re, subprocess, tempfile, zipfile
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -34,6 +34,13 @@ def main():
     if (not package or package[1]!=proof['package'] or int(package[2])!=proof['versionCode'] or
             package[3]!=proof['versionName'] or 'application-debuggable' in manifest):
         raise RuntimeError('Signing job independently rejected APK manifest/proof mismatch')
+    xml=run(str(tools/'aapt'),'dump','xmltree',str(apk),'AndroidManifest.xml')
+    if 'com.personal.zecprivate.foss.provider' not in xml or '"co.electriccoin.zcash.foss.provider"' in xml:
+        raise RuntimeError('Signing job rejected conflicting provider authority')
+    with zipfile.ZipFile(apk) as archive:
+        info=archive.getinfo('assets/UPSTREAM-LICENSE.txt')
+        if info.file_size>8192 or archive.read(info)!=(ROOT/'LICENSE').read_bytes():
+            raise RuntimeError('Signing job rejected missing or altered license')
     dist=ROOT/'dist';dist.mkdir(exist_ok=True)
     signed=dist/'zec-private-latest.apk'
     with tempfile.TemporaryDirectory() as temp:

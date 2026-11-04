@@ -35,6 +35,13 @@ def check(root=ROOT):
     need('ZCASH_RELEASE_PACKAGE_NAME=com.personal.zecprivate\n' in props,'Package identity changed')
     need('IS_RELEASE_BUILD_DEBUGGABLE=false' in props,'Release debuggability enabled')
     need('IS_SIGN_RELEASE_BUILD_WITH_DEBUG_KEY=false' in props,'Debug signing enabled')
+    target=(root/'app/src/zcashmainnetFossRelease/AndroidManifest.xml').read_text()
+    need('android:authorities="com.personal.zecprivate.foss.provider"' in target,
+         'FOSS provider authority can collide with the official wallet')
+    share=(root/'ui-lib/src/main/java/co/electriccoin/zcash/ui/util/FileShareUtil.kt').read_text()
+    need('"co.electriccoin.zcash.' not in share,'File sharing still uses upstream authorities')
+    need((root/'app/src/main/assets/UPSTREAM-LICENSE.txt').read_bytes().replace(b'\r\n',b'\n') ==
+         (root/'LICENSE').read_bytes().replace(b'\r\n',b'\n'),'Bundled upstream license differs')
     for p in (root/'ui-lib/src/test').rglob('*.kt'):
         need('requestQuote(any(), any(), any(), any(), any(), any(), any(), any())' not in p.read_text(),
              'Obsolete affiliate argument in mock: '+str(p.relative_to(root)))

@@ -6,7 +6,7 @@ This project is under validation. A committed workflow or passing static check d
 
 ## Differences
 
-The mainnet FOSS release is named ZEC Private. Its installed package is `com.personal.zecprivate.foss`, which can coexist with official Zodl. The launcher uses original geometric artwork. Fork support is through this private repository; the upstream support mailbox is removed.
+The mainnet FOSS release is named ZEC Private. Its installed package is `com.personal.zecprivate.foss`. Its file-provider authorities also use the fork identity, allowing coexistence with official Zodl FOSS. The launcher uses original geometric artwork. Upstream's MIT notice is preserved in LICENSE and bundled as `assets/UPSTREAM-LICENSE.txt`. Fork support is through this private repository; the upstream support mailbox is removed.
 
 NEAR quote requests send `appFees: []`, omit the Zodl referral, and contain no Zodl partner JWT or personal API key. The affiliate-specific argument, constants and display calculations are removed. This does not remove NEAR platform, bridge, execution, liquidity or blockchain network costs. [NEAR authentication documentation](https://docs.near-intents.org/integration/distribution-channels/1click-api/authentication) documents an additional 25 basis points for unauthenticated ordinary quotes. Review the quoted received amount before signing. Affiliate fee displays represent the fork's fee, not a complete breakdown of provider costs embedded in the exchange quote.
 

@@ -1,3 +1,114 @@
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index 6f22ad215..a5005652c 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -55 +55 @@
+-            android:authorities="co.electriccoin.zcash.provider"
++            android:authorities="com.personal.zecprivate.provider"
+diff --git a/app/src/main/assets/UPSTREAM-LICENSE.txt b/app/src/main/assets/UPSTREAM-LICENSE.txt
+new file mode 100644
+index 000000000..d6f306286
+--- /dev/null
++++ b/app/src/main/assets/UPSTREAM-LICENSE.txt
+@@ -0,0 +1,21 @@
++MIT License
++
++Copyright © 2026 Znewco, Inc. (d/b/a Zcash Open Development Lab)
++
++Permission is hereby granted, free of charge, to any person obtaining a copy
++of this software and associated documentation files (the "Software"), to deal
++in the Software without restriction, including without limitation the rights
++to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
++copies of the Software, and to permit persons to whom the Software is
++furnished to do so, subject to the following conditions:
++
++The above copyright notice and this permission notice shall be included in all
++copies or substantial portions of the Software.
++
++THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
++FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
++AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
++LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
++OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
++SOFTWARE.
+diff --git a/app/src/zcashmainnetFossDebug/AndroidManifest.xml b/app/src/zcashmainnetFossDebug/AndroidManifest.xml
+index 80a1ab98a..8809eb03a 100644
+--- a/app/src/zcashmainnetFossDebug/AndroidManifest.xml
++++ b/app/src/zcashmainnetFossDebug/AndroidManifest.xml
+@@ -13 +13 @@
+-            android:authorities="co.electriccoin.zcash.foss.debug.provider"
++            android:authorities="com.personal.zecprivate.foss.debug.provider"
+diff --git a/app/src/zcashmainnetFossRelease/AndroidManifest.xml b/app/src/zcashmainnetFossRelease/AndroidManifest.xml
+index 20ec8303e..d9a3e715d 100644
+--- a/app/src/zcashmainnetFossRelease/AndroidManifest.xml
++++ b/app/src/zcashmainnetFossRelease/AndroidManifest.xml
+@@ -13 +13 @@
+-            android:authorities="co.electriccoin.zcash.foss.provider"
++            android:authorities="com.personal.zecprivate.foss.provider"
+diff --git a/app/src/zcashmainnetInternalDebug/AndroidManifest.xml b/app/src/zcashmainnetInternalDebug/AndroidManifest.xml
+index c33c631d9..9a30182fc 100644
+--- a/app/src/zcashmainnetInternalDebug/AndroidManifest.xml
++++ b/app/src/zcashmainnetInternalDebug/AndroidManifest.xml
+@@ -13 +13 @@
+-            android:authorities="co.electriccoin.zcash.internal.debug.provider"
++            android:authorities="com.personal.zecprivate.internal.debug.provider"
+diff --git a/app/src/zcashmainnetInternalRelease/AndroidManifest.xml b/app/src/zcashmainnetInternalRelease/AndroidManifest.xml
+index 255730069..28c274b06 100644
+--- a/app/src/zcashmainnetInternalRelease/AndroidManifest.xml
++++ b/app/src/zcashmainnetInternalRelease/AndroidManifest.xml
+@@ -13 +13 @@
+-            android:authorities="co.electriccoin.zcash.internal.provider"
++            android:authorities="com.personal.zecprivate.internal.provider"
+diff --git a/app/src/zcashmainnetStoreDebug/AndroidManifest.xml b/app/src/zcashmainnetStoreDebug/AndroidManifest.xml
+index 76538fc15..3c7987c27 100644
+--- a/app/src/zcashmainnetStoreDebug/AndroidManifest.xml
++++ b/app/src/zcashmainnetStoreDebug/AndroidManifest.xml
+@@ -13 +13 @@
+-            android:authorities="co.electriccoin.zcash.debug.provider"
++            android:authorities="com.personal.zecprivate.debug.provider"
+diff --git a/app/src/zcashtestnetFossDebug/AndroidManifest.xml b/app/src/zcashtestnetFossDebug/AndroidManifest.xml
+index 0d316d832..9a8e87126 100644
+--- a/app/src/zcashtestnetFossDebug/AndroidManifest.xml
++++ b/app/src/zcashtestnetFossDebug/AndroidManifest.xml
+@@ -13 +13 @@
+-            android:authorities="co.electriccoin.zcash.foss.debug.provider.testnet"
++            android:authorities="com.personal.zecprivate.foss.debug.provider.testnet"
+diff --git a/app/src/zcashtestnetFossRelease/AndroidManifest.xml b/app/src/zcashtestnetFossRelease/AndroidManifest.xml
+index 938e0ae44..c7eb63af2 100644
+--- a/app/src/zcashtestnetFossRelease/AndroidManifest.xml
++++ b/app/src/zcashtestnetFossRelease/AndroidManifest.xml
+@@ -13 +13 @@
+-            android:authorities="co.electriccoin.zcash.foss.provider.testnet"
++            android:authorities="com.personal.zecprivate.foss.provider.testnet"
+diff --git a/app/src/zcashtestnetInternalDebug/AndroidManifest.xml b/app/src/zcashtestnetInternalDebug/AndroidManifest.xml
+index 8ae0f31e8..e1a43bb6a 100644
+--- a/app/src/zcashtestnetInternalDebug/AndroidManifest.xml
++++ b/app/src/zcashtestnetInternalDebug/AndroidManifest.xml
+@@ -13 +13 @@
+-            android:authorities="co.electriccoin.zcash.internal.debug.provider.testnet"
++            android:authorities="com.personal.zecprivate.internal.debug.provider.testnet"
+diff --git a/app/src/zcashtestnetInternalRelease/AndroidManifest.xml b/app/src/zcashtestnetInternalRelease/AndroidManifest.xml
+index 1f8e744ac..889011292 100644
+--- a/app/src/zcashtestnetInternalRelease/AndroidManifest.xml
++++ b/app/src/zcashtestnetInternalRelease/AndroidManifest.xml
+@@ -13 +13 @@
+-            android:authorities="co.electriccoin.zcash.internal.provider.testnet"
++            android:authorities="com.personal.zecprivate.internal.provider.testnet"
+diff --git a/app/src/zcashtestnetStoreDebug/AndroidManifest.xml b/app/src/zcashtestnetStoreDebug/AndroidManifest.xml
+index 4551b7489..320176903 100644
+--- a/app/src/zcashtestnetStoreDebug/AndroidManifest.xml
++++ b/app/src/zcashtestnetStoreDebug/AndroidManifest.xml
+@@ -13 +13 @@
+-            android:authorities="co.electriccoin.zcash.debug.provider.testnet"
++            android:authorities="com.personal.zecprivate.debug.provider.testnet"
+diff --git a/app/src/zcashtestnetStoreRelease/AndroidManifest.xml b/app/src/zcashtestnetStoreRelease/AndroidManifest.xml
+index 7e1b440d1..4b1b532d0 100644
+--- a/app/src/zcashtestnetStoreRelease/AndroidManifest.xml
++++ b/app/src/zcashtestnetStoreRelease/AndroidManifest.xml
+@@ -13 +13 @@
+-            android:authorities="co.electriccoin.zcash.provider.testnet"
++            android:authorities="com.personal.zecprivate.provider.testnet"
 diff --git a/gradle.properties b/gradle.properties
 index ec56161b5..2a4e59269 100644
 --- a/gradle.properties
@@ -190,6 +301,39 @@ index 717411935..03de94524 100644
 +                title = stringRes(R.string.private_provider_costs_included).withStyle(),
 +                subtitle = stringRes(R.string.private_no_affiliate_fee).withStyle()
 +            ),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/util/FileShareUtil.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/util/FileShareUtil.kt
+index df8c09607..b4f164957 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/util/FileShareUtil.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/util/FileShareUtil.kt
+@@ -19,4 +19,4 @@ object FileShareUtil {
+-    const val ZASHI_INTERNAL_DATA_AUTHORITY = "co.electriccoin.zcash.provider"
+-    const val ZASHI_INTERNAL_DATA_AUTHORITY_DEBUG = "co.electriccoin.zcash.debug.provider"
+-    const val ZASHI_INTERNAL_DATA_AUTHORITY_INTERNAL = "co.electriccoin.zcash.internal.provider"
+-    const val ZASHI_INTERNAL_DATA_AUTHORITY_INTERNAL_DEBUG = "co.electriccoin.zcash.internal.debug.provider"
++    const val ZASHI_INTERNAL_DATA_AUTHORITY = "com.personal.zecprivate.provider"
++    const val ZASHI_INTERNAL_DATA_AUTHORITY_DEBUG = "com.personal.zecprivate.debug.provider"
++    const val ZASHI_INTERNAL_DATA_AUTHORITY_INTERNAL = "com.personal.zecprivate.internal.provider"
++    const val ZASHI_INTERNAL_DATA_AUTHORITY_INTERNAL_DEBUG = "com.personal.zecprivate.internal.debug.provider"
+@@ -24,2 +24,2 @@ object FileShareUtil {
+-    const val ZASHI_INTERNAL_DATA_FOSS_AUTHORITY = "co.electriccoin.zcash.foss.provider"
+-    const val ZASHI_INTERNAL_DATA_FOSS_AUTHORITY_DEBUG = "co.electriccoin.zcash.foss.debug.provider"
++    const val ZASHI_INTERNAL_DATA_FOSS_AUTHORITY = "com.personal.zecprivate.foss.provider"
++    const val ZASHI_INTERNAL_DATA_FOSS_AUTHORITY_DEBUG = "com.personal.zecprivate.foss.debug.provider"
+@@ -27,3 +27,3 @@ object FileShareUtil {
+-    const val ZASHI_INTERNAL_DATA_AUTHORITY_TESTNET = "co.electriccoin.zcash.provider.testnet"
+-    const val ZASHI_INTERNAL_DATA_AUTHORITY_TESTNET_DEBUG = "co.electriccoin.zcash.debug.provider.testnet"
+-    const val ZASHI_INTERNAL_DATA_AUTHORITY_TESTNET_INTERNAL = "co.electriccoin.zcash.internal.provider.testnet"
++    const val ZASHI_INTERNAL_DATA_AUTHORITY_TESTNET = "com.personal.zecprivate.provider.testnet"
++    const val ZASHI_INTERNAL_DATA_AUTHORITY_TESTNET_DEBUG = "com.personal.zecprivate.debug.provider.testnet"
++    const val ZASHI_INTERNAL_DATA_AUTHORITY_TESTNET_INTERNAL = "com.personal.zecprivate.internal.provider.testnet"
+@@ -31 +31 @@ object FileShareUtil {
+-        "co.electriccoin.zcash.internal.debug.provider.testnet"
++        "com.personal.zecprivate.internal.debug.provider.testnet"
+@@ -33,2 +33,2 @@ object FileShareUtil {
+-    const val ZASHI_INTERNAL_DATA_FOSS_AUTHORITY_TESTNET = "co.electriccoin.zcash.foss.provider.testnet"
+-    const val ZASHI_INTERNAL_DATA_FOSS_AUTHORITY_TESTNET_DEBUG = "co.electriccoin.zcash.foss.debug.provider.testnet"
++    const val ZASHI_INTERNAL_DATA_FOSS_AUTHORITY_TESTNET = "com.personal.zecprivate.foss.provider.testnet"
++    const val ZASHI_INTERNAL_DATA_FOSS_AUTHORITY_TESTNET_DEBUG = "com.personal.zecprivate.foss.debug.provider.testnet"
 diff --git a/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_foreground.xml b/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_foreground.xml
 new file mode 100644
 index 000000000..23aa98f43

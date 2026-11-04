@@ -13,7 +13,7 @@ class ControlsTest(unittest.TestCase):
         # Copy only static-check inputs; never touch real release state or keys.
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
-            for relative in ['ui-lib/src/main','gradle.properties']:
+            for relative in ['ui-lib/src/main','app/src','gradle.properties','LICENSE']:
                 source=checks.ROOT/relative
                 target=root/relative
                 target.parent.mkdir(parents=True,exist_ok=True)

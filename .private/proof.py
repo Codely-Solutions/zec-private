@@ -1,5 +1,5 @@
 """Extract unsigned APK manifest and bind the artifact to the checked revision."""
-import hashlib,json,os,re,shutil,subprocess
+import hashlib,json,os,re,shutil,subprocess,zipfile
 from pathlib import Path
 root=Path(__file__).resolve().parents[1]
 apks=list((root/'app/build/outputs/apk/zcashmainnetFoss/release').glob('*unsigned.apk'))
@@ -10,6 +10,13 @@ badging=subprocess.check_output([str(sdk/'build-tools/36.0.0/aapt'),'dump','badg
 package=re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'",badging)
 if not package or package[1]!='com.personal.zecprivate.foss' or 'application-debuggable' in badging:
     raise SystemExit('Invalid release manifest')
+manifest=subprocess.check_output([str(sdk/'build-tools/36.0.0/aapt'),'dump','xmltree',str(apk),'AndroidManifest.xml'],text=True)
+if 'com.personal.zecprivate.foss.provider' not in manifest or '"co.electriccoin.zcash.foss.provider"' in manifest:
+    raise SystemExit('Provider authority conflicts with official Zodl FOSS')
+with zipfile.ZipFile(apk) as archive:
+    info=archive.getinfo('assets/UPSTREAM-LICENSE.txt')
+    if info.file_size>8192 or archive.read(info)!=(root/'LICENSE').read_bytes():
+        raise SystemExit('Missing or altered upstream license notice')
 upstream=json.loads((root/'.private/candidate.json' if (root/'.private/candidate.json').exists() else root/'.private/upstream.json').read_text())
 version=upstream['tag'].rsplit('-',1)[0]
 sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
