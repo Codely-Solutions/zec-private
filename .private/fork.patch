@@ -146,7 +146,7 @@ index 4d388e80f..701e1d9d0 100644
 +class FreshShieldedAddressUnavailableException :
 +    IllegalStateException("A fresh shielded address is unavailable. Wait for wallet synchronization and retry.")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
-index a5bcffdcd..25c1e4a8a 100644
+index a5bcffdcd..30135e743 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
 @@ -16 +15,0 @@ import co.electriccoin.zcash.ui.common.model.isZCashAsset
@@ -169,9 +169,19 @@ index a5bcffdcd..25c1e4a8a 100644
 -                    ),
 -                referral = "zodl"
 +                appFees = emptyList()
-@@ -209 +197,0 @@ class NearSwapDataSource(
+@@ -174,0 +164,9 @@ class NearSwapDataSource(
++            val depositType =
++                if (originAsset.isZCashAsset) {
++                    synchronizerProvider.getSynchronizer().validateAddress(response.quote.depositAddress)
++                } else {
++                    null
++                }
++            require(depositType != AddressType.Tex) {
++                "TEX swap deposits require an intermediate transparent wallet address and are not supported."
++            }
+@@ -209 +206,0 @@ class NearSwapDataSource(
 -        log("checkSwapStatus $depositAddress")
-@@ -256,2 +243,0 @@ class NearSwapDataSource(
+@@ -256,2 +252,0 @@ class NearSwapDataSource(
 -const val AFFILIATE_FEE_BPS = 67
 -const val AFFILIATE_ADDRESS = "d78abd5477432c9d9c5e32c4a1a0056cd7b8be6580d3c49e1f97185b786592db"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
@@ -1713,14 +1723,17 @@ index da0613aca..d1521bb2d 100644
 -        affiliateAddress = "affiliate"
 +        slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
-index c0be20563..17c9dbf60 100644
+index c0be20563..cef57d3d1 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
-@@ -96,2 +96 @@ class NearSwapDataSourceTest {
+@@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.datasource
++import cash.z.ecc.android.sdk.Synchronizer
++import cash.z.ecc.android.sdk.type.AddressType
+@@ -96,2 +98 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -111,4 +110,3 @@ class NearSwapDataSourceTest {
+@@ -111,4 +112,3 @@ class NearSwapDataSourceTest {
 -            // The affiliate fee + referral are attached to every request.
 -            assertEquals("zodl", captured.referral)
 -            assertEquals("affiliate", captured.appFees.single().recipient)
@@ -1728,39 +1741,72 @@ index c0be20563..17c9dbf60 100644
 +            // Independent quotes carry no affiliate fee or referral.
 +            assertEquals(null, captured.referral)
 +            assertEquals(emptyList(), captured.appFees)
-@@ -132,2 +130 @@ class NearSwapDataSourceTest {
+@@ -132,2 +132 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -159,2 +156 @@ class NearSwapDataSourceTest {
+@@ -159,2 +158 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -182,2 +178 @@ class NearSwapDataSourceTest {
+@@ -182,2 +180 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -205,2 +200 @@ class NearSwapDataSourceTest {
+@@ -205,2 +202 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -235,2 +229 @@ class NearSwapDataSourceTest {
+@@ -235,2 +231 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -260,2 +253 @@ class NearSwapDataSourceTest {
+@@ -244,0 +240,32 @@ class NearSwapDataSourceTest {
++    @Test
++    fun outgoingQuotesRejectTexDepositsBeforeCreatingAProposal() =
++        runBlocking {
++            val synchronizer = mockk<Synchronizer>()
++            coEvery { synchronizer.validateAddress("tex-deposit") } returns AddressType.Tex
++            coEvery { synchronizerProvider.getSynchronizer() } returns synchronizer
++            for ((mode, type) in listOf(
++                SwapMode.EXACT_INPUT to SwapType.EXACT_INPUT,
++                SwapMode.EXACT_OUTPUT to SwapType.EXACT_OUTPUT
++            )) {
++                val response =
++                    mockk<QuoteResponseDto> {
++                        every { quoteRequest } returns mockk { every { swapType } returns type }
++                        every { quote } returns mockk { every { depositAddress } returns "tex-deposit" }
++                    }
++                coEvery { nearApiProvider.requestQuote(any()) } returns response
++                val error =
++                    assertFailsWith<IllegalArgumentException> {
++                        dataSource.requestQuote(
++                            swapMode = mode,
++                            amount = BigDecimal.ONE,
++                            refundAddress = "refund",
++                            originAsset = zec,
++                            destinationAddress = "destination",
++                            destinationAsset = origin,
++                            slippage = BigDecimal("2")
++                        )
++                    }
++                assertEquals(true, error.message?.contains("TEX"))
++            }
++        }
++
+@@ -260,2 +287 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -285,2 +277 @@ class NearSwapDataSourceTest {
+@@ -285,2 +311 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -311,2 +302 @@ class NearSwapDataSourceTest {
+@@ -311,2 +336 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -335,2 +325 @@ class NearSwapDataSourceTest {
+@@ -335,2 +359 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")

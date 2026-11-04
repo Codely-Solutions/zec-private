@@ -46,7 +46,11 @@ jobs:
         run: |
           python3 .private/check.py
           python3 .private/test_controls.py
+      - name: Unfunded NEAR API contracts without credentials
+        timeout-minutes: 3
+        run: python3 .private/live_near.py
       - name: Unit tests, static analysis, lint and unsigned FOSS release
+        timeout-minutes: 45
         env:
           GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false
         run: |

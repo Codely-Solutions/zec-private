@@ -17,8 +17,14 @@ def main():
         raise RuntimeError('Artifact identity/digest mismatch')
     if proof['package']!='com.personal.zecprivate.foss' or proof['debuggable']:
         raise RuntimeError('Unexpected APK manifest identity')
-    if proof.get('validation')!='unit-lint-detekt-fork-v1':
+    if proof.get('validation')!='unit-lint-detekt-live-fork-v2':
         raise RuntimeError('Missing release validation evidence')
+    contract_bytes=(artifact/'near-contract.json').read_bytes()
+    contract=json.loads(contract_bytes)
+    if (hashlib.sha256(contract_bytes).hexdigest()!=proof.get('live_contract_sha256') or
+            not contract.get('success') or contract.get('source_sha')!=expected or
+            contract.get('funds_transferred') or contract.get('wallet_secrets_used')):
+        raise RuntimeError('Invalid live API contract evidence')
     tag=proof['release_tag']
     if not re.fullmatch(r'v\d+\.\d+\.\d+-private\.\d+',tag): raise RuntimeError('Invalid private release tag')
     # Existing published tags/assets are immutable, including duplicate polling.

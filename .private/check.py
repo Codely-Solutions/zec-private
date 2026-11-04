@@ -13,6 +13,8 @@ def check(root=ROOT):
     need('appFees = emptyList()' in source, 'Affiliate-free quote construction changed')
     need('AppFee(' not in source and 'affiliateAddress' not in source, 'Affiliate recipient reintroduced')
     need('referral =' not in source, 'Quote referral reintroduced')
+    need('require(depositType != AddressType.Tex)' in source,
+         'Swap deposits can invoke the SDK transparent-intermediate flow')
     provider=(root/COMMON/'provider/NearApiProvider.kt').read_text()
     need(not re.search(r'Authorization|AUTH_TOKEN|Bearer |X-API-Key|eyJhbGci',provider), 'Partner authentication reintroduced')
     need(provider.count('https://1click.chaindefuser.com/v0/')==4,'NEAR endpoint changed')

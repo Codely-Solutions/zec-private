@@ -161,6 +161,15 @@ class NearSwapDataSource(
                             "but server returned ${response.quoteRequest.swapType}"
                 )
             }
+            val depositType =
+                if (originAsset.isZCashAsset) {
+                    synchronizerProvider.getSynchronizer().validateAddress(response.quote.depositAddress)
+                } else {
+                    null
+                }
+            require(depositType != AddressType.Tex) {
+                "TEX swap deposits require an intermediate transparent wallet address and are not supported."
+            }
             NearSwapQuote(
                 response = response,
                 originAsset = originAsset,

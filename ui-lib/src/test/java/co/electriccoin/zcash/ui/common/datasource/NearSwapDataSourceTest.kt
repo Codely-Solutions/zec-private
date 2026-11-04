@@ -1,5 +1,7 @@
 package co.electriccoin.zcash.ui.common.datasource
 
+import cash.z.ecc.android.sdk.Synchronizer
+import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
@@ -234,6 +236,38 @@ class NearSwapDataSourceTest {
             assertEquals("deposit-address", exception.depositAddress)
         }
     }
+
+    @Test
+    fun outgoingQuotesRejectTexDepositsBeforeCreatingAProposal() =
+        runBlocking {
+            val synchronizer = mockk<Synchronizer>()
+            coEvery { synchronizer.validateAddress("tex-deposit") } returns AddressType.Tex
+            coEvery { synchronizerProvider.getSynchronizer() } returns synchronizer
+            for ((mode, type) in listOf(
+                SwapMode.EXACT_INPUT to SwapType.EXACT_INPUT,
+                SwapMode.EXACT_OUTPUT to SwapType.EXACT_OUTPUT
+            )) {
+                val response =
+                    mockk<QuoteResponseDto> {
+                        every { quoteRequest } returns mockk { every { swapType } returns type }
+                        every { quote } returns mockk { every { depositAddress } returns "tex-deposit" }
+                    }
+                coEvery { nearApiProvider.requestQuote(any()) } returns response
+                val error =
+                    assertFailsWith<IllegalArgumentException> {
+                        dataSource.requestQuote(
+                            swapMode = mode,
+                            amount = BigDecimal.ONE,
+                            refundAddress = "refund",
+                            originAsset = zec,
+                            destinationAddress = "destination",
+                            destinationAsset = origin,
+                            slippage = BigDecimal("2")
+                        )
+                    }
+                assertEquals(true, error.message?.contains("TEX"))
+            }
+        }
 
     @Test
     fun requestQuoteBuildsExactOutputRequestNormalizedToDestinationDecimals() =
