@@ -103,7 +103,10 @@ jobs:
         env:
           NTFY_URL: ${{ secrets.NTFY_URL }}
           GH_TOKEN: ${{ github.token }}
-        run: python3 .private/notify.py "ZEC Private APK built, signed and published. Download it from GitHub Releases."
+        run: |
+          release_url=$(gh release view --repo "$GITHUB_REPOSITORY" --json url --jq .url)
+          release_tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          python3 .private/notify.py "ZEC Private $release_tag is ready. APK built and signed. $release_url"
   failed:
     if: ${{ always() && (needs.unsigned.result == 'failure' || needs.publish.result == 'failure') }}
     needs: [unsigned, publish]

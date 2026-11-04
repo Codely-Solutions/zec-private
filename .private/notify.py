@@ -9,8 +9,11 @@ if os.environ.get('MAKE_ISSUE')=='true':
     title='ZEC Private update blocked: review required'
     found=subprocess.check_output(['gh','issue','list','--repo',repo,'--state','open','--search',title+' in:title','--json','number'],text=True)
     import json
-    if not json.loads(found):
-        subprocess.run(['gh','issue','create','--repo',repo,'--title',title,'--body',message+'\n\nWorkflow evidence: '+link+'\nLast published APK is unchanged.'],check=True)
+    issues=json.loads(found)
+    if not issues:
+        link=subprocess.check_output(['gh','issue','create','--repo',repo,'--title',title,'--body',message+'\n\nWorkflow evidence: '+link+'\nLast published APK is unchanged.'],text=True).strip()
+    else:
+        link=f'https://github.com/{repo}/issues/{issues[0]["number"]}'
 url=os.environ.get('NTFY_URL','').strip()
 if url:
     request=urllib.request.Request(url,data=(message+' '+link).encode(),headers={'Title':'ZEC Private','Priority':'default'},method='POST')
