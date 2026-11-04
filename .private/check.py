@@ -35,6 +35,9 @@ def check(root=ROOT):
     need('ZCASH_RELEASE_PACKAGE_NAME=com.personal.zecprivate\n' in props,'Package identity changed')
     need('IS_RELEASE_BUILD_DEBUGGABLE=false' in props,'Release debuggability enabled')
     need('IS_SIGN_RELEASE_BUILD_WITH_DEBUG_KEY=false' in props,'Debug signing enabled')
+    for p in (root/'ui-lib/src/test').rglob('*.kt'):
+        need('requestQuote(any(), any(), any(), any(), any(), any(), any(), any())' not in p.read_text(),
+             'Obsolete affiliate argument in mock: '+str(p.relative_to(root)))
     return errors
 
 if __name__=='__main__':

@@ -1663,7 +1663,7 @@ index cffe4775f..d11822df2 100644
 -            appFees = listOf(AppFee(recipient = "affiliate", fee = 75))
 +            appFees = emptyList()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
-index d55620b20..63f4c089b 100644
+index d55620b20..a8a1c5e97 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 @@ -4 +3,0 @@ import cash.z.ecc.android.sdk.model.WalletAddress
@@ -1680,6 +1680,21 @@ index d55620b20..63f4c089b 100644
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = AFFILIATE_ADDRESS
 +                    slippage = BigDecimal("2")
+@@ -216 +212 @@ class SwapRepositoryImplTest {
+-                        requestQuote(any(), any(), any(), any(), any(), any(), any(), any())
++                        requestQuote(any(), any(), any(), any(), any(), any(), any())
+@@ -241 +237 @@ class SwapRepositoryImplTest {
+-                        requestQuote(any(), any(), any(), any(), any(), any(), any(), any())
++                        requestQuote(any(), any(), any(), any(), any(), any(), any())
+@@ -277 +273 @@ class SwapRepositoryImplTest {
+-            coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) }
++            coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any()) }
+@@ -391 +387 @@ class SwapRepositoryImplTest {
+-                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } throws
++                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } throws
+@@ -764 +760 @@ class SwapRepositoryImplTest {
+-            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } returns quote
++            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 index c01988b65..9de3f9ace 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt

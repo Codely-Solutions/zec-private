@@ -209,7 +209,7 @@ class SwapRepositoryImplTest {
                 mockk<SwapDataSource> {
                     coEvery { getSupportedTokens() } returns listOf(zec, btc)
                     coEvery {
-                        requestQuote(any(), any(), any(), any(), any(), any(), any(), any())
+                        requestQuote(any(), any(), any(), any(), any(), any(), any())
                     } throws RuntimeException("quote failed")
                 }
             val repository = loadedRepository(dataSource)
@@ -234,7 +234,7 @@ class SwapRepositoryImplTest {
                 mockk<SwapDataSource> {
                     coEvery { getSupportedTokens() } returns listOf(zec, btc)
                     coEvery {
-                        requestQuote(any(), any(), any(), any(), any(), any(), any(), any())
+                        requestQuote(any(), any(), any(), any(), any(), any(), any())
                     } throws RuntimeException("quote failed")
                 }
             val repository = loadedRepository(dataSource)
@@ -270,7 +270,7 @@ class SwapRepositoryImplTest {
             )
 
             assertEquals(SwapQuoteData.Loading, repository.quote.value)
-            coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) }
+            coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any()) }
         }
 
     // region quote validation — the repo fails the quote closed when it is inconsistent with the request
@@ -384,7 +384,7 @@ class SwapRepositoryImplTest {
             val dataSource =
                 mockk<SwapDataSource> {
                     coEvery { getSupportedTokens() } returns listOf(zec, btc)
-                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } throws
+                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } throws
                         SwapQuoteMismatchException.Rejected(
                             type = SwapQuoteMismatchType.SWAP_TYPE,
                             message = "boom",
@@ -757,7 +757,7 @@ class SwapRepositoryImplTest {
     private fun dataSourceReturning(quote: SwapQuote) =
         mockk<SwapDataSource> {
             coEvery { getSupportedTokens() } returns listOf(zec, btc)
-            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } returns quote
+            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
         }
 
     /** Builds a repository on the test scope and loads its assets (so a ZEC asset is available). */
