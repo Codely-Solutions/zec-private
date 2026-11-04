@@ -36,6 +36,21 @@ def source_state(root):
     return {p:digest(root/p) for p in paths
             if not p.startswith(('.private/','.github/')) and p!='README.md' and (root/p).is_file()}
 
+def sanitize_provider(root):
+    # Keep the shared upstream JWT out of the maintained patch. The exact original
+    # provider is verified by digest before deleting the credential and its uses.
+    path=root/'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/NearApiProvider.kt'
+    text=path.read_text().replace('\r\n','\n')
+    expected='67a73e8a3b1a7e23715f9c80cef47ed5841ddd9eca04bd0a3e9c5e207becd301'
+    if hashlib.sha256(text.encode()).hexdigest()!=expected:
+        raise RuntimeError('Upstream NEAR provider changed; credential removal needs review')
+    if text.count('header(HttpHeaders.Authorization, AUTH_TOKEN)')!=3:
+        raise RuntimeError('Unexpected upstream authentication structure')
+    text=re.sub(r'\nprivate const val AUTH_TOKEN =[\s\S]*','\n',text)
+    text=text.replace('import io.ktor.client.request.header\n','').replace('import io.ktor.http.HttpHeaders\n','')
+    text=text.replace('                header(HttpHeaders.Authorization, AUTH_TOKEN)\n','')
+    path.write_text(text.rstrip()+'\n')
+
 def main():
     expected=json.loads((ROOT/'.private/source-state.json').read_text())
     if source_state(ROOT)!=expected:
@@ -67,6 +82,7 @@ def main():
     try:
         run('git','apply','--unidiff-zero','--check',str(ROOT/'.private/fork.patch'),cwd=candidate)
         run('git','apply','--unidiff-zero',str(ROOT/'.private/fork.patch'),cwd=candidate)
+        sanitize_provider(candidate)
         shutil.rmtree(candidate/'.github/workflows')
         (candidate/'.github/dependabot.yml').unlink(missing_ok=True)
         shutil.copytree(ROOT/'.github/workflows',candidate/'.github/workflows')

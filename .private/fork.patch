@@ -110,30 +110,6 @@ index b2c6505ad..223704c21 100644
 -                MathContext.DECIMAL128
 -            )
 +    override val amountInFee: BigDecimal = BigDecimal.ZERO
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/NearApiProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/NearApiProvider.kt
-index f2eed5a45..3d3864781 100644
---- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/NearApiProvider.kt
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/NearApiProvider.kt
-@@ -13 +12,0 @@ import io.ktor.client.request.get
--import io.ktor.client.request.header
-@@ -18 +16,0 @@ import io.ktor.http.ContentType
--import io.ktor.http.HttpHeaders
-@@ -38 +35,0 @@ interface NearApiProvider {
--
-@@ -59 +55,0 @@ class KtorNearApiProvider(
--                header(HttpHeaders.Authorization, AUTH_TOKEN)
-@@ -68 +63,0 @@ class KtorNearApiProvider(
--                header(HttpHeaders.Authorization, AUTH_TOKEN)
-@@ -78 +72,0 @@ class KtorNearApiProvider(
--                header(HttpHeaders.Authorization, AUTH_TOKEN)
-@@ -104,7 +97,0 @@ class KtorNearApiProvider(
--
--private const val AUTH_TOKEN =
--    "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IjIwMjUtMDEtMTItdjEifQ.eyJ2IjoxLCJrZXlfdHlwZSI6ImRpc3RyaWJ1dG" +
--        "lvbl9jaGFubmVsIiwicGFydG5lcl9pZCI6InpvZGwiLCJpYXQiOjE3NzUwMjc5MzgsImV4cCI6MTgwNjU2MzkzOH0.TwBxHbVpCZWhvREfK0" +
--        "hvQMPn4eibIqBylc9AI-dy7xR5-k519lFoDxqTaIfv70E-Oa4aswOkWv_Rx2OQUkbL41RMHxWiOU6jnn6z6gXVGfylZ-sZK5bELnvPugyucD" +
--        "-BLSRw3ia-czvTO_LDYGBNDO78J0QbjOe0-CIbg06PxA59tui8SGXQ5paGi6bHUpdjnKXOOB1PAwkIZOaZjqrlh4YoATdFhAgEfbfu9zXdNq" +
--        "jtmYfmAzn8B3_hGI_ZoyIN1sR3ka-LWa5rIaIMfaqBTvDFn2zmCdCbUCUMKhkeBijfpVAf3UmrK4gQeLgo70AQqAFSHZeIk6X0loH_AwzBag"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
 index 36d947b49..4602a8e12 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
