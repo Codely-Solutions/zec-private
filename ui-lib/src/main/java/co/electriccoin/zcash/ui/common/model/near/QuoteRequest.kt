@@ -6,6 +6,7 @@ import co.electriccoin.zcash.ui.common.serialization.BigDecimalSerializer
 import co.electriccoin.zcash.ui.common.serialization.NearRecipientTypeSerializer
 import co.electriccoin.zcash.ui.common.serialization.NearRefundTypeSerializer
 import co.electriccoin.zcash.ui.common.serialization.NearSwapTypeSerializer
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -50,6 +51,7 @@ data class QuoteRequest(
     @SerialName("appFees")
     val appFees: List<AppFee>,
     @SerialName("referral")
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     val referral: String? = null
 )
 

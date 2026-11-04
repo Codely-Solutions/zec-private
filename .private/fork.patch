@@ -131,6 +131,14 @@ index b2c6505ad..223704c21 100644
 -                MathContext.DECIMAL128
 -            )
 +    override val amountInFee: BigDecimal = BigDecimal.ZERO
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteRequest.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteRequest.kt
+index d8016e519..37dcf12b4 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteRequest.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteRequest.kt
+@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.serialization.NearSwapTypeSerializer
++import kotlinx.serialization.EncodeDefault
+@@ -52,0 +54 @@ data class QuoteRequest(
++    @EncodeDefault(EncodeDefault.Mode.NEVER)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
 index 36d947b49..4602a8e12 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
@@ -1778,3 +1786,10 @@ index c01988b65..9de3f9ace 100644
 @@ -494 +568 @@ class RequestSwapQuoteUseCaseTest {
 -        coEvery { accountDataSource.requestNextShieldedAddress() } returns shieldedAddress
 +        coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returns shieldedAddress
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
+index 1d445dd11..b96c50409 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
+@@ -75 +75 @@ class ViewOnlySpendGuardTest {
+-            coEvery { requestNextShieldedAddress() } returns "u"
++            coEvery { requestNextShieldedAddress(requireFresh = true) } returns "u"

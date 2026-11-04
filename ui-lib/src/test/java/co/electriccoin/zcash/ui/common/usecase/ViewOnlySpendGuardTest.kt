@@ -72,7 +72,7 @@ class ViewOnlySpendGuardTest {
         mockk<AccountDataSource> {
             coEvery { getSelectedAccount() } returns viewOnly
             every { allAccounts } returns MutableStateFlow(listOf(viewOnly))
-            coEvery { requestNextShieldedAddress() } returns "u"
+            coEvery { requestNextShieldedAddress(requireFresh = true) } returns "u"
         }
 
     private val zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true)
