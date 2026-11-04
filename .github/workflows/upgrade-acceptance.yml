@@ -116,7 +116,8 @@ jobs:
           persist-credentials: false
       - env:
           NTFY_URL: ${{ secrets.NTFY_URL }}
-        run: python3 .private/notify.py "TEST: simulated ZEC Private upgrade failed. No production release or state was changed."
+        run: |
+          python3 .private/notify.py "TEST: simulated ZEC Private upgrade failed. No production release or state was changed."
   cleanup:
     if: always()
     needs: [prepare, unsigned, sign]
