@@ -1,5 +1,5 @@
 diff --git a/gradle.properties b/gradle.properties
-index ec56161..d4fddd9 100644
+index ec56161b5..2a4e59269 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
@@ -10,8 +10,11 @@ index ec56161..d4fddd9 100644
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash
 +ZCASH_RELEASE_APP_NAME=ZEC Private
 +ZCASH_RELEASE_PACKAGE_NAME=com.personal.zecprivate
+@@ -208 +208 @@ ZCASH_BIP39_VERSION=1.0.9
+-ZCASH_SDK_VERSION=6.0.0-SNAPSHOT
++ZCASH_SDK_VERSION=6.0.0
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
-index a5bcffd..25c1e4a 100644
+index a5bcffdcd..25c1e4a8a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
 @@ -16 +15,0 @@ import co.electriccoin.zcash.ui.common.model.isZCashAsset
@@ -40,7 +43,7 @@ index a5bcffd..25c1e4a 100644
 -const val AFFILIATE_FEE_BPS = 67
 -const val AFFILIATE_ADDRESS = "d78abd5477432c9d9c5e32c4a1a0056cd7b8be6580d3c49e1f97185b786592db"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
-index 13e9d07..751abb0 100644
+index 13e9d0788..751abb024 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
 @@ -28,2 +28 @@ interface SwapDataSource {
@@ -48,7 +51,7 @@ index 13e9d07..751abb0 100644
 -        affiliateAddress: String
 +        slippage: BigDecimal
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
-index e5b3ebf..d3cf673 100644
+index e5b3ebffe..d3cf6734c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
 @@ -4 +3,0 @@ import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
@@ -94,7 +97,7 @@ index e5b3ebf..d3cf673 100644
 -            )
 +    override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
-index b2c6505..223704c 100644
+index b2c6505ad..223704c21 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.common.model.near
@@ -108,7 +111,7 @@ index b2c6505..223704c 100644
 -            )
 +    override val amountInFee: BigDecimal = BigDecimal.ZERO
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/NearApiProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/NearApiProvider.kt
-index f2eed5a..3d38647 100644
+index f2eed5a45..3d3864781 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/NearApiProvider.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/NearApiProvider.kt
 @@ -13 +12,0 @@ import io.ktor.client.request.get
@@ -132,7 +135,7 @@ index f2eed5a..3d38647 100644
 -        "-BLSRw3ia-czvTO_LDYGBNDO78J0QbjOe0-CIbg06PxA59tui8SGXQ5paGi6bHUpdjnKXOOB1PAwkIZOaZjqrlh4YoATdFhAgEfbfu9zXdNq" +
 -        "jtmYfmAzn8B3_hGI_ZoyIN1sR3ka-LWa5rIaIMfaqBTvDFn2zmCdCbUCUMKhkeBijfpVAf3UmrK4gQeLgo70AQqAFSHZeIk6X0loH_AwzBag"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
-index 36d947b..4602a8e 100644
+index 36d947b49..4602a8e12 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
 @@ -6 +5,0 @@ import co.electriccoin.zcash.crash.android.GlobalCrashReporter
@@ -147,7 +150,7 @@ index 36d947b..4602a8e 100644
 +                            slippage = slippage
 diff --git a/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_foreground.xml b/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_foreground.xml
 new file mode 100644
-index 0000000..23aa98f
+index 000000000..23aa98f43
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_foreground.xml
 @@ -0,0 +1 @@
@@ -155,7 +158,7 @@ index 0000000..23aa98f
 \ No newline at end of file
 diff --git a/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_monochrome.xml b/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_monochrome.xml
 new file mode 100644
-index 0000000..23aa98f
+index 000000000..23aa98f43
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_monochrome.xml
 @@ -0,0 +1 @@
@@ -163,7 +166,7 @@ index 0000000..23aa98f
 \ No newline at end of file
 diff --git a/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_round.xml b/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_round.xml
 new file mode 100644
-index 0000000..23aa98f
+index 000000000..23aa98f43
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_round.xml
 @@ -0,0 +1 @@
@@ -171,7 +174,7 @@ index 0000000..23aa98f
 \ No newline at end of file
 diff --git a/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_square.xml b/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_square.xml
 new file mode 100644
-index 0000000..23aa98f
+index 000000000..23aa98f43
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_square.xml
 @@ -0,0 +1 @@
@@ -1497,14 +1500,14 @@ zC&pRADr+0~R)j`F%D6SuP}H)ztKV?vFEi9J%-f!f2d&3O3%*r~#W<#58bhnKW5vwy
 Kk$Jm+-+us)Rn*`B
 
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/strings.xml
-index 813f564..596f657 100644
+index 813f56457..596f657f6 100644
 --- a/ui-lib/src/main/res/ui/non_translatable/values/strings.xml
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/strings.xml
 @@ -3 +3 @@
 -    <string translatable="false" name="support_email_address">support@zodl.com</string>
 +    <string translatable="false" name="support_email_address">noreply@localhost</string>
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceGiftCardLinkTest.kt
-index da0613a..d1521bb 100644
+index da0613aca..d1521bb2d 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceGiftCardLinkTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceGiftCardLinkTest.kt
 @@ -127,2 +127 @@ class NearSwapDataSourceGiftCardLinkTest {
@@ -1512,7 +1515,7 @@ index da0613a..d1521bb 100644
 -        affiliateAddress = "affiliate"
 +        slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
-index c0be205..17c9dbf 100644
+index c0be20563..17c9dbf60 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 @@ -96,2 +96 @@ class NearSwapDataSourceTest {
@@ -1564,7 +1567,7 @@ index c0be205..17c9dbf 100644
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt
-index cffe477..6d7ae97 100644
+index cffe4775f..6d7ae97da 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.common.provider
@@ -1614,7 +1617,7 @@ index cffe477..6d7ae97 100644
 -            appFees = listOf(AppFee(recipient = "affiliate", fee = 75))
 +            appFees = emptyList()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
-index d55620b..63f4c08 100644
+index d55620b20..63f4c089b 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 @@ -4 +3,0 @@ import cash.z.ecc.android.sdk.model.WalletAddress
@@ -1632,7 +1635,7 @@ index d55620b..63f4c08 100644
 -                    affiliateAddress = AFFILIATE_ADDRESS
 +                    slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
-index c01988b..e90873a 100644
+index c01988b65..e90873ab7 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 @@ -404,0 +405,42 @@ class RequestSwapQuoteUseCaseTest {

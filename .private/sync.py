@@ -1,5 +1,5 @@
 """Trusted controller: fetch stable upstream, gate critical diffs, apply exact patch."""
-import json, os, re, shutil, subprocess
+import hashlib, json, os, re, shutil, subprocess
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -20,7 +20,15 @@ def output(**values):
     with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
         for key,value in values.items(): stream.write(f'{key}={value}\n')
 
+def source_state(root):
+    paths=run('git','ls-files',cwd=root).splitlines()
+    return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in paths
+            if not p.startswith(('.private/','.github/')) and p!='README.md' and (root/p).is_file()}
+
 def main():
+    expected=json.loads((ROOT/'.private/source-state.json').read_text())
+    if source_state(ROOT)!=expected:
+        raise RuntimeError('Fork source changed outside maintained patch; preserve modifications and review patch state')
     state=json.loads((ROOT/'.private/upstream.json').read_text())
     releases=gh(f'repos/{OFFICIAL}/releases?per_page=100')
     stable=[r for r in releases if not r['draft'] and not r['prerelease'] and r.get('published_at')]
@@ -58,6 +66,8 @@ def main():
         (candidate/'.private/candidate.json').write_text(json.dumps({'tag':tag,'sha':commit,'published_at':latest['published_at'],'versionCode':code},indent=2)+'\n')
         run('python3','.private/check.py',cwd=candidate)
         run('git','add','-A',cwd=candidate)
+        (candidate/'.private/source-state.json').write_text(json.dumps(source_state(candidate),indent=2)+'\n')
+        run('git','add','.private/source-state.json',cwd=candidate)
         run('git','-c','user.name=ZEC Private automation','-c','user.email=zec-private@users.noreply.github.com','commit','-m',f'Prepare upstream {tag} with private fork changes',cwd=candidate)
         sha=run('git','rev-parse','HEAD',cwd=candidate)
         # Do not replace a previous candidate. A repeated poll can reuse only the exact same tree.

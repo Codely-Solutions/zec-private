@@ -53,4 +53,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NTFY_URL: ${{ secrets.NTFY_URL }}
           MAKE_ISSUE: 'true'
-        run: python3 .private/notify.py "ZEC Private update blocked: upstream patch or security review required. Last working release remains available."
+        run: |
+          python3 .private/notify.py "ZEC Private update blocked: upstream patch or security review required. Last working release remains available."
