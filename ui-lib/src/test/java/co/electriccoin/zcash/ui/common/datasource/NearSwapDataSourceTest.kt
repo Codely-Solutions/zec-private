@@ -93,8 +93,7 @@ class NearSwapDataSourceTest {
                     originAsset = origin,
                     destinationAddress = "destination",
                     destinationAsset = zec,
-                    slippage = BigDecimal("2"),
-                    affiliateAddress = "affiliate"
+                    slippage = BigDecimal("2")
                 )
             }
 
@@ -108,10 +107,9 @@ class NearSwapDataSourceTest {
             assertEquals("destination", captured.recipient)
             // 1.5 normalized to the origin's 8 decimals.
             assertEquals(0, BigDecimal("150000000").compareTo(captured.amount))
-            // The affiliate fee + referral are attached to every request.
-            assertEquals("zodl", captured.referral)
-            assertEquals("affiliate", captured.appFees.single().recipient)
-            assertEquals(AFFILIATE_FEE_BPS, captured.appFees.single().fee)
+            // Independent quotes carry no affiliate fee or referral.
+            assertEquals(null, captured.referral)
+            assertEquals(emptyList(), captured.appFees)
         }
 
     @Test
@@ -129,8 +127,7 @@ class NearSwapDataSourceTest {
                         originAsset = origin,
                         destinationAddress = "destination",
                         destinationAsset = zec,
-                        slippage = BigDecimal("2"),
-                        affiliateAddress = "affiliate"
+                        slippage = BigDecimal("2")
                     )
                 }
 
@@ -156,8 +153,7 @@ class NearSwapDataSourceTest {
                         originAsset = zec,
                         destinationAddress = "destination",
                         destinationAsset = destination,
-                        slippage = BigDecimal("2"),
-                        affiliateAddress = "affiliate"
+                        slippage = BigDecimal("2")
                     )
                 }
 
@@ -179,8 +175,7 @@ class NearSwapDataSourceTest {
                         originAsset = origin,
                         destinationAddress = "destination",
                         destinationAsset = zec,
-                        slippage = BigDecimal("2"),
-                        affiliateAddress = "affiliate"
+                        slippage = BigDecimal("2")
                     )
                 }
 
@@ -202,8 +197,7 @@ class NearSwapDataSourceTest {
                     originAsset = origin,
                     destinationAddress = "destination",
                     destinationAsset = zec,
-                    slippage = BigDecimal("2"),
-                    affiliateAddress = "affiliate"
+                    slippage = BigDecimal("2")
                 )
             }
         }
@@ -232,8 +226,7 @@ class NearSwapDataSourceTest {
                         originAsset = origin,
                         destinationAddress = "destination",
                         destinationAsset = zec,
-                        slippage = BigDecimal("2"),
-                        affiliateAddress = "affiliate"
+                        slippage = BigDecimal("2")
                     )
                 }
 
@@ -257,8 +250,7 @@ class NearSwapDataSourceTest {
                     originAsset = zec,
                     destinationAddress = "destination",
                     destinationAsset = destination,
-                    slippage = BigDecimal("2"),
-                    affiliateAddress = "affiliate"
+                    slippage = BigDecimal("2")
                 )
             }
 
@@ -282,8 +274,7 @@ class NearSwapDataSourceTest {
                     originAsset = origin,
                     destinationAddress = "destination",
                     destinationAsset = zec,
-                    slippage = BigDecimal("2"),
-                    affiliateAddress = "affiliate"
+                    slippage = BigDecimal("2")
                 )
             }
 
@@ -308,8 +299,7 @@ class NearSwapDataSourceTest {
                         originAsset = origin,
                         destinationAddress = "destination",
                         destinationAsset = zec,
-                        slippage = BigDecimal("2"),
-                        affiliateAddress = "affiliate"
+                        slippage = BigDecimal("2")
                     )
                 }
 
@@ -332,8 +322,7 @@ class NearSwapDataSourceTest {
                     originAsset = origin,
                     destinationAddress = "destination",
                     destinationAsset = zec,
-                    slippage = BigDecimal("2"),
-                    affiliateAddress = "affiliate"
+                    slippage = BigDecimal("2")
                 )
             }
         }

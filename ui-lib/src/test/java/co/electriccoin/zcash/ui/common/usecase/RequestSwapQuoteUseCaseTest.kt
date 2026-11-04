@@ -402,6 +402,48 @@ class RequestSwapQuoteUseCaseTest {
         }
 
     // endregion
+    @Test
+    fun incomingQuotesUseIndependentShieldedRecipients() =
+        runBlocking {
+            val instance = useCase(SwapQuoteData.Error(SwapMode.FLEX_INPUT, TestException()))
+            coEvery { accountDataSource.requestNextShieldedAddress() } returnsMany listOf("shielded-first", "shielded-second")
+            instance.flex()
+            instance.flex()
+            coVerify(exactly = 1) {
+                swapRepository.requestFlexInputIntoZec(
+                    amount = BigDecimal("1"), refundAddress = "refund", destinationAddress = "shielded-first",
+                    originAsset = btc, slippage = BigDecimal("2")
+                )
+            }
+            coVerify(exactly = 1) {
+                swapRepository.requestFlexInputIntoZec(
+                    amount = BigDecimal("1"), refundAddress = "refund", destinationAddress = "shielded-second",
+                    originAsset = btc, slippage = BigDecimal("2")
+                )
+            }
+        }
+
+    @Test
+    fun outgoingQuotesUseIndependentShieldedRefunds() =
+        runBlocking {
+            val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
+            coEvery { accountDataSource.requestNextShieldedAddress() } returnsMany listOf("refund-first", "refund-second")
+            instance.exactInput()
+            instance.exactInput()
+            coVerify(exactly = 1) {
+                swapRepository.requestExactInputQuote(
+                    amount = BigDecimal("1"), address = "destination", refundAddress = "refund-first",
+                    destinationAsset = btc, slippage = BigDecimal("2")
+                )
+            }
+            coVerify(exactly = 1) {
+                swapRepository.requestExactInputQuote(
+                    amount = BigDecimal("1"), address = "destination", refundAddress = "refund-second",
+                    destinationAsset = btc, slippage = BigDecimal("2")
+                )
+            }
+        }
+
     // region helpers
 
     private fun mismatchError(

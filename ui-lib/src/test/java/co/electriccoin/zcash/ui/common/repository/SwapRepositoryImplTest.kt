@@ -1,7 +1,6 @@
 package co.electriccoin.zcash.ui.common.repository
 
 import cash.z.ecc.android.sdk.model.WalletAddress
-import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_ADDRESS
 import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
@@ -143,8 +142,7 @@ class SwapRepositoryImplTest {
                     originAsset = zec,
                     destinationAddress = "destination",
                     destinationAsset = btc,
-                    slippage = BigDecimal("3"),
-                    affiliateAddress = AFFILIATE_ADDRESS
+                    slippage = BigDecimal("3")
                 )
             }
         }
@@ -171,8 +169,7 @@ class SwapRepositoryImplTest {
                     originAsset = zec,
                     destinationAddress = "destination",
                     destinationAsset = btc,
-                    slippage = BigDecimal("2"),
-                    affiliateAddress = AFFILIATE_ADDRESS
+                    slippage = BigDecimal("2")
                 )
             }
         }
@@ -200,8 +197,7 @@ class SwapRepositoryImplTest {
                     originAsset = btc,
                     destinationAddress = "destination",
                     destinationAsset = zec,
-                    slippage = BigDecimal("2"),
-                    affiliateAddress = AFFILIATE_ADDRESS
+                    slippage = BigDecimal("2")
                 )
             }
         }

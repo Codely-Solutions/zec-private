@@ -10,12 +10,10 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ResponseException
 import io.ktor.client.request.get
-import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
-import io.ktor.http.HttpHeaders
 import io.ktor.http.contentType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -35,7 +33,6 @@ interface NearApiProvider {
     @Throws(ResponseException::class, ResponseWithNearErrorException::class)
     suspend fun checkSwapStatus(depositAddress: String): SwapStatusResponseDto
 }
-
 class ResponseWithNearErrorException(
     val error: ErrorDto,
     override val cause: ResponseException
@@ -56,7 +53,6 @@ class KtorNearApiProvider(
         execute {
             post("https://1click.chaindefuser.com/v0/quote") {
                 contentType(ContentType.Application.Json)
-                header(HttpHeaders.Authorization, AUTH_TOKEN)
                 setBody(request)
             }.body()
         }
@@ -65,7 +61,6 @@ class KtorNearApiProvider(
         execute {
             post("https://1click.chaindefuser.com/v0/deposit/submit") {
                 contentType(ContentType.Application.Json)
-                header(HttpHeaders.Authorization, AUTH_TOKEN)
                 setBody(request)
             }
         }
@@ -75,7 +70,6 @@ class KtorNearApiProvider(
         execute {
             get("https://1click.chaindefuser.com/v0/status") {
                 contentType(ContentType.Application.Json)
-                header(HttpHeaders.Authorization, AUTH_TOKEN)
                 parameter("depositAddress", depositAddress)
             }.body()
         }
@@ -101,10 +95,3 @@ class KtorNearApiProvider(
             }
         }
 }
-
-private const val AUTH_TOKEN =
-    "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IjIwMjUtMDEtMTItdjEifQ.eyJ2IjoxLCJrZXlfdHlwZSI6ImRpc3RyaWJ1dG" +
-        "lvbl9jaGFubmVsIiwicGFydG5lcl9pZCI6InpvZGwiLCJpYXQiOjE3NzUwMjc5MzgsImV4cCI6MTgwNjU2MzkzOH0.TwBxHbVpCZWhvREfK0" +
-        "hvQMPn4eibIqBylc9AI-dy7xR5-k519lFoDxqTaIfv70E-Oa4aswOkWv_Rx2OQUkbL41RMHxWiOU6jnn6z6gXVGfylZ-sZK5bELnvPugyucD" +
-        "-BLSRw3ia-czvTO_LDYGBNDO78J0QbjOe0-CIbg06PxA59tui8SGXQ5paGi6bHUpdjnKXOOB1PAwkIZOaZjqrlh4YoATdFhAgEfbfu9zXdNq" +
-        "jtmYfmAzn8B3_hGI_ZoyIN1sR3ka-LWa5rIaIMfaqBTvDFn2zmCdCbUCUMKhkeBijfpVAf3UmrK4gQeLgo70AQqAFSHZeIk6X0loH_AwzBag"

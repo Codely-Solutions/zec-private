@@ -3,7 +3,6 @@ package co.electriccoin.zcash.ui.common.repository
 import androidx.annotation.RestrictTo
 import androidx.annotation.VisibleForTesting
 import co.electriccoin.zcash.crash.android.GlobalCrashReporter
-import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_ADDRESS
 import co.electriccoin.zcash.ui.common.datasource.AssetNotFoundException
 import co.electriccoin.zcash.ui.common.datasource.NEAR_SWAP_PROVIDER
 import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
@@ -330,8 +329,7 @@ class SwapRepositoryImpl(
                             originAsset = originAsset,
                             destinationAddress = destinationAddress,
                             destinationAsset = destinationAsset,
-                            slippage = slippage,
-                            affiliateAddress = AFFILIATE_ADDRESS
+                            slippage = slippage
                         )
                     receivedQuote = result
                     requireQuoteMatchesUserAmount(
@@ -405,8 +403,7 @@ class SwapRepositoryImpl(
                             originAsset = originAsset,
                             destinationAddress = address,
                             destinationAsset = destinationAsset,
-                            slippage = slippage,
-                            affiliateAddress = AFFILIATE_ADDRESS
+                            slippage = slippage
                         )
                     receivedQuote = result
                     when (mode) {

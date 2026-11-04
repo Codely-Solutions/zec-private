@@ -13,7 +13,6 @@ import co.electriccoin.zcash.ui.common.model.ZcashShieldedSwapAddress
 import co.electriccoin.zcash.ui.common.model.ZcashSwapAddress
 import co.electriccoin.zcash.ui.common.model.ZcashTransparentSwapAddress
 import co.electriccoin.zcash.ui.common.model.isZCashAsset
-import co.electriccoin.zcash.ui.common.model.near.AppFee
 import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuote
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
@@ -31,7 +30,6 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.TokenIconProvider
 import co.electriccoin.zcash.ui.common.provider.TokenNameProvider
 import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector.mayContainGiftCardSecret
-import co.electriccoin.zcash.ui.util.loggableNot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.math.BigDecimal
@@ -47,7 +45,6 @@ class NearSwapDataSource(
     private val blockchainProvider: BlockchainProvider,
     private val synchronizerProvider: SynchronizerProvider,
 ) : SwapDataSource {
-    private val log = loggableNot("NearSwapDataSourceImpl")
 
     override suspend fun getSupportedTokens(): List<SwapAsset> =
         withContext(Dispatchers.Default) {
@@ -76,8 +73,7 @@ class NearSwapDataSource(
         originAsset: SwapAsset,
         destinationAddress: String,
         destinationAsset: SwapAsset,
-        slippage: BigDecimal,
-        affiliateAddress: String
+        slippage: BigDecimal
     ): SwapQuote {
         if (mayContainGiftCardSecret(destinationAddress) || mayContainGiftCardSecret(refundAddress)) {
             throw GiftCardAddressNotAllowedException()
@@ -115,14 +111,7 @@ class NearSwapDataSource(
                 recipientType = RecipientType.DESTINATION_CHAIN,
                 deadline = Clock.System.now() + 2.hours,
                 quoteWaitingTimeMs = QUOTE_WAITING_TIME,
-                appFees =
-                    listOf(
-                        AppFee(
-                            recipient = affiliateAddress,
-                            fee = AFFILIATE_FEE_BPS
-                        )
-                    ),
-                referral = "zodl"
+                appFees = emptyList()
             )
 
         val response =
@@ -206,7 +195,6 @@ class NearSwapDataSource(
         val destinationAsset =
             findAssetByEchoedId(supportedTokens, response.quoteResponse.quoteRequest.destinationAsset)
                 ?: throw AssetNotFoundException(response.quoteResponse.quoteRequest.destinationAsset)
-        log("checkSwapStatus $depositAddress")
         return NearSwapQuoteStatus(
             response = response,
             origin = originAsset,
@@ -253,8 +241,6 @@ class NearSwapDataSource(
         }
 }
 
-const val AFFILIATE_FEE_BPS = 67
-const val AFFILIATE_ADDRESS = "d78abd5477432c9d9c5e32c4a1a0056cd7b8be6580d3c49e1f97185b786592db"
 
 /** The only swap provider the app talks to; the id [NearSwapQuote] reports as its `provider`. */
 internal const val NEAR_SWAP_PROVIDER = "near"

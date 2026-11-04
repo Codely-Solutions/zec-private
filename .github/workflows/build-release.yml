@@ -1,0 +1,108 @@
+name: Build and publish ZEC Private
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      source_sha:
+        type: string
+        required: true
+    secrets:
+      RELEASE_KEYSTORE_BASE64:
+        required: true
+      RELEASE_STORE_PASSWORD:
+        required: true
+      RELEASE_KEY_PASSWORD:
+        required: true
+      NTFY_URL:
+        required: false
+permissions: {}
+concurrency:
+  group: zec-private-release
+  cancel-in-progress: false
+jobs:
+  unsigned:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      contents: read
+    outputs:
+      source_sha: ${{ steps.identity.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - id: identity
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Fork regression checks
+        run: |
+          python3 .private/check.py
+          python3 .private/test_controls.py
+      - name: Unit tests, static analysis, lint and unsigned FOSS release
+        env:
+          GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --no-watch-fs --max-workers=2 :ui-lib:testReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease
+          python3 .private/proof.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: validated-unsigned-apk
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 3
+  publish:
+    needs: unsigned
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout trusted controller revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: validated-unsigned-apk
+          path: artifact/
+      - name: Sign, verify, publish and record successful integration
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.unsigned.outputs.source_sha }}
+          CONTROLLER_SHA: ${{ github.sha }}
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          gh auth setup-git
+          python3 .private/publish.py
+      - name: Notify signed APK ready
+        env:
+          NTFY_URL: ${{ secrets.NTFY_URL }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .private/notify.py "ZEC Private APK built, signed and published. Download it from GitHub Releases."
+  failed:
+    if: ${{ always() && (needs.unsigned.result == 'failure' || needs.publish.result == 'failure') }}
+    needs: [unsigned, publish]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          NTFY_URL: ${{ secrets.NTFY_URL }}
+          MAKE_ISSUE: 'true'
+        run: python3 .private/notify.py "ZEC Private update blocked by a build or release check. Last working release remains available."

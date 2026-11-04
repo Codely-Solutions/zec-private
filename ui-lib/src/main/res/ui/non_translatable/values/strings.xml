@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <resources>
-    <string translatable="false" name="support_email_address">support@zodl.com</string>
+    <string translatable="false" name="support_email_address">noreply@localhost</string>
 
     <!-- These are replaced by resource overlaying via app/build.gradle.kts -->
     <string translatable="false" name="app_name">zashi-ui</string>

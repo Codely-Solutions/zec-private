@@ -124,8 +124,7 @@ class NearSwapDataSourceGiftCardLinkTest {
         originAsset = origin,
         destinationAddress = destinationAddress,
         destinationAsset = zec,
-        slippage = BigDecimal("2"),
-        affiliateAddress = "affiliate"
+        slippage = BigDecimal("2")
     )
 
     /**

@@ -1,6 +1,5 @@
 package co.electriccoin.zcash.ui.common.model.near
 
-import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_FEE_BPS
 import co.electriccoin.zcash.ui.common.model.SwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapMode
@@ -99,12 +98,7 @@ data class NearSwapQuoteStatus(
 
     override val amountInFormatted: BigDecimal = response.swapDetails?.amountInFormatted ?: quote.amountInFormatted
 
-    override val amountInFee: BigDecimal =
-        amountInFormatted
-            .multiply(
-                BigDecimal(AFFILIATE_FEE_BPS).divide(BigDecimal("10000"), MathContext.DECIMAL128),
-                MathContext.DECIMAL128
-            )
+    override val amountInFee: BigDecimal = BigDecimal.ZERO
 
     override val amountInUsd: BigDecimal = response.swapDetails?.amountInUsd ?: quote.amountInUsd
 

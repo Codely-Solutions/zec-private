@@ -1,11 +1,9 @@
 package co.electriccoin.zcash.ui.common.model.near
 
 import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
-import cash.z.ecc.android.sdk.ext.convertZecToZatoshi
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.extension.ZERO
-import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_FEE_BPS
 import co.electriccoin.zcash.ui.common.datasource.NEAR_SWAP_PROVIDER
 import co.electriccoin.zcash.ui.common.model.SwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAsset
@@ -14,7 +12,6 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
 import co.electriccoin.zcash.ui.common.model.isSame
-import co.electriccoin.zcash.ui.common.model.isZCashAsset
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
@@ -110,38 +107,11 @@ data class NearSwapQuote(
     override val amountOutUsd: BigDecimal = response.quote.amountOutUsd
     override val amountOutFormatted: BigDecimal = response.quote.amountOutFormatted
 
-    override val affiliateFee: BigDecimal =
-        response.quote.amountInFormatted
-            .multiply(
-                BigDecimal(AFFILIATE_FEE_BPS).divide(BigDecimal("10000"), MathContext.DECIMAL128),
-                MathContext.DECIMAL128
-            )
+    override val affiliateFee: BigDecimal = BigDecimal.ZERO
 
-    override val affiliateFeeZatoshi: Zatoshi =
-        if (originAsset.isZCashAsset) {
-            response.quote.amountInFormatted
-                .coerceAtLeast(BigDecimal(0))
-                .multiply(
-                    BigDecimal(AFFILIATE_FEE_BPS).divide(BigDecimal("10000"), MathContext.DECIMAL128),
-                    MathContext.DECIMAL128
-                ).convertZecToZatoshi()
-        } else {
-            response.quote.amountOutUsd
-                .coerceAtLeast(BigDecimal(0))
-                .multiply(
-                    BigDecimal(AFFILIATE_FEE_BPS).divide(BigDecimal("10000"), MathContext.DECIMAL128),
-                    MathContext.DECIMAL128
-                ).divide(zecExchangeRate, MathContext.DECIMAL128)
-                .convertZecToZatoshi()
-        }
+    override val affiliateFeeZatoshi: Zatoshi = Zatoshi.ZERO
 
-    override val affiliateFeeUsd: BigDecimal =
-        response.quote.amountInUsd
-            .coerceAtLeast(BigDecimal(0))
-            .multiply(
-                BigDecimal(AFFILIATE_FEE_BPS).divide(BigDecimal("10000"), MathContext.DECIMAL128),
-                MathContext.DECIMAL128
-            )
+    override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO
 
     override val timestamp: Instant = response.timestamp
 

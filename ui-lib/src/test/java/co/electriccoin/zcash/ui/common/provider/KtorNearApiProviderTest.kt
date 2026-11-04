@@ -1,6 +1,5 @@
 package co.electriccoin.zcash.ui.common.provider
 
-import co.electriccoin.zcash.ui.common.model.near.AppFee
 import co.electriccoin.zcash.ui.common.model.near.QuoteRequest
 import co.electriccoin.zcash.ui.common.model.near.SubmitDepositTransactionRequest
 import co.electriccoin.zcash.ui.common.model.near.SwapType
@@ -14,22 +13,22 @@ import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
+import io.ktor.http.content.TextContent
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 /**
  * [KtorNearApiProvider] drives the 1Click HTTP API. The contract these tests pin down: the three
- * privileged endpoints (quote, deposit submit, status) must carry the `Authorization: Bearer …`
- * credential, the public token list must NOT, and a NEAR error body must be lifted into a typed
+ * swap endpoints and the public token list must omit Authorization, and a NEAR error body must be lifted into a typed
  * [ResponseWithNearErrorException] (falling back to the raw [ResponseException] otherwise).
  */
 class KtorNearApiProviderTest {
@@ -60,7 +59,7 @@ class KtorNearApiProviderTest {
         }
 
     @Test
-    fun requestQuoteSendsBearerAuthorizationHeader() =
+    fun requestQuoteDoesNotSendAuthorizationHeader() =
         runBlocking {
             // The QuoteResponseDto body intentionally fails to deserialize; we only assert the request.
             responseBody = "{}"
@@ -69,12 +68,15 @@ class KtorNearApiProviderTest {
             val request = requests.single()
             assertEquals(HttpMethod.Post, request.method)
             assertEquals("/v0/quote", request.url.encodedPath)
-            assertBearerAuthorization(request)
+            val body = Json.parseToJsonElement((request.body as TextContent).text).jsonObject
+            assertEquals("[]", body["appFees"].toString())
+            assertNull(body["referral"])
+            assertNoAuthorization(request)
             assertRespectsTorPreference()
         }
 
     @Test
-    fun submitDepositTransactionSendsBearerAuthorizationHeader() =
+    fun submitDepositTransactionDoesNotSendAuthorizationHeader() =
         runBlocking {
             provider.submitDepositTransaction(
                 SubmitDepositTransactionRequest(txHash = "hash", depositAddress = "deposit")
@@ -83,12 +85,12 @@ class KtorNearApiProviderTest {
             val request = requests.single()
             assertEquals(HttpMethod.Post, request.method)
             assertEquals("/v0/deposit/submit", request.url.encodedPath)
-            assertBearerAuthorization(request)
+            assertNoAuthorization(request)
             assertRespectsTorPreference()
         }
 
     @Test
-    fun checkSwapStatusSendsBearerAuthorizationHeaderAndDepositAddressParameter() =
+    fun checkSwapStatusDoesNotSendAuthorizationHeaderAndDepositAddressParameter() =
         runBlocking {
             responseBody = "{}"
             runCatching { provider.checkSwapStatus(depositAddress = "deposit-address") }
@@ -97,7 +99,7 @@ class KtorNearApiProviderTest {
             assertEquals(HttpMethod.Get, request.method)
             assertEquals("/v0/status", request.url.encodedPath)
             assertEquals("deposit-address", request.url.parameters["depositAddress"])
-            assertBearerAuthorization(request)
+            assertNoAuthorization(request)
             assertRespectsTorPreference()
         }
 
@@ -135,10 +137,8 @@ class KtorNearApiProviderTest {
         }
     }
 
-    private fun assertBearerAuthorization(request: HttpRequestData) {
-        val authorization = request.headers[HttpHeaders.Authorization]
-        assertNotNull(authorization, "Authorization header must be present")
-        assertTrue(authorization.startsWith("Bearer "), "Authorization header must be a Bearer token")
+    private fun assertNoAuthorization(request: HttpRequestData) {
+        assertNull(request.headers[HttpHeaders.Authorization])
     }
 
     private fun quoteRequest() =
@@ -152,7 +152,7 @@ class KtorNearApiProviderTest {
             refundTo = "refund",
             recipient = "recipient",
             deadline = Instant.fromEpochMilliseconds(0),
-            appFees = listOf(AppFee(recipient = "affiliate", fee = 75))
+            appFees = emptyList()
         )
 
     private fun assertRespectsTorPreference() {

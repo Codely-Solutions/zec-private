@@ -1,0 +1,76 @@
+"""Trusted controller: fetch stable upstream, gate critical diffs, apply exact patch."""
+import json, os, re, shutil, subprocess
+from pathlib import Path
+
+ROOT=Path(__file__).resolve().parents[1]
+OFFICIAL='zodl-inc/zodl-android'
+def run(*args,cwd=ROOT):
+    return subprocess.check_output(args,cwd=cwd,text=True).strip()
+def gh(path): return json.loads(run('gh','api',path))
+def version(tag):
+    match=re.fullmatch(r'(\d+)\.(\d+)\.(\d+)-(\d+)',tag)
+    if not match: raise RuntimeError('Unsupported upstream version format; review required')
+    return tuple(map(int,match.groups()))
+def critical(path):
+    return (path.startswith(('build-conventions/','buildSrc/','gradle/','feature-','sdk-')) or
+            path.endswith(('.gradle.kts','gradle.lockfile','AndroidManifest.xml')) or
+            path.startswith('ui-lib/src/main/java/co/electriccoin/zcash/ui/common/') or
+            '/network/' in path or '/security/' in path or '/di/' in path)
+def output(**values):
+    with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
+        for key,value in values.items(): stream.write(f'{key}={value}\n')
+
+def main():
+    state=json.loads((ROOT/'.private/upstream.json').read_text())
+    releases=gh(f'repos/{OFFICIAL}/releases?per_page=100')
+    stable=[r for r in releases if not r['draft'] and not r['prerelease'] and r.get('published_at')]
+    latest=max(stable,key=lambda r:version(r['tag_name']))
+    tag=latest['tag_name']
+    if version(tag)<=version(state['tag']):
+        output(changed='false'); return
+    if not latest['html_url'].startswith(f'https://github.com/{OFFICIAL}/releases/tag/'):
+        raise RuntimeError('Unexpected upstream release repository')
+    run('git','fetch','--no-tags',f'https://github.com/{OFFICIAL}.git',f'refs/tags/{tag}')
+    commit=run('git','rev-parse','FETCH_HEAD^{commit}')
+    run('git','fetch','--no-tags',f'https://github.com/{OFFICIAL}.git',state['sha'])
+    changes=run('git','diff','--name-only',state['sha'],commit).splitlines()
+    unsafe=[p for p in changes if critical(p)]
+    if 'gradle.properties' in changes:
+        old=run('git','show',state['sha']+':gradle.properties')
+        new=run('git','show',commit+':gradle.properties')
+        normalize=lambda text: re.sub(r'^ZCASH_VERSION_(?:CODE|NAME)=.*$','',text,flags=re.M)
+        if normalize(old)!=normalize(new): unsafe.append('gradle.properties (dependencies or security configuration)')
+    if unsafe: raise RuntimeError('Critical upstream changes require review: '+', '.join(unsafe[:25]))
+    branch='updates/'+tag
+    # A fresh detached worktree prevents upstream workflows from replacing the controller.
+    candidate=Path(os.environ['RUNNER_TEMP'])/'candidate'
+    run('git','worktree','add','--detach',str(candidate),commit)
+    try:
+        run('git','apply','--unidiff-zero','--check',str(ROOT/'.private/fork.patch'),cwd=candidate)
+        run('git','apply','--unidiff-zero',str(ROOT/'.private/fork.patch'),cwd=candidate)
+        shutil.rmtree(candidate/'.github/workflows')
+        shutil.copytree(ROOT/'.github/workflows',candidate/'.github/workflows')
+        shutil.copytree(ROOT/'.private',candidate/'.private')
+        shutil.copy2(ROOT/'README.md',candidate/'README.md')
+        code=version(tag)[3]*1000+1
+        props=candidate/'gradle.properties'
+        props.write_text(re.sub(r'^ZCASH_VERSION_CODE=\d+$',f'ZCASH_VERSION_CODE={code}',props.read_text(),flags=re.M))
+        (candidate/'.private/candidate.json').write_text(json.dumps({'tag':tag,'sha':commit,'published_at':latest['published_at'],'versionCode':code},indent=2)+'\n')
+        run('python3','.private/check.py',cwd=candidate)
+        run('git','add','-A',cwd=candidate)
+        run('git','-c','user.name=ZEC Private automation','-c','user.email=zec-private@users.noreply.github.com','commit','-m',f'Prepare upstream {tag} with private fork changes',cwd=candidate)
+        sha=run('git','rev-parse','HEAD',cwd=candidate)
+        # Do not replace a previous candidate. A repeated poll can reuse only the exact same tree.
+        existing=run('git','ls-remote','origin',f'refs/heads/{branch}')
+        if existing:
+            prior=existing.split()[0]
+            run('git','fetch','origin',prior)
+            if run('git','rev-parse',prior+'^{tree}')!=run('git','rev-parse',sha+'^{tree}',cwd=candidate):
+                raise RuntimeError('Candidate branch differs; review required')
+            sha=prior
+        else: run('git','push','origin',f'{sha}:refs/heads/{branch}')
+        output(changed='true',source_sha=sha,branch=branch)
+    finally:
+        run('git','worktree','remove','--force',str(candidate))
+
+if __name__=='__main__': main()
