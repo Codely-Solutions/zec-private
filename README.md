@@ -20,9 +20,9 @@ The existing Tor preference is preserved. When Tor is enabled, the shared HTTP p
 
 ## Building and installing
 
-Use the checked-in Gradle wrapper, JDK 21 toolchain and Android SDK 36. Keep dependency locks and wrapper checksums intact. The upstream release currently names `com.zodl.android` SDK `6.0.0-SNAPSHOT`; this is a reproducibility concern that must be resolved or explicitly pinned by artifact digest before automatic publication is enabled.
+Use the checked-in Gradle wrapper, JDK 21 toolchain and Android SDK 36. Keep dependency locks and wrapper checksums intact. This fork pins `com.zodl.android` SDK `6.0.0`, the current stable release verified from Maven Central and the official source tag. Upstream's app tag used `6.0.0-SNAPSHOT`; the stable replacement still requires successful build and behavioral validation.
 
-Run `python3 .private/check.py` and `python3 .private/test_controls.py`, then `./gradlew --no-daemon --no-watch-fs --max-workers=2 :ui-lib:testReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease`. Release debuggability and debug-key signing are disabled. Supply release-signing Gradle properties from a private environment only, or sign the unsigned APK in a separate process using Android apksigner.
+Run `python3 .private/check.py` and `python3 .private/test_controls.py`, then `./gradlew --no-daemon --no-watch-fs --max-workers=2 :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease`. Release debuggability and debug-key signing are disabled. Supply release-signing Gradle properties from a private environment only, or sign the unsigned APK in a separate process using Android apksigner.
 
 Download signed APKs and SHA256SUMS from this private repository's GitHub Releases. Check the checksum and signing certificate before installing. Android may require enabling installation for the application used to open the APK. Updates must use the same signing key and a higher versionCode. Never uninstall an existing wallet to resolve an update failure without independently securing its recovery material. Automatic phone installation is not configured.
 

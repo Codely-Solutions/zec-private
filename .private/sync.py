@@ -22,7 +22,14 @@ def output(**values):
 
 def source_state(root):
     paths=run('git','ls-files',cwd=root).splitlines()
-    return {p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in paths
+    def digest(path):
+        data=path.read_bytes()
+        try:
+            data.decode('utf-8')
+            data=data.replace(b'\r\n',b'\n')
+        except UnicodeDecodeError: pass
+        return hashlib.sha256(data).hexdigest()
+    return {p:digest(root/p) for p in paths
             if not p.startswith(('.private/','.github/')) and p!='README.md' and (root/p).is_file()}
 
 def main():

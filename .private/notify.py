@@ -11,11 +11,15 @@ if os.environ.get('MAKE_ISSUE')=='true':
     import json
     if not json.loads(found):
         subprocess.run(['gh','issue','create','--repo',repo,'--title',title,'--body',message+'\n\nWorkflow evidence: '+link+'\nLast published APK is unchanged.'],check=True)
-url=os.environ.get('NTFY_URL')
+url=os.environ.get('NTFY_URL','').strip()
 if url:
     request=urllib.request.Request(url,data=(message+' '+link).encode(),headers={'Title':'ZEC Private','Priority':'default'},method='POST')
-    with urllib.request.urlopen(request,timeout=20) as response:
-        if response.status!=200: raise RuntimeError('ntfy notification failed')
+    # Suppress exceptions containing the secret topic URL.
+    try:
+        with urllib.request.urlopen(request,timeout=20) as response:
+            if response.status!=200: raise RuntimeError('notification rejected')
+    except Exception as error:
+        raise SystemExit('ntfy notification failed: '+type(error).__name__)
     print('Push notification accepted by ntfy; phone delivery requires subscription.')
 else:
     print('ntfy is not configured; use GitHub workflow and issue notifications.')
