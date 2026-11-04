@@ -1,0 +1,134 @@
+name: Full simulated stable upgrade acceptance
+on:
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: zec-private-release
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      source_sha: ${{ steps.prepare.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - run: |
+          python3 .private/test_controls.py
+          python3 .private/test_sync.py
+      - id: prepare
+        run: python3 .private/create_simulation.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: simulation-source
+          path: simulation-source.bundle
+          retention-days: 1
+  unsigned:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: simulation-source
+          path: ${{ runner.temp }}/simulation-source
+      - env:
+          EXPECTED_SHA: ${{ needs.prepare.outputs.source_sha }}
+        run: |
+          git bundle verify "$RUNNER_TEMP/simulation-source/simulation-source.bundle"
+          git fetch "$RUNNER_TEMP/simulation-source/simulation-source.bundle" simulation-local
+          test "$(git rev-parse FETCH_HEAD)" = "$EXPECTED_SHA"
+          git checkout --detach "$EXPECTED_SHA"
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+      - name: Validate and build simulated upgraded source
+        run: |
+          python3 .private/check.py
+          python3 .private/live_near.py
+          chmod +x gradlew
+          ./gradlew --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease
+          python3 .private/proof.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: simulation-unsigned
+          path: artifact/
+          retention-days: 1
+  sign:
+    needs: [prepare, unsigned]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: simulation-unsigned
+          path: artifact/
+      - name: Sign and verify without real publication or state changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ needs.prepare.outputs.source_sha }}
+          SIMULATION: 'true'
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: python3 .private/publish.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: simulation-receipt
+          path: dist/simulation-receipt.json
+          if-no-files-found: error
+          retention-days: 10
+      - name: Notify simulated upgrade acceptance
+        env:
+          NTFY_URL: ${{ secrets.NTFY_URL }}
+        run: |
+          python3 .private/notify.py "TEST: fee and incompatible-upstream regressions blocked publication as expected. Real release state is unchanged."
+          python3 .private/notify.py "TEST: ZEC Private simulated stable upgrade passed build, tests and permanent-key signing. No test APK was published."
+  failed:
+    if: ${{ always() && (needs.prepare.result == 'failure' || needs.unsigned.result == 'failure' || needs.sign.result == 'failure') }}
+    needs: [prepare, unsigned, sign]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - env:
+          NTFY_URL: ${{ secrets.NTFY_URL }}
+        run: python3 .private/notify.py "TEST: simulated ZEC Private upgrade failed. No production release or state was changed."
+  cleanup:
+    if: always()
+    needs: [prepare, unsigned, sign]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Remove disposable source and unsigned APK artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" --jq '.artifacts[] | select(.name == "simulation-source" or .name == "simulation-unsigned") | .id' | while read -r id; do
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id"
+          done
