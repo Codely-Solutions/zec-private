@@ -12,7 +12,13 @@ def version(tag):
     if not match: raise RuntimeError('Unsupported upstream version format; review required')
     return tuple(map(int,match.groups()))
 def critical(path):
-    return (path.startswith(('build-conventions','buildSrc/','gradle/','feature-','sdk-',
+    sensitive_screen=re.match(
+        r'^ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/'
+        r'(authentication|walletbackup|restore|onboarding|exportvk|exportdata|deletewallet|tor|'
+        r'chooseserver|send|pay|swap|reviewtransaction|transactionprogress|receive|request|qrcode|'
+        r'scan|signkeystonetransaction|connecthw|connectkeystone|scankeystone|selectkeystoneaccount|'
+        r'choosehwwallet|ironwood|advancedsettings)/',path)
+    return (bool(sensitive_screen) or path.startswith(('build-conventions','buildSrc/','gradle/','feature-','sdk-',
                             'app/src/','tools/','preference-','crash-')) or
             path in ('gradlew','gradlew.bat') or
             path.endswith(('.gradle.kts','gradle.lockfile','AndroidManifest.xml')) or

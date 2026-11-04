@@ -23,6 +23,14 @@ class SyncTests(unittest.TestCase):
             sync.main()
             output.assert_called_once_with(changed='false')
 
+    def test_sensitive_wallet_screens_require_review(self):
+        base='ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/'
+        for screen in ('walletbackup','restore','onboarding','authentication','tor','send',
+                       'swap','reviewtransaction','signkeystonetransaction','receive','ironwood'):
+            with self.subTest(screen=screen):
+                self.assertTrue(sync.critical(base+screen+'/Screen.kt'))
+        self.assertFalse(sync.critical(base+'colorpicker/Screen.kt'))
+
     def test_critical_change_blocks_before_candidate_or_publication(self):
         original=sync.run
         def commands(*args,**kwargs):

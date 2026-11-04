@@ -1,0 +1,46 @@
+{
+  "release_tag": "v3.19.0-private.2",
+  "apk_source_sha": "b117e9edce32f88fcfb9b6ecc2d5473a255e2b04",
+  "upstream": {
+    "tag": "3.19.0-3234",
+    "sha": "a57ea1455840a0d97eb0b2a3d2557480dfe5bda7",
+    "published_at": "2026-10-29T16:12:07Z",
+    "versionCode": 3234002
+  },
+  "verification": {
+    "package": "com.personal.zecprivate.foss",
+    "versionName": "3.19.0",
+    "versionCode": 3234002,
+    "debuggable": false,
+    "apk_bytes": 114013666,
+    "apk_sha256": "b3e1cb0baa4442191fc998ec0dfb876bb571306f9693974ef38ea52347e6522e",
+    "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
+    "signature_verified": true,
+    "zipalign_16k_verified": true,
+    "provider_unique": true,
+    "license_preserved": true,
+    "device_install_tested": false
+  },
+  "tests": {
+    "run": 41932146968,
+    "tests": 1386,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "quote_rendering_regressions_passed": [
+      "incomingQuoteFeeNoteRendersWithoutFormatConversionFailure",
+      "outgoingExactInputFeeNoteRendersWithoutFormatConversionFailure",
+      "outgoingExactOutputFeeNoteRendersWithoutFormatConversionFailure"
+    ],
+    "reports_zip_sha256": "374a93781b549d95c67cb93cd490c001725c0b3980759f102afae2c04d08a806"
+  },
+  "local_guard_receipt": "f623a117561c43cd9568e7c1e7930bf9",
+  "local_guard_accepted": true,
+  "local_guard_owned_survivors": [],
+  "production_run": "https://github.com/Sammy-Lastre/zec-private/actions/runs/41932146968",
+  "corrected_device_quote_retest": "pending",
+  "funded_transactions_tested": false,
+  "valid_funded_deposit_submission_tested": false,
+  "user_wallet_secrets_used": false,
+  "automatic_phone_installation": false
+}
