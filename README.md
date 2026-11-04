@@ -2,7 +2,7 @@
 
 Personal fork of [Zodl Android](https://github.com/zodl-inc/zodl-android), based on stable release `3.19.0-3234`, commit `a57ea1455840a0d97eb0b2a3d2557480dfe5bda7`, published October 29, 2026. Upstream copyright and MIT license remain in LICENSE. Original setup and security documentation remain in docs/.
 
-This project is under validation. A committed workflow or passing static check does not establish that a usable APK exists. See `.private/STATUS.md` for verified results and blockers before installing or funding a wallet.
+The signed [v3.19.0-private.2 release](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.2), versionCode `3234002`, fixes the quote-sheet percent-formatting crash in revision 1. All 1,386 unit tests, including three Compose quote-row rendering regressions, lint, Detekt and live unfunded API checks passed. Independent local verification confirmed its manifest, signature, certificate, checksum and alignment. See `.private/STATUS.md` for the validation limits and upgrade acceptance record.
 
 ## Differences
 
@@ -20,7 +20,7 @@ The existing Tor preference is preserved. When Tor is enabled, the shared HTTP p
 
 ## Building and installing
 
-Use the checked-in Gradle wrapper, JDK 21 toolchain and Android SDK 36. Keep dependency locks and wrapper checksums intact. This fork pins `com.zodl.android` SDK `6.0.0`, the current stable release verified from Maven Central and the official source tag. Upstream's app tag used `6.0.0-SNAPSHOT`; the stable replacement still requires successful build and behavioral validation.
+Use the checked-in Gradle wrapper, JDK 21 toolchain and Android SDK 36. Keep dependency locks and wrapper checksums intact. This fork pins `com.zodl.android` SDK `6.0.0`, the current stable release verified from Maven Central and the official source tag. Upstream's app tag used `6.0.0-SNAPSHOT`; the stable replacement passed the release build and 1,386 unit tests. Device and funded-transaction acceptance remain untested.
 
 Run `python3 .private/check.py` and `python3 .private/test_controls.py`, then `./gradlew --no-daemon --no-watch-fs --max-workers=2 :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease`. Release debuggability and debug-key signing are disabled. Supply release-signing Gradle properties from a private environment only, or sign the unsigned APK in a separate process using Android apksigner.
 
@@ -34,9 +34,9 @@ The controller fetches the exact upstream tag, resolves its commit, checks criti
 
 Unsigned builds receive no signing secrets. The signing job checks out the controller revision, downloads only the current run's validated artifact, verifies its bound source SHA, hash, package and version, and invokes SDK signing tools without running upstream Gradle scripts. Pull requests have no signing workflow. All external Actions are pinned to official immutable revisions. Upstream workflows are disabled in this fork.
 
-Private release tags use `v<upstream-version>-private.1`. Android versionCode uses upstream build number times 1000 plus a private revision; the publisher requires it to exceed previous releases. Published tags and assets are never replaced. Previous releases are retained. Candidate commits retain the controller revision and upstream commit as parents. After publication, a normal fast-forward push records integration; concurrent modifications cause the push to fail instead of being overwritten. The signing job needs a fresh signing credential for every future key rotation, and Android update compatibility must be handled separately.
+Private release tags use `v<upstream-version>-private.<revision>`, with the revision stored in `.private/release-revision.json`. Android versionCode is at least the upstream build number times 1000 plus one, and strictly exceeds the stored code even if upstream resets its build counter. The publisher independently compares previous releases. Published tags and assets are never replaced. Previous releases are retained. Candidate commits retain the controller revision and upstream commit as parents. After publication, a normal fast-forward push records integration; concurrent modifications cause the push to fail instead of being overwritten. The signing job needs a fresh signing credential for every future key rotation, and Android update compatibility must be handled separately.
 
-For a manual build use Actions → Build and publish ZEC Private → Run workflow. Rebuilding an already published version intentionally refuses to replace it; increase the private revision/versionCode through reviewed changes when a new release is needed.
+For a manual build use Actions → Build and publish ZEC Private → Run workflow. Rebuilding an already published version intentionally refuses to replace it. For a new private revision of the same upstream version, increase `private_revision` in `.private/release-revision.json` and `ZCASH_VERSION_CODE`, and regenerate `.private/fork.patch` and `.private/source-state.json` before dispatching. Preserve the signing key. For a normal new upstream stable version, use Follow stable upstream releases; it prepares the code and tag automatically.
 
 ## Signing custody and notifications
 
@@ -45,3 +45,15 @@ The dedicated RSA-4096 signing certificate SHA-256 is `41:01:74:E0:D6:80:63:8D:1
 The local signing files are outside this repository at `D:\Data\Crypto\zec-private\signing\`: `release.p12`, `release-backup.p12`, and `password.txt`. Copy the backup and password to separate encrypted offline storage; two files on one drive are not an independent disaster-recovery backup. Restore the exact keystore and alias `zec-private`, then restore the matching Actions secrets. Never generate a replacement key for a routine update.
 
 The ntfy URL is in Actions secret `NTFY_URL` and the private local file `D:\Data\Crypto\zec-private\signing\ntfy-url.txt`. Install ntfy on Android, add a subscription using that file's server/topic, and allow Android notifications and background delivery. Keep the topic private: possession permits subscribing and publishing on the public ntfy service. Push acceptance by the service does not prove delivery to your phone. Notification text contains only build/release information and GitHub links. GitHub Actions, review issues and Releases remain available if push delivery fails.
+
+## Validation and recovery
+
+The production build is [run 41932146968](https://github.com/Sammy-Lastre/zec-private/actions/runs/41932146968). The local APK is `dist/zec-private-latest.apk`; its SHA-256 is `b3e1cb0baa4442191fc998ec0dfb876bb571306f9693974ef38ea52347e6522e`. `dist/verification.json`, `dist/tests.json` and `dist/SHA256SUMS` hold local evidence. Android SDK tools verified the release manifest, signature, unique provider authority and 16 KiB ZIP alignment. No phone installation or funded transaction was performed. ZIP alignment does not independently establish every native library's runtime compatibility.
+
+Full simulated stable upgrade acceptance creates a local synthetic upstream commit, runs the real patch controller and full Android build, then signs on a separate machine using the permanent key. It first restores the original malformed percent text and requires all three quote modes to reproduce the reported formatter crash, then restores the exact corrected source and runs the full suite. It also tests duplicate polling, a tampered APK and disposable state advancement. It uploads a compact receipt, removes temporary source/unsigned artifacts and deletes the signed test APK. It never publishes a fake release or changes the real integration state. Expected fee, quote-text and critical-change failures send clearly marked TEST notifications. Actual GitHub publication is established by the production run above. Run this workflow after changes to trusted update/signing controls.
+
+The FOSS crash provider is disabled and store-only crash dependencies are excluded. Upstream still declares Flexa libraries in shared build configuration; the absent Flexa API key disables its initialization and account flow. This fork does not claim that every integration library has been removed from the binary.
+
+Local Gradle attempts were stopped by resource-guard receipt/inventory failures before a compiler result. Their owned processes and disposable caches were removed. Release validation therefore used isolated GitHub-hosted runners. The local signed APK subsequently passed independent guarded verification.
+
+Revision 1 remains immutable and marked affected. Install revision 2 over the existing app; its unchanged package and signing certificate, together with its higher versionCode, support an in-place Android update. Actual device retest of revision 2 is pending user confirmation.
