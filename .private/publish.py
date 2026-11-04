@@ -12,6 +12,10 @@ def record_integration(path, upstream):
     path.write_text(json.dumps(upstream,indent=2)+'\n')
 
 def simulation_receipt(proof, signed, digest, dist):
+    negative=json.loads((ROOT/'artifact/quote-rendering-negative.json').read_text())
+    if (negative.get('source_sha')!=proof['source_sha'] or not negative.get('original_crash_reproduced') or
+            negative.get('quote_modes_tested')!=3 or not negative.get('source_restored')):
+        raise RuntimeError('Missing original quote-crash regression evidence')
     original_state=(ROOT/'.private/upstream.json').read_bytes()
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as temp:
         temp=Path(temp)
@@ -39,7 +43,7 @@ def simulation_receipt(proof, signed, digest, dist):
             raise RuntimeError('Simulated integration state did not advance')
     if (ROOT/'.private/upstream.json').read_bytes()!=original_state:
         raise RuntimeError('Simulation changed real integrated state')
-    receipt=dict(simulation=True,source_sha=proof['source_sha'],upstream=proof['upstream'],
+    receipt=dict(simulation=True,original_quote_crash_reproduced=True,quote_modes_tested=3,source_sha=proof['source_sha'],upstream=proof['upstream'],
                  package=proof['package'],versionCode=proof['versionCode'],versionName=proof['versionName'],
                  apk_sha256=digest,certificate_sha256=CERT,signature_verified=True,
                  tampered_apk_rejected=True,duplicate_poll_skipped=True,
