@@ -110,12 +110,12 @@ index 7e1b440d1..4b1b532d0 100644
 -            android:authorities="co.electriccoin.zcash.provider.testnet"
 +            android:authorities="com.personal.zecprivate.provider.testnet"
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..2a4e59269 100644
+index ec56161b5..e006cb108 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
 -ZCASH_VERSION_CODE=1
-+ZCASH_VERSION_CODE=3234001
++ZCASH_VERSION_CODE=3234002
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
 -ZCASH_RELEASE_APP_NAME=Zodl
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash
@@ -1697,7 +1697,7 @@ Kk$Jm+-+us)Rn*`B
 
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
-index 000000000..92162e8fb
+index 000000000..e9643b925
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 @@ -0,0 +1,6 @@
@@ -1705,7 +1705,7 @@ index 000000000..92162e8fb
 +    <string name="private_wallet_transaction_fee" translatable="false">Wallet transaction fee</string>
 +    <string name="private_provider_costs" translatable="false">Provider and bridge costs</string>
 +    <string name="private_provider_costs_included" translatable="false">Included in the quoted amount received</string>
-+    <string name="private_no_affiliate_fee" translatable="false">No affiliate fee. Unauthenticated quotes may include an extra 0.25% platform fee.</string>
++    <string name="private_no_affiliate_fee" translatable="false">No affiliate fee. Unauthenticated quotes may include an extra 0.25%% platform fee.</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/strings.xml
 index 813f56457..596f657f6 100644
@@ -1983,3 +1983,53 @@ index 1d445dd11..b96c50409 100644
 @@ -75 +75 @@ class ViewOnlySpendGuardTest {
 -            coEvery { requestNextShieldedAddress() } returns "u"
 +            coEvery { requestNextShieldedAddress(requireFresh = true) } returns "u"
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
+index 38427672d..ed798c0f8 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
+@@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.screen.swap.quote
++import androidx.compose.foundation.layout.Column
++import androidx.compose.ui.test.junit4.createComposeRule
++import androidx.compose.ui.test.onNodeWithText
+@@ -15,0 +19,2 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
++import co.electriccoin.zcash.ui.design.theme.ZcashTheme
++import org.junit.Rule
+@@ -18,0 +24 @@ import org.robolectric.annotation.Config
++import org.robolectric.annotation.GraphicsMode
+@@ -31,0 +38 @@ import kotlin.test.assertEquals
++@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@@ -32,0 +40,3 @@ class SwapQuoteVMMapperTest {
++    @get:Rule
++    val composeTestRule = createComposeRule()
++
+@@ -68,0 +79,30 @@ class SwapQuoteVMMapperTest {
++    @Test
++    fun incomingQuoteFeeNoteRendersWithoutFormatConversionFailure() {
++        assertQuoteRowsRender(SwapMode.FLEX_INPUT, SwapAssetTestFixture.zecAsset())
++    }
++
++    @Test
++    fun outgoingExactInputFeeNoteRendersWithoutFormatConversionFailure() {
++        assertQuoteRowsRender(SwapMode.EXACT_INPUT, destinationAsset)
++    }
++
++    @Test
++    fun outgoingExactOutputFeeNoteRendersWithoutFormatConversionFailure() {
++        assertQuoteRowsRender(SwapMode.EXACT_OUTPUT, destinationAsset)
++    }
++
++    private fun assertQuoteRowsRender(mode: SwapMode, asset: SwapAsset) {
++        val items = createItems(zashi(), asset, mode)
++        composeTestRule.setContent {
++            ZcashTheme {
++                Column {
++                    items.forEach { SwapQuoteInfo(it) }
++                }
++            }
++        }
++        composeTestRule.waitForIdle()
++        composeTestRule.onNodeWithText(
++            "No affiliate fee. Unauthenticated quotes may include an extra 0.25% platform fee."
++        ).assertExists()
++    }
++
