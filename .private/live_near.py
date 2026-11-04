@@ -1,5 +1,5 @@
 """Unfunded API contract checks using public SDK addresses, never a real wallet."""
-import datetime,json,subprocess,time,urllib.error,urllib.parse,urllib.request
+import datetime,json,re,subprocess,time,urllib.error,urllib.parse,urllib.request
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -17,10 +17,18 @@ def request(path,body=None):
                 if len(raw)>4*1024*1024: raise RuntimeError('Oversized API response')
                 return response.status,json.loads(raw)
         except urllib.error.HTTPError as error:
+            raw=error.read(4096).decode('utf-8',errors='replace')
+            try:
+                parsed=json.loads(raw)
+                reason=str(parsed.get('message',parsed.get('error','HTTP error')))
+            except json.JSONDecodeError:
+                title=re.search(r'<title>(.*?)</title>',raw,re.I|re.S)
+                reason=title[1].strip() if title else 'Non-JSON HTTP error'
+            reason=re.sub(r'[A-Za-z0-9_-]{30,}','[redacted]',reason)[:400]
             if error.code==429 or error.code>=500:
                 if attempt<2:
                     time.sleep(attempt+1);continue
-            return error.code,None
+            return error.code,{'http_error':reason}
         except (urllib.error.URLError,TimeoutError):
             if attempt<2:
                 time.sleep(attempt+1);continue
@@ -38,7 +46,8 @@ def quote(mode,incoming,dry=True):
               appFees=[])
     status,result=request('/v0/quote',body)
     if status not in (200,201) or not result:
-        raise RuntimeError('Unauthenticated '+mode+' quote failed: HTTP '+str(status))
+        reason=result.get('http_error','') if result else ''
+        raise RuntimeError('Unauthenticated '+mode+' quote failed: HTTP '+str(status)+' '+reason)
     echo=result['quoteRequest']
     if (echo['swapType']!=mode or echo['recipient']!=body['recipient'] or echo['refundTo']!=body['refundTo']):
         raise RuntimeError('NEAR quote echo is incompatible; publication stopped')
