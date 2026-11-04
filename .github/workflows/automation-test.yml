@@ -1,0 +1,24 @@
+name: Test update controls without publication
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  simulate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Fee and authentication regression simulations
+        run: python3 .private/test_controls.py
+      - name: Simulated stable update and incompatible-change checks
+        run: python3 .private/test_sync.py
+      - name: Test push delivery acceptance
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          NTFY_URL: ${{ secrets.NTFY_URL }}
+        run: python3 .private/notify.py "ZEC Private automation test passed. This is a test notification; no APK was published."

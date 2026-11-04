@@ -148,6 +148,19 @@ index 36d947b49..4602a8e12 100644
 -                            slippage = slippage,
 -                            affiliateAddress = AFFILIATE_ADDRESS
 +                            slippage = slippage
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
+index 717411935..03de94524 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
+@@ -96 +96 @@ internal class SwapQuoteVMMapper {
+-                description = stringRes(R.string.swapAndPay_totalFees),
++                description = stringRes(R.string.private_wallet_transaction_fee),
+@@ -108,0 +109,5 @@ internal class SwapQuoteVMMapper {
++            SwapQuoteInfoItem(
++                description = stringRes(R.string.private_provider_costs),
++                title = stringRes(R.string.private_provider_costs_included).withStyle(),
++                subtitle = stringRes(R.string.private_no_affiliate_fee).withStyle()
++            ),
 diff --git a/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_foreground.xml b/ui-lib/src/main/res/ui/common/mipmap-anydpi/ic_launcher_foreground.xml
 new file mode 100644
 index 000000000..23aa98f43
@@ -1499,6 +1512,18 @@ z@zg|{n`mVO>%z<$C{M2w;U5v7E7URq{5O_+%W{-kE7D!qW$)bcIp@tIzA=HQ#AINd
 zC&pRADr+0~R)j`F%D6SuP}H)ztKV?vFEi9J%-f!f2d&3O3%*r~#W<#58bhnKW5vwy
 Kk$Jm+-+us)Rn*`B
 
+diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
+new file mode 100644
+index 000000000..92162e8fb
+--- /dev/null
++++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
+@@ -0,0 +1,6 @@
++<resources>
++    <string name="private_wallet_transaction_fee" translatable="false">Wallet transaction fee</string>
++    <string name="private_provider_costs" translatable="false">Provider and bridge costs</string>
++    <string name="private_provider_costs_included" translatable="false">Included in the quoted amount received</string>
++    <string name="private_no_affiliate_fee" translatable="false">No affiliate fee. Unauthenticated quotes may include an extra 0.25% platform fee.</string>
++</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/strings.xml
 index 813f56457..596f657f6 100644
 --- a/ui-lib/src/main/res/ui/non_translatable/values/strings.xml

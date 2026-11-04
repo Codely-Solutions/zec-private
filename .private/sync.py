@@ -39,7 +39,7 @@ def main():
     state=json.loads((ROOT/'.private/upstream.json').read_text())
     releases=gh(f'repos/{OFFICIAL}/releases?per_page=100')
     stable=[r for r in releases if not r['draft'] and not r['prerelease'] and r.get('published_at')]
-    latest=max(stable,key=lambda r:version(r['tag_name']))
+    latest=max(stable,key=lambda r:r['published_at'])
     tag=latest['tag_name']
     if version(tag)<=version(state['tag']):
         output(changed='false'); return

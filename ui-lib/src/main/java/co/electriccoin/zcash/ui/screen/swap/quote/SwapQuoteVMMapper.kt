@@ -93,7 +93,7 @@ internal class SwapQuoteVMMapper {
                 subtitle = null
             ).takeIf { !quote.destinationAsset.isZCashAsset },
             SwapQuoteInfoItem(
-                description = stringRes(R.string.swapAndPay_totalFees),
+                description = stringRes(R.string.private_wallet_transaction_fee),
                 title =
                     if (quote.destinationAsset.isZCashAsset) {
                         stringResByDynamicCurrencyNumber(totalFees, quote.originAsset.tokenTicker)
@@ -105,6 +105,11 @@ internal class SwapQuoteVMMapper {
                         .takeIf {
                             quote.mode == EXACT_OUTPUT
                         }?.withStyle()
+            ),
+            SwapQuoteInfoItem(
+                description = stringRes(R.string.private_provider_costs),
+                title = stringRes(R.string.private_provider_costs_included).withStyle(),
+                subtitle = stringRes(R.string.private_no_affiliate_fee).withStyle()
             ),
             if (quote.mode == EXACT_OUTPUT) {
                 val slippage = quote.slippage.divide(BigDecimal("100"))
