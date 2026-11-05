@@ -66,6 +66,7 @@ public final class Bridge extends Instrumentation {
  }
  private JSONObject execute(JSONObject c) throws Exception {
   String action=c.getString("action");
+  if(!action.equals("finish") && !action.equals("snapshot") && nodes().isEmpty())throw new SecurityException();
   if(action.equals("finish")){running=false;return new JSONObject().put("finished",true);}
   if(action.equals("click_text")) {
    String wanted=c.getString("text"); if(wanted.toLowerCase(java.util.Locale.ROOT).contains("confirm") || wanted.toLowerCase(java.util.Locale.ROOT).contains("accept"))throw new IllegalArgumentException("Accepting quotes forbidden");
