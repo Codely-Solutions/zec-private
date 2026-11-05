@@ -325,7 +325,7 @@ index 717411935..8d3a5b371 100644
 +                layout = SwapQuoteInfoLayout.STACKED
 +            ),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
-index 1fa0df8d6..dd0eb0b24 100644
+index 1fa0df8d6..75f5e1137 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 @@ -243,0 +244,4 @@ fun SwapQuoteInfo(
@@ -333,7 +333,8 @@ index 1fa0df8d6..dd0eb0b24 100644
 +        StackedSwapQuoteInfo(item, descriptionStyle, descriptionFontWeight, descriptionColor)
 +        return
 +    }
-@@ -277,0 +282,39 @@ fun SwapQuoteInfo(
+@@ -277,0 +282,40 @@ fun SwapQuoteInfo(
++@Suppress("MagicNumber")
 +@Composable
 +private fun StackedSwapQuoteInfo(
 +    item: SwapQuoteInfoItem,
@@ -2046,16 +2047,15 @@ index 1d445dd11..b96c50409 100644
 -            coEvery { requestNextShieldedAddress() } returns "u"
 +            coEvery { requestNextShieldedAddress(requireFresh = true) } returns "u"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-index 38427672d..da08f8e36 100644
+index 38427672d..f93fe9dd8 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-@@ -2,0 +3,21 @@ package co.electriccoin.zcash.ui.screen.swap.quote
+@@ -2,0 +3,20 @@ package co.electriccoin.zcash.ui.screen.swap.quote
 +import android.graphics.Bitmap
 +import android.graphics.Canvas
 +import android.view.View
 +import androidx.compose.foundation.background
 +import androidx.compose.foundation.layout.Column
-+import androidx.compose.foundation.layout.fillMaxWidth
 +import androidx.compose.foundation.layout.padding
 +import androidx.compose.foundation.layout.width
 +import androidx.compose.runtime.CompositionLocalProvider
@@ -2071,26 +2071,26 @@ index 38427672d..da08f8e36 100644
 +import androidx.compose.ui.unit.dp
 +import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.onNodeWithText
-@@ -15,0 +37,5 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
+@@ -15,0 +36,5 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
 +import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 +import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 +import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 +import java.io.File
 +import org.junit.Rule
-@@ -18,0 +45 @@ import org.robolectric.annotation.Config
+@@ -18,0 +44 @@ import org.robolectric.annotation.Config
 +import org.robolectric.annotation.GraphicsMode
-@@ -20,0 +48,2 @@ import kotlin.test.assertEquals
+@@ -20,0 +47,2 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertTrue
-@@ -31 +60,2 @@ import kotlin.test.assertEquals
+@@ -31 +59,2 @@ import kotlin.test.assertEquals
 -@Config(sdk = [34])
 +@Config(sdk = [34], qualifiers = "w411dp-h891dp")
 +@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@@ -32,0 +63,3 @@ class SwapQuoteVMMapperTest {
+@@ -32,0 +62,3 @@ class SwapQuoteVMMapperTest {
 +    @get:Rule
 +    val composeTestRule = createComposeRule()
 +
-@@ -68,0 +102,97 @@ class SwapQuoteVMMapperTest {
+@@ -68,0 +101,97 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun incomingQuoteFeeNoteRendersWithoutFormatConversionFailure() {
 +        assertQuoteRowsRender(SwapMode.FLEX_INPUT, SwapAssetTestFixture.zecAsset())
