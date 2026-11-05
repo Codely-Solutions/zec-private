@@ -10,10 +10,12 @@ import java.net.*;
 import java.util.*;
 
 public final class Bridge extends Instrumentation {
+ private static final String TARGET="com.personal.zecprivate.foss.debug";
  private boolean running=true;
  @Override public void onCreate(Bundle args) { super.onCreate(args); start(); }
  @Override public void onStart() {
   try {
+   if(!TARGET.equals(getTargetContext().getPackageName()))throw new SecurityException();
    getTargetContext().startActivity(getTargetContext().getPackageManager().getLaunchIntentForPackage(getTargetContext().getPackageName()).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
    try(ServerSocket server=new ServerSocket()) {
     server.bind(new InetSocketAddress("127.0.0.1",8777)); server.setSoTimeout(2000);
@@ -35,6 +37,7 @@ public final class Bridge extends Instrumentation {
  }
  private List<AccessibilityNodeInfo> nodes() {
   List<AccessibilityNodeInfo> all=new ArrayList<>(); AccessibilityNodeInfo root=getUiAutomation().getRootInActiveWindow();
+  if(root!=null && !TARGET.contentEquals(root.getPackageName()))throw new SecurityException();
   if(root!=null) collect(root,all);return all;
  }
  private void collect(AccessibilityNodeInfo node,List<AccessibilityNodeInfo> all) {
@@ -50,6 +53,12 @@ public final class Bridge extends Instrumentation {
   }
   return new JSONObject().put("nodes",data);
  }
+ private boolean acceptance(AccessibilityNodeInfo n) {
+  String label=text(n).toLowerCase(java.util.Locale.ROOT);
+  if(label.contains("confirm") || label.contains("accept"))return true;
+  for(int i=0;i<n.getChildCount();i++){AccessibilityNodeInfo child=n.getChild(i);if(child!=null && acceptance(child))return true;}
+  return false;
+ }
  private void tap(int x,int y) {
   long t=SystemClock.uptimeMillis();
   MotionEvent down=MotionEvent.obtain(t,t,MotionEvent.ACTION_DOWN,x,y,0);getUiAutomation().injectInputEvent(down,true);down.recycle();
@@ -59,12 +68,12 @@ public final class Bridge extends Instrumentation {
   String action=c.getString("action");
   if(action.equals("finish")){running=false;return new JSONObject().put("finished",true);}
   if(action.equals("click_text")) {
-   String wanted=c.getString("text"); if(wanted.equalsIgnoreCase("Confirm"))throw new IllegalArgumentException("Accepting quotes forbidden");
+   String wanted=c.getString("text"); if(wanted.toLowerCase(java.util.Locale.ROOT).contains("confirm") || wanted.toLowerCase(java.util.Locale.ROOT).contains("accept"))throw new IllegalArgumentException("Accepting quotes forbidden");
    AccessibilityNodeInfo found=null;
    for(AccessibilityNodeInfo n:nodes())if(n.isVisibleToUser() && text(n).equalsIgnoreCase(wanted)){found=n;break;}
    if(found==null)throw new IllegalArgumentException("Text not visible");
    while(found!=null && !found.isClickable())found=found.getParent();
-   if(found==null || !found.isEnabled())throw new IllegalArgumentException("Control disabled");
+   if(found==null || !found.isEnabled() || acceptance(found))throw new IllegalArgumentException("Control disabled");
    Rect b=new Rect();found.getBoundsInScreen(b);tap(b.centerX(),b.centerY());
   } else if(action.equals("set_text")) {
    int index=c.optInt("index",0);String value=c.getString("value");if(!value.matches("[A-Za-z0-9._]{1,160}"))throw new IllegalArgumentException();
@@ -73,8 +82,16 @@ public final class Bridge extends Instrumentation {
    if(!editable.get(index).performAction(AccessibilityNodeInfo.ACTION_SET_TEXT,args))throw new IllegalStateException();
   } else if(action.equals("back"))sendKeyDownUpSync(KeyEvent.KEYCODE_BACK);
   else if(action.equals("swipe")) {
-   int x=c.getInt("x"),y1=c.getInt("y1"),y2=c.getInt("y2");long t=SystemClock.uptimeMillis();
+   int x=c.getInt("x"),y1=c.getInt("y1"),y2=c.getInt("y2");
+   if(x<0 || x>1080 || y1<0 || y2>1920 || y2-y1<300)throw new SecurityException();
+   List<AccessibilityNodeInfo> current=nodes();int titleTop=-1,acceptTop=1920;
+   for(AccessibilityNodeInfo n:current){Rect b=new Rect();n.getBoundsInScreen(b);if(text(n).equalsIgnoreCase("Review Quote"))titleTop=b.top;if(text(n).toLowerCase(java.util.Locale.ROOT).contains("confirm"))acceptTop=Math.min(acceptTop,b.top);}
+   if(titleTop<0 || y1>=titleTop || y2>=acceptTop-20)throw new SecurityException();
+   long t=SystemClock.uptimeMillis();
    for(int i=0;i<=25;i++){int mode=i==0?MotionEvent.ACTION_DOWN:(i==25?MotionEvent.ACTION_UP:MotionEvent.ACTION_MOVE);MotionEvent event=MotionEvent.obtain(t,SystemClock.uptimeMillis(),mode,x,y1+(y2-y1)*i/25,0);getUiAutomation().injectInputEvent(event,true);event.recycle();SystemClock.sleep(20);}
+  } else if(action.equals("scroll")) {
+   boolean done=false;for(AccessibilityNodeInfo n:nodes())if(n.isScrollable()){done=n.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD);if(done)break;}
+   if(!done)throw new IllegalStateException();
   } else if(!action.equals("snapshot"))throw new IllegalArgumentException("Unsupported action");
   SystemClock.sleep(700);return snapshot();
  }
