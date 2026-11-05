@@ -1,0 +1,19 @@
+import groovy.json.JsonOutput
+
+gradle.projectsEvaluated {
+    def app = rootProject.project(':app')
+    app.tasks.register('privateRuntimeInventory') {
+        doLast {
+            def name = 'zcashmainnetFossReleaseRuntimeClasspath'
+            def configuration = app.configurations.getByName(name)
+            def components = configuration.incoming.resolutionResult.allComponents.collect {
+                it.id.displayName
+            }.sort()
+            def destination = System.getenv('PRIVATE_RUNTIME_OUTPUT') ?: 'artifact/runtime.json'
+            def output = new File(destination)
+            if (!output.isAbsolute()) output = new File(rootProject.projectDir, destination)
+            output.parentFile.mkdirs()
+            output.text = JsonOutput.prettyPrint(JsonOutput.toJson([configuration: name, components: components])) + '\n'
+        }
+    }
+}

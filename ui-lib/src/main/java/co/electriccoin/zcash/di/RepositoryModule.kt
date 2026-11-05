@@ -15,8 +15,6 @@ import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.FiatCurrencyRepository
 import co.electriccoin.zcash.ui.common.repository.FiatCurrencyRepositoryImpl
-import co.electriccoin.zcash.ui.common.repository.FlexaRepository
-import co.electriccoin.zcash.ui.common.repository.FlexaRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStore
 import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 import co.electriccoin.zcash.ui.common.repository.GiftCardRepository
@@ -50,7 +48,6 @@ val repositoryModule =
         singleOf(::ConfigurationRepositoryImpl) bind ConfigurationRepository::class
         singleOf(::ExchangeRateRepositoryImpl) bind ExchangeRateRepository::class
         singleOf(::FiatCurrencyRepositoryImpl) bind FiatCurrencyRepository::class
-        singleOf(::FlexaRepositoryImpl) bind FlexaRepository::class
         singleOf(::BiometricRepositoryImpl) bind BiometricRepository::class
         singleOf(::KeystoneProposalRepositoryImpl) bind KeystoneProposalRepository::class
         singleOf(::TransactionRepositoryImpl) bind TransactionRepository::class

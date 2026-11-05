@@ -1,12 +1,13 @@
 """Fork invariants. Static checks supplement, and never replace, Kotlin tests."""
 import hashlib, json, re, subprocess, sys
 from pathlib import Path
+from check_exclusions import check as check_exclusions
 
 ROOT = Path(__file__).resolve().parents[1]
 COMMON = Path('ui-lib/src/main/java/co/electriccoin/zcash/ui/common')
 
 def check(root=ROOT):
-    errors=[]
+    errors=check_exclusions(root)
     def need(ok, message):
         if not ok: errors.append(message)
     source=(root/COMMON/'datasource/NearSwapDataSource.kt').read_text()

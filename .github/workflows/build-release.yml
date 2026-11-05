@@ -46,9 +46,9 @@ jobs:
         run: |
           python3 .private/check.py
           python3 .private/test_controls.py
-      - name: Unfunded NEAR API contracts without credentials
-        timeout-minutes: 3
-        run: python3 .private/live_near.py
+      - name: Unfunded NEAR API contracts over Tor without credentials
+        timeout-minutes: 15
+        run: bash .private/run_tor_ci.sh
       - name: Unit tests including quote text rendering
         timeout-minutes: 20
         env:

@@ -12,7 +12,6 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
-import co.electriccoin.zcash.ui.common.repository.ConfigurationRepository
 import co.electriccoin.zcash.ui.common.usecase.AccountIconFixtures
 import co.electriccoin.zcash.ui.common.usecase.AccountIconFixtures.PICKED
 import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
@@ -206,10 +205,6 @@ class ZashiTopAppBarVMTest {
             mockk<GetVersionInfoProvider> {
                 every { this@mockk() } returns
                     VersionInfoFixture.new(distributionDimension = DistributionDimension.FOSS)
-            },
-        configurationRepository =
-            mockk<ConfigurationRepository> {
-                coEvery { isFlexaAvailable() } returns false
             },
         viewOnlyContent =
             mockk<ViewOnlyContent> {

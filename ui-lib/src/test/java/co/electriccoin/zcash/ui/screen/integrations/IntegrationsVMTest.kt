@@ -10,10 +10,8 @@ import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.WalletRestoringState
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
-import co.electriccoin.zcash.ui.common.usecase.GetFlexaStatusUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetWalletRestoringStateUseCase
-import co.electriccoin.zcash.ui.common.usecase.Status
 import co.electriccoin.zcash.ui.design.util.StringResource
 import io.mockk.every
 import io.mockk.mockk
@@ -34,7 +32,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 /**
- * Flexa is unavailable on a hardware wallet, and the explanation names the one the user has.
+ * Gift redemption and settings remain available after merchant integration removal.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class IntegrationsVMTest {
@@ -51,27 +49,21 @@ class IntegrationsVMTest {
     }
 
     @Test
-    fun aLedgerAccountGetsTheLedgerWording() =
+    fun aLedgerAccountHasNoRemovedMerchantNotice() =
         runTest {
             val vm = vm(ledger())
             collect(vm)
 
-            assertEquals(
-                R.string.integrations_disabled_info_flexa_ledger,
-                assertNotNull(vm.state.value?.disabledInfo).resourceId()
-            )
+            assertNull(vm.state.value?.disabledInfo)
         }
 
     @Test
-    fun aKeystoneAccountKeepsTheKeystoneWording() =
+    fun aKeystoneAccountHasNoRemovedMerchantNotice() =
         runTest {
             val vm = vm(keystone())
             collect(vm)
 
-            assertEquals(
-                R.string.integrations_disabled_info_flexa,
-                assertNotNull(vm.state.value?.disabledInfo).resourceId()
-            )
+            assertNull(vm.state.value?.disabledInfo)
         }
 
     @Test
@@ -84,15 +76,14 @@ class IntegrationsVMTest {
         }
 
     @Test
-    fun theSheetListsFlexaGiftCardAndMoreButNoHardwareWalletEntry() =
+    fun theSheetKeepsGiftCardAndMoreButNoMerchantEntry() =
         runTest {
             val vm = vm(zashi())
             collect(vm)
 
             val items = assertNotNull(vm.state.value).items
-            assertEquals(3, items.size)
-            assertEquals(R.string.settings_flexa, items[0].title.resourceId())
-            assertEquals(R.string.integrations_redeemGift, items[1].title.resourceId())
+            assertEquals(2, items.size)
+            assertEquals(R.string.integrations_redeemGift, items[0].title.resourceId())
         }
 
     private fun vm(selectedAccount: WalletAccount) =
@@ -104,10 +95,6 @@ class IntegrationsVMTest {
             getSelectedWalletAccount =
                 mockk<GetSelectedWalletAccountUseCase> {
                     every { observe() } returns MutableStateFlow(selectedAccount)
-                },
-            getFlexaStatus =
-                mockk<GetFlexaStatusUseCase> {
-                    every { observe() } returns MutableStateFlow(Status.DISABLED)
                 },
             navigationRouter = mockk<NavigationRouter>(relaxed = true),
             viewOnlyContent = mockk(relaxed = true),

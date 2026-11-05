@@ -1,0 +1,12 @@
+{
+  "source": "dd8629826a9e3731ac6403685c64884714cbfe86",
+  "release": "v3.19.0-private.4",
+  "apkBytes": 114013666,
+  "apkSha256": "bd8916b173d03a83a29cb53638b23949a85bbec4c7bbce23d1d98928558719b3",
+  "latestOfficialStable": "3.19.0-3234",
+  "upstreamPublished": "2026-10-29T16:12:07Z",
+  "scope": "Flexa, voting implementation and redundant feedback/upstream changelog UI",
+  "preservedSafetySurface": "Ironwood funds-migration guide and operational warnings",
+  "runtimeGraph": "To be measured by phase1-validation on the exact baseline and candidate",
+  "publication": "Held until local Tor UI and upgrade acceptance plus full release checks"
+}

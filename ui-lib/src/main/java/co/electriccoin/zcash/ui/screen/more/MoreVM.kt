@@ -3,19 +3,16 @@ package co.electriccoin.zcash.ui.screen.more
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.NavigationTargets.WHATS_NEW
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 import co.electriccoin.zcash.ui.common.usecase.NavigateToAddressBookUseCase
-import co.electriccoin.zcash.ui.common.usecase.NavigateToVotingUseCase
-import co.electriccoin.zcash.ui.common.voting.VotingSettingsEntry
 import co.electriccoin.zcash.ui.design.component.listitem.ListItemState
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.ExternalUrl
 import co.electriccoin.zcash.ui.screen.about.AboutArgs
 import co.electriccoin.zcash.ui.screen.advancedsettings.AdvancedSettingsArgs
 import co.electriccoin.zcash.ui.screen.exchangerate.settings.ExchangeRateSettingsArgs
-import co.electriccoin.zcash.ui.screen.feedback.FeedbackArgs
 import co.electriccoin.zcash.ui.screen.hotfix.enhancement.EnhancementHotfixArgs
 import co.electriccoin.zcash.ui.screen.hotfix.ephemeral.EphemeralHotfixArgs
 import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsArgs
@@ -28,8 +25,6 @@ class MoreVM(
     private val getVersionInfo: GetVersionInfoProvider,
     private val navigationRouter: NavigationRouter,
     private val navigateToAddressBook: NavigateToAddressBookUseCase,
-    private val navigateToVoting: NavigateToVotingUseCase,
-    private val votingSettingsEntry: VotingSettingsEntry,
 ) : ViewModel() {
     val state: StateFlow<MoreState> = MutableStateFlow(createState())
 
@@ -50,11 +45,6 @@ class MoreVM(
                         onClick = ::onCurrencyConversionClick
                     ),
                     ListItemState(
-                        title = stringRes(R.string.settings_coinholderPolling),
-                        bigIcon = imageRes(R.drawable.ic_settings_voting),
-                        onClick = ::onVotingClick
-                    ).takeIf { votingSettingsEntry.isEnabled },
-                    ListItemState(
                         title = stringRes(R.string.settings_theme),
                         bigIcon = imageRes(R.drawable.ic_settings_theme),
                         onClick = ::onThemeClick
@@ -74,11 +64,6 @@ class MoreVM(
                         bigIcon = imageRes(R.drawable.ic_settings_info),
                         onClick = ::onAboutUsClick
                     ),
-                    ListItemState(
-                        title = stringRes(R.string.settings_feedback),
-                        bigIcon = imageRes(R.drawable.ic_settings_feedback),
-                        onClick = ::onSendUsFeedbackClick
-                    ),
                 ).toImmutableList(),
             onVersionLongClick = ::onVersionLongClick,
             onVersionDoubleClick = ::onVersionDoubleClick
@@ -92,7 +77,6 @@ class MoreVM(
 
     private fun onBack() = navigationRouter.back()
 
-    private fun onVotingClick() = viewModelScope.launch { navigateToVoting() }
 
     private fun onAdvancedSettingsClick() = navigationRouter.forward(AdvancedSettingsArgs)
 
@@ -100,9 +84,8 @@ class MoreVM(
 
     private fun onAboutUsClick() = navigationRouter.forward(AboutArgs)
 
-    private fun onSendUsFeedbackClick() = navigationRouter.forward(FeedbackArgs)
 
     private fun onAddressBookClick() = viewModelScope.launch { navigateToAddressBook() }
 
-    private fun onWhatsNewClick() = navigationRouter.forward(WHATS_NEW)
+    private fun onWhatsNewClick() = navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/releases"))
 }

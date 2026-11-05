@@ -12,7 +12,6 @@ import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRequest
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
-import co.electriccoin.zcash.ui.common.repository.FlexaRepository
 import co.electriccoin.zcash.ui.common.repository.GiftCardRepository
 import co.electriccoin.zcash.ui.common.repository.HomeMessageCacheRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
@@ -24,7 +23,6 @@ import kotlin.time.Duration.Companion.seconds
 
 class ResetZashiUseCase(
     private val walletCoordinator: WalletCoordinator,
-    private val flexaRepository: FlexaRepository,
     private val synchronizerProvider: SynchronizerProvider,
     private val standardPreferenceProvider: StandardPreferenceProvider,
     private val encryptedPreferenceProvider: EncryptedPreferenceProvider,
@@ -43,7 +41,6 @@ class ResetZashiUseCase(
             // scheduled produces zombie retries against a wallet that no longer exists (Milan,
             // 2026-07-30). Cancel while the accounts are still resolvable.
             migrationAppHooks.cancelMigrationWork()
-            flexaRepository.disconnect()
             giftCardRepository.closeAllSessions()
             deleteLocalFiles(keepFiles)
             closeSynchronizer()

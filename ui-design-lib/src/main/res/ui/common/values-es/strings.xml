@@ -439,10 +439,6 @@
     <string name="integrations_info">Las integraciones de Zodl brindan acceso a servicios de terceros. Las funciones e información compartida con ellos están fuera de nuestro control y sujetas a sus políticas de privacidad.</string>
     <string name="integrations_dialog_info">La información que compartas con los socios de integración de Zodl está sujeta a sus políticas de privacidad.</string>
     <string name="integrations_disabled_info">Durante el proceso de restauración no es posible usar integraciones de pago.</string>
-    <string name="settings_flexa">Pagar con Flexa</string>
-    <string name="settings_flexaDesc">Gasta ZEC en miles de establecimientos comerciales.</string>
-    <string name="integrations_flexa_biometric_message">Autentícate para pagar con Flexa</string>
-    <string name="integrations_disabled_info_flexa">Cambia de Keystone a Zodl para usar Flexa.</string>
     <string name="integrations_dialog_more_options">Más opciones</string>
     <string name="integrations_near_swap">Haz swap de %s con NEAR Intents</string>
     <string name="integrations_near_swap_message">Haz swap de %s con otras criptomonedas.</string>
@@ -484,7 +480,6 @@
     <string name="send_requestPayment_for">Para:</string>
     <string name="send_feeSummary">Comisión</string>
     <string name="send_requestPayment_total">Total</string>
-    <string name="partners_flexa_transactionFailedTitle">Transacción Fallida</string>
     <string name="payment_request_dialog_error_text">Ocurrió un error y el intento de enviar fondos falló. Inténtelo de nuevo, por favor.</string>
     <string name="payment_request_dialog_error_grpc_title">Error de Conexión</string>
     <string name="payment_request_dialog_error_grpc_text">Zodl encontró algunos problemas de conexión al enviar la transacción a la red. Volverá a intentarlo durante los próximos minutos.</string>

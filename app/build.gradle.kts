@@ -244,7 +244,6 @@ dependencies {
     implementation(projects.featureLedger)
     implementation(projects.featureMigration)
     implementation(projects.featureViewingKey)
-    implementation(projects.featureVoting)
 
     androidTestImplementation(projects.testLib)
 

@@ -93,8 +93,6 @@ import co.electriccoin.zcash.ui.screen.exportvk.confirm.ExportVKConfirmArgs
 import co.electriccoin.zcash.ui.screen.exportvk.confirm.ExportVKConfirmScreen
 import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailArgs
 import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailScreen
-import co.electriccoin.zcash.ui.screen.feedback.FeedbackArgs
-import co.electriccoin.zcash.ui.screen.feedback.FeedbackScreen
 import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
 import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoScreen
 import co.electriccoin.zcash.ui.screen.home.AndroidHome
@@ -237,7 +235,6 @@ import co.electriccoin.zcash.ui.screen.walletbackup.AndroidWalletBackup
 import co.electriccoin.zcash.ui.screen.walletbackup.WalletBackup
 import co.electriccoin.zcash.ui.screen.warning.WrapNotEnoughSpace
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
-import co.electriccoin.zcash.ui.screen.whatsnew.WrapWhatsNew
 
 fun NavGraphBuilder.walletNavGraph(
     storageCheckViewModel: StorageCheckViewModel,
@@ -266,10 +263,8 @@ fun NavGraphBuilder.walletNavGraph(
         composable<AdvancedSettingsArgs> { AdvancedSettingsScreen() }
         composable<ChooseServerArgs> { ChooseServerScreen() }
         composable<WalletBackup> { AndroidWalletBackup(it.toRoute()) }
-        composable<FeedbackArgs> { FeedbackScreen() }
         composable<ResetZashiArgs> { ResetZashiScreen() }
         composable<AboutArgs> { AboutScreen() }
-        composable(NavigationTargets.WHATS_NEW) { WrapWhatsNew() }
         dialogComposable<IntegrationsArgs> { IntegrationsScreen() }
         composable<ExchangeRateSettingsArgs> { ExchangeRateSettingsScreen() }
         composable(NavigationTargets.CRASH_REPORTING_OPT_IN) { AndroidCrashReportingOptIn() }

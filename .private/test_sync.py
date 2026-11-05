@@ -67,6 +67,8 @@ class SyncTests(unittest.TestCase):
                 self.assertEqual(1,len(writes))
                 tree=original('git','ls-tree','-r','--name-only',output.call_args.kwargs['source_sha']).splitlines()
                 self.assertFalse(any('__pycache__' in name or name.endswith('.pyc') for name in tree))
+                self.assertFalse(any(name.startswith('feature-voting/') for name in tree))
+                self.assertFalse(any('/ui/screen/flexa/' in name for name in tree))
             self.assertFalse((Path(temp)/'candidate').exists())
         self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
 

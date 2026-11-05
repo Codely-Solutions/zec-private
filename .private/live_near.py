@@ -1,5 +1,5 @@
 """Unfunded API contract checks using public SDK addresses, never a real wallet."""
-import datetime,json,re,subprocess,time,urllib.parse
+import datetime,json,os,re,subprocess,time,urllib.parse
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -7,15 +7,18 @@ BASE='https://1click.chaindefuser.com'
 FIXTURE=json.loads((ROOT/'.private/public-api-fixture.json').read_text())
 
 def request(path,body=None):
+    proxy = os.environ.get('PRIVATE_TOR_SOCKS', '')
+    if not re.fullmatch(r'127\.0\.0\.1:[0-9]{2,5}', proxy):
+        raise RuntimeError('A loopback Tor SOCKS endpoint is required; direct requests are forbidden')
     data=None if body is None else json.dumps(body).encode()
     for attempt in range(3):
         # curl is a documented, supported API client. The edge service rejects
         # urllib's client signature (1010) on hosted runners; no identity is spoofed.
-        args=['curl','--silent','--show-error','--max-time','15','--max-filesize','4194304',
+        args=['curl','--socks5-hostname',proxy,'--noproxy','','--silent','--show-error','--max-time','45','--max-filesize','4194304',
               '--write-out','\n%{http_code}',BASE+path]
         if data is not None: args+=['--header','Content-Type: application/json','--data-binary','@-']
         try:
-            result=subprocess.run(args,input=data,capture_output=True,timeout=20)
+            result=subprocess.run(args,input=data,capture_output=True,timeout=50)
         except subprocess.TimeoutExpired:
             result=None
         if result is None or result.returncode!=0:
@@ -86,7 +89,8 @@ def main():
     receipt=dict(success=True,source_sha=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
                  utc=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                  dry_modes_passed=3,unused_quote_status_passed=True,provider_deposit_requires_transparent_intermediate=False,
-                 deposit_validation_passed=True,funds_transferred=False,wallet_secrets_used=False)
+                 deposit_validation_passed=True,funds_transferred=False,wallet_secrets_used=False,
+                 transport='Tor SOCKS5 with remote DNS; no direct fallback')
     out=ROOT/'artifact';out.mkdir(exist_ok=True)
     (out/'near-contract.json').write_text(json.dumps(receipt,indent=2)+'\n')
     print('Live NEAR contracts passed. No funds or wallet secrets were used; no blockchain transaction was submitted.')

@@ -9,7 +9,6 @@ import co.electriccoin.zcash.ui.common.usecase.CancelSwapUseCase
 import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
 import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
-import co.electriccoin.zcash.ui.common.usecase.CreateFlexaTransactionUseCase
 import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.CreateIncreaseEphemeralGapLimitProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.CreateKeystoneAccountUseCase
@@ -39,7 +38,6 @@ import co.electriccoin.zcash.ui.common.usecase.GetConfigurationUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetCuratedSwapAssetsUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetExchangeRateUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetFilteredActivitiesUseCase
-import co.electriccoin.zcash.ui.common.usecase.GetFlexaStatusUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetGiftCardDestinationAddressUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetHomeMessageUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetIronwoodBalanceUseCase
@@ -134,7 +132,6 @@ import co.electriccoin.zcash.ui.common.usecase.SaveABContactUseCase
 import co.electriccoin.zcash.ui.common.usecase.SaveORSwapUseCase
 import co.electriccoin.zcash.ui.common.usecase.SelectWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
-import co.electriccoin.zcash.ui.common.usecase.SendSupportEmailUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendTransactionAgainUseCase
 import co.electriccoin.zcash.ui.common.usecase.SetAppearanceModeUseCase
 import co.electriccoin.zcash.ui.common.usecase.ShareImageUseCase
@@ -198,7 +195,6 @@ val useCaseModule =
         factoryOf(::ErrorMapperUseCase)
         factoryOf(::ResyncErrorMapperUseCase)
         factoryOf(::SendEmailUseCase)
-        factoryOf(::SendSupportEmailUseCase)
         factoryOf(::ShowErrorUseCase)
         factoryOf(::GetWalletAccountsUseCase)
         factoryOf(::SelectWalletAccountUseCase)
@@ -253,12 +249,10 @@ val useCaseModule =
         factoryOf(::MarkTxMemoAsReadUseCase)
         factoryOf(::ExportTaxUseCase)
         factoryOf(::NavigateToTaxExportUseCase)
-        factoryOf(::CreateFlexaTransactionUseCase)
         factoryOf(::IsRestoreSuccessDialogVisibleUseCase)
         factoryOf(::ValidateSeedUseCase)
         factoryOf(::RestoreWalletUseCase)
         factoryOf(::NavigateToWalletBackupUseCase)
-        factoryOf(::GetFlexaStatusUseCase)
         factoryOf(::GetHomeMessageUseCase)
         factoryOf(::NavigateToVotingUseCase)
         factoryOf(::OnUserSavedWalletBackupUseCase)

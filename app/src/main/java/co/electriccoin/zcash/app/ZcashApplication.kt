@@ -23,7 +23,6 @@ import co.electriccoin.zcash.ui.common.provider.CrashReportingStorageProvider
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.repository.ApplicationStateRepository
 import co.electriccoin.zcash.ui.common.repository.AutomaticServerRepository
-import co.electriccoin.zcash.ui.common.repository.FlexaRepository
 import co.electriccoin.zcash.ui.common.repository.HomeMessageCacheRepository
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
 import co.electriccoin.zcash.ui.common.repository.WalletSnapshotRepository
@@ -31,7 +30,7 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveKeepScreenOnSyncSessionUse
 import co.electriccoin.zcash.ui.common.usecase.ObserveSeedMismatchUseCase
 import co.electriccoin.zcash.ui.common.usecase.SweepOrphanedGiftCardWalletsUseCase
 import co.electriccoin.zcash.viewingkey.di.featureViewingKeyModule
-import co.electriccoin.zcash.voting.di.featureVotingModule
+import co.electriccoin.zcash.di.excludedVotingModule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.koin.android.ext.android.inject
@@ -41,7 +40,6 @@ import org.koin.core.context.startKoin
 import org.koin.core.parameter.parametersOf
 
 class ZcashApplication : CoroutineApplication() {
-    private val flexaRepository by inject<FlexaRepository>()
     private val getAvailableCrashReporters: CrashReportersProvider by inject()
     private val homeMessageCacheRepository: HomeMessageCacheRepository by inject()
     private val walletSnapshotRepository: WalletSnapshotRepository by inject()
@@ -85,7 +83,7 @@ class ZcashApplication : CoroutineApplication() {
                 mapperModule,
                 viewModelModule,
                 featureMigrationModule,
-                featureVotingModule,
+                excludedVotingModule,
                 featureLedgerModule,
                 featureViewingKeyModule
             )
@@ -96,7 +94,6 @@ class ZcashApplication : CoroutineApplication() {
         configureAnalytics()
 
         migrationNotifier.createChannel()
-        flexaRepository.init()
         homeMessageCacheRepository.init()
         walletSnapshotRepository.init()
         applicationStateRepository.init()
