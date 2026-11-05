@@ -11,7 +11,13 @@ import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.SwapAsset
-import co.electriccoin.zcash.ui.common.provider.*
+import co.electriccoin.zcash.ui.common.provider.BlockchainProviderImpl
+import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
+import co.electriccoin.zcash.ui.common.provider.KtorNearApiProvider
+import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
+import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.TokenIconProviderImpl
+import co.electriccoin.zcash.ui.common.provider.TokenNameProviderImpl
 import co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import io.ktor.client.HttpClient
@@ -32,16 +38,33 @@ import org.junit.Test
 import java.lang.reflect.Proxy
 import java.math.BigDecimal
 
+private const val PUBLIC_RECIPIENT =
+    "u1l9f0l4348negsncgr9pxd9d3qaxagmqv3lnexcplmufpq7muffvfaue6ksevfvd7wrz7" +
+        "xrvn95rc5zjtn7ugkmgh5rnxswmcj30y0pw52pn0zjvy38rn2esfgve64rj5pcmazxgpyuj"
+
 class TorQuoteTest {
  @Test fun realAppQuoteDismissAndRequestAgainOverTor() = runBlocking {
   val context = InstrumentationRegistry.getInstrumentation().targetContext
-  val backend = Proxy.newProxyInstance(Backend::class.java.classLoader, arrayOf(Backend::class.java)) { _, _, _ -> error("Wallet access forbidden") } as Backend
+  val backend = Proxy.newProxyInstance(
+   Backend::class.java.classLoader,
+   arrayOf(Backend::class.java)
+  ) { _, _, _ ->
+      error("Wallet access forbidden")
+  } as Backend
   val tor = TorClient.new(java.io.File(context.cacheDir, "isolated-tor"), backend)
-  val sync = Proxy.newProxyInstance(Synchronizer::class.java.classLoader, arrayOf(Synchronizer::class.java)) { _, method, args ->
-   check(method.name == "validateAddress" && args?.first() == "u1l9f0l4348negsncgr9pxd9d3qaxagmqv3lnexcplmufpq7muffvfaue6ksevfvd7wrz7xrvn95rc5zjtn7ugkmgh5rnxswmcj30y0pw52pn0zjvy38rn2esfgve64rj5pcmazxgpyuj") { "Only validation of the public SDK fixture is permitted" }
+  val sync = Proxy.newProxyInstance(
+   Synchronizer::class.java.classLoader,
+   arrayOf(Synchronizer::class.java)
+  ) { _, method, args ->
+   check(method.name == "validateAddress" && args?.first() == PUBLIC_RECIPIENT) {
+    "Only validation of the public SDK fixture is permitted"
+   }
    AddressType.Unified
   } as Synchronizer
-  val syncProvider = Proxy.newProxyInstance(SynchronizerProvider::class.java.classLoader, arrayOf(SynchronizerProvider::class.java)) { _, method, _ ->
+  val syncProvider = Proxy.newProxyInstance(
+   SynchronizerProvider::class.java.classLoader,
+   arrayOf(SynchronizerProvider::class.java)
+  ) { _, method, _ ->
    check(method.name == "getSynchronizer"); sync
   } as SynchronizerProvider
   val clients = object : HttpClientProvider {
@@ -54,7 +77,11 @@ class TorQuoteTest {
     }
    }
   }
-  val data = NearSwapDataSource(KtorNearApiProvider(clients), TokenIconProviderImpl(context), TokenNameProviderImpl(), BlockchainProviderImpl(context), syncProvider)
+  val data = NearSwapDataSource(KtorNearApiProvider(clients),
+       TokenIconProviderImpl(context),
+       TokenNameProviderImpl(),
+       BlockchainProviderImpl(context),
+       syncProvider)
   val cache = object : SwapAssetCacheProvider {
    override suspend fun get() = emptyList<SwapAsset>()
    override suspend fun store(assets: List<SwapAsset>) = Unit
@@ -67,7 +94,13 @@ class TorQuoteTest {
     swapMode: SwapMode, amount: BigDecimal, refundAddress: String, originAsset: SwapAsset,
     destinationAddress: String, destinationAsset: SwapAsset, slippage: BigDecimal,
    ): SwapQuote {
-    if (refundAddress != "invalid") return data.requestQuote(swapMode, amount, refundAddress, originAsset, destinationAddress, destinationAsset, slippage)
+    if (refundAddress != "invalid") return data.requestQuote(swapMode,
+         amount,
+         refundAddress,
+         originAsset,
+         destinationAddress,
+         destinationAsset,
+         slippage)
     oldStarted.complete(currentCoroutineContext().job)
     return withContext(NonCancellable) {
      val error = try {
@@ -83,12 +116,20 @@ class TorQuoteTest {
   val repo = SwapRepositoryImpl(network, cache)
   try {
    withTimeout(180000) { repo.requestRefreshAssetsOnce() }
-   val asset = checkNotNull(repo.assets.value.data).first { it.tokenTicker.equals("btc", true) && it.chainTicker.equals("btc", true) }
+   val asset = checkNotNull(repo.assets.value.data).first { it.tokenTicker.equals("btc",
+        true) && it.chainTicker.equals("btc",
+        true) }
    repeat(3) { attempt ->
-    repo.requestFlexInputIntoZec(BigDecimal("0.001"), "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", "u1l9f0l4348negsncgr9pxd9d3qaxagmqv3lnexcplmufpq7muffvfaue6ksevfvd7wrz7xrvn95rc5zjtn7ugkmgh5rnxswmcj30y0pw52pn0zjvy38rn2esfgve64rj5pcmazxgpyuj", asset, BigDecimal("0.5"))
+    repo.requestFlexInputIntoZec(BigDecimal("0.001"),
+         "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+         PUBLIC_RECIPIENT,
+         asset,
+         BigDecimal("0.5"))
     val result = withTimeout(180000) { repo.quote.first { it is SwapQuoteData.Success || it is SwapQuoteData.Error } }
     val error = (result as? SwapQuoteData.Error)?.exception
-    println("TOR_QUOTE attempt=$attempt appResult=${result?.javaClass?.simpleName} errorClass=${error?.javaClass?.simpleName} status=${(error as? ResponseException)?.response?.status?.value}")
+    println("TOR_QUOTE attempt=$attempt appResult=${result?.javaClass?.simpleName} " +
+        "errorClass=${error?.javaClass?.simpleName} " +
+        "status=${(error as? ResponseException)?.response?.status?.value}")
     check(result is SwapQuoteData.Success) { "Real app quote failed; see safe class/status diagnostic" }
     repo.clearQuote() // Same repository cancellation/reset invoked by sheet dismissal.
     check(repo.quote.value == null)
@@ -96,19 +137,27 @@ class TorQuoteTest {
    }
    // Force only the delivery timing of a real native-Tor HTTP validation error.
    // This reproduces a cancelled, noncooperative native request completing after its replacement.
-   repo.requestFlexInputIntoZec(BigDecimal("0.001"), "invalid", "u1l9f0l4348negsncgr9pxd9d3qaxagmqv3lnexcplmufpq7muffvfaue6ksevfvd7wrz7xrvn95rc5zjtn7ugkmgh5rnxswmcj30y0pw52pn0zjvy38rn2esfgve64rj5pcmazxgpyuj", asset, BigDecimal("0.5"))
+   repo.requestFlexInputIntoZec(BigDecimal("0.001"), "invalid", PUBLIC_RECIPIENT, asset, BigDecimal("0.5"))
    val oldJob = withTimeout(180000) { oldStarted.await() }
    val oldError = withTimeout(180000) { oldFailed.await() }
    val oldStatus = (oldError as? ResponseException)?.response?.status?.value
-   check(oldStatus == 400 || oldStatus == 422) { "Expected a real provider HTTP validation error; actual class=${oldError.javaClass.simpleName} status=$oldStatus" }
+   check(oldStatus == 400 || oldStatus == 422) { "Expected a real provider HTTP validation error; " +
+        "actual class=${oldError.javaClass.simpleName} status=$oldStatus" }
    repo.clearQuote()
-   repo.requestFlexInputIntoZec(BigDecimal("0.001"), "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", "u1l9f0l4348negsncgr9pxd9d3qaxagmqv3lnexcplmufpq7muffvfaue6ksevfvd7wrz7xrvn95rc5zjtn7ugkmgh5rnxswmcj30y0pw52pn0zjvy38rn2esfgve64rj5pcmazxgpyuj", asset, BigDecimal("0.5"))
-   val replacement = withTimeout(180000) { repo.quote.first { it is SwapQuoteData.Success || it is SwapQuoteData.Error } }
+   repo.requestFlexInputIntoZec(BigDecimal("0.001"),
+        "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+        PUBLIC_RECIPIENT,
+        asset,
+        BigDecimal("0.5"))
+   val replacement = withTimeout(180000) {
+    repo.quote.first { it is SwapQuoteData.Success || it is SwapQuoteData.Error }
+   }
    check(replacement is SwapQuoteData.Success) { "Replacement live quote failed before cancellation regression" }
    releaseOldFailure.complete(Unit)
    withTimeout(180000) { oldJob.join() }
    println("TOR_QUOTE nativeCancellation oldHTTP=$oldStatus replacementPreserved=${repo.quote.value === replacement}")
-   check(repo.quote.value === replacement) { "LATE_CANCELLED_ERROR_OVERWROTE_CURRENT_QUOTE oldHTTP=$oldStatus currentClass=${repo.quote.value?.javaClass?.simpleName}" }
+   check(repo.quote.value === replacement) { "LATE_CANCELLED_ERROR_OVERWROTE_CURRENT_QUOTE oldHTTP=$oldStatus " +
+        "currentClass=${repo.quote.value?.javaClass?.simpleName}" }
   } finally { releaseOldFailure.complete(Unit); repo.clear(); tor.dispose() }
  }
 }
