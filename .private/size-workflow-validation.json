@@ -1,0 +1,176 @@
+{
+  "release": "v3.19.0-private.6",
+  "url": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.6",
+  "source_sha": "a0bd21f27bb53af0eeb9b433d0273c6f39b04e19",
+  "candidate_run": 42083842851,
+  "promotion_run": 42090950748,
+  "discovery_run": 42083849965,
+  "baseline": {
+    "release": "v3.19.0-private.5",
+    "source_sha": "a8d7a6a3c2188e953e79f30b05fcd8c55fbac5bb",
+    "apk_bytes": 111930635,
+    "sha256": "25df9731086778320cbee4211e3cd73fd77a044d4d97a23256380fb8142337f1",
+    "native_compressed_bytes_by_abi": {
+      "arm64-v8a": 57019328,
+      "armeabi-v7a": 43943000
+    }
+  },
+  "delivery": {
+    "release_tag": "v3.19.0-private.6",
+    "source_sha": "a0bd21f27bb53af0eeb9b433d0273c6f39b04e19",
+    "ci_run": 42083842851,
+    "package": "com.personal.zecprivate.foss",
+    "versionCode": 3234006,
+    "versionName": "3.19.0",
+    "debuggable": false,
+    "apk_bytes": 67930887,
+    "apk_sha256": "9ab54f4935d4937a79c85d50d9600c2fc55b3147e47458fbbf6ca081218b0f74",
+    "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
+    "signature_verified": true,
+    "zipalign_16k_verified": true,
+    "provider_unique": true,
+    "license_preserved": true,
+    "excluded_runtime_components_absent": true,
+    "original_package_descriptors_absent": true,
+    "runtimeComparison": {
+      "baselineComponents": 351,
+      "candidateComponents": 333,
+      "removed": [
+        "androidx.compose.runtime:runtime-livedata:1.10.6",
+        "androidx.webkit:webkit:1.14.0",
+        "co.flexa:core:1.1.3",
+        "co.flexa:spend:1.1.3",
+        "com.caverock:androidsvg-aar:1.4",
+        "com.google.accompanist:accompanist-drawablepainter:0.32.0",
+        "com.squareup.okhttp3:logging-interceptor:5.1.0",
+        "com.squareup.okhttp3:okhttp-sse:5.1.0",
+        "commons-codec:commons-codec:1.15",
+        "io.coil-kt:coil-base:2.7.0",
+        "io.coil-kt:coil-compose-base:2.7.0",
+        "io.coil-kt:coil-compose:2.7.0",
+        "io.coil-kt:coil-svg:2.7.0",
+        "io.coil-kt:coil:2.7.0",
+        "joda-time:joda-time:2.12.7",
+        "org.jetbrains.kotlin:kotlin-android-extensions-runtime:2.1.0",
+        "org.jetbrains.kotlin:kotlin-parcelize-runtime:2.1.0",
+        "project :feature-voting"
+      ],
+      "added": [],
+      "retainedVersionsUnchanged": true
+    },
+    "architecture": {
+      "abis": [
+        "arm64-v8a"
+      ],
+      "native_bytes": 57019328
+    },
+    "promotion_run": 42090950748,
+    "signedPayloadMatchesValidatedUnsigned": true,
+    "apk_bytes_saved": 43999748,
+    "tests": {
+      "tests": 1391,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "required_regressions_passed": [
+      "aKeystoneAccountHasNoRemovedMerchantNotice",
+      "aLedgerAccountHasNoRemovedMerchantNotice",
+      "cancellingPendingIncomingRequestDoesNotPoisonTheNextQuote",
+      "dismissedIncomingQuoteCanBeRequestedAgainWithoutRestart",
+      "dismissedRequestCannotPublishLateNetworkErrorOverNextQuote",
+      "dismissedRequestCannotPublishLateSuccessOverNextQuote",
+      "incomingQuoteCostsFitNarrowScreenWithLargeText",
+      "incomingQuoteFeeNoteRendersWithoutFormatConversionFailure",
+      "newRequestClearsPreviousErrorBeforeBackgroundDispatch",
+      "outgoingExactInputCostsFitNarrowScreenWithLargeText",
+      "outgoingExactInputFeeNoteRendersWithoutFormatConversionFailure",
+      "outgoingExactOutputCostsFitNarrowScreenWithLargeText",
+      "outgoingExactOutputFeeNoteRendersWithoutFormatConversionFailure",
+      "sheetDismissalCallbacksOnlyCancelOnce",
+      "theSheetKeepsGiftCardAndMoreButNoMerchantEntry",
+      "transientIncomingFailureCanBeRetriedWithoutRestart",
+      "unavailableSynchronizerStopsSwapApiWithoutDirectFallback",
+      "unavailableTorClientStopsSwapApiWithoutDirectFallback"
+    ],
+    "layout_preview_sha256": {
+      "exact_input-320-1.6.png": "3e71c35a8e03f4d53fe6429be2276d7dc530fbb79b4a067192704126696e92bb",
+      "exact_input-360-1.0.png": "564904058dbea11e5ce647dc5d35ca3d83fd98ce29bc814c700c01ec2d464aaf",
+      "exact_output-320-1.6.png": "1d46b22fe97f2bb8a64b9a5bd6995e676808471003c9b961adf773ce9c629256",
+      "flex_input-320-1.6.png": "0ea044609dc4ddcfd21aaeeb2252b7500fe5a7818e47fd4f4c3864376f1c647b",
+      "exact_output-360-1.0.png": "bab1f35d77611b38ba2071dcb9a06b9caaef2ce84e6cf3d3c4de1cdb91fe5437",
+      "flex_input-360-1.0.png": "376b88bbc50c3f93867b5488b63618b67f0e29a44b741b2983c0f73411ea1d7d"
+    },
+    "tor_ui_receipt": "C:\\Users\\User\\.codex\\workflow-guards\\state\\receipt-9fd3f3199747469b9d023dff67343abb.json",
+    "upgradeTest": "Package, increasing versionCode, permanent certificate and unchanged wallet code inspected; fresh x86_64 wallet executed",
+    "production_arm_apk_executed": false,
+    "funded_settlement_tested": false
+  },
+  "ui": {
+    "passed": true,
+    "versionCode": 3234006,
+    "quoteReviewsVerified": 3,
+    "quoteRequests": 3,
+    "dismissals": 3,
+    "torOptInVerified": true,
+    "fundsTransferred": false,
+    "personalWalletAccess": false,
+    "phase1Scenario": {
+      "passed": true,
+      "freshIsolatedWallet": true,
+      "quotesReviewedAndDismissed": 3,
+      "providerTimeouts": [],
+      "excludedSettingsAbsent": true,
+      "settingsLabels": [
+        "about",
+        "address book",
+        "advanced settings",
+        "app theme",
+        "back",
+        "currency conversion",
+        "settings",
+        "version 3.19.0 (3234006)",
+        "what's new"
+      ],
+      "fundsTransferred": false
+    }
+  },
+  "emulator_original_apk_sha256": "2b775fe29901cc0c2d017d6484d18b03e3d43ea4131965ecb22636db491484c1",
+  "ui_guard": "C:\\Users\\User\\.codex\\workflow-guards\\state\\receipt-9fd3f3199747469b9d023dff67343abb.json",
+  "ui_harness_sha256": "f2b3cd50ef983ec3738c0128ca395f4a50a901443d86435f69ae9417aacf16cc",
+  "delivery_guard": "C:\\Users\\User\\.codex\\workflow-guards\\state\\receipt-8743eba8b6ba4b0485a21bbb30d0d070.json",
+  "timing": {
+    "revision5_production_run_seconds": 1331,
+    "candidate_unsigned_job_seconds": 1861,
+    "candidate_gradle_seconds": 1753,
+    "candidate_includes_optional_emulator_apk": true,
+    "promotion_successful_job_seconds": 45.0,
+    "gradle_invocations_before": 4,
+    "gradle_invocations_after": 1,
+    "earlier_full_preparation_seconds": 2782,
+    "junit_suite_seconds_cumulative": 176.106,
+    "revision5_junit_suite_seconds_cumulative": 85.048,
+    "failed_candidate_job_seconds": 948.0,
+    "cache_caveat": "Different cache state and debug variant scope; no controlled production-only speedup claim",
+    "candidate_validation_build_step_seconds": 1755
+  },
+  "resources": {
+    "cache_before_bytes": 3855093931,
+    "cache_after_bytes": 1752598387,
+    "cache_bytes_removed": 2102495544,
+    "ci_artifact_bytes_removed": 98481646,
+    "ui_peak_transient_bytes": 8423354238,
+    "ui_final_logical_bytes_removed": 2638690898,
+    "host_free_increase_across_successful_ui_cleanup": 2575048704,
+    "delivery_peak_transient_bytes": 260351922,
+    "owned_process_survivors": 0,
+    "preexisting_unassigned_helpers_preserved": true
+  },
+  "limitations": [
+    "Production ARM64 APK inspected, not executed on ARM hardware",
+    "No funded settlement or personal wallet access",
+    "Initial UI attempt hit an explicit upstream 25000ms quote-exchange timeout; second attempt completed three cycles with no retries",
+    "No newer real upstream release available; disposable integration and real discovery passed",
+    "Remote CPU and peak resident memory not directly measured; runner time and configured limits recorded"
+  ]
+}

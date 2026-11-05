@@ -34,3 +34,25 @@ its four Gradle steps totalled 19m23s. The earlier separate acceptance/debug
 preparation runs are additional costs and must not be conflated with that
 production-run baseline. ARM64 execution requires an ARM device; an x86_64
 emulator validates debug wallet behavior, not production ARM native execution.
+
+## Measured revision 6 result
+
+Signed APK: 67930887 bytes versus 111930635 bytes in revision 5 (39.31% smaller).
+Successful candidate: 31m01s unsigned job, including both variants; the consolidated build step took
+29m15s (Gradle logged 29m13s) in one invocation. Earlier combined preparation took 46m22s, with a
+separate duplicate debug build and later release preparation also run then.
+Revision 5's production-only run was 22m11s. These scopes and cache states differ;
+no controlled production-only speedup is claimed. Promotion used no Gradle build.
+The failed candidate cost 948 cumulative job seconds before its
+exception-provenance assertion was corrected. Unit suite durations total
+176.106s cumulatively, versus 85.048s before; this is not wall time.
+Compilation, static analysis, dexing and R8 remain the substantial build work.
+
+Real fresh-wallet Tor acceptance passed three request/review/dismiss cycles.
+An initial attempt received an explicit upstream 25000ms quote-exchange timeout.
+The harness now records and bounds retries for that observed failure; the
+successful run needed none. No application swap behavior changed.
+
+The controller caller now explicitly grants actions:read for artifact download.
+The obsolete Phase 1 builder no longer produces duplicate APKs. Diagnostic and
+negative-mutation workflows remain available for their distinct checks.

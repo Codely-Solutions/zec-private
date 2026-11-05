@@ -1,3 +1,29 @@
+# Revision 6 — ARM64 and workflow cleanup complete
+
+Published [v3.19.0-private.6](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.6).
+The signed APK is 67,930,887 bytes, down 43,999,748 bytes (39.31%) from revision 5.
+Production contains ARM64 only; the isolated debug variant contains x86_64 only.
+Package identity and permanent signing certificate are preserved; versionCode is 3234006.
+
+Candidate 42083842851 passed 1,391 tests, layout previews, lint, Detekt, runtime
+exclusions, real Tor contracts and disposable upstream integration checks.
+A fresh emulator wallet completed three real BTC→ZEC quote/review/dismiss cycles
+with Tor selected, no restart, no acceptance and no funds. One earlier attempt
+received the provider's explicit 25-second backend timeout; the successful run
+needed no retries. Production ARM binaries were inspected, not executed.
+
+Promotion 42090950748 skipped all builds and signed the validated artifact.
+Independent verification confirmed the certificate, ARM64 ELF headers, alignment,
+manifest, source/report bindings and byte-identical payload after signing.
+Discovery 42083849965 passed; the six-hour schedule remains enabled. The maintained
+patch and actual APK checks preserve ARM64-only packaging through integration.
+
+See `size-workflow-validation.json` and `size-workflow.md` for measured timing,
+resource cleanup, the candidate-promotion procedure and remaining limitations.
+Later roadmap phases remain deferred.
+
+---
+
 # Revision 5: Phase 1 removals released
 
 Signed update: [v3.19.0-private.5](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.5), versionCode `3234005`, package `com.personal.zecprivate.foss`. The permanent certificate is unchanged. Install over the existing app without uninstalling. APK: 111,930,635 bytes, SHA-256 `25df9731086778320cbee4211e3cd73fd77a044d4d97a23256380fb8142337f1`.

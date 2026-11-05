@@ -81,17 +81,31 @@ def run(root, stop):
         action('set_text',index=0,value='0.001')
         click('Open address book','Phase1Fixture')
         click('Phase1Fixture','Get a quote')
+        provider_errors=[]
         for index in range(3):
-            state=click('Get a quote')
-            # The safety warning remains enabled; its Continue only requests a quote.
-            for _ in range(6):
-                state=action('snapshot')
-                if 'no refunds under $300' in labels(state):
-                    click('Continue')
-                    break
+            for attempt in range(3):
+                state=click('Get a quote')
+                deadline=time.monotonic()+180
+                while time.monotonic()<deadline:
+                    state=action('snapshot')
+                    current=labels(state)
+                    if 'no refunds under $300' in current:
+                        click('Continue')
+                    elif 'review quote' in current:
+                        break
+                    elif 'quote unavailable' in current:
+                        messages=[n['text'] for n in state['nodes'] if 'timeout' in n['text'].lower()]
+                        # Retry this observed upstream timeout only. Other errors require diagnosis.
+                        if not messages or not any('25000ms' in m for m in messages):
+                            raise RuntimeError('Unexpected provider quote failure')
+                        provider_errors.append({'cycle':index+1,'attempt':attempt+1,'messages':messages})
+                        click('Edit swap','Get a quote')
+                        if stop.wait(15):raise InterruptedError('UI driver stopped')
+                        break
+                    if stop.wait(.5):raise InterruptedError('UI driver stopped')
                 if 'review quote' in labels(state):break
-                if stop.wait(.5):raise InterruptedError('UI driver stopped')
-            state=wait('Review Quote',120)
+            else:raise RuntimeError('Provider timeout retry budget exhausted')
+            if 'review quote' not in labels(state):raise RuntimeError('Quote response deadline exceeded')
             action('assert_text',text='Review Quote')
             title=next(n for n in state['nodes'] if n['text'].casefold()=='review quote')
             title_top=int(title['bounds'].split()[1])
@@ -112,7 +126,7 @@ def run(root, stop):
         action('assert_text',text='About')
         action('assert_text',text="What's New")
         result={'passed':True,'freshIsolatedWallet':True,'quotesReviewedAndDismissed':3,
-                'excludedSettingsAbsent':True,'settingsLabels':sorted(current),'fundsTransferred':False}
+                'providerTimeouts':provider_errors,'excludedSettingsAbsent':True,'settingsLabels':sorted(current),'fundsTransferred':False}
         (root/'phase1-scenario-result.json').write_text(json.dumps(result,indent=2)+'\n')
         action('finish')
     except Exception as error:

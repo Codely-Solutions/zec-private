@@ -1,0 +1,25 @@
+{
+  "ownedSurvivors": [],
+  "guardRoots": [],
+  "registeredWorktrees": "source only",
+  "baselineHelperTreesUnchanged": true,
+  "preservedUnassignedRootProcessIds": [
+    17948,
+    20040,
+    6432,
+    1240,
+    18592
+  ],
+  "unresolvedPreexistingOwnership": true,
+  "retainedOutputs": [
+    "one signed current APK in dist",
+    "compact source-bound reports and archived failed receipts",
+    "nine current repository Gradle cache categories",
+    "bounded final CI validation report"
+  ],
+  "remoteCacheBytesAfter": 1752598387,
+  "remoteCacheBytesRemoved": 2102495544,
+  "consumedArtifactBytesRemoved": 98481646,
+  "hostFreeC": 128056397824,
+  "hostFreeD": 227370348544
+}
