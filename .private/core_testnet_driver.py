@@ -64,6 +64,10 @@ def run(adb, root, apks, manifest):
             safe = [line[:240] for line in output.splitlines() if re.search(r'CoreWalletAcceptance.kt:\d+|^java\.lang\.|^kotlinx\.coroutines\.|Faucet claim HTTP \d+', line)]
             diagnostic=dict(stage=name,lines=safe[-12:])
             diagnostic['sync']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_SYNC_DIAGNOSTIC ')][-1:]
+            native=adb('logcat','-d','-v','raw','-t','120','--uid='+str(app_uid),'-s','slipstream:V',timeout=15).stdout.decode(errors='replace')
+            diagnostic['native_engine']=[re.sub(r'\b[0-9a-fA-F]{64,}\b','[hex omitted]',line)[:400]
+                for line in native.splitlines() if re.search(r'stall|error|fail|warn|counter',line,re.I)
+                and not re.search(r'seed|mnemonic|phrase|utest|secret|ufvk|viewing.?key',line,re.I)][-20:]
             if name=='fund':
                 http=adb('logcat','-d','-v','raw','--uid='+str(app_uid),'-s','HttpClient:D',timeout=15,check=False).stdout.decode(errors='replace')
                 failures=[]
