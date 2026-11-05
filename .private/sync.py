@@ -103,7 +103,7 @@ def main():
         props=candidate/'gradle.properties'
         props.write_text(re.sub(r'^ZCASH_VERSION_CODE=\d+$',f'ZCASH_VERSION_CODE={code}',props.read_text(),flags=re.M))
         (candidate/'.private/candidate.json').write_text(json.dumps({'tag':tag,'sha':commit,'published_at':latest['published_at'],'versionCode':code},indent=2)+'\n')
-        run('python3','.private/check.py',cwd=candidate)
+        run('python3','-B','.private/check.py',cwd=candidate)
         run('git','add','-A',cwd=candidate)
         (candidate/'.private/source-state.json').write_text(json.dumps(source_state(candidate),indent=2)+'\n')
         run('git','add','.private/source-state.json',cwd=candidate)

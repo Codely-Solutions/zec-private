@@ -52,3 +52,7 @@ google-services.json
 
 # Solana dApp Store config (stored privately in GCS)
 stores/config.yaml
+
+# Local validation bytecode is never an upstream-integration input.
+.private/**/__pycache__/
+.private/**/*.pyc
