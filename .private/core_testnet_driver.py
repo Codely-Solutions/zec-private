@@ -49,7 +49,14 @@ def run(adb, root, apks, manifest):
         if 'OK (1 test)' not in output or len(rows) != 1 or rows[0].get('stage') != name or rows[0].get('passed') is not True:
             # Keep only class/line locations and explicit safe assertions; never raw test output.
             safe = [line[:240] for line in output.splitlines() if re.search(r'CoreWalletAcceptance.kt:\d+|^java\.lang\.|^kotlinx\.coroutines\.|Faucet claim HTTP \d+', line)]
-            (root/'core-testnet-diagnostic.json').write_text(json.dumps(dict(stage=name, lines=safe[-12:])))
+            diagnostic=dict(stage=name,lines=safe[-12:])
+            if name=='networkTargets':
+                # This first stage precedes wallet/seed creation. Preserve its
+                # startup failure, which may happen before JUnit can report it.
+                diagnostic['pre_wallet_instrumentation']=output[-6000:]
+                crash=adb('logcat','-b','crash','-d','-t','80',timeout=15,check=False)
+                diagnostic['pre_wallet_crash']=crash.stdout.decode(errors='replace')[-10000:]
+            (root/'core-testnet-diagnostic.json').write_text(json.dumps(diagnostic))
             raise RuntimeError('Core test stage failed: ' + name)
         if name in ('fund', 'upgrade', 'send', 'restart', 'restore'):
             stages[name] = rows[0]
