@@ -16,6 +16,10 @@ import org.junit.Test
 import java.lang.reflect.Proxy
 import java.time.Instant
 
+private const val PUBLIC_RECIPIENT =
+    "u1l9f0l4348negsncgr9pxd9d3qaxagmqv3lnexcplmufpq7muffvfaue6ksevfvd7wrz7" +
+        "xrvn95rc5zjtn7ugkmgh5rnxswmcj30y0pw52pn0zjvy38rn2esfgve64rj5pcmazxgpyuj"
+
 class TorQuoteTest {
     @Test fun repeatedUnfundedQuotesWithNativeTor() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -33,7 +37,7 @@ class TorQuoteTest {
                         put("originAsset", "nep141:btc.omft.near"); put("destinationAsset", "nep141:zec.omft.near")
                         put("amount", "100000"); put("depositType", "ORIGIN_CHAIN"); put("refundType", "ORIGIN_CHAIN")
                         put("recipientType", "DESTINATION_CHAIN"); put("refundTo", "1BoatSLRHtKNngkdXEeobR76b53LETtpyT")
-                        put("recipient", "u1l9f0l4348negsncgr9pxd9d3qaxagmqv3lnexcplmufpq7muffvfaue6ksevfvd7wrz7xrvn95rc5zjtn7ugkmgh5rnxswmcj30y0pw52pn0zjvy38rn2esfgve64rj5pcmazxgpyuj"); put("appFees", org.json.JSONArray())
+                        put("recipient", PUBLIC_RECIPIENT); put("appFees", org.json.JSONArray())
                         put("deadline", Instant.now().plusSeconds(7200).toString()); put("quoteWaitingTimeMs", 3000)
                     }
                     val response = client.post("https://1click.chaindefuser.com/v0/quote") {
@@ -42,7 +46,8 @@ class TorQuoteTest {
                     val text = response.bodyAsText()
                     val parsed = runCatching { JSONObject(text) }.getOrNull()
                     // Safe diagnostics: never print addresses, response bodies or request data.
-                    println("TOR_QUOTE attempt=$attempt status=${response.status.value} hasQuote=${parsed?.has("quote")}")
+                    println("TOR_QUOTE attempt=$attempt status=${response.status.value} " +
+                        "hasQuote=${parsed?.has("quote")}")
                     check(response.status.value in 200..201 && parsed?.has("quote") == true) {
                         "Native Tor quote attempt $attempt failed: HTTP ${response.status.value}"
                     }

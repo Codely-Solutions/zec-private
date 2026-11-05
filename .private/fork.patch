@@ -2251,33 +2251,49 @@ index cffe4775f..d11822df2 100644
 @@ -155 +155 @@ class KtorNearApiProviderTest {
 -            appFees = listOf(AppFee(recipient = "affiliate", fee = 75))
 +            appFees = emptyList()
-diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
-index d55620b20..f3bccf6a1 100644
---- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
-+++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
-@@ -4 +3,0 @@ import cash.z.ecc.android.sdk.model.WalletAddress
--import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_ADDRESS
-@@ -20,0 +20,3 @@ import io.mockk.mockk
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapQuoteLifecycleTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapQuoteLifecycleTest.kt
+new file mode 100644
+index 000000000..d8641f161
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapQuoteLifecycleTest.kt
+@@ -0,0 +1,202 @@
++package co.electriccoin.zcash.ui.common.repository
++
++import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
++import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
++import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
++import co.electriccoin.zcash.ui.common.model.SwapMode
++import co.electriccoin.zcash.ui.common.model.SwapQuote
++import io.mockk.coEvery
++import io.mockk.coVerify
++import io.mockk.mockk
 +import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.NonCancellable
++import kotlinx.coroutines.awaitCancellation
++import kotlinx.coroutines.cancel
++import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import kotlinx.coroutines.test.runTest
 +import kotlinx.coroutines.withContext
-@@ -27,0 +30 @@ import kotlinx.coroutines.test.runTest
 +import java.io.IOException
-@@ -36,0 +40 @@ import kotlin.test.assertNull
++import java.math.BigDecimal
++import kotlin.test.AfterTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertIs
++import kotlin.test.assertNull
 +import kotlin.test.assertTrue
-@@ -146,2 +150 @@ class SwapRepositoryImplTest {
--                    slippage = BigDecimal("3"),
--                    affiliateAddress = AFFILIATE_ADDRESS
-+                    slippage = BigDecimal("3")
-@@ -174,2 +177 @@ class SwapRepositoryImplTest {
--                    slippage = BigDecimal("2"),
--                    affiliateAddress = AFFILIATE_ADDRESS
-+                    slippage = BigDecimal("2")
-@@ -203,2 +205 @@ class SwapRepositoryImplTest {
--                    slippage = BigDecimal("2"),
--                    affiliateAddress = AFFILIATE_ADDRESS
-+                    slippage = BigDecimal("2")
-@@ -208,0 +210,141 @@ class SwapRepositoryImplTest {
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class SwapQuoteLifecycleTest {
++    private val testScope = CoroutineScope(UnconfinedTestDispatcher())
++    private val zec = SwapAssetTestFixture.zecAsset()
++    private val btc = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc")
++
++    @AfterTest
++    fun tearDown() = testScope.cancel()
++
 +    @Test
 +    fun dismissedIncomingQuoteCanBeRequestedAgainWithoutRestart() =
 +        runTest {
@@ -2419,19 +2435,61 @@ index d55620b20..f3bccf6a1 100644
 +            slippage = BigDecimal("2")
 +        )
 +
-@@ -216 +358 @@ class SwapRepositoryImplTest {
++    private fun flexQuote(destinationAddress: String = "destination"): SwapQuote =
++        FakeSwapQuote(
++            originAsset = btc,
++            destinationAsset = zec,
++            mode = SwapMode.FLEX_INPUT,
++            amountIn = BigDecimal("100"),
++            amountInFormatted = BigDecimal("2"),
++            amountOutFormatted = BigDecimal.ONE,
++            depositAddress = "deposit",
++            destinationAddress = destinationAddress,
++            refundAddress = "refund"
++        )
++
++    private fun dataSourceReturning(quote: SwapQuote) =
++        mockk<SwapDataSource> {
++            coEvery { getSupportedTokens() } returns listOf(zec, btc)
++            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
++        }
++
++    private suspend fun loadedRepository(dataSource: SwapDataSource): SwapRepositoryImpl =
++        SwapRepositoryImpl(dataSource, mockk(relaxed = true))
++            .apply { scope = testScope }
++            .also { it.requestRefreshAssetsOnce() }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
+index d55620b20..a8a1c5e97 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
+@@ -4 +3,0 @@ import cash.z.ecc.android.sdk.model.WalletAddress
+-import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_ADDRESS
+@@ -146,2 +145 @@ class SwapRepositoryImplTest {
+-                    slippage = BigDecimal("3"),
+-                    affiliateAddress = AFFILIATE_ADDRESS
++                    slippage = BigDecimal("3")
+@@ -174,2 +172 @@ class SwapRepositoryImplTest {
+-                    slippage = BigDecimal("2"),
+-                    affiliateAddress = AFFILIATE_ADDRESS
++                    slippage = BigDecimal("2")
+@@ -203,2 +200 @@ class SwapRepositoryImplTest {
+-                    slippage = BigDecimal("2"),
+-                    affiliateAddress = AFFILIATE_ADDRESS
++                    slippage = BigDecimal("2")
+@@ -216 +212 @@ class SwapRepositoryImplTest {
 -                        requestQuote(any(), any(), any(), any(), any(), any(), any(), any())
 +                        requestQuote(any(), any(), any(), any(), any(), any(), any())
-@@ -241 +383 @@ class SwapRepositoryImplTest {
+@@ -241 +237 @@ class SwapRepositoryImplTest {
 -                        requestQuote(any(), any(), any(), any(), any(), any(), any(), any())
 +                        requestQuote(any(), any(), any(), any(), any(), any(), any())
-@@ -277 +419 @@ class SwapRepositoryImplTest {
+@@ -277 +273 @@ class SwapRepositoryImplTest {
 -            coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) }
 +            coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any()) }
-@@ -391 +533 @@ class SwapRepositoryImplTest {
+@@ -391 +387 @@ class SwapRepositoryImplTest {
 -                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } throws
 +                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } throws
-@@ -764 +906 @@ class SwapRepositoryImplTest {
+@@ -764 +760 @@ class SwapRepositoryImplTest {
 -            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } returns quote
 +            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
