@@ -44,21 +44,23 @@ with zipfile.ZipFile(artifact) as archive:
             target.write_bytes(archive.read(item));apk_paths.append(target)
 artifact.unlink()
 if len(apk_paths)!=2: raise ValueError('Expected exactly two probe APKs')
-print('Verified native probe APKs ready.',flush=True)
+from strip_emulator_apk import prepare
+apk_preparation=prepare(apk_paths,ROOT,SDK)
+print('Verified x86_64-only emulator APK copies ready; execution bytes unchanged.',flush=True)
 PORT=5041
 SERIAL='emulator-5580'
 for port in (PORT,5580,5581):
     with socket.socket() as sock: sock.bind(('127.0.0.1',port))
 home=ROOT/'android';avds=home/'avd';avd=avds/'CodexTorProbe.avd';avd.mkdir(parents=True)
 config={'abi.type':'x86_64','hw.cpu.arch':'x86_64','image.sysdir.1':str(system),'tag.id':'default','hw.lcd.width':'1080','hw.lcd.height':'1920','hw.lcd.density':'420','hw.gpu.enabled':'yes','hw.gpu.mode':'swiftshader_indirect','disk.cachePartition':'yes'}
-config.update({'avd.id':'CodexTorProbe','avd.name':'CodexTorProbe','hw.ramSize':'1536','hw.cpu.ncore':'2','hw.sdCard':'no','hw.camera.back':'none','hw.camera.front':'none','hw.keyboard':'yes','fastboot.forceColdBoot':'yes','fastboot.forceFastBoot':'no','firstboot.saveToLocalSnapshot':'no','disk.dataPartition.size':'6G','disk.dataPartition.path':str(ROOT/'userdata.img'),'disk.cachePartition.path':str(ROOT/'cache.img')})
+config.update({'avd.id':'CodexTorProbe','avd.name':'CodexTorProbe','hw.ramSize':'1536','hw.cpu.ncore':'2','hw.sdCard':'no','hw.camera.back':'none','hw.camera.front':'none','hw.keyboard':'yes','fastboot.forceColdBoot':'yes','fastboot.forceFastBoot':'no','firstboot.saveToLocalSnapshot':'no','disk.dataPartition.size':'2G','disk.dataPartition.path':str(ROOT/'userdata.img'),'disk.cachePartition.path':str(ROOT/'cache.img')})
 (avd/'config.ini').write_text(''.join(k+'='+v+'\n' for k,v in config.items()))
 (avds/'CodexTorProbe.ini').write_text('avd.ini.encoding=UTF-8\npath='+str(avd)+'\ntarget=android-35\n')
 env=dict(os.environ,ANDROID_HOME=str(SDK),ANDROID_SDK_ROOT=str(SDK),ANDROID_USER_HOME=str(home),ANDROID_EMULATOR_HOME=str(home),ANDROID_AVD_HOME=str(avds),ANDROID_ADB_SERVER_PORT=str(PORT),ADB_SERVER_SOCKET='tcp:localhost:'+str(PORT))
 log=(ROOT/'emulator.log').open('wb')
 def adb(*args,timeout=30,check=True):
     return subprocess.run([ADB,'-P',str(PORT),'-s',SERIAL,*args],env=env,capture_output=True,timeout=timeout,check=check)
-receipt={'probeArtifact':manifest,'apkHashes':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in apk_paths},'fundsTransferred':False,'walletAccess':False,'route':'native SDK Tor only','guest':'fresh Android API35 x86_64','writableState':'guard-owned root','userdataRequestedBytes':6442450944}
+receipt={'apkPreparation':apk_preparation,'probeArtifact':manifest,'apkHashes':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in apk_paths},'fundsTransferred':False,'walletAccess':False,'route':'native SDK Tor only','guest':'fresh Android API35 x86_64','writableState':'guard-owned root','userdataRequestedBytes':2147483648}
 proc=None
 try:
     subprocess.run([ADB,'-P',str(PORT),'start-server'],env=env,capture_output=True,check=True,timeout=15)

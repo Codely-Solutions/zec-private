@@ -110,12 +110,12 @@ index 7e1b440d1..4b1b532d0 100644
 -            android:authorities="co.electriccoin.zcash.provider.testnet"
 +            android:authorities="com.personal.zecprivate.provider.testnet"
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..14d7351ac 100644
+index ec56161b5..aac2d374b 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
 -ZCASH_VERSION_CODE=1
-+ZCASH_VERSION_CODE=3234003
++ZCASH_VERSION_CODE=3234004
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
 -ZCASH_RELEASE_APP_NAME=Zodl
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash
