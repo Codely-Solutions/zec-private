@@ -65,7 +65,7 @@ class AcceptancePolicyTest(unittest.TestCase):
                        evidence_class='real-app-testnet', network='zcash-testnet',
                        clearnet_fallback=False, personal_wallet_access=False, real_funds_used=False,
                        stages={s: dict(passed=True, txId='a'*64) for s in CORE_STAGES},
-                       network_enforcement=dict(passed=True,sensitive_no_fallback=True,direct_bulk_targets=['192.0.2.1']), build_source_sha='a'*40,
+                       network_enforcement=dict(passed=True,metadata_no_direct_fallback_observed=True,direct_bulk_targets=['192.0.2.1']), build_source_sha='a'*40,
                        baseline_source_sha='a0bd21f27bb53af0eeb9b433d0273c6f39b04e19',
                        build_input_fingerprint='d'*64,
                        baseline_version_code=3234006, candidate_version_code=3234007)

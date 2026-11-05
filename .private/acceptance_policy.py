@@ -106,7 +106,7 @@ def validate_core(receipt, expected_inputs):
     if not receipt.get('network_enforcement', {}).get('passed'):
         raise ValueError('Missing fail-closed connection evidence')
     enforcement=receipt['network_enforcement']
-    if enforcement.get('sensitive_no_fallback') is not True or not enforcement.get('direct_bulk_targets'):
+    if enforcement.get('metadata_no_direct_fallback_observed') is not True or not enforcement.get('direct_bulk_targets'):
         raise ValueError('Missing scoped Tor policy and authorized bulk transport evidence')
     preflight=receipt.get('sync_preflight',{})
     if (preflight.get('passed') is not True or preflight.get('mode') not in ('caught-up','advancing-scan') or
