@@ -12,6 +12,8 @@ Local APK: `D:\Data\Crypto\zec-private\source\dist\zec-private-latest.apk`. SHA-
 
 The user confirmed revision 2 no longer crashes, then supplied the layout defect. Revision 3 device retest remains pending. No automatic phone installation, real-money swap or user wallet secret was used. Earlier full upgrade acceptance remains recorded below; it was not rerun for this UI/copy-only change. The current real release pipeline and focused patch-maintenance tests passed.
 
+Cleanup for the layout work is recorded in `D:\Data\Crypto\zec-private\layout-cleanup.json`: 56,991,591 bytes of superseded Actions artifacts and 1,325,735,479 bytes of obsolete caches removed; one current Gradle cache set remains (1,777,788,289 bytes, nine categories). Current workflows are terminal, the local guarded job has no survivors or disposable roots, and source is clean. Unassigned Codex helper roots remain preserved and are explicitly not certified as globally clean.
+
 ## Prior validation and custody record
 
 # Verified delivery and remaining device check
