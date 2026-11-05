@@ -929,7 +929,7 @@
   "feature-voting/src/test/java/co/electriccoin/zcash/ui/screen/voting/results/VoteResultsVMTest.kt": "4fe129600ae331b5f8e47956e7e38a8bce90b552de40cb91ecd2406c7255df8b",
   "feature-voting/src/test/java/co/electriccoin/zcash/ui/screen/voting/votingerror/VotingErrorMapperTest.kt": "99130584c53982752f1afe365bda93690ab27fbe2c0a23c0e9e9c17211513835",
   "feature-voting/src/test/java/co/electriccoin/zcash/voting/VotingHomeHooksImplTest.kt": "9c2a2582f581d4df255cc3eeb3e36c525a13a5ecd58759039b52addc6a93fdba",
-  "gradle.properties": "298ed6efbb473a3de6b15dcccf268d85b0047b1a8a1b3751c7ec8ae923d8314a",
+  "gradle.properties": "8b72ded0216442616d15194423f47bdf7aab56c2668cef305630a45b9c096e16",
   "gradle/wrapper/gradle-wrapper.jar": "81a82aaea5abcc8ff68b3dfcb58b3c3c429378efd98e7433460610fecd7ae45f",
   "gradle/wrapper/gradle-wrapper.properties": "f2cf3c3fd49439d145f308d1a0ea663ac5c06556c92d5c7da93c349a66a6b26d",
   "gradlew": "734b3879d3501dce471cf0522d3bcbafe76873d9fc5129345b67fb43bd15e933",
