@@ -110,22 +110,27 @@ def fund(address,root):
     if 'Tor version 0.4.9.15' not in version:raise ValueError('Unexpected stable Tor binary version')
     with socket.socket() as listener:
         listener.bind(('127.0.0.1',0));port=listener.getsockname()[1]
-    log=root/'faucet-tor.log'
-    process=subprocess.Popen([str(tor),'--ClientOnly','1','--DataDirectory',str(root/'faucet-tor-data'),
+    torrc=root/'faucet-torrc'
+    torrc.write_bytes(b'')
+    console=root/'faucet-tor-console.log'
+    log=console
+    console_stream=console.open('wb')
+    process=subprocess.Popen([str(tor),'-f',str(torrc),'--ClientOnly','1','--DataDirectory',str(root/'faucet-tor-data'),
                               '--SocksPort','127.0.0.1:'+str(port),'--AvoidDiskWrites','1',
-                              '--Log','notice file "'+log.as_posix()+'"'],
-                             stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=0x08000000)
+                              '--Log','notice stdout'],
+                             stdout=console_stream,stderr=subprocess.STDOUT,creationflags=0x08000000)
     started=time.monotonic()
     setup_seconds=started-setup_started
     try:
         deadline=started+180
         while time.monotonic()<deadline:
             if process.poll() is not None:
-                detail=log.read_text(errors='replace')[-1800:] if log.exists() else 'No bootstrap log'
+                detail=log.read_text(errors='replace')[-1800:] if log.exists() else console.read_text(errors='replace')[-1800:]
                 raise RuntimeError('Task Tor exited before bootstrap: '+detail)
             if log.exists():
                 if log.stat().st_size>131072:raise RuntimeError('Task Tor log exceeded bound')
                 if 'Bootstrapped 100%' in log.read_text(errors='replace'):break
+            if console.stat().st_size>131072:raise RuntimeError('Task Tor console exceeded bound')
             time.sleep(.5)
         else:raise RuntimeError('Task Tor bootstrap timed out; direct fallback forbidden')
         bootstrap_seconds=time.monotonic()-started
@@ -166,3 +171,4 @@ def fund(address,root):
         try:process.wait(timeout=10)
         except subprocess.TimeoutExpired:process.kill();process.wait(timeout=10)
         if process.poll() is None:raise RuntimeError('Task Tor did not exit')
+        console_stream.close()
