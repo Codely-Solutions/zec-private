@@ -25,7 +25,8 @@ class TorQuoteTest {
         val tor = TorClient.new(java.io.File(context.cacheDir, "isolated-tor"), backend)
         try {
             repeat(3) { attempt ->
-                val client = HttpClient(TorHttp) { engine { this.tor = tor.isolatedTorClient(); retryLimit = 1 } }
+                val isolated = tor.isolatedTorClient()
+                val client = HttpClient(TorHttp) { engine { this.tor = isolated; retryLimit = 1 } }
                 try {
                     val body = JSONObject().apply {
                         put("dry", false); put("swapType", "FLEX_INPUT"); put("slippageTolerance", 50)
