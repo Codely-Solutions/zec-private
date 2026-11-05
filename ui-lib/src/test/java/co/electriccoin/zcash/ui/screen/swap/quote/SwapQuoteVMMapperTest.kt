@@ -190,7 +190,7 @@ class SwapQuoteVMMapperTest {
                 bounds.height.toInt()
             )
         val target = File(output, "${mode.name.lowercase()}-$width-$fontScale.png")
-        target.parentFile.mkdirs()
+        checkNotNull(target.parentFile).mkdirs()
         target.outputStream().use { crop.compress(Bitmap.CompressFormat.PNG, 100, it) }
         crop.recycle()
         bitmap.recycle()
