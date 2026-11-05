@@ -2046,7 +2046,7 @@ index 1d445dd11..b96c50409 100644
 -            coEvery { requestNextShieldedAddress() } returns "u"
 +            coEvery { requestNextShieldedAddress(requireFresh = true) } returns "u"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-index 38427672d..4b5f64968 100644
+index 38427672d..94de8049a 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 @@ -2,0 +3,21 @@ package co.electriccoin.zcash.ui.screen.swap.quote
@@ -2090,7 +2090,7 @@ index 38427672d..4b5f64968 100644
 +    @get:Rule
 +    val composeTestRule = createComposeRule()
 +
-@@ -68,0 +102,91 @@ class SwapQuoteVMMapperTest {
+@@ -68,0 +102,97 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun incomingQuoteFeeNoteRendersWithoutFormatConversionFailure() {
 +        assertQuoteRowsRender(SwapMode.FLEX_INPUT, SwapAssetTestFixture.zecAsset())
@@ -2174,7 +2174,13 @@ index 38427672d..4b5f64968 100644
 +        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
 +        composeTestRule.runOnUiThread { view.draw(Canvas(bitmap)) }
 +        val crop =
-+            Bitmap.createBitmap(bitmap, bounds.left.toInt(), bounds.top.toInt(), bounds.width.toInt(), bounds.height.toInt())
++            Bitmap.createBitmap(
++                bitmap,
++                bounds.left.toInt(),
++                bounds.top.toInt(),
++                bounds.width.toInt(),
++                bounds.height.toInt()
++            )
 +        val target = File(output, "${mode.name.lowercase()}-$width-$fontScale.png")
 +        target.parentFile.mkdirs()
 +        target.outputStream().use { crop.compress(Bitmap.CompressFormat.PNG, 100, it) }
