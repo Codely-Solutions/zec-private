@@ -8,6 +8,7 @@ import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.android.sdk.model.ZecSend
+import cash.z.ecc.android.sdk.type.ServerValidation
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.internal.Backend
 import cash.z.ecc.android.sdk.internal.model.TorClient
@@ -35,7 +36,6 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.runBlocking
@@ -46,7 +46,6 @@ import org.junit.Test
 import org.koin.core.context.GlobalContext
 import java.io.File
 import java.lang.reflect.Proxy
-import java.util.concurrent.atomic.AtomicInteger
 
 /** Exercises the installed app graph. No mocks, SDK-only wallet, or mainnet spending. */
 class CoreWalletAcceptance {
@@ -59,25 +58,6 @@ class CoreWalletAcceptance {
     private val fixtureFile get() = File(context.filesDir, "core-private.json")
     private fun fixture() = if (fixtureFile.exists()) JSONObject(fixtureFile.readText()) else JSONObject()
     private fun save(value: JSONObject) = fixtureFile.writeText(value.toString())
-
-    // Diagnostic reads only; never dump objects, database rows, keys or messages.
-    private fun nativeCounters(sync: Synchronizer?): JSONObject = runCatching {
-        checkNotNull(sync)
-        val engine = sync.javaClass.getDeclaredField("engine").apply { isAccessible = true }.get(sync)
-        val flow = engine.javaClass.getDeclaredField("lastSnapshot").apply { isAccessible = true }.get(engine) as StateFlow<*>
-        val snapshot = checkNotNull(flow.value)
-        JSONObject().apply {
-            for (name in listOf("chainTip", "fetchedBlocks", "scannedBlocks", "enhancedTxs", "currentRangeEnd",
-                "state", "passTotalBlocks", "spendableHint", "rangesCompleted", "isRecovering",
-                "progressPermille", "stalledSeconds", "tipFresh", "txSetVersion")) {
-                val value = snapshot.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(snapshot)
-                check(value is Number || value is Boolean)
-                put(name, value)
-            }
-            val running = engine.javaClass.getDeclaredField("running").apply { isAccessible = true }.get(engine)
-            if (running is Boolean) put("kotlinRunning", running)
-        }
-    }.getOrElse { JSONObject().put("unavailable_class", it.javaClass.simpleName) }
 
     @Test
     fun executeStage() = runBlocking {
@@ -170,12 +150,32 @@ class CoreWalletAcceptance {
                     val height=original.fullyScannedHeight.filterNotNull().first()
                     val beforeBalance=balance()
                     val fundingId=fixture().getString("fundingTxId")
+                    val endpoint=dependency<PersistableWalletProvider>().requirePersistableWallet().endpoint
+                    check(withTimeout(30_000) { original.validateServerEndpoint(context,endpoint) } == ServerValidation.Valid)
                     val ready=File(context.filesDir,"core-sync-ready.json")
                     ready.writeText(JSONObject().put("ready",true).put("height",height.value).toString())
                     withTimeout(60_000) {
                         while (!File(context.filesDir,"core-sync-drop").exists()) delay(100)
                     }
-                    File(context.filesDir,"core-sync-requested.json").writeText("{\"requested\":true}")
+                    val metadataDuringOutage=withTimeoutOrNull(8_000) { original.validateServerEndpoint(context,endpoint) }
+                    check(metadataDuringOutage != ServerValidation.Valid) { "Sensitive metadata succeeded while Tor was blocked" }
+                    // A plain TLS handshake proves the authorized direct bulk path
+                    // is reachable; no wallet RPC or wallet data is sent here.
+                    withTimeout(8_000) {
+                        java.net.Socket().use { plain ->
+                            plain.connect(java.net.InetSocketAddress(endpoint.host,endpoint.port),6_000)
+                            plain.soTimeout=6_000
+                            val factory=javax.net.ssl.SSLSocketFactory.getDefault() as javax.net.ssl.SSLSocketFactory
+                            (factory.createSocket(plain,endpoint.host,endpoint.port,true) as javax.net.ssl.SSLSocket).use {
+                                it.soTimeout=6_000
+                                val parameters=it.sslParameters
+                                parameters.endpointIdentificationAlgorithm="HTTPS"
+                                it.sslParameters=parameters
+                                it.startHandshake()
+                            }
+                        }
+                    }
+                    File(context.filesDir,"core-sync-requested.json").writeText("{\"requested\":true,\"metadata_blocked\":true,\"direct_bulk_reachable\":true}")
                     dependency<ConfirmResyncUseCase>()(BlockHeight.new(height.value-1))
                     val recovered=withTimeout(180_000) { provider.synchronizer.filterNotNull().first { it!==original } }
                     withTimeout(180_000) {
@@ -183,6 +183,7 @@ class CoreWalletAcceptance {
                         recovered.fullyScannedHeight.filterNotNull().first { it.value>=height.value }
                         while (balance()!=beforeBalance) delay(500)
                         dependency<TransactionRepository>().observeTransaction(fundingId).filterNotNull().first { it is ReceiveTransaction.Success }
+                        check(recovered.validateServerEndpoint(context,endpoint) == ServerValidation.Valid)
                     }
                     File(context.filesDir,"core-sync-result.json").writeText(JSONObject()
                         .put("sync_restarted",true).put("synced",true).put("balance_preserved",true)
@@ -200,16 +201,22 @@ class CoreWalletAcceptance {
                             engine { this.tor=isolated; retryLimit=1 }
                             expectSuccess=true
                         }.use { client ->
-                            val addresses = JSONArray()
+                            val addresses = JSONObject()
                             for (host in listOf("testnet.zec.rocks", "zcashfaucet.jinolabs.xyz")) {
+                                val hostAddresses=JSONArray()
+                                if (host=="testnet.zec.rocks") {
+                                    java.net.InetAddress.getAllByName(host).forEach { hostAddresses.put(it.hostAddress) }
+                                }
                                 for (type in listOf("A", "AAAA")) {
                                     val result = JSONObject(client.get("https://dns.google/resolve?name=$host&type=$type").bodyAsText())
                                     val answers = result.optJSONArray("Answer") ?: continue
                                     for (index in 0 until answers.length()) {
                                         val answer = answers.getJSONObject(index)
-                                        if (answer.optInt("type") in listOf(1, 28)) addresses.put(answer.getString("data"))
+                                        if (answer.optInt("type") in listOf(1, 28)) hostAddresses.put(answer.getString("data"))
                                     }
                                 }
+                                check(hostAddresses.length()>0)
+                                addresses.put(if (host=="testnet.zec.rocks") "bulk" else "sensitive",hostAddresses)
                             }
                             check(addresses.length() > 0)
                             println("CORE_TARGETS $addresses")
@@ -228,7 +235,7 @@ class CoreWalletAcceptance {
             }
         }
         val receipt = JSONObject().put("stage", stage).put("passed", true)
-            .put("network", "zcash-testnet").put("transport", "app-native-Tor")
+            .put("network", "zcash-testnet").put("transport", "Tor sensitive RPCs; upstream direct bulk")
             .put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
         if (stage in listOf("send", "restart", "restore")) receipt.put("txId", fixture().getString("txId"))
         if (stage=="fund") receipt.put("funding_txid",fixture().getString("fundingTxId")).put("balance_zatoshi",fixture().getLong("fundedBalance"))
@@ -249,14 +256,6 @@ class CoreWalletAcceptance {
         val wallet = dependency<PersistableWalletProvider>().persistableWallet.filterNotNull().first()
         check(wallet.network == ZcashNetwork.Testnet)
         val sync = dependency<SynchronizerProvider>().getSynchronizer()
-        val previousCritical = sync.onCriticalErrorHandler
-        val criticalCount = AtomicInteger()
-        sync.onCriticalErrorHandler = { error ->
-            if (criticalCount.incrementAndGet() <= 3) println("CORE_NATIVE_ERROR " + JSONObject()
-                .put("exception_class",error.javaClass.simpleName)
-                .put("cause_class",error.cause?.javaClass?.simpleName ?: "none"))
-            previousCritical?.invoke(error) ?: false
-        }
         val account = dependency<AccountDataSource>().getZashiAccount()
         val address = sync.getUnifiedAddress(account.sdkAccount)
         check(address.startsWith("utest1"))
@@ -271,7 +270,6 @@ class CoreWalletAcceptance {
             var last: Snapshot? = null
             var observed: Synchronizer? = null
             var initial: Long? = null
-            var firstNative: JSONObject? = null
             try {
                 val ready = withTimeout(120_000) {
                     provider.synchronizer.filterNotNull().flatMapLatest { current ->
@@ -280,7 +278,6 @@ class CoreWalletAcceptance {
                         }
                     }.first { snapshot ->
                         last = snapshot
-                        if (firstNative == null) firstNative = nativeCounters(snapshot.sync)
                         if (observed !== snapshot.sync) {
                             observed = snapshot.sync
                             initial = snapshot.scanned?.value
@@ -304,8 +301,6 @@ class CoreWalletAcceptance {
                     .put("error_type",currentError?.javaClass?.simpleName ?: "none")
                     .put("cause_class",currentError?.cause?.javaClass?.simpleName ?: "none")
                     .put("foreground",withTimeoutOrNull(1_000) { dependency<ApplicationStateProvider>().isInForeground.first() } ?: false)
-                    .put("native_first",firstNative ?: JSONObject())
-                    .put("native_last",nativeCounters(provider.synchronizer.value))
                     .put("exception_class", error.javaClass.simpleName))
                 throw error
             }
