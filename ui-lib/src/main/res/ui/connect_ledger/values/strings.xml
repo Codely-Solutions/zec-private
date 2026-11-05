@@ -8,8 +8,6 @@
     <!-- Disconnect and integrations -->
     <string name="ledger_disconnect_title">Disconnect Ledger</string>
     <string name="ledgerHW">Ledger Hardware</string>
-    <string name="integrations_disabled_info_flexa_ledger">Switch from Ledger to Zodl to use Flexa.</string>
-
     <!-- Send paths -->
     <string name="ledger_confirm">Confirm with Ledger</string>
     <string name="ledger_unsupported_title">Not available yet</string>

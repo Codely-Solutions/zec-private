@@ -153,14 +153,6 @@ androidComponents {
             )
         )
         variant.buildConfigFields?.put(
-            "ZCASH_FLEXA_KEY",
-            BuildConfigField(
-                type = "String",
-                value = "\"${project.property("ZCASH_FLEXA_KEY")?.toString().orEmpty()}\"",
-                comment = "Publishable key of the Flexa integration"
-            )
-        )
-        variant.buildConfigFields?.put(
             "ZCASH_CMC_KEY",
             BuildConfigField(
                 type = "String",
@@ -211,8 +203,6 @@ dependencies {
     implementation(libs.tink)
     implementation(libs.zxing)
 
-    api(libs.flexa.core)
-    api(libs.flexa.spend)
 
     implementation(projects.buildInfoLib)
     implementation(projects.configurationApiLib)

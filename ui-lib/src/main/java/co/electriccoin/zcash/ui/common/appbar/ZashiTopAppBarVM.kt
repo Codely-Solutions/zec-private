@@ -18,7 +18,6 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
-import co.electriccoin.zcash.ui.common.repository.ConfigurationRepository
 import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveAccountIconUseCase
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
@@ -46,7 +45,6 @@ class ZashiTopAppBarVM(
     private val standardPreferenceProvider: StandardPreferenceProvider,
     private val navigationRouter: NavigationRouter,
     private val getVersionInfo: GetVersionInfoProvider,
-    private val configurationRepository: ConfigurationRepository,
     private val viewOnlyContent: ViewOnlyContent,
     private val observeAccountIcon: ObserveAccountIconUseCase,
 ) : ViewModel() {
@@ -127,9 +125,8 @@ class ZashiTopAppBarVM(
     private fun onInfoClick(accounts: List<WalletAccount>?) =
         viewModelScope.launch {
             if (getVersionInfo().distribution == DistributionDimension.FOSS) {
-                val isFlexaAvailable = configurationRepository.isFlexaAvailable()
                 val isHWWalletConnected = accounts.orEmpty().any { it is HWWalletAccount }
-                if (!isFlexaAvailable && isHWWalletConnected) {
+                if (isHWWalletConnected) {
                     navigationRouter.forward(MoreArgs)
                 } else {
                     navigationRouter.forward(IntegrationsArgs)

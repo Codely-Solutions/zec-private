@@ -14,7 +14,9 @@ import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.component.ZashiConfirmationState
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
-import com.flexa.core.Flexa.scope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
@@ -35,6 +37,8 @@ class ErrorMapperUseCase(
     private val sendEmail: SendEmailUseCase,
     private val viewOnlyContent: ViewOnlyContent,
 ) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
     /**
      * An [AccountOperationUnsupportedException] carries its own copy and overrides whatever title
      * and message the call site passed — the caller cannot know a Ledger or view-only account was

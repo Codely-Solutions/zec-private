@@ -173,9 +173,9 @@ private fun IntegrationSettings() =
                     items =
                         persistentListOf(
                             ListItemState(
-                                title = stringRes(R.string.settings_flexa),
-                                subtitle = stringRes(R.string.settings_flexa),
-                                bigIcon = imageRes(R.drawable.ic_integrations_flexa),
+                                title = stringRes(R.string.integrations_redeemGift),
+                                subtitle = stringRes(R.string.integrations_redeemGift),
+                                bigIcon = imageRes(R.drawable.ic_integrations_gift),
                                 onClick = {}
                             ),
                         ),

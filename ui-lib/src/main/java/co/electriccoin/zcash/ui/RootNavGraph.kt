@@ -21,7 +21,6 @@ import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.exitTransition
 import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.popEnterTransition
 import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.popExitTransition
 import co.electriccoin.zcash.ui.design.util.LocalNavController
-import co.electriccoin.zcash.ui.screen.flexa.FlexaViewModel
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -42,7 +41,6 @@ fun RootNavGraph(
     storageCheckViewModel: StorageCheckViewModel = koinViewModel(),
 ) {
     val keyboardManager = LocalKeyboardManager.current
-    val flexaViewModel = koinViewModel<FlexaViewModel>()
     val navigationRouter = koinInject<NavigationRouter>()
     val applicationStateProvider = koinInject<ApplicationStateProvider>()
     val appearanceModeStorageProvider = koinInject<AppearanceModeStorageProvider>()
@@ -56,7 +54,6 @@ fun RootNavGraph(
         remember(
             activity,
             navController,
-            flexaViewModel,
             keyboardManager,
             applicationStateProvider,
             appearanceModeStorageProvider,
@@ -65,7 +62,6 @@ fun RootNavGraph(
             NavigatorImpl(
                 activity = activity,
                 navController = navController,
-                flexaViewModel = flexaViewModel,
                 keyboardManager = keyboardManager,
                 applicationStateProvider = applicationStateProvider,
                 appearanceModeStorageProvider = appearanceModeStorageProvider,

@@ -12,9 +12,6 @@ import co.electriccoin.zcash.ui.common.provider.getOrSystem
 import co.electriccoin.zcash.ui.design.KeyboardManager
 import co.electriccoin.zcash.ui.screen.ExternalUrl
 import co.electriccoin.zcash.ui.screen.about.util.WebBrowserUtil
-import co.electriccoin.zcash.ui.screen.flexa.FlexaViewModel
-import com.flexa.core.Flexa
-import com.flexa.spend.buildSpend
 import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.serializer
 
@@ -28,7 +25,6 @@ interface Navigator {
 class NavigatorImpl(
     private val activity: Activity,
     private val navController: NavHostController,
-    private val flexaViewModel: FlexaViewModel,
     private val keyboardManager: KeyboardManager,
     private val applicationStateProvider: ApplicationStateProvider,
     private val appearanceModeStorageProvider: AppearanceModeStorageProvider,
@@ -77,22 +73,6 @@ class NavigatorImpl(
     private suspend fun replaceAll(command: NavigationCommand.ReplaceAll) {
         command.routes.forEachIndexed { index, route ->
             when (route) {
-                co.electriccoin.zcash.ui.screen.flexa.Flexa -> {
-                    if (index == 0) {
-                        navController.currentDestination?.parent?.startDestinationId?.let {
-                            navController.popBackStack(
-                                route = it,
-                                inclusive = false
-                            )
-                        }
-                    }
-
-                    if (index != command.routes.lastIndex) {
-                        throw UnsupportedOperationException("Flexa can be opened as last screen only")
-                    }
-
-                    createFlexaFlow(flexaViewModel)
-                }
 
                 is ExternalUrl -> {
                     if (index == 0) {
@@ -133,17 +113,6 @@ class NavigatorImpl(
         val popUpToId = command.route.serializer().generateHashCode()
         command.routes.forEachIndexed { index, route ->
             when (route) {
-                co.electriccoin.zcash.ui.screen.flexa.Flexa -> {
-                    if (index == 0) {
-                        navController.popBackStack(destinationId = popUpToId, inclusive = true)
-                    }
-
-                    if (index != command.routes.lastIndex) {
-                        throw UnsupportedOperationException("Flexa can be opened as last screen only")
-                    }
-
-                    createFlexaFlow(flexaViewModel)
-                }
 
                 is ExternalUrl -> {
                     if (index == 0) {
@@ -174,17 +143,6 @@ class NavigatorImpl(
     private suspend fun replace(command: NavigationCommand.Replace) {
         command.routes.forEachIndexed { index, route ->
             when (route) {
-                co.electriccoin.zcash.ui.screen.flexa.Flexa -> {
-                    if (index == 0) {
-                        navController.popBackStack()
-                    }
-
-                    if (index != command.routes.lastIndex) {
-                        throw UnsupportedOperationException("Flexa can be opened as last screen only")
-                    }
-
-                    createFlexaFlow(flexaViewModel)
-                }
 
                 is ExternalUrl -> {
                     if (index == 0) {
@@ -215,13 +173,12 @@ class NavigatorImpl(
     private suspend fun forward(command: NavigationCommand.Forward) {
         command.routes.forEach { route ->
             when (route) {
-                co.electriccoin.zcash.ui.screen.flexa.Flexa -> createFlexaFlow(flexaViewModel)
                 is ExternalUrl -> startWebBrowser(route)
                 else -> navController.executeNavigation(route = route)
             }
         }
 
-        if (command.routes.lastOrNull() in listOf(ExternalUrl, co.electriccoin.zcash.ui.screen.flexa.Flexa)) {
+        if (command.routes.lastOrNull() is ExternalUrl) {
             applicationStateProvider.onThirdPartyUiShown()
         }
     }
@@ -254,12 +211,4 @@ class NavigatorImpl(
         }
     }
 
-    private fun createFlexaFlow(flexaViewModel: FlexaViewModel) {
-        applicationStateProvider.onThirdPartyUiShown()
-        Flexa
-            .buildSpend()
-            .onTransactionRequest { result -> flexaViewModel.createTransaction(result) }
-            .build()
-            .open(activity)
-    }
 }

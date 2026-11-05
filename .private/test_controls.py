@@ -13,7 +13,9 @@ class ControlsTest(unittest.TestCase):
         # Copy only static-check inputs; never touch real release state or keys.
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
-            for relative in ['ui-lib/src/main','app/src','gradle.properties','LICENSE']:
+            for relative in ['ui-lib/src/main','app/src','gradle.properties','LICENSE',
+                             'settings.gradle.kts','app/build.gradle.kts','ui-lib/build.gradle.kts',
+                             '.private/excluded-features.json']:
                 source=checks.ROOT/relative
                 target=root/relative
                 target.parent.mkdir(parents=True,exist_ok=True)
@@ -31,5 +33,25 @@ class ControlsTest(unittest.TestCase):
             p=root/'ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml'
             p.write_text(p.read_text().replace('0.25%% where applicable','0.25% where applicable'))
             self.assertTrue(checks.check(root))
+
+    def test_excluded_integrations_cannot_return(self):
+        from check_exclusions import check
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            for relative in ['app/build.gradle.kts','ui-lib/build.gradle.kts','settings.gradle.kts',
+                             '.private/excluded-features.json']:
+                target=root/relative
+                target.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copy2(checks.ROOT/relative,target)
+            self.assertEqual([],check(root))
+            settings=root/'settings.gradle.kts'
+            original=settings.read_text()
+            settings.write_text(original+'\ninclude("feature-voting")\n')
+            self.assertTrue(check(root))
+            settings.write_text(original)
+            source=root/'app/src/main/Reintroduced.kt'
+            source.parent.mkdir(parents=True)
+            source.write_text('import com.flexa.core.Flexa\n')
+            self.assertTrue(check(root))
 
 if __name__=='__main__': unittest.main()

@@ -40,8 +40,6 @@ import co.electriccoin.zcash.ui.screen.exchangerateunavailable.ExchangeRateUnava
 import co.electriccoin.zcash.ui.screen.exportvk.ExportVKVM
 import co.electriccoin.zcash.ui.screen.exportvk.confirm.ExportVKConfirmVM
 import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailVM
-import co.electriccoin.zcash.ui.screen.feedback.FeedbackVM
-import co.electriccoin.zcash.ui.screen.flexa.FlexaViewModel
 import co.electriccoin.zcash.ui.screen.home.HomeVM
 import co.electriccoin.zcash.ui.screen.home.backup.WalletBackupDetailViewModel
 import co.electriccoin.zcash.ui.screen.home.backup.WalletBackupInfoViewModel
@@ -110,7 +108,6 @@ import co.electriccoin.zcash.ui.screen.transactionnote.viewmodel.TransactionNote
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressVM
 import co.electriccoin.zcash.ui.screen.walletbackup.WalletBackupViewModel
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
-import co.electriccoin.zcash.ui.screen.whatsnew.viewmodel.WhatsNewViewModel
 import org.koin.core.module.dsl.viewModelOf
 import org.koin.dsl.module
 
@@ -125,7 +122,6 @@ val viewModelModule =
         viewModelOf(::MoreVM)
         viewModelOf(::AdvancedSettingsVM)
         viewModelOf(::SupportViewModel)
-        viewModelOf(::WhatsNewViewModel)
         viewModelOf(::ChooseServerVM)
         viewModelOf(::ReceiveVM)
         viewModelOf(::QrCodeVM)
@@ -135,10 +131,8 @@ val viewModelModule =
         viewModelOf(::ScanKeystoneSignInRequestViewModel)
         viewModelOf(::ScanKeystonePCZTViewModel)
         viewModelOf(::IntegrationsVM)
-        viewModelOf(::FlexaViewModel)
         viewModelOf(::SendViewModel)
         viewModelOf(::WalletBackupViewModel)
-        viewModelOf(::FeedbackVM)
         viewModelOf(::SignKeystoneTransactionVM)
         viewModelOf(::AccountListVM)
         viewModelOf(::WalletOptionsVM)
