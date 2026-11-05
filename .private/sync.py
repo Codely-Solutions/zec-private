@@ -93,7 +93,7 @@ def main():
         shutil.rmtree(candidate/'.github/workflows')
         (candidate/'.github/dependabot.yml').unlink(missing_ok=True)
         shutil.copytree(ROOT/'.github/workflows',candidate/'.github/workflows')
-        shutil.copytree(ROOT/'.private',candidate/'.private')
+        shutil.copytree(ROOT/'.private',candidate/'.private',ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
         shutil.copy2(ROOT/'README.md',candidate/'README.md')
         for path in ('docs/UPSTREAM-README.md','docs/UPSTREAM-dependabot.yml'):
             shutil.copy2(ROOT/path,candidate/path)
