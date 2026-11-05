@@ -6,7 +6,7 @@ r=Path(d['root']);state=r/'ui-state.json';previous=json.loads(state.read_text())
 p=r/'ui-command.next';p.write_text(json.dumps(cmd));p.replace(r/'ui-command.json')
 if cmd['action']=='finish':
  print('Finish requested; wait for guard cleanup.');raise SystemExit(0)
-needs_snapshot=cmd['action']!='snapshot'
+needs_snapshot=False
 deadline=time.monotonic()+45
 while time.monotonic()<deadline:
  if not active.exists():raise RuntimeError('UI job ended')
