@@ -53,7 +53,7 @@ def run(adb, root, apks, manifest):
         # markers from this app UID after clearing this blank guest's log buffer.
         app_uid=uid()
         logs=adb('logcat','-d','-v','raw','--uid='+str(app_uid),'-s','System.out:I',timeout=15).stdout.decode(errors='replace')
-        markers=[line for line in logs.splitlines() if line.startswith(('CORE_RESULT ','CORE_TARGETS '))]
+        markers=[line for line in logs.splitlines() if line.startswith(('CORE_RESULT ','CORE_TARGETS ','CORE_SYNC_DIAGNOSTIC '))]
         thread_logs=adb('logcat','-d','-v','threadtime','-t','2000','--uid='+str(app_uid),timeout=15).stdout.decode(errors='replace')
         application_pids.update(int(match[1]) for match in re.finditer(r'^\S+\s+\S+\s+(\d+)\s+\d+\s+[A-Z]\s+',thread_logs,re.M))
         if sum(map(len,markers))>8192:raise RuntimeError('Safe core markers exceed bound')
@@ -63,6 +63,7 @@ def run(adb, root, apks, manifest):
             # Keep only class/line locations and explicit safe assertions; never raw test output.
             safe = [line[:240] for line in output.splitlines() if re.search(r'CoreWalletAcceptance.kt:\d+|^java\.lang\.|^kotlinx\.coroutines\.|Faucet claim HTTP \d+', line)]
             diagnostic=dict(stage=name,lines=safe[-12:])
+            diagnostic['sync']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_SYNC_DIAGNOSTIC ')][-1:]
             if name=='fund':
                 http=adb('logcat','-d','-v','raw','--uid='+str(app_uid),'-s','HttpClient:D',timeout=15,check=False).stdout.decode(errors='replace')
                 failures=[]
@@ -172,6 +173,17 @@ def run(adb, root, apks, manifest):
                 allowed.add(str(ipaddress.ip_address(host)))
         if not 1000 <= len(allowed) <= 40000:
             raise RuntimeError('Tor relay inventory outside reviewed bound')
+        bootstrap_path=Path(__file__).with_name('core-network-policy.json')
+        bootstrap=json.loads(bootstrap_path.read_text())
+        properties=(Path(__file__).resolve().parents[1]/'gradle.properties').read_text()
+        if 'ZCASH_SDK_VERSION='+bootstrap['sdk_version'] not in properties:
+            raise RuntimeError('Tor bootstrap inventory does not match the compiled SDK')
+        bootstrap_peers={(str(ipaddress.ip_address(row['address'])),int(row['port'])) for row in bootstrap['addresses']}
+        if not 50<len(bootstrap_peers)<2000 or any(not 1<=port<=65535 for _,port in bootstrap_peers):
+            raise RuntimeError('Tor bootstrap inventory outside reviewed bounds')
+        if {address for address,_ in bootstrap_peers}&targets:
+            raise RuntimeError('Tor bootstrap inventory overlaps direct wallet/provider destinations')
+        report['bootstrap_policy_sha256']=hashlib.sha256(bootstrap_path.read_bytes()).hexdigest()
         # Snapshot established app TCP sockets after native Tor bootstrap.
         peers = set()
         for table in ('tcp', 'tcp6'):
@@ -185,7 +197,7 @@ def run(adb, root, apks, manifest):
                 peer = ipaddress.ip_address(raw)
                 if not peer.is_loopback and not peer.is_unspecified:
                     peers.add(str(peer))
-        if peers & targets or not peers.issubset(allowed):
+        if peers & targets or not peers.issubset(allowed | {address for address,_ in bootstrap_peers}):
             raise RuntimeError('Cannot establish isolated native Tor relay peers')
         for binary, family in (('iptables',4),('ip6tables',6)):
             lines=['*filter', ':CORE_ACCEPT - [0:0]',
@@ -196,6 +208,9 @@ def run(adb, root, apks, manifest):
             for peer in sorted(allowed):
                 if ipaddress.ip_address(peer).version == family:
                     lines.append('-A CORE_ACCEPT -p tcp -d '+peer+' -j ACCEPT')
+            for peer,port in sorted(bootstrap_peers):
+                if ipaddress.ip_address(peer).version==family and peer not in allowed:
+                    lines.append('-A CORE_ACCEPT -p tcp -d '+peer+' --dport '+str(port)+' -j ACCEPT')
             # No UDP DNS or unobserved endpoint/relay is allowed from the app.
             lines.extend(['-A CORE_ACCEPT -p udp -j REJECT','-A CORE_ACCEPT -j REJECT','COMMIT'])
             local=root/(binary+'-rules.txt')
@@ -285,7 +300,7 @@ def run(adb, root, apks, manifest):
         if denied:
             raise RuntimeError('Unexpected app egress attempts blocked; inspect exact destinations')
         report['network_enforcement']=dict(passed=True,mode='app-UID TCP Tor-relay allowlist; dual-stack deny other egress; whole-guest DNS/DoT blocked',
-                                           allowed_relay_peers=len(allowed),tor_resolved_targets=len(targets))
+                                           allowed_relay_peers=len(allowed),embedded_bootstrap_pairs=len(bootstrap_peers),tor_resolved_targets=len(targets))
         report['passed']=True
     finally:
         failure=sys.exc_info()[1]
