@@ -13,8 +13,13 @@ for profile,name,validate in (('core-testnet','core-acceptance.json',validate_co
     try:
         receipt=json.loads(path.read_text())
         validate(receipt,fingerprint)
-        if input_fingerprint(receipt['build_source_sha'],profile=profile)!=fingerprint:
-            raise ValueError('Executed build inputs differ')
+        if profile=='core-testnet':
+            build_inputs=receipt.get('build_input_fingerprint')
+            if (input_fingerprint(receipt['build_source_sha'],profile='core-build')!=build_inputs or
+                    input_fingerprint(profile='core-build')!=build_inputs):
+                raise ValueError('Executed core build inputs differ')
+        elif input_fingerprint(receipt['build_source_sha'],profile=profile)!=fingerprint:
+            raise ValueError('Executed quote build inputs differ')
     except (OSError,ValueError,KeyError):
         pending.append(profile)
 print(json.dumps({'pending_acceptance':pending,'publication_permitted':not pending}))

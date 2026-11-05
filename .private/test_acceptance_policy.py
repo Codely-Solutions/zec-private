@@ -23,6 +23,7 @@ class AcceptancePolicyTest(unittest.TestCase):
                        stages={s: dict(passed=True, txId='a'*64) for s in CORE_STAGES},
                        network_enforcement=dict(passed=True), build_source_sha='a'*40,
                        baseline_source_sha='a0bd21f27bb53af0eeb9b433d0273c6f39b04e19',
+                       build_input_fingerprint='d'*64,
                        baseline_version_code=3234006, candidate_version_code=3234007)
         for key in ('candidate_apk_sha256', 'baseline_apk_sha256', 'instrumentation_apk_sha256', 'harness_sha256'):
             receipt[key] = 'b'*64

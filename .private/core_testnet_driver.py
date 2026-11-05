@@ -26,6 +26,7 @@ def run(adb, root, apks, manifest):
     report = dict(schema=1, passed=False, evidence_class='real-app-testnet', network='zcash-testnet',
                   clearnet_fallback=False, personal_wallet_access=False, real_funds_used=False,
                   stages=stages, input_fingerprint=manifest['input_fingerprint'],
+                  build_input_fingerprint=manifest['build_input_fingerprint'],
                   build_source_sha=manifest['build_source_sha'],
                   baseline_source_sha=manifest['baseline_source_sha'],
                   baseline_version_code=3234006, candidate_version_code=3234007,
@@ -91,6 +92,11 @@ def run(adb, root, apks, manifest):
         adb('install', '-r', '-t', str(test), timeout=90)
         if version() != 3234006:
             raise RuntimeError('Wrong baseline version')
+        # Android netd can resolve on behalf of an app under a system UID.
+        # Block guest DNS/DoT as well as app-UID egress; Tor resolves remotely.
+        for binary in ('iptables','ip6tables'):
+            for protocol,port in (('udp','53'),('tcp','53'),('tcp','853')):
+                rule(binary,'-I','OUTPUT','1','-p',protocol,'--dport',port,'-j','REJECT')
         output = stage('networkTargets', 180)
         targets = set()
         for line in output.splitlines():
@@ -127,7 +133,6 @@ def run(adb, root, apks, manifest):
             raise RuntimeError('Cannot establish isolated native Tor relay peers')
         for binary, family in (('iptables',4),('ip6tables',6)):
             lines=['*filter', ':CORE_ACCEPT - [0:0]',
-                   '-I OUTPUT 1 -m owner --uid-owner '+str(app_uid)+' -j CORE_ACCEPT',
                    '-A CORE_ACCEPT -d '+('127.0.0.0/8' if family==4 else '::1')+' -j ACCEPT']
             for target in sorted(targets):
                 if ipaddress.ip_address(target).version==family:
@@ -141,6 +146,7 @@ def run(adb, root, apks, manifest):
             remote='/data/local/tmp/'+local.name
             adb('push',str(local),remote,timeout=20)
             shell(binary+'-restore --noflush < '+remote)
+            rule(binary,'-I','OUTPUT','1','-m','owner','--uid-owner',str(app_uid),'-j','CORE_ACCEPT')
         firewall = True
         stage('recipient',240)
         clear_wallet()
@@ -187,7 +193,7 @@ def run(adb, root, apks, manifest):
             denied+=sum(int(line.split()[0]) for line in rejected)
         if denied:
             raise RuntimeError('Unexpected app egress attempts blocked; inspect exact destinations')
-        report['network_enforcement']=dict(passed=True,mode='app-UID TCP relay allowlist; IPv4/IPv6 deny other egress and UDP',
+        report['network_enforcement']=dict(passed=True,mode='app-UID TCP Tor-relay allowlist; dual-stack deny other egress; whole-guest DNS/DoT blocked',
                                            allowed_relay_peers=len(allowed),tor_resolved_targets=len(targets))
         report['passed']=True
     finally:

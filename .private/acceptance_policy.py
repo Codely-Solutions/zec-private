@@ -24,7 +24,8 @@ def relevant(path):
     if path.startswith(('.private/', '.github/')):
         return path.startswith(('.private/core-wallet/',)) or path in {
             '.private/acceptance_policy.py', '.private/core_testnet_driver.py',
-            '.private/run_core_emulator.py', '.private/core-network-policy.json',
+            '.private/run_tor_emulator.py', '.private/admit_core_emulator.py', '.private/core-network-policy.json',
+            '.private/tor_differential_driver.py', '.private/strip_emulator_apk.py',
             '.private/tor-ui-abi.gradle', '.github/workflows/core-validation.yml'}
     if path.startswith(('.idea/','docs/')) or '/src/test/' in path or '/src/androidTest/' in path:
         return False
@@ -43,7 +44,13 @@ def input_fingerprint(revision='HEAD', root=ROOT, profile='core-testnet'):
         if not row:
             continue
         metadata, path = row.split('\t', 1)
-        if relevant(path) and (profile!='production-quotes' or not path.startswith(('.private/','.github/'))):
+        selected=relevant(path)
+        if profile=='production-quotes' and path.startswith(('.private/','.github/')):
+            selected=False
+        if profile=='core-build' and path.startswith(('.private/','.github/')):
+            selected=path.startswith('.private/core-wallet/') or path in {
+                '.private/tor-ui-abi.gradle','.github/workflows/core-validation.yml'}
+        if selected:
             entries[path] = metadata
     # Version increments select an update target, not a different wallet engine.
     # All other Gradle properties (identity, SDK and behavior switches) stay bound.
@@ -97,6 +104,8 @@ def validate_core(receipt, expected_inputs):
     for key in ('candidate_apk_sha256', 'baseline_apk_sha256', 'instrumentation_apk_sha256', 'harness_sha256'):
         if not re.fullmatch('[0-9a-f]{64}', str(receipt.get(key, ''))):
             raise ValueError('Missing executed artifact/harness digest: ' + key)
+    if not re.fullmatch('[0-9a-f]{64}',str(receipt.get('build_input_fingerprint',''))):
+        raise ValueError('Missing relevant executed-build input fingerprint')
     if not re.fullmatch('[0-9a-f]{40}', str(receipt.get('build_source_sha', ''))):
         raise ValueError('Missing build source identity')
     if receipt.get('baseline_source_sha') != 'a0bd21f27bb53af0eeb9b433d0273c6f39b04e19':

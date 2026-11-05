@@ -16,6 +16,8 @@ Testnet instrumentation uses real installed app dependencies and production wall
 
 The current core fingerprint conservatively includes retained runtime/build inputs and the core harness/policy. Version labels, documentation, images, theme-only code and unrelated test-source changes do not invalidate wallet transaction acceptance. Unknown retained code/configuration does. A receipt also binds the exact older build revision and executed APK; evidence reuse never relabels an older binary as the current binary.
 
+The executed-build fingerprint and host-harness binding are separate. A host driver correction can rerun acceptance against the same immutable APK when its relevant compiled inputs still match. Changing instrumented Kotlin or its Gradle setup requires new instrumentation. The host guard independently binds the actual launcher, preparation helpers, SDK tools and private manifest used for that execution.
+
 No periodic job is enabled initially. Measure the first real run, including build/setup, Tor bootstrap, faucet wait, scanning, confirmation and active assertion time. Add a bounded drift schedule only after its reliability and cost support it. Public-chain or provider failures remain unverified acceptance, with a classified cause; they are not converted into passing app results.
 
 Automated ARM hardware testing is outside scope. The user will exercise production on their phone. Keep that evidence separate from emulator execution and binary inspection.

@@ -30,6 +30,7 @@ image_zip.unlink()
 system=next(image.rglob('system.img')).parent
 print('Verified disposable Android image extracted.',flush=True)
 manifest=json.loads((PROJECT.parent/'tor-probe-artifact.json').read_text())
+guest_memory=3072 if manifest.get('probeKind')=='core-testnet' else 1536
 artifact=ROOT/'probe.zip'
 with artifact.open('wb') as out:
     subprocess.run([r'C:\Program Files\GitHub CLI\gh.exe','api','repos/Sammy-Lastre/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip'],stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)
@@ -42,6 +43,18 @@ with zipfile.ZipFile(artifact) as archive:
         if item.filename.endswith('.apk'):
             target=apks/Path(item.filename).name
             target.write_bytes(archive.read(item));apk_paths.append(target)
+    if manifest.get('probeKind')=='core-testnet':
+        source=next(n for n in archive.namelist() if n.endswith('source-sha.txt'))
+        if archive.read(source).decode().strip()!=manifest['build_source_sha']:
+            raise ValueError('Core artifact source metadata mismatch')
+        checksums=next(n for n in archive.namelist() if n.endswith('SHA256SUMS'))
+        expected={Path(line.split()[1]).name:line.split()[0] for line in archive.read(checksums).decode().splitlines()}
+        if len(set(apk_paths))!=2:raise ValueError('Core artifact names must be unique')
+        for path in apk_paths:
+            digest=hashlib.sha256(path.read_bytes()).hexdigest()
+            if expected.get(path.name)!=digest:raise ValueError('Core APK checksum mismatch')
+            field='instrumentation_apk_sha256' if 'androidTest' in path.name else 'candidate_apk_sha256'
+            manifest[field]=digest
 artifact.unlink()
 expected_apks=1 if manifest.get('probeKind')=='ui' else 2
 if len(apk_paths)!=expected_apks: raise ValueError('Unexpected probe APK count')
@@ -54,6 +67,8 @@ if manifest.get('residentUiBridge'):
 if manifest.get('upgradeBaseline'):
     from tor_differential_driver import fetch_baseline
     apk_paths.append(fetch_baseline(ROOT,manifest['upgradeBaseline'],'baseline-ui.apk'))
+    if manifest.get('probeKind')=='core-testnet':
+        manifest['baseline_apk_sha256']=hashlib.sha256(apk_paths[-1].read_bytes()).hexdigest()
 from strip_emulator_apk import prepare
 apk_preparation=prepare(apk_paths,ROOT,SDK)
 print('Verified x86_64-only emulator APK copies ready; execution bytes unchanged.',flush=True)
@@ -63,7 +78,7 @@ for port in (PORT,5580,5581,8877):
     with socket.socket() as sock: sock.bind(('127.0.0.1',port))
 home=ROOT/'android';avds=home/'avd';avd=avds/'CodexTorProbe.avd';avd.mkdir(parents=True)
 config={'abi.type':'x86_64','hw.cpu.arch':'x86_64','image.sysdir.1':str(system),'tag.id':'default','hw.lcd.width':'1080','hw.lcd.height':'1920','hw.lcd.density':'420','hw.gpu.enabled':'yes','hw.gpu.mode':'host','disk.cachePartition':'yes'}
-config.update({'avd.id':'CodexTorProbe','avd.name':'CodexTorProbe','hw.ramSize':'1536','hw.cpu.ncore':'2','hw.sdCard':'no','hw.camera.back':'none','hw.camera.front':'none','hw.keyboard':'yes','fastboot.forceColdBoot':'yes','fastboot.forceFastBoot':'no','firstboot.saveToLocalSnapshot':'no','disk.dataPartition.size':'2G','disk.dataPartition.path':str(ROOT/'userdata.img'),'disk.cachePartition.path':str(ROOT/'cache.img')})
+config.update({'avd.id':'CodexTorProbe','avd.name':'CodexTorProbe','hw.ramSize':str(guest_memory),'hw.cpu.ncore':'2','hw.sdCard':'no','hw.camera.back':'none','hw.camera.front':'none','hw.keyboard':'yes','fastboot.forceColdBoot':'yes','fastboot.forceFastBoot':'no','firstboot.saveToLocalSnapshot':'no','disk.dataPartition.size':'2G','disk.dataPartition.path':str(ROOT/'userdata.img'),'disk.cachePartition.path':str(ROOT/'cache.img')})
 (avd/'config.ini').write_text(''.join(k+'='+v+'\n' for k,v in config.items()))
 (avds/'CodexTorProbe.ini').write_text('avd.ini.encoding=UTF-8\npath='+str(avd)+'\ntarget=android-35\n')
 env=dict(os.environ,ANDROID_HOME=str(SDK),ANDROID_SDK_ROOT=str(SDK),ANDROID_USER_HOME=str(home),ANDROID_EMULATOR_HOME=str(home),ANDROID_AVD_HOME=str(avds),ANDROID_ADB_SERVER_PORT=str(PORT),ADB_SERVER_SOCKET='tcp:localhost:'+str(PORT),ANDROID_EMU_ENABLE_CRASH_REPORTING='0')
@@ -72,11 +87,11 @@ def adb(*args,timeout=30,check=True):
     return subprocess.run([ADB,'-P',str(PORT),'-s',SERIAL,*args],env=env,capture_output=True,timeout=timeout,check=check)
 adb.command_base=[ADB,'-P',str(PORT),'-s',SERIAL]
 adb.environment=env
-receipt={'apkPreparation':apk_preparation,'probeArtifact':manifest,'apkHashes':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in apk_paths},'fundsTransferred':False,'walletAccess':False,'route':'native SDK Tor only','guest':'fresh Android API35 x86_64','writableState':'guard-owned root','userdataRequestedBytes':2147483648}
+receipt={'apkPreparation':apk_preparation,'probeArtifact':manifest,'apkHashes':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in apk_paths},'fundsTransferred':False,'walletAccess':False,'route':'native SDK Tor only','guest':'fresh Android API35 x86_64','guestMemoryMiB':guest_memory,'writableState':'guard-owned root','userdataRequestedBytes':2147483648}
 proc=None
 try:
     subprocess.run([ADB,'-P',str(PORT),'start-server'],env=env,capture_output=True,check=True,timeout=15)
-    proc=subprocess.Popen([str(SDK/'emulator/emulator.exe'),'-avd','CodexTorProbe','-port','5580','-no-window','-partition-size','2047','-feature','-QuickbootFileBacked,-Vulkan','-no-snapshot','-no-boot-anim','-no-audio','-memory','1536','-cores','2','-gpu','host','-data',str(ROOT/'userdata.img'),'-cache',str(ROOT/'cache.img')],env=env,stdout=log,stderr=log,creationflags=0x08000000)
+    proc=subprocess.Popen([str(SDK/'emulator/emulator.exe'),'-avd','CodexTorProbe','-port','5580','-no-window','-partition-size','2047','-feature','-QuickbootFileBacked,-Vulkan','-no-snapshot','-no-boot-anim','-no-audio','-memory',str(guest_memory),'-cores','2','-gpu','host','-data',str(ROOT/'userdata.img'),'-cache',str(ROOT/'cache.img')],env=env,stdout=log,stderr=log,creationflags=0x08000000)
     adb.emulator=proc
     deadline=time.monotonic()+240
     while time.monotonic()<deadline:
