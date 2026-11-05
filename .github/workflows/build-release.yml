@@ -56,6 +56,13 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :ui-lib:testZcashmainnetFossReleaseUnitTest
+      - name: Upload phone-width layout previews for visual review
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: quote-layout-previews
+          path: ui-lib/build/reports/quote-layout/
+          if-no-files-found: error
+          retention-days: 2
       - name: Detekt and Android lint
         timeout-minutes: 20
         run: ./gradlew --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process detektAll :app:lintZcashmainnetFossRelease
