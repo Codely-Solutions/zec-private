@@ -8,6 +8,9 @@ def fetch_baseline(root, manifest, target_name="baseline-app.apk"):
     assert archive.stat().st_size<=manifest['size_in_bytes']+1048576
     assert 'sha256:'+hashlib.sha256(archive.read_bytes()).hexdigest()==manifest['digest']
     with zipfile.ZipFile(archive) as z:
+        if manifest.get('source_sha'):
+            source=next(n for n in z.namelist() if n.endswith('source-sha.txt'))
+            assert z.read(source).decode().strip()==manifest['source_sha'], 'Baseline source identity mismatch'
         names=[n for n in z.namelist() if n.endswith('.apk') and 'androidTest' not in n]
         assert len(names)==1
         assert z.getinfo(names[0]).file_size<512*1024**2

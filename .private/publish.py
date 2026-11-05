@@ -71,7 +71,8 @@ def main():
     core=json.loads(core_bytes)
     core_inputs=input_fingerprint(expected)
     validate_core(core,core_inputs)
-    if input_fingerprint(core['build_source_sha'])!=core_inputs:
+    if (input_fingerprint(core['build_source_sha'],profile='core-build')!=core.get('build_input_fingerprint') or
+            input_fingerprint(expected,profile='core-build')!=core.get('build_input_fingerprint')):
         raise RuntimeError('Executed core build does not match current relevant inputs')
     validate_binding(proof,'core_acceptance',core_inputs,core_bytes,(artifact/'core-acceptance.json').read_bytes())
     quote_bytes=(ROOT/'.private/quote-acceptance.json').read_bytes()
