@@ -38,6 +38,9 @@ def check(root=ROOT):
     need('Anonymous API platform fee: 0.25%% where applicable.' in fee_copy,'Fee note can crash Android formatted-resource rendering')
     mapper=(root/'ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt').read_text()
     need('layout = SwapQuoteInfoLayout.STACKED' in mapper,'Provider costs can collapse the quote label into a vertical column')
+    build=(root/'app/build.gradle.kts').read_text()
+    need('abiFilters.add("arm64-v8a")' in build and 'armeabi-v7a' not in build,
+         'Production ARM64-only packaging changed')
     props=(root/'gradle.properties').read_text()
     need('ZCASH_RELEASE_PACKAGE_NAME=com.personal.zecprivate\n' in props,'Package identity changed')
     need('IS_RELEASE_BUILD_DEBUGGABLE=false' in props,'Release debuggability enabled')

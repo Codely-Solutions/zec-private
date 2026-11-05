@@ -1,10 +1,12 @@
 """Extract unsigned APK manifest and bind the artifact to the checked revision."""
 import hashlib,json,os,re,shutil,subprocess,zipfile
 from pathlib import Path
+from apk_architecture import check_apk
 root=Path(__file__).resolve().parents[1]
 apks=list((root/'app/build/outputs/apk/zcashmainnetFoss/release').glob('*unsigned.apk'))
 if len(apks)!=1: raise SystemExit('Expected exactly one unsigned FOSS release APK')
 apk=apks[0]
+architecture=check_apk(apk)
 sdk=Path(os.environ['ANDROID_HOME'])
 badging=subprocess.check_output([str(sdk/'build-tools/36.0.0/aapt'),'dump','badging',str(apk)],text=True)
 package=re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'",badging)
@@ -35,6 +37,13 @@ if json.loads(runtime_path.read_text()).get('source_sha')!=sha:
 subprocess.run([os.sys.executable,str(root/'.private/check_exclusions.py'),str(runtime_path)],check=True)
 proof={'source_sha':sha,'apk_sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'package':package[1],'versionCode':int(package[2]),'versionName':package[3],'debuggable':False,'upstream':upstream,'release_tag':f'v{version}-private.{revision}','validation':'unit-lint-detekt-live-ui-fork-v3','live_contract_sha256':hashlib.sha256(contract_path.read_bytes()).hexdigest()}
 out=root/'artifact';out.mkdir(exist_ok=True)
+proof['architecture']=architecture
+proof['workflow_run_id']=os.environ.get('GITHUB_RUN_ID')
+if os.environ.get('BUILD_EMULATOR')=='true':
+    debug=list((root/'app/build/outputs/apk/zcashmainnetFoss/debug').glob('*.apk'))
+    if len(debug)!=1: raise SystemExit('Expected one emulator candidate APK')
+    proof['emulator']={'apk_sha256':hashlib.sha256(debug[0].read_bytes()).hexdigest(),
+                       'architecture':check_apk(debug[0],('x86_64',))}
 proof['runtime_graph_sha256']=hashlib.sha256(runtime_path.read_bytes()).hexdigest()
 shutil.copy2(apk,out/'zec-private-unsigned.apk')
 (out/'proof.json').write_text(json.dumps(proof,indent=2)+'\n')

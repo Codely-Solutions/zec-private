@@ -1,73 +1,11 @@
-name: Validate Phase 1 removals without publication
+name: Phase 1 validation retired — use release candidate validation
 on:
   workflow_dispatch:
-permissions:
-  contents: read
-concurrency:
-  group: phase1-validation
-  cancel-in-progress: false
+permissions: {}
 jobs:
-  validate:
+  instructions:
     runs-on: ubuntu-24.04
-    timeout-minutes: 70
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
-        with:
-          cache-read-only: false
-      - name: Source exclusion and wallet invariants
-        run: |
-          python3 .private/check.py
-          python3 .private/test_controls.py
-      - name: Reuse digest-verified current-release dependency baseline
-        run: |
-          mkdir -p phase1-evidence
-          cp .private/phase1-runtime-baseline.json phase1-evidence/baseline-runtime.json
-      - name: Resolve candidate release graph and refresh dependency locks
-        env:
-          PRIVATE_RUNTIME_OUTPUT: phase1-evidence/candidate-runtime.json
-        run: |
-          chmod +x gradlew
-          ./gradlew -I .private/runtime-inventory.gradle --write-locks --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :app:privateRuntimeInventory
-          python3 .private/check_exclusions.py phase1-evidence/candidate-runtime.json
-      - name: Unit regressions and affected layouts
-        env:
-          QUOTE_LAYOUT_SCREENSHOTS: ${{ github.workspace }}/ui-lib/build/reports/quote-layout
-        run: ./gradlew -I .private/robolectric-ci.gradle --write-locks --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :ui-lib:testZcashmainnetFossReleaseUnitTest
-      - name: Static checks
-        run: ./gradlew --write-locks --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process detektAll :app:lintZcashmainnetFossRelease
-      - name: Build release candidate and isolated emulator app
-        run: |
-          ./gradlew --write-locks --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :app:assembleZcashmainnetFossRelease
-          ./gradlew -I .private/tor-ui-abi.gradle --write-locks --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :app:assembleZcashmainnetFossDebug
-      - name: Collect refreshed locks and compact source identity
-        if: always()
-        run: |
-          mkdir -p phase1-evidence/locks
-          git ls-files '*gradle.lockfile' '*buildscript-gradle.lockfile' | while IFS= read -r path; do
-            if [ -f "$path" ]; then mkdir -p "phase1-evidence/locks/$(dirname "$path")"; cp "$path" "phase1-evidence/locks/$path"; fi
-          done
-          git rev-parse HEAD > phase1-evidence/source-sha.txt
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: always()
-        with:
-          name: phase1-validation-evidence
-          path: |
-            phase1-evidence/
-            ui-lib/build/test-results/
-            ui-lib/build/reports/quote-layout/
-            app/build/reports/lint-results-*.xml
-            build/reports/detekt/
-          retention-days: 3
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: phase1-candidate-apks
-          path: app/build/outputs/apk/zcashmainnetFoss/*/*.apk
-          retention-days: 2
+      - run: |
+          echo 'Use Build and publish ZEC Private with validation_only=true and build_emulator=true.'
+          echo 'Validate those artifacts, then promote candidate_run; do not rebuild the same candidate.'

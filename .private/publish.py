@@ -2,6 +2,7 @@
 import base64, hashlib, importlib.util, json, os, re, shutil, subprocess, tempfile, zipfile
 from unittest.mock import patch
 from pathlib import Path
+from apk_architecture import check_apk
 
 ROOT=Path(__file__).resolve().parents[1]
 REPO=os.environ['GITHUB_REPOSITORY']
@@ -69,6 +70,12 @@ def main():
             not contract.get('success') or contract.get('source_sha')!=expected or
             contract.get('funds_transferred') or contract.get('wallet_secrets_used')):
         raise RuntimeError('Invalid live API contract evidence')
+    if proof.get('workflow_run_id')!=os.environ.get('ARTIFACT_RUN_ID'):
+        raise RuntimeError('Artifact came from a different validation run')
+    runtime_bytes=(artifact/'runtime.json').read_bytes()
+    if (hashlib.sha256(runtime_bytes).hexdigest()!=proof.get('runtime_graph_sha256') or
+            json.loads(runtime_bytes).get('source_sha')!=expected):
+        raise RuntimeError('Invalid runtime graph binding')
     tag=proof['release_tag']
     if not re.fullmatch(r'v\d+\.\d+\.\d+-private\.\d+',tag): raise RuntimeError('Invalid private release tag')
     # Existing published tags/assets are immutable, including duplicate polling.
@@ -78,6 +85,8 @@ def main():
     releases=json.loads(run('gh','api',f'repos/{REPO}/releases?per_page=100'))
     previous=[int(r['body'].split('Android versionCode: ')[1].split()[0]) for r in releases if not r['draft'] and 'Android versionCode: ' in (r['body'] or '')]
     if previous and proof['versionCode']<=max(previous): raise RuntimeError('Android versionCode must increase')
+    if proof.get('architecture') != check_apk(apk):
+        raise RuntimeError('Release architecture evidence mismatch')
     tools=Path(os.environ['ANDROID_HOME'])/'build-tools/36.0.0'
     manifest=run(str(tools/'aapt'),'dump','badging',str(apk))
     package=re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'",manifest)
@@ -106,7 +115,7 @@ def main():
     digest=hashlib.sha256(signed.read_bytes()).hexdigest()
     checksum=dist/'SHA256SUMS';checksum.write_text(digest+'  zec-private-latest.apk\n')
     notes=dist/'release-notes.md'
-    notes.write_text(f'ZEC Private {tag}\n\nUpstream: {proof["upstream"]["tag"]}\nCommit: {proof["upstream"]["sha"]}\nAndroid versionCode: {proof["versionCode"]}\n\nFork: no affiliate fee, no partner JWT or referral; separate FOSS identity.\nNEAR platform, bridge, execution and network costs remain.\n\nValidated: Kotlin unit tests, Android lint, Detekt and static fork checks.\nNo real-money transactions were tested.\n\nUpstream changes: https://github.com/zodl-inc/zodl-android/releases/tag/{proof["upstream"]["tag"]}\n')
+    notes.write_text(f'ZEC Private {tag}\n\nUpstream: {proof["upstream"]["tag"]}\nCommit: {proof["upstream"]["sha"]}\nAndroid versionCode: {proof["versionCode"]}\n\nFork: no affiliate fee, no partner JWT or referral; separate FOSS identity.\nNEAR platform, bridge, execution and network costs remain.\n\nARM64-only: 32-bit Android is no longer supported. Existing ARM64 wallets retain their update identity.\nValidated: Kotlin unit tests, Android lint, Detekt and static fork checks.\nNo real-money transactions were tested.\n\nUpstream changes: https://github.com/zodl-inc/zodl-android/releases/tag/{proof["upstream"]["tag"]}\n')
     if os.environ.get('SIMULATION')=='true':
         try:
             simulation_receipt(proof,signed,digest,dist)

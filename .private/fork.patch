@@ -8,9 +8,12 @@ index 31940f5da..0e8dbc645 100644
 +.private/**/__pycache__/
 +.private/**/*.pyc
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
-index d2b4df262..feeb95100 100644
+index d2b4df262..83292a7af 100644
 --- a/app/build.gradle.kts
 +++ b/app/build.gradle.kts
+@@ -148 +148 @@ android {
+-                abiFilters.addAll(setOf("arm64-v8a", "armeabi-v7a"))
++                abiFilters.add("arm64-v8a")
 @@ -247 +246,0 @@ dependencies {
 -    implementation(projects.featureVoting)
 diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
@@ -271,12 +274,12 @@ index 000000000..146265093
 +    open-pull-requests-limit: 10
 \ No newline at end of file
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..58750203e 100644
+index ec56161b5..ddfca72f9 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
 -ZCASH_VERSION_CODE=1
-+ZCASH_VERSION_CODE=3234005
++ZCASH_VERSION_CODE=3234006
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
 -ZCASH_RELEASE_APP_NAME=Zodl
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash
