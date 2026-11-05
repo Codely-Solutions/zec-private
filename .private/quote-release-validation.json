@@ -1,0 +1,131 @@
+{
+  "release": {
+    "release_tag": "v3.19.0-private.4",
+    "source_sha": "26fa4cf2a891d9494be1e41891b84daa7a7be0db",
+    "ci_run": 42037903318,
+    "package": "com.personal.zecprivate.foss",
+    "versionName": "3.19.0",
+    "versionCode": 3234004,
+    "debuggable": false,
+    "apk_bytes": 114013666,
+    "apk_sha256": "bd8916b173d03a83a29cb53638b23949a85bbec4c7bbce23d1d98928558719b3",
+    "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
+    "signature_verified": true,
+    "zipalign_16k_verified": true,
+    "provider_unique": true,
+    "license_preserved": true,
+    "device_install_tested": false,
+    "layout_preview_sha256": {
+      "exact_input-320-1.6.png": "3e71c35a8e03f4d53fe6429be2276d7dc530fbb79b4a067192704126696e92bb",
+      "exact_input-360-1.0.png": "564904058dbea11e5ce647dc5d35ca3d83fd98ce29bc814c700c01ec2d464aaf",
+      "exact_output-320-1.6.png": "1d46b22fe97f2bb8a64b9a5bd6995e676808471003c9b961adf773ce9c629256",
+      "exact_output-360-1.0.png": "bab1f35d77611b38ba2071dcb9a06b9caaef2ce84e6cf3d3c4de1cdb91fe5437",
+      "flex_input-320-1.6.png": "0ea044609dc4ddcfd21aaeeb2252b7500fe5a7818e47fd4f4c3864376f1c647b",
+      "flex_input-360-1.0.png": "376b88bbc50c3f93867b5488b63618b67f0e29a44b741b2983c0f73411ea1d7d"
+    },
+    "layout_review_basis": "All six new previews are byte-identical to the previously visually reviewed revision 3 images.",
+    "native_tor_differential_passed": true,
+    "full_tor_ui_retry_passed": true,
+    "quote_validation_sources": [
+      "5ba6c92f6",
+      "8a69dac56"
+    ],
+    "six_rendering_geometry_tests_passed": true
+  },
+  "tests": {
+    "run": 42037903318,
+    "tests": 1396,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "quote_rendering_regressions_passed": [
+      "incomingQuoteCostsFitNarrowScreenWithLargeText",
+      "incomingQuoteFeeNoteRendersWithoutFormatConversionFailure",
+      "outgoingExactInputCostsFitNarrowScreenWithLargeText",
+      "outgoingExactInputFeeNoteRendersWithoutFormatConversionFailure",
+      "outgoingExactOutputCostsFitNarrowScreenWithLargeText",
+      "outgoingExactOutputFeeNoteRendersWithoutFormatConversionFailure"
+    ],
+    "quote_lifecycle_regressions_passed": [
+      "cancellingPendingIncomingRequestDoesNotPoisonTheNextQuote",
+      "dismissedIncomingQuoteCanBeRequestedAgainWithoutRestart",
+      "dismissedRequestCannotPublishLateNetworkErrorOverNextQuote",
+      "dismissedRequestCannotPublishLateSuccessOverNextQuote",
+      "newRequestClearsPreviousErrorBeforeBackgroundDispatch",
+      "sheetDismissalCallbacksOnlyCancelOnce",
+      "transientIncomingFailureCanBeRetriedWithoutRestart"
+    ],
+    "reports_zip_sha256": "31b8b38a821cf7064d1028462210f908ef396852b3267692f8fb828c5a8cdca6"
+  },
+  "releaseWorkflow": "https://github.com/Sammy-Lastre/zec-private/actions/runs/42037903318",
+  "updateController": {
+    "run": 42042023761,
+    "tests": 6,
+    "failures": 0,
+    "source": "26fa4cf2a891d9494be1e41891b84daa7a7be0db"
+  },
+  "apkVerificationGuardReceipt": "f9a894dc29cf4e5fa29ba027abb5c868",
+  "apkVerificationGuardVerified": true,
+  "torUiEvidence": ".private/tor-ui-validation.json",
+  "nativeTorDifferentialEvidence": ".private/tor-differential-validation.json",
+  "productionRuntimeUnchangedSinceLiveTestedCandidate": "5ba6c92f6",
+  "upstreamCurrency": {
+    "checked": "2026-11-05",
+    "app": "3.19.0-3234",
+    "sdkStable": "6.0.0",
+    "sdkMetadataUpdated": "20261030200313"
+  },
+  "limitations": [
+    "Original phone provider failure was not captured; real native differential used controlled delivery timing of HTTP 400.",
+    "Full app UI tested on disposable Android API35 x86_64; no physical Android17/ARM install retest.",
+    "No funded swap settlement or testnet transaction was performed; transaction execution code is unchanged."
+  ],
+  "cleanup": {
+    "guardOwnedSurvivors": [],
+    "guardDisposableRoots": [],
+    "configurationDrift": false,
+    "taskWorktrees": [],
+    "removedCrashDumpBytes": 205064852.0,
+    "observedCrashDumpHostSpaceRecovered": 205074432,
+    "removedCiCacheBytes": 6970283491,
+    "retainedCiCacheBytes": 1515193940,
+    "retainedCiCacheCount": 9,
+    "removedCiArtifactBytes": 693230472,
+    "signedReleaseHistoryPreserved": true,
+    "signingCustodyPreserved": true,
+    "retainedHelperRoots": [
+      {
+        "pid": 17948,
+        "kind": "node-repl",
+        "reason": "Unassigned at baseline; preserved because task ownership is not established",
+        "descendants": 1
+      },
+      {
+        "pid": 20040,
+        "kind": "computer-use-repl",
+        "reason": "Unassigned at baseline; preserved because task ownership is not established",
+        "descendants": 2
+      },
+      {
+        "pid": 6432,
+        "kind": "node-repl",
+        "reason": "Unassigned at baseline; preserved because task ownership is not established",
+        "descendants": 1
+      },
+      {
+        "pid": 1240,
+        "kind": "codex-app-tools",
+        "reason": "Unassigned at baseline; preserved because task ownership is not established",
+        "descendants": 2
+      },
+      {
+        "pid": 18592,
+        "kind": "uno-mcp",
+        "reason": "Unassigned at baseline; preserved because task ownership is not established",
+        "descendants": 2
+      }
+    ],
+    "unresolvedDuplicateGroups": 1,
+    "scope": "Task resources only; baseline unassigned helper ownership is unresolved. No global helper-cleanliness claim."
+  }
+}
