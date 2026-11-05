@@ -1,7 +1,10 @@
 // Test-only source and existing dependencies; no production variant is modified.
-gradle.projectsEvaluated {
-    def app = rootProject.project(':app')
-    app.android.sourceSets.getByName('androidTest').java.srcDir(new File(rootProject.projectDir, '.private/core-wallet/src'))
-    app.dependencies.add('androidTestImplementation', rootProject.project(':ui-lib'))
-    app.dependencies.add('androidTestImplementation', rootProject.project(':sdk-ext-lib'))
+allprojects { app ->
+    app.plugins.withId('com.android.application') {
+        if (app.path == ':app') {
+            app.android.sourceSets.getByName('androidTest').java.srcDir(new File(app.rootProject.projectDir, '.private/core-wallet/src'))
+            app.dependencies.add('androidTestImplementation', app.rootProject.project(':ui-lib'))
+            app.dependencies.add('androidTestImplementation', app.rootProject.project(':sdk-ext-lib'))
+        }
+    }
 }

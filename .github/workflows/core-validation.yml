@@ -1,6 +1,11 @@
 name: Prepare isolated core wallet acceptance
 on:
   workflow_dispatch:
+    inputs:
+      build_baseline:
+        description: Build revision 6 baseline only when no validated artifact is available
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -36,6 +41,7 @@ jobs:
           path: core-artifact/
           retention-days: 3
   baseline:
+    if: ${{ inputs.build_baseline }}
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
