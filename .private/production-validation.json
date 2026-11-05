@@ -1,62 +1,76 @@
 {
-  "release_tag": "v3.19.0-private.2",
-  "apk_source_sha": "b117e9edce32f88fcfb9b6ecc2d5473a255e2b04",
+  "release_tag": "v3.19.0-private.3",
+  "apk_source_sha": "ac097b80e7dc2aaacdb4564efa2b9a8b53e176af",
   "upstream": {
     "tag": "3.19.0-3234",
     "sha": "a57ea1455840a0d97eb0b2a3d2557480dfe5bda7",
     "published_at": "2026-10-29T16:12:07Z",
-    "versionCode": 3234002
+    "versionCode": 3234003
   },
   "verification": {
+    "release_tag": "v3.19.0-private.3",
+    "source_sha": "ac097b80e7dc2aaacdb4564efa2b9a8b53e176af",
+    "ci_run": 41998124939,
     "package": "com.personal.zecprivate.foss",
     "versionName": "3.19.0",
-    "versionCode": 3234002,
+    "versionCode": 3234003,
     "debuggable": false,
     "apk_bytes": 114013666,
-    "apk_sha256": "b3e1cb0baa4442191fc998ec0dfb876bb571306f9693974ef38ea52347e6522e",
+    "apk_sha256": "e66bcb4e3877be248b184b84360f4a0cd1d55cd7bce027337ddd2d8fc7929743",
     "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
     "signature_verified": true,
     "zipalign_16k_verified": true,
     "provider_unique": true,
     "license_preserved": true,
-    "device_install_tested": false
+    "device_install_tested": false,
+    "layout_preview_sha256": {
+      "exact_input-320-1.6.png": "3e71c35a8e03f4d53fe6429be2276d7dc530fbb79b4a067192704126696e92bb",
+      "exact_input-360-1.0.png": "564904058dbea11e5ce647dc5d35ca3d83fd98ce29bc814c700c01ec2d464aaf",
+      "exact_output-320-1.6.png": "1d46b22fe97f2bb8a64b9a5bd6995e676808471003c9b961adf773ce9c629256",
+      "exact_output-360-1.0.png": "bab1f35d77611b38ba2071dcb9a06b9caaef2ce84e6cf3d3c4de1cdb91fe5437",
+      "flex_input-320-1.6.png": "0ea044609dc4ddcfd21aaeeb2252b7500fe5a7818e47fd4f4c3864376f1c647b",
+      "flex_input-360-1.0.png": "376b88bbc50c3f93867b5488b63618b67f0e29a44b741b2983c0f73411ea1d7d"
+    },
+    "six_rendering_geometry_tests_passed": true
   },
   "tests": {
-    "run": 41932146968,
-    "tests": 1386,
+    "run": 41998124939,
+    "tests": 1389,
     "failures": 0,
     "errors": 0,
     "skipped": 0,
     "quote_rendering_regressions_passed": [
+      "incomingQuoteCostsFitNarrowScreenWithLargeText",
       "incomingQuoteFeeNoteRendersWithoutFormatConversionFailure",
+      "outgoingExactInputCostsFitNarrowScreenWithLargeText",
       "outgoingExactInputFeeNoteRendersWithoutFormatConversionFailure",
+      "outgoingExactOutputCostsFitNarrowScreenWithLargeText",
       "outgoingExactOutputFeeNoteRendersWithoutFormatConversionFailure"
     ],
-    "reports_zip_sha256": "374a93781b549d95c67cb93cd490c001725c0b3980759f102afae2c04d08a806"
+    "reports_zip_sha256": "7275381a109a737e8a7afc3958016ffe5c288ca3e17ad850179d62a05d724f64"
   },
-  "local_guard_receipt": "f623a117561c43cd9568e7c1e7930bf9",
+  "local_guard_receipt": "e826042d14184fec99ca728023528f16",
   "local_guard_accepted": true,
   "local_guard_owned_survivors": [],
-  "production_run": "https://github.com/Sammy-Lastre/zec-private/actions/runs/41932146968",
-  "corrected_device_quote_retest": "pending",
+  "production_run": "https://github.com/Sammy-Lastre/zec-private/actions/runs/41998124939",
+  "layout_review": {
+    "run": 41998124939,
+    "source_sha": "ac097b80e7dc2aaacdb4564efa2b9a8b53e176af",
+    "files": {
+      "exact_input-320-1.6.png": "3e71c35a8e03f4d53fe6429be2276d7dc530fbb79b4a067192704126696e92bb",
+      "exact_input-360-1.0.png": "564904058dbea11e5ce647dc5d35ca3d83fd98ce29bc814c700c01ec2d464aaf",
+      "exact_output-320-1.6.png": "1d46b22fe97f2bb8a64b9a5bd6995e676808471003c9b961adf773ce9c629256",
+      "exact_output-360-1.0.png": "bab1f35d77611b38ba2071dcb9a06b9caaef2ce84e6cf3d3c4de1cdb91fe5437",
+      "flex_input-320-1.6.png": "0ea044609dc4ddcfd21aaeeb2252b7500fe5a7818e47fd4f4c3864376f1c647b",
+      "flex_input-360-1.0.png": "376b88bbc50c3f93867b5488b63618b67f0e29a44b741b2983c0f73411ea1d7d"
+    },
+    "visually_reviewed": true,
+    "review_basis": "All six final PNGs visually inspected: incoming, exact-input and exact-output at 360 dp / 1x text and 320 dp / 1.6x text. Provider labels retain full width; descriptions wrap completely without clipping.",
+    "test_data_only": true
+  },
+  "corrected_device_quote_retest": "Revision 2 quote opening confirmed by user; revision 3 device retest pending.",
   "funded_transactions_tested": false,
-  "valid_funded_deposit_submission_tested": false,
   "user_wallet_secrets_used": false,
   "automatic_phone_installation": false,
-  "additional_control_tests": [
-    41938489272
-  ],
-  "setup_java": {
-    "version": "v6.2.0",
-    "commit": "77dd5b2ce225ea11469928ac317850245a74ae78",
-    "java": "Temurin 21.0.13+9",
-    "bootstrap_test": 41938756220
-  },
-  "real_duplicate_poll": 41940200994,
-  "upgrade_acceptance_run": 41936825170,
-  "manifest_inspection": {
-    "bytes": 17008,
-    "flexa_activities_present": true,
-    "matching_flexa_firebase_crashlytics_analytics_startup_entries_found": false
-  }
+  "patch_controls_run": 41998130492
 }
