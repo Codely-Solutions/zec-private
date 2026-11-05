@@ -13,6 +13,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+from core_faucet import fund as fund_testnet
 
 PACKAGE = 'com.personal.zecprivate.testnet.foss.debug'
 RUNNER = PACKAGE + '.test/co.electriccoin.zcash.test.ZcashUiTestRunner'
@@ -121,6 +122,10 @@ def run(adb, root, apks, manifest):
         subprocess.run(adb.command_base+['shell',"run-as "+PACKAGE+" sh -c 'cat > files/core-private.json'"],
                        input=private,env=adb.environment,capture_output=True,check=True,timeout=15)
 
+    def write_fixture(value):
+        subprocess.run(adb.command_base+['shell',"run-as "+PACKAGE+" sh -c 'cat > files/core-private.json'"],
+                       input=json.dumps(value).encode(),env=adb.environment,capture_output=True,check=True,timeout=15)
+
     firewall = False
     try:
         adb('root', timeout=20)
@@ -209,6 +214,16 @@ def run(adb, root, apks, manifest):
         firewall = True
         stage('recipient',240)
         clear_wallet()
+        stage('sender',240)
+        private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15).stdout)
+        if private.get('claimAttempted'):raise RuntimeError('Funding was already attempted; automatic re-claim forbidden')
+        private['claimAttempted']=True
+        write_fixture(private)
+        current_stage='funding_setup'
+        # Only the public test address enters this helper; it never sees seeds.
+        report['funding_setup']=fund_testnet(private['senderAddress'],root)
+        private.update(fundingTxId=report['funding_setup']['txid'],fundingProvider=report['funding_setup']['provider'])
+        write_fixture(private)
         # App Tor must reconnect through the enforced relay set; refusal is safe.
         stage('fund',950)
         shell('am','force-stop',PACKAGE)
@@ -283,9 +298,11 @@ def run(adb, root, apks, manifest):
                 mapping=shell('cat','/sys/kernel/tracing/saved_tgids')
                 tgids={int(row[0]):int(row[1]) for line in mapping.splitlines() if len(row:=line.split())==2 and all(v.isdigit() for v in row)}
                 trace=shell('cat','/sys/kernel/tracing/trace')
+                report['connection_trace_header']=trace[:500]
+                report['connection_trace_sample']=[re.sub(r'skaddr=\S+','skaddr=[omitted]',line)[:350] for line in trace.splitlines() if 'inet_sock_set_state:' in line][:8]
                 connections=set()
                 for line in trace.splitlines():
-                    tid=re.search(r'-(\d+)\s+\[',line)
+                    tid=re.search(r'-(\d+)(?:\s+\(\s*\d+\s*\))?\s+\[',line)
                     if not tid or tgids.get(int(tid[1]),int(tid[1])) not in application_pids:continue
                     port=re.search(r'\bdport=(\d+)',line)
                     family='daddrv6' if 'family=AF_INET6' in line or 'family=10 ' in line else 'daddr'

@@ -26,6 +26,7 @@ def relevant(path):
             '.private/acceptance_policy.py', '.private/core_testnet_driver.py',
             '.private/run_tor_emulator.py', '.private/admit_core_emulator.py', '.private/core-network-policy.json',
             '.private/tor_differential_driver.py', '.private/strip_emulator_apk.py',
+            '.private/core_faucet.py',
             '.private/tor-ui-abi.gradle', '.github/workflows/core-validation.yml'}
     if path.startswith(('.idea/','docs/')) or '/src/test/' in path or '/src/androidTest/' in path:
         return False
@@ -111,6 +112,10 @@ def validate_core(receipt, expected_inputs):
             stages['fund'].get('balance_zatoshi',0)<=0 or stages['send'].get('fee_zatoshi',0)<=0 or
             stages['restore'].get('mined_height',0)<=0 or stages['restore'].get('amount_zatoshi')!=1000000):
         raise ValueError('Missing real transaction accounting/confirmation evidence')
+    funding=receipt.get('funding_setup',{})
+    if (funding.get('tor_exit_verified') is not True or funding.get('persistent_tor_connection') is not True or
+            funding.get('txid')!=stages['fund']['funding_txid']):
+        raise ValueError('Missing Tor-only setup payment provenance')
     for key in ('candidate_apk_sha256', 'baseline_apk_sha256', 'instrumentation_apk_sha256', 'harness_sha256'):
         if not re.fullmatch('[0-9a-f]{64}', str(receipt.get(key, ''))):
             raise ValueError('Missing executed artifact/harness digest: ' + key)
