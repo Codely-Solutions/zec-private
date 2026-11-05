@@ -40,11 +40,20 @@ def run(adb, root, apks, manifest):
         current_stage = name
         if time.monotonic() - started > 1600:
             raise RuntimeError('Core acceptance total deadline exhausted')
+        adb('logcat','-c',timeout=15)
         result = adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
                      'co.electriccoin.zcash.app.CoreWalletAcceptance', '-e', 'isolatedTestnet',
                      'valueless-coins-only', '-e', 'stage', name, RUNNER,
                      timeout=min(timeout, max(1, 1700-int(time.monotonic()-started))), check=False)
         output = result.stdout.decode(errors='replace')
+        # Android redirects System.out to logcat. Only retain our bounded safe
+        # markers from this app UID after clearing this blank guest's log buffer.
+        uid_info=adb('shell','dumpsys','package',PACKAGE,timeout=15).stdout.decode()
+        app_uid=int(re.search(r'userId=(\d+)',uid_info)[1])
+        logs=adb('logcat','-d','-v','raw','--uid='+str(app_uid),'-s','System.out:I',timeout=15).stdout.decode(errors='replace')
+        markers=[line for line in logs.splitlines() if line.startswith(('CORE_RESULT ','CORE_TARGETS '))]
+        if sum(map(len,markers))>8192:raise RuntimeError('Safe core markers exceed bound')
+        output+='\n'+'\n'.join(markers)
         rows = [json.loads(line.split('CORE_RESULT ', 1)[1]) for line in output.splitlines() if 'CORE_RESULT {' in line]
         if 'OK (1 test)' not in output or len(rows) != 1 or rows[0].get('stage') != name or rows[0].get('passed') is not True:
             # Keep only class/line locations and explicit safe assertions; never raw test output.
