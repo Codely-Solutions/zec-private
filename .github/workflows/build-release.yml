@@ -51,6 +51,8 @@ jobs:
         run: python3 .private/live_near.py
       - name: Unit tests including quote text rendering
         timeout-minutes: 20
+        env:
+          QUOTE_LAYOUT_SCREENSHOTS: ${{ github.workspace }}/ui-lib/build/reports/quote-layout
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :ui-lib:testZcashmainnetFossReleaseUnitTest
@@ -76,6 +78,7 @@ jobs:
           path: |
             ui-lib/build/test-results/
             ui-lib/build/reports/tests/
+            ui-lib/build/reports/quote-layout/
             app/build/reports/lint-results-*.xml
             build/reports/detekt/
           if-no-files-found: ignore
