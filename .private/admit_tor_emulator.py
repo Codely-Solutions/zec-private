@@ -10,7 +10,7 @@ spec=guard.read(receipt_dir/'tor-emulator-job.json')
 spec['sources'].append(str(Path(__file__).resolve()))
 def retain(root):
     retained={}
-    for name in ('tor-probe-result.json','tor-probe-diagnostic.txt','command.log','emulator.log','tor-ui-result.json'):
+    for name in ('tor-probe-result.json','tor-probe-diagnostic.txt','command.log','emulator.log','tor-ui-result.json','tor-differential-result.json','old-native-diagnostic.txt','fixed-native-diagnostic.txt'):
         source=root/name
         if source.exists():
             with source.open('rb') as stream:

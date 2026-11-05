@@ -1,0 +1,86 @@
+{
+  "differentialPassed": true,
+  "sameTestApk": true,
+  "results": [
+    {
+      "version": "old",
+      "passed": false,
+      "lateErrorReproduced": true,
+      "realTor": true
+    },
+    {
+      "version": "fixed",
+      "passed": true,
+      "lateErrorReproduced": false,
+      "realTor": true
+    }
+  ],
+  "fundsTransferred": false,
+  "walletAccess": false,
+  "testTiming": "Only delivery of a real invalid-refund HTTP 400/422 is delayed until a replacement live quote succeeds.",
+  "artifactProof": {
+    "apkPreparation": {
+      "tor-app-probe-debug-androidTest.apk": {
+        "originalSha256": "f6fbf40e5a1625c0e7acfd6c78639c6d1eea0896ff94840054b45e045ee03e1e",
+        "testedSha256": "50ad831f0450ddcc9e88b097c0e3c9ad07a59a5e5e9f8cf73a97f41f861da9ed",
+        "preservedExecutionEntries": 5,
+        "executionEntriesDigest": "41b98bdbc26d5e7c91e3dd76b954e591427bd7977d2daa53357209cfe894bd24",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key"
+      },
+      "tor-app-probe-debug.apk": {
+        "originalSha256": "52741b4a35807f31a82361bf8f791cf62e83a2398410c6084518fe1653169f20",
+        "testedSha256": "aa947a9c00876725ff8a05560087649b9cfb1256eb0596b4252ebb8a9b05a7f1",
+        "preservedExecutionEntries": 32,
+        "executionEntriesDigest": "37998971eb3126c895be74f905e1636b2e0c228d4c297c192fe6f6c4801d2f21",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key"
+      },
+      "baseline-app.apk": {
+        "originalSha256": "0cb8f6ed3ccdfb53ec016d34de515fe0ca3fa35de508ca6c57babce8aa4012e4",
+        "testedSha256": "bd866cb1328ef6893a7fe2dc6d2ebc2fc946b0adf9095ee7c2bffcbd04dd3dbd",
+        "preservedExecutionEntries": 32,
+        "executionEntriesDigest": "ec3704b2595e779f9ab42fc11cb939255cd89a9708ffd1aa2177c3ecc57a8b46",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key"
+      }
+    },
+    "probeArtifact": {
+      "id": 13411622309,
+      "digest": "sha256:ec75ba4eb10962545a745325b636e823a0a3b73d786febc2b27cebe258277dc6",
+      "size_in_bytes": 135917702,
+      "sourceCommit": "5ba6c92f6",
+      "run": "https://github.com/Sammy-Lastre/zec-private/actions/runs/42020194714",
+      "probeKind": "differential",
+      "baselineArtifact": {
+        "id": 13410606830,
+        "digest": "sha256:c1525a1b7a3c7b6c26f1e72de32a106ae2e4ad0d43ee77cfc4c706f866cd4bb1",
+        "size_in_bytes": 135912040,
+        "sourceCommit": "6c5438a32",
+        "run": "https://github.com/Sammy-Lastre/zec-private/actions/runs/42016620241"
+      }
+    },
+    "apkHashes": {
+      "tor-app-probe-debug-androidTest.apk": "50ad831f0450ddcc9e88b097c0e3c9ad07a59a5e5e9f8cf73a97f41f861da9ed",
+      "tor-app-probe-debug.apk": "aa947a9c00876725ff8a05560087649b9cfb1256eb0596b4252ebb8a9b05a7f1",
+      "baseline-app.apk": "bd866cb1328ef6893a7fe2dc6d2ebc2fc946b0adf9095ee7c2bffcbd04dd3dbd"
+    },
+    "fundsTransferred": false,
+    "walletAccess": false,
+    "route": "native SDK Tor only",
+    "guest": "fresh Android API35 x86_64",
+    "writableState": "guard-owned root",
+    "userdataRequestedBytes": 2147483648,
+    "guestDataBefore": "Filesystem       1K-blocks   Used Available Use% Mounted on\r\n/dev/block/dm-43   6082144 275800   5664132   5% /data/user/0",
+    "guestDataPartitionActualKiB": 6082144,
+    "passed": true,
+    "guestDataAfter": "Filesystem       1K-blocks   Used Available Use% Mounted on\r\n/dev/block/dm-43   6082144 398284   5541648   7% /data/user/0"
+  },
+  "guardReceipt": "4c79ffc44c9e4a88807980c411f824a3",
+  "guardReceiptVerified": true,
+  "actualOldHttpStatus": 400,
+  "remainingLimit": "Controlled delivery timing reproduced the failure mechanism; the original phone error was not recorded."
+}

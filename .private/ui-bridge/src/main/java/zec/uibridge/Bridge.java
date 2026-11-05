@@ -61,8 +61,8 @@ public final class Bridge extends Instrumentation {
  }
  private void tap(int x,int y) {
   long t=SystemClock.uptimeMillis();
-  MotionEvent down=MotionEvent.obtain(t,t,MotionEvent.ACTION_DOWN,x,y,0);getUiAutomation().injectInputEvent(down,true);down.recycle();
-  SystemClock.sleep(70);MotionEvent up=MotionEvent.obtain(t,SystemClock.uptimeMillis(),MotionEvent.ACTION_UP,x,y,0);getUiAutomation().injectInputEvent(up,true);up.recycle();
+  MotionEvent down=MotionEvent.obtain(t,t,MotionEvent.ACTION_DOWN,x,y,0);down.setSource(InputDevice.SOURCE_TOUCHSCREEN);if(!getUiAutomation().injectInputEvent(down,true))throw new IllegalStateException();down.recycle();
+  SystemClock.sleep(70);MotionEvent up=MotionEvent.obtain(t,SystemClock.uptimeMillis(),MotionEvent.ACTION_UP,x,y,0);up.setSource(InputDevice.SOURCE_TOUCHSCREEN);if(!getUiAutomation().injectInputEvent(up,true))throw new IllegalStateException();up.recycle();
  }
  private JSONObject execute(JSONObject c) throws Exception {
   String action=c.getString("action");
@@ -86,10 +86,10 @@ public final class Bridge extends Instrumentation {
    int x=c.getInt("x"),y1=c.getInt("y1"),y2=c.getInt("y2");
    if(x<0 || x>1080 || y1<0 || y2>1920 || y2-y1<300)throw new SecurityException();
    List<AccessibilityNodeInfo> current=nodes();int titleTop=-1,acceptTop=1920;
-   for(AccessibilityNodeInfo n:current){Rect b=new Rect();n.getBoundsInScreen(b);if(text(n).equalsIgnoreCase("Review Quote"))titleTop=b.top;if(text(n).toLowerCase(java.util.Locale.ROOT).contains("confirm"))acceptTop=Math.min(acceptTop,b.top);}
+   for(AccessibilityNodeInfo n:current){Rect b=new Rect();n.getBoundsInScreen(b);if(text(n).equalsIgnoreCase("Review Quote"))titleTop=b.top;if(text(n).toLowerCase(java.util.Locale.ROOT).contains("confirm")){AccessibilityNodeInfo control=n;while(control.getParent()!=null && !control.isClickable())control=control.getParent();Rect controlBounds=new Rect();control.getBoundsInScreen(controlBounds);acceptTop=Math.min(acceptTop,controlBounds.top);}}
    if(titleTop<0 || y1>=titleTop || y2>=acceptTop-20)throw new SecurityException();
    long t=SystemClock.uptimeMillis();
-   for(int i=0;i<=25;i++){int mode=i==0?MotionEvent.ACTION_DOWN:(i==25?MotionEvent.ACTION_UP:MotionEvent.ACTION_MOVE);MotionEvent event=MotionEvent.obtain(t,SystemClock.uptimeMillis(),mode,x,y1+(y2-y1)*i/25,0);getUiAutomation().injectInputEvent(event,true);event.recycle();SystemClock.sleep(20);}
+   for(int i=0;i<=25;i++){int mode=i==0?MotionEvent.ACTION_DOWN:(i==25?MotionEvent.ACTION_UP:MotionEvent.ACTION_MOVE);MotionEvent event=MotionEvent.obtain(t,SystemClock.uptimeMillis(),mode,x,y1+(y2-y1)*i/25,0);event.setSource(InputDevice.SOURCE_TOUCHSCREEN);if(!getUiAutomation().injectInputEvent(event,true))throw new IllegalStateException();event.recycle();SystemClock.sleep(20);}
   } else if(action.equals("scroll")) {
    boolean done=false;for(AccessibilityNodeInfo n:nodes())if(n.isScrollable()){done=n.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD);if(done)break;}
    if(!done)throw new IllegalStateException();

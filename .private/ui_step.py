@@ -17,7 +17,7 @@ while time.monotonic()<deadline:
    cmd={'sequence':cmd['sequence']+1,'action':'snapshot'};needs_snapshot=False
    p=r/'ui-command.next';p.write_text(json.dumps(cmd));p.replace(r/'ui-command.json');deadline=time.monotonic()+45
    continue
-  print('sequence',current['sequence'],'hierarchyUnavailable',current.get('hierarchyUnavailable',False))
+  print('sequence',current['sequence'],'error',current.get('error'),'hierarchyUnavailable',current.get('hierarchyUnavailable',False))
   for n in current.get('nodes',[]):print(json.dumps({k:n[k] for k in ['text','id','bounds','clickable','enabled']}))
   break
  time.sleep(.2)
