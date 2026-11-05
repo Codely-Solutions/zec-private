@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.app
 
 import androidx.test.platform.app.InstrumentationRegistry
+import android.content.Intent
 import cash.z.ecc.android.sdk.model.BlockHeight
 import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.SeedPhrase
@@ -15,6 +16,7 @@ import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
@@ -62,6 +64,12 @@ class CoreWalletAcceptance {
         val started = System.nanoTime()
         withTimeout(900_000) {
             dependency<IsTorEnabledStorageProvider>().store(true)
+            if (stage != "networkTargets") {
+                val intent = checkNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                instrumentation.startActivitySync(intent)
+                withTimeout(15_000) { dependency<ApplicationStateProvider>().isInForeground.first { it } }
+            }
             when (stage) {
                 "recipient" -> createWallet("recipient")
                 "sender" -> createWallet("sender")
@@ -219,6 +227,22 @@ class CoreWalletAcceptance {
             .put(role + "Birthday", checkNotNull(wallet.birthday).value)
             .put(role + "Address", address)
         save(state)
+        // Prove the real app is syncing before requesting scarce faucet coins.
+        if (role == "sender") {
+            try {
+                withTimeout(120_000) {
+                    sync.status.first { it == Synchronizer.Status.SYNCED }
+                    sync.fullyScannedHeight.filterNotNull().first()
+                }
+            } catch (error: Exception) {
+                println("CORE_SYNC_DIAGNOSTIC " + JSONObject()
+                    .put("status", sync.status.first().toString())
+                    .put("scanned_height", sync.fullyScannedHeight.value?.value ?: -1L)
+                    .put("network_height", sync.networkHeight.value?.value ?: -1L)
+                    .put("exception_class", error.javaClass.simpleName))
+                throw error
+            }
+        }
     }
 
     private suspend fun checkWallet(role: String) {
