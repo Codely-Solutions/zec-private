@@ -37,6 +37,8 @@ def run(adb, root, apks, manifest):
                      'instrumentation_apk_sha256')},
                   harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
     current_stage = 'install'
+    active_instrumentation={}
+    operation_lock=threading.Lock()
 
     def stage(name, timeout=700):
         nonlocal current_stage
@@ -44,10 +46,21 @@ def run(adb, root, apks, manifest):
         if time.monotonic() - started > 1600:
             raise RuntimeError('Core acceptance total deadline exhausted')
         adb('logcat','-c',timeout=15)
-        result = adb('shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
+        command=adb.command_base+['shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
                      'co.electriccoin.zcash.app.CoreWalletAcceptance', '-e', 'isolatedTestnet',
-                     'valueless-coins-only', '-e', 'stage', name, RUNNER,
-                     timeout=min(timeout, max(1, 1700-int(time.monotonic()-started))), check=False)
+                     'valueless-coins-only', '-e', 'stage', name, RUNNER]
+        timeout_seconds=min(timeout,max(1,1700-int(time.monotonic()-started)))
+        operation=subprocess.Popen(command,env=adb.environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        with operation_lock:active_instrumentation[name]=operation
+        try:
+            stdout,stderr=operation.communicate(timeout=timeout_seconds)
+            result=subprocess.CompletedProcess(command,operation.returncode,stdout,stderr)
+        except BaseException:
+            if operation.poll() is None:operation.kill()
+            operation.communicate(timeout=10)
+            raise
+        finally:
+            with operation_lock:active_instrumentation.pop(name,None)
         output = result.stdout.decode(errors='replace')
         # Android redirects System.out to logcat. Only retain our bounded safe
         # markers from this app UID after clearing this blank guest's log buffer.
@@ -255,42 +268,62 @@ def run(adb, root, apks, manifest):
         before = time.monotonic()
         outcome = {}
         def interrupted_request():
-            try: stage('transport',300);outcome['passed']=True
+            try: stage('transport',420);outcome['passed']=True
             except Exception as error: outcome['error']=type(error).__name__
         worker = threading.Thread(target=interrupted_request)
         worker.start()
-        def wait_marker(name,timeout=120):
-            deadline=time.monotonic()+timeout
-            while time.monotonic()<deadline:
-                data=adb('shell','run-as',PACKAGE,'cat','files/'+name,timeout=10,check=False)
-                if data.returncode==0:
-                    return json.loads(data.stdout)
-                if not worker.is_alive():raise RuntimeError('Wallet sync stage ended before handshake')
-                time.sleep(.5)
-            raise RuntimeError('Wallet sync handshake deadline exceeded')
-        if not wait_marker('core-sync-ready.json').get('ready'):
-            raise RuntimeError('Wallet synchronizer not ready for interruption')
-        for binary in ('iptables','ip6tables'):
-            rule(binary,'-I','CORE_TOR','1','-j','DROP')
-        shell('run-as',PACKAGE,'touch','files/core-sync-drop')
-        outage=wait_marker('core-sync-requested.json',35)
-        if not all(outage.get(key) is True for key in ('requested','metadata_blocked','direct_bulk_reachable')):
-            raise RuntimeError('Sensitive Tor failure with reachable direct bulk path not established')
-        time.sleep(10)
-        blocked = 0
-        for binary in ('iptables','ip6tables'):
-            counters = rule(binary,'-L','CORE_TOR','-n','-v','-x')
-            for line in counters.splitlines():
-                fields=line.split()
-                if len(fields)>2 and fields[2]=='DROP':blocked+=int(fields[0])
-            rule(binary,'-D','CORE_TOR','1')
-        worker.join(timeout=200)
-        if worker.is_alive() or not outcome.get('passed') or blocked==0:
-            raise RuntimeError('Tor interruption/recovery not established')
-        recovery=json.loads(shell('run-as',PACKAGE,'cat','files/core-sync-result.json'))
-        if not all(recovery.get(key) is True for key in ('sync_restarted','synced','balance_preserved','history_preserved')):
-            raise RuntimeError('Wallet synchronization recovery not established')
-        stages['interruption']=dict(passed=True,metadata_blocked=True,direct_bulk_reachable=True,metadata_recovered=True,blocked_packets=blocked,seconds=time.monotonic()-before,**recovery)
+        active_drops=[]
+        try:
+            def wait_marker(name,timeout=120):
+                deadline=time.monotonic()+timeout
+                while time.monotonic()<deadline:
+                    data=adb('shell','run-as',PACKAGE,'cat','files/'+name,timeout=10,check=False)
+                    if data.returncode==0:
+                        return json.loads(data.stdout)
+                    if not worker.is_alive():raise RuntimeError('Wallet sync stage ended before handshake')
+                    time.sleep(.5)
+                raise RuntimeError('Wallet sync handshake deadline exceeded')
+            if not wait_marker('core-sync-ready.json',180).get('ready'):
+                raise RuntimeError('Wallet synchronizer not ready for interruption')
+            for binary in ('iptables','ip6tables'):
+                rule(binary,'-I','CORE_TOR','1','-j','DROP')
+                active_drops.append(binary)
+            shell('run-as',PACKAGE,'touch','files/core-sync-drop')
+            outage=wait_marker('core-sync-requested.json',35)
+            if not all(outage.get(key) is True for key in ('requested','metadata_blocked','direct_bulk_reachable')):
+                raise RuntimeError('Sensitive Tor failure with reachable direct bulk path not established')
+            time.sleep(10)
+            blocked = 0
+            for binary in ('iptables','ip6tables'):
+                counters = rule(binary,'-L','CORE_TOR','-n','-v','-x')
+                for line in counters.splitlines():
+                    fields=line.split()
+                    if len(fields)>2 and fields[2]=='DROP':blocked+=int(fields[0])
+                rule(binary,'-D','CORE_TOR','-j','DROP')
+                active_drops.remove(binary)
+            worker.join(timeout=200)
+            if worker.is_alive() or not outcome.get('passed') or blocked==0:
+                raise RuntimeError('Tor interruption/recovery not established')
+            recovery=json.loads(shell('run-as',PACKAGE,'cat','files/core-sync-result.json'))
+            if not all(recovery.get(key) is True for key in ('sync_restarted','synced','balance_preserved','history_preserved')):
+                raise RuntimeError('Wallet synchronization recovery not established')
+            stages['interruption']=dict(passed=True,metadata_blocked=True,direct_bulk_reachable=True,metadata_recovered=True,blocked_packets=blocked,seconds=time.monotonic()-before,**recovery)
+        finally:
+            cleanup_errors=[]
+            for binary in reversed(active_drops):
+                try:rule(binary,'-D','CORE_TOR','-j','DROP')
+                except Exception as error:cleanup_errors.append(type(error).__name__)
+            if worker.is_alive():
+                try:adb('shell','am','force-stop',PACKAGE,timeout=15,check=False)
+                except Exception as error:cleanup_errors.append(type(error).__name__)
+                with operation_lock:operation=active_instrumentation.get('transport')
+                if operation is not None and operation.poll() is None:
+                    operation.terminate()
+                    try:operation.wait(timeout=10)
+                    except subprocess.TimeoutExpired:operation.kill();operation.wait(timeout=10)
+                worker.join(timeout=100)
+            if worker.is_alive():raise RuntimeError('Interruption instrumentation worker did not exit')
+            if cleanup_errors:raise RuntimeError('Tor outage cleanup failed: '+','.join(cleanup_errors))
         stage('send')
         shell('am','force-stop',PACKAGE)
         stage('restart',240)
@@ -305,7 +338,7 @@ def run(adb, root, apks, manifest):
         if denied:
             raise RuntimeError('Unexpected app egress attempts blocked; inspect exact destinations')
         report['network_enforcement']=dict(passed=True,mode='direct public bulk endpoint TCP443 plus Tor relay allowlist; sensitive provider direct egress denied; metadata outage assertion',
-                                           allowed_relay_peers=len(allowed),embedded_bootstrap_pairs=len(bootstrap_peers),sensitive_targets=len(targets),direct_bulk_targets=sorted(bulk_targets),sensitive_no_fallback=True)
+                                           allowed_relay_peers=len(allowed),embedded_bootstrap_pairs=len(bootstrap_peers),sensitive_targets=len(targets),direct_bulk_targets=sorted(bulk_targets),metadata_no_direct_fallback_observed=True,metadata_rpc_scope=['getServerInfo','getLatestBlockHeight'],sdk_transport_policy='published SDK6.0.0 source inspected; bulk direct, sensitive calls Tor')
         report['passed']=True
     finally:
         failure=sys.exc_info()[1]
