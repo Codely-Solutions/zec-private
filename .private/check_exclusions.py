@@ -19,9 +19,10 @@ def check(root=ROOT):
     for project in policy['forbidden_projects']:
         if 'include("' + project + '")' in settings:
             failures.append('Excluded project included: ' + project)
-    for path in [root / 'app/build.gradle.kts', root / 'ui-lib/build.gradle.kts']:
-        if 'libs.flexa' in path.read_text():
-            failures.append('Excluded Flexa dependency: ' + str(path.relative_to(root)))
+    for path in root.glob('*/build.gradle.kts'):
+        text = path.read_text()
+        if 'libs.flexa' in text or 'projects.featureVoting' in text:
+            failures.append('Excluded integration dependency: ' + str(path.relative_to(root)))
     return failures
 
 
