@@ -5475,10 +5475,10 @@ index c0be20563..cef57d3d1 100644
 +                    slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt
 new file mode 100644
-index 000000000..ecf9764f5
+index 000000000..e26a87f93
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,59 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -5493,7 +5493,8 @@ index 000000000..ecf9764f5
 +import java.io.IOException
 +import kotlin.test.Test
 +import kotlin.test.assertFailsWith
-+import kotlin.test.assertSame
++import kotlin.test.assertEquals
++import kotlin.test.assertTrue
 +
 +/** A selected Tor failure must reach the caller without constructing a direct HTTP engine. */
 +class HttpClientProviderTorFailureTest {
@@ -5527,7 +5528,10 @@ index 000000000..ecf9764f5
 +        try {
 +            every { OkHttp.create(any()) } throws AssertionError("Direct HTTP engine is forbidden in this test")
 +            val api = KtorNearApiProvider(HttpClientProviderImpl(synchronizerProvider, preference))
-+            assertSame(failure, assertFailsWith<IOException> { api.getSupportedTokens() })
++            val actual = assertFailsWith<IOException> { api.getSupportedTokens() }
++            assertEquals(failure.message, actual.message)
++            // Coroutine stack recovery can copy an exception while retaining its original cause.
++            assertTrue(generateSequence<Throwable>(actual) { it.cause }.any { it === failure })
 +            verify(exactly = 0) { OkHttp.create(any()) }
 +        } finally {
 +            unmockkObject(OkHttp)

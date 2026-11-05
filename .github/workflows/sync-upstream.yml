@@ -34,6 +34,7 @@ jobs:
     permissions:
       contents: write
       issues: write
+      actions: read
     uses: ./.github/workflows/build-release.yml
     with:
       source_sha: ${{ needs.prepare.outputs.source_sha }}
