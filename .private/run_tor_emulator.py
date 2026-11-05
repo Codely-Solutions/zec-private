@@ -32,7 +32,7 @@ print('Verified disposable Android image extracted.',flush=True)
 manifest=json.loads((PROJECT.parent/'tor-probe-artifact.json').read_text())
 artifact=ROOT/'probe.zip'
 with artifact.open('wb') as out:
-    subprocess.run(['gh','api','repos/Sammy-Lastre/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip'],stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)
+    subprocess.run([r'C:\Program Files\GitHub CLI\gh.exe','api','repos/Sammy-Lastre/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip'],stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)
 if artifact.stat().st_size>manifest['size_in_bytes']+1048576: raise ValueError('Probe archive exceeds declared size')
 if 'digest' in manifest and manifest['digest'] and 'sha256:'+hashlib.sha256(artifact.read_bytes()).hexdigest()!=manifest['digest']: raise ValueError('Probe artifact digest mismatch')
 apks=ROOT/'apks';apks.mkdir();apk_paths=[]
@@ -66,7 +66,7 @@ config={'abi.type':'x86_64','hw.cpu.arch':'x86_64','image.sysdir.1':str(system),
 config.update({'avd.id':'CodexTorProbe','avd.name':'CodexTorProbe','hw.ramSize':'1536','hw.cpu.ncore':'2','hw.sdCard':'no','hw.camera.back':'none','hw.camera.front':'none','hw.keyboard':'yes','fastboot.forceColdBoot':'yes','fastboot.forceFastBoot':'no','firstboot.saveToLocalSnapshot':'no','disk.dataPartition.size':'2G','disk.dataPartition.path':str(ROOT/'userdata.img'),'disk.cachePartition.path':str(ROOT/'cache.img')})
 (avd/'config.ini').write_text(''.join(k+'='+v+'\n' for k,v in config.items()))
 (avds/'CodexTorProbe.ini').write_text('avd.ini.encoding=UTF-8\npath='+str(avd)+'\ntarget=android-35\n')
-env=dict(os.environ,ANDROID_HOME=str(SDK),ANDROID_SDK_ROOT=str(SDK),ANDROID_USER_HOME=str(home),ANDROID_EMULATOR_HOME=str(home),ANDROID_AVD_HOME=str(avds),ANDROID_ADB_SERVER_PORT=str(PORT),ADB_SERVER_SOCKET='tcp:localhost:'+str(PORT))
+env=dict(os.environ,ANDROID_HOME=str(SDK),ANDROID_SDK_ROOT=str(SDK),ANDROID_USER_HOME=str(home),ANDROID_EMULATOR_HOME=str(home),ANDROID_AVD_HOME=str(avds),ANDROID_ADB_SERVER_PORT=str(PORT),ADB_SERVER_SOCKET='tcp:localhost:'+str(PORT),ANDROID_EMU_ENABLE_CRASH_REPORTING='0')
 log=(ROOT/'emulator.log').open('wb')
 def adb(*args,timeout=30,check=True):
     return subprocess.run([ADB,'-P',str(PORT),'-s',SERIAL,*args],env=env,capture_output=True,timeout=timeout,check=check)

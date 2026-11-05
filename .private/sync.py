@@ -12,6 +12,10 @@ def version(tag):
     if not match: raise RuntimeError('Unsupported upstream version format; review required')
     return tuple(map(int,match.groups()))
 def critical(path):
+    # Changes confined to a removed project cannot execute in the candidate.
+    # Its root, shared wiring and every retained feature remain review-gated.
+    if any(path.startswith(project+'/') for project in excluded_projects()):
+        return False
     sensitive_screen=re.match(
         r'^ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/'
         r'(authentication|walletbackup|restore|onboarding|exportvk|exportdata|deletewallet|tor|'
@@ -42,6 +46,23 @@ def source_state(root):
         return hashlib.sha256(data).hexdigest()
     return {p:digest(root/p) for p in paths
             if not p.startswith(('.private/','.github/')) and p!='README.md' and (root/p).is_file()}
+
+def excluded_projects():
+    projects=json.loads((ROOT/'.private/excluded-features.json').read_text())['forbidden_projects']
+    if not all(re.fullmatch(r'[a-z][a-z0-9-]*',project) for project in projects):
+        raise RuntimeError('Invalid excluded project identity')
+    return projects
+
+def remove_excluded_projects(candidate):
+    parent=candidate.resolve()
+    for project in excluded_projects():
+        target=candidate/project
+        if target.is_symlink() or getattr(target,'is_junction',lambda:False)():
+            raise RuntimeError('Excluded project path is a link; review required')
+        if target.exists():
+            if not target.is_dir() or target.resolve().parent!=parent:
+                raise RuntimeError('Excluded project escaped the candidate workspace')
+            shutil.rmtree(target)
 
 def sanitize_provider(root):
     # Keep the shared upstream JWT out of the maintained patch. The exact original
@@ -90,6 +111,7 @@ def main():
         run('git','apply','--unidiff-zero','--check',str(ROOT/'.private/fork.patch'),cwd=candidate)
         run('git','apply','--unidiff-zero',str(ROOT/'.private/fork.patch'),cwd=candidate)
         sanitize_provider(candidate)
+        remove_excluded_projects(candidate)
         shutil.rmtree(candidate/'.github/workflows')
         (candidate/'.github/dependabot.yml').unlink(missing_ok=True)
         shutil.copytree(ROOT/'.github/workflows',candidate/'.github/workflows')

@@ -19,6 +19,8 @@ def check(root=ROOT):
     for project in policy['forbidden_projects']:
         if 'include("' + project + '")' in settings:
             failures.append('Excluded project included: ' + project)
+        if (root/project).exists() or (root/project).is_symlink():
+            failures.append('Excluded project tree remains: ' + project)
     for path in root.glob('*/build.gradle.kts'):
         text = path.read_text()
         if 'libs.flexa' in text or 'projects.featureVoting' in text:

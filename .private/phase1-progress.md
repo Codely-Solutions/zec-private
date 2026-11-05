@@ -1,6 +1,6 @@
 # Phase 1 validation record
 
-Implementation is in progress; revision 5 is not published yet.
+Runtime implementation and prepublication acceptance passed; revision 5 is not published yet.
 
 Approved scope: remove Flexa, coinholder voting implementation and redundant promotional/feedback surfaces. Preserve core wallet operations, gift cards, hardware/view-only accounts, migration/repair and CrossPay. Inspection classified the Ironwood announcement as a funds-migration guide; it remains with the operational migration warnings. What's New points to fork releases.
 
@@ -14,4 +14,12 @@ Unfunded production API contracts passed through a dedicated Tor process in CI r
 
 Local guard tests initially exceeded its per-receipt bound when listing every scanned source. The maintained source manifest is now verified before and after broad scans while the small control implementation set is registered directly. Fixture cleanup is deferred to guard finalization to avoid a concurrent scan/delete race. Local control receipt `929fc9d5b8b547e0aaadabb59bef9a2b` passed with cleanup; it predates subsequent edits and is not final acceptance evidence.
 
-Still required: final full tests/static checks/build, exact-candidate emulator validation with Tor, isolated upgrade and retained-feature checks, successful update simulation, signed publication, independent artifact verification and final resource cleanup. Never use a personal wallet, accepted swap, real funds or a direct-network fallback for these checks.
+Candidate `b34bcc43a` passed the complete prepublication workflow `42057798290`: full unit suite, lint, Detekt, dependency comparison and release/debug APK builds. The corrected controller simulation `42057791966` passed. Two additional fail-closed Tor tests must still pass in the final production build.
+
+Real UI acceptance passed under verified guard receipt `b6da0fca348a40eeaeb3c94b19591383`. A fresh random zero-balance revision 4 wallet enabled Tor and populated its public asset catalog before upgrade. Revision 5 preserved all three stored preference files byte-for-byte before startup and retained the synthetic BTC contact. It completed three real quote/review/drag-dismiss cycles without accepting a quote or restarting between requests. Settings exclude voting/feedback and retain About, release information, address book and advanced controls. Retained receive/QR, send preparation, CrossPay and server/recovery/export settings were inspected. No personal wallet or accepted swap was accessed.
+
+The first UI run ended on a Windows command-file sharing race; bounded read/replacement retries and a repeatable scenario replaced the fragile manual startup sequence. A subsequent cold-start run exceeded its 90-second price-catalog readiness allowance before issuing any quote. The final upgrade profile models an installed wallet with a Tor-warmed catalog and allows a bounded longer startup; this is not evidence that cold Tor startup latency has been fixed. Both failed guests were cleaned up. Four reviewed task receipts were archived to free the shared guard retention quota; unrelated receipts were preserved.
+
+The successful guest and private ADB/instrumentation tree exited with no owned survivors. Peak measured transient storage was 8,530,531,562 bytes within the 8 GiB shared policy. `.private/phase1-ui-validation.json` binds UI/probe results to the exact artifact and guard hashes. The UI uses x86_64 debug builds signed with one ephemeral test key; permanent ARM release signing and packaging are checked separately. No funded settlement, physical hardware signing or full phrase restoration was performed.
+
+Still required: final production tests including the two new Tor failures, signed publication, independent artifact verification and final task/cloud cleanup. Never use a personal wallet, accepted swap, real funds or a direct-network fallback for these checks.
