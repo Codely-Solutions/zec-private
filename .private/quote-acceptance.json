@@ -3,7 +3,7 @@
   "evidence_class": "real-app-production-quotes",
   "passed": true,
   "build_source_sha": "a0bd21f27bb53af0eeb9b433d0273c6f39b04e19",
-  "input_fingerprint": "7684f11eeba99efff24ebcd61d5e3ae0990af24f7a62389c75161538406ddb4e",
+  "input_fingerprint": "ade8ad7cf4a2d0ffd21af0ca082a59f43055e60b50b93823fcf9dd35de38ff07",
   "executed_apk_sha256": "2b775fe29901cc0c2d017d6484d18b03e3d43ea4131965ecb22636db491484c1",
   "quote_requests": 3,
   "quote_reviews": 3,

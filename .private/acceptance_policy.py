@@ -30,7 +30,8 @@ def relevant(path):
             '.private/tor-ui-abi.gradle', '.github/workflows/core-validation.yml'}
     if path.startswith(('.idea/','docs/')) or '/src/test/' in path or '/src/androidTest/' in path:
         return False
-    if '/screen/theme/' in path or '/design/theme/' in path:
+    if any(part in path for part in ('/screen/theme/','/design/theme/','/screen/about/','/screen/whatsnew/',
+                                     '/res/ui/about/','/res/ui/whatsnew/','/res/ui/theme/')):
         return False
     return not (path in {'README.md', 'LICENSE', '.gitignore', '.gitattributes'} or
                 path.endswith(('.md', '.png', '.jpg', '.webp', '.svg')))
