@@ -1,4 +1,22 @@
-# Revision 4: Tor quote retry fix released
+# Revision 5: Phase 1 removals released
+
+Signed update: [v3.19.0-private.5](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.5), versionCode `3234005`, package `com.personal.zecprivate.foss`. The permanent certificate is unchanged. Install over the existing app without uninstalling. APK: 111,930,635 bytes, SHA-256 `25df9731086778320cbee4211e3cd73fd77a044d4d97a23256380fb8142337f1`.
+
+Removed Flexa code/dependencies/startup/navigation, the coinholder voting module and routes, redundant feedback and upstream release-promotion screens. What's New opens fork releases. The Ironwood funds-migration guide remains as an operational safety notice. Gift cards, hardware/view-only accounts, repair/migration, recovery/export, CrossPay and core wallet functions remain. Shared voting contracts have inert bindings; embedded SDK APIs were not physically removed.
+
+Resolved runtime components fell from 351 to 333, with no additions or version changes to retained components. Compose 1.10.6 and Room 2.7.2 constraints preserve the previous release's effective versions. The comparable signed APK is 2,083,031 bytes smaller (1.83%).
+
+[Production run 42072171381](https://github.com/Sammy-Lastre/zec-private/actions/runs/42072171381) passed all 1,391 tests with zero failures/errors/skips, lint, Detekt, six unchanged reviewed quote-layout previews, real unfunded production API contracts over Tor, assembly, permanent-key signing, publication and notification submission. Independent downloaded-artifact verification checked CI/source/tag binding, checksum, certificate, manifest, package/version, excluded original package descriptors, dependency graph, license and 16 KiB alignment. Delivery guard `dbe3c909912e4180a522658f270a0c2c` and UI guard `b6da0fca348a40eeaeb3c94b19591383` both verified after publication.
+
+A fresh zero-balance revision 4 debug wallet enabled Tor and warmed its public catalog before the in-place revision 5 debug upgrade. All three preference files were byte-identical before startup; the synthetic contact remained. The upgraded app completed three real BTC→ZEC quote/review/drag-dismiss/requote cycles without accepting or restarting. Retained settings, receive/QR, send preparation, CrossPay, server and recovery/export menu access were inspected. No personal wallet, accepted swap or real funds were used. Two new regression tests confirm unavailable Tor/synchronizer failures cannot construct a direct swap HTTP client.
+
+Upstream discovery remains scheduled and enabled against official stable `3.19.0-3234`; no newer release existed at delivery. [Controller run 42071651403](https://github.com/Sammy-Lastre/zec-private/actions/runs/42071651403) passed actual disposable patch integration, excluded-tree reintroduction and critical-change gates. The controller removes excluded voting trees after integration instead of carrying their entire deletion in the patch; shared wiring remains review-gated. Future upstream compatibility remains unproved until its candidate passes these gates. SDK 6.0.0 remains the newest Maven stable checked at delivery.
+
+Limits: emulator UI ran x86_64 debug builds signed with an ephemeral test key; the permanent ARM release was independently inspected, not executed. No funded settlement, physical hardware signing or full phrase restoration was performed. One cold Tor catalog startup exceeded 90 seconds; the successful upgrade profile used an existing Tor-warmed catalog. Cold-start latency is not claimed fixed.
+
+All registered task roots and emulator/ADB processes were removed, with no owned survivors or configuration drift. Temporary CI artifacts removed: 306,945,796 bytes. Superseded caches removed across both cleanup passes: 4,322,655,430 bytes; nine current categories retain 1,616,690,293 bytes. Final reports/previews retain their normal short expiry, and signed history/signing custody remain. Five pre-existing helper roots remain unassigned and preserved, including a duplicate REPL group; this is not a global helper-cleanliness claim. Evidence: `phase1-release-validation.json`, `phase1-ui-validation.json`, `phase1-cleanup.json`, `dist/verification.json` and `dist/tests.json`.
+
+# Historical revision 4: Tor quote retry fix released
 
 Signed release: [v3.19.0-private.4](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.4), versionCode `3234004`, package `com.personal.zecprivate.foss`. Install as an update over the existing app; the permanent signing certificate is unchanged. Final APK: `dist/zec-private-latest.apk`. SHA-256: `bd8916b173d03a83a29cb53638b23949a85bbec4c7bbce23d1d98928558719b3`.
 
