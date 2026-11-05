@@ -1,0 +1,5 @@
+allprojects { p ->
+ p.plugins.withId("com.android.application") {
+  if (p.path == ":app") p.android.defaultConfig.ndk.abiFilters.add("x86_64")
+ }
+}

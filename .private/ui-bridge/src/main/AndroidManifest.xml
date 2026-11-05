@@ -1,0 +1,4 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<application android:label="Disposable UI test bridge" android:allowBackup="false" android:testOnly="true" />
+<instrumentation android:name="zec.uibridge.Bridge" android:targetPackage="com.personal.zecprivate.foss.debug" android:functionalTest="true" />
+</manifest>
