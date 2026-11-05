@@ -27,6 +27,11 @@ class AcceptancePolicyTest(unittest.TestCase):
                        baseline_version_code=3234006, candidate_version_code=3234007)
         for key in ('candidate_apk_sha256', 'baseline_apk_sha256', 'instrumentation_apk_sha256', 'harness_sha256'):
             receipt[key] = 'b'*64
+        receipt['stages']['interruption'].update(sync_restarted=True,synced=True,balance_preserved=True,
+                                               history_preserved=True,blocked_packets=1,scanned_height=12345)
+        receipt['stages']['fund'].update(funding_txid='c'*64,balance_zatoshi=10000000)
+        receipt['stages']['send'].update(fee_zatoshi=10000)
+        receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000)
         return receipt
 
     def test_required_real_evidence(self):
@@ -45,6 +50,9 @@ class AcceptancePolicyTest(unittest.TestCase):
                 validate_core(bad, 'inputs')
         bad = self.receipt(); bad['stages']['restore']['txId'] = 'c'*64
         with self.assertRaises(ValueError): validate_core(bad, 'inputs')
+        for key in ('sync_restarted','synced','balance_preserved','history_preserved'):
+            bad=self.receipt();bad['stages']['interruption'][key]=False
+            with self.subTest(recovery=key),self.assertRaises(ValueError):validate_core(bad,'inputs')
 
     def test_conservative_triggers(self):
         self.assertEqual([], requirements(['README.md', '.private/STATUS.md'])['profiles'])
@@ -53,6 +61,7 @@ class AcceptancePolicyTest(unittest.TestCase):
             self.assertIn('core-testnet', requirements([path])['profiles'])
         self.assertEqual(['production-quotes'], requirements(['ui-lib/src/main/java/SwapRepository.kt'])['profiles'])
         self.assertIn('production-quotes', requirements(['ui-lib/src/main/java/HttpClientProvider.kt'])['profiles'])
+        self.assertEqual(['deterministic-regressions'],requirements(['ui-lib/src/test/java/WalletTest.kt'])['profiles'])
 
     def test_quotes_need_real_repeated_tor_evidence(self):
         receipt=dict(schema=1,input_fingerprint='inputs',evidence_class='real-app-production-quotes',

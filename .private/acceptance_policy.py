@@ -70,6 +70,10 @@ def requirements(paths):
                 profiles.add('core-testnet')
                 reasons.append(path)
             continue
+        if '/src/test/' in path or '/src/androidTest/' in path:
+            profiles.add('deterministic-regressions')
+            reasons.append(path)
+            continue
         if not relevant(path):
             continue
         if '/src/main/res/' in path and path.endswith('.xml'):
@@ -77,8 +81,6 @@ def requirements(paths):
             profiles.add('core-testnet')
         elif '/screen/swap/' in path or any(word in path for word in ('Near', 'SwapQuote', 'SwapRepository')):
             profiles.add('production-quotes')
-        elif '/src/test/' in path and not any(word in path.lower() for word in ('wallet', 'tor', 'swap', 'send', 'restore')):
-            continue
         else:
             profiles.add('core-testnet')
         if any(word in path.lower() for word in ('tor', 'httpclient', 'synchronizer', '/di/', 'navigation')):
@@ -101,6 +103,14 @@ def validate_core(receipt, expected_inputs):
         raise ValueError('Missing required core acceptance stage')
     if not receipt.get('network_enforcement', {}).get('passed'):
         raise ValueError('Missing fail-closed connection evidence')
+    recovery=stages['interruption']
+    if (not all(recovery.get(key) is True for key in ('sync_restarted','synced','balance_preserved','history_preserved')) or
+            recovery.get('blocked_packets',0)<=0 or recovery.get('scanned_height',0)<=0):
+        raise ValueError('Actual wallet synchronization interruption/recovery required')
+    if (not re.fullmatch('[0-9a-f]{64}',str(stages['fund'].get('funding_txid',''))) or
+            stages['fund'].get('balance_zatoshi',0)<=0 or stages['send'].get('fee_zatoshi',0)<=0 or
+            stages['restore'].get('mined_height',0)<=0 or stages['restore'].get('amount_zatoshi')!=1000000):
+        raise ValueError('Missing real transaction accounting/confirmation evidence')
     for key in ('candidate_apk_sha256', 'baseline_apk_sha256', 'instrumentation_apk_sha256', 'harness_sha256'):
         if not re.fullmatch('[0-9a-f]{64}', str(receipt.get(key, ''))):
             raise ValueError('Missing executed artifact/harness digest: ' + key)
