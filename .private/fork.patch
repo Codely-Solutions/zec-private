@@ -1924,36 +1924,116 @@ index cffe4775f..d11822df2 100644
 -            appFees = listOf(AppFee(recipient = "affiliate", fee = 75))
 +            appFees = emptyList()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
-index d55620b20..a8a1c5e97 100644
+index d55620b20..86af1b87a 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 @@ -4 +3,0 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 -import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_ADDRESS
-@@ -146,2 +145 @@ class SwapRepositoryImplTest {
+@@ -27,0 +27 @@ import kotlinx.coroutines.test.runTest
++import java.io.IOException
+@@ -36,0 +37 @@ import kotlin.test.assertNull
++import kotlin.test.assertTrue
+@@ -146,2 +147 @@ class SwapRepositoryImplTest {
 -                    slippage = BigDecimal("3"),
 -                    affiliateAddress = AFFILIATE_ADDRESS
 +                    slippage = BigDecimal("3")
-@@ -174,2 +172 @@ class SwapRepositoryImplTest {
+@@ -174,2 +174 @@ class SwapRepositoryImplTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = AFFILIATE_ADDRESS
 +                    slippage = BigDecimal("2")
-@@ -203,2 +200 @@ class SwapRepositoryImplTest {
+@@ -203,2 +202 @@ class SwapRepositoryImplTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = AFFILIATE_ADDRESS
 +                    slippage = BigDecimal("2")
-@@ -216 +212 @@ class SwapRepositoryImplTest {
+@@ -208,0 +207,75 @@ class SwapRepositoryImplTest {
++    @Test
++    fun dismissedIncomingQuoteCanBeRequestedAgainWithoutRestart() =
++        runTest {
++            var calls = 0
++            val source = dataSourceReturning(flexQuote())
++            coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
++                flexQuote(destinationAddress = if (calls++ == 0) "first-recipient" else "second-recipient")
++            }
++            val repository = loadedRepository(source)
++            requestIncoming(repository, "first-recipient")
++            assertIs<SwapQuoteData.Success>(repository.quote.value)
++            repository.clearQuote()
++            assertNull(repository.quote.value)
++            requestIncoming(repository, "second-recipient")
++            val retried = assertIs<SwapQuoteData.Success>(repository.quote.value)
++            assertEquals("second-recipient", retried.quote.destinationAddress.address)
++            assertEquals(2, calls)
++            coVerify(exactly = 0) { source.submitDepositTransaction(any(), any()) }
++        }
++
++    @Test
++    fun transientIncomingFailureCanBeRetriedWithoutRestart() =
++        runTest {
++            var calls = 0
++            val source = dataSourceReturning(flexQuote())
++            coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
++                if (calls++ == 0) throw IOException("Simulated temporary connection failure")
++                flexQuote()
++            }
++            val repository = loadedRepository(source)
++            requestIncoming(repository)
++            assertIs<SwapQuoteData.Error>(repository.quote.value)
++            repository.clearQuote()
++            requestIncoming(repository)
++            assertIs<SwapQuoteData.Success>(repository.quote.value)
++            assertEquals(2, calls)
++        }
++
++    @Test
++    fun cancellingPendingIncomingRequestDoesNotPoisonTheNextQuote() =
++        runTest {
++            var calls = 0
++            var firstCancelled = false
++            val source = dataSourceReturning(flexQuote())
++            coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
++                if (calls++ == 0) {
++                    try {
++                        awaitCancellation()
++                    } finally {
++                        firstCancelled = true
++                    }
++                } else {
++                    flexQuote()
++                }
++            }
++            val repository = loadedRepository(source)
++            requestIncoming(repository)
++            assertIs<SwapQuoteData.Loading>(repository.quote.value)
++            repository.clearQuote()
++            assertTrue(firstCancelled)
++            assertNull(repository.quote.value)
++            requestIncoming(repository)
++            assertIs<SwapQuoteData.Success>(repository.quote.value)
++            assertEquals(2, calls)
++        }
++
++    private fun requestIncoming(repository: SwapRepositoryImpl, recipient: String = "destination") =
++        repository.requestFlexInputIntoZec(
++            amount = BigDecimal("2"),
++            refundAddress = "refund",
++            destinationAddress = recipient,
++            originAsset = btc,
++            slippage = BigDecimal("2")
++        )
++
+@@ -216 +289 @@ class SwapRepositoryImplTest {
 -                        requestQuote(any(), any(), any(), any(), any(), any(), any(), any())
 +                        requestQuote(any(), any(), any(), any(), any(), any(), any())
-@@ -241 +237 @@ class SwapRepositoryImplTest {
+@@ -241 +314 @@ class SwapRepositoryImplTest {
 -                        requestQuote(any(), any(), any(), any(), any(), any(), any(), any())
 +                        requestQuote(any(), any(), any(), any(), any(), any(), any())
-@@ -277 +273 @@ class SwapRepositoryImplTest {
+@@ -277 +350 @@ class SwapRepositoryImplTest {
 -            coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) }
 +            coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any()) }
-@@ -391 +387 @@ class SwapRepositoryImplTest {
+@@ -391 +464 @@ class SwapRepositoryImplTest {
 -                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } throws
 +                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } throws
-@@ -764 +760 @@ class SwapRepositoryImplTest {
+@@ -764 +837 @@ class SwapRepositoryImplTest {
 -            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } returns quote
 +            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
