@@ -1,15 +1,29 @@
-name: Diagnose public API access
+name: Diagnose toolchain and public API access
 on:
   workflow_dispatch:
+    inputs:
+      check_api:
+        description: Also check unfunded public API contracts
+        type: boolean
+        default: true
 permissions:
   contents: read
 jobs:
   diagnose:
     runs-on: ubuntu-24.04
-    timeout-minutes: 3
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Verify the selected JDK
+        run: |
+          "$JAVA_HOME/bin/java" -version
+          grep -Eq '^JAVA_VERSION="21[."]' "$JAVA_HOME/release"
       - name: Probe public API from the hosted runner
+        if: inputs.check_api
         run: python3 .private/live_near.py
