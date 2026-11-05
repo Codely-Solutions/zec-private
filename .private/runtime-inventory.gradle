@@ -1,11 +1,16 @@
 import groovy.json.JsonOutput
 
 gradle.projectsEvaluated {
-    def app = rootProject.project(':app')
+    def app = rootProject.findProject(':app')
+    if (app == null) return
     app.tasks.register('privateRuntimeInventory') {
         doLast {
             def name = 'zcashmainnetFossReleaseRuntimeClasspath'
             def configuration = app.configurations.getByName(name)
+            def unresolved = configuration.incoming.resolutionResult.allDependencies.findAll {
+                it instanceof org.gradle.api.artifacts.result.UnresolvedDependencyResult
+            }
+            if (!unresolved.isEmpty()) throw new GradleException('Release graph contains unresolved dependencies: ' + unresolved)
             def components = configuration.incoming.resolutionResult.allComponents.collect {
                 it.id.displayName
             }.sort()
