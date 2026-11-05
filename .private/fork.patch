@@ -1924,28 +1924,32 @@ index cffe4775f..d11822df2 100644
 -            appFees = listOf(AppFee(recipient = "affiliate", fee = 75))
 +            appFees = emptyList()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
-index d55620b20..86af1b87a 100644
+index d55620b20..f3bccf6a1 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 @@ -4 +3,0 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 -import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_ADDRESS
-@@ -27,0 +27 @@ import kotlinx.coroutines.test.runTest
+@@ -20,0 +20,3 @@ import io.mockk.mockk
++import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.NonCancellable
++import kotlinx.coroutines.withContext
+@@ -27,0 +30 @@ import kotlinx.coroutines.test.runTest
 +import java.io.IOException
-@@ -36,0 +37 @@ import kotlin.test.assertNull
+@@ -36,0 +40 @@ import kotlin.test.assertNull
 +import kotlin.test.assertTrue
-@@ -146,2 +147 @@ class SwapRepositoryImplTest {
+@@ -146,2 +150 @@ class SwapRepositoryImplTest {
 -                    slippage = BigDecimal("3"),
 -                    affiliateAddress = AFFILIATE_ADDRESS
 +                    slippage = BigDecimal("3")
-@@ -174,2 +174 @@ class SwapRepositoryImplTest {
+@@ -174,2 +177 @@ class SwapRepositoryImplTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = AFFILIATE_ADDRESS
 +                    slippage = BigDecimal("2")
-@@ -203,2 +202 @@ class SwapRepositoryImplTest {
+@@ -203,2 +205 @@ class SwapRepositoryImplTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = AFFILIATE_ADDRESS
 +                    slippage = BigDecimal("2")
-@@ -208,0 +207,75 @@ class SwapRepositoryImplTest {
+@@ -208,0 +210,141 @@ class SwapRepositoryImplTest {
 +    @Test
 +    fun dismissedIncomingQuoteCanBeRequestedAgainWithoutRestart() =
 +        runTest {
@@ -2012,6 +2016,72 @@ index d55620b20..86af1b87a 100644
 +            assertEquals(2, calls)
 +        }
 +
++    @Test
++    fun newRequestClearsPreviousErrorBeforeBackgroundDispatch() =
++        runTest {
++            val repository = loadedRepository(dataSourceReturning(flexQuote()))
++            repository.quote.value = SwapQuoteData.Error(SwapMode.FLEX_INPUT, IOException("old failure"))
++            repository.scope = backgroundScope
++
++            requestIncoming(repository)
++
++            assertIs<SwapQuoteData.Loading>(repository.quote.value)
++        }
++
++    @Test
++    fun dismissedRequestCannotPublishLateNetworkErrorOverNextQuote() =
++        runTest {
++            val finishOldRequest = CompletableDeferred<Unit>()
++            var calls = 0
++            val source = dataSourceReturning(flexQuote())
++            coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
++                if (calls++ == 0) {
++                    withContext(NonCancellable) {
++                        finishOldRequest.await()
++                        throw IOException("Old native request failed during cancellation")
++                    }
++                } else {
++                    flexQuote(destinationAddress = "second-recipient")
++                }
++            }
++            val repository = loadedRepository(source)
++            requestIncoming(repository, "first-recipient")
++            repository.clearQuote()
++            requestIncoming(repository, "second-recipient")
++            val current = assertIs<SwapQuoteData.Success>(repository.quote.value)
++
++            finishOldRequest.complete(Unit)
++
++            assertEquals(current, repository.quote.value)
++        }
++
++    @Test
++    fun dismissedRequestCannotPublishLateSuccessOverNextQuote() =
++        runTest {
++            val finishOldRequest = CompletableDeferred<Unit>()
++            var calls = 0
++            val source = dataSourceReturning(flexQuote())
++            coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
++                if (calls++ == 0) {
++                    withContext(NonCancellable) {
++                        finishOldRequest.await()
++                        flexQuote(destinationAddress = "first-recipient")
++                    }
++                } else {
++                    flexQuote(destinationAddress = "second-recipient")
++                }
++            }
++            val repository = loadedRepository(source)
++            requestIncoming(repository, "first-recipient")
++            repository.clearQuote()
++            requestIncoming(repository, "second-recipient")
++            val current = assertIs<SwapQuoteData.Success>(repository.quote.value)
++
++            finishOldRequest.complete(Unit)
++
++            assertEquals(current, repository.quote.value)
++        }
++
 +    private fun requestIncoming(repository: SwapRepositoryImpl, recipient: String = "destination") =
 +        repository.requestFlexInputIntoZec(
 +            amount = BigDecimal("2"),
@@ -2021,19 +2091,19 @@ index d55620b20..86af1b87a 100644
 +            slippage = BigDecimal("2")
 +        )
 +
-@@ -216 +289 @@ class SwapRepositoryImplTest {
+@@ -216 +358 @@ class SwapRepositoryImplTest {
 -                        requestQuote(any(), any(), any(), any(), any(), any(), any(), any())
 +                        requestQuote(any(), any(), any(), any(), any(), any(), any())
-@@ -241 +314 @@ class SwapRepositoryImplTest {
+@@ -241 +383 @@ class SwapRepositoryImplTest {
 -                        requestQuote(any(), any(), any(), any(), any(), any(), any(), any())
 +                        requestQuote(any(), any(), any(), any(), any(), any(), any())
-@@ -277 +350 @@ class SwapRepositoryImplTest {
+@@ -277 +419 @@ class SwapRepositoryImplTest {
 -            coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) }
 +            coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any()) }
-@@ -391 +464 @@ class SwapRepositoryImplTest {
+@@ -391 +533 @@ class SwapRepositoryImplTest {
 -                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } throws
 +                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } throws
-@@ -764 +837 @@ class SwapRepositoryImplTest {
+@@ -764 +906 @@ class SwapRepositoryImplTest {
 -            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } returns quote
 +            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
@@ -2269,3 +2339,33 @@ index 38427672d..1181b3696 100644
 +        bitmap.recycle()
 +    }
 +
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
+index 3027e6cda..bbd688270 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
+@@ -21,0 +22 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
++import io.mockk.verify
+@@ -96,0 +98,14 @@ class SwapQuoteVMTest {
++    @Test
++    fun sheetDismissalCallbacksOnlyCancelOnce() =
++        runTest {
++            val cancelQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true)
++            val vm = vm(account = zashi(), cancelQuote = cancelQuote)
++            collect(vm)
++            val state = assertNotNull(vm.state.value)
++
++            state.onBack()
++            state.onBack()
++
++            verify(exactly = 1) { cancelQuote() }
++        }
++
+@@ -105 +120,4 @@ class SwapQuoteVMTest {
+-    private fun vm(account: WalletAccount) =
++    private fun vm(
++        account: WalletAccount,
++        cancelQuote: CancelSwapQuoteUseCase = mockk(relaxed = true),
++    ) =
+@@ -128 +146 @@ class SwapQuoteVMTest {
+-            cancelSwapQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true),
++            cancelSwapQuote = cancelQuote,

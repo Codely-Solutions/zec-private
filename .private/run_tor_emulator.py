@@ -1,7 +1,7 @@
 """Task adapter: blank Android guest; all writable state inside the guard Job/root.
 No authenticated AVD, wallet, seed, deposit or user app is loaded. QEMU and private
 ADB inherit the kill-on-close Windows Job, so a killed controller ends the guest.
-The finite 2 GiB userdata partition bounds guest writes; host storage is scanned
+The measured 6 GiB userdata partition bounds guest writes; host storage is scanned
 by shared admission. This adapter is specific to this credential-free probe.
 """
 import os,subprocess,time,json,shutil,socket,urllib.request,zipfile,hashlib
@@ -51,18 +51,18 @@ for port in (PORT,5580,5581):
     with socket.socket() as sock: sock.bind(('127.0.0.1',port))
 home=ROOT/'android';avds=home/'avd';avd=avds/'CodexTorProbe.avd';avd.mkdir(parents=True)
 config={'abi.type':'x86_64','hw.cpu.arch':'x86_64','image.sysdir.1':str(system),'tag.id':'default','hw.lcd.width':'1080','hw.lcd.height':'1920','hw.lcd.density':'420','hw.gpu.enabled':'yes','hw.gpu.mode':'swiftshader_indirect','disk.cachePartition':'yes'}
-config.update({'avd.id':'CodexTorProbe','avd.name':'CodexTorProbe','hw.ramSize':'1536','hw.cpu.ncore':'2','hw.sdCard':'no','hw.camera.back':'none','hw.camera.front':'none','hw.keyboard':'yes','fastboot.forceColdBoot':'yes','fastboot.forceFastBoot':'no','firstboot.saveToLocalSnapshot':'no','disk.dataPartition.size':'2G','disk.dataPartition.path':str(ROOT/'userdata.img'),'disk.cachePartition.path':str(ROOT/'cache.img')})
+config.update({'avd.id':'CodexTorProbe','avd.name':'CodexTorProbe','hw.ramSize':'1536','hw.cpu.ncore':'2','hw.sdCard':'no','hw.camera.back':'none','hw.camera.front':'none','hw.keyboard':'yes','fastboot.forceColdBoot':'yes','fastboot.forceFastBoot':'no','firstboot.saveToLocalSnapshot':'no','disk.dataPartition.size':'6G','disk.dataPartition.path':str(ROOT/'userdata.img'),'disk.cachePartition.path':str(ROOT/'cache.img')})
 (avd/'config.ini').write_text(''.join(k+'='+v+'\n' for k,v in config.items()))
 (avds/'CodexTorProbe.ini').write_text('avd.ini.encoding=UTF-8\npath='+str(avd)+'\ntarget=android-35\n')
 env=dict(os.environ,ANDROID_HOME=str(SDK),ANDROID_SDK_ROOT=str(SDK),ANDROID_USER_HOME=str(home),ANDROID_EMULATOR_HOME=str(home),ANDROID_AVD_HOME=str(avds),ANDROID_ADB_SERVER_PORT=str(PORT),ADB_SERVER_SOCKET='tcp:localhost:'+str(PORT))
 log=(ROOT/'emulator.log').open('wb')
 def adb(*args,timeout=30,check=True):
     return subprocess.run([ADB,'-P',str(PORT),'-s',SERIAL,*args],env=env,capture_output=True,timeout=timeout,check=check)
-receipt={'probeArtifact':manifest,'apkHashes':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in apk_paths},'fundsTransferred':False,'walletAccess':False,'route':'native SDK Tor only','guest':'fresh Android API35 x86_64','writableState':'guard-owned root','userdataLimitBytes':2147483648}
+receipt={'probeArtifact':manifest,'apkHashes':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in apk_paths},'fundsTransferred':False,'walletAccess':False,'route':'native SDK Tor only','guest':'fresh Android API35 x86_64','writableState':'guard-owned root','userdataRequestedBytes':6442450944}
 proc=None
 try:
     subprocess.run([ADB,'-P',str(PORT),'start-server'],env=env,capture_output=True,check=True,timeout=15)
-    proc=subprocess.Popen([str(SDK/'emulator/emulator.exe'),'-avd','CodexTorProbe','-port','5580','-no-window','-no-snapshot','-no-boot-anim','-no-audio','-memory','1536','-cores','2','-gpu','swiftshader_indirect','-data',str(ROOT/'userdata.img'),'-cache',str(ROOT/'cache.img')],env=env,stdout=log,stderr=log,creationflags=0x08000000)
+    proc=subprocess.Popen([str(SDK/'emulator/emulator.exe'),'-avd','CodexTorProbe','-port','5580','-no-window','-feature','-QuickbootFileBacked','-no-snapshot','-no-boot-anim','-no-audio','-memory','1536','-cores','2','-gpu','swiftshader_indirect','-data',str(ROOT/'userdata.img'),'-cache',str(ROOT/'cache.img')],env=env,stdout=log,stderr=log,creationflags=0x08000000)
     deadline=time.monotonic()+240
     while time.monotonic()<deadline:
         if proc.poll() is not None: raise RuntimeError('Emulator exited: '+(ROOT/'emulator.log').read_text(errors='replace')[-2500:])
@@ -71,6 +71,9 @@ try:
         time.sleep(2)
     else: raise RuntimeError('Emulator boot deadline exceeded')
     receipt['guestDataBefore']=adb('shell','df','-k','/data').stdout.decode().strip()
+    data_kib=int(receipt['guestDataBefore'].splitlines()[-1].split()[1])
+    if data_kib>6500000: raise ValueError('Guest data partition exceeds reviewed 6GiB profile')
+    receipt['guestDataPartitionActualKiB']=data_kib
     for path in sorted(apk_paths, key=lambda p: 'androidTest' in p.name):
         adb('install','-r',str(path),timeout=60)
     result=adb('shell','am','instrument','-w','-r','zec.privateprobe.test/androidx.test.runner.AndroidJUnitRunner',timeout=600,check=False)

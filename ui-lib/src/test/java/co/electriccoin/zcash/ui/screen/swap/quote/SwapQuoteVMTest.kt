@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.common.usecase.CancelSwapUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
+import io.mockk.verify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
@@ -94,6 +95,20 @@ class SwapQuoteVMTest {
             assertEquals(R.string.accounts_zashi, fromRowTitle(vm))
         }
 
+    @Test
+    fun sheetDismissalCallbacksOnlyCancelOnce() =
+        runTest {
+            val cancelQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true)
+            val vm = vm(account = zashi(), cancelQuote = cancelQuote)
+            collect(vm)
+            val state = assertNotNull(vm.state.value)
+
+            state.onBack()
+            state.onBack()
+
+            verify(exactly = 1) { cancelQuote() }
+        }
+
     private fun fromRowTitle(vm: SwapQuoteVM): Int {
         val state = assertNotNull(vm.state.value) as SwapQuoteState.Success
         return state.items
@@ -102,7 +117,10 @@ class SwapQuoteVMTest {
             .resourceId()
     }
 
-    private fun vm(account: WalletAccount) =
+    private fun vm(
+        account: WalletAccount,
+        cancelQuote: CancelSwapQuoteUseCase = mockk(relaxed = true),
+    ) =
         SwapQuoteVM(
             observeProposal =
                 mockk {
@@ -125,7 +143,7 @@ class SwapQuoteVMTest {
                             )
                         )
                 },
-            cancelSwapQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true),
+            cancelSwapQuote = cancelQuote,
             cancelSwap = mockk<CancelSwapUseCase>(relaxed = true),
             swapQuoteSuccessMapper = SwapQuoteVMMapper(),
             submitProposal = mockk<SubmitProposalUseCase>(relaxed = true),

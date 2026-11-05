@@ -17,6 +17,9 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -268,6 +271,72 @@ class SwapRepositoryImplTest {
             requestIncoming(repository)
             assertIs<SwapQuoteData.Success>(repository.quote.value)
             assertEquals(2, calls)
+        }
+
+    @Test
+    fun newRequestClearsPreviousErrorBeforeBackgroundDispatch() =
+        runTest {
+            val repository = loadedRepository(dataSourceReturning(flexQuote()))
+            repository.quote.value = SwapQuoteData.Error(SwapMode.FLEX_INPUT, IOException("old failure"))
+            repository.scope = backgroundScope
+
+            requestIncoming(repository)
+
+            assertIs<SwapQuoteData.Loading>(repository.quote.value)
+        }
+
+    @Test
+    fun dismissedRequestCannotPublishLateNetworkErrorOverNextQuote() =
+        runTest {
+            val finishOldRequest = CompletableDeferred<Unit>()
+            var calls = 0
+            val source = dataSourceReturning(flexQuote())
+            coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+                if (calls++ == 0) {
+                    withContext(NonCancellable) {
+                        finishOldRequest.await()
+                        throw IOException("Old native request failed during cancellation")
+                    }
+                } else {
+                    flexQuote(destinationAddress = "second-recipient")
+                }
+            }
+            val repository = loadedRepository(source)
+            requestIncoming(repository, "first-recipient")
+            repository.clearQuote()
+            requestIncoming(repository, "second-recipient")
+            val current = assertIs<SwapQuoteData.Success>(repository.quote.value)
+
+            finishOldRequest.complete(Unit)
+
+            assertEquals(current, repository.quote.value)
+        }
+
+    @Test
+    fun dismissedRequestCannotPublishLateSuccessOverNextQuote() =
+        runTest {
+            val finishOldRequest = CompletableDeferred<Unit>()
+            var calls = 0
+            val source = dataSourceReturning(flexQuote())
+            coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+                if (calls++ == 0) {
+                    withContext(NonCancellable) {
+                        finishOldRequest.await()
+                        flexQuote(destinationAddress = "first-recipient")
+                    }
+                } else {
+                    flexQuote(destinationAddress = "second-recipient")
+                }
+            }
+            val repository = loadedRepository(source)
+            requestIncoming(repository, "first-recipient")
+            repository.clearQuote()
+            requestIncoming(repository, "second-recipient")
+            val current = assertIs<SwapQuoteData.Success>(repository.quote.value)
+
+            finishOldRequest.complete(Unit)
+
+            assertEquals(current, repository.quote.value)
         }
 
     private fun requestIncoming(repository: SwapRepositoryImpl, recipient: String = "destination") =
