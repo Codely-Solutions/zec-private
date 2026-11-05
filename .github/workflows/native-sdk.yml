@@ -1,0 +1,50 @@
+name: Build strict Tor native SDK
+on:
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: zec-private-native-sdk
+  cancel-in-progress: false
+jobs:
+  native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 85
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        abi: [arm64-v8a, x86_64]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: zodl-inc/zodl-android-wallet-sdk
+          ref: f4da36be5ca78ca7fefe48cac0d3f6920a044cef
+          path: native-sdk
+          persist-credentials: false
+      - name: Install the exact SDK release toolchain
+        timeout-minutes: 8
+        env:
+          ABI: ${{ matrix.abi }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          target=$(python3 -c 'import json,os;print(json.load(open(".private/native-sdk.json"))["targets"][os.environ["ABI"]])')
+          rustup toolchain install 1.99.1 --profile minimal --target "$target"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;27.0.12077973'
+          df -B1 "$RUNNER_TEMP"
+      - name: Build one required ABI with strict Tor bulk transport
+        timeout-minutes: 76
+        env:
+          ABI: ${{ matrix.abi }}
+        run: python3 -B .private/build_native_sdk.py --sdk native-sdk --output "$RUNNER_TEMP/private-native" --abi "$ABI"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: strict-tor-native-${{ matrix.abi }}
+          path: ${{ runner.temp }}/private-native/deliver/
+          if-no-files-found: error
+          retention-days: 3
