@@ -1,0 +1,33 @@
+{
+  "issue": "Unweighted value column consumed provider label width; text existence tests missed geometry.",
+  "fix": "Provider costs use a full-width stacked block with normal wrapping and readable body size.",
+  "fee_disclosure": "No affiliate fee. Anonymous API platform fee: 0.25% where applicable. Other swap costs may apply; review the quoted amount received.",
+  "fee_sources": [
+    "https://docs.near-intents.org/resources/fees",
+    "https://docs.near-intents.org/integration/distribution-channels/1click-api/authentication"
+  ],
+  "review": {
+    "run": 41998124939,
+    "source_sha": "ac097b80e7dc2aaacdb4564efa2b9a8b53e176af",
+    "files": {
+      "exact_input-320-1.6.png": "3e71c35a8e03f4d53fe6429be2276d7dc530fbb79b4a067192704126696e92bb",
+      "exact_input-360-1.0.png": "564904058dbea11e5ce647dc5d35ca3d83fd98ce29bc814c700c01ec2d464aaf",
+      "exact_output-320-1.6.png": "1d46b22fe97f2bb8a64b9a5bd6995e676808471003c9b961adf773ce9c629256",
+      "exact_output-360-1.0.png": "bab1f35d77611b38ba2071dcb9a06b9caaef2ce84e6cf3d3c4de1cdb91fe5437",
+      "flex_input-320-1.6.png": "0ea044609dc4ddcfd21aaeeb2252b7500fe5a7818e47fd4f4c3864376f1c647b",
+      "flex_input-360-1.0.png": "376b88bbc50c3f93867b5488b63618b67f0e29a44b741b2983c0f73411ea1d7d"
+    },
+    "visually_reviewed": true,
+    "review_basis": "All six final PNGs visually inspected: incoming, exact-input and exact-output at 360 dp / 1x text and 320 dp / 1.6x text. Provider labels retain full width; descriptions wrap completely without clipping.",
+    "test_data_only": true
+  },
+  "cases": [
+    "incomingQuoteCostsFitNarrowScreenWithLargeText",
+    "incomingQuoteFeeNoteRendersWithoutFormatConversionFailure",
+    "outgoingExactInputCostsFitNarrowScreenWithLargeText",
+    "outgoingExactInputFeeNoteRendersWithoutFormatConversionFailure",
+    "outgoingExactOutputCostsFitNarrowScreenWithLargeText",
+    "outgoingExactOutputFeeNoteRendersWithoutFormatConversionFailure"
+  ],
+  "test_data_only": true
+}
