@@ -44,7 +44,7 @@ old.update(owner='zec-private-core-validation',purpose='Real installed-app testn
            seconds=1800,reserveBytes=8450000000,
            cleanup='Stop exact blank emulator/private ADB Job and destroy isolated test-wallet seeds, userdata and transient output')
 names=('run_tor_emulator.py','strip_emulator_apk.py','tor_differential_driver.py',
-       'core_testnet_driver.py','acceptance_policy.py',
+       'core_testnet_driver.py','core_faucet.py','acceptance_policy.py',
        'core-wallet/src/co/electriccoin/zcash/app/CoreWalletAcceptance.kt','core-wallet/include.gradle')
 old['sources']=[str(ROOT/'.private'/name) for name in names]+[str(PARENT/'tor-probe-artifact.json')]+[
     value for value in old['sources'] if value.startswith('C:\\')]

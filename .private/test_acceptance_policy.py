@@ -74,6 +74,7 @@ class AcceptancePolicyTest(unittest.TestCase):
         receipt['stages']['interruption'].update(sync_restarted=True,synced=True,balance_preserved=True,
                                                history_preserved=True,blocked_packets=1,scanned_height=12345)
         receipt['stages']['fund'].update(funding_txid='c'*64,balance_zatoshi=10000000)
+        receipt['funding_setup']=dict(tor_exit_verified=True,persistent_tor_connection=True,txid='c'*64)
         receipt['stages']['send'].update(fee_zatoshi=10000)
         receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000)
         return receipt

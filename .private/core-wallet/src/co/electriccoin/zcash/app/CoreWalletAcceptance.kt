@@ -14,7 +14,6 @@ import cash.z.ecc.android.sdk.internal.model.TorHttp
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.SubmitResult
-import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -28,11 +27,7 @@ import co.electriccoin.zcash.ui.common.usecase.RestoreWalletUseCase
 import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
 import io.ktor.client.request.get
 import io.ktor.client.HttpClient
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
-import io.ktor.http.contentType
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -44,7 +39,6 @@ import org.junit.Test
 import org.koin.core.context.GlobalContext
 import java.io.File
 import java.lang.reflect.Proxy
-import java.security.MessageDigest
 
 /** Exercises the installed app graph. No mocks, SDK-only wallet, or mainnet spending. */
 class CoreWalletAcceptance {
@@ -70,48 +64,12 @@ class CoreWalletAcceptance {
             dependency<IsTorEnabledStorageProvider>().store(true)
             when (stage) {
                 "recipient" -> createWallet("recipient")
+                "sender" -> createWallet("sender")
                 "fund" -> {
-                    createWallet("sender")
                     val state = fixture()
-                    val address = state.getString("senderAddress")
-                    check(address.startsWith("utest1"))
-                    // Exactly one funding claim. Unknown outcome must never cause an automatic re-claim.
-                    check(!state.has("claimAttempted"))
-                    state.put("claimAttempted", true); save(state)
-                    dependency<HttpClientProvider>().createTor().use { client ->
-                        val challenge=JSONObject(client.get("https://zcashfaucet.jinolabs.xyz/api/pow/challenge").bodyAsText())
-                        val difficulty=challenge.getInt("difficulty")
-                        check(difficulty in 1..22) { "Faucet proof-of-work exceeds bounded test budget" }
-                        val digest=MessageDigest.getInstance("SHA-256")
-                        val proofStarted=System.nanoTime()
-                        var nonce=0L
-                        while (true) {
-                            val hash=digest.digest((challenge.getString("seed")+":"+nonce).toByteArray(Charsets.UTF_8))
-                            var zeroBits=0
-                            for (value in hash) {
-                                val unsigned=value.toInt() and 255
-                                if (unsigned==0) zeroBits+=8 else {
-                                    zeroBits+=Integer.numberOfLeadingZeros(unsigned)-24
-                                    break
-                                }
-                            }
-                            if (zeroBits>=difficulty) break
-                            nonce++
-                            if (nonce % 8192L==0L) check(System.nanoTime()-proofStarted<30_000_000_000L) { "Faucet proof-of-work time budget exhausted" }
-                        }
-                        val proof=JSONObject()
-                        for (key in listOf("seed","difficulty","exp","sig")) proof.put(key,challenge.get(key))
-                        proof.put("nonce",nonce.toString())
-                        val response = client.post("https://zcashfaucet.jinolabs.xyz/api/faucet") {
-                            contentType(ContentType.Application.Json)
-                            setBody(JSONObject().put("address", address).put("network","taz").put("pow",proof).toString())
-                        }
-                        check(response.status.value == 200) { "Faucet claim HTTP ${response.status.value}" }
-                        val claim = JSONObject(response.bodyAsText())
-                        check(claim.getBoolean("ok"))
-                        check(claim.getString("txid").matches(Regex("[0-9a-f]{64}")))
-                        state.put("fundingTxId",claim.getString("txid")).put("fundingProvider","jinolabs-testnet"); save(state)
-                    }
+                    check(state.getBoolean("claimAttempted"))
+                    check(state.getString("fundingTxId").matches(Regex("[0-9a-f]{64}")))
+                    checkWallet("sender")
                     val received=withTimeout(850_000) {
                         dependency<TransactionRepository>().observeTransaction(state.getString("fundingTxId"))
                             .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight!=null }
