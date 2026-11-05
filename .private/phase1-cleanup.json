@@ -1,0 +1,86 @@
+{
+  "taskOwnedLocalSurvivors": [],
+  "guardDisposableRoots": [],
+  "unregisteredGuardRoots": [],
+  "configurationDrift": false,
+  "helperAudit": "phase1-helper-final.json",
+  "unassignedBaselineHelpersPreserved": [
+    1240,
+    6432,
+    17948,
+    18592,
+    20040
+  ],
+  "unresolvedHelperOwnership": "Five pre-existing roots including duplicate node-repl connections remain unassigned and preserved; no global helper-cleanliness claim.",
+  "cloudCacheBytesRemoved": 4322655430,
+  "cloudCacheBytesRetained": 1616690293,
+  "cloudCacheCountRetained": 9,
+  "cloudArtifactBytesRemoved": 306945796,
+  "retainedCloudArtifacts": [
+    {
+      "id": 13438341157,
+      "name": "validation-reports",
+      "expires_at": "2026-11-08T17:32:37Z"
+    },
+    {
+      "id": 13435888592,
+      "name": "quote-layout-previews",
+      "expires_at": "2026-11-07T17:19:38Z"
+    }
+  ],
+  "releaseHistoryPreserved": true,
+  "signingCustodyPreserved": true,
+  "localTransientCleanup": "Guard verified removal of all registered job roots, including emulator/ADB and downloaded verification staging. No task worktrees remain.",
+  "persistentOutputs": "One current signed APK in source/dist, reviewed layout previews, source, compact validation/guard evidence and reproducible verification inputs.",
+  "localHostRecoveryLimitation": "Guard measured logical storage and host free space; no exact allocated-host recovery total is claimed for transient job deletion.",
+  "finalFreeBytes": {
+    "C:": 128246013952,
+    "D:": 227327586304
+  },
+  "removedScratchFiles": [
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase1_remove.py",
+      "bytes": 3994
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase1_finish_flexa.py",
+      "bytes": 3911
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase1_remove_surfaces.py",
+      "bytes": 2964
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase1_cleanup_source.py",
+      "bytes": 1316
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase1_prepare.py",
+      "bytes": 2786
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase1_local_checks.py",
+      "bytes": 1792
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase1_read_evidence.py",
+      "bytes": 2181
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase1_admit_evidence.py",
+      "bytes": 1147
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase1_finalize.py",
+      "bytes": 4127
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase1_prune_ci_cache.py",
+      "bytes": 2396
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase1-scenario-error.json",
+      "bytes": 52
+    }
+  ]
+}
