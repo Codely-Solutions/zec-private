@@ -10,6 +10,8 @@ class SyncTests(unittest.TestCase):
     def setUp(self):
         self.state=json.loads((sync.ROOT/'.private/upstream.json').read_text())
         self.before=(sync.ROOT/'.private/upstream.json').read_bytes()
+        major,minor,patch_version,build=sync.version(self.state['tag'])
+        self.next_tag=f'{major}.{minor}.{patch_version+1}-{build+1}'
 
     def release(self,tag,published='2026-11-04T00:00:00Z',**extra):
         return dict(tag_name=tag,published_at=published,draft=False,prerelease=False,
@@ -43,7 +45,7 @@ class SyncTests(unittest.TestCase):
             if args[:2]==('git','rev-parse'): return self.state['sha']
             if args[:3]==('git','diff','--name-only'): return 'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt'
             return original(*args,**kwargs)
-        with patch.object(sync,'gh',return_value=[self.release('3.19.1-3235')]),patch.object(sync,'run',side_effect=commands):
+        with patch.object(sync,'gh',return_value=[self.release(self.next_tag)]),patch.object(sync,'run',side_effect=commands):
             with self.assertRaisesRegex(RuntimeError,'Critical upstream changes'): sync.main()
         self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
 
@@ -58,10 +60,10 @@ class SyncTests(unittest.TestCase):
                 writes.append(args);return ''
             return original(*args,**kwargs)
         with tempfile.TemporaryDirectory() as temp:
-            with patch.dict(os.environ,{'RUNNER_TEMP':temp}),patch.object(sync,'gh',return_value=[self.release('3.19.1-3235')]),patch.object(sync,'run',side_effect=commands),patch.object(sync,'output') as output:
+            with patch.dict(os.environ,{'RUNNER_TEMP':temp}),patch.object(sync,'gh',return_value=[self.release(self.next_tag)]),patch.object(sync,'run',side_effect=commands),patch.object(sync,'output') as output:
                 sync.main()
                 self.assertEqual('true',output.call_args.kwargs['changed'])
-                self.assertEqual('updates/3.19.1-3235',output.call_args.kwargs['branch'])
+                self.assertEqual('updates/'+self.next_tag,output.call_args.kwargs['branch'])
                 self.assertEqual(1,len(writes))
             self.assertFalse((Path(temp)/'candidate').exists())
         self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
