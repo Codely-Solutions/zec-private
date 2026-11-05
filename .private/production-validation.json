@@ -42,5 +42,21 @@
   "funded_transactions_tested": false,
   "valid_funded_deposit_submission_tested": false,
   "user_wallet_secrets_used": false,
-  "automatic_phone_installation": false
+  "automatic_phone_installation": false,
+  "additional_control_tests": [
+    41938489272
+  ],
+  "setup_java": {
+    "version": "v6.2.0",
+    "commit": "77dd5b2ce225ea11469928ac317850245a74ae78",
+    "java": "Temurin 21.0.13+9",
+    "bootstrap_test": 41938756220
+  },
+  "real_duplicate_poll": 41940200994,
+  "upgrade_acceptance_run": 41936825170,
+  "manifest_inspection": {
+    "bytes": 17008,
+    "flexa_activities_present": true,
+    "matching_flexa_firebase_crashlytics_analytics_startup_entries_found": false
+  }
 }

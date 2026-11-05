@@ -56,4 +56,4 @@ The FOSS crash provider is disabled and store-only crash dependencies are exclud
 
 Local Gradle attempts were stopped by resource-guard receipt/inventory failures before a compiler result. Their owned processes and disposable caches were removed. Release validation therefore used isolated GitHub-hosted runners. The local signed APK subsequently passed independent guarded verification.
 
-Revision 1 remains immutable and marked affected. Install revision 2 over the existing app; its unchanged package and signing certificate, together with its higher versionCode, support an in-place Android update. Actual device retest of revision 2 is pending user confirmation.
+Revision 1 remains immutable and marked affected. Install revision 2 over the existing app; its unchanged package and signing certificate, together with its higher versionCode, support an in-place Android update. The [full upgrade acceptance run](https://github.com/Sammy-Lastre/zec-private/actions/runs/41936825170) passed and its receipt is in `.private/upgrade-acceptance.json`. Actual device retest of revision 2 is pending user confirmation.
