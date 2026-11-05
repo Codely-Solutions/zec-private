@@ -2,11 +2,16 @@
 import socket,json,time,re,subprocess
 
 def run(adb, root, apks, manifest):
+    if manifest['package']!='com.personal.zecprivate.foss.debug':
+        raise ValueError('Only the isolated debug wallet package is supported')
     bridge=next(p for p in apks if p.name=='ui-bridge.apk')
-    app=next(p for p in apks if p!=bridge)
-    for path in (app,bridge):adb('install','-t','-r',str(path),timeout=90)
+    baseline=next((p for p in apks if p.name=='baseline-ui.apk'),None)
+    app=next(p for p in apks if p!=bridge and p!=baseline)
+    for path in (baseline or app,bridge):adb('install','-t','-r',str(path),timeout=90)
     info=adb('shell','dumpsys','package',manifest['package'],timeout=20).stdout.decode(errors='replace')
-    version=int(re.search(r'versionCode=(\d+)',info)[1]);assert version==manifest['expectedVersionCode']
+    version=int(re.search(r'versionCode=(\d+)',info)[1])
+    assert version==(manifest['baselineVersionCode'] if baseline else manifest['expectedVersionCode'])
+    upgrade=None
     adb('forward','tcp:8877','tcp:8777',timeout=15)
     watcher_log=(root/'ui-instrumentation.log').open('wb')
     watcher=subprocess.Popen(adb.command_base+['shell','am','instrument','-w','-r','zec.uibridge/zec.uibridge.Bridge'],env=adb.environment,stdout=watcher_log,stderr=watcher_log,creationflags=0x08000000)
@@ -55,9 +60,44 @@ def run(adb, root, apks, manifest):
                         receipt['torOptInVerified']=tor_opted_in
                         receipt['quoteRequests']=quote_requests;receipt['dismissals']=dismissals
                         receipt['passed']=receipt['quoteReviewsVerified']>=3 and quote_requests>=3 and dismissals>=2 and receipt['torOptInVerified'] and all(a['passed'] for a in assertions)
+                        receipt['upgrade']=upgrade
+                        if baseline and not (upgrade and upgrade['passed']):receipt['passed']=False
                         (root/'tor-ui-result.json').write_text(json.dumps(receipt,separators=(',',':')))
                         if not receipt['passed']:raise RuntimeError('Required Tor and quote UI assertions were not completed')
                         return
+                    if action=='upgrade_candidate':
+                        if not baseline or upgrade is not None:raise ValueError('Upgrade is available exactly once')
+                        if not tor_opted_in:raise ValueError('Enable Tor in the baseline wallet before upgrade')
+                        request({'action':'finish'})
+                        watcher.wait(timeout=20)
+                        adb('shell','am','force-stop',manifest['package'],timeout=15)
+                        def preferences():
+                            command="run-as com.personal.zecprivate.foss.debug sh -c 'sha256sum shared_prefs/*.xml'"
+                            value=adb('shell',command,timeout=20).stdout.decode().strip()
+                            if not value or not all(re.fullmatch(r'[a-f0-9]{64}\s+shared_prefs/[A-Za-z0-9_.-]+\.xml',line) for line in value.splitlines()):
+                                raise ValueError('Expected isolated wallet preference hashes')
+                            return sorted(value.splitlines())
+                        before=preferences()
+                        adb('install','-t','-r',str(app),timeout=90)
+                        after=preferences()
+                        if before!=after:raise ValueError('Upgrade changed stored preferences before startup')
+                        info=adb('shell','dumpsys','package',manifest['package'],timeout=20).stdout.decode()
+                        old_version=version
+                        version=int(re.search(r'versionCode=(\d+)',info)[1])
+                        if version!=manifest['expectedVersionCode'] or version<=old_version:
+                            raise ValueError('Upgrade did not increase to the expected version')
+                        upgrade={'passed':True,'fromVersionCode':old_version,'toVersionCode':version,
+                                 'storedPreferencesByteIdenticalBeforeStartup':True,'preferenceFiles':len(before),
+                                 'signing':'same ephemeral test certificate; production signature checked separately'}
+                        watcher=subprocess.Popen(adb.command_base+['shell','am','instrument','-w','-r','zec.uibridge/zec.uibridge.Bridge'],env=adb.environment,stdout=watcher_log,stderr=watcher_log,creationflags=0x08000000)
+                        ready=time.monotonic()+90
+                        while True:
+                            try:state=capture({'action':'snapshot'});break
+                            except (OSError,ValueError):
+                                if time.monotonic()>ready:raise RuntimeError('UI bridge did not resume after upgrade')
+                                time.sleep(1)
+                        trace.append({'sequence':last,'action':action,'versionCode':version})
+                        continue
                     if action=='assert_text':
                         state=capture({'action':'snapshot'})
                         passed=any(command['text'].lower() in n['text'].lower() for n in state['nodes'])

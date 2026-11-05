@@ -51,6 +51,9 @@ if manifest.get('probeKind')=='differential':
 if manifest.get('residentUiBridge'):
     from tor_differential_driver import fetch_baseline
     apk_paths.append(fetch_baseline(ROOT,manifest['residentUiBridge'],'ui-bridge.apk'))
+if manifest.get('upgradeBaseline'):
+    from tor_differential_driver import fetch_baseline
+    apk_paths.append(fetch_baseline(ROOT,manifest['upgradeBaseline'],'baseline-ui.apk'))
 from strip_emulator_apk import prepare
 apk_preparation=prepare(apk_paths,ROOT,SDK)
 print('Verified x86_64-only emulator APK copies ready; execution bytes unchanged.',flush=True)
