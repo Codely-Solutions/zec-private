@@ -143,12 +143,42 @@ def validate_quotes(receipt, expected_inputs):
     return True
 
 
-def validate_binding(proof, profile, expected_inputs, trusted_bytes, artifact_bytes):
+def validate_binding(proof, profile, expected_inputs, trusted_bytes, artifact_bytes, allow_late=False):
     bound=proof.get(profile,{})
+    if (allow_late and bound.get('status')=='pending' and bound.get('input_fingerprint')==expected_inputs
+            and artifact_bytes is None):
+        # The trusted controller has independently validated the real receipt.
+        # Its addition after a candidate build must not force another APK build.
+        return
     if (bound.get('status')!='passed' or bound.get('input_fingerprint')!=expected_inputs or
             bound.get('receipt_sha256')!=hashlib.sha256(trusted_bytes).hexdigest() or
             artifact_bytes!=trusted_bytes):
         raise ValueError('Missing or mismatched trusted acceptance: '+profile)
+
+
+ATTESTATION_PATHS={'.private/core-acceptance.json','.private/quote-acceptance.json',
+                   '.private/core-validation-summary.json','.private/core-coverage.md','.private/STATUS.md'}
+
+
+def validate_attestation_changes(paths):
+    if set(paths)-ATTESTATION_PATHS:
+        raise ValueError('Candidate or controller changed after validation; rebuild required')
+
+
+def verify_promotion_revision(candidate, controller, root=ROOT):
+    if not all(re.fullmatch('[0-9a-f]{40}',value) for value in (candidate,controller)):
+        raise ValueError('Invalid promotion revision')
+    if candidate==controller:return False
+    # The upstream controller can prepare a reviewed child candidate. This is
+    # the existing update path, independently gated by current real receipts.
+    child=subprocess.run(['git','merge-base','--is-ancestor',controller,candidate],cwd=root,
+                         stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    if child.returncode==0:return False
+    subprocess.run(['git','merge-base','--is-ancestor',candidate,controller],cwd=root,check=True,
+                   stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    paths=git('diff','--no-renames','--name-only',candidate,controller,root=root).decode().splitlines()
+    validate_attestation_changes(paths)
+    return True
 
 
 if __name__ == '__main__':
