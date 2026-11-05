@@ -43,7 +43,8 @@ with zipfile.ZipFile(artifact) as archive:
             target=apks/Path(item.filename).name
             target.write_bytes(archive.read(item));apk_paths.append(target)
 artifact.unlink()
-if len(apk_paths)!=2: raise ValueError('Expected exactly two probe APKs')
+expected_apks=1 if manifest.get('probeKind')=='ui' else 2
+if len(apk_paths)!=expected_apks: raise ValueError('Unexpected probe APK count')
 from strip_emulator_apk import prepare
 apk_preparation=prepare(apk_paths,ROOT,SDK)
 print('Verified x86_64-only emulator APK copies ready; execution bytes unchanged.',flush=True)
@@ -64,7 +65,7 @@ receipt={'apkPreparation':apk_preparation,'probeArtifact':manifest,'apkHashes':{
 proc=None
 try:
     subprocess.run([ADB,'-P',str(PORT),'start-server'],env=env,capture_output=True,check=True,timeout=15)
-    proc=subprocess.Popen([str(SDK/'emulator/emulator.exe'),'-avd','CodexTorProbe','-port','5580','-no-window','-feature','-QuickbootFileBacked','-no-snapshot','-no-boot-anim','-no-audio','-memory','1536','-cores','2','-gpu','swiftshader_indirect','-data',str(ROOT/'userdata.img'),'-cache',str(ROOT/'cache.img')],env=env,stdout=log,stderr=log,creationflags=0x08000000)
+    proc=subprocess.Popen([str(SDK/'emulator/emulator.exe'),'-avd','CodexTorProbe','-port','5580','-no-window','-partition-size','2047','-feature','-QuickbootFileBacked','-no-snapshot','-no-boot-anim','-no-audio','-memory','1536','-cores','2','-gpu','swiftshader_indirect','-data',str(ROOT/'userdata.img'),'-cache',str(ROOT/'cache.img')],env=env,stdout=log,stderr=log,creationflags=0x08000000)
     deadline=time.monotonic()+240
     while time.monotonic()<deadline:
         if proc.poll() is not None: raise RuntimeError('Emulator exited: '+(ROOT/'emulator.log').read_text(errors='replace')[-2500:])
@@ -76,17 +77,22 @@ try:
     data_kib=int(receipt['guestDataBefore'].splitlines()[-1].split()[1])
     if data_kib>6500000: raise ValueError('Guest data partition exceeds reviewed 6GiB profile')
     receipt['guestDataPartitionActualKiB']=data_kib
-    for path in sorted(apk_paths, key=lambda p: 'androidTest' in p.name):
-        adb('install','-r',str(path),timeout=60)
-    result=adb('shell','am','instrument','-w','-r','zec.privateprobe.test/androidx.test.runner.AndroidJUnitRunner',timeout=600,check=False)
-    text=result.stdout.decode(errors='replace')
-    # Instrumentation prints assertion summaries, never HTTP bodies or addresses.
-    safe_lines=[line for line in text.splitlines() if line.startswith('TOR_QUOTE ') or line.startswith('OK (') or line.startswith('FAILURES') or line.startswith('Tests run:')]
-    print('\n'.join(safe_lines),flush=True)
-    if 'OK (1 test)' not in text:
-        # A bounded private file retains only public-fixture test diagnostics for investigation.
-        (ROOT/'tor-probe-diagnostic.txt').write_text(text[-12000:])
-    receipt['passed']='OK (1 test)' in text
+    if manifest.get('probeKind')=='ui':
+        from tor_ui_driver import run
+        run(adb,ROOT,apk_paths,manifest['package'])
+        receipt['passed']=True
+    else:
+        for path in sorted(apk_paths, key=lambda p: 'androidTest' in p.name):
+            adb('install','-r',str(path),timeout=60)
+        result=adb('shell','am','instrument','-w','-r','zec.privateprobe.test/androidx.test.runner.AndroidJUnitRunner',timeout=600,check=False)
+        text=result.stdout.decode(errors='replace')
+        # Instrumentation prints assertion summaries, never HTTP bodies or addresses.
+        safe_lines=[line for line in text.splitlines() if line.startswith('TOR_QUOTE ') or line.startswith('OK (') or line.startswith('FAILURES') or line.startswith('Tests run:')]
+        print('\n'.join(safe_lines),flush=True)
+        if 'OK (1 test)' not in text:
+            # A bounded private file retains only public-fixture test diagnostics for investigation.
+            (ROOT/'tor-probe-diagnostic.txt').write_text(text[-12000:])
+        receipt['passed']='OK (1 test)' in text
     receipt['guestDataAfter']=adb('shell','df','-k','/data').stdout.decode().strip()
     (ROOT/'tor-probe-result.json').write_text(json.dumps(receipt,indent=2)+'\n')
     if not receipt['passed']: raise RuntimeError('Native Tor probe failed; safe instrumentation output above')

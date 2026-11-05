@@ -1,0 +1,50 @@
+{
+  "apkPreparation": {
+    "tor-app-probe-debug-androidTest.apk": {
+      "originalSha256": "fd4f543e41df387fef337457356fbedc32e05793fc63a04412b02c30a0a71ade",
+      "testedSha256": "3e28b74916d5b2286b29ff61b2086617a8b11dabc1d7cc00a76f25b31dc35c75",
+      "preservedExecutionEntries": 5,
+      "executionEntriesDigest": "2288f4361c63ad5e1b4fbb33b5735adcce06a70be22e209c0c6443015e49db1a",
+      "executionEntriesUnchanged": true,
+      "abi": "x86_64",
+      "signing": "ephemeral test key; not release key"
+    },
+    "tor-app-probe-debug.apk": {
+      "originalSha256": "0cb8f6ed3ccdfb53ec016d34de515fe0ca3fa35de508ca6c57babce8aa4012e4",
+      "testedSha256": "d60ed1aa2923a280e8a7608d95ed0def9ede13b20052a7f5a1b6a30f546eaad7",
+      "preservedExecutionEntries": 32,
+      "executionEntriesDigest": "ec3704b2595e779f9ab42fc11cb939255cd89a9708ffd1aa2177c3ecc57a8b46",
+      "executionEntriesUnchanged": true,
+      "abi": "x86_64",
+      "signing": "ephemeral test key; not release key"
+    }
+  },
+  "probeArtifact": {
+    "digest": "sha256:c1525a1b7a3c7b6c26f1e72de32a106ae2e4ad0d43ee77cfc4c706f866cd4bb1",
+    "id": 13410606830,
+    "name": "app-native-tor-probe",
+    "size_in_bytes": 135912040,
+    "sourceCommit": "6c5438a32",
+    "run": "https://github.com/Sammy-Lastre/zec-private/actions/runs/42016620241",
+    "probeKind": "actual-app-baseline"
+  },
+  "apkHashes": {
+    "tor-app-probe-debug-androidTest.apk": "3e28b74916d5b2286b29ff61b2086617a8b11dabc1d7cc00a76f25b31dc35c75",
+    "tor-app-probe-debug.apk": "d60ed1aa2923a280e8a7608d95ed0def9ede13b20052a7f5a1b6a30f546eaad7"
+  },
+  "fundsTransferred": false,
+  "walletAccess": false,
+  "route": "native SDK Tor only",
+  "guest": "fresh Android API35 x86_64",
+  "writableState": "guard-owned root",
+  "userdataRequestedBytes": 2147483648,
+  "guestDataBefore": "Filesystem       1K-blocks   Used Available Use% Mounted on\r\n/dev/block/dm-43   6082144 271592   5668340   5% /data/user/0",
+  "guestDataPartitionActualKiB": 6082144,
+  "passed": true,
+  "guestDataAfter": "Filesystem       1K-blocks   Used Available Use% Mounted on\r\n/dev/block/dm-43   6082144 399156   5540776   7% /data/user/0",
+  "scope": "Actual app provider, quote decoding/validation and repository clearQuote over native SDK Tor; no wallet or UI",
+  "guardJob": "e57cfff96a9b4226b0c195bc4d19f6d6",
+  "quotesRequested": 3,
+  "allQuotesValid": true,
+  "sourceCommit": "6c5438a32"
+}

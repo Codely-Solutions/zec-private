@@ -21,7 +21,7 @@ jobs:
       - name: Build debug FOSS app for a fresh unfunded emulator wallet
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :app:assembleZcashmainnetFossDebug
+          ./gradlew --init-script .private/tor-ui-abi.gradle --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :app:assembleZcashmainnetFossDebug
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: isolated-ui-repro-apk

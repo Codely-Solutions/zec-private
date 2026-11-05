@@ -1,0 +1,39 @@
+{
+  "source": "8a69dac56",
+  "run": "https://github.com/Sammy-Lastre/zec-private/actions/runs/42018353929",
+  "suites": [
+    {
+      "name": "co.electriccoin.zcash.ui.common.repository.SwapRepositoryImplTest",
+      "tests": "44",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "co.electriccoin.zcash.ui.common.usecase.CancelSwapQuoteUseCaseTest",
+      "tests": "1",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCaseTest",
+      "tests": "31",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteVMTest",
+      "tests": "4",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    }
+  ],
+  "totalTests": 80,
+  "baselineFailureRun": "https://github.com/Sammy-Lastre/zec-private/actions/runs/42017464097",
+  "baselineFailures": 4,
+  "scope": "Controlled repository/use-case/quote-VM race regressions; complemented by native Tor integration probes, not a phone-specific root-cause trace",
+  "independentReview": "No concrete regression found; missing-ZEC Loading path is pre-existing and unchanged."
+}
