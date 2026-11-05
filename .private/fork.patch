@@ -38979,12 +38979,14 @@ index 813f56457..596f657f6 100644
 -    <string translatable="false" name="support_email_address">support@zodl.com</string>
 +    <string translatable="false" name="support_email_address">noreply@localhost</string>
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVMTest.kt
-index 4e28ba3d9..a83a5e215 100644
+index 4e28ba3d9..ca4d7ba2e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVMTest.kt
 @@ -15 +14,0 @@ import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 -import co.electriccoin.zcash.ui.common.repository.ConfigurationRepository
-@@ -210,4 +208,0 @@ class ZashiTopAppBarVMTest {
+@@ -29 +27,0 @@ import co.electriccoin.zcash.ui.screen.more.MoreArgs
+-import io.mockk.coEvery
+@@ -210,4 +207,0 @@ class ZashiTopAppBarVMTest {
 -        configurationRepository =
 -            mockk<ConfigurationRepository> {
 -                coEvery { isFlexaAvailable() } returns false
@@ -39747,3 +39749,19 @@ index 3027e6cda..bbd688270 100644
 @@ -128 +146 @@ class SwapQuoteVMTest {
 -            cancelSwapQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true),
 +            cancelSwapQuote = cancelQuote,
+diff --git a/ui-screenshot-test/build.gradle.kts b/ui-screenshot-test/build.gradle.kts
+index 21de45f4b..cc166ec80 100644
+--- a/ui-screenshot-test/build.gradle.kts
++++ b/ui-screenshot-test/build.gradle.kts
+@@ -77 +76,0 @@ dependencies {
+-    implementation(projects.featureVoting)
+diff --git a/ui-screenshot-test/src/main/java/co/electroniccoin/zcash/ui/screenshot/ZcashUiTestRunner.kt b/ui-screenshot-test/src/main/java/co/electroniccoin/zcash/ui/screenshot/ZcashUiTestRunner.kt
+index a6b9a664f..021646f08 100644
+--- a/ui-screenshot-test/src/main/java/co/electroniccoin/zcash/ui/screenshot/ZcashUiTestRunner.kt
++++ b/ui-screenshot-test/src/main/java/co/electroniccoin/zcash/ui/screenshot/ZcashUiTestRunner.kt
+@@ -18 +18 @@ import co.electriccoin.zcash.viewingkey.di.featureViewingKeyModule
+-import co.electriccoin.zcash.voting.di.featureVotingModule
++import co.electriccoin.zcash.di.excludedVotingModule
+@@ -48 +48 @@ class ZcashUiTestApplication : Application() {
+-                featureVotingModule,
++                excludedVotingModule,

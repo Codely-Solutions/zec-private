@@ -2696,7 +2696,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/BiometricActivityTest.kt": "d8c6168840c4e2f6af4d0efcb59f210912f2aec0a4a8376e519886e2d75c7dba",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt": "b18e74f9e812447c7494081d102b6f7e765415de3192b1c1d93c77a8c1f37665",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/ListExtTest.kt": "b3c3a47ec60432a524cd5339238cf4faab65379a7c720cb9bcf5fa7127bd151c",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVMTest.kt": "3710fb9f328432989a6cf95e709c35203ec716a7cd1c8a29a57792e13748bb46",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVMTest.kt": "ed7ae5e9e906d8de42349ccf96d28cc0d48988f6e2682e9aaa806cb6c93fc4e3",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/component/ZashiEndpointTextFieldParserTest.kt": "262413b3350ac258d9bd5f079b46bbd3659141568cc31167997d50f2fcb372c3",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplTest.kt": "57918a936187baae4717ff06f7bbfdd257eb9436de62898a0ea3fa8566ef5e28",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSourceImplViewOnlyDeletionTest.kt": "94045857eb745d03f4cc761fea2c229c7319287b4ff0767ca935bd5be3de9d23",
@@ -2887,8 +2887,8 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/SwapAssetIconTest.kt": "3e142f45aa1587a2b35792ab1494aead31a41a8018eb49e475a6ad59cdd8413a",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionnote/viewmodel/TransactionNoteViewModelTest.kt": "b2efe4d91ba24dbca29a5b514d9723fedc5ee92412eb63bd34331c1e045844df",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressPendingDescriptionTest.kt": "b39bf8cc849477e0e728a3fb4c64d20f818a4d5dfbbfc0eb14d98fe698cfc994",
-  "ui-screenshot-test/build.gradle.kts": "9465580b6881a7948c87c2267b2c128bf35648beb8dcfa068ee3f4df5ae1a189",
+  "ui-screenshot-test/build.gradle.kts": "eae57fe63c64d3d48fae64fc6f6f73260c26eac825b7482d89b606fcef9254be",
   "ui-screenshot-test/src/main/AndroidManifest.xml": "3bce38cc155872508209a82fd2a269e12c6a6d1cd1179ea9164a88cd29c14259",
   "ui-screenshot-test/src/main/java/co/electroniccoin/zcash/ui/screenshot/ScreenshotTest.kt": "39eec20af709723b03e37a1c85c594810a9e18b4082b35131fee4eb4cd905e0f",
-  "ui-screenshot-test/src/main/java/co/electroniccoin/zcash/ui/screenshot/ZcashUiTestRunner.kt": "6eca1c9c41e80e7ac595635107582f7c69e97d9f62593ccf652fcc5f3d0923be"
+  "ui-screenshot-test/src/main/java/co/electroniccoin/zcash/ui/screenshot/ZcashUiTestRunner.kt": "9a3ede65fc94c9684d41ef6c4029521e8b4683b4552fd22e779b6b4e932a18a9"
 }
