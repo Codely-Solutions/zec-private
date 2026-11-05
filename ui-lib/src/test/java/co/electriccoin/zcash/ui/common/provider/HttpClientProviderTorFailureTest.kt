@@ -12,7 +12,8 @@ import kotlinx.coroutines.test.runTest
 import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
-import kotlin.test.assertSame
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /** A selected Tor failure must reach the caller without constructing a direct HTTP engine. */
 class HttpClientProviderTorFailureTest {
@@ -46,7 +47,10 @@ class HttpClientProviderTorFailureTest {
         try {
             every { OkHttp.create(any()) } throws AssertionError("Direct HTTP engine is forbidden in this test")
             val api = KtorNearApiProvider(HttpClientProviderImpl(synchronizerProvider, preference))
-            assertSame(failure, assertFailsWith<IOException> { api.getSupportedTokens() })
+            val actual = assertFailsWith<IOException> { api.getSupportedTokens() }
+            assertEquals(failure.message, actual.message)
+            // Coroutine stack recovery can copy an exception while retaining its original cause.
+            assertTrue(generateSequence<Throwable>(actual) { it.cause }.any { it === failure })
             verify(exactly = 0) { OkHttp.create(any()) }
         } finally {
             unmockkObject(OkHttp)
