@@ -48,8 +48,7 @@ def run(adb, root, apks, manifest):
         output = result.stdout.decode(errors='replace')
         # Android redirects System.out to logcat. Only retain our bounded safe
         # markers from this app UID after clearing this blank guest's log buffer.
-        uid_info=adb('shell','dumpsys','package',PACKAGE,timeout=15).stdout.decode()
-        app_uid=int(re.search(r'userId=(\d+)',uid_info)[1])
+        app_uid=uid()
         logs=adb('logcat','-d','-v','raw','--uid='+str(app_uid),'-s','System.out:I',timeout=15).stdout.decode(errors='replace')
         markers=[line for line in logs.splitlines() if line.startswith(('CORE_RESULT ','CORE_TARGETS '))]
         if sum(map(len,markers))>8192:raise RuntimeError('Safe core markers exceed bound')
@@ -76,8 +75,11 @@ def run(adb, root, apks, manifest):
         return adb('shell', *args, timeout=20).stdout.decode(errors='replace')
 
     def uid():
-        info = shell('dumpsys', 'package', PACKAGE)
-        return int(re.search(r'userId=(\d+)', info)[1])
+        # dumpsys field labels vary across Android versions. Ask the debug
+        # target's own process identity, which also preflights fixture access.
+        value=int(shell('run-as',PACKAGE,'id','-u').strip())
+        if not 10000 <= value < 20000:raise RuntimeError('Unexpected isolated app UID')
+        return value
 
     def version():
         return int(re.search(r'versionCode=(\d+)', shell('dumpsys', 'package', PACKAGE))[1])
@@ -108,6 +110,7 @@ def run(adb, root, apks, manifest):
         adb('install', '-r', '-t', str(test), timeout=90)
         if version() != 3234006:
             raise RuntimeError('Wrong baseline version')
+        uid()
         # Android netd can resolve on behalf of an app under a system UID.
         # Block guest DNS/DoT as well as app-UID egress; Tor resolves remotely.
         for binary in ('iptables','ip6tables'):

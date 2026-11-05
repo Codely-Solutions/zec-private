@@ -13,6 +13,10 @@ PROJECT=Path(__file__).resolve().parents[1]
 PARENT=PROJECT.parent
 spec=guard.read(PARENT/'core-emulator-job.json')
 spec['sources'].append(str(Path(__file__).resolve()))
+for name in ('core-testnet-result.json','core-testnet-diagnostic.json','core-command.log','core-emulator.log','core-tor-probe-result.json'):
+    # Only disposable outputs owned by this adapter; prior attempts are copied
+    # to named evidence before rerun. Never let stale diagnostics describe it.
+    (PARENT/name).unlink(missing_ok=True)
 
 
 def retain(root):
