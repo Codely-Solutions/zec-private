@@ -1,0 +1,23 @@
+{
+  "simulation": true,
+  "original_quote_crash_reproduced": true,
+  "quote_modes_tested": 3,
+  "source_sha": "78d52d15057eb879962d97360961f18052a8eeeb",
+  "upstream": {
+    "tag": "3.19.1-3235",
+    "sha": "36feb51c23043d6ddb61319a4e2ef1f1dcaeeff0",
+    "published_at": "2026-11-04T23:50:48.367340Z",
+    "versionCode": 3235002
+  },
+  "package": "com.personal.zecprivate.foss",
+  "versionCode": 3235002,
+  "versionName": "3.19.1",
+  "apk_sha256": "d43b3e52082c1a4bcf6ec9120d51b07bbdb21a37d1952932a0f1dc9b22b2e273",
+  "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
+  "signature_verified": true,
+  "tampered_apk_rejected": true,
+  "duplicate_poll_skipped": true,
+  "disposable_state_advanced": true,
+  "real_state_unchanged": true,
+  "remote_publication": false
+}
