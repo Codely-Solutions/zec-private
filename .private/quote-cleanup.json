@@ -1,0 +1,48 @@
+{
+  "guardOwnedSurvivors": [],
+  "guardDisposableRoots": [],
+  "configurationDrift": false,
+  "taskWorktrees": [],
+  "removedCrashDumpBytes": 205064852.0,
+  "observedCrashDumpHostSpaceRecovered": 205074432,
+  "removedCiCacheBytes": 6970283491,
+  "retainedCiCacheBytes": 1515193940,
+  "retainedCiCacheCount": 9,
+  "removedCiArtifactBytes": 693230472,
+  "signedReleaseHistoryPreserved": true,
+  "signingCustodyPreserved": true,
+  "retainedHelperRoots": [
+    {
+      "pid": 17948,
+      "kind": "node-repl",
+      "reason": "Unassigned at baseline; preserved because task ownership is not established",
+      "descendants": 1
+    },
+    {
+      "pid": 20040,
+      "kind": "computer-use-repl",
+      "reason": "Unassigned at baseline; preserved because task ownership is not established",
+      "descendants": 2
+    },
+    {
+      "pid": 6432,
+      "kind": "node-repl",
+      "reason": "Unassigned at baseline; preserved because task ownership is not established",
+      "descendants": 1
+    },
+    {
+      "pid": 1240,
+      "kind": "codex-app-tools",
+      "reason": "Unassigned at baseline; preserved because task ownership is not established",
+      "descendants": 2
+    },
+    {
+      "pid": 18592,
+      "kind": "uno-mcp",
+      "reason": "Unassigned at baseline; preserved because task ownership is not established",
+      "descendants": 2
+    }
+  ],
+  "unresolvedDuplicateGroups": 1,
+  "scope": "Task resources only; baseline unassigned helper ownership is unresolved. No global helper-cleanliness claim."
+}
