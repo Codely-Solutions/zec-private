@@ -1,0 +1,20 @@
+{
+  "reviewed": "2026-11-06",
+  "sources": [
+    "https://www.usetidepool.tech/llms-full.txt",
+    "https://gov.near.org/t/tidepool-a-1click-compatible-testnet-sandbox-for-near-intents/42746",
+    "https://www.usetidepool.tech/openapi.json"
+  ],
+  "document_sha256": "8dbb411e637b77720bccb703d63c3f7d6ddefc537354cc8a853402f75906568d",
+  "openapi_sha256": "819c801fecf036d91624a5b5a3ef93329b28b6a5d496e1fc3344eaf476d42993",
+  "findings": [
+    "Community 1Click-compatible sandbox advertises Bitcoin testnet4.",
+    "General documentation mentions Zcash, but its detailed 2026-10-29 changelog says the transparent-address TAZ bridge was disabled and the asset rejected.",
+    "No shielded unified-address route or Tor runtime compatibility was established."
+  ],
+  "openapi_mentions_zcash": false,
+  "openapi_mentions_zec_asset": false,
+  "decision": "Do not adopt as BTC/Zcash shielded settlement acceptance; retain real Zcash lifecycle plus unfunded production quotes and deterministic swap recovery coverage.",
+  "tor_runtime_verified": false,
+  "app_settlement_executed": false
+}

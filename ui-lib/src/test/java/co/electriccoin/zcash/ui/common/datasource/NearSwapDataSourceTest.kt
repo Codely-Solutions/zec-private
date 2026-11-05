@@ -57,6 +57,37 @@ class NearSwapDataSourceTest {
     private val zec = SwapAssetTestFixture.zecAsset()
 
     @Test
+    fun quoteModesPreserveRepresentativeAtomicUnitPrecisions() =
+        runBlocking {
+            data class PrecisionCase(val decimals: Int, val value: String, val units: String)
+            val cases = listOf(
+                PrecisionCase(0, "7", "7"),
+                PrecisionCase(6, "0.000001", "1"),
+                PrecisionCase(8, "0.00000001", "1"),
+                PrecisionCase(18, "1.000000000000000001", "1000000000000000001")
+            )
+            for (case in cases) {
+                val asset = SwapAssetTestFixture.asset(tokenTicker = "precision", chainTicker = "eth", decimals = case.decimals)
+                for (mode in listOf(SwapMode.EXACT_INPUT, SwapMode.EXACT_OUTPUT, SwapMode.FLEX_INPUT)) {
+                    val request = slot<QuoteRequest>()
+                    coEvery { nearApiProvider.requestQuote(capture(request)) } throws nearError("No quotes found")
+                    assertFailsWith<QuoteLowAmountException> {
+                        dataSource.requestQuote(
+                            swapMode = mode,
+                            amount = BigDecimal(case.value),
+                            refundAddress = "refund",
+                            originAsset = if (mode == SwapMode.EXACT_OUTPUT) zec else asset,
+                            destinationAddress = "destination",
+                            destinationAsset = if (mode == SwapMode.EXACT_OUTPUT) asset else zec,
+                            slippage = BigDecimal("0.5")
+                        )
+                    }
+                    assertEquals(0, BigDecimal(case.units).compareTo(request.captured.amount), "$mode with ${case.decimals} decimals")
+                }
+            }
+        }
+
+    @Test
     fun getSupportedTokensDeduplicatesAndMapsTokens() =
         runBlocking {
             coEvery { nearApiProvider.getSupportedTokens() } returns
