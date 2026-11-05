@@ -16,6 +16,8 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+        with:
+          cache-read-only: true
       - name: Build wallet-free probe using the release native Tor SDK
         run: |
           chmod +x gradlew
