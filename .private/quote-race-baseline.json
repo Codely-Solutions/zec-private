@@ -1,0 +1,22 @@
+{
+  "run": "https://github.com/Sammy-Lastre/zec-private/actions/runs/42017464097",
+  "source": "c92c6f900",
+  "failures": [
+    {
+      "test": "dismissedRequestCannotPublishLateNetworkErrorOverNextQuote",
+      "message": "java.lang.AssertionError: expected:<Success(quote=co.electriccoin.zcash.ui.common.model.FakeSwapQuote@5ae22651)> but was:<Error(mode=FLEX_INPUT, exception=java.io.IOException: Old native request failed during cancellation)>"
+    },
+    {
+      "test": "dismissedRequestCannotPublishLateSuccessOverNextQuote",
+      "message": "java.lang.AssertionError: expected:<Success(quote=co.electriccoin.zcash.ui.common.model.FakeSwapQuote@3577e37c)> but was:<Success(quote=co.electriccoin.zcash.ui.common.model.FakeSwapQuote@60f6d689)>"
+    },
+    {
+      "test": "newRequestClearsPreviousErrorBeforeBackgroundDispatch",
+      "message": "java.lang.AssertionError: Expected value to be of type <co.electriccoin.zcash.ui.common.repository.SwapQuoteData.Loading>, actual <class co.electriccoin.zcash.ui.common.repository.SwapQuoteData$Error>."
+    },
+    {
+      "test": "sheetDismissalCallbacksOnlyCancelOnce",
+      "message": "java.lang.AssertionError: Verification failed: call 1 of 1: CancelSwapQuoteUseCase(#37).invoke()). 2 matching calls found, but needs exactly 1 calls\nCalls:\n1) CancelSwapQuoteUseCase(#37).invoke()\n2) CancelSwapQuoteUseCase(#37).invoke()\n\n\nStack traces:\n1)                                                                     io.mockk.impl.InternalPlatform.captureStackTrace                            ("
+    }
+  ]
+}

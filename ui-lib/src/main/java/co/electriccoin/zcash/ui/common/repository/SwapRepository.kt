@@ -24,6 +24,9 @@ import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
 import io.ktor.client.plugins.ResponseException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -139,6 +142,8 @@ class SwapRepositoryImpl(
     private var refreshSession: AssetsRefreshSession? = null
 
     private var requestQuoteJob: Job? = null
+
+    private var quoteGeneration = 0L
 
     override fun requestRefreshAssets() {
         getOrStartRefreshAssetsSession(keepRefreshing = true)
@@ -314,69 +319,69 @@ class SwapRepositoryImpl(
         originAsset: SwapAsset,
         slippage: BigDecimal
     ) {
-        requestQuoteJob?.cancel()
-        requestQuoteJob =
-            scope.launch {
-                quote.update { SwapQuoteData.Loading }
-                val destinationAsset = assets.value.zecAsset ?: return@launch
-                var receivedQuote: SwapQuote? = null
-                try {
-                    val result =
-                        swapDataSource.requestQuote(
-                            swapMode = FLEX_INPUT,
-                            amount = amount,
-                            refundAddress = refundAddress,
-                            originAsset = originAsset,
-                            destinationAddress = destinationAddress,
-                            destinationAsset = destinationAsset,
-                            slippage = slippage
-                        )
-                    receivedQuote = result
-                    requireQuoteMatchesUserAmount(
-                        quoted = result.amountInFormatted,
-                        requested = amount,
-                        decimals = result.originAsset.decimals
+        launchQuoteRequest { generation ->
+            val destinationAsset = assets.value.zecAsset ?: return@launchQuoteRequest
+            var receivedQuote: SwapQuote? = null
+            try {
+                val result =
+                    swapDataSource.requestQuote(
+                        swapMode = FLEX_INPUT,
+                        amount = amount,
+                        refundAddress = refundAddress,
+                        originAsset = originAsset,
+                        destinationAddress = destinationAddress,
+                        destinationAsset = destinationAsset,
+                        slippage = slippage
                     )
-                    requireSupportedSelectedAsset(
-                        name = "originAsset",
-                        type = SwapQuoteMismatchType.ORIGIN_ASSET,
-                        supportedAssets = assets.value.data,
-                        selectedAsset = originAsset,
-                        actual = result.originAsset
+                currentCoroutineContext().ensureActive()
+                receivedQuote = result
+                requireQuoteMatchesUserAmount(
+                    quoted = result.amountInFormatted,
+                    requested = amount,
+                    decimals = result.originAsset.decimals
+                )
+                requireSupportedSelectedAsset(
+                    name = "originAsset",
+                    type = SwapQuoteMismatchType.ORIGIN_ASSET,
+                    supportedAssets = assets.value.data,
+                    selectedAsset = originAsset,
+                    actual = result.originAsset
+                )
+                requireExpectedAsset(
+                    name = "destinationAsset",
+                    type = SwapQuoteMismatchType.DESTINATION_ASSET,
+                    expected = destinationAsset,
+                    actual = result.destinationAsset
+                )
+                requireMatchingAddress(
+                    name = "refundAddress",
+                    type = SwapQuoteMismatchType.REFUND_ADDRESS,
+                    expected = refundAddress,
+                    actual = result.refundAddress.address
+                )
+                requireMatchingAddress(
+                    name = "destinationAddress",
+                    type = SwapQuoteMismatchType.RECIPIENT_ADDRESS,
+                    expected = destinationAddress,
+                    actual = result.destinationAddress.address
+                )
+                publishQuote(generation, SwapQuoteData.Success(quote = result))
+            } catch (e: SwapQuoteMismatchException) {
+                currentCoroutineContext().ensureActive()
+                GlobalCrashReporter.reportCaughtException(swapQuoteMismatchSignal(e))
+                publishQuote(
+                    generation,
+                    SwapQuoteData.Error(
+                        mode = FLEX_INPUT,
+                        exception = e.withQuoteReportContext(receivedQuote, originAsset, destinationAsset)
                     )
-                    requireExpectedAsset(
-                        name = "destinationAsset",
-                        type = SwapQuoteMismatchType.DESTINATION_ASSET,
-                        expected = destinationAsset,
-                        actual = result.destinationAsset
-                    )
-                    requireMatchingAddress(
-                        name = "refundAddress",
-                        type = SwapQuoteMismatchType.REFUND_ADDRESS,
-                        expected = refundAddress,
-                        actual = result.refundAddress.address
-                    )
-                    requireMatchingAddress(
-                        name = "destinationAddress",
-                        type = SwapQuoteMismatchType.RECIPIENT_ADDRESS,
-                        expected = destinationAddress,
-                        actual = result.destinationAddress.address
-                    )
-                    quote.update { SwapQuoteData.Success(quote = result) }
-                } catch (e: SwapQuoteMismatchException) {
-                    GlobalCrashReporter.reportCaughtException(swapQuoteMismatchSignal(e))
-                    quote.update {
-                        SwapQuoteData.Error(
-                            mode = FLEX_INPUT,
-                            exception = e.withQuoteReportContext(receivedQuote, originAsset, destinationAsset)
-                        )
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    quote.update { SwapQuoteData.Error(FLEX_INPUT, e) }
-                }
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                publishQuote(generation, SwapQuoteData.Error(FLEX_INPUT, e))
             }
+        }
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -388,82 +393,82 @@ class SwapRepositoryImpl(
         destinationAsset: SwapAsset,
         slippage: BigDecimal
     ) {
-        requestQuoteJob?.cancel()
-        requestQuoteJob =
-            scope.launch {
-                quote.update { SwapQuoteData.Loading }
-                val originAsset = assets.value.zecAsset ?: return@launch
-                var receivedQuote: SwapQuote? = null
-                try {
-                    val result =
-                        swapDataSource.requestQuote(
-                            swapMode = mode,
-                            amount = amount,
-                            refundAddress = refundAddress,
-                            originAsset = originAsset,
-                            destinationAddress = address,
-                            destinationAsset = destinationAsset,
-                            slippage = slippage
+        launchQuoteRequest { generation ->
+            val originAsset = assets.value.zecAsset ?: return@launchQuoteRequest
+            var receivedQuote: SwapQuote? = null
+            try {
+                val result =
+                    swapDataSource.requestQuote(
+                        swapMode = mode,
+                        amount = amount,
+                        refundAddress = refundAddress,
+                        originAsset = originAsset,
+                        destinationAddress = address,
+                        destinationAsset = destinationAsset,
+                        slippage = slippage
+                    )
+                currentCoroutineContext().ensureActive()
+                receivedQuote = result
+                when (mode) {
+                    EXACT_INPUT,
+                    FLEX_INPUT -> {
+                        requireQuoteMatchesUserAmount(
+                            quoted = result.amountInFormatted,
+                            requested = amount,
+                            decimals = result.originAsset.decimals
                         )
-                    receivedQuote = result
-                    when (mode) {
-                        EXACT_INPUT,
-                        FLEX_INPUT -> {
-                            requireQuoteMatchesUserAmount(
-                                quoted = result.amountInFormatted,
-                                requested = amount,
-                                decimals = result.originAsset.decimals
-                            )
-                        }
+                    }
 
-                        EXACT_OUTPUT -> {
-                            requireQuoteMatchesUserAmount(
-                                quoted = result.amountOutFormatted,
-                                requested = amount,
-                                decimals = result.destinationAsset.decimals
-                            )
-                        }
-                    }
-                    requireExpectedAsset(
-                        name = "originAsset",
-                        type = SwapQuoteMismatchType.ORIGIN_ASSET,
-                        expected = originAsset,
-                        actual = result.originAsset
-                    )
-                    requireSupportedSelectedAsset(
-                        name = "destinationAsset",
-                        type = SwapQuoteMismatchType.DESTINATION_ASSET,
-                        supportedAssets = assets.value.data,
-                        selectedAsset = destinationAsset,
-                        actual = result.destinationAsset
-                    )
-                    requireMatchingAddress(
-                        name = "destinationAddress",
-                        type = SwapQuoteMismatchType.RECIPIENT_ADDRESS,
-                        expected = address,
-                        actual = result.destinationAddress.address
-                    )
-                    requireMatchingAddress(
-                        name = "refundAddress",
-                        type = SwapQuoteMismatchType.REFUND_ADDRESS,
-                        expected = refundAddress,
-                        actual = result.refundAddress.address
-                    )
-                    quote.update { SwapQuoteData.Success(quote = result) }
-                } catch (e: SwapQuoteMismatchException) {
-                    GlobalCrashReporter.reportCaughtException(swapQuoteMismatchSignal(e))
-                    quote.update {
-                        SwapQuoteData.Error(
-                            mode = mode,
-                            exception = e.withQuoteReportContext(receivedQuote, originAsset, destinationAsset)
+                    EXACT_OUTPUT -> {
+                        requireQuoteMatchesUserAmount(
+                            quoted = result.amountOutFormatted,
+                            requested = amount,
+                            decimals = result.destinationAsset.decimals
                         )
                     }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    quote.update { SwapQuoteData.Error(mode, e) }
                 }
+                requireExpectedAsset(
+                    name = "originAsset",
+                    type = SwapQuoteMismatchType.ORIGIN_ASSET,
+                    expected = originAsset,
+                    actual = result.originAsset
+                )
+                requireSupportedSelectedAsset(
+                    name = "destinationAsset",
+                    type = SwapQuoteMismatchType.DESTINATION_ASSET,
+                    supportedAssets = assets.value.data,
+                    selectedAsset = destinationAsset,
+                    actual = result.destinationAsset
+                )
+                requireMatchingAddress(
+                    name = "destinationAddress",
+                    type = SwapQuoteMismatchType.RECIPIENT_ADDRESS,
+                    expected = address,
+                    actual = result.destinationAddress.address
+                )
+                requireMatchingAddress(
+                    name = "refundAddress",
+                    type = SwapQuoteMismatchType.REFUND_ADDRESS,
+                    expected = refundAddress,
+                    actual = result.refundAddress.address
+                )
+                publishQuote(generation, SwapQuoteData.Success(quote = result))
+            } catch (e: SwapQuoteMismatchException) {
+                currentCoroutineContext().ensureActive()
+                GlobalCrashReporter.reportCaughtException(swapQuoteMismatchSignal(e))
+                publishQuote(
+                    generation,
+                    SwapQuoteData.Error(
+                        mode = mode,
+                        exception = e.withQuoteReportContext(receivedQuote, originAsset, destinationAsset)
+                    )
+                )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                publishQuote(generation, SwapQuoteData.Error(mode, e))
             }
+        }
     }
 
     override suspend fun submitDepositTransaction(txId: String, transactionProposal: SwapTransactionProposal) {
@@ -527,10 +532,31 @@ class SwapRepositoryImpl(
         clearQuote()
     }
 
+    /** Loading is visible before callers collect a result; old jobs cannot publish into a new request. */
+    private fun launchQuoteRequest(block: suspend (Long) -> Unit) {
+        val job =
+            synchronized(this) {
+                val generation = ++quoteGeneration
+                requestQuoteJob?.cancel()
+                quote.value = SwapQuoteData.Loading
+                scope.launch(start = CoroutineStart.LAZY) { block(generation) }.also { requestQuoteJob = it }
+            }
+        job.start()
+    }
+
+    private fun publishQuote(generation: Long, result: SwapQuoteData) {
+        synchronized(this) {
+            if (quoteGeneration == generation) quote.value = result
+        }
+    }
+
     override fun clearQuote() {
-        requestQuoteJob?.cancel()
-        requestQuoteJob = null
-        quote.update { null }
+        synchronized(this) {
+            ++quoteGeneration
+            requestQuoteJob?.cancel()
+            requestQuoteJob = null
+            quote.value = null
+        }
     }
 }
 

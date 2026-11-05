@@ -261,19 +261,319 @@ index d8016e519..37dcf12b4 100644
 @@ -52,0 +54 @@ data class QuoteRequest(
 +    @EncodeDefault(EncodeDefault.Mode.NEVER)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
-index 36d947b49..4602a8e12 100644
+index 36d947b49..adde1447a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
 @@ -6 +5,0 @@ import co.electriccoin.zcash.crash.android.GlobalCrashReporter
 -import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_ADDRESS
-@@ -333,2 +332 @@ class SwapRepositoryImpl(
+@@ -27,0 +27,3 @@ import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.CoroutineStart
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.ensureActive
+@@ -143,0 +146,2 @@ class SwapRepositoryImpl(
++    private var quoteGeneration = 0L
++
+@@ -318,42 +322,13 @@ class SwapRepositoryImpl(
+-        requestQuoteJob?.cancel()
+-        requestQuoteJob =
+-            scope.launch {
+-                quote.update { SwapQuoteData.Loading }
+-                val destinationAsset = assets.value.zecAsset ?: return@launch
+-                var receivedQuote: SwapQuote? = null
+-                try {
+-                    val result =
+-                        swapDataSource.requestQuote(
+-                            swapMode = FLEX_INPUT,
+-                            amount = amount,
+-                            refundAddress = refundAddress,
+-                            originAsset = originAsset,
+-                            destinationAddress = destinationAddress,
+-                            destinationAsset = destinationAsset,
 -                            slippage = slippage,
 -                            affiliateAddress = AFFILIATE_ADDRESS
-+                            slippage = slippage
-@@ -408,2 +406 @@ class SwapRepositoryImpl(
+-                        )
+-                    receivedQuote = result
+-                    requireQuoteMatchesUserAmount(
+-                        quoted = result.amountInFormatted,
+-                        requested = amount,
+-                        decimals = result.originAsset.decimals
+-                    )
+-                    requireSupportedSelectedAsset(
+-                        name = "originAsset",
+-                        type = SwapQuoteMismatchType.ORIGIN_ASSET,
+-                        supportedAssets = assets.value.data,
+-                        selectedAsset = originAsset,
+-                        actual = result.originAsset
+-                    )
+-                    requireExpectedAsset(
+-                        name = "destinationAsset",
+-                        type = SwapQuoteMismatchType.DESTINATION_ASSET,
+-                        expected = destinationAsset,
+-                        actual = result.destinationAsset
+-                    )
+-                    requireMatchingAddress(
+-                        name = "refundAddress",
+-                        type = SwapQuoteMismatchType.REFUND_ADDRESS,
+-                        expected = refundAddress,
+-                        actual = result.refundAddress.address
++        launchQuoteRequest { generation ->
++            val destinationAsset = assets.value.zecAsset ?: return@launchQuoteRequest
++            var receivedQuote: SwapQuote? = null
++            try {
++                val result =
++                    swapDataSource.requestQuote(
++                        swapMode = FLEX_INPUT,
++                        amount = amount,
++                        refundAddress = refundAddress,
++                        originAsset = originAsset,
++                        destinationAddress = destinationAddress,
++                        destinationAsset = destinationAsset,
++                        slippage = slippage
+@@ -361,5 +336,41 @@ class SwapRepositoryImpl(
+-                    requireMatchingAddress(
+-                        name = "destinationAddress",
+-                        type = SwapQuoteMismatchType.RECIPIENT_ADDRESS,
+-                        expected = destinationAddress,
+-                        actual = result.destinationAddress.address
++                currentCoroutineContext().ensureActive()
++                receivedQuote = result
++                requireQuoteMatchesUserAmount(
++                    quoted = result.amountInFormatted,
++                    requested = amount,
++                    decimals = result.originAsset.decimals
++                )
++                requireSupportedSelectedAsset(
++                    name = "originAsset",
++                    type = SwapQuoteMismatchType.ORIGIN_ASSET,
++                    supportedAssets = assets.value.data,
++                    selectedAsset = originAsset,
++                    actual = result.originAsset
++                )
++                requireExpectedAsset(
++                    name = "destinationAsset",
++                    type = SwapQuoteMismatchType.DESTINATION_ASSET,
++                    expected = destinationAsset,
++                    actual = result.destinationAsset
++                )
++                requireMatchingAddress(
++                    name = "refundAddress",
++                    type = SwapQuoteMismatchType.REFUND_ADDRESS,
++                    expected = refundAddress,
++                    actual = result.refundAddress.address
++                )
++                requireMatchingAddress(
++                    name = "destinationAddress",
++                    type = SwapQuoteMismatchType.RECIPIENT_ADDRESS,
++                    expected = destinationAddress,
++                    actual = result.destinationAddress.address
++                )
++                publishQuote(generation, SwapQuoteData.Success(quote = result))
++            } catch (e: SwapQuoteMismatchException) {
++                currentCoroutineContext().ensureActive()
++                GlobalCrashReporter.reportCaughtException(swapQuoteMismatchSignal(e))
++                publishQuote(
++                    generation,
++                    SwapQuoteData.Error(
++                        mode = FLEX_INPUT,
++                        exception = e.withQuoteReportContext(receivedQuote, originAsset, destinationAsset)
+@@ -367,14 +378,5 @@ class SwapRepositoryImpl(
+-                    quote.update { SwapQuoteData.Success(quote = result) }
+-                } catch (e: SwapQuoteMismatchException) {
+-                    GlobalCrashReporter.reportCaughtException(swapQuoteMismatchSignal(e))
+-                    quote.update {
+-                        SwapQuoteData.Error(
+-                            mode = FLEX_INPUT,
+-                            exception = e.withQuoteReportContext(receivedQuote, originAsset, destinationAsset)
+-                        )
+-                    }
+-                } catch (e: CancellationException) {
+-                    throw e
+-                } catch (e: Exception) {
+-                    quote.update { SwapQuoteData.Error(FLEX_INPUT, e) }
+-                }
++                )
++            } catch (e: CancellationException) {
++                throw e
++            } catch (e: Exception) {
++                publishQuote(generation, SwapQuoteData.Error(FLEX_INPUT, e))
+@@ -381,0 +384 @@ class SwapRepositoryImpl(
++        }
+@@ -393,17 +396,23 @@ class SwapRepositoryImpl(
+-        requestQuoteJob?.cancel()
+-        requestQuoteJob =
+-            scope.launch {
+-                quote.update { SwapQuoteData.Loading }
+-                val originAsset = assets.value.zecAsset ?: return@launch
+-                var receivedQuote: SwapQuote? = null
+-                try {
+-                    val result =
+-                        swapDataSource.requestQuote(
+-                            swapMode = mode,
+-                            amount = amount,
+-                            refundAddress = refundAddress,
+-                            originAsset = originAsset,
+-                            destinationAddress = address,
+-                            destinationAsset = destinationAsset,
 -                            slippage = slippage,
 -                            affiliateAddress = AFFILIATE_ADDRESS
-+                            slippage = slippage
++        launchQuoteRequest { generation ->
++            val originAsset = assets.value.zecAsset ?: return@launchQuoteRequest
++            var receivedQuote: SwapQuote? = null
++            try {
++                val result =
++                    swapDataSource.requestQuote(
++                        swapMode = mode,
++                        amount = amount,
++                        refundAddress = refundAddress,
++                        originAsset = originAsset,
++                        destinationAddress = address,
++                        destinationAsset = destinationAsset,
++                        slippage = slippage
++                    )
++                currentCoroutineContext().ensureActive()
++                receivedQuote = result
++                when (mode) {
++                    EXACT_INPUT,
++                    FLEX_INPUT -> {
++                        requireQuoteMatchesUserAmount(
++                            quoted = result.amountInFormatted,
++                            requested = amount,
++                            decimals = result.originAsset.decimals
+@@ -411,18 +419,0 @@ class SwapRepositoryImpl(
+-                    receivedQuote = result
+-                    when (mode) {
+-                        EXACT_INPUT,
+-                        FLEX_INPUT -> {
+-                            requireQuoteMatchesUserAmount(
+-                                quoted = result.amountInFormatted,
+-                                requested = amount,
+-                                decimals = result.originAsset.decimals
+-                            )
+-                        }
+-
+-                        EXACT_OUTPUT -> {
+-                            requireQuoteMatchesUserAmount(
+-                                quoted = result.amountOutFormatted,
+-                                requested = amount,
+-                                decimals = result.destinationAsset.decimals
+-                            )
+-                        }
+@@ -430,32 +421,6 @@ class SwapRepositoryImpl(
+-                    requireExpectedAsset(
+-                        name = "originAsset",
+-                        type = SwapQuoteMismatchType.ORIGIN_ASSET,
+-                        expected = originAsset,
+-                        actual = result.originAsset
+-                    )
+-                    requireSupportedSelectedAsset(
+-                        name = "destinationAsset",
+-                        type = SwapQuoteMismatchType.DESTINATION_ASSET,
+-                        supportedAssets = assets.value.data,
+-                        selectedAsset = destinationAsset,
+-                        actual = result.destinationAsset
+-                    )
+-                    requireMatchingAddress(
+-                        name = "destinationAddress",
+-                        type = SwapQuoteMismatchType.RECIPIENT_ADDRESS,
+-                        expected = address,
+-                        actual = result.destinationAddress.address
+-                    )
+-                    requireMatchingAddress(
+-                        name = "refundAddress",
+-                        type = SwapQuoteMismatchType.REFUND_ADDRESS,
+-                        expected = refundAddress,
+-                        actual = result.refundAddress.address
+-                    )
+-                    quote.update { SwapQuoteData.Success(quote = result) }
+-                } catch (e: SwapQuoteMismatchException) {
+-                    GlobalCrashReporter.reportCaughtException(swapQuoteMismatchSignal(e))
+-                    quote.update {
+-                        SwapQuoteData.Error(
+-                            mode = mode,
+-                            exception = e.withQuoteReportContext(receivedQuote, originAsset, destinationAsset)
++
++                    EXACT_OUTPUT -> {
++                        requireQuoteMatchesUserAmount(
++                            quoted = result.amountOutFormatted,
++                            requested = amount,
++                            decimals = result.destinationAsset.decimals
+@@ -464,4 +428,0 @@ class SwapRepositoryImpl(
+-                } catch (e: CancellationException) {
+-                    throw e
+-                } catch (e: Exception) {
+-                    quote.update { SwapQuoteData.Error(mode, e) }
+@@ -468,0 +430,40 @@ class SwapRepositoryImpl(
++                requireExpectedAsset(
++                    name = "originAsset",
++                    type = SwapQuoteMismatchType.ORIGIN_ASSET,
++                    expected = originAsset,
++                    actual = result.originAsset
++                )
++                requireSupportedSelectedAsset(
++                    name = "destinationAsset",
++                    type = SwapQuoteMismatchType.DESTINATION_ASSET,
++                    supportedAssets = assets.value.data,
++                    selectedAsset = destinationAsset,
++                    actual = result.destinationAsset
++                )
++                requireMatchingAddress(
++                    name = "destinationAddress",
++                    type = SwapQuoteMismatchType.RECIPIENT_ADDRESS,
++                    expected = address,
++                    actual = result.destinationAddress.address
++                )
++                requireMatchingAddress(
++                    name = "refundAddress",
++                    type = SwapQuoteMismatchType.REFUND_ADDRESS,
++                    expected = refundAddress,
++                    actual = result.refundAddress.address
++                )
++                publishQuote(generation, SwapQuoteData.Success(quote = result))
++            } catch (e: SwapQuoteMismatchException) {
++                currentCoroutineContext().ensureActive()
++                GlobalCrashReporter.reportCaughtException(swapQuoteMismatchSignal(e))
++                publishQuote(
++                    generation,
++                    SwapQuoteData.Error(
++                        mode = mode,
++                        exception = e.withQuoteReportContext(receivedQuote, originAsset, destinationAsset)
++                    )
++                )
++            } catch (e: CancellationException) {
++                throw e
++            } catch (e: Exception) {
++                publishQuote(generation, SwapQuoteData.Error(mode, e))
+@@ -469,0 +471 @@ class SwapRepositoryImpl(
++        }
+@@ -532,0 +535,18 @@ class SwapRepositoryImpl(
++    /** Loading is visible before callers collect a result; old jobs cannot publish into a new request. */
++    private fun launchQuoteRequest(block: suspend (Long) -> Unit) {
++        val job =
++            synchronized(this) {
++                val generation = ++quoteGeneration
++                requestQuoteJob?.cancel()
++                quote.value = SwapQuoteData.Loading
++                scope.launch(start = CoroutineStart.LAZY) { block(generation) }.also { requestQuoteJob = it }
++            }
++        job.start()
++    }
++
++    private fun publishQuote(generation: Long, result: SwapQuoteData) {
++        synchronized(this) {
++            if (quoteGeneration == generation) quote.value = result
++        }
++    }
++
+@@ -534,3 +554,6 @@ class SwapRepositoryImpl(
+-        requestQuoteJob?.cancel()
+-        requestQuoteJob = null
+-        quote.update { null }
++        synchronized(this) {
++            ++quoteGeneration
++            requestQuoteJob?.cancel()
++            requestQuoteJob = null
++            quote.value = null
++        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 index 76c590a49..d7153c359 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
@@ -310,6 +610,34 @@ index 2ceac399f..985329123 100644
 +    INLINE,
 +    STACKED
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
+index 9f37c1d93..4ed48daa4 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
+@@ -55,0 +56,2 @@ internal class SwapQuoteVM(
++    private var isClosing = false
++
+@@ -80 +82 @@ internal class SwapQuoteVM(
+-                    cancelSwapQuote()
++                    onBack()
+@@ -159 +161,3 @@ internal class SwapQuoteVM(
+-    private fun onEditPaymentClick() = cancelSwapQuote()
++    private fun onEditPaymentClick() = onBack()
++
++    private fun onBack() = closeQuote { cancelSwapQuote() }
+@@ -161 +165,5 @@ internal class SwapQuoteVM(
+-    private fun onBack() = cancelSwapQuote()
++    private fun closeQuote(action: () -> Unit) {
++        if (isClosing) return
++        isClosing = true
++        action()
++    }
+@@ -163 +171 @@ internal class SwapQuoteVM(
+-    private fun onBackDuringError() = cancelSwapQuote()
++    private fun onBackDuringError() = onBack()
+@@ -167 +175 @@ internal class SwapQuoteVM(
+-    private fun onCancelPaymentClick() = cancelSwap()
++    private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 index 717411935..8d3a5b371 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
