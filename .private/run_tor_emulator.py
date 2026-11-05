@@ -8,7 +8,6 @@ import os,subprocess,time,json,shutil,socket
 from pathlib import Path
 ROOT=Path(os.environ["CODEX_GUARD_OUTPUT"])
 SDK=Path(r"C:\Users\User\AppData\Local\Android\Sdk")
-BASE=Path(r"C:\Users\User\.android\avd\Android_Emulator_35.avd\config.ini")
 PROJECT=Path(__file__).resolve().parents[1]
 ADB=str(SDK/'platform-tools/adb.exe')
 PORT=5041
@@ -48,10 +47,10 @@ try:
     print('\n'.join(safe_lines),flush=True)
     if 'OK (1 test)' not in text:
         # A bounded private file retains only public-fixture test diagnostics for investigation.
-        (PROJECT.parent/'tor-probe-diagnostic.txt').write_text(text[-12000:])
+        (ROOT/'tor-probe-diagnostic.txt').write_text(text[-12000:])
     receipt['passed']='OK (1 test)' in text
     receipt['guestDataAfter']=adb('shell','df','-k','/data').stdout.decode().strip()
-    (PROJECT/'.private/tor-probe-result.json').write_text(json.dumps(receipt,indent=2)+'\n')
+    (ROOT/'tor-probe-result.json').write_text(json.dumps(receipt,indent=2)+'\n')
     if not receipt['passed']: raise RuntimeError('Native Tor probe failed; safe instrumentation output above')
 finally:
     try:
