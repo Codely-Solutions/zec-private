@@ -1,0 +1,55 @@
+{
+  "date": "2026-11-05",
+  "sourceCommit": "1c62824e9",
+  "run": "https://github.com/Sammy-Lastre/zec-private/actions/runs/42009124248",
+  "conclusion": "success",
+  "suites": [
+    {
+      "name": "co.electriccoin.zcash.ui.common.repository.SwapRepositoryImplTest",
+      "tests": "41",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "co.electriccoin.zcash.ui.common.usecase.CancelSwapQuoteUseCaseTest",
+      "tests": "1",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    },
+    {
+      "name": "co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCaseTest",
+      "tests": "31",
+      "failures": "0",
+      "errors": "0",
+      "skipped": "0"
+    }
+  ],
+  "evidenceClass": "mocked repository/use-case lifecycle; no Android Tor runtime reproduction",
+  "userObservation": "Repeated quote unavailable after dismissing an unaccepted BTC-to-ZEC quote with Tor enabled; app restart restores quoting.",
+  "findings": [
+    "Dismissal clears local proposals/quote and cancels pending request; no provider cancellation request.",
+    "Fresh shielded recipient is requested for every incoming quote.",
+    "Generic quote-unavailable UI also covers network failures; it does not establish absent liquidity.",
+    "SDK v6.0.0 creates an isolated Tor handle per HTTP client; Rust isolated_client clones the runtime. No demonstrated shared-runtime disposal defect."
+  ],
+  "rootCause": "unresolved",
+  "productionChanges": false,
+  "releaseUnchanged": "v3.19.0-private.3",
+  "privacy": "No wallet secrets, funded transaction, accepted swap, device interaction or clearnet fallback used.",
+  "cleanup": {
+    "disposableDownloads": "ZIP/XML parsed in memory; no extracted output",
+    "ci": "terminal success; bounded runner teardown",
+    "guardRoots": [],
+    "newPersistentLocalProcesses": [],
+    "preservedUnassignedHelperPids": [
+      7744,
+      1232,
+      21096,
+      5728,
+      10616
+    ],
+    "unresolvedDuplicateGroups": 1
+  }
+}
