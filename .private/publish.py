@@ -3,7 +3,7 @@ import base64, hashlib, importlib.util, json, os, re, shutil, subprocess, tempfi
 from unittest.mock import patch
 from pathlib import Path
 from apk_architecture import check_apk
-from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_binding
+from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_binding, verify_promotion_revision
 
 ROOT=Path(__file__).resolve().parents[1]
 REPO=os.environ['GITHUB_REPOSITORY']
@@ -59,6 +59,8 @@ def main():
     apk=artifact/'zec-private-unsigned.apk'
     proof=json.loads((artifact/'proof.json').read_text())
     expected=os.environ['SOURCE_SHA']
+    controller=os.environ['CONTROLLER_SHA']
+    late_attestation=verify_promotion_revision(expected,controller)
     if proof['source_sha']!=expected or proof['apk_sha256']!=hashlib.sha256(apk.read_bytes()).hexdigest():
         raise RuntimeError('Artifact identity/digest mismatch')
     if proof['package']!='com.personal.zecprivate.foss' or proof['debuggable']:
@@ -74,14 +76,18 @@ def main():
     if (input_fingerprint(core['build_source_sha'],profile='core-build')!=core.get('build_input_fingerprint') or
             input_fingerprint(expected,profile='core-build')!=core.get('build_input_fingerprint')):
         raise RuntimeError('Executed core build does not match current relevant inputs')
-    validate_binding(proof,'core_acceptance',core_inputs,core_bytes,(artifact/'core-acceptance.json').read_bytes())
+    core_artifact=artifact/'core-acceptance.json'
+    validate_binding(proof,'core_acceptance',core_inputs,core_bytes,
+                     core_artifact.read_bytes() if core_artifact.exists() else None,allow_late=late_attestation)
     quote_bytes=(ROOT/'.private/quote-acceptance.json').read_bytes()
     quote=json.loads(quote_bytes)
     quote_inputs=input_fingerprint(expected,profile='production-quotes')
     validate_quotes(quote,quote_inputs)
     if input_fingerprint(quote['build_source_sha'],profile='production-quotes')!=quote_inputs:
         raise RuntimeError('Production quote inputs changed since executed acceptance')
-    validate_binding(proof,'quote_acceptance',quote_inputs,quote_bytes,(artifact/'quote-acceptance.json').read_bytes())
+    quote_artifact=artifact/'quote-acceptance.json'
+    validate_binding(proof,'quote_acceptance',quote_inputs,quote_bytes,
+                     quote_artifact.read_bytes() if quote_artifact.exists() else None,allow_late=late_attestation)
     contract_bytes=(artifact/'near-contract.json').read_bytes()
     contract=json.loads(contract_bytes)
     if (hashlib.sha256(contract_bytes).hexdigest()!=proof.get('live_contract_sha256') or
@@ -142,10 +148,13 @@ def main():
         print('Removed signed test APK after its final verification.')
         return
     # Release publication occurs only after all verification. No upstream code runs here.
-    run('gh','release','create',tag,str(signed),str(checksum),'--repo',REPO,'--target',expected,'--title',tag,'--notes-file',str(notes))
+    validation=dist/'VALIDATION.json'
+    validation.write_text(json.dumps(dict(source_sha=expected,controller_sha=controller,artifact_run_id=proof['workflow_run_id'],
+        apk_sha256=digest,core=core,production_quotes=quote,production_arm_executed=False,real_funds_used=False),indent=2)+'\n')
+    run('gh','release','create',tag,str(signed),str(checksum),str(validation),'--repo',REPO,'--target',expected,'--title',tag,'--notes-file',str(notes))
     # Advance the integrated state only after publication. Candidate is already a full patched tree.
     run('git','fetch','origin',expected)
-    run('git','checkout','--detach',expected)
+    run('git','checkout','--detach',controller if late_attestation else expected)
     record_integration(ROOT/'.private/upstream.json',proof['upstream'])
     run('git','add','.private/upstream.json')
     run('git','-c','user.name=ZEC Private automation','-c','user.email=zec-private@users.noreply.github.com','commit','--allow-empty','-m','Record verified release '+tag)

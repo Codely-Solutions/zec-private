@@ -1,5 +1,6 @@
 """Resolve only a successful candidate from this repository's release workflow."""
 import json, os, re, subprocess
+from acceptance_policy import verify_promotion_revision
 
 run_id=os.environ['CANDIDATE_RUN']
 if not re.fullmatch(r'[1-9][0-9]*',run_id):
@@ -12,6 +13,6 @@ if (run['conclusion']!='success' or run['event']!='workflow_dispatch' or
 with open(os.environ['GITHUB_OUTPUT'],'a') as output:
     output.write('source_sha='+run['head_sha']+'\n')
 
-# A promotion cannot silently discard changes made after candidate validation.
-if run['head_sha']!=os.environ['GITHUB_SHA']:
-    raise SystemExit('Candidate is not the current controller/source revision; review intervening changes')
+# Only bounded receipt/document additions may follow validation. Runtime source,
+# build inputs, workflows and signing/controller code must remain unchanged.
+verify_promotion_revision(run['head_sha'],os.environ['GITHUB_SHA'])

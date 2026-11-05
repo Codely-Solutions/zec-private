@@ -18,6 +18,12 @@ The current core fingerprint conservatively includes retained runtime/build inpu
 
 The executed-build fingerprint and host-harness binding are separate. A host driver correction can rerun acceptance against the same immutable APK when its relevant compiled inputs still match. Changing instrumented Kotlin or its Gradle setup requires new instrumentation. The host guard independently binds the actual launcher, preparation helpers, SDK tools and private manifest used for that execution.
 
+Candidate builds may finish while real acceptance is pending. Signing can attach a later controller-owned receipt only when the intervening Git diff contains the explicit receipt/document allowlist. Runtime source, build files, workflow and controller changes require a new candidate. Both promotion and signing check that boundary; the signed release records the original build revision and the attesting controller revision. This permits overlap of required acceptance and release preparation without another APK build or access to signing secrets from build work.
+
+Funding currently uses the Jino Labs TAZ faucet's documented proof-of-work flow, bounded to 30 seconds and difficulty 22. The initially evaluated Valar faucet returned `failed: the wallet cannot pay this address` for the generated shielded address. No payment is automatically retried after an unknown result. Confirmation/spendability uses the wallet's normal policy; recipient recovery requires a mined transaction and records its actual app state, without waiting again for spendability that this recipient does not use.
+
+Relevant ordinary test changes select deterministic regression checks and upstream review. They do not automatically require a fresh live transaction when the app and core acceptance producer remain unchanged. The private live producer itself is included in its receipt fingerprint.
+
 No periodic job is enabled initially. Measure the first real run, including build/setup, Tor bootstrap, faucet wait, scanning, confirmation and active assertion time. Add a bounded drift schedule only after its reliability and cost support it. Public-chain or provider failures remain unverified acceptance, with a classified cause; they are not converted into passing app results.
 
 Automated ARM hardware testing is outside scope. The user will exercise production on their phone. Keep that evidence separate from emulator execution and binary inspection.

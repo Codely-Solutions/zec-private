@@ -1,8 +1,14 @@
 """Small negative cases for promotion evidence; no emulator or network."""
 import copy
 import hashlib
+import os
+import subprocess
+import stat
+import tempfile
+from contextlib import ExitStack
+from pathlib import Path
 import unittest
-from acceptance_policy import requirements, validate_core, validate_quotes, validate_binding, CORE_STAGES
+from acceptance_policy import requirements, validate_core, validate_quotes, validate_binding, verify_promotion_revision, CORE_STAGES
 
 
 class AcceptancePolicyTest(unittest.TestCase):
@@ -15,6 +21,44 @@ class AcceptancePolicyTest(unittest.TestCase):
                         {'core_acceptance':dict(proof['core_acceptance'],receipt_sha256='a'*64)}):
             with self.assertRaises(ValueError):validate_binding(changed,'core_acceptance','inputs',receipt,receipt)
         with self.assertRaises(ValueError):validate_binding(proof,'core_acceptance','inputs',receipt,b'other receipt')
+        pending={'core_acceptance':dict(status='pending',input_fingerprint='inputs')}
+        with self.assertRaises(ValueError):validate_binding(pending,'core_acceptance','inputs',receipt,None)
+        validate_binding(pending,'core_acceptance','inputs',receipt,None,allow_late=True)
+        with self.assertRaises(ValueError):validate_binding(pending,'core_acceptance','inputs',receipt,b'forged',allow_late=True)
+
+    def test_only_attestations_can_follow_a_validated_candidate(self):
+        with ExitStack() as stack:
+            guarded=os.environ.get('CODEX_GUARD_OUTPUT')
+            root=Path(tempfile.mkdtemp(prefix='promotion-',dir=guarded)) if guarded else Path(stack.enter_context(tempfile.TemporaryDirectory()))
+            def allow_fixture_cleanup():
+                # Git marks object files read-only on Windows. Leave deletion to
+                # the guard, but make this exact task-owned fixture removable.
+                for path in (root/'.git/objects').rglob('*'):
+                    if path.is_file():
+                        assert not path.is_symlink() and path.resolve().is_relative_to(root.resolve())
+                        path.chmod(path.stat().st_mode|stat.S_IWRITE)
+            stack.callback(allow_fixture_cleanup)
+            def git(*args):
+                return subprocess.check_output(['git',*args],cwd=root,text=True,stderr=subprocess.DEVNULL).strip()
+            def commit():
+                git('add','-A');git('-c','user.name=Acceptance test','-c','user.email=test@example.invalid','commit','-qm','Fixture')
+                return git('rev-parse','HEAD')
+            git('init','-q')
+            (root/'app.kt').write_text('immutable runtime')
+            candidate=commit()
+            (root/'.private').mkdir()
+            (root/'.private/core-acceptance.json').write_text('{}')
+            attestation=commit()
+            self.assertTrue(verify_promotion_revision(candidate,attestation,root=root))
+            self.assertFalse(verify_promotion_revision(attestation,attestation,root=root))
+            # A prepared child source remains available to the upstream path.
+            self.assertFalse(verify_promotion_revision(attestation,candidate,root=root))
+            (root/'.private/publish.py').write_text('changed controller')
+            changed_controller=commit()
+            with self.assertRaises(ValueError):verify_promotion_revision(candidate,changed_controller,root=root)
+            (root/'app.kt').write_text('different runtime')
+            changed=commit()
+            with self.assertRaises(ValueError):verify_promotion_revision(candidate,changed,root=root)
 
     def receipt(self):
         receipt = dict(schema=1, input_fingerprint='inputs', passed=True,
