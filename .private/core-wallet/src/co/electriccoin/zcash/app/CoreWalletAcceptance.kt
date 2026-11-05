@@ -119,7 +119,26 @@ class CoreWalletAcceptance {
                     // Persist intent before submission; no retry after an ambiguous broadcast.
                     state.put("sendAttempted", true).put("balanceBeforeSend", before); save(state)
                     val result = dependency<ZashiProposalRepository>().submit()
-                    check(result is SubmitResult.Success && result.txIds.size == 1) { "Broadcast did not establish a single successful transfer" }
+                    fun safeDescription(value: String?): String? = value
+                        ?.replace(Regex("[0-9a-fA-F]{64,}"), "[hex omitted]")
+                        ?.replace(Regex("utest1[a-z0-9]+"), "[isolated test address]")?.take(400)
+                    val diagnostic=JSONObject().put("type",result.javaClass.simpleName)
+                        .put("tx_ids",JSONArray(result.txIds)).put("manual_resubmissions",0)
+                    when (result) {
+                        is SubmitResult.Failure -> diagnostic.put("code",result.code).put("description",safeDescription(result.description))
+                        is SubmitResult.GrpcFailure -> diagnostic.put("reason",result.reason?.name).put("description",safeDescription(result.description))
+                        is SubmitResult.Partial -> diagnostic.put("statuses",JSONArray(result.statuses.map { safeDescription(it) }))
+                        is SubmitResult.Error -> diagnostic.put("cause_class",result.cause.javaClass.simpleName)
+                        is SubmitResult.Success -> Unit
+                    }
+                    println("CORE_SEND_DIAGNOSTIC $diagnostic")
+                    save(state.put("initialSubmitType",result.javaClass.simpleName).put("candidateTxIds",JSONArray(result.txIds)))
+                    // The app deliberately keeps attempted gRPC failures pending
+                    // for SDK resubmission. Observe that exact transaction; never
+                    // invoke submit again or accept an unconfirmed result.
+                    check((result is SubmitResult.Success || result is SubmitResult.GrpcFailure) && result.txIds.size == 1) {
+                        "Submission did not establish one accepted or SDK-pending transaction"
+                    }
                     state.put("txId", result.txIds.single()); save(state)
                     checkSent()
                 }
@@ -243,6 +262,7 @@ class CoreWalletAcceptance {
             .put("network_height",fixture().getLong("preflightNetworkHeight"))
             .put("mode",fixture().getString("preflightMode"))
         if (stage=="send") receipt.put("fee_zatoshi",fixture().getLong("feeZatoshi"))
+            .put("initial_submit_type",fixture().getString("initialSubmitType")).put("manual_resubmissions",0)
         if (stage=="restore") receipt.put("mined_height",fixture().getLong("restoreMinedHeight"))
             .put("amount_zatoshi",1_000_000L).put("app_transaction_state",fixture().getString("restoreTransactionState"))
         // No exception messages, seeds, addresses, HTTP bodies or private fixture are printed.
