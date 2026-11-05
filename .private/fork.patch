@@ -1,3 +1,12 @@
+diff --git a/.gitignore b/.gitignore
+index 31940f5da..0e8dbc645 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -54,0 +55,4 @@ stores/config.yaml
++
++# Local validation bytecode is never an upstream-integration input.
++.private/**/__pycache__/
++.private/**/*.pyc
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
 index d2b4df262..feeb95100 100644
 --- a/app/build.gradle.kts

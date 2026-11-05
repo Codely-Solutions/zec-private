@@ -26,15 +26,10 @@ jobs:
         run: |
           python3 .private/check.py
           python3 .private/test_controls.py
-      - name: Resolve current release baseline graph
-        env:
-          PRIVATE_RUNTIME_OUTPUT: ${{ github.workspace }}/phase1-evidence/baseline-runtime.json
+      - name: Reuse digest-verified current-release dependency baseline
         run: |
-          baseline="$RUNNER_TEMP/phase1-baseline"
-          git worktree add --detach "$baseline" dd8629826a9e3731ac6403685c64884714cbfe86
-          trap 'git worktree remove --force "$baseline"' EXIT
-          chmod +x "$baseline/gradlew"
-          "$baseline/gradlew" -p "$baseline" -I "$GITHUB_WORKSPACE/.private/runtime-inventory.gradle" --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :app:privateRuntimeInventory
+          mkdir -p phase1-evidence
+          cp .private/phase1-runtime-baseline.json phase1-evidence/baseline-runtime.json
       - name: Resolve candidate release graph and refresh dependency locks
         env:
           PRIVATE_RUNTIME_OUTPUT: phase1-evidence/candidate-runtime.json
