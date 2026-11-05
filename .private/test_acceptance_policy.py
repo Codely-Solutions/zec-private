@@ -101,6 +101,7 @@ class AcceptancePolicyTest(unittest.TestCase):
 
     def test_conservative_triggers(self):
         self.assertEqual([], requirements(['README.md', '.private/STATUS.md'])['profiles'])
+        self.assertEqual([], requirements(['ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/about/view/AboutView.kt'])['profiles'])
         for path in ('unknown/runtime.bin', 'gradle.properties', 'ui-lib/src/main/java/new/Thing.kt',
                      '.private/acceptance_policy.py', '.private/core-wallet/include.gradle'):
             self.assertIn('core-testnet', requirements([path])['profiles'])

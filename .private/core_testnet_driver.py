@@ -32,7 +32,7 @@ def run(adb, root, apks, manifest):
                   build_input_fingerprint=manifest['build_input_fingerprint'],
                   build_source_sha=manifest['build_source_sha'],
                   baseline_source_sha=manifest['baseline_source_sha'],
-                  baseline_version_code=3234006, candidate_version_code=3234007,
+                  baseline_version_code=manifest['baseline_version_code'], candidate_version_code=manifest['candidate_version_code'],
                   **{name: manifest[name] for name in ('candidate_apk_sha256', 'baseline_apk_sha256',
                      'instrumentation_apk_sha256')},
                   harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
@@ -134,7 +134,7 @@ def run(adb, root, apks, manifest):
             raise RuntimeError('Blank AOSP guest root required for network enforcement')
         adb('install', '-r', str(baseline), timeout=90)
         adb('install', '-r', '-t', str(test), timeout=90)
-        if version() != 3234006:
+        if version() != manifest['baseline_version_code']:
             raise RuntimeError('Wrong baseline version')
         uid()
         # Bounded kernel connection metadata identifies blocked native SDK
@@ -228,7 +228,7 @@ def run(adb, root, apks, manifest):
         stage('fund',950)
         shell('am','force-stop',PACKAGE)
         adb('install','-r',str(candidate),timeout=90)
-        if uid()!=app_uid or version()!=3234007:
+        if uid()!=app_uid or version()!=manifest['candidate_version_code']:
             raise RuntimeError('Installed update identity/version mismatch')
         stage('upgrade',240)
         # Start the normal wallet resync path, then interrupt its actual native

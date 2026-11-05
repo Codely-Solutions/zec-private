@@ -1,6 +1,7 @@
 """Bind immutable CI artifacts to the current guarded host harness."""
 import json
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -31,7 +32,11 @@ assert not baseline['expired'] and baseline['name']=='core-testnet-baseline'
 build_inputs=input_fingerprint(run['head_sha'],profile='core-build')
 assert build_inputs==input_fingerprint(profile='core-build'), 'Compiled relevant inputs changed'
 manifest={key:candidate[key] for key in ('id','size_in_bytes','digest')}
+properties=subprocess.check_output(['git','show',run['head_sha']+':gradle.properties'],cwd=ROOT,text=True)
+candidate_code=int(re.search(r'^ZCASH_VERSION_CODE=(\d+)$',properties,re.M)[1])
+assert candidate_code>3234006
 manifest.update(probeKind='core-testnet',package='com.personal.zecprivate.testnet.foss.debug',
+                candidate_version_code=candidate_code,baseline_version_code=3234006,
                 build_source_sha=run['head_sha'],build_input_fingerprint=build_inputs,
                 input_fingerprint=input_fingerprint(),baseline_source_sha='a0bd21f27bb53af0eeb9b433d0273c6f39b04e19',
                 upgradeBaseline={**{key:baseline[key] for key in ('id','size_in_bytes','digest')},
