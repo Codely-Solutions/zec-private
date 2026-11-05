@@ -32,6 +32,9 @@ class SyncTests(unittest.TestCase):
             with self.subTest(screen=screen):
                 self.assertTrue(sync.critical(base+screen+'/Screen.kt'))
         self.assertFalse(sync.critical(base+'colorpicker/Screen.kt'))
+        self.assertFalse(sync.critical('feature-voting/src/main/UnusedVotingChange.kt'))
+        self.assertTrue(sync.critical('feature-voting'))
+        self.assertTrue(sync.critical('feature-voting-other/build.gradle.kts'))
         for path in ('configuration-impl-android-lib/src/main/kotlin/Flags.kt',
                      'spackle-lib/src/main/kotlin/Logging.kt','build-info-lib/src/main/kotlin/BuildInfo.kt',
                      'scripts/build.sh'):
@@ -47,6 +50,38 @@ class SyncTests(unittest.TestCase):
             return original(*args,**kwargs)
         with patch.object(sync,'gh',return_value=[self.release(self.next_tag)]),patch.object(sync,'run',side_effect=commands):
             with self.assertRaisesRegex(RuntimeError,'Critical upstream changes'): sync.main()
+        self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
+
+    def test_changed_excluded_upstream_tree_is_removed_before_integration(self):
+        original=sync.run
+        writes=[]
+        with tempfile.TemporaryDirectory() as temp:
+            upstream=Path(temp)/'upstream'
+            original('git','worktree','add','--detach',str(upstream),self.state['sha'])
+            try:
+                new_file=upstream/'feature-voting/upstream-only-change.txt'
+                new_file.write_text('Disposable excluded feature change\n')
+                original('git','add',str(new_file),cwd=upstream)
+                original('git','-c','user.name=Excluded feature test','-c',
+                         'user.email=zec-private@users.noreply.github.com','commit','-m',
+                         'Disposable upstream voting-only change',cwd=upstream)
+                changed_sha=original('git','rev-parse','HEAD',cwd=upstream)
+                def commands(*args,**kwargs):
+                    if args[:2]==('git','fetch'):return ''
+                    if args[:3]==('git','rev-parse','FETCH_HEAD^{commit}'):return changed_sha
+                    if args[:2]==('git','ls-remote'):return ''
+                    if args[:2]==('git','push'):
+                        writes.append(args);return ''
+                    return original(*args,**kwargs)
+                with patch.dict(os.environ,{'RUNNER_TEMP':temp}),patch.object(sync,'gh',
+                        return_value=[self.release(self.next_tag)]),patch.object(sync,'run',
+                        side_effect=commands),patch.object(sync,'output') as output:
+                    sync.main()
+                    tree=original('git','ls-tree','-r','--name-only',output.call_args.kwargs['source_sha']).splitlines()
+                    self.assertFalse(any(name.startswith('feature-voting/') for name in tree))
+                    self.assertEqual(1,len(writes))
+            finally:
+                original('git','worktree','remove','--force',str(upstream))
         self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
 
     def test_simulated_new_release_reapplies_real_patch_without_remote_writes(self):

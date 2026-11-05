@@ -4,7 +4,7 @@ import json,hashlib,subprocess,zipfile
 def fetch_baseline(root, manifest, target_name="baseline-app.apk"):
     archive=root/'baseline.zip'
     with archive.open('wb') as out:
-        subprocess.run(['gh','api','repos/Sammy-Lastre/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip'],stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)
+        subprocess.run([r'C:\Program Files\GitHub CLI\gh.exe','api','repos/Sammy-Lastre/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip'],stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)
     assert archive.stat().st_size<=manifest['size_in_bytes']+1048576
     assert 'sha256:'+hashlib.sha256(archive.read_bytes()).hexdigest()==manifest['digest']
     with zipfile.ZipFile(archive) as z:

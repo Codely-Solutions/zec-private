@@ -93,6 +93,9 @@ jobs:
             ui-lib/build/reports/quote-layout/
             app/build/reports/lint-results-*.xml
             build/reports/detekt/
+            artifact/runtime.json
+            artifact/near-contract.json
+            artifact/proof.json
           if-no-files-found: ignore
           retention-days: 3
   publish:

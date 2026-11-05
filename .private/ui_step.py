@@ -1,7 +1,7 @@
 import json,sys,time
 from pathlib import Path
 active=Path(r"C:\Users\User\.codex\workflow-guards\state\active.json")
-d=json.loads(active.read_text());assert d['owner']=='zec-private-tor-retry'
+d=json.loads(active.read_text());assert d['owner'] in ('zec-private-tor-retry','zec-private-phase1')
 r=Path(d['root']);state=r/'ui-state.json';previous=json.loads(state.read_text());cmd=json.loads(sys.stdin.read());cmd['sequence']=(previous.get('sequence') or 0)+1
 p=r/'ui-command.next';p.write_text(json.dumps(cmd));p.replace(r/'ui-command.json')
 if cmd['action']=='finish':

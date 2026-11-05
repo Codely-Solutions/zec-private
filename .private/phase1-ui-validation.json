@@ -1,0 +1,778 @@
+{
+  "guardReceipt": "b6da0fca348a40eeaeb3c94b19591383",
+  "guardReceiptVerified": true,
+  "testedMainSource": "b34bcc43aa162a900f74d4cc2e0db50155f7e257",
+  "ui": {
+    "completed": true,
+    "versionCode": 3234005,
+    "assertions": [
+      {
+        "text": "Seed Recovery Phrase",
+        "passed": true,
+        "sequence": 7
+      },
+      {
+        "text": "Beta: Coinholder Polling",
+        "passed": true,
+        "sequence": 29
+      },
+      {
+        "text": "Send Us Feedback",
+        "passed": true,
+        "sequence": 30
+      },
+      {
+        "text": "Phase1Fixture",
+        "passed": true,
+        "sequence": 51
+      },
+      {
+        "text": "Phase1Fixture",
+        "passed": true,
+        "sequence": 83
+      },
+      {
+        "text": "Review Quote",
+        "passed": true,
+        "sequence": 97
+      },
+      {
+        "text": "Review Quote",
+        "passed": true,
+        "sequence": 108
+      },
+      {
+        "text": "Review Quote",
+        "passed": true,
+        "sequence": 120
+      },
+      {
+        "text": "Advanced Settings",
+        "passed": true,
+        "sequence": 132
+      },
+      {
+        "text": "About",
+        "passed": true,
+        "sequence": 133
+      },
+      {
+        "text": "What's New",
+        "passed": true,
+        "sequence": 134
+      },
+      {
+        "text": "Connect over Tor",
+        "passed": true,
+        "sequence": 139
+      },
+      {
+        "text": "Export Viewing Key",
+        "passed": true,
+        "sequence": 142
+      },
+      {
+        "text": "Zodl Recovery Phrase",
+        "passed": true,
+        "sequence": 143
+      },
+      {
+        "text": "Automatic",
+        "passed": true,
+        "sequence": 146
+      },
+      {
+        "text": "Zcash Shielded Address",
+        "passed": true,
+        "sequence": 153
+      },
+      {
+        "text": "Unified Address QR code",
+        "passed": true,
+        "sequence": 156
+      },
+      {
+        "text": "Send to",
+        "passed": true,
+        "sequence": 162
+      },
+      {
+        "text": "CROSSPAY",
+        "passed": true,
+        "sequence": 168
+      },
+      {
+        "text": "Make the first move",
+        "passed": true,
+        "sequence": 174
+      }
+    ],
+    "trace": [
+      {
+        "sequence": 154,
+        "action": "click_text",
+        "requestedText": "QR Code",
+        "labels": [
+          "Zcash Shielded Address",
+          "u1shzcttcr...dulstchv2e",
+          "Copy",
+          "Copy",
+          "QR Code",
+          "QR Code",
+          "Request",
+          "Request",
+          "Zcash Transparent Address",
+          "t1R4afJEPc...GWpHvNdQxX",
+          "For privacy, always use shielded address.",
+          "Back",
+          "RECEIVE ZEC"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 155,
+        "action": "snapshot",
+        "requestedText": null,
+        "labels": [
+          "Unified Address QR code",
+          "Private",
+          "Zcash Shielded Address",
+          "u1shzcttcr...dulstchv2e",
+          "Close",
+          "Share QR Code",
+          "Copy Address"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 156,
+        "action": "assert_text",
+        "requestedText": "Unified Address QR code",
+        "labels": [
+          "Unified Address QR code",
+          "Private",
+          "Zcash Shielded Address",
+          "u1shzcttcr...dulstchv2e",
+          "Close",
+          "Share QR Code",
+          "Copy Address"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 157,
+        "action": "click_text",
+        "requestedText": "Close",
+        "labels": [
+          "Unified Address QR code",
+          "Private",
+          "Zcash Shielded Address",
+          "u1shzcttcr...dulstchv2e",
+          "Close",
+          "Share QR Code",
+          "Copy Address"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 158,
+        "action": "back",
+        "requestedText": null,
+        "labels": [
+          "Zcash Shielded Address",
+          "u1shzcttcr...dulstchv2e",
+          "Copy",
+          "Copy",
+          "QR Code",
+          "QR Code",
+          "Request",
+          "Request",
+          "Zcash Transparent Address",
+          "t1R4afJEPc...GWpHvNdQxX",
+          "For privacy, always use shielded address.",
+          "Back",
+          "RECEIVE ZEC"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 159,
+        "action": "snapshot",
+        "requestedText": null,
+        "labels": [
+          "0.000",
+          "Currency Conversion",
+          "Enable to display fiat values",
+          "Start",
+          "There\u2019s nothing here, yet.",
+          "Make the first move\u2026",
+          "Receive",
+          "Receive",
+          "Send",
+          "Send",
+          "Pay",
+          "Pay",
+          "Swap",
+          "Swap",
+          "Zodl",
+          "Hide balances",
+          "More"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 160,
+        "action": "click_text",
+        "requestedText": "Send",
+        "labels": [
+          "0.000",
+          "Currency Conversion",
+          "Enable to display fiat values",
+          "Start",
+          "There\u2019s nothing here, yet.",
+          "Make the first move\u2026",
+          "Receive",
+          "Receive",
+          "Send",
+          "Send",
+          "Pay",
+          "Pay",
+          "Swap",
+          "Swap",
+          "Zodl",
+          "Hide balances",
+          "More"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 161,
+        "action": "snapshot",
+        "requestedText": null,
+        "labels": [
+          "0.000 ZEC",
+          "Send to",
+          "Zcash Address",
+          "Open address book",
+          "Scan",
+          "Amount",
+          "ZEC",
+          "Message",
+          "Write encrypted message here\u2026",
+          "512/512",
+          "Review",
+          "Back",
+          "Hide balances"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 162,
+        "action": "assert_text",
+        "requestedText": "Send to",
+        "labels": [
+          "0.000 ZEC",
+          "Send to",
+          "Zcash Address",
+          "Open address book",
+          "Scan",
+          "Amount",
+          "ZEC",
+          "Message",
+          "Write encrypted message here\u2026",
+          "512/512",
+          "Review",
+          "Back",
+          "Hide balances"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 163,
+        "action": "back",
+        "requestedText": null,
+        "labels": [
+          "0.000 ZEC",
+          "Send to",
+          "Zcash Address",
+          "Open address book",
+          "Scan",
+          "Amount",
+          "ZEC",
+          "Message",
+          "Write encrypted message here\u2026",
+          "512/512",
+          "Review",
+          "Back",
+          "Hide balances"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 164,
+        "action": "snapshot",
+        "requestedText": null,
+        "labels": [
+          "0.000",
+          "Currency Conversion",
+          "Enable to display fiat values",
+          "Start",
+          "There\u2019s nothing here, yet.",
+          "Make the first move\u2026",
+          "Receive",
+          "Receive",
+          "Send",
+          "Send",
+          "Pay",
+          "Pay",
+          "Swap",
+          "Swap",
+          "Zodl",
+          "Hide balances",
+          "More"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 165,
+        "action": "click_text",
+        "requestedText": "Pay",
+        "labels": [
+          "0.000",
+          "Currency Conversion",
+          "Enable to display fiat values",
+          "Start",
+          "There\u2019s nothing here, yet.",
+          "Make the first move\u2026",
+          "Receive",
+          "Receive",
+          "Send",
+          "Send",
+          "Pay",
+          "Pay",
+          "Swap",
+          "Swap",
+          "Zodl",
+          "Hide balances",
+          "More"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 166,
+        "action": "snapshot",
+        "requestedText": null,
+        "labels": [
+          "0.000",
+          "Currency Conversion",
+          "Enable to display fiat values",
+          "Start",
+          "There\u2019s nothing here, yet.",
+          "Make the first move\u2026",
+          "Receive",
+          "Receive",
+          "Send",
+          "Send",
+          "Pay",
+          "Pay",
+          "Swap",
+          "Swap",
+          "Zodl",
+          "Hide balances",
+          "More"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 167,
+        "action": "snapshot",
+        "requestedText": null,
+        "labels": [
+          "0.000 ZEC",
+          "Send to",
+          "BTC on Bitcoin",
+          "Bitcoin address\u2026",
+          "Open address book",
+          "Scan",
+          "Amount",
+          "BTC",
+          "USD",
+          "ZEC",
+          "0.00 ZEC",
+          "Slippage tolerance",
+          "2%",
+          "Review",
+          "Back",
+          "CROSSPAY",
+          "Hide balances"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 168,
+        "action": "assert_text",
+        "requestedText": "CROSSPAY",
+        "labels": [
+          "0.000 ZEC",
+          "Send to",
+          "BTC on Bitcoin",
+          "Bitcoin address\u2026",
+          "Open address book",
+          "Scan",
+          "Amount",
+          "BTC",
+          "USD",
+          "ZEC",
+          "0.00 ZEC",
+          "Slippage tolerance",
+          "2%",
+          "Review",
+          "Back",
+          "CROSSPAY",
+          "Hide balances"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 169,
+        "action": "back",
+        "requestedText": null,
+        "labels": [
+          "0.000 ZEC",
+          "Send to",
+          "BTC on Bitcoin",
+          "Bitcoin address\u2026",
+          "Open address book",
+          "Scan",
+          "Amount",
+          "BTC",
+          "USD",
+          "ZEC",
+          "0.00 ZEC",
+          "Slippage tolerance",
+          "2%",
+          "Review",
+          "Back",
+          "CROSSPAY",
+          "Hide balances"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 170,
+        "action": "snapshot",
+        "requestedText": null,
+        "labels": [
+          "0.000",
+          "Currency Conversion",
+          "Enable to display fiat values",
+          "Start",
+          "There\u2019s nothing here, yet.",
+          "Make the first move\u2026",
+          "Receive",
+          "Receive",
+          "Send",
+          "Send",
+          "Pay",
+          "Pay",
+          "Swap",
+          "Swap",
+          "Zodl",
+          "Hide balances",
+          "More"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 171,
+        "action": "click_text",
+        "requestedText": "Zodl",
+        "labels": [
+          "0.000",
+          "Currency Conversion",
+          "Enable to display fiat values",
+          "Start",
+          "There\u2019s nothing here, yet.",
+          "Make the first move\u2026",
+          "Receive",
+          "Receive",
+          "Send",
+          "Send",
+          "Pay",
+          "Pay",
+          "Swap",
+          "Swap",
+          "Zodl",
+          "Hide balances",
+          "More"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 172,
+        "action": "snapshot",
+        "requestedText": null,
+        "labels": [
+          "0.000",
+          "Currency Conversion",
+          "Enable to display fiat values",
+          "Start",
+          "There\u2019s nothing here, yet.",
+          "Make the first move\u2026",
+          "Receive",
+          "Receive",
+          "Send",
+          "Send",
+          "Pay",
+          "Pay",
+          "Swap",
+          "Swap",
+          "Zodl",
+          "Hide balances",
+          "More"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 173,
+        "action": "snapshot",
+        "requestedText": null,
+        "labels": [
+          "0.000",
+          "Currency Conversion",
+          "Enable to display fiat values",
+          "Start",
+          "There\u2019s nothing here, yet.",
+          "Make the first move\u2026",
+          "Receive",
+          "Receive",
+          "Send",
+          "Send",
+          "Pay",
+          "Pay",
+          "Swap",
+          "Swap",
+          "Zodl",
+          "Hide balances",
+          "More"
+        ],
+        "error": null
+      },
+      {
+        "sequence": 174,
+        "action": "assert_text",
+        "requestedText": "Make the first move",
+        "labels": [
+          "0.000",
+          "Currency Conversion",
+          "Enable to display fiat values",
+          "Start",
+          "There\u2019s nothing here, yet.",
+          "Make the first move\u2026",
+          "Receive",
+          "Receive",
+          "Send",
+          "Send",
+          "Pay",
+          "Pay",
+          "Swap",
+          "Swap",
+          "Zodl",
+          "Hide balances",
+          "More"
+        ],
+        "error": null
+      }
+    ],
+    "fundsTransferred": false,
+    "personalWalletAccess": false,
+    "control": "same-certificate instrumentation, loopback ADB forward, strict target package",
+    "quoteReviewsVerified": 3,
+    "torOptInVerified": true,
+    "quoteRequests": 3,
+    "dismissals": 3,
+    "passed": true,
+    "upgrade": {
+      "passed": true,
+      "fromVersionCode": 3234004,
+      "toVersionCode": 3234005,
+      "storedPreferencesByteIdenticalBeforeStartup": true,
+      "preferenceFiles": 3,
+      "signing": "same ephemeral test certificate; production signature checked separately"
+    },
+    "phase1Scenario": {
+      "passed": true,
+      "upgradeContactPreserved": true,
+      "quotesReviewedAndDismissed": 3,
+      "excludedSettingsAbsent": true,
+      "settingsLabels": [
+        "about",
+        "address book",
+        "advanced settings",
+        "app theme",
+        "back",
+        "currency conversion",
+        "settings",
+        "version 3.19.0 (3234005)",
+        "what's new"
+      ],
+      "fundsTransferred": false
+    }
+  },
+  "probe": {
+    "apkPreparation": {
+      "app-zcashmainnet-foss-debug.apk": {
+        "originalSha256": "9948651776c28b0593f77e0afda1625b9c5d1a518ada1c12ce49c6c111bf415f",
+        "testedSha256": "d5f1dd6543abafe263220d80cc0384112af07b94d5f3009bc04dcddcd6fd5c53",
+        "preservedExecutionEntries": 33,
+        "executionEntriesDigest": "c90d8c3bd8565c97fe4edfb8a75f26f692f53938f648c328851c941e859b19df",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key"
+      },
+      "ui-bridge.apk": {
+        "originalSha256": "00049867cf7578961783d84de5b327ed466073ab3d1c46d0121e11347e40732a",
+        "testedSha256": "d3db0ad74cf1b70713506415ac7805497a150ea648cd04f03d8b5abbf0798f79",
+        "preservedExecutionEntries": 4,
+        "executionEntriesDigest": "1388c596e2535028fefd0f37c0b2feffae62b1619c7cdbf1b69d93c1b4f68fce",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key"
+      },
+      "baseline-ui.apk": {
+        "originalSha256": "069f97706c9bbcf5d924d3ca59938110151625ae7a3088449be50a612c770c5c",
+        "testedSha256": "b692b797b9c56aea55314b2dd25e08ef8903a16a9eaba3c2a0e70da361d82053",
+        "preservedExecutionEntries": 34,
+        "executionEntriesDigest": "0a2a4db1c1442ae64a3fe4bdebcf4d4cc7c426d4032e1b5dd14d173ff8811090",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key"
+      }
+    },
+    "probeArtifact": {
+      "archive_download_url": "https://api.github.com/repos/Sammy-Lastre/zec-private/actions/artifacts/13431221279/zip",
+      "created_at": "2026-11-05T15:58:08Z",
+      "digest": "sha256:1ec203c292e950a488097acc9549d18dd0f55e54acfba106f043a9a928a34a75",
+      "expired": false,
+      "expires_at": "2026-11-07T15:58:04Z",
+      "id": 13431221279,
+      "name": "isolated-ui-repro-apk",
+      "node_id": "MDg6QXJ0aWZhY3QxMzQzMTIyMTI3OQ==",
+      "size_in_bytes": 65992353,
+      "updated_at": "2026-11-05T15:58:08Z",
+      "url": "https://api.github.com/repos/Sammy-Lastre/zec-private/actions/artifacts/13431221279",
+      "workflow_run": {
+        "head_branch": "main",
+        "head_repository_id": 1446185273,
+        "head_sha": "b34bcc43aa162a900f74d4cc2e0db50155f7e257",
+        "id": 42057804282,
+        "repository_id": 1446185273
+      },
+      "probeKind": "ui",
+      "package": "com.personal.zecprivate.foss.debug",
+      "expectedVersionCode": 3234005,
+      "baselineVersionCode": 3234004,
+      "residentUiBridge": {
+        "archive_download_url": "https://api.github.com/repos/Sammy-Lastre/zec-private/actions/artifacts/13429461710/zip",
+        "created_at": "2026-11-05T15:32:29Z",
+        "digest": "sha256:b9a8c277dfe5eca7d3a6fc38fe7aece470d7de7841a37f05f5d9aa57e205752b",
+        "expired": false,
+        "expires_at": "2026-11-07T15:32:28Z",
+        "id": 13429461710,
+        "name": "android-ui-bridge",
+        "node_id": "MDg6QXJ0aWZhY3QxMzQyOTQ2MTcxMA==",
+        "size_in_bytes": 8524,
+        "updated_at": "2026-11-05T15:32:29Z",
+        "url": "https://api.github.com/repos/Sammy-Lastre/zec-private/actions/artifacts/13429461710",
+        "workflow_run": {
+          "head_branch": "main",
+          "head_repository_id": 1446185273,
+          "head_sha": "68306af943e32653dc142e8b1ba54fe36ebb507e",
+          "id": 42055776305,
+          "repository_id": 1446185273
+        }
+      },
+      "upgradeBaseline": {
+        "archive_download_url": "https://api.github.com/repos/Sammy-Lastre/zec-private/actions/artifacts/13429238529/zip",
+        "created_at": "2026-11-05T15:41:55Z",
+        "digest": "sha256:fb43657f258b35688edac355054d343c0b8b068d9819605e3f52056f52b53375",
+        "expired": false,
+        "expires_at": "2026-11-07T15:41:51Z",
+        "id": 13429238529,
+        "name": "isolated-ui-repro-apk",
+        "node_id": "MDg6QXJ0aWZhY3QxMzQyOTIzODUyOQ==",
+        "size_in_bytes": 69344307,
+        "updated_at": "2026-11-05T15:41:55Z",
+        "url": "https://api.github.com/repos/Sammy-Lastre/zec-private/actions/artifacts/13429238529",
+        "workflow_run": {
+          "head_branch": "v3.19.0-private.4",
+          "head_repository_id": 1446185273,
+          "head_sha": "26fa4cf2a891d9494be1e41891b84daa7a7be0db",
+          "id": 42055505402,
+          "repository_id": 1446185273
+        }
+      },
+      "phase1Scenario": true
+    },
+    "apkHashes": {
+      "app-zcashmainnet-foss-debug.apk": "d5f1dd6543abafe263220d80cc0384112af07b94d5f3009bc04dcddcd6fd5c53",
+      "ui-bridge.apk": "d3db0ad74cf1b70713506415ac7805497a150ea648cd04f03d8b5abbf0798f79",
+      "baseline-ui.apk": "b692b797b9c56aea55314b2dd25e08ef8903a16a9eaba3c2a0e70da361d82053"
+    },
+    "fundsTransferred": false,
+    "walletAccess": false,
+    "route": "native SDK Tor only",
+    "guest": "fresh Android API35 x86_64",
+    "writableState": "guard-owned root",
+    "userdataRequestedBytes": 2147483648,
+    "guestDataBefore": "Filesystem       1K-blocks   Used Available Use% Mounted on\r\n/dev/block/dm-43   6082144 267792   5672140   5% /data/user/0",
+    "guestDataPartitionActualKiB": 6082144,
+    "passed": true,
+    "guestDataAfter": "Filesystem       1K-blocks   Used Available Use% Mounted on\r\n/dev/block/dm-43   6082144 407784   5532148   7% /data/user/0"
+  },
+  "evidenceSha256": {
+    "tor-probe-result.json": {
+      "bytes": 5228,
+      "sha256": "c2fe442c387ded933e6342d5b20302df14c2cda20765731d67288b30774e7626"
+    },
+    "command.log": {
+      "bytes": 322,
+      "sha256": "f82fc70f7d73013637dc25d57cdf66efaed577f7042aabc94e268006ec443748"
+    },
+    "emulator.log": {
+      "bytes": 12000,
+      "sha256": "d5e7d1a4780b43552841db7708f08da6d23edd7fad7dc1248d0c5b8b53bb0718"
+    },
+    "tor-ui-result.json": {
+      "bytes": 7888,
+      "sha256": "9297565f1ea00379c6c20773b8724ad6d33adf650a1d6beae1c9c2c23033def7"
+    },
+    "ui-instrumentation.log": {
+      "bytes": 52,
+      "sha256": "2e9ba2551c0205040592574d59f0d8599ade6c96c609fcf8600a5b660d60ada2"
+    },
+    "phase1-scenario-result.json": {
+      "bytes": 378,
+      "sha256": "be6f7ed1c10a147855e7f1c2ef2e746dd0491c08dc2cb7b84880d902776a230a"
+    }
+  },
+  "releaseRuntimeInputsUnchanged": true,
+  "realUnfundedProductionQuotes": true,
+  "quoteAccepted": false,
+  "clearnetFallback": false,
+  "personalWalletAccess": false,
+  "testWallet": "fresh random zero-balance baseline, public BTC contact, Tor-warmed catalog before upgrade",
+  "limitations": [
+    "x86_64 debug APKs were re-signed with one ephemeral certificate; production ARM signature checked separately",
+    "No funded settlement, physical hardware-wallet signing or complete recovery-phrase restoration tested"
+  ],
+  "cleanup": {
+    "ownedSurvivors": [],
+    "peakMeasuredBytes": 8530531562,
+    "footprint": {
+      "logicalBytes": 2854336800,
+      "hostFreeBeforeCleanup": 125719949312
+    },
+    "hostFreeAfterCleanup": 128510648320
+  }
+}

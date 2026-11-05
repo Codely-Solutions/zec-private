@@ -1,5 +1,5 @@
 """One resident UiAutomation instrumentation session; no repeated UI-dump JVMs."""
-import socket,json,time,re,subprocess
+import socket,json,time,re,subprocess,threading
 
 def run(adb, root, apks, manifest):
     if manifest['package']!='com.personal.zecprivate.foss.debug':
@@ -25,6 +25,7 @@ def run(adb, root, apks, manifest):
                 if len(data)>512*1024:raise ValueError('UI bridge response exceeds budget')
         return json.loads(data.split(b'\n',1)[0])
     last=None;trace=[];assertions=[];tor_opted_in=False;quote_requests=0;dismissals=0
+    scenario_stop=threading.Event();scenario_thread=None;command_read_failures=0
     def capture(command):
         response=request(command)
         safe=[];labels=[str(n.get('text','')) for n in response.get('nodes',[])]
@@ -44,13 +45,24 @@ def run(adb, root, apks, manifest):
                 if time.monotonic()>ready:raise RuntimeError('Resident UI bridge did not become ready')
                 time.sleep(1)
         print('UI_READY: resident instrumentation; fresh unfunded test wallet only.',flush=True)
+        if manifest.get('phase1Scenario'):
+            from phase1_ui_scenario import run as run_scenario
+            scenario_thread=threading.Thread(target=run_scenario,args=(root,scenario_stop),daemon=True)
+            scenario_thread.start()
         deadline=time.monotonic()+1000
         while time.monotonic()<deadline:
             if adb.emulator.poll() is not None:raise RuntimeError('Emulator exited during UI test: '+str(adb.emulator.returncode))
             if watcher.poll() is not None:raise RuntimeError('UI instrumentation exited: '+str(watcher.returncode))
             path=root/'ui-command.json'
             if path.exists():
-                command=json.loads(path.read_text())
+                try:
+                    command=json.loads(path.read_text())
+                    command_read_failures=0
+                except (PermissionError,FileNotFoundError,json.JSONDecodeError):
+                    command_read_failures+=1
+                    if command_read_failures>10:raise
+                    time.sleep(.05)
+                    continue
                 if command['sequence']!=last:
                     last=command['sequence'];action=command['action']
                     if action=='finish':
@@ -62,6 +74,12 @@ def run(adb, root, apks, manifest):
                         receipt['passed']=receipt['quoteReviewsVerified']>=3 and quote_requests>=3 and dismissals>=2 and receipt['torOptInVerified'] and all(a['passed'] for a in assertions)
                         receipt['upgrade']=upgrade
                         if baseline and not (upgrade and upgrade['passed']):receipt['passed']=False
+                        if manifest.get('phase1Scenario'):
+                            scenario_path=root/'phase1-scenario-result.json'
+                            scenario_result=json.loads(scenario_path.read_text()) if scenario_path.exists() else {}
+                            receipt['phase1Scenario']=scenario_result
+                            if not scenario_result.get('passed') or (root/'phase1-scenario-error.json').exists():
+                                receipt['passed']=False
                         (root/'tor-ui-result.json').write_text(json.dumps(receipt,separators=(',',':')))
                         if not receipt['passed']:raise RuntimeError('Required Tor and quote UI assertions were not completed')
                         return
@@ -116,6 +134,9 @@ def run(adb, root, apks, manifest):
             time.sleep(.15)
         raise RuntimeError('Resident UI test deadline exceeded')
     finally:
+        scenario_stop.set()
+        if scenario_thread:
+            scenario_thread.join(timeout=5)
         try:request({'action':'finish'})
         except (OSError,ValueError):pass
         try:watcher.wait(timeout=15)
