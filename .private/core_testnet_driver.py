@@ -24,6 +24,7 @@ def run(adb, root, apks, manifest):
     test = next(p for p in apks if 'androidTest' in p.name)
     candidate = next(p for p in apks if p not in (baseline, test))
     stages = {}
+    application_pids=set()
     report = dict(schema=1, passed=False, evidence_class='real-app-testnet', network='zcash-testnet',
                   clearnet_fallback=False, personal_wallet_access=False, real_funds_used=False,
                   stages=stages, input_fingerprint=manifest['input_fingerprint'],
@@ -52,6 +53,8 @@ def run(adb, root, apks, manifest):
         app_uid=uid()
         logs=adb('logcat','-d','-v','raw','--uid='+str(app_uid),'-s','System.out:I',timeout=15).stdout.decode(errors='replace')
         markers=[line for line in logs.splitlines() if line.startswith(('CORE_RESULT ','CORE_TARGETS '))]
+        thread_logs=adb('logcat','-d','-v','threadtime','-t','2000','--uid='+str(app_uid),timeout=15).stdout.decode(errors='replace')
+        application_pids.update(int(match[1]) for match in re.finditer(r'^\S+\s+\S+\s+(\d+)\s+\d+\s+[A-Z]\s+',thread_logs,re.M))
         if sum(map(len,markers))>8192:raise RuntimeError('Safe core markers exceed bound')
         output+='\n'+'\n'.join(markers)
         rows = [json.loads(line.split('CORE_RESULT ', 1)[1]) for line in output.splitlines() if 'CORE_RESULT {' in line]
@@ -68,6 +71,9 @@ def run(adb, root, apks, manifest):
                     if isinstance(body,dict) and body.get('status') in ('failed','review'):
                         message=re.sub(r'utest1[a-z0-9]+','[isolated test address]',str(body.get('message','')))[:800]
                         failures.append(dict(status=body['status'],message=message))
+                    elif isinstance(body,dict) and body.get('ok') is False:
+                        failures.append({key:re.sub(r'utest1[a-z0-9]+','[isolated test address]',str(body[key]))[:500]
+                                         for key in ('code','error','message','kind','retryAfterSeconds') if key in body})
                 diagnostic['faucet_failures']=failures[-2:]
             if name=='networkTargets':
                 # This first stage precedes wallet/seed creation. Preserve its
@@ -108,7 +114,6 @@ def run(adb, root, apks, manifest):
         if len(private)>16384:
             raise RuntimeError('Private test fixture exceeds bound')
         json.loads(private)
-        (root/'core-private.json').write_bytes(private)
         shell('am','force-stop',PACKAGE)
         shell('pm','clear',PACKAGE)
         shell('run-as',PACKAGE,'mkdir','-p','files')
@@ -127,6 +132,17 @@ def run(adb, root, apks, manifest):
         if version() != 3234006:
             raise RuntimeError('Wrong baseline version')
         uid()
+        # Bounded kernel connection metadata identifies blocked native SDK
+        # bootstrap attempts when this AOSP image lacks the LOG extension.
+        adb('shell','mount','-t','tracefs','nodev','/sys/kernel/tracing',timeout=15,check=False)
+        try:
+            for path,value in (('tracing_on','0'),('buffer_size_kb','2048'),('options/record-tgid','1'),
+                               ('events/sock/inet_sock_set_state/enable','1'),('tracing_on','1')):
+                shell('echo '+value+' > /sys/kernel/tracing/'+path)
+            report['connection_tracing']=True
+        except RuntimeError as error:
+            report['connection_tracing']=False
+            report['connection_tracing_error']=str(error)[:400]
         # Android netd can resolve on behalf of an app under a system UID.
         # Block guest DNS/DoT as well as app-UID egress; Tor resolves remotely.
         for binary in ('iptables','ip6tables'):
@@ -176,7 +192,7 @@ def run(adb, root, apks, manifest):
                 if ipaddress.ip_address(peer).version == family:
                     lines.append('-A CORE_ACCEPT -p tcp -d '+peer+' -j ACCEPT')
             # No UDP DNS or unobserved endpoint/relay is allowed from the app.
-            lines.extend(['-A CORE_ACCEPT -j REJECT','COMMIT'])
+            lines.extend(['-A CORE_ACCEPT -p udp -j REJECT','-A CORE_ACCEPT -j REJECT','COMMIT'])
             local=root/(binary+'-rules.txt')
             # Windows text-mode CRLF is invalid input for Android restore.
             local.write_bytes(('\n'.join(lines)+'\n').encode('ascii'))
@@ -188,28 +204,43 @@ def run(adb, root, apks, manifest):
             diagnostic=adb('shell',binary,'-I','CORE_ACCEPT',str(len(lines)-3),'-m','limit','--limit','30/minute',
                            '-j','LOG','--log-prefix','CORE_EGRESS:',timeout=15,check=False)
             report[binary+'_kernel_logging']=diagnostic.returncode==0
+            if diagnostic.returncode:report[binary+'_logging_error']=diagnostic.stderr.decode(errors='replace')[:500]
             rule(binary,'-I','OUTPUT','1','-m','owner','--uid-owner',str(app_uid),'-j','CORE_ACCEPT')
         firewall = True
         stage('recipient',240)
         clear_wallet()
         # App Tor must reconnect through the enforced relay set; refusal is safe.
-        stage('fund')
+        stage('fund',950)
         shell('am','force-stop',PACKAGE)
         adb('install','-r',str(candidate),timeout=90)
         if uid()!=app_uid or version()!=3234007:
             raise RuntimeError('Installed update identity/version mismatch')
         stage('upgrade',240)
-        # A controlled transport outage before any send: require observed blocked
-        # packets, successful native-Tor request after restoration, and intact funds.
+        # Start the normal wallet resync path, then interrupt its actual native
+        # synchronizer before broadcast. Require fresh sync and intact history.
         before = time.monotonic()
-        for binary in ('iptables','ip6tables'):
-            rule(binary,'-I','CORE_ACCEPT','1','-j','DROP')
         outcome = {}
         def interrupted_request():
-            try: stage('transport',120);outcome['passed']=True
+            try: stage('transport',300);outcome['passed']=True
             except Exception as error: outcome['error']=type(error).__name__
         worker = threading.Thread(target=interrupted_request)
         worker.start()
+        def wait_marker(name,timeout=120):
+            deadline=time.monotonic()+timeout
+            while time.monotonic()<deadline:
+                data=adb('shell','run-as',PACKAGE,'cat','files/'+name,timeout=10,check=False)
+                if data.returncode==0:
+                    return json.loads(data.stdout)
+                if not worker.is_alive():raise RuntimeError('Wallet sync stage ended before handshake')
+                time.sleep(.5)
+            raise RuntimeError('Wallet sync handshake deadline exceeded')
+        if not wait_marker('core-sync-ready.json').get('ready'):
+            raise RuntimeError('Wallet synchronizer not ready for interruption')
+        for binary in ('iptables','ip6tables'):
+            rule(binary,'-I','CORE_ACCEPT','1','-j','DROP')
+        shell('run-as',PACKAGE,'touch','files/core-sync-drop')
+        if not wait_marker('core-sync-requested.json',30).get('requested'):
+            raise RuntimeError('Wallet resync was not requested under outage')
         time.sleep(10)
         blocked = 0
         for binary in ('iptables','ip6tables'):
@@ -218,10 +249,13 @@ def run(adb, root, apks, manifest):
                 fields=line.split()
                 if len(fields)>2 and fields[2]=='DROP':blocked+=int(fields[0])
             rule(binary,'-D','CORE_ACCEPT','1')
-        worker.join(timeout=125)
+        worker.join(timeout=200)
         if worker.is_alive() or not outcome.get('passed') or blocked==0:
             raise RuntimeError('Tor interruption/recovery not established')
-        stages['interruption']=dict(passed=True,blocked_packets=blocked,seconds=time.monotonic()-before)
+        recovery=json.loads(shell('run-as',PACKAGE,'cat','files/core-sync-result.json'))
+        if not all(recovery.get(key) is True for key in ('sync_restarted','synced','balance_preserved','history_preserved')):
+            raise RuntimeError('Wallet synchronization recovery not established')
+        stages['interruption']=dict(passed=True,blocked_packets=blocked,seconds=time.monotonic()-before,**recovery)
         stage('send')
         shell('am','force-stop',PACKAGE)
         stage('restart',240)
@@ -243,6 +277,28 @@ def run(adb, root, apks, manifest):
         if failure:report['failure']=dict(type=type(failure).__name__,message=str(failure)[:1600])
         report['seconds']=time.monotonic()-started
         report['last_stage']=current_stage
+        if report.get('connection_tracing'):
+            try:
+                shell('echo 0 > /sys/kernel/tracing/tracing_on')
+                mapping=shell('cat','/sys/kernel/tracing/saved_tgids')
+                tgids={int(row[0]):int(row[1]) for line in mapping.splitlines() if len(row:=line.split())==2 and all(v.isdigit() for v in row)}
+                trace=shell('cat','/sys/kernel/tracing/trace')
+                connections=set()
+                for line in trace.splitlines():
+                    tid=re.search(r'-(\d+)\s+\[',line)
+                    if not tid or tgids.get(int(tid[1]),int(tid[1])) not in application_pids:continue
+                    port=re.search(r'\bdport=(\d+)',line)
+                    family='daddrv6' if 'family=AF_INET6' in line or 'family=10 ' in line else 'daddr'
+                    address=re.search(r'\b'+family+r'=([^\s]+)',line)
+                    if port and address:
+                        try:
+                            parsed=ipaddress.ip_address(address[1]);parsed=getattr(parsed,'ipv4_mapped',None) or parsed
+                            connections.add((str(parsed),int(port[1])))
+                        except ValueError:pass
+                report['application_pids']=sorted(application_pids)
+                report['connection_destinations']=[dict(address=address,port=port) for address,port in sorted(connections)[:100]]
+                report['connection_destinations_truncated']=len(connections)>100
+            except RuntimeError as error:report['connection_trace_error']=str(error)[:500]
         if firewall:
             for binary in ('iptables','ip6tables'):
                 # Retain counter totals only; guard-owned guest disappears next.
@@ -254,7 +310,7 @@ def run(adb, root, apks, manifest):
             report['blocked_connection_diagnostics']=[line[:350] for line in kernel.splitlines() if 'CORE_EGRESS:' in line][-30:]
         try:
             private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15,check=False).stdout)
-            allowed_fields=('claimId','fundingTxId','fundedBalance','balanceBeforeSend','feeZatoshi','senderConfirmedBalance')
+            allowed_fields=('claimId','fundingTxId','fundingProvider','fundedBalance','balanceBeforeSend','feeZatoshi','senderConfirmedBalance','restoreMinedHeight','restoreTransactionState')
             report['transaction_evidence']={key:private[key] for key in allowed_fields if key in private}
         except (ValueError,subprocess.SubprocessError):pass
         (root/'core-testnet-result.json').write_text(json.dumps(report,indent=2)+'\n')

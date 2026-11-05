@@ -7,6 +7,7 @@ import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.android.sdk.model.ZecSend
+import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.internal.Backend
 import cash.z.ecc.android.sdk.internal.model.TorClient
 import cash.z.ecc.android.sdk.internal.model.TorHttp
@@ -24,6 +25,7 @@ import co.electriccoin.zcash.ui.common.repository.WalletRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.CreateProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.RestoreWalletUseCase
+import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
 import io.ktor.client.request.get
 import io.ktor.client.HttpClient
 import io.ktor.client.request.post
@@ -42,6 +44,7 @@ import org.junit.Test
 import org.koin.core.context.GlobalContext
 import java.io.File
 import java.lang.reflect.Proxy
+import java.security.MessageDigest
 
 /** Exercises the installed app graph. No mocks, SDK-only wallet, or mainnet spending. */
 class CoreWalletAcceptance {
@@ -76,34 +79,48 @@ class CoreWalletAcceptance {
                     check(!state.has("claimAttempted"))
                     state.put("claimAttempted", true); save(state)
                     dependency<HttpClientProvider>().createTor().use { client ->
-                        val readiness=JSONObject(client.get("https://faucet.testnet.valargroup.dev/api/status").bodyAsText())
-                        check(readiness.getString("network")=="testnet" && readiness.getBoolean("ready")) { "Faucet testnet funding unavailable" }
-                        val response = client.post("https://faucet.testnet.valargroup.dev/api/claim") {
-                            contentType(ContentType.Application.Json)
-                            setBody(JSONObject().put("address", address).toString())
-                        }
-                        check(response.status.value == 202) { "Faucet claim HTTP ${response.status.value}" }
-                        val claim = JSONObject(response.bodyAsText())
-                        state.put("claimId", claim.get("id").toString()); save(state)
-                        withTimeout(600_000) {
-                            while (true) {
-                                val status = JSONObject(client.get(
-                                    "https://faucet.testnet.valargroup.dev/api/claim/${state.getString("claimId")}" 
-                                ).bodyAsText())
-                                if (status.optString("status") == "sent") {
-                                    state.put("fundingTxId", status.getString("txid")); save(state); break
+                        val challenge=JSONObject(client.get("https://zcashfaucet.jinolabs.xyz/api/pow/challenge").bodyAsText())
+                        val difficulty=challenge.getInt("difficulty")
+                        check(difficulty in 1..22) { "Faucet proof-of-work exceeds bounded test budget" }
+                        val digest=MessageDigest.getInstance("SHA-256")
+                        val proofStarted=System.nanoTime()
+                        var nonce=0L
+                        while (true) {
+                            val hash=digest.digest((challenge.getString("seed")+":"+nonce).toByteArray(Charsets.UTF_8))
+                            var zeroBits=0
+                            for (value in hash) {
+                                val unsigned=value.toInt() and 255
+                                if (unsigned==0) zeroBits+=8 else {
+                                    zeroBits+=Integer.numberOfLeadingZeros(unsigned)-24
+                                    break
                                 }
-                                check(status.optString("status") !in listOf("failed", "review")) { "Faucet did not establish payment" }
-                                delay(10_000)
                             }
+                            if (zeroBits>=difficulty) break
+                            nonce++
+                            if (nonce % 8192L==0L) check(System.nanoTime()-proofStarted<30_000_000_000L) { "Faucet proof-of-work time budget exhausted" }
                         }
+                        val proof=JSONObject()
+                        for (key in listOf("seed","difficulty","exp","sig")) proof.put(key,challenge.get(key))
+                        proof.put("nonce",nonce.toString())
+                        val response = client.post("https://zcashfaucet.jinolabs.xyz/api/faucet") {
+                            contentType(ContentType.Application.Json)
+                            setBody(JSONObject().put("address", address).put("network","taz").put("pow",proof).toString())
+                        }
+                        check(response.status.value == 200) { "Faucet claim HTTP ${response.status.value}" }
+                        val claim = JSONObject(response.bodyAsText())
+                        check(claim.getBoolean("ok"))
+                        check(claim.getString("txid").matches(Regex("[0-9a-f]{64}")))
+                        state.put("fundingTxId",claim.getString("txid")).put("fundingProvider","jinolabs-testnet"); save(state)
                     }
-                    val received=withTimeout(600_000) {
+                    val received=withTimeout(850_000) {
                         dependency<TransactionRepository>().observeTransaction(state.getString("fundingTxId"))
-                            .filterNotNull().first { it is ReceiveTransaction.Success }
+                            .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight!=null }
                     }
                     awaitBalance(2_000_000)
                     check(balance()==received.amount.value)
+                    withTimeout(850_000) {
+                        while ((dependency<AccountDataSource>().getZashiAccount().spendableShieldedBalance?.value ?: 0L)<2_000_000L) delay(2_000)
+                    }
                     state.put("fundedBalance", balance()); save(state)
                 }
                 "upgrade", "restart" -> {
@@ -146,18 +163,39 @@ class CoreWalletAcceptance {
                     checkWallet("recipient")
                     val transaction = withTimeout(600_000) {
                         dependency<TransactionRepository>().observeTransaction(state.getString("txId"))
-                            .filterNotNull().first { it is ReceiveTransaction.Success }
+                            .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight!=null }
                     }
                     check(transaction.amount.value == 1_000_000L)
                     check("core-testnet-acceptance" in dependency<TransactionRepository>().getMemos(transaction))
                     awaitBalance(1_000_000)
                     check(balance() == 1_000_000L)
+                    save(state.put("restoreMinedHeight",checkNotNull(transaction.overview.minedHeight).value)
+                        .put("restoreTransactionState",transaction.overview.transactionState.toString()))
                 }
                 "transport" -> {
-                    dependency<SynchronizerProvider>().getSynchronizer()
-                    dependency<HttpClientProvider>().createTor().use { client ->
-                        check(client.get("https://faucet.testnet.valargroup.dev/healthz").status.value == 200)
+                    val provider=dependency<SynchronizerProvider>()
+                    val original=provider.getSynchronizer()
+                    withTimeout(120_000) { original.status.first { it==Synchronizer.Status.SYNCED } }
+                    val height=original.fullyScannedHeight.filterNotNull().first()
+                    val beforeBalance=balance()
+                    val fundingId=fixture().getString("fundingTxId")
+                    val ready=File(context.filesDir,"core-sync-ready.json")
+                    ready.writeText(JSONObject().put("ready",true).put("height",height.value).toString())
+                    withTimeout(60_000) {
+                        while (!File(context.filesDir,"core-sync-drop").exists()) delay(100)
                     }
+                    File(context.filesDir,"core-sync-requested.json").writeText("{\"requested\":true}")
+                    dependency<ConfirmResyncUseCase>()(BlockHeight.new(height.value-1))
+                    val recovered=withTimeout(180_000) { provider.synchronizer.filterNotNull().first { it!==original } }
+                    withTimeout(180_000) {
+                        recovered.status.first { it==Synchronizer.Status.SYNCED }
+                        recovered.fullyScannedHeight.filterNotNull().first { it.value>=height.value }
+                        while (balance()!=beforeBalance) delay(500)
+                        dependency<TransactionRepository>().observeTransaction(fundingId).filterNotNull().first { it is ReceiveTransaction.Success }
+                    }
+                    File(context.filesDir,"core-sync-result.json").writeText(JSONObject()
+                        .put("sync_restarted",true).put("synced",true).put("balance_preserved",true)
+                        .put("history_preserved",true).put("scanned_height",recovered.fullyScannedHeight.value?.value).toString())
                 }
                 "networkTargets" -> {
                     check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
@@ -172,7 +210,7 @@ class CoreWalletAcceptance {
                             expectSuccess=true
                         }.use { client ->
                             val addresses = JSONArray()
-                            for (host in listOf("testnet.zec.rocks", "faucet.testnet.valargroup.dev")) {
+                            for (host in listOf("testnet.zec.rocks", "zcashfaucet.jinolabs.xyz")) {
                                 for (type in listOf("A", "AAAA")) {
                                     val result = JSONObject(client.get("https://dns.google/resolve?name=$host&type=$type").bodyAsText())
                                     val answers = result.optJSONArray("Answer") ?: continue
@@ -202,6 +240,10 @@ class CoreWalletAcceptance {
             .put("network", "zcash-testnet").put("transport", "app-native-Tor")
             .put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
         if (stage in listOf("send", "restart", "restore")) receipt.put("txId", fixture().getString("txId"))
+        if (stage=="fund") receipt.put("funding_txid",fixture().getString("fundingTxId")).put("balance_zatoshi",fixture().getLong("fundedBalance"))
+        if (stage=="send") receipt.put("fee_zatoshi",fixture().getLong("feeZatoshi"))
+        if (stage=="restore") receipt.put("mined_height",fixture().getLong("restoreMinedHeight"))
+            .put("amount_zatoshi",1_000_000L).put("app_transaction_state",fixture().getString("restoreTransactionState"))
         // No exception messages, seeds, addresses, HTTP bodies or private fixture are printed.
         println("CORE_RESULT $receipt")
     }

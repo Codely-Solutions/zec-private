@@ -31,7 +31,8 @@ def critical(path):
             path.startswith('ui-lib/src/main/java/co/electriccoin/zcash/ui/common/') or
             '/network/' in path or '/security/' in path or '/di/' in path or
             'network_security' in path or
-            ('/src/test/' in path and any(word in path.lower() for word in ('swap','near','tor','wallet','sign'))))
+            (any(part in path for part in ('/src/test/','/src/androidTest/')) and
+             any(word in path.lower() for word in ('swap','near','tor','wallet','sign','send','restore','transaction'))))
 def output(**values):
     with open(os.environ['GITHUB_OUTPUT'],'a') as stream:
         for key,value in values.items(): stream.write(f'{key}={value}\n')
