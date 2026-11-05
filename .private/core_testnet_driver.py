@@ -53,7 +53,7 @@ def run(adb, root, apks, manifest):
         # markers from this app UID after clearing this blank guest's log buffer.
         app_uid=uid()
         logs=adb('logcat','-d','-v','raw','--uid='+str(app_uid),'-s','System.out:I',timeout=15).stdout.decode(errors='replace')
-        markers=[line for line in logs.splitlines() if line.startswith(('CORE_RESULT ','CORE_TARGETS ','CORE_SYNC_DIAGNOSTIC '))]
+        markers=[line for line in logs.splitlines() if line.startswith(('CORE_RESULT ','CORE_TARGETS ','CORE_SYNC_DIAGNOSTIC ','CORE_NATIVE_ERROR '))]
         thread_logs=adb('logcat','-d','-v','threadtime','-t','2000','--uid='+str(app_uid),timeout=15).stdout.decode(errors='replace')
         application_pids.update(int(match[1]) for match in re.finditer(r'^\S+\s+\S+\s+(\d+)\s+\d+\s+[A-Z]\s+',thread_logs,re.M))
         if sum(map(len,markers))>8192:raise RuntimeError('Safe core markers exceed bound')
@@ -64,6 +64,7 @@ def run(adb, root, apks, manifest):
             safe = [line[:240] for line in output.splitlines() if re.search(r'CoreWalletAcceptance.kt:\d+|^java\.lang\.|^kotlinx\.coroutines\.|Faucet claim HTTP \d+', line)]
             diagnostic=dict(stage=name,lines=safe[-12:])
             diagnostic['sync']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_SYNC_DIAGNOSTIC ')][-1:]
+            diagnostic['native_errors']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_NATIVE_ERROR ')][-3:]
             native=adb('logcat','-d','-v','raw','-t','120','--uid='+str(app_uid),'-s','slipstream:V',timeout=15).stdout.decode(errors='replace')
             diagnostic['native_engine']=[re.sub(r'\b[0-9a-fA-F]{64,}\b','[hex omitted]',line)[:400]
                 for line in native.splitlines() if re.search(r'stall|error|fail|warn|counter',line,re.I)

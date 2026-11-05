@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.runBlocking
@@ -45,6 +46,7 @@ import org.junit.Test
 import org.koin.core.context.GlobalContext
 import java.io.File
 import java.lang.reflect.Proxy
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Exercises the installed app graph. No mocks, SDK-only wallet, or mainnet spending. */
 class CoreWalletAcceptance {
@@ -57,6 +59,25 @@ class CoreWalletAcceptance {
     private val fixtureFile get() = File(context.filesDir, "core-private.json")
     private fun fixture() = if (fixtureFile.exists()) JSONObject(fixtureFile.readText()) else JSONObject()
     private fun save(value: JSONObject) = fixtureFile.writeText(value.toString())
+
+    // Diagnostic reads only; never dump objects, database rows, keys or messages.
+    private fun nativeCounters(sync: Synchronizer?): JSONObject = runCatching {
+        checkNotNull(sync)
+        val engine = sync.javaClass.getDeclaredField("engine").apply { isAccessible = true }.get(sync)
+        val flow = engine.javaClass.getDeclaredField("lastSnapshot").apply { isAccessible = true }.get(engine) as StateFlow<*>
+        val snapshot = checkNotNull(flow.value)
+        JSONObject().apply {
+            for (name in listOf("chainTip", "fetchedBlocks", "scannedBlocks", "enhancedTxs", "currentRangeEnd",
+                "state", "passTotalBlocks", "spendableHint", "rangesCompleted", "isRecovering",
+                "progressPermille", "stalledSeconds", "tipFresh", "txSetVersion")) {
+                val value = snapshot.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(snapshot)
+                check(value is Number || value is Boolean)
+                put(name, value)
+            }
+            val running = engine.javaClass.getDeclaredField("running").apply { isAccessible = true }.get(engine)
+            if (running is Boolean) put("kotlinRunning", running)
+        }
+    }.getOrElse { JSONObject().put("unavailable_class", it.javaClass.simpleName) }
 
     @Test
     fun executeStage() = runBlocking {
@@ -228,6 +249,14 @@ class CoreWalletAcceptance {
         val wallet = dependency<PersistableWalletProvider>().persistableWallet.filterNotNull().first()
         check(wallet.network == ZcashNetwork.Testnet)
         val sync = dependency<SynchronizerProvider>().getSynchronizer()
+        val previousCritical = sync.onCriticalErrorHandler
+        val criticalCount = AtomicInteger()
+        sync.onCriticalErrorHandler = { error ->
+            if (criticalCount.incrementAndGet() <= 3) println("CORE_NATIVE_ERROR " + JSONObject()
+                .put("exception_class",error.javaClass.simpleName)
+                .put("cause_class",error.cause?.javaClass?.simpleName ?: "none"))
+            previousCritical?.invoke(error) ?: false
+        }
         val account = dependency<AccountDataSource>().getZashiAccount()
         val address = sync.getUnifiedAddress(account.sdkAccount)
         check(address.startsWith("utest1"))
@@ -242,6 +271,7 @@ class CoreWalletAcceptance {
             var last: Snapshot? = null
             var observed: Synchronizer? = null
             var initial: Long? = null
+            var firstNative: JSONObject? = null
             try {
                 val ready = withTimeout(120_000) {
                     provider.synchronizer.filterNotNull().flatMapLatest { current ->
@@ -250,6 +280,7 @@ class CoreWalletAcceptance {
                         }
                     }.first { snapshot ->
                         last = snapshot
+                        if (firstNative == null) firstNative = nativeCounters(snapshot.sync)
                         if (observed !== snapshot.sync) {
                             observed = snapshot.sync
                             initial = snapshot.scanned?.value
@@ -273,6 +304,8 @@ class CoreWalletAcceptance {
                     .put("error_type",currentError?.javaClass?.simpleName ?: "none")
                     .put("cause_class",currentError?.cause?.javaClass?.simpleName ?: "none")
                     .put("foreground",withTimeoutOrNull(1_000) { dependency<ApplicationStateProvider>().isInForeground.first() } ?: false)
+                    .put("native_first",firstNative ?: JSONObject())
+                    .put("native_last",nativeCounters(provider.synchronizer.value))
                     .put("exception_class", error.javaClass.simpleName))
                 throw error
             }
