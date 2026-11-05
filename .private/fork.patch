@@ -35174,7 +35174,7 @@ index 029cd502c..000000000
 -        )
 -}
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..ec73fc3c2 100644
+index ec56161b5..58750203e 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
@@ -35188,11 +35188,15 @@ index ec56161b5..ec73fc3c2 100644
 @@ -65,2 +64,0 @@ IS_SCREEN_ROTATION_ENABLED=false
 -# Set the flexa publishable key to setup local integration. Replaced by CI action.
 -ZCASH_FLEXA_KEY=
-@@ -163 +160,0 @@ ANDROIDX_FRAGMENT_VERSION=1.8.9
+@@ -157 +155,2 @@ ANDROIDX_COMPOSE_MATERIAL_ICONS_VERSION=1.7.8
+-ANDROIDX_COMPOSE_VERSION=1.10.4
++# Preserve revision 4's resolved Compose version after removing Flexa's constraints.
++ANDROIDX_COMPOSE_VERSION=1.10.6
+@@ -163 +161,0 @@ ANDROIDX_FRAGMENT_VERSION=1.8.9
 -# WARNING: Higher version of this dependency causes crash in Flexa Login screen
-@@ -180 +176,0 @@ FIREBASE_BOM_VERSION_MATCHER=34.10.0
+@@ -180 +177,0 @@ FIREBASE_BOM_VERSION_MATCHER=34.10.0
 -FLEXA_VERSION=1.1.3
-@@ -208 +204 @@ ZCASH_BIP39_VERSION=1.0.9
+@@ -208 +205 @@ ZCASH_BIP39_VERSION=1.0.9
 -ZCASH_SDK_VERSION=6.0.0-SNAPSHOT
 +ZCASH_SDK_VERSION=6.0.0
 diff --git a/settings.gradle.kts b/settings.gradle.kts
@@ -35229,7 +35233,7 @@ index f41234151..d7038b7c1 100644
 @@ -523 +518,0 @@
 -    <string name="partners_flexa_transactionFailedTitle">Transaction Failed</string>
 diff --git a/ui-lib/build.gradle.kts b/ui-lib/build.gradle.kts
-index 717b3f997..7a56c2104 100644
+index 717b3f997..85a126716 100644
 --- a/ui-lib/build.gradle.kts
 +++ b/ui-lib/build.gradle.kts
 @@ -155,8 +154,0 @@ androidComponents {
@@ -35241,7 +35245,13 @@ index 717b3f997..7a56c2104 100644
 -                comment = "Publishable key of the Flexa integration"
 -            )
 -        )
-@@ -214,2 +205,0 @@ dependencies {
+@@ -183,0 +176,5 @@ dependencies {
++    constraints {
++        implementation("androidx.room:room-runtime:2.7.2") {
++            because("Preserve the released wallet SDK runtime after removing Flexa's transitive constraints")
++        }
++    }
+@@ -214,2 +210,0 @@ dependencies {
 -    api(libs.flexa.core)
 -    api(libs.flexa.spend)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ExcludedVotingModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ExcludedVotingModule.kt
