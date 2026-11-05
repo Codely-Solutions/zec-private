@@ -34,4 +34,10 @@ data class SwapQuoteInfoItem(
     val description: StringResource,
     val title: StyledStringResource,
     val subtitle: StyledStringResource? = null,
+    val layout: SwapQuoteInfoLayout = SwapQuoteInfoLayout.INLINE,
 )
+
+enum class SwapQuoteInfoLayout {
+    INLINE,
+    STACKED
+}

@@ -241,6 +241,10 @@ fun SwapQuoteInfo(
     descriptionFontWeight: FontWeight = FontWeight.Normal,
     descriptionColor: Color = ZashiColors.Text.textTertiary
 ) {
+    if (item.layout == SwapQuoteInfoLayout.STACKED) {
+        StackedSwapQuoteInfo(item, descriptionStyle, descriptionFontWeight, descriptionColor)
+        return
+    }
     Row {
         Text(
             modifier = Modifier.weight(1f),
@@ -268,6 +272,45 @@ fun SwapQuoteInfo(
                         style = ZashiTypography.textXs,
                         color = ZashiColors.Text.textTertiary,
                         maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StackedSwapQuoteInfo(
+    item: SwapQuoteInfoItem,
+    descriptionStyle: TextStyle,
+    descriptionFontWeight: FontWeight,
+    descriptionColor: Color
+) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            modifier = Modifier.fillMaxWidth(),
+            text = item.description.getValue(),
+            style = descriptionStyle,
+            fontWeight = descriptionFontWeight,
+            color = descriptionColor
+        )
+        Spacer(4.dp)
+        SelectionContainer {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = item.title.getValue(),
+                    style = ZashiTypography.textSm,
+                    fontWeight = FontWeight.Medium,
+                    color = ZashiColors.Text.textPrimary
+                )
+                item.subtitle?.let { subtitle ->
+                    Spacer(4.dp)
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = subtitle.getValue(),
+                        style = ZashiTypography.textSm,
+                        color = ZashiColors.Text.textTertiary
                     )
                 }
             }

@@ -109,7 +109,8 @@ internal class SwapQuoteVMMapper {
             SwapQuoteInfoItem(
                 description = stringRes(R.string.private_provider_costs),
                 title = stringRes(R.string.private_provider_costs_included).withStyle(),
-                subtitle = stringRes(R.string.private_no_affiliate_fee).withStyle()
+                subtitle = stringRes(R.string.private_no_affiliate_fee).withStyle(),
+                layout = SwapQuoteInfoLayout.STACKED
             ),
             if (quote.mode == EXACT_OUTPUT) {
                 val slippage = quote.slippage.divide(BigDecimal("100"))

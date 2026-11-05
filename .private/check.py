@@ -35,6 +35,8 @@ def check(root=ROOT):
     need('override val affiliateFee: BigDecimal = BigDecimal.ZERO' in quote,'Affiliate display is nonzero')
     fee_copy=(root/'ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml').read_text()
     need('0.25%% platform' in fee_copy,'Fee note can crash Android formatted-resource rendering')
+    mapper=(root/'ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt').read_text()
+    need('layout = SwapQuoteInfoLayout.STACKED' in mapper,'Provider costs can collapse the quote label into a vertical column')
     props=(root/'gradle.properties').read_text()
     need('ZCASH_RELEASE_PACKAGE_NAME=com.personal.zecprivate\n' in props,'Package identity changed')
     need('IS_RELEASE_BUILD_DEBUGGABLE=false' in props,'Release debuggability enabled')
