@@ -37,7 +37,7 @@ class ErrorMapperUseCase(
     private val sendEmail: SendEmailUseCase,
     private val viewOnlyContent: ViewOnlyContent,
 ) {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
 
     /**
      * An [AccountOperationUnsupportedException] carries its own copy and overrides whatever title

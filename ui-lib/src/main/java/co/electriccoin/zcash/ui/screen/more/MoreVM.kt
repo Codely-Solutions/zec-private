@@ -87,5 +87,6 @@ class MoreVM(
 
     private fun onAddressBookClick() = viewModelScope.launch { navigateToAddressBook() }
 
-    private fun onWhatsNewClick() = navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/releases"))
+    private fun onWhatsNewClick() =
+        navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/releases"))
 }
