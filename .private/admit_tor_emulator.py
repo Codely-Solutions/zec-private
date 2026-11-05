@@ -10,11 +10,11 @@ spec=guard.read(receipt_dir/'tor-emulator-job.json')
 spec['sources'].append(str(Path(__file__).resolve()))
 def retain(root):
     retained={}
-    for name in ('tor-probe-result.json','tor-probe-diagnostic.txt'):
+    for name in ('tor-probe-result.json','tor-probe-diagnostic.txt','command.log','emulator.log'):
         source=root/name
         if source.exists():
-            data=source.read_bytes()
-            if len(data)>16384: raise ValueError('Probe evidence exceeds limit')
+            with source.open('rb') as stream:
+                stream.seek(max(0,source.stat().st_size-12000));data=stream.read(12000)
             (receipt_dir/name).write_bytes(data)
             retained[name]={'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}
     return {'androidGuest':'fresh ephemeral API35 x86_64','lifetime':'enclosing Windows Job kills and verifies entire guest process tree','retainedEvidence':retained}
