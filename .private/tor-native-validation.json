@@ -1,0 +1,32 @@
+{
+  "probeArtifact": {
+    "digest": "sha256:45fed7513c82b20476f70d55a42cf35fb2af33c6ac379fa737e2e68be0ac4e37",
+    "id": 13408607704,
+    "name": "native-tor-probe",
+    "size_in_bytes": 90756598
+  },
+  "apkHashes": {
+    "TorQuoteProbe-debug-androidTest.apk": "4c20da43e031d3adbe58f09cc2bfcc90497210e8353a26d6edfadcc479621af6",
+    "TorQuoteProbe-debug.apk": "3b8eb881225a5265547a59798e5a2a7d9ae7a3d0803c78fe4148e4d9bfeef3d5"
+  },
+  "fundsTransferred": false,
+  "walletAccess": false,
+  "route": "native SDK Tor only",
+  "guest": "fresh Android API35 x86_64",
+  "writableState": "guard-owned root",
+  "userdataLimitBytes": null,
+  "guestDataBefore": "Filesystem       1K-blocks   Used Available Use% Mounted on\r\n/dev/block/dm-43   6082144 271304   5668628   5% /data/user/0",
+  "passed": true,
+  "guestDataAfter": "Filesystem       1K-blocks   Used Available Use% Mounted on\r\n/dev/block/dm-43   6082144 515400   5424532   9% /data/user/0",
+  "sourceCommit": "abd508c4baff634cda2d43347ad172c42190c346",
+  "ciRun": "https://github.com/Sammy-Lastre/zec-private/actions/runs/42014802543",
+  "guardJob": "f7074a4accf34dc5b3f832d1086e0fb2",
+  "guardReceiptVerified": true,
+  "scope": "Real SDK native Tor HTTP lifecycle only; no app UI or repository decoding in this probe",
+  "quotesRequested": 3,
+  "allQuotesValid": true,
+  "quoteAccepted": false,
+  "guestDataPartitionActualKiB": 6082144,
+  "requestedUserdataBytes": 2147483648,
+  "resourceCaveat": "Emulator enlarged /data beyond the requested 2GiB; Windows guard bounded host storage and removed all guest outputs. Correct profile before next run."
+}
