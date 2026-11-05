@@ -59,6 +59,16 @@ def run(adb, root, apks, manifest):
             # Keep only class/line locations and explicit safe assertions; never raw test output.
             safe = [line[:240] for line in output.splitlines() if re.search(r'CoreWalletAcceptance.kt:\d+|^java\.lang\.|^kotlinx\.coroutines\.|Faucet claim HTTP \d+', line)]
             diagnostic=dict(stage=name,lines=safe[-12:])
+            if name=='fund':
+                http=adb('logcat','-d','-v','raw','--uid='+str(app_uid),'-s','HttpClient:D',timeout=15,check=False).stdout.decode(errors='replace')
+                failures=[]
+                for line in http.splitlines():
+                    try:body=json.loads(line.strip())
+                    except (ValueError,TypeError):continue
+                    if isinstance(body,dict) and body.get('status') in ('failed','review'):
+                        message=re.sub(r'utest1[a-z0-9]+','[isolated test address]',str(body.get('message','')))[:800]
+                        failures.append(dict(status=body['status'],message=message))
+                diagnostic['faucet_failures']=failures[-2:]
             if name=='networkTargets':
                 # This first stage precedes wallet/seed creation. Preserve its
                 # startup failure, which may happen before JUnit can report it.
@@ -69,6 +79,7 @@ def run(adb, root, apks, manifest):
             raise RuntimeError('Core test stage failed: ' + name)
         if name in ('fund', 'upgrade', 'send', 'restart', 'restore'):
             stages[name] = rows[0]
+        (root/'core-testnet-progress.json').write_text(json.dumps(dict(last_completed_stage=name,stages=stages,elapsed_seconds=time.monotonic()-started)))
         print('CORE_STAGE '+name+' passed', flush=True)
         return output
 
@@ -172,6 +183,11 @@ def run(adb, root, apks, manifest):
             remote='/data/local/tmp/'+local.name
             adb('push',str(local),remote,timeout=20)
             shell(binary+'-restore --noflush < '+remote)
+            # Logging is optional diagnostics; the terminal REJECT remains
+            # mandatory even on images without the kernel LOG extension.
+            diagnostic=adb('shell',binary,'-I','CORE_ACCEPT',str(len(lines)-3),'-m','limit','--limit','30/minute',
+                           '-j','LOG','--log-prefix','CORE_EGRESS:',timeout=15,check=False)
+            report[binary+'_kernel_logging']=diagnostic.returncode==0
             rule(binary,'-I','OUTPUT','1','-m','owner','--uid-owner',str(app_uid),'-j','CORE_ACCEPT')
         firewall = True
         stage('recipient',240)
@@ -234,4 +250,11 @@ def run(adb, root, apks, manifest):
                     rows=rule(binary,'-L','CORE_ACCEPT','-n','-v','-x').splitlines()
                     report[binary+'_counters']=[line for line in rows if len(line.split())>2 and line.split()[2] in ('REJECT','DROP')]
                 except subprocess.SubprocessError: pass
+            kernel=adb('shell','dmesg',timeout=15,check=False).stdout.decode(errors='replace')
+            report['blocked_connection_diagnostics']=[line[:350] for line in kernel.splitlines() if 'CORE_EGRESS:' in line][-30:]
+        try:
+            private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15,check=False).stdout)
+            allowed_fields=('claimId','fundingTxId','fundedBalance','balanceBeforeSend','feeZatoshi','senderConfirmedBalance')
+            report['transaction_evidence']={key:private[key] for key in allowed_fields if key in private}
+        except (ValueError,subprocess.SubprocessError):pass
         (root/'core-testnet-result.json').write_text(json.dumps(report,indent=2)+'\n')
