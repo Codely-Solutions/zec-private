@@ -75,6 +75,7 @@ class AcceptancePolicyTest(unittest.TestCase):
                                                history_preserved=True,blocked_packets=1,scanned_height=12345)
         receipt['stages']['fund'].update(funding_txid='c'*64,balance_zatoshi=10000000)
         receipt['funding_setup']=dict(tor_exit_verified=True,persistent_tor_connection=True,txid='c'*64)
+        receipt['sync_preflight']=dict(passed=True,mode='advancing-scan',scanned_height=12340,network_height=12345)
         receipt['stages']['send'].update(fee_zatoshi=10000)
         receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000)
         return receipt
@@ -84,7 +85,7 @@ class AcceptancePolicyTest(unittest.TestCase):
         cases = [('network', 'mainnet'), ('input_fingerprint', 'old'),
                  ('evidence_class', 'simulation'), ('clearnet_fallback', True),
                  ('candidate_apk_sha256', None), ('candidate_version_code', 3234006),
-                 ('baseline_source_sha', 'c'*40), ('passed', False)]
+                 ('baseline_source_sha', 'c'*40), ('passed', False),('sync_preflight',{})]
         for key, value in cases:
             bad = self.receipt(); bad[key] = value
             with self.subTest(key=key), self.assertRaises(ValueError):

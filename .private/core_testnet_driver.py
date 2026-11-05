@@ -87,6 +87,7 @@ def run(adb, root, apks, manifest):
             raise RuntimeError('Core test stage failed: ' + name)
         if name in ('fund', 'upgrade', 'send', 'restart', 'restore'):
             stages[name] = rows[0]
+        if name=='sender':report['sync_preflight']=rows[0]
         (root/'core-testnet-progress.json').write_text(json.dumps(dict(last_completed_stage=name,stages=stages,elapsed_seconds=time.monotonic()-started)))
         print('CORE_STAGE '+name+' passed', flush=True)
         return output

@@ -105,6 +105,10 @@ def validate_core(receipt, expected_inputs):
         raise ValueError('Missing required core acceptance stage')
     if not receipt.get('network_enforcement', {}).get('passed'):
         raise ValueError('Missing fail-closed connection evidence')
+    preflight=receipt.get('sync_preflight',{})
+    if (preflight.get('passed') is not True or preflight.get('mode') not in ('caught-up','advancing-scan') or
+            not 0<preflight.get('scanned_height',0)<=preflight.get('network_height',0)):
+        raise ValueError('Missing real pre-funding synchronization readiness')
     recovery=stages['interruption']
     if (not all(recovery.get(key) is True for key in ('sync_restarted','synced','balance_preserved','history_preserved')) or
             recovery.get('blocked_packets',0)<=0 or recovery.get('scanned_height',0)<=0):

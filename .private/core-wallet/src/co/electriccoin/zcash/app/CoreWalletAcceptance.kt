@@ -33,6 +33,10 @@ import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
@@ -207,6 +211,9 @@ class CoreWalletAcceptance {
             .put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
         if (stage in listOf("send", "restart", "restore")) receipt.put("txId", fixture().getString("txId"))
         if (stage=="fund") receipt.put("funding_txid",fixture().getString("fundingTxId")).put("balance_zatoshi",fixture().getLong("fundedBalance"))
+        if (stage=="sender") receipt.put("scanned_height",fixture().getLong("preflightScannedHeight"))
+            .put("network_height",fixture().getLong("preflightNetworkHeight"))
+            .put("mode",fixture().getString("preflightMode"))
         if (stage=="send") receipt.put("fee_zatoshi",fixture().getLong("feeZatoshi"))
         if (stage=="restore") receipt.put("mined_height",fixture().getLong("restoreMinedHeight"))
             .put("amount_zatoshi",1_000_000L).put("app_transaction_state",fixture().getString("restoreTransactionState"))
@@ -214,6 +221,7 @@ class CoreWalletAcceptance {
         println("CORE_RESULT $receipt")
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun createWallet(role: String) {
         check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
         dependency<WalletRepository>().createNewWallet()
@@ -229,16 +237,42 @@ class CoreWalletAcceptance {
         save(state)
         // Prove the real app is syncing before requesting scarce faucet coins.
         if (role == "sender") {
+            val provider = dependency<SynchronizerProvider>()
+            data class Snapshot(val sync: Synchronizer, val status: Synchronizer.Status, val tip: BlockHeight?, val scanned: BlockHeight?)
+            var last: Snapshot? = null
+            var observed: Synchronizer? = null
+            var initial: Long? = null
             try {
-                withTimeout(120_000) {
-                    sync.status.first { it == Synchronizer.Status.SYNCED }
-                    sync.fullyScannedHeight.filterNotNull().first()
+                val ready = withTimeout(120_000) {
+                    provider.synchronizer.filterNotNull().flatMapLatest { current ->
+                        combine(current.status, current.networkHeight, current.fullyScannedHeight) { status, tip, scanned ->
+                            Snapshot(current, status, tip, scanned)
+                        }
+                    }.first { snapshot ->
+                        last = snapshot
+                        if (observed !== snapshot.sync) {
+                            observed = snapshot.sync
+                            initial = snapshot.scanned?.value
+                        }
+                        val height = snapshot.scanned?.value
+                        val tip = snapshot.tip?.value
+                        if (initial == null && height != null) initial = height
+                        height != null && tip != null && height <= tip &&
+                            ((snapshot.status == Synchronizer.Status.SYNCED && height >= tip) || height > (initial ?: height))
+                    }
                 }
+                save(fixture().put("preflightScannedHeight",checkNotNull(ready.scanned).value)
+                    .put("preflightNetworkHeight",checkNotNull(ready.tip).value)
+                    .put("preflightMode",if (ready.status == Synchronizer.Status.SYNCED) "caught-up" else "advancing-scan"))
             } catch (error: Exception) {
+                val currentError = provider.error.value
                 println("CORE_SYNC_DIAGNOSTIC " + JSONObject()
-                    .put("status", sync.status.first().toString())
-                    .put("scanned_height", sync.fullyScannedHeight.value?.value ?: -1L)
-                    .put("network_height", sync.networkHeight.value?.value ?: -1L)
+                    .put("status",last?.status?.toString() ?: "not-emitted")
+                    .put("scanned_height",last?.scanned?.value ?: -1L)
+                    .put("network_height",last?.tip?.value ?: -1L)
+                    .put("error_type",currentError?.javaClass?.simpleName ?: "none")
+                    .put("cause_class",currentError?.cause?.javaClass?.simpleName ?: "none")
+                    .put("foreground",withTimeoutOrNull(1_000) { dependency<ApplicationStateProvider>().isInForeground.first() } ?: false)
                     .put("exception_class", error.javaClass.simpleName))
                 throw error
             }
