@@ -14,7 +14,7 @@ Validation used no personal wallet, accepted swap or real funds. Full UI ran on 
 
 All task guests, private ADB trees and disposable roots are removed; no owned survivors or configuration drift remain. Superseded CI caches and temporary APK artifacts were removed, retaining nine current cache categories, final reports/previews and all signed releases. Four task QEMU crash dumps were identity-checked and deleted, recovering an observed 205,074,432 host bytes. Five baseline helper roots remain unassigned and preserved; their duplicate connection group is unresolved, so this is not a global helper-cleanliness claim. `.private/quote-cleanup.json` records the scope and measured results.
 
-The Windows emulator's software-rendering JIT crashed during early UI attempts. Supported NVIDIA host rendering completed the sequence; no global graphics setting changed. CI's first attempt hit Maven repo1 HTTP 429; Robolectric now uses the canonical Maven Central endpoint. The lifecycle tests were split into their own class and native probes formatted to satisfy Detekt. These workflow repairs are retained for future checks.
+The Windows emulator crashed with access violations during early UI attempts using software rendering. Supported NVIDIA host rendering completed the sequence; no global graphics setting changed. CI's first attempt hit Maven repo1 HTTP 429; Robolectric now uses the canonical Maven Central endpoint. The lifecycle tests were split into their own class and native probes formatted to satisfy Detekt. These workflow repairs are retained for future checks.
 
 # Historical revision 3 record: layout and fee disclosure
 
