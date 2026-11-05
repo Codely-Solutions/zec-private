@@ -156,7 +156,8 @@ class SwapQuoteVMMapperTest {
         val label = composeTestRule.onNodeWithText("Provider and bridge costs")
         val included = composeTestRule.onNodeWithText("Included in the quoted amount received")
         val note = composeTestRule.onNodeWithText(
-            "No affiliate fee. Unauthenticated quotes may include an extra 0.25% platform fee."
+            "No affiliate fee. Anonymous API platform fee: 0.25% where applicable. " +
+                "Other swap costs may apply; review the quoted amount received."
         )
         val labelBounds = label.fetchSemanticsNode().boundsInRoot
         val titleBounds = included.fetchSemanticsNode().boundsInRoot

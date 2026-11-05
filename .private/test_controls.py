@@ -29,7 +29,7 @@ class ControlsTest(unittest.TestCase):
             self.assertTrue(checks.check(root))
             p.write_text(p.read_text().replace('// Authorization: Bearer regression',''))
             p=root/'ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml'
-            p.write_text(p.read_text().replace('0.25%% platform','0.25% platform'))
+            p.write_text(p.read_text().replace('0.25%% where applicable','0.25% where applicable'))
             self.assertTrue(checks.check(root))
 
 if __name__=='__main__': unittest.main()

@@ -14,11 +14,13 @@ EXPECTED={
 
 def main():
     original=RESOURCE.read_bytes()
-    if b'0.25%% platform' not in original:
+    if b'0.25%% where applicable' not in original:
         raise RuntimeError('Corrected fee text is required before negative-control testing')
     REPORT.unlink(missing_ok=True)
     try:
-        RESOURCE.write_bytes(original.replace(b'0.25%% platform',b'0.25% platform'))
+        RESOURCE.write_bytes(original.replace(
+            b'Anonymous API platform fee: 0.25%% where applicable. Other swap costs may apply; review the quoted amount received.',
+            b'Unauthenticated quotes may include an extra 0.25% platform fee.'))
         result=subprocess.run([
             str(ROOT/'gradlew'),'--no-daemon','--no-watch-fs','--max-workers=2',
             '-Dorg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g',

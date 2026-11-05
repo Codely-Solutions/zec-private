@@ -34,7 +34,7 @@ def check(root=ROOT):
     quote=(root/COMMON/'model/near/NearSwapQuote.kt').read_text()
     need('override val affiliateFee: BigDecimal = BigDecimal.ZERO' in quote,'Affiliate display is nonzero')
     fee_copy=(root/'ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml').read_text()
-    need('0.25%% platform' in fee_copy,'Fee note can crash Android formatted-resource rendering')
+    need('Anonymous API platform fee: 0.25%% where applicable.' in fee_copy,'Fee note can crash Android formatted-resource rendering')
     mapper=(root/'ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt').read_text()
     need('layout = SwapQuoteInfoLayout.STACKED' in mapper,'Provider costs can collapse the quote label into a vertical column')
     props=(root/'gradle.properties').read_text()

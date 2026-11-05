@@ -1760,7 +1760,7 @@ Kk$Jm+-+us)Rn*`B
 
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
-index 000000000..e9643b925
+index 000000000..50f80d556
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 @@ -0,0 +1,6 @@
@@ -1768,7 +1768,7 @@ index 000000000..e9643b925
 +    <string name="private_wallet_transaction_fee" translatable="false">Wallet transaction fee</string>
 +    <string name="private_provider_costs" translatable="false">Provider and bridge costs</string>
 +    <string name="private_provider_costs_included" translatable="false">Included in the quoted amount received</string>
-+    <string name="private_no_affiliate_fee" translatable="false">No affiliate fee. Unauthenticated quotes may include an extra 0.25%% platform fee.</string>
++    <string name="private_no_affiliate_fee" translatable="false">No affiliate fee. Anonymous API platform fee: 0.25%% where applicable. Other swap costs may apply; review the quoted amount received.</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/strings.xml
 index 813f56457..596f657f6 100644
@@ -2047,7 +2047,7 @@ index 1d445dd11..b96c50409 100644
 -            coEvery { requestNextShieldedAddress() } returns "u"
 +            coEvery { requestNextShieldedAddress(requireFresh = true) } returns "u"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-index 38427672d..f93fe9dd8 100644
+index 38427672d..1181b3696 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 @@ -2,0 +3,20 @@ package co.electriccoin.zcash.ui.screen.swap.quote
@@ -2090,7 +2090,7 @@ index 38427672d..f93fe9dd8 100644
 +    @get:Rule
 +    val composeTestRule = createComposeRule()
 +
-@@ -68,0 +101,97 @@ class SwapQuoteVMMapperTest {
+@@ -68,0 +101,98 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun incomingQuoteFeeNoteRendersWithoutFormatConversionFailure() {
 +        assertQuoteRowsRender(SwapMode.FLEX_INPUT, SwapAssetTestFixture.zecAsset())
@@ -2149,7 +2149,8 @@ index 38427672d..f93fe9dd8 100644
 +        val label = composeTestRule.onNodeWithText("Provider and bridge costs")
 +        val included = composeTestRule.onNodeWithText("Included in the quoted amount received")
 +        val note = composeTestRule.onNodeWithText(
-+            "No affiliate fee. Unauthenticated quotes may include an extra 0.25% platform fee."
++            "No affiliate fee. Anonymous API platform fee: 0.25% where applicable. " +
++                "Other swap costs may apply; review the quoted amount received."
 +        )
 +        val labelBounds = label.fetchSemanticsNode().boundsInRoot
 +        val titleBounds = included.fetchSemanticsNode().boundsInRoot
