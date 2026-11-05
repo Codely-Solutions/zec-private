@@ -89,7 +89,11 @@ try:
     data_kib=int(receipt['guestDataBefore'].splitlines()[-1].split()[1])
     if data_kib>6500000: raise ValueError('Guest data partition exceeds reviewed 6GiB profile')
     receipt['guestDataPartitionActualKiB']=data_kib
-    if manifest.get('probeKind')=='differential':
+    if manifest.get('probeKind')=='core-testnet':
+        from core_testnet_driver import run
+        run(adb,ROOT,apk_paths,manifest)
+        receipt.update(passed=True,fundsTransferred=True,realFundsUsed=False,walletAccess='isolated-testnet-only')
+    elif manifest.get('probeKind')=='differential':
         from tor_differential_driver import run
         run(adb,ROOT,apk_paths)
         receipt['passed']=True

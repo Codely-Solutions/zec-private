@@ -61,7 +61,12 @@ jobs:
           python3 .private/check.py
           python3 .private/test_controls.py
           python3 .private/test_packaging.py
+          python3 -B .private/test_acceptance_policy.py
           python3 -B .private/test_sync.py
+      - name: Select acceptance by exact relevant inputs before expensive preparation
+        env:
+          VALIDATION_ONLY: ${{ inputs.validation_only || false }}
+        run: python3 -B .private/acceptance_status.py
       - name: Unfunded NEAR API contracts over Tor without credentials
         timeout-minutes: 15
         run: bash .private/run_tor_ci.sh
@@ -100,6 +105,8 @@ jobs:
             artifact/near-contract.json
             artifact/gradle-timing.json
             artifact/proof.json
+            artifact/core-acceptance.json
+            artifact/quote-acceptance.json
           if-no-files-found: ignore
           retention-days: 3
   promotion:
