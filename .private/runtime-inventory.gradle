@@ -18,7 +18,8 @@ gradle.projectsEvaluated {
             def output = new File(destination)
             if (!output.isAbsolute()) output = new File(rootProject.projectDir, destination)
             output.parentFile.mkdirs()
-            output.text = JsonOutput.prettyPrint(JsonOutput.toJson([configuration: name, components: components])) + '\n'
+            def sha = ['git', 'rev-parse', 'HEAD'].execute(null, rootProject.projectDir).text.trim()
+            output.text = JsonOutput.prettyPrint(JsonOutput.toJson([source_sha: sha, configuration: name, components: components])) + '\n'
         }
     }
 }

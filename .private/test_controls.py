@@ -1,9 +1,20 @@
-import importlib.util, json, tempfile, unittest
+import contextlib, importlib.util, json, os, tempfile, unittest
 from pathlib import Path
 import shutil
 
 spec=importlib.util.spec_from_file_location('forkcheck',Path(__file__).with_name('check.py'))
 checks=importlib.util.module_from_spec(spec);spec.loader.exec_module(checks)
+
+@contextlib.contextmanager
+def fixture_directory():
+    # The native guard scans its output while the child runs. Leave task-owned
+    # fixture deletion to its final cleanup, avoiding a scan/delete race.
+    guarded=os.environ.get('CODEX_GUARD_OUTPUT')
+    if guarded:
+        yield tempfile.mkdtemp(prefix='controls-',dir=guarded)
+    else:
+        with tempfile.TemporaryDirectory() as temp:
+            yield temp
 
 class ControlsTest(unittest.TestCase):
     def test_current_source(self):
@@ -11,7 +22,7 @@ class ControlsTest(unittest.TestCase):
 
     def test_fee_and_auth_regressions_block(self):
         # Copy only static-check inputs; never touch real release state or keys.
-        with tempfile.TemporaryDirectory() as temp:
+        with fixture_directory() as temp:
             root=Path(temp)
             for relative in ['ui-lib/src/main','app/src','gradle.properties','LICENSE',
                              'settings.gradle.kts','app/build.gradle.kts','ui-lib/build.gradle.kts',
@@ -36,7 +47,7 @@ class ControlsTest(unittest.TestCase):
 
     def test_excluded_integrations_cannot_return(self):
         from check_exclusions import check
-        with tempfile.TemporaryDirectory() as temp:
+        with fixture_directory() as temp:
             root=Path(temp)
             for relative in ['app/build.gradle.kts','ui-lib/build.gradle.kts','settings.gradle.kts',
                              '.private/excluded-features.json']:

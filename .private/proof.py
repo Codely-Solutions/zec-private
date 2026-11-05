@@ -27,7 +27,14 @@ contract_path=root/'artifact/near-contract.json'
 contract=json.loads(contract_path.read_text())
 if not contract.get('success') or contract.get('source_sha')!=sha:
     raise SystemExit('Missing live API contract evidence for this source revision')
+if contract.get('transport')!='Tor SOCKS5 with remote DNS; no direct fallback':
+    raise SystemExit('Live API checks did not establish the required Tor transport')
+runtime_path=root/'artifact/runtime.json'
+if json.loads(runtime_path.read_text()).get('source_sha')!=sha:
+    raise SystemExit('Release dependency inventory is not bound to this source')
+subprocess.run([os.sys.executable,str(root/'.private/check_exclusions.py'),str(runtime_path)],check=True)
 proof={'source_sha':sha,'apk_sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'package':package[1],'versionCode':int(package[2]),'versionName':package[3],'debuggable':False,'upstream':upstream,'release_tag':f'v{version}-private.{revision}','validation':'unit-lint-detekt-live-ui-fork-v3','live_contract_sha256':hashlib.sha256(contract_path.read_bytes()).hexdigest()}
 out=root/'artifact';out.mkdir(exist_ok=True)
+proof['runtime_graph_sha256']=hashlib.sha256(runtime_path.read_bytes()).hexdigest()
 shutil.copy2(apk,out/'zec-private-unsigned.apk')
 (out/'proof.json').write_text(json.dumps(proof,indent=2)+'\n')
