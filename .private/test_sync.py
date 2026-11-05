@@ -30,6 +30,11 @@ class SyncTests(unittest.TestCase):
             with self.subTest(screen=screen):
                 self.assertTrue(sync.critical(base+screen+'/Screen.kt'))
         self.assertFalse(sync.critical(base+'colorpicker/Screen.kt'))
+        for path in ('configuration-impl-android-lib/src/main/kotlin/Flags.kt',
+                     'spackle-lib/src/main/kotlin/Logging.kt','build-info-lib/src/main/kotlin/BuildInfo.kt',
+                     'scripts/build.sh'):
+            with self.subTest(path=path):
+                self.assertTrue(sync.critical(path))
 
     def test_critical_change_blocks_before_candidate_or_publication(self):
         original=sync.run
