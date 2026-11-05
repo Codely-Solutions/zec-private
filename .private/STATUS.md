@@ -1,3 +1,13 @@
+# Quote retry investigation: unresolved device/Tor failure
+
+The user reports repeatable BTC-to-ZEC quote failures after dismissing an unaccepted quote with Tor enabled; restarting the app restores quoting. Dismissal should allow another request. This remains an unresolved defect report, not a confirmed liquidity limitation.
+
+[Focused lifecycle run 42009124248](https://github.com/Sammy-Lastre/zec-private/actions/runs/42009124248) passed all 73 repository/use-case tests, with zero failures, errors or skips. New regressions cover successful dismissal followed by a fresh request, cancellation of a pending request, and recovery after a transient network failure. These use mocked networking and do not establish Android Tor runtime behavior. `.private/quote-retry-validation.json` records the evidence and limits.
+
+Source review found that dismissal clears local quote/proposal state and sends no provider cancellation request. Incoming requests derive fresh recipients. The generic quote-unavailable screen also covers network failures. In pinned SDK v6.0.0, every HTTP request gets an isolated Tor handle, and native isolation clones the runtime; closing one client is not evidence that the shared runtime was destroyed. No root cause or production fix is proven. Release v3.19.0-private.3 remains unchanged. No accepted swap, funds or wallet secrets were used, and Tor routing was preserved.
+
+Local disposable downloads were parsed in memory. The CI run is terminal; guard status has no disposable roots, recovery marker or configuration drift. The five unassigned helper roots and one duplicate group were already present at baseline and remain preserved; their ownership is unresolved. No global helper-cleanliness claim is made.
+
 # Revision 3: layout and fee disclosure verified
 
 Current release: [v3.19.0-private.3](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.3), versionCode `3234003`, package `com.personal.zecprivate.foss`. It uses the same permanent signing certificate and is non-debuggable. Install it as an update over the existing app.
