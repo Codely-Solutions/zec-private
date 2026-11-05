@@ -173,6 +173,11 @@ androidComponents {
 }
 
 dependencies {
+    constraints {
+        implementation("androidx.room:room-runtime:2.7.2") {
+            because("Preserve the released wallet SDK runtime after removing Flexa's transitive constraints")
+        }
+    }
     implementation(libs.accompanist.permissions)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.annotation)

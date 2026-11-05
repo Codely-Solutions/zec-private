@@ -36,6 +36,9 @@ if __name__ == '__main__':
         for component in components:
             if component.startswith('co.flexa:') or component == 'project :feature-voting':
                 errors.append('Excluded runtime component: ' + component)
+        from compare_runtime import compare
+        comparison=compare(evidence)
+        print(json.dumps(comparison,sort_keys=True))
     if errors:
         raise SystemExit('\n'.join(errors))
     print('Excluded integration checks passed.')
