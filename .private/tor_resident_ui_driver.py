@@ -46,7 +46,10 @@ def run(adb, root, apks, manifest):
                 time.sleep(1)
         print('UI_READY: resident instrumentation; fresh unfunded test wallet only.',flush=True)
         if manifest.get('phase1Scenario'):
-            from phase1_ui_scenario import run as run_scenario
+            if manifest.get('sizeWorkflowScenario'):
+                from size_workflow_ui_scenario import run as run_scenario
+            else:
+                from phase1_ui_scenario import run as run_scenario
             scenario_thread=threading.Thread(target=run_scenario,args=(root,scenario_stop),daemon=True)
             scenario_thread.start()
         deadline=time.monotonic()+1000
