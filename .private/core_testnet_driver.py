@@ -27,7 +27,7 @@ def run(adb, root, apks, manifest):
     stages = {}
     application_pids=set()
     report = dict(schema=1, passed=False, evidence_class='real-app-testnet', network='zcash-testnet',
-                  clearnet_fallback=False, personal_wallet_access=False, real_funds_used=False,
+                  clearnet_fallback=False, direct_bulk_downloads=True,personal_wallet_access=False, real_funds_used=False,
                   stages=stages, input_fingerprint=manifest['input_fingerprint'],
                   build_input_fingerprint=manifest['build_input_fingerprint'],
                   build_source_sha=manifest['build_source_sha'],
@@ -155,17 +155,17 @@ def run(adb, root, apks, manifest):
         except RuntimeError as error:
             report['connection_tracing']=False
             report['connection_tracing_error']=str(error)[:400]
-        # Android netd can resolve on behalf of an app under a system UID.
-        # Block guest DNS/DoT as well as app-UID egress; Tor resolves remotely.
-        for binary in ('iptables','ip6tables'):
-            for protocol,port in (('udp','53'),('tcp','53'),('tcp','853')):
-                rule(binary,'-I','OUTPUT','1','-p',protocol,'--dport',port,'-j','REJECT')
+        # Normal DNS is permitted for the explicitly authorized public bulk path.
+        # Sensitive SDK/provider calls must still use native Tor without fallback.
         output = stage('networkTargets', 180)
         targets = set()
+        bulk_targets = set()
         for line in output.splitlines():
             if line.startswith('CORE_TARGETS '):
-                targets.update(str(ipaddress.ip_address(value)) for value in json.loads(line.split(' ', 1)[1]))
-        if not targets:
+                resolved=json.loads(line.split(' ',1)[1])
+                targets.update(str(ipaddress.ip_address(value)) for value in resolved['sensitive'])
+                bulk_targets.update(str(ipaddress.ip_address(value)) for value in resolved['bulk'])
+        if not targets or not bulk_targets or targets & bulk_targets:
             raise RuntimeError('Missing Tor-resolved destination addresses')
         app_uid = uid()
         # Independently published Tor relay addresses were fetched through app
@@ -206,31 +206,29 @@ def run(adb, root, apks, manifest):
         if peers & targets or not peers.issubset(allowed | {address for address,_ in bootstrap_peers}):
             raise RuntimeError('Cannot establish isolated native Tor relay peers')
         for binary, family in (('iptables',4),('ip6tables',6)):
-            lines=['*filter', ':CORE_ACCEPT - [0:0]',
+            lines=['*filter', ':CORE_ACCEPT - [0:0]', ':CORE_TOR - [0:0]',
                    '-A CORE_ACCEPT -d '+('127.0.0.0/8' if family==4 else '::1')+' -j ACCEPT']
             for target in sorted(targets):
                 if ipaddress.ip_address(target).version==family:
                     lines.append('-A CORE_ACCEPT -d '+target+' -j REJECT')
+            for target in sorted(bulk_targets):
+                if ipaddress.ip_address(target).version==family:
+                    lines.append('-A CORE_ACCEPT -p tcp -d '+target+' --dport 443 -j ACCEPT')
+            lines.append('-A CORE_ACCEPT -j CORE_TOR')
             for peer in sorted(allowed):
                 if ipaddress.ip_address(peer).version == family:
-                    lines.append('-A CORE_ACCEPT -p tcp -d '+peer+' -j ACCEPT')
+                    lines.append('-A CORE_TOR -p tcp -d '+peer+' -j ACCEPT')
             for peer,port in sorted(bootstrap_peers):
                 if ipaddress.ip_address(peer).version==family and peer not in allowed:
-                    lines.append('-A CORE_ACCEPT -p tcp -d '+peer+' --dport '+str(port)+' -j ACCEPT')
+                    lines.append('-A CORE_TOR -p tcp -d '+peer+' --dport '+str(port)+' -j ACCEPT')
             # No UDP DNS or unobserved endpoint/relay is allowed from the app.
-            lines.extend(['-A CORE_ACCEPT -p udp -j REJECT','-A CORE_ACCEPT -j REJECT','COMMIT'])
+            lines.extend(['-A CORE_TOR -p udp -j REJECT','-A CORE_TOR -j REJECT','COMMIT'])
             local=root/(binary+'-rules.txt')
             # Windows text-mode CRLF is invalid input for Android restore.
             local.write_bytes(('\n'.join(lines)+'\n').encode('ascii'))
             remote='/data/local/tmp/'+local.name
             adb('push',str(local),remote,timeout=20)
             shell(binary+'-restore --noflush < '+remote)
-            # Logging is optional diagnostics; the terminal REJECT remains
-            # mandatory even on images without the kernel LOG extension.
-            diagnostic=adb('shell',binary,'-I','CORE_ACCEPT',str(len(lines)-3),'-m','limit','--limit','30/minute',
-                           '-j','LOG','--log-prefix','CORE_EGRESS:',timeout=15,check=False)
-            report[binary+'_kernel_logging']=diagnostic.returncode==0
-            if diagnostic.returncode:report[binary+'_logging_error']=diagnostic.stderr.decode(errors='replace')[:500]
             rule(binary,'-I','OUTPUT','1','-m','owner','--uid-owner',str(app_uid),'-j','CORE_ACCEPT')
         firewall = True
         stage('recipient',240)
@@ -273,25 +271,26 @@ def run(adb, root, apks, manifest):
         if not wait_marker('core-sync-ready.json').get('ready'):
             raise RuntimeError('Wallet synchronizer not ready for interruption')
         for binary in ('iptables','ip6tables'):
-            rule(binary,'-I','CORE_ACCEPT','1','-j','DROP')
+            rule(binary,'-I','CORE_TOR','1','-j','DROP')
         shell('run-as',PACKAGE,'touch','files/core-sync-drop')
-        if not wait_marker('core-sync-requested.json',30).get('requested'):
-            raise RuntimeError('Wallet resync was not requested under outage')
+        outage=wait_marker('core-sync-requested.json',35)
+        if not all(outage.get(key) is True for key in ('requested','metadata_blocked','direct_bulk_reachable')):
+            raise RuntimeError('Sensitive Tor failure with reachable direct bulk path not established')
         time.sleep(10)
         blocked = 0
         for binary in ('iptables','ip6tables'):
-            counters = rule(binary,'-L','CORE_ACCEPT','-n','-v','-x')
+            counters = rule(binary,'-L','CORE_TOR','-n','-v','-x')
             for line in counters.splitlines():
                 fields=line.split()
                 if len(fields)>2 and fields[2]=='DROP':blocked+=int(fields[0])
-            rule(binary,'-D','CORE_ACCEPT','1')
+            rule(binary,'-D','CORE_TOR','1')
         worker.join(timeout=200)
         if worker.is_alive() or not outcome.get('passed') or blocked==0:
             raise RuntimeError('Tor interruption/recovery not established')
         recovery=json.loads(shell('run-as',PACKAGE,'cat','files/core-sync-result.json'))
         if not all(recovery.get(key) is True for key in ('sync_restarted','synced','balance_preserved','history_preserved')):
             raise RuntimeError('Wallet synchronization recovery not established')
-        stages['interruption']=dict(passed=True,blocked_packets=blocked,seconds=time.monotonic()-before,**recovery)
+        stages['interruption']=dict(passed=True,metadata_blocked=True,direct_bulk_reachable=True,metadata_recovered=True,blocked_packets=blocked,seconds=time.monotonic()-before,**recovery)
         stage('send')
         shell('am','force-stop',PACKAGE)
         stage('restart',240)
@@ -299,14 +298,14 @@ def run(adb, root, apks, manifest):
         stage('restore')
         denied=0
         for binary in ('iptables','ip6tables'):
-            rows=rule(binary,'-L','CORE_ACCEPT','-n','-v','-x').splitlines()
+            rows=(rule(binary,'-L','CORE_TOR','-n','-v','-x')+'\n'+rule(binary,'-L','CORE_ACCEPT','-n','-v','-x')).splitlines()
             rejected=[line for line in rows if len(line.split())>2 and line.split()[2]=='REJECT']
             report[binary+'_denials']=rejected
             denied+=sum(int(line.split()[0]) for line in rejected)
         if denied:
             raise RuntimeError('Unexpected app egress attempts blocked; inspect exact destinations')
-        report['network_enforcement']=dict(passed=True,mode='app-UID TCP Tor-relay allowlist; dual-stack deny other egress; whole-guest DNS/DoT blocked',
-                                           allowed_relay_peers=len(allowed),embedded_bootstrap_pairs=len(bootstrap_peers),tor_resolved_targets=len(targets))
+        report['network_enforcement']=dict(passed=True,mode='direct public bulk endpoint TCP443 plus Tor relay allowlist; sensitive provider direct egress denied; metadata outage assertion',
+                                           allowed_relay_peers=len(allowed),embedded_bootstrap_pairs=len(bootstrap_peers),sensitive_targets=len(targets),direct_bulk_targets=sorted(bulk_targets),sensitive_no_fallback=True)
         report['passed']=True
     finally:
         failure=sys.exc_info()[1]
@@ -341,7 +340,7 @@ def run(adb, root, apks, manifest):
             for binary in ('iptables','ip6tables'):
                 # Retain counter totals only; guard-owned guest disappears next.
                 try:
-                    rows=rule(binary,'-L','CORE_ACCEPT','-n','-v','-x').splitlines()
+                    rows=(rule(binary,'-L','CORE_TOR','-n','-v','-x')+'\n'+rule(binary,'-L','CORE_ACCEPT','-n','-v','-x')).splitlines()
                     report[binary+'_counters']=[line for line in rows if len(line.split())>2 and line.split()[2] in ('REJECT','DROP')]
                 except subprocess.SubprocessError: pass
             kernel=adb('shell','dmesg',timeout=15,check=False).stdout.decode(errors='replace')

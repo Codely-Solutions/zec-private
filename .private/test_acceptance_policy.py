@@ -65,14 +65,15 @@ class AcceptancePolicyTest(unittest.TestCase):
                        evidence_class='real-app-testnet', network='zcash-testnet',
                        clearnet_fallback=False, personal_wallet_access=False, real_funds_used=False,
                        stages={s: dict(passed=True, txId='a'*64) for s in CORE_STAGES},
-                       network_enforcement=dict(passed=True), build_source_sha='a'*40,
+                       network_enforcement=dict(passed=True,sensitive_no_fallback=True,direct_bulk_targets=['192.0.2.1']), build_source_sha='a'*40,
                        baseline_source_sha='a0bd21f27bb53af0eeb9b433d0273c6f39b04e19',
                        build_input_fingerprint='d'*64,
                        baseline_version_code=3234006, candidate_version_code=3234007)
         for key in ('candidate_apk_sha256', 'baseline_apk_sha256', 'instrumentation_apk_sha256', 'harness_sha256'):
             receipt[key] = 'b'*64
         receipt['stages']['interruption'].update(sync_restarted=True,synced=True,balance_preserved=True,
-                                               history_preserved=True,blocked_packets=1,scanned_height=12345)
+                                               history_preserved=True,metadata_blocked=True,direct_bulk_reachable=True,
+                                               metadata_recovered=True,blocked_packets=1,scanned_height=12345)
         receipt['stages']['fund'].update(funding_txid='c'*64,balance_zatoshi=10000000)
         receipt['funding_setup']=dict(tor_exit_verified=True,persistent_tor_connection=True,txid='c'*64)
         receipt['sync_preflight']=dict(passed=True,mode='advancing-scan',scanned_height=12340,network_height=12345)
@@ -96,7 +97,7 @@ class AcceptancePolicyTest(unittest.TestCase):
                 validate_core(bad, 'inputs')
         bad = self.receipt(); bad['stages']['restore']['txId'] = 'c'*64
         with self.assertRaises(ValueError): validate_core(bad, 'inputs')
-        for key in ('sync_restarted','synced','balance_preserved','history_preserved'):
+        for key in ('sync_restarted','synced','balance_preserved','history_preserved','metadata_blocked','direct_bulk_reachable','metadata_recovered'):
             bad=self.receipt();bad['stages']['interruption'][key]=False
             with self.subTest(recovery=key),self.assertRaises(ValueError):validate_core(bad,'inputs')
 
