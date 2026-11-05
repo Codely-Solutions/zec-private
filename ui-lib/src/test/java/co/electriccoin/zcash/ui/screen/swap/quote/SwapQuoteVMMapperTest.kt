@@ -182,7 +182,13 @@ class SwapQuoteVMMapperTest {
         val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
         composeTestRule.runOnUiThread { view.draw(Canvas(bitmap)) }
         val crop =
-            Bitmap.createBitmap(bitmap, bounds.left.toInt(), bounds.top.toInt(), bounds.width.toInt(), bounds.height.toInt())
+            Bitmap.createBitmap(
+                bitmap,
+                bounds.left.toInt(),
+                bounds.top.toInt(),
+                bounds.width.toInt(),
+                bounds.height.toInt()
+            )
         val target = File(output, "${mode.name.lowercase()}-$width-$fontScale.png")
         target.parentFile.mkdirs()
         target.outputStream().use { crop.compress(Bitmap.CompressFormat.PNG, 100, it) }
