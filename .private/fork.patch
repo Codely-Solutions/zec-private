@@ -274,12 +274,12 @@ index 000000000..146265093
 +    open-pull-requests-limit: 10
 \ No newline at end of file
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..ddfca72f9 100644
+index ec56161b5..b6a3b1829 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
 -ZCASH_VERSION_CODE=1
-+ZCASH_VERSION_CODE=3234006
++ZCASH_VERSION_CODE=3234007
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
 -ZCASH_RELEASE_APP_NAME=Zodl
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash

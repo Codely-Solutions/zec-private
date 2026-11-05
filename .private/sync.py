@@ -1,6 +1,7 @@
 """Trusted controller: fetch stable upstream, gate critical diffs, apply exact patch."""
 import hashlib, json, os, re, shutil, subprocess
 from pathlib import Path
+from acceptance_policy import requirements
 
 ROOT=Path(__file__).resolve().parents[1]
 OFFICIAL='zodl-inc/zodl-android'
@@ -124,7 +125,7 @@ def main():
         code=max(int(state.get('versionCode',0))+1,version(tag)[3]*1000+revision)
         props=candidate/'gradle.properties'
         props.write_text(re.sub(r'^ZCASH_VERSION_CODE=\d+$',f'ZCASH_VERSION_CODE={code}',props.read_text(),flags=re.M))
-        (candidate/'.private/candidate.json').write_text(json.dumps({'tag':tag,'sha':commit,'published_at':latest['published_at'],'versionCode':code},indent=2)+'\n')
+        (candidate/'.private/candidate.json').write_text(json.dumps({'tag':tag,'sha':commit,'published_at':latest['published_at'],'versionCode':code,'acceptance':requirements(changes)},indent=2)+'\n')
         run('python3','-B','.private/check.py',cwd=candidate)
         run('git','add','-A',cwd=candidate)
         (candidate/'.private/source-state.json').write_text(json.dumps(source_state(candidate),indent=2)+'\n')

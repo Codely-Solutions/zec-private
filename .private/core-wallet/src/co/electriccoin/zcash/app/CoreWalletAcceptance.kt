@@ -7,6 +7,9 @@ import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.android.sdk.model.ZecSend
+import cash.z.ecc.android.sdk.internal.Backend
+import cash.z.ecc.android.sdk.internal.model.TorClient
+import cash.z.ecc.android.sdk.internal.model.TorHttp
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.SubmitResult
@@ -22,6 +25,7 @@ import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.CreateProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.RestoreWalletUseCase
 import io.ktor.client.request.get
+import io.ktor.client.HttpClient
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -33,9 +37,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
+import org.json.JSONArray
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 import java.io.File
+import java.lang.reflect.Proxy
 
 /** Exercises the installed app graph. No mocks, SDK-only wallet, or mainnet spending. */
 class CoreWalletAcceptance {
@@ -43,8 +49,9 @@ class CoreWalletAcceptance {
     private val context = instrumentation.targetContext
     private val arguments = InstrumentationRegistry.getArguments()
     private inline fun <reified T : Any> dependency(): T = GlobalContext.get().get()
-    // Instrumentation-owned storage survives target pm clear; the whole blank guest is disposable.
-    private val fixtureFile get() = File(instrumentation.context.filesDir, "core-private.json")
+    // The guarded host briefly preserves this fixture around explicit target-data
+    // erasure. It restores only this seed/birthday fixture, never an SDK database.
+    private val fixtureFile get() = File(context.filesDir, "core-private.json")
     private fun fixture() = if (fixtureFile.exists()) JSONObject(fixtureFile.readText()) else JSONObject()
     private fun save(value: JSONObject) = fixtureFile.writeText(value.toString())
 
@@ -69,6 +76,8 @@ class CoreWalletAcceptance {
                     check(!state.has("claimAttempted"))
                     state.put("claimAttempted", true); save(state)
                     dependency<HttpClientProvider>().createTor().use { client ->
+                        val readiness=JSONObject(client.get("https://faucet.testnet.valargroup.dev/api/status").bodyAsText())
+                        check(readiness.getString("network")=="testnet" && readiness.getBoolean("ready")) { "Faucet testnet funding unavailable" }
                         val response = client.post("https://faucet.testnet.valargroup.dev/api/claim") {
                             contentType(ContentType.Application.Json)
                             setBody(JSONObject().put("address", address).toString())
@@ -89,14 +98,25 @@ class CoreWalletAcceptance {
                             }
                         }
                     }
+                    val received=withTimeout(600_000) {
+                        dependency<TransactionRepository>().observeTransaction(state.getString("fundingTxId"))
+                            .filterNotNull().first { it is ReceiveTransaction.Success }
+                    }
                     awaitBalance(2_000_000)
+                    check(balance()==received.amount.value)
                     state.put("fundedBalance", balance()); save(state)
                 }
                 "upgrade", "restart" -> {
                     val state = fixture()
                     checkWallet("sender")
-                    if (stage == "upgrade") check(balance() == state.getLong("fundedBalance"))
-                    else checkSent()
+                    if (stage == "upgrade") {
+                        awaitBalance(state.getLong("fundedBalance"))
+                        check(balance() == state.getLong("fundedBalance"))
+                        withTimeout(120_000) {
+                            dependency<TransactionRepository>().observeTransaction(state.getString("fundingTxId"))
+                                .filterNotNull().first { it is ReceiveTransaction.Success }
+                        }
+                    } else checkSent()
                 }
                 "send" -> {
                     val state = fixture()
@@ -137,6 +157,42 @@ class CoreWalletAcceptance {
                     dependency<SynchronizerProvider>().getSynchronizer()
                     dependency<HttpClientProvider>().createTor().use { client ->
                         check(client.get("https://faucet.testnet.valargroup.dev/healthz").status.value == 200)
+                    }
+                }
+                "networkTargets" -> {
+                    check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
+                    val backend=Proxy.newProxyInstance(Backend::class.java.classLoader,arrayOf(Backend::class.java)) { _, _, _ ->
+                        error("Wallet access forbidden during isolated Tor bootstrap")
+                    } as Backend
+                    val tor=TorClient.new(File(context.cacheDir,"core-bootstrap-tor"),backend)
+                    try {
+                        val isolated=tor.isolatedTorClient()
+                        HttpClient(TorHttp) {
+                            engine { this.tor=isolated; retryLimit=1 }
+                            expectSuccess=true
+                        }.use { client ->
+                            val addresses = JSONArray()
+                            for (host in listOf("testnet.zec.rocks", "faucet.testnet.valargroup.dev")) {
+                                for (type in listOf("A", "AAAA")) {
+                                    val result = JSONObject(client.get("https://dns.google/resolve?name=$host&type=$type").bodyAsText())
+                                    val answers = result.optJSONArray("Answer") ?: continue
+                                    for (index in 0 until answers.length()) {
+                                        val answer = answers.getJSONObject(index)
+                                        if (answer.optInt("type") in listOf(1, 28)) addresses.put(answer.getString("data"))
+                                    }
+                                }
+                            }
+                            check(addresses.length() > 0)
+                            println("CORE_TARGETS $addresses")
+                            val directory = JSONObject(client.get(
+                                "https://onionoo.torproject.org/details?running=true&fields=or_addresses"
+                            ).bodyAsText())
+                            val relays = directory.getJSONArray("relays")
+                            check(relays.length() in 1000..20000)
+                            File(context.filesDir, "core-relays.json").writeText(directory.toString())
+                        }
+                    } finally {
+                        tor.dispose()
                     }
                 }
                 else -> error("Unsupported core stage")

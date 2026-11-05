@@ -1,10 +1,21 @@
 """Small negative cases for promotion evidence; no emulator or network."""
 import copy
+import hashlib
 import unittest
-from acceptance_policy import requirements, validate_core, CORE_STAGES
+from acceptance_policy import requirements, validate_core, validate_quotes, validate_binding, CORE_STAGES
 
 
 class AcceptancePolicyTest(unittest.TestCase):
+    def test_receipt_substitution_and_missing_proof_block(self):
+        receipt=b'trusted acceptance'
+        proof={'core_acceptance':dict(status='passed',input_fingerprint='inputs',
+                                      receipt_sha256=hashlib.sha256(receipt).hexdigest())}
+        validate_binding(proof,'core_acceptance','inputs',receipt,receipt)
+        for changed in ({}, {'core_acceptance':dict(proof['core_acceptance'],status='pending')},
+                        {'core_acceptance':dict(proof['core_acceptance'],receipt_sha256='a'*64)}):
+            with self.assertRaises(ValueError):validate_binding(changed,'core_acceptance','inputs',receipt,receipt)
+        with self.assertRaises(ValueError):validate_binding(proof,'core_acceptance','inputs',receipt,b'other receipt')
+
     def receipt(self):
         receipt = dict(schema=1, input_fingerprint='inputs', passed=True,
                        evidence_class='real-app-testnet', network='zcash-testnet',
@@ -41,6 +52,15 @@ class AcceptancePolicyTest(unittest.TestCase):
             self.assertIn('core-testnet', requirements([path])['profiles'])
         self.assertEqual(['production-quotes'], requirements(['ui-lib/src/main/java/SwapRepository.kt'])['profiles'])
         self.assertIn('production-quotes', requirements(['ui-lib/src/main/java/HttpClientProvider.kt'])['profiles'])
+
+    def test_quotes_need_real_repeated_tor_evidence(self):
+        receipt=dict(schema=1,input_fingerprint='inputs',evidence_class='real-app-production-quotes',
+                     passed=True,tor_enabled=True,funds_transferred=False,personal_wallet_access=False,
+                     quote_requests=3,quote_reviews=3,dismissals=3,executed_apk_sha256='a'*64,build_source_sha='b'*40)
+        self.assertTrue(validate_quotes(receipt,'inputs'))
+        for key,value in (('dismissals',2),('tor_enabled',False),('input_fingerprint','old'),('funds_transferred',True)):
+            bad=dict(receipt);bad[key]=value
+            with self.subTest(key=key),self.assertRaises(ValueError):validate_quotes(bad,'inputs')
 
 
 if __name__ == '__main__': unittest.main()

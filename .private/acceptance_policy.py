@@ -26,11 +26,15 @@ def relevant(path):
             '.private/acceptance_policy.py', '.private/core_testnet_driver.py',
             '.private/run_core_emulator.py', '.private/core-network-policy.json',
             '.private/tor-ui-abi.gradle', '.github/workflows/core-validation.yml'}
+    if path.startswith(('.idea/','docs/')) or '/src/test/' in path or '/src/androidTest/' in path:
+        return False
+    if '/screen/theme/' in path or '/design/theme/' in path:
+        return False
     return not (path in {'README.md', 'LICENSE', '.gitignore', '.gitattributes'} or
                 path.endswith(('.md', '.png', '.jpg', '.webp', '.svg')))
 
 
-def input_fingerprint(revision='HEAD', root=ROOT):
+def input_fingerprint(revision='HEAD', root=ROOT, profile='core-testnet'):
     # One bounded Git inventory. Blob IDs refer to canonical committed bytes,
     # independent of Windows checkout line endings; no subprocess per file.
     rows = git('ls-tree', '-r', '-z', revision, root=root).decode().split('\0')
@@ -39,8 +43,14 @@ def input_fingerprint(revision='HEAD', root=ROOT):
         if not row:
             continue
         metadata, path = row.split('\t', 1)
-        if relevant(path):
+        if relevant(path) and (profile!='production-quotes' or not path.startswith(('.private/','.github/'))):
             entries[path] = metadata
+    # Version increments select an update target, not a different wallet engine.
+    # All other Gradle properties (identity, SDK and behavior switches) stay bound.
+    if 'gradle.properties' in entries:
+        properties=git('show',f'{revision}:gradle.properties',root=root).decode().replace('\r\n','\n')
+        properties='\n'.join(line for line in properties.splitlines() if not line.startswith(('ZCASH_VERSION_CODE=','ZCASH_VERSION_NAME=')))
+        entries['gradle.properties']=hashlib.sha256(properties.encode()).hexdigest()
     return hashlib.sha256(json.dumps(entries, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
@@ -97,6 +107,29 @@ def validate_core(receipt, expected_inputs):
     if len(txids) != 1 or not re.fullmatch('[0-9a-f]{64}', str(next(iter(txids)))):
         raise ValueError('Transaction identity not preserved through restart/restore')
     return True
+
+
+def validate_quotes(receipt, expected_inputs):
+    if (receipt.get('schema')!=POLICY_VERSION or receipt.get('input_fingerprint')!=expected_inputs or
+            receipt.get('evidence_class')!='real-app-production-quotes' or receipt.get('passed') is not True or
+            receipt.get('tor_enabled') is not True or receipt.get('funds_transferred') is not False or
+            receipt.get('personal_wallet_access') is not False):
+        raise ValueError('Missing real unfunded production quote acceptance')
+    if min(receipt.get(key,0) for key in ('quote_requests','quote_reviews','dismissals'))<3:
+        raise ValueError('Repeated quote/dismiss path not established')
+    if not re.fullmatch('[0-9a-f]{64}',str(receipt.get('executed_apk_sha256',''))):
+        raise ValueError('Missing executed quote artifact digest')
+    if not re.fullmatch('[0-9a-f]{40}',str(receipt.get('build_source_sha',''))):
+        raise ValueError('Missing executed quote source')
+    return True
+
+
+def validate_binding(proof, profile, expected_inputs, trusted_bytes, artifact_bytes):
+    bound=proof.get(profile,{})
+    if (bound.get('status')!='passed' or bound.get('input_fingerprint')!=expected_inputs or
+            bound.get('receipt_sha256')!=hashlib.sha256(trusted_bytes).hexdigest() or
+            artifact_bytes!=trusted_bytes):
+        raise ValueError('Missing or mismatched trusted acceptance: '+profile)
 
 
 if __name__ == '__main__':

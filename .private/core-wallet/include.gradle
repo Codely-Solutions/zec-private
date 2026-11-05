@@ -5,6 +5,8 @@ allprojects { app ->
             app.android.sourceSets.getByName('androidTest').java.srcDir(new File(app.rootProject.projectDir, '.private/core-wallet/src'))
             app.dependencies.add('androidTestImplementation', app.rootProject.project(':ui-lib'))
             app.dependencies.add('androidTestImplementation', app.rootProject.project(':sdk-ext-lib'))
+            def libs=app.extensions.getByType(org.gradle.api.artifacts.VersionCatalogsExtension).named('libs')
+            app.dependencies.add('androidTestImplementation',libs.findLibrary('zcash-sdk-backend').get())
         }
     }
 }

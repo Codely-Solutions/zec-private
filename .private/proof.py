@@ -2,6 +2,7 @@
 import hashlib,json,os,re,shutil,subprocess,zipfile
 from pathlib import Path
 from apk_architecture import check_apk
+from acceptance_policy import input_fingerprint, validate_core, validate_quotes
 root=Path(__file__).resolve().parents[1]
 apks=list((root/'app/build/outputs/apk/zcashmainnetFoss/release').glob('*unsigned.apk'))
 if len(apks)!=1: raise SystemExit('Expected exactly one unsigned FOSS release APK')
@@ -39,6 +40,24 @@ proof={'source_sha':sha,'apk_sha256':hashlib.sha256(apk.read_bytes()).hexdigest(
 out=root/'artifact';out.mkdir(exist_ok=True)
 proof['architecture']=architecture
 proof['workflow_run_id']=os.environ.get('GITHUB_RUN_ID')
+core_inputs=input_fingerprint(sha)
+core_path=root/'.private/core-acceptance.json'
+proof['core_acceptance']={'input_fingerprint':core_inputs,'status':'pending'}
+if core_path.exists():
+    core=json.loads(core_path.read_text())
+    if core.get('input_fingerprint')==core_inputs:
+        validate_core(core,core_inputs)
+        shutil.copy2(core_path,out/'core-acceptance.json')
+        proof['core_acceptance'].update(status='passed',receipt_sha256=hashlib.sha256(core_path.read_bytes()).hexdigest())
+quote_inputs=input_fingerprint(sha,profile='production-quotes')
+quote_path=root/'.private/quote-acceptance.json'
+proof['quote_acceptance']={'input_fingerprint':quote_inputs,'status':'pending'}
+if quote_path.exists():
+    quote=json.loads(quote_path.read_text())
+    if quote.get('input_fingerprint')==quote_inputs:
+        validate_quotes(quote,quote_inputs)
+        shutil.copy2(quote_path,out/'quote-acceptance.json')
+        proof['quote_acceptance'].update(status='passed',receipt_sha256=hashlib.sha256(quote_path.read_bytes()).hexdigest())
 if os.environ.get('BUILD_EMULATOR')=='true':
     debug=list((root/'app/build/outputs/apk/zcashmainnetFoss/debug').glob('*.apk'))
     if len(debug)!=1: raise SystemExit('Expected one emulator candidate APK')

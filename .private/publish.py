@@ -3,6 +3,7 @@ import base64, hashlib, importlib.util, json, os, re, shutil, subprocess, tempfi
 from unittest.mock import patch
 from pathlib import Path
 from apk_architecture import check_apk
+from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_binding
 
 ROOT=Path(__file__).resolve().parents[1]
 REPO=os.environ['GITHUB_REPOSITORY']
@@ -64,6 +65,22 @@ def main():
         raise RuntimeError('Unexpected APK manifest identity')
     if proof.get('validation')!='unit-lint-detekt-live-ui-fork-v3':
         raise RuntimeError('Missing release validation evidence')
+    # A pending core profile may build a candidate, but cannot enter signing.
+    # Controller-owned attestation is independent of the untrusted build output.
+    core_bytes=(ROOT/'.private/core-acceptance.json').read_bytes()
+    core=json.loads(core_bytes)
+    core_inputs=input_fingerprint(expected)
+    validate_core(core,core_inputs)
+    if input_fingerprint(core['build_source_sha'])!=core_inputs:
+        raise RuntimeError('Executed core build does not match current relevant inputs')
+    validate_binding(proof,'core_acceptance',core_inputs,core_bytes,(artifact/'core-acceptance.json').read_bytes())
+    quote_bytes=(ROOT/'.private/quote-acceptance.json').read_bytes()
+    quote=json.loads(quote_bytes)
+    quote_inputs=input_fingerprint(expected,profile='production-quotes')
+    validate_quotes(quote,quote_inputs)
+    if input_fingerprint(quote['build_source_sha'],profile='production-quotes')!=quote_inputs:
+        raise RuntimeError('Production quote inputs changed since executed acceptance')
+    validate_binding(proof,'quote_acceptance',quote_inputs,quote_bytes,(artifact/'quote-acceptance.json').read_bytes())
     contract_bytes=(artifact/'near-contract.json').read_bytes()
     contract=json.loads(contract_bytes)
     if (hashlib.sha256(contract_bytes).hexdigest()!=proof.get('live_contract_sha256') or
