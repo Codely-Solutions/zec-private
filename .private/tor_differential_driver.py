@@ -1,7 +1,7 @@
 """Run one real-native cancellation test against old and fixed app DEX."""
 import json,hashlib,subprocess,zipfile
 
-def fetch_baseline(root, manifest):
+def fetch_baseline(root, manifest, target_name="baseline-app.apk"):
     archive=root/'baseline.zip'
     with archive.open('wb') as out:
         subprocess.run(['gh','api','repos/Sammy-Lastre/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip'],stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)
@@ -11,7 +11,7 @@ def fetch_baseline(root, manifest):
         names=[n for n in z.namelist() if n.endswith('.apk') and 'androidTest' not in n]
         assert len(names)==1
         assert z.getinfo(names[0]).file_size<512*1024**2
-        target=root/'apks/baseline-app.apk';target.write_bytes(z.read(names[0]))
+        target=root/'apks'/target_name;target.write_bytes(z.read(names[0]))
     archive.unlink()
     return target
 

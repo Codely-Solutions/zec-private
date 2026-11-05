@@ -45,12 +45,18 @@ with zipfile.ZipFile(artifact) as archive:
 artifact.unlink()
 expected_apks=1 if manifest.get('probeKind')=='ui' else 2
 if len(apk_paths)!=expected_apks: raise ValueError('Unexpected probe APK count')
+if manifest.get('probeKind')=='differential':
+    from tor_differential_driver import fetch_baseline
+    apk_paths.append(fetch_baseline(ROOT,manifest['baselineArtifact']))
+if manifest.get('residentUiBridge'):
+    from tor_differential_driver import fetch_baseline
+    apk_paths.append(fetch_baseline(ROOT,manifest['residentUiBridge'],'ui-bridge.apk'))
 from strip_emulator_apk import prepare
 apk_preparation=prepare(apk_paths,ROOT,SDK)
 print('Verified x86_64-only emulator APK copies ready; execution bytes unchanged.',flush=True)
 PORT=5041
 SERIAL='emulator-5580'
-for port in (PORT,5580,5581):
+for port in (PORT,5580,5581,8877):
     with socket.socket() as sock: sock.bind(('127.0.0.1',port))
 home=ROOT/'android';avds=home/'avd';avd=avds/'CodexTorProbe.avd';avd.mkdir(parents=True)
 config={'abi.type':'x86_64','hw.cpu.arch':'x86_64','image.sysdir.1':str(system),'tag.id':'default','hw.lcd.width':'1080','hw.lcd.height':'1920','hw.lcd.density':'420','hw.gpu.enabled':'yes','hw.gpu.mode':'swiftshader_indirect','disk.cachePartition':'yes'}
@@ -77,9 +83,17 @@ try:
     data_kib=int(receipt['guestDataBefore'].splitlines()[-1].split()[1])
     if data_kib>6500000: raise ValueError('Guest data partition exceeds reviewed 6GiB profile')
     receipt['guestDataPartitionActualKiB']=data_kib
-    if manifest.get('probeKind')=='ui':
-        from tor_ui_driver import run
-        run(adb,ROOT,apk_paths,manifest['package'])
+    if manifest.get('probeKind')=='differential':
+        from tor_differential_driver import run
+        run(adb,ROOT,apk_paths)
+        receipt['passed']=True
+    elif manifest.get('probeKind')=='ui':
+        if manifest.get('residentUiBridge'):
+            from tor_resident_ui_driver import run
+            run(adb,ROOT,apk_paths,manifest)
+        else:
+            from tor_ui_driver import run
+            run(adb,ROOT,apk_paths,manifest['package'])
         receipt['passed']=True
     else:
         for path in sorted(apk_paths, key=lambda p: 'androidTest' in p.name):
