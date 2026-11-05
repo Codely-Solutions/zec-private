@@ -1,0 +1,6 @@
+// Maven Central canonical endpoint; avoid repo1 rate limiting in the test JVM.
+allprojects {
+    tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+        systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+    }
+}
