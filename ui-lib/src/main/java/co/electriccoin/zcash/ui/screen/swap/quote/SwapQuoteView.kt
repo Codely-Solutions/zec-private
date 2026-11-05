@@ -279,6 +279,7 @@ fun SwapQuoteInfo(
     }
 }
 
+@Suppress("MagicNumber")
 @Composable
 private fun StackedSwapQuoteInfo(
     item: SwapQuoteInfoItem,
