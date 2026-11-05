@@ -53,6 +53,8 @@ internal class SwapQuoteVM(
     private val submitProposal: SubmitProposalUseCase,
     private val navigationRouter: NavigationRouter,
 ) : ViewModel() {
+    private var isClosing = false
+
     val state: StateFlow<SwapQuoteState?> =
         combine(
             swapRepository.quote.filterNotNull(),
@@ -77,7 +79,7 @@ internal class SwapQuoteVM(
                 val quote = (swapRepository.quote.value as? SwapQuoteData.Success)?.quote ?: return@onEach
 
                 if ((Clock.System.now() - quote.timestamp) >= 3.minutes) {
-                    cancelSwapQuote()
+                    onBack()
                 }
             }.launchIn(viewModelScope)
     }
@@ -156,15 +158,21 @@ internal class SwapQuoteVM(
         )
     }
 
-    private fun onEditPaymentClick() = cancelSwapQuote()
+    private fun onEditPaymentClick() = onBack()
 
-    private fun onBack() = cancelSwapQuote()
+    private fun onBack() = closeQuote { cancelSwapQuote() }
 
-    private fun onBackDuringError() = cancelSwapQuote()
+    private fun closeQuote(action: () -> Unit) {
+        if (isClosing) return
+        isClosing = true
+        action()
+    }
+
+    private fun onBackDuringError() = onBack()
 
     private fun onSubmitQuoteClick() = viewModelScope.launch { submitProposal() }
 
-    private fun onCancelPaymentClick() = cancelSwap()
+    private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
 }
 
 internal data class SwapQuoteInternalState(
