@@ -42,8 +42,7 @@ class TorQuoteTest {
                     val text = response.bodyAsText()
                     val parsed = runCatching { JSONObject(text) }.getOrNull()
                     // Safe diagnostics: never print addresses, response bodies or request data.
-                    val message = parsed?.optString("message")?.takeIf { it.length < 180 && !it.contains("1") }
-                    println("TOR_QUOTE attempt=$attempt status=${response.status.value} hasQuote=${parsed?.has("quote")} message=$message")
+                    println("TOR_QUOTE attempt=$attempt status=${response.status.value} hasQuote=${parsed?.has("quote")}")
                     check(response.status.value in 200..201 && parsed?.has("quote") == true) {
                         "Native Tor quote attempt $attempt failed: HTTP ${response.status.value}"
                     }
