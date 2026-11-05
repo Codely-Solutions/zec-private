@@ -24,6 +24,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
+import java.io.IOException
 import java.math.BigDecimal
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -33,6 +34,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * [SwapRepositoryImpl] owns the shared `assets`/`quote` state (the selected asset + slippage now
@@ -201,6 +203,81 @@ class SwapRepositoryImplTest {
                 )
             }
         }
+
+    @Test
+    fun dismissedIncomingQuoteCanBeRequestedAgainWithoutRestart() =
+        runTest {
+            var calls = 0
+            val source = dataSourceReturning(flexQuote())
+            coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+                flexQuote(destinationAddress = if (calls++ == 0) "first-recipient" else "second-recipient")
+            }
+            val repository = loadedRepository(source)
+            requestIncoming(repository, "first-recipient")
+            assertIs<SwapQuoteData.Success>(repository.quote.value)
+            repository.clearQuote()
+            assertNull(repository.quote.value)
+            requestIncoming(repository, "second-recipient")
+            val retried = assertIs<SwapQuoteData.Success>(repository.quote.value)
+            assertEquals("second-recipient", retried.quote.destinationAddress.address)
+            assertEquals(2, calls)
+            coVerify(exactly = 0) { source.submitDepositTransaction(any(), any()) }
+        }
+
+    @Test
+    fun transientIncomingFailureCanBeRetriedWithoutRestart() =
+        runTest {
+            var calls = 0
+            val source = dataSourceReturning(flexQuote())
+            coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+                if (calls++ == 0) throw IOException("Simulated temporary connection failure")
+                flexQuote()
+            }
+            val repository = loadedRepository(source)
+            requestIncoming(repository)
+            assertIs<SwapQuoteData.Error>(repository.quote.value)
+            repository.clearQuote()
+            requestIncoming(repository)
+            assertIs<SwapQuoteData.Success>(repository.quote.value)
+            assertEquals(2, calls)
+        }
+
+    @Test
+    fun cancellingPendingIncomingRequestDoesNotPoisonTheNextQuote() =
+        runTest {
+            var calls = 0
+            var firstCancelled = false
+            val source = dataSourceReturning(flexQuote())
+            coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+                if (calls++ == 0) {
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        firstCancelled = true
+                    }
+                } else {
+                    flexQuote()
+                }
+            }
+            val repository = loadedRepository(source)
+            requestIncoming(repository)
+            assertIs<SwapQuoteData.Loading>(repository.quote.value)
+            repository.clearQuote()
+            assertTrue(firstCancelled)
+            assertNull(repository.quote.value)
+            requestIncoming(repository)
+            assertIs<SwapQuoteData.Success>(repository.quote.value)
+            assertEquals(2, calls)
+        }
+
+    private fun requestIncoming(repository: SwapRepositoryImpl, recipient: String = "destination") =
+        repository.requestFlexInputIntoZec(
+            amount = BigDecimal("2"),
+            refundAddress = "refund",
+            destinationAddress = recipient,
+            originAsset = btc,
+            slippage = BigDecimal("2")
+        )
 
     @Test
     fun flexQuoteFailureProducesFlexErrorState() =
