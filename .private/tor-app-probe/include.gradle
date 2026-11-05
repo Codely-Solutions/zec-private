@@ -1,0 +1,4 @@
+settingsEvaluated { s ->
+ s.include(":tor-app-probe")
+ s.project(":tor-app-probe").projectDir = new File(s.settingsDir, ".private/tor-app-probe")
+}
