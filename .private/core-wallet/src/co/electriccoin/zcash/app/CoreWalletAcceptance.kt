@@ -75,7 +75,7 @@ class CoreWalletAcceptance {
                         }
                         check(response.status.value == 202) { "Faucet claim HTTP ${response.status.value}" }
                         val claim = JSONObject(response.bodyAsText())
-                        state.put("claimId", claim.getString("id")); save(state)
+                        state.put("claimId", claim.get("id").toString()); save(state)
                         withTimeout(600_000) {
                             while (true) {
                                 val status = JSONObject(client.get(
