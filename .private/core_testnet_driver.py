@@ -8,6 +8,7 @@ import ipaddress
 import json
 import re
 import struct
+import sys
 import subprocess
 import threading
 import time
@@ -72,7 +73,11 @@ def run(adb, root, apks, manifest):
         return output
 
     def shell(*args):
-        return adb('shell', *args, timeout=20).stdout.decode(errors='replace')
+        try:
+            return adb('shell', *args, timeout=20).stdout.decode(errors='replace')
+        except subprocess.CalledProcessError as error:
+            # Commands contain no seed values; stdout may, so never include it.
+            raise RuntimeError('Android shell failed: '+error.stderr.decode(errors='replace')[:1200]) from None
 
     def uid():
         # dumpsys field labels vary across Android versions. Ask the debug
@@ -161,7 +166,9 @@ def run(adb, root, apks, manifest):
                     lines.append('-A CORE_ACCEPT -p tcp -d '+peer+' -j ACCEPT')
             # No UDP DNS or unobserved endpoint/relay is allowed from the app.
             lines.extend(['-A CORE_ACCEPT -j REJECT','COMMIT'])
-            local=root/(binary+'-rules.txt');local.write_text('\n'.join(lines)+'\n')
+            local=root/(binary+'-rules.txt')
+            # Windows text-mode CRLF is invalid input for Android restore.
+            local.write_bytes(('\n'.join(lines)+'\n').encode('ascii'))
             remote='/data/local/tmp/'+local.name
             adb('push',str(local),remote,timeout=20)
             shell(binary+'-restore --noflush < '+remote)
@@ -216,6 +223,8 @@ def run(adb, root, apks, manifest):
                                            allowed_relay_peers=len(allowed),tor_resolved_targets=len(targets))
         report['passed']=True
     finally:
+        failure=sys.exc_info()[1]
+        if failure:report['failure']=dict(type=type(failure).__name__,message=str(failure)[:1600])
         report['seconds']=time.monotonic()-started
         report['last_stage']=current_stage
         if firewall:
