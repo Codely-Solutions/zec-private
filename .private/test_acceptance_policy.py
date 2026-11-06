@@ -12,6 +12,10 @@ from acceptance_policy import requirements, validate_core, validate_quotes, vali
 
 
 class AcceptancePolicyTest(unittest.TestCase):
+    def test_foundation_changes_invalidate_wallet_and_quote_acceptance(self):
+        result=requirements(['wallet-foundation-lib/src/main/kotlin/Flow.kt'])
+        self.assertEqual({'core-testnet','production-quotes'},set(result['profiles']))
+
     def test_receipt_substitution_and_missing_proof_block(self):
         receipt=b'trusted acceptance'
         proof={'core_acceptance':dict(status='passed',input_fingerprint='inputs',

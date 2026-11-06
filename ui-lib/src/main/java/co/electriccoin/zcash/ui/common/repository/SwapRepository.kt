@@ -21,6 +21,8 @@ import co.electriccoin.zcash.ui.common.model.near.requireMatchingAsset
 import co.electriccoin.zcash.ui.common.model.near.requireQuoteMatchesUserAmount
 import co.electriccoin.zcash.ui.common.model.swapQuoteMismatchSignal
 import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
+import co.electriccoin.zcash.wallet.foundation.RequestGeneration
+import co.electriccoin.zcash.wallet.foundation.RequestId
 import io.ktor.client.plugins.ResponseException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -143,7 +145,7 @@ class SwapRepositoryImpl(
 
     private var requestQuoteJob: Job? = null
 
-    private var quoteGeneration = 0L
+    private val quoteGeneration = RequestGeneration()
 
     override fun requestRefreshAssets() {
         getOrStartRefreshAssetsSession(keepRefreshing = true)
@@ -479,9 +481,10 @@ class SwapRepositoryImpl(
     }
 
     override suspend fun checkSwapStatus(swapMetadata: TransactionSwapMetadata): SwapQuoteStatus {
+        val recovery = swapMetadata.requireNearRecovery()
         val result =
             swapDataSource.checkSwapStatus(
-                depositAddress = swapMetadata.depositAddress,
+                depositAddress = recovery.reference,
                 supportedTokens = getSupportedTokensForStatus()
             )
         requireMatchingAsset(
@@ -533,10 +536,10 @@ class SwapRepositoryImpl(
     }
 
     /** Loading is visible before callers collect a result; old jobs cannot publish into a new request. */
-    private fun launchQuoteRequest(block: suspend (Long) -> Unit) {
+    private fun launchQuoteRequest(block: suspend (RequestId) -> Unit) {
         val job =
             synchronized(this) {
-                val generation = ++quoteGeneration
+                val generation = quoteGeneration.advance()
                 requestQuoteJob?.cancel()
                 quote.value = SwapQuoteData.Loading
                 scope.launch(start = CoroutineStart.LAZY) { block(generation) }.also { requestQuoteJob = it }
@@ -544,15 +547,15 @@ class SwapRepositoryImpl(
         job.start()
     }
 
-    private fun publishQuote(generation: Long, result: SwapQuoteData) {
+    private fun publishQuote(generation: RequestId, result: SwapQuoteData) {
         synchronized(this) {
-            if (quoteGeneration == generation) quote.value = result
+            if (quoteGeneration.isCurrent(generation)) quote.value = result
         }
     }
 
     override fun clearQuote() {
         synchronized(this) {
-            ++quoteGeneration
+            quoteGeneration.advance()
             requestQuoteJob?.cancel()
             requestQuoteJob = null
             quote.value = null

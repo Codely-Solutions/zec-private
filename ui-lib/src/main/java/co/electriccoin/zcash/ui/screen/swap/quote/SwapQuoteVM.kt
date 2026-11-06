@@ -15,6 +15,10 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_OUTPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.zcash.getTotal
+import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
+import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
+import co.electriccoin.zcash.ui.common.model.zcash.getTotalUsd
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.provider.ResponseWithNearErrorException
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData

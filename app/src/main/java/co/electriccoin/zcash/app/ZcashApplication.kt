@@ -76,6 +76,7 @@ class ZcashApplication : CoroutineApplication() {
                 providerModule,
                 crashProviderModule,
                 dataSourceModule,
+                zecPrivateProductModule,
                 repositoryModule,
                 addressBookModule,
                 metadataModule,

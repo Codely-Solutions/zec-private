@@ -270,37 +270,9 @@ class MetadataRepositoryImpl(
                     isBookmarked = accountMetadata.bookmarked.find { it.txId == txId }?.isBookmarked == true,
                     isRead = accountMetadata.read.any { it == txId },
                     note = accountMetadata.annotations.find { it.txId == txId }?.content,
-                    swapMetadata = swapMetadata?.toBusinessObject()
+                    swapMetadata = swapMetadata?.toBusinessObject(simpleSwapAssetProvider)
                 )
             }.distinctUntilChanged()
-    }
-
-    private fun SwapMetadataV3.toBusinessObject(): TransactionSwapMetadata {
-        val origin = simpleSwapAssetProvider.get(tokenTicker = fromAsset.token, chainTicker = fromAsset.chain)
-        return TransactionSwapMetadata(
-            depositAddress = depositAddress,
-            lastUpdated = lastUpdated,
-            origin = origin,
-            destination =
-                toAsset.let {
-                    simpleSwapAssetProvider.get(tokenTicker = it.token, chainTicker = it.chain)
-                },
-            mode =
-                if (origin is ZecSimpleSwapAsset) {
-                    when (exactInput) {
-                        true -> SwapMode.EXACT_INPUT
-                        false -> SwapMode.EXACT_OUTPUT
-                        null -> SwapMode.EXACT_INPUT
-                    }
-                } else {
-                    SwapMode.FLEX_INPUT
-                },
-            status = status ?: SwapStatus.SUCCESS,
-            amountOutFormatted = amountOutFormatted ?: BigDecimal(0),
-            provider = provider,
-            totalFees = totalFees,
-            totalFeesUsd = totalFeesUsd,
-        )
     }
 
     override fun observeSwapMetadata(): Flow<List<TransactionSwapMetadata>?> =
@@ -310,7 +282,7 @@ class MetadataRepositoryImpl(
                     ?.accountMetadata
                     ?.swaps
                     ?.swapIds
-                    ?.map { it.toBusinessObject() }
+                    ?.map { it.toBusinessObject(simpleSwapAssetProvider) }
             }.distinctUntilChanged()
 
     override suspend fun getSwapMetadata(depositAddress: String): TransactionSwapMetadata? =
@@ -321,7 +293,7 @@ class MetadataRepositoryImpl(
             .swaps
             .swapIds
             .firstOrNull { it.depositAddress == depositAddress }
-            ?.toBusinessObject()
+            ?.toBusinessObject(simpleSwapAssetProvider)
 
     override fun observeLastUsedAssetHistory(): Flow<Set<SimpleSwapAsset>?> =
         selectedMetadata
@@ -456,3 +428,33 @@ data class TransactionSwapMetadata(
     val status: SwapStatus,
     val amountOutFormatted: BigDecimal,
 )
+
+internal fun SwapMetadataV3.toBusinessObject(
+    simpleSwapAssetProvider: SimpleSwapAssetProvider
+): TransactionSwapMetadata {
+    val origin = simpleSwapAssetProvider.get(tokenTicker = fromAsset.token, chainTicker = fromAsset.chain)
+    return TransactionSwapMetadata(
+        depositAddress = depositAddress,
+        lastUpdated = lastUpdated,
+        origin = origin,
+        destination =
+            toAsset.let {
+                simpleSwapAssetProvider.get(tokenTicker = it.token, chainTicker = it.chain)
+            },
+        mode =
+            if (origin is ZecSimpleSwapAsset) {
+                when (exactInput) {
+                    true -> SwapMode.EXACT_INPUT
+                    false -> SwapMode.EXACT_OUTPUT
+                    null -> SwapMode.EXACT_INPUT
+                }
+            } else {
+                SwapMode.FLEX_INPUT
+            },
+        status = status ?: SwapStatus.SUCCESS,
+        amountOutFormatted = amountOutFormatted ?: BigDecimal(0),
+        provider = provider,
+        totalFees = totalFees,
+        totalFeesUsd = totalFeesUsd,
+    )
+}

@@ -38,7 +38,7 @@ def critical(path):
         r'choosehwwallet|ironwood|advancedsettings)/',path)
     return (bool(sensitive_screen) or path.startswith(('build-conventions','buildSrc/','gradle/','feature-','sdk-',
                             'app/src/','tools/','scripts/','preference-','crash-',
-                            'configuration-','spackle-','build-info-lib/')) or
+                            'configuration-','spackle-','build-info-lib/','wallet-foundation-lib/')) or
             path in ('gradlew','gradlew.bat') or
             path.endswith(('.gradle.kts','gradle.lockfile','AndroidManifest.xml')) or
             path.startswith('ui-lib/src/main/java/co/electriccoin/zcash/ui/common/') or

@@ -209,6 +209,7 @@ dependencies {
     implementation(libs.zxing)
 
 
+    api(projects.walletFoundationLib)
     implementation(projects.buildInfoLib)
     implementation(projects.configurationApiLib)
     implementation(projects.crashAndroidLib)

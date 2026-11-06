@@ -4,11 +4,9 @@ import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
-import io.ktor.client.plugins.ResponseException
 import java.math.BigDecimal
 
 interface SwapDataSource {
-    @Throws(ResponseException::class)
     suspend fun getSupportedTokens(): List<SwapAsset>
 
     /**
@@ -17,7 +15,7 @@ interface SwapDataSource {
      * Throws [GiftCardAddressNotAllowedException], before anything is sent to the provider, when [refundAddress] or
      * [destinationAddress] is a gift card link.
      */
-    @Throws(ResponseException::class, QuoteLowAmountException::class, GiftCardAddressNotAllowedException::class)
+    @Throws(QuoteLowAmountException::class, GiftCardAddressNotAllowedException::class)
     suspend fun requestQuote(
         swapMode: SwapMode,
         amount: BigDecimal,
@@ -28,10 +26,9 @@ interface SwapDataSource {
         slippage: BigDecimal
     ): SwapQuote
 
-    @Throws(ResponseException::class)
     suspend fun submitDepositTransaction(txHash: String, depositAddress: String)
 
-    @Throws(ResponseException::class, AssetNotFoundException::class)
+    @Throws(AssetNotFoundException::class)
     suspend fun checkSwapStatus(depositAddress: String, supportedTokens: List<SwapAsset>): SwapQuoteStatus
 }
 

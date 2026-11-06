@@ -81,8 +81,11 @@ def requirements(paths):
         if '/src/main/res/' in path and path.endswith('.xml'):
             # Resources affect navigation, validation and network flavor overlays.
             profiles.add('core-testnet')
-        elif '/screen/swap/' in path or any(word in path for word in ('Near', 'SwapQuote', 'SwapRepository')):
+        elif (path.startswith('wallet-foundation-lib/') or '/screen/swap/' in path or
+              any(word in path for word in ('Near', 'SwapQuote', 'SwapRepository', 'ZecSwapComposition'))):
             profiles.add('production-quotes')
+            if path.startswith('wallet-foundation-lib/'):
+                profiles.add('core-testnet')
         else:
             profiles.add('core-testnet')
         if any(word in path.lower() for word in ('tor', 'httpclient', 'synchronizer', '/di/', 'navigation')):

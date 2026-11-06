@@ -60,7 +60,7 @@ index 000000000..d6f306286
 +OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 +SOFTWARE.
 diff --git a/app/src/main/java/co/electriccoin/zcash/app/ZcashApplication.kt b/app/src/main/java/co/electriccoin/zcash/app/ZcashApplication.kt
-index 6e68fc9c5..ff6f4f46b 100644
+index 6e68fc9c5..574aabbe8 100644
 --- a/app/src/main/java/co/electriccoin/zcash/app/ZcashApplication.kt
 +++ b/app/src/main/java/co/electriccoin/zcash/app/ZcashApplication.kt
 @@ -26 +25,0 @@ import co.electriccoin.zcash.ui.common.repository.AutomaticServerRepository
@@ -70,11 +70,32 @@ index 6e68fc9c5..ff6f4f46b 100644
 +import co.electriccoin.zcash.di.excludedVotingModule
 @@ -44 +42,0 @@ class ZcashApplication : CoroutineApplication() {
 -    private val flexaRepository by inject<FlexaRepository>()
-@@ -88 +86 @@ class ZcashApplication : CoroutineApplication() {
+@@ -80,0 +79 @@ class ZcashApplication : CoroutineApplication() {
++                zecPrivateProductModule,
+@@ -88 +87 @@ class ZcashApplication : CoroutineApplication() {
 -                featureVotingModule,
 +                excludedVotingModule,
-@@ -99 +96,0 @@ class ZcashApplication : CoroutineApplication() {
+@@ -99 +97,0 @@ class ZcashApplication : CoroutineApplication() {
 -        flexaRepository.init()
+diff --git a/app/src/main/java/co/electriccoin/zcash/app/ZecPrivateProductModule.kt b/app/src/main/java/co/electriccoin/zcash/app/ZecPrivateProductModule.kt
+new file mode 100644
+index 000000000..6d760951c
+--- /dev/null
++++ b/app/src/main/java/co/electriccoin/zcash/app/ZecPrivateProductModule.kt
+@@ -0,0 +1,13 @@
++package co.electriccoin.zcash.app
++
++import co.electriccoin.zcash.ui.common.datasource.NearSwapDataSource
++import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
++import org.koin.core.module.dsl.singleOf
++import org.koin.dsl.bind
++import org.koin.dsl.module
++
++/** Shipping product selection. Shared UI does not choose a concrete swap provider. */
++internal val zecPrivateProductModule =
++    module {
++        singleOf(::NearSwapDataSource) bind SwapDataSource::class
++    }
 diff --git a/app/src/zcashmainnetFossDebug/AndroidManifest.xml b/app/src/zcashmainnetFossDebug/AndroidManifest.xml
 index 80a1ab98a..8809eb03a 100644
 --- a/app/src/zcashmainnetFossDebug/AndroidManifest.xml
@@ -158,6 +179,53 @@ index ebbd24d3c..edac136cd 100644
 +++ b/build.gradle.kts
 @@ -112 +111,0 @@ tasks {
 -            "ZCASH_FLEXA_KEY" to "",
+diff --git a/docs/FOUNDATION.md b/docs/FOUNDATION.md
+new file mode 100644
+index 000000000..7c8c641cb
+--- /dev/null
++++ b/docs/FOUNDATION.md
+@@ -0,0 +1,41 @@
++# Composable Wallet Foundation
++
++ZEC Private selects its shipping swap provider in `app/.../ZecPrivateProductModule.kt`. The existing application module remains the product entry point. There is one shipping wallet engine and one swap provider.
++
++## Dependency direction
++
++`app` selects integrations → `ui-lib` coordinates Zcash/NEAR and retained presentation → `wallet-foundation-lib` supplies engine-independent values, deposit capability validation and request ownership.
++
++The foundation is a Kotlin JVM library. Its production contracts use Kotlin and Java math/time only. It has no Android, Zcash SDK, NEAR DTO, HTTP, dependency-injection or UI dependency. The Android app already supplies the platform support required by its Java time use. The alternative compositions in its tests exercise external-only funding and memo-bearing flexible deposits without an engine. They establish structural reuse, not settlement support.
++
++## Current composition
++
++| Flow | Funding and owner | Approval and recovery |
++|---|---|---|
++| Native ZEC receive/send | Existing account, synchronizer and proposal integrations | Existing seed custody, biometrics, local signing or hardware signing; no shared secret format |
++| External asset → ZEC | External deposit; fresh shielded recipient; NEAR flexible-input quote | Review precedes showing deposit instructions; accepted metadata keeps the provider and deposit reference |
++| ZEC → external asset | Local transaction; fresh refund; exact input | Zcash proposal remains opaque to shared contracts; execution retains the account-specific signer |
++| CrossPay | Local transaction; exact output | Fixed requested destination amount; same signing and metadata owners |
++| Dismiss/requote | Repository cancels jobs; foundation request identities reject stale results | Clearing advances the identity before cancellation; no acceptance or funding occurs |
++| Legacy swap status/refund | Existing V2/V3 readers, original provider identity | NEAR schema-1 recovery uses its original deposit reference; unknown providers fail before network access and preserve the record |
++
++`ZecSwapComposition` maps the current product's quote into exact asset/network-tagged deposit instructions. It rejects incompatible funding directions, providers, precision and expiry. Provider mapping, response-echo/slippage checks and gift-secret rejection stay in their existing integrations. Zcash quote fee calculations live under `model/zcash`, outside `SwapQuote` and NEAR's quote implementation. Zero affiliate fees remain a product invariant.
++
++Hardware, view-only, gifts and native receive/recovery keep their existing owners and navigation. Their chain-specific semantics are deliberate. The foundation does not reinterpret seeds or add a general transaction representation.
++
++## Adding a flow or component
++
++1. Specify funding, quote modes, network/asset precision, required memo/tag, expiry, approval and recovery reference semantics. Reject unsupported combinations before approval.
++2. Supply a provider adapter through the product assembly. Translate its DTOs and transport errors at that boundary. Keep endpoint selection and Tor policy inside the integration.
++3. Reuse the existing wallet capability only when it matches the requested network and custody rules. A different engine owns its keys, storage, recovery and prepared transaction types.
++4. Give asynchronous work an owner. Invalidate outstanding request IDs before clearing or replacement; serialize the identity check and publication under the same owner lock.
++5. Preserve old-provider recovery for existing records. Introduce a new explicit persisted schema only when required, with readers and installed-update evidence. An unknown identity must never choose a default provider.
++6. Select dependencies at build time and inspect the final APK. A future XMR app needs separate identity, data and recovery; a second APK is not created by this phase.
++
++XMR Private and THORChain remain paper scenarios. Monero custody, synchronization and recovery require a separate integration; an external XMR destination is not an owned wallet. A memo-bearing THORChain-style deposit requires an adapter and flow declaring that capability. The present ZEC product rejects such instructions. No current route availability or network support is claimed.
++
++## Upstream and validation
++
++Keep stable discovery enabled. Carry upstream wallet fixes into the existing account/proposal/synchronizer owners, provider fixes into the NEAR adapter and DTOs, presentation fixes into retained screens, and composition changes into the product mapping. The maintained patch contains the extraction; sensitive changes to the foundation are review-gated along with shared wiring. Validate a disposable integration candidate before publication.
++
++Foundation runtime changes invalidate both real wallet and quote evidence. Fingerprints remain conservative across the complete runtime graph. Unit tests cover precision, flow incompatibility, stale publication, fee calculations and synthetic legacy persistence. Required real testnet and unfunded production quote acceptance remain separate. Production artifacts are promoted after acceptance without rebuilding; signing secrets remain outside build jobs.
 diff --git a/docs/PRIVACY.md b/docs/PRIVACY.md
 new file mode 100644
 index 000000000..365b74624
@@ -345,6 +413,18 @@ index 000000000..692a16bf3
 +## Guidance provenance
 +
 +The migration and payment guidance was reviewed against the upstream [migration guide](https://support.zodl.com/article/42-moving-your-funds-to-ironwood), [CrossPay guide](https://support.zodl.com/article/24-using-crosspay-to-spend-zec) and [swap guide](https://support.zodl.com/article/26-swapping-into-zec) on 2026-11-06. Those pages describe upstream; this guide describes the retained fork flow and does not promise settlement timing or support services.
+diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt
+index 683867b58..7b15fe7f7 100644
+--- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt
++++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt
+@@ -23,0 +24 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
++import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
+@@ -33,0 +35 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
++import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
+@@ -581,0 +584,3 @@ class LedgerProposalRepositoryImpl(
++                            if (transactionProposal is SwapTransactionProposal) {
++                                ZecSwapComposition.validate(transactionProposal.quote)
++                            }
 diff --git a/feature-ledger/src/main/res/values-es/strings.xml b/feature-ledger/src/main/res/values-es/strings.xml
 index 2657577a0..9a1311342 100644
 --- a/feature-ledger/src/main/res/values-es/strings.xml
@@ -415,6 +495,70 @@ index 48b59db8e..60a94c2fc 100644
 -    <string name="ledger_error_unknown_inlineMessage">Zodl couldn’t connect to your Ledger.\nMake sure it’s unlocked and nearby, then try again.</string>
 +    <string name="ledger_error_unknown_message">ZEC Private couldn’t connect to your Ledger. Make sure it’s unlocked and nearby, then try again.</string>
 +    <string name="ledger_error_unknown_inlineMessage">ZEC Private couldn’t connect to your Ledger.\nMake sure it’s unlocked and nearby, then try again.</string>
+diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
+index 4ae26a42d..a3c025c5b 100644
+--- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
++++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
+@@ -6,0 +7,5 @@ import cash.z.ecc.android.sdk.model.Pczt
++import cash.z.ecc.android.sdk.model.Memo
++import cash.z.ecc.android.sdk.model.Proposal
++import cash.z.ecc.android.sdk.model.WalletAddress
++import cash.z.ecc.android.sdk.model.Zatoshi
++import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
+@@ -11,0 +17,4 @@ import co.electriccoin.zcash.ui.common.model.SubmitResult
++import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
++import co.electriccoin.zcash.ui.common.model.SwapAsset
++import co.electriccoin.zcash.ui.common.model.SwapMode
++import co.electriccoin.zcash.ui.common.model.SwapQuote
+@@ -33,0 +43 @@ import kotlin.test.assertTrue
++import kotlin.test.assertIs
+@@ -34,0 +45,2 @@ import kotlin.time.Duration.Companion.seconds
++import kotlin.time.Instant
++import java.math.BigDecimal
+@@ -42,0 +55,43 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
++    @Test
++    fun quoteExpiringWhileAwaitingProofsAfterSigningCannotBroadcast() = runTest(dispatcher) {
++        val proofsGate = CompletableDeferred<Unit>()
++        givenPczt(ledgerAccount(), proofsGate = proofsGate)
++        runCurrent()
++        every { ledgerSigningDataSource.isLinked } returns true
++        coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
++        var currentDeadline = Instant.parse("2100-01-01T00:00:00Z")
++        val origin = mockk<SwapAsset>(relaxed = true) {
++            every { tokenTicker } returns "zec"
++            every { chainTicker } returns "zec"
++            every { blockchain.chainTicker } returns "zec"
++            every { assetId } returns "zec-zec"
++            every { decimals } returns 8
++        }
++        val quote = object : SwapQuote by mockk<SwapQuote>() {
++            override val originAsset = origin
++            override val mode = SwapMode.EXACT_INPUT
++            override val provider = "near"
++            override val depositAddress = DynamicSwapAddress("synthetic-deposit")
++            override val amountInFormatted = BigDecimal.ONE
++            override val deadline: Instant get() = currentDeadline
++        }
++        repository.transactionProposal.value = ExactInputSwapTransactionProposal(
++            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""), mockk<Proposal>(), quote
++        )
++        repository.startSigning()
++        runCurrent()
++        assertEquals(LedgerSigningState.Signed, repository.signingState.value)
++        val submitting = async { runCatching { repository.submit() } }
++        runCurrent()
++        assertFalse(submitting.isCompleted)
++
++        currentDeadline = Instant.parse("2000-01-01T00:00:00Z")
++        proofsGate.complete(Unit)
++        runCurrent()
++
++        val error = assertIs<IllegalArgumentException>(submitting.await().exceptionOrNull())
++        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>()) }
++        val result = assertIs<SubmitProposalState.Result>(repository.submitState.value)
++        assertSame(error, assertIs<SubmitResult.Error>(result.submitResult).cause)
++    }
++
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVM.kt
 index e84eff32e..dfed08306 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVM.kt
@@ -454,12 +598,12 @@ index 96a911cd4..799c7d501 100644
 -    <string name="view_only_remove_message">Removing this account clears its data from Zodl on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 +    <string name="view_only_remove_message">Removing this account clears its data from ZEC Private on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..fd69777ac 100644
+index ec56161b5..66aa9424d 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
 -ZCASH_VERSION_CODE=1
-+ZCASH_VERSION_CODE=3234008
++ZCASH_VERSION_CODE=3234009
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
 -ZCASH_RELEASE_APP_NAME=Zodl
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash
@@ -480,7 +624,7 @@ index ec56161b5..fd69777ac 100644
 -ZCASH_SDK_VERSION=6.0.0-SNAPSHOT
 +ZCASH_SDK_VERSION=6.0.0
 diff --git a/settings.gradle.kts b/settings.gradle.kts
-index 5831568a4..93359c268 100644
+index 5831568a4..8a9b07649 100644
 --- a/settings.gradle.kts
 +++ b/settings.gradle.kts
 @@ -189 +188,0 @@ dependencyResolutionManagement {
@@ -490,6 +634,8 @@ index 5831568a4..93359c268 100644
 -            library("flexa-spend", "co.flexa:spend:$flexaVersion")
 @@ -361 +357,0 @@ include("feature-viewing-key")
 -include("feature-voting")
+@@ -371,0 +368 @@ include("ui-lib")
++include("wallet-foundation-lib")
 diff --git a/ui-design-lib/src/main/res/ui/common/drawable-es/logo_with_hi.png b/ui-design-lib/src/main/res/ui/common/drawable-es/logo_with_hi.png
 deleted file mode 100644
 index ab1bbb368661c87dfedbea2be6fc7d22c4e8cac6..0000000000000000000000000000000000000000
@@ -2816,7 +2962,7 @@ index f41234151..1c70421cb 100644
 +    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open ZEC Private manually at each scheduled time to send.</string>
 diff --git a/ui-lib/build.gradle.kts b/ui-lib/build.gradle.kts
-index 717b3f997..85a126716 100644
+index 717b3f997..88ea2fafa 100644
 --- a/ui-lib/build.gradle.kts
 +++ b/ui-lib/build.gradle.kts
 @@ -155,8 +154,0 @@ androidComponents {
@@ -2837,6 +2983,8 @@ index 717b3f997..85a126716 100644
 @@ -214,2 +210,0 @@ dependencies {
 -    api(libs.flexa.core)
 -    api(libs.flexa.spend)
+@@ -216,0 +212 @@ dependencies {
++    api(projects.walletFoundationLib)
 diff --git a/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/support/util/EmailUtilTest.kt b/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/support/util/EmailUtilTest.kt
 deleted file mode 100644
 index 69a8a613a..000000000
@@ -3122,6 +3270,16 @@ z9~ARp9kgy9-q@~f1|tc?JL>s7eAjko878=&{`;!fQQela77Ia?ErO=0Mbr?OCULb5
 z-o8muEG^gtP&FBR6~cdpHORCK3u^AzpD<lFaOjTI15l$CSU{Si^IAL%|G3P~Usl@(
 uiUl-_fP<e$fdu)#fBx?|{C^PyWHra@ZwzDt=1M@&LpQXIv`RJX!~PG`gvXWu
 
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt
+index b1dfa14c3..658aa14e4 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt
+@@ -13 +12,0 @@ import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSourceI
+-import co.electriccoin.zcash.ui.common.datasource.NearSwapDataSource
+@@ -18 +16,0 @@ import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSourceImpl
+-import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
+@@ -35 +32,0 @@ val dataSourceModule =
+-        singleOf(::NearSwapDataSource) bind SwapDataSource::class
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ExcludedVotingModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ExcludedVotingModule.kt
 new file mode 100644
 index 000000000..c15f95a55
@@ -3370,33 +3528,144 @@ index a5bcffdcd..30135e743 100644
 @@ -256,2 +252,0 @@ class NearSwapDataSource(
 -const val AFFILIATE_FEE_BPS = 67
 -const val AFFILIATE_ADDRESS = "d78abd5477432c9d9c5e32c4a1a0056cd7b8be6580d3c49e1f97185b786592db"
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
+index bf147a8b5..649d872e5 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
+@@ -26,0 +27,2 @@ import co.electriccoin.zcash.ui.common.model.requireSpendable
++import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
++import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
+@@ -30,0 +33 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import java.math.BigDecimal
+@@ -35 +37,0 @@ import org.zecdev.zip321.parser.ParserContext
+-import java.math.BigDecimal
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
-index 13e9d0788..751abb024 100644
+index 13e9d0788..d1112a657 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
-@@ -28,2 +28 @@ interface SwapDataSource {
+@@ -7 +6,0 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
+-import io.ktor.client.plugins.ResponseException
+@@ -11 +9,0 @@ interface SwapDataSource {
+-    @Throws(ResponseException::class)
+@@ -20 +18 @@ interface SwapDataSource {
+-    @Throws(ResponseException::class, QuoteLowAmountException::class, GiftCardAddressNotAllowedException::class)
++    @Throws(QuoteLowAmountException::class, GiftCardAddressNotAllowedException::class)
+@@ -28,2 +26 @@ interface SwapDataSource {
 -        slippage: BigDecimal,
 -        affiliateAddress: String
 +        slippage: BigDecimal
+@@ -32 +28,0 @@ interface SwapDataSource {
+-    @Throws(ResponseException::class)
+@@ -35 +31 @@ interface SwapDataSource {
+-    @Throws(ResponseException::class, AssetNotFoundException::class)
++    @Throws(AssetNotFoundException::class)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
+index ab4d7ab5b..6693c38d3 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
+@@ -3,2 +2,0 @@ package co.electriccoin.zcash.ui.common.model
+-import cash.z.ecc.android.sdk.model.Proposal
+-import cash.z.ecc.android.sdk.model.Zatoshi
+@@ -16 +13,0 @@ interface SwapQuote {
+-    val zecExchangeRate: BigDecimal
+@@ -27 +23,0 @@ interface SwapQuote {
+-    val affiliateFeeZatoshi: Zatoshi
+@@ -35,8 +31 @@ interface SwapQuote {
+-    fun getTotal(proposal: Proposal?): BigDecimal
+-
+-    fun getTotalUsd(proposal: Proposal?): BigDecimal
+-
+-    fun getTotalFeesUsd(proposal: Proposal?): BigDecimal
+-
+-    fun getTotalFeesZatoshi(proposal: Proposal?): Zatoshi
+-}
++}
+\ No newline at end of file
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ZecSwapComposition.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ZecSwapComposition.kt
+new file mode 100644
+index 000000000..eb152bc57
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ZecSwapComposition.kt
+@@ -0,0 +1,47 @@
++package co.electriccoin.zcash.ui.common.model
++
++import co.electriccoin.zcash.wallet.foundation.AssetAmount
++import co.electriccoin.zcash.wallet.foundation.AssetId
++import co.electriccoin.zcash.wallet.foundation.DepositInstructions
++import co.electriccoin.zcash.wallet.foundation.FlowComposition
++import co.electriccoin.zcash.wallet.foundation.FundingCapability
++import co.electriccoin.zcash.wallet.foundation.ProviderId
++import co.electriccoin.zcash.wallet.foundation.QuoteMode
++import co.electriccoin.zcash.wallet.foundation.RecoveryReference
++import java.time.Instant
++
++/** ZEC product policy: incoming external deposits and outgoing local transactions are distinct flows. */
++object ZecSwapComposition {
++    private val near = ProviderId("near")
++
++    fun funding(mode: SwapMode): FundingCapability =
++        when (mode) {
++            SwapMode.FLEX_INPUT -> FundingCapability.EXTERNAL_DEPOSIT
++            SwapMode.EXACT_INPUT, SwapMode.EXACT_OUTPUT -> FundingCapability.LOCAL_TRANSACTION
++        }
++
++    fun validate(quote: SwapQuote, now: Instant = Instant.now()) {
++        val funding = funding(quote.mode)
++        require(
++            if (funding == FundingCapability.LOCAL_TRANSACTION) quote.originAsset.isZCashAsset
++            else quote.destinationAsset.isZCashAsset && !quote.originAsset.isZCashAsset
++        ) { "Quote does not match the selected product flow" }
++        val asset = quote.originAsset.foundationId()
++        val instructions =
++            DepositInstructions(
++                amount = AssetAmount(asset, quote.amountInFormatted, quote.originAsset.decimals),
++                address = quote.depositAddress.address,
++                recovery = RecoveryReference(ProviderId(quote.provider), 1, quote.depositAddress.address),
++                expiresAt = Instant.ofEpochSecond(quote.deadline.epochSeconds, quote.deadline.nanosecondsOfSecond.toLong())
++            )
++        FlowComposition(
++            provider = near,
++            quoteModes = setOf(QuoteMode.valueOf(quote.mode.name)),
++            depositAssets = setOf(asset),
++            fundingCapabilities = setOf(funding)
++        ).validate(QuoteMode.valueOf(quote.mode.name), funding, instructions, now)
++    }
++
++    /** Provider IDs are namespaced; ticker equality alone cannot identify an asset on another network. */
++    private fun SwapAsset.foundationId() = AssetId("mainnet:${blockchain.chainTicker}", assetId)
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
-index e5b3ebffe..d3cf6734c 100644
+index e5b3ebffe..0377cf78e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
-@@ -4 +3,0 @@ import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
+@@ -3,6 +2,0 @@ package co.electriccoin.zcash.ui.common.model.near
+-import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
 -import cash.z.ecc.android.sdk.ext.convertZecToZatoshi
-@@ -8 +6,0 @@ import cash.z.ecc.sdk.extension.ZERO
+-import cash.z.ecc.android.sdk.model.Proposal
+-import cash.z.ecc.android.sdk.model.Zatoshi
+-import cash.z.ecc.sdk.extension.ZERO
 -import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_FEE_BPS
-@@ -17 +14,0 @@ import co.electriccoin.zcash.ui.common.model.isSame
+@@ -17 +10,0 @@ import co.electriccoin.zcash.ui.common.model.isSame
 -import co.electriccoin.zcash.ui.common.model.isZCashAsset
-@@ -113,6 +110 @@ data class NearSwapQuote(
+@@ -41 +34 @@ data class NearSwapQuote(
+-        // Guards zecExchangeRate (= amountInUsd / amountInFormatted) and the fee math below it against a
++        // Guards input USD unit pricing (= amountInUsd / amountInFormatted) against a
+@@ -43 +36 @@ data class NearSwapQuote(
+-        // clear message rather than letting an ArithmeticException surface from the property initializers.
++        // clear message before presentation attempts to calculate a unit price.
+@@ -101,4 +93,0 @@ data class NearSwapQuote(
+-    override val zecExchangeRate: BigDecimal =
+-        response.quote.amountInUsd
+-            .divide(response.quote.amountInFormatted, MathContext.DECIMAL128)
+-
+@@ -113,24 +102 @@ data class NearSwapQuote(
 -    override val affiliateFee: BigDecimal =
 -        response.quote.amountInFormatted
 -            .multiply(
 -                BigDecimal(AFFILIATE_FEE_BPS).divide(BigDecimal("10000"), MathContext.DECIMAL128),
 -                MathContext.DECIMAL128
 -            )
-+    override val affiliateFee: BigDecimal = BigDecimal.ZERO
-@@ -120,17 +112 @@ data class NearSwapQuote(
+-
 -    override val affiliateFeeZatoshi: Zatoshi =
 -        if (originAsset.isZCashAsset) {
 -            response.quote.amountInFormatted
@@ -3414,8 +3683,8 @@ index e5b3ebffe..d3cf6734c 100644
 -                ).divide(zecExchangeRate, MathContext.DECIMAL128)
 -                .convertZecToZatoshi()
 -        }
-+    override val affiliateFeeZatoshi: Zatoshi = Zatoshi.ZERO
-@@ -138,7 +114 @@ data class NearSwapQuote(
++    override val affiliateFee: BigDecimal = BigDecimal.ZERO
+@@ -138,7 +104 @@ data class NearSwapQuote(
 -    override val affiliateFeeUsd: BigDecimal =
 -        response.quote.amountInUsd
 -            .coerceAtLeast(BigDecimal(0))
@@ -3424,12 +3693,30 @@ index e5b3ebffe..d3cf6734c 100644
 -                MathContext.DECIMAL128
 -            )
 +    override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO
+@@ -149,14 +108,0 @@ data class NearSwapQuote(
+-
+-    override fun getTotal(proposal: Proposal?) = amountInFormatted + (getZecFee(proposal) ?: BigDecimal.ZERO)
+-
+-    override fun getTotalUsd(proposal: Proposal?) = amountInUsd + getZecFeeUsd(proposal)
+-
+-    override fun getTotalFeesUsd(proposal: Proposal?) = affiliateFeeUsd + getZecFeeUsd(proposal)
+-
+-    override fun getTotalFeesZatoshi(proposal: Proposal?): Zatoshi =
+-        (proposal?.totalFeeRequired() ?: Zatoshi.ZERO) + affiliateFeeZatoshi
+-
+-    private fun getZecFee(proposal: Proposal?): BigDecimal? = proposal?.totalFeeRequired()?.convertZatoshiToZec()
+-
+-    private fun getZecFeeUsd(proposal: Proposal?): BigDecimal =
+-        zecExchangeRate.multiply(getZecFee(proposal) ?: BigDecimal.ZERO, MathContext.DECIMAL128)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
-index b2c6505ad..223704c21 100644
+index b2c6505ad..f52ec2420 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.common.model.near
 -import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_FEE_BPS
+@@ -28 +27 @@ data class NearSwapQuoteStatus(
+-            // zecExchangeRate divides by the effective amountInFormatted (swapDetails value when present),
++            // Input USD unit pricing divides by the effective amountInFormatted (swapDetails value when present),
 @@ -102,6 +101 @@ data class NearSwapQuoteStatus(
 -    override val amountInFee: BigDecimal =
 -        amountInFormatted
@@ -3446,6 +3733,42 @@ index d8016e519..37dcf12b4 100644
 +import kotlinx.serialization.EncodeDefault
 @@ -52,0 +54 @@ data class QuoteRequest(
 +    @EncodeDefault(EncodeDefault.Mode.NEVER)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/ZcashSwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/ZcashSwapQuote.kt
+new file mode 100644
+index 000000000..1ebd4391a
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/ZcashSwapQuote.kt
+@@ -0,0 +1,30 @@
++package co.electriccoin.zcash.ui.common.model.zcash
++
++import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
++import cash.z.ecc.android.sdk.model.Proposal
++import cash.z.ecc.android.sdk.model.Zatoshi
++import cash.z.ecc.sdk.extension.ZERO
++import co.electriccoin.zcash.ui.common.model.SwapQuote
++import java.math.BigDecimal
++import java.math.MathContext
++
++/**
++ * Zcash wallet-funded quote presentation. The input USD unit price prices a Zcash fee when the
++ * origin is ZEC. Incoming externally funded quotes have no wallet proposal and add no wallet fee.
++ * ZEC Private requests zero affiliate fees; decimal provider fee fields remain available separately.
++ */
++fun SwapQuote.getTotal(proposal: Proposal?): BigDecimal = amountInFormatted + proposal.zecFee()
++
++fun SwapQuote.getTotalUsd(proposal: Proposal?): BigDecimal = amountInUsd + zecFeeUsd(proposal)
++
++fun SwapQuote.getTotalFeesUsd(proposal: Proposal?): BigDecimal = affiliateFeeUsd + zecFeeUsd(proposal)
++
++fun SwapQuote.getTotalFeesZatoshi(proposal: Proposal?): Zatoshi = proposal?.totalFeeRequired() ?: Zatoshi.ZERO
++
++private fun Proposal?.zecFee(): BigDecimal = this?.totalFeeRequired()?.convertZatoshiToZec() ?: BigDecimal.ZERO
++
++private fun SwapQuote.zecFeeUsd(proposal: Proposal?): BigDecimal {
++    if (proposal == null) return BigDecimal.ZERO
++    val originUsdUnitPrice = amountInUsd.divide(amountInFormatted, MathContext.DECIMAL128)
++    return originUsdUnitPrice.multiply(proposal.zecFee(), MathContext.DECIMAL128)
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ConfigurationRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ConfigurationRepository.kt
 index 549fbf800..05d18dfb3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ConfigurationRepository.kt
@@ -3632,20 +3955,128 @@ index a74efab27..000000000
 -}
 -
 -private const val DEFAULT_BALANCE = .0
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepository.kt
+index f9a562c53..2bd72c4d9 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepository.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/KeystoneProposalRepository.kt
+@@ -18,0 +19 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
++import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
+@@ -24,0 +26 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
++import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
+@@ -295,0 +298,3 @@ class KeystoneProposalRepositoryImpl(
++                            if (transactionProposal is SwapTransactionProposal) {
++                                ZecSwapComposition.validate(transactionProposal.quote)
++                            }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
+index a4216cc0a..71b5b8033 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/MetadataRepository.kt
+@@ -273 +273 @@ class MetadataRepositoryImpl(
+-                    swapMetadata = swapMetadata?.toBusinessObject()
++                    swapMetadata = swapMetadata?.toBusinessObject(simpleSwapAssetProvider)
+@@ -278,28 +277,0 @@ class MetadataRepositoryImpl(
+-    private fun SwapMetadataV3.toBusinessObject(): TransactionSwapMetadata {
+-        val origin = simpleSwapAssetProvider.get(tokenTicker = fromAsset.token, chainTicker = fromAsset.chain)
+-        return TransactionSwapMetadata(
+-            depositAddress = depositAddress,
+-            lastUpdated = lastUpdated,
+-            origin = origin,
+-            destination =
+-                toAsset.let {
+-                    simpleSwapAssetProvider.get(tokenTicker = it.token, chainTicker = it.chain)
+-                },
+-            mode =
+-                if (origin is ZecSimpleSwapAsset) {
+-                    when (exactInput) {
+-                        true -> SwapMode.EXACT_INPUT
+-                        false -> SwapMode.EXACT_OUTPUT
+-                        null -> SwapMode.EXACT_INPUT
+-                    }
+-                } else {
+-                    SwapMode.FLEX_INPUT
+-                },
+-            status = status ?: SwapStatus.SUCCESS,
+-            amountOutFormatted = amountOutFormatted ?: BigDecimal(0),
+-            provider = provider,
+-            totalFees = totalFees,
+-            totalFeesUsd = totalFeesUsd,
+-        )
+-    }
+-
+@@ -313 +285 @@ class MetadataRepositoryImpl(
+-                    ?.map { it.toBusinessObject() }
++                    ?.map { it.toBusinessObject(simpleSwapAssetProvider) }
+@@ -324 +296 @@ class MetadataRepositoryImpl(
+-            ?.toBusinessObject()
++            ?.toBusinessObject(simpleSwapAssetProvider)
+@@ -458,0 +431,30 @@ data class TransactionSwapMetadata(
++
++internal fun SwapMetadataV3.toBusinessObject(
++    simpleSwapAssetProvider: SimpleSwapAssetProvider
++): TransactionSwapMetadata {
++    val origin = simpleSwapAssetProvider.get(tokenTicker = fromAsset.token, chainTicker = fromAsset.chain)
++    return TransactionSwapMetadata(
++        depositAddress = depositAddress,
++        lastUpdated = lastUpdated,
++        origin = origin,
++        destination =
++            toAsset.let {
++                simpleSwapAssetProvider.get(tokenTicker = it.token, chainTicker = it.chain)
++            },
++        mode =
++            if (origin is ZecSimpleSwapAsset) {
++                when (exactInput) {
++                    true -> SwapMode.EXACT_INPUT
++                    false -> SwapMode.EXACT_OUTPUT
++                    null -> SwapMode.EXACT_INPUT
++                }
++            } else {
++                SwapMode.FLEX_INPUT
++            },
++        status = status ?: SwapStatus.SUCCESS,
++        amountOutFormatted = amountOutFormatted ?: BigDecimal(0),
++        provider = provider,
++        totalFees = totalFees,
++        totalFeesUsd = totalFeesUsd,
++    )
++}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRecoveryRouting.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRecoveryRouting.kt
+new file mode 100644
+index 000000000..15ea036e2
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRecoveryRouting.kt
+@@ -0,0 +1,14 @@
++package co.electriccoin.zcash.ui.common.repository
++
++import co.electriccoin.zcash.wallet.foundation.ProviderId
++import co.electriccoin.zcash.wallet.foundation.RecoveryReference
++
++/** Existing V2/V3 records use a NEAR deposit address. No persisted fields or identifiers change. */
++internal fun TransactionSwapMetadata.requireNearRecovery(): RecoveryReference {
++    if (provider != "near") throw UnsupportedSwapRecoveryException()
++    return RecoveryReference(ProviderId(provider), 1, depositAddress)
++}
++
++/** The record remains intact so a supported recovery adapter can be supplied later. */
++class UnsupportedSwapRecoveryException :
++    IllegalArgumentException("This swap provider is not supported for recovery; the saved record has been preserved")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
-index 36d947b49..adde1447a 100644
+index 36d947b49..4bef6c4cf 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
 @@ -6 +5,0 @@ import co.electriccoin.zcash.crash.android.GlobalCrashReporter
 -import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_ADDRESS
-@@ -27,0 +27,3 @@ import kotlinx.coroutines.CompletableDeferred
+@@ -24,0 +24,2 @@ import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
++import co.electriccoin.zcash.wallet.foundation.RequestGeneration
++import co.electriccoin.zcash.wallet.foundation.RequestId
+@@ -27,0 +29,3 @@ import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.CoroutineStart
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
-@@ -143,0 +146,2 @@ class SwapRepositoryImpl(
-+    private var quoteGeneration = 0L
+@@ -143,0 +148,2 @@ class SwapRepositoryImpl(
++    private val quoteGeneration = RequestGeneration()
 +
-@@ -318,42 +322,13 @@ class SwapRepositoryImpl(
+@@ -318,42 +324,13 @@ class SwapRepositoryImpl(
 -        requestQuoteJob?.cancel()
 -        requestQuoteJob =
 -            scope.launch {
@@ -3701,7 +4132,7 @@ index 36d947b49..adde1447a 100644
 +                        destinationAddress = destinationAddress,
 +                        destinationAsset = destinationAsset,
 +                        slippage = slippage
-@@ -361,5 +336,41 @@ class SwapRepositoryImpl(
+@@ -361,5 +338,41 @@ class SwapRepositoryImpl(
 -                    requireMatchingAddress(
 -                        name = "destinationAddress",
 -                        type = SwapQuoteMismatchType.RECIPIENT_ADDRESS,
@@ -3748,7 +4179,7 @@ index 36d947b49..adde1447a 100644
 +                    SwapQuoteData.Error(
 +                        mode = FLEX_INPUT,
 +                        exception = e.withQuoteReportContext(receivedQuote, originAsset, destinationAsset)
-@@ -367,14 +378,5 @@ class SwapRepositoryImpl(
+@@ -367,14 +380,5 @@ class SwapRepositoryImpl(
 -                    quote.update { SwapQuoteData.Success(quote = result) }
 -                } catch (e: SwapQuoteMismatchException) {
 -                    GlobalCrashReporter.reportCaughtException(swapQuoteMismatchSignal(e))
@@ -3768,9 +4199,9 @@ index 36d947b49..adde1447a 100644
 +                throw e
 +            } catch (e: Exception) {
 +                publishQuote(generation, SwapQuoteData.Error(FLEX_INPUT, e))
-@@ -381,0 +384 @@ class SwapRepositoryImpl(
+@@ -381,0 +386 @@ class SwapRepositoryImpl(
 +        }
-@@ -393,17 +396,23 @@ class SwapRepositoryImpl(
+@@ -393,17 +398,23 @@ class SwapRepositoryImpl(
 -        requestQuoteJob?.cancel()
 -        requestQuoteJob =
 -            scope.launch {
@@ -3811,7 +4242,7 @@ index 36d947b49..adde1447a 100644
 +                            quoted = result.amountInFormatted,
 +                            requested = amount,
 +                            decimals = result.originAsset.decimals
-@@ -411,18 +419,0 @@ class SwapRepositoryImpl(
+@@ -411,18 +421,0 @@ class SwapRepositoryImpl(
 -                    receivedQuote = result
 -                    when (mode) {
 -                        EXACT_INPUT,
@@ -3830,7 +4261,7 @@ index 36d947b49..adde1447a 100644
 -                                decimals = result.destinationAsset.decimals
 -                            )
 -                        }
-@@ -430,32 +421,6 @@ class SwapRepositoryImpl(
+@@ -430,32 +423,6 @@ class SwapRepositoryImpl(
 -                    requireExpectedAsset(
 -                        name = "originAsset",
 -                        type = SwapQuoteMismatchType.ORIGIN_ASSET,
@@ -3869,12 +4300,12 @@ index 36d947b49..adde1447a 100644
 +                            quoted = result.amountOutFormatted,
 +                            requested = amount,
 +                            decimals = result.destinationAsset.decimals
-@@ -464,4 +428,0 @@ class SwapRepositoryImpl(
+@@ -464,4 +430,0 @@ class SwapRepositoryImpl(
 -                } catch (e: CancellationException) {
 -                    throw e
 -                } catch (e: Exception) {
 -                    quote.update { SwapQuoteData.Error(mode, e) }
-@@ -468,0 +430,40 @@ class SwapRepositoryImpl(
+@@ -468,0 +432,40 @@ class SwapRepositoryImpl(
 +                requireExpectedAsset(
 +                    name = "originAsset",
 +                    type = SwapQuoteMismatchType.ORIGIN_ASSET,
@@ -3915,14 +4346,19 @@ index 36d947b49..adde1447a 100644
 +                throw e
 +            } catch (e: Exception) {
 +                publishQuote(generation, SwapQuoteData.Error(mode, e))
-@@ -469,0 +471 @@ class SwapRepositoryImpl(
+@@ -469,0 +473 @@ class SwapRepositoryImpl(
 +        }
-@@ -532,0 +535,18 @@ class SwapRepositoryImpl(
+@@ -479,0 +484 @@ class SwapRepositoryImpl(
++        val recovery = swapMetadata.requireNearRecovery()
+@@ -482 +487 @@ class SwapRepositoryImpl(
+-                depositAddress = swapMetadata.depositAddress,
++                depositAddress = recovery.reference,
+@@ -532,0 +538,18 @@ class SwapRepositoryImpl(
 +    /** Loading is visible before callers collect a result; old jobs cannot publish into a new request. */
-+    private fun launchQuoteRequest(block: suspend (Long) -> Unit) {
++    private fun launchQuoteRequest(block: suspend (RequestId) -> Unit) {
 +        val job =
 +            synchronized(this) {
-+                val generation = ++quoteGeneration
++                val generation = quoteGeneration.advance()
 +                requestQuoteJob?.cancel()
 +                quote.value = SwapQuoteData.Loading
 +                scope.launch(start = CoroutineStart.LAZY) { block(generation) }.also { requestQuoteJob = it }
@@ -3930,22 +4366,38 @@ index 36d947b49..adde1447a 100644
 +        job.start()
 +    }
 +
-+    private fun publishQuote(generation: Long, result: SwapQuoteData) {
++    private fun publishQuote(generation: RequestId, result: SwapQuoteData) {
 +        synchronized(this) {
-+            if (quoteGeneration == generation) quote.value = result
++            if (quoteGeneration.isCurrent(generation)) quote.value = result
 +        }
 +    }
 +
-@@ -534,3 +554,6 @@ class SwapRepositoryImpl(
+@@ -534,3 +557,6 @@ class SwapRepositoryImpl(
 -        requestQuoteJob?.cancel()
 -        requestQuoteJob = null
 -        quote.update { null }
 +        synchronized(this) {
-+            ++quoteGeneration
++            quoteGeneration.advance()
 +            requestQuoteJob?.cancel()
 +            requestQuoteJob = null
 +            quote.value = null
 +        }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
+index 0a5bfe73c..647e7f6c7 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
+@@ -14,0 +15 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
++import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
+@@ -19,0 +21 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
++import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
+@@ -139,0 +142,4 @@ class ZashiProposalRepositoryImpl(
++                        val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
++                        if (transactionProposal is SwapTransactionProposal) {
++                            ZecSwapComposition.validate(transactionProposal.quote)
++                        }
+@@ -143 +149 @@ class ZashiProposalRepositoryImpl(
+-                                usk = zashiSpendingKeyDataSource.getZashiSpendingKey()
++                                usk = spendingKey
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateFlexaTransactionUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateFlexaTransactionUseCase.kt
 deleted file mode 100644
 index 572bbb6b4..000000000
@@ -4119,21 +4571,33 @@ index 84d9fd0c0..000000000
 -    DISABLED
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
-index 76c590a49..d7153c359 100644
+index 76c590a49..5e460bb86 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 @@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.datasource.FreshShieldedAddressUnavailableException
-@@ -57 +58 @@ class RequestSwapQuoteUseCase(
+@@ -20,0 +22,2 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
++import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
++import co.electriccoin.zcash.wallet.foundation.FundingCapability
+@@ -57 +60 @@ class RequestSwapQuoteUseCase(
 -        val newAddress = accountDataSource.requestNextShieldedAddress()
 +        val newAddress = requestFreshAddress() ?: return
-@@ -80 +81 @@ class RequestSwapQuoteUseCase(
+@@ -68 +71 @@ class RequestSwapQuoteUseCase(
+-            createProposal = true,
++            funding = ZecSwapComposition.funding(EXACT_INPUT),
+@@ -80 +83 @@ class RequestSwapQuoteUseCase(
 -        val newAddress = accountDataSource.requestNextShieldedAddress()
 +        val newAddress = requestFreshAddress() ?: return
-@@ -103 +104 @@ class RequestSwapQuoteUseCase(
+@@ -91 +94 @@ class RequestSwapQuoteUseCase(
+-            createProposal = true,
++            funding = ZecSwapComposition.funding(EXACT_OUTPUT),
+@@ -103 +106 @@ class RequestSwapQuoteUseCase(
 -        val newAddress = accountDataSource.requestNextShieldedAddress()
 +        val newAddress = requestFreshAddress() ?: return
-@@ -119,0 +121,8 @@ class RequestSwapQuoteUseCase(
+@@ -115 +118 @@ class RequestSwapQuoteUseCase(
+-            createProposal = false,
++            funding = ZecSwapComposition.funding(FLEX_INPUT),
+@@ -119,0 +123,8 @@ class RequestSwapQuoteUseCase(
 +    private suspend fun requestFreshAddress(): String? =
 +        try {
 +            accountDataSource.requestNextShieldedAddress(requireFresh = true)
@@ -4142,6 +4606,22 @@ index 76c590a49..d7153c359 100644
 +            null
 +        }
 +
+@@ -123 +134 @@ class RequestSwapQuoteUseCase(
+-        createProposal: Boolean,
++        funding: FundingCapability,
+@@ -139 +150,11 @@ class RequestSwapQuoteUseCase(
+-        if (result is SwapQuoteData.Success && createProposal) {
++        if (result is SwapQuoteData.Success) {
++            try {
++                ZecSwapComposition.validate(result.quote)
++            } catch (e: IllegalArgumentException) {
++                swapRepository.clearQuote()
++                navigateToErrorUseCase(ErrorArgs.General(e))
++                return@withContext
++            }
++        }
++
++        if (result is SwapQuoteData.Success && funding == FundingCapability.LOCAL_TRANSACTION) {
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
 index 51caa9e19..8e640d823 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
@@ -5116,31 +5596,36 @@ index 2ceac399f..985329123 100644
 +    STACKED
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
-index 9f37c1d93..4ed48daa4 100644
+index 9f37c1d93..998a4f33e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
-@@ -55,0 +56,2 @@ internal class SwapQuoteVM(
+@@ -17,0 +18,4 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
++import co.electriccoin.zcash.ui.common.model.zcash.getTotal
++import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
++import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
++import co.electriccoin.zcash.ui.common.model.zcash.getTotalUsd
+@@ -55,0 +60,2 @@ internal class SwapQuoteVM(
 +    private var isClosing = false
 +
-@@ -80 +82 @@ internal class SwapQuoteVM(
+@@ -80 +86 @@ internal class SwapQuoteVM(
 -                    cancelSwapQuote()
 +                    onBack()
-@@ -159 +161,3 @@ internal class SwapQuoteVM(
+@@ -159 +165,3 @@ internal class SwapQuoteVM(
 -    private fun onEditPaymentClick() = cancelSwapQuote()
 +    private fun onEditPaymentClick() = onBack()
 +
 +    private fun onBack() = closeQuote { cancelSwapQuote() }
-@@ -161 +165,5 @@ internal class SwapQuoteVM(
+@@ -161 +169,5 @@ internal class SwapQuoteVM(
 -    private fun onBack() = cancelSwapQuote()
 +    private fun closeQuote(action: () -> Unit) {
 +        if (isClosing) return
 +        isClosing = true
 +        action()
 +    }
-@@ -163 +171 @@ internal class SwapQuoteVM(
+@@ -163 +175 @@ internal class SwapQuoteVM(
 -    private fun onBackDuringError() = cancelSwapQuote()
 +    private fun onBackDuringError() = onBack()
-@@ -167 +175 @@ internal class SwapQuoteVM(
+@@ -167 +179 @@ internal class SwapQuoteVM(
 -    private fun onCancelPaymentClick() = cancelSwap()
 +    private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
@@ -10021,6 +10506,184 @@ index c0be20563..1bea03a8f 100644
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt
+index 3f54429cb..4c5470daa 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt
+@@ -3,2 +2,0 @@ package co.electriccoin.zcash.ui.common.model
+-import cash.z.ecc.android.sdk.model.Proposal
+-import cash.z.ecc.android.sdk.model.Zatoshi
+@@ -25 +23,3 @@ class FakeSwapQuote(
+-    refundAddress: String
++    refundAddress: String,
++    override val provider: String = "near",
++    override val deadline: Instant = Instant.parse("2100-01-01T00:00:00Z")
+@@ -30,2 +29,0 @@ class FakeSwapQuote(
+-    override val provider: String = "test"
+-    override val zecExchangeRate: BigDecimal = BigDecimal.ONE
+@@ -36 +33,0 @@ class FakeSwapQuote(
+-    override val affiliateFeeZatoshi: Zatoshi = Zatoshi(0)
+@@ -39 +35,0 @@ class FakeSwapQuote(
+-    override val deadline: Instant = Instant.fromEpochMilliseconds(0)
+@@ -42,8 +38 @@ class FakeSwapQuote(
+-    override fun getTotal(proposal: Proposal?): BigDecimal = BigDecimal.ZERO
+-
+-    override fun getTotalUsd(proposal: Proposal?): BigDecimal = BigDecimal.ZERO
+-
+-    override fun getTotalFeesUsd(proposal: Proposal?): BigDecimal = BigDecimal.ZERO
+-
+-    override fun getTotalFeesZatoshi(proposal: Proposal?): Zatoshi = Zatoshi(0)
+-}
++}
+\ No newline at end of file
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/ZecSwapCompositionTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/ZecSwapCompositionTest.kt
+new file mode 100644
+index 000000000..68c54e72d
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/ZecSwapCompositionTest.kt
+@@ -0,0 +1,103 @@
++package co.electriccoin.zcash.ui.common.model
++
++import co.electriccoin.zcash.wallet.foundation.FundingCapability
++import java.math.BigDecimal
++import java.time.Instant as JavaInstant
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++import kotlin.time.Instant
++
++class ZecSwapCompositionTest {
++    private val now = JavaInstant.parse("2026-11-06T12:00:00Z")
++    private val future = Instant.parse("2026-11-06T12:01:00Z")
++    private val zec = SwapAssetTestFixture.zecAsset()
++    private val btc = SwapAssetTestFixture.asset()
++
++    @Test
++    fun outgoingModesRequireLocalFundingAndAcceptZecOrigin() {
++        for (mode in listOf(SwapMode.EXACT_INPUT, SwapMode.EXACT_OUTPUT)) {
++            assertEquals(FundingCapability.LOCAL_TRANSACTION, ZecSwapComposition.funding(mode))
++            ZecSwapComposition.validate(quote(mode, zec, btc), now)
++        }
++    }
++
++    @Test
++    fun incomingFlexibleQuoteUsesExternalFundingAndItsOwnPrecision() {
++        val usdc = SwapAssetTestFixture.asset(tokenTicker = "usdc", chainTicker = "eth", decimals = 6)
++        assertEquals(FundingCapability.EXTERNAL_DEPOSIT, ZecSwapComposition.funding(SwapMode.FLEX_INPUT))
++        ZecSwapComposition.validate(quote(SwapMode.FLEX_INPUT, usdc, zec, amount = "12.345678"), now)
++    }
++
++    @Test
++    fun rejectsAssetDirectionsThatCannotBeFundedByTheSelectedFlow() {
++        for (mode in listOf(SwapMode.EXACT_INPUT, SwapMode.EXACT_OUTPUT)) {
++            assertFailsWith<IllegalArgumentException> {
++                ZecSwapComposition.validate(quote(mode, btc, zec), now)
++            }
++        }
++        for ((origin, destination) in listOf(zec to btc, btc to btc, zec to zec)) {
++            assertFailsWith<IllegalArgumentException> {
++                ZecSwapComposition.validate(quote(SwapMode.FLEX_INPUT, origin, destination), now)
++            }
++        }
++    }
++
++    @Test
++    fun zecTickerOnAnotherChainCannotSupplyLocalWalletFunding() {
++        val externalZec = SwapAssetTestFixture.asset(tokenTicker = "zec", chainTicker = "eth")
++        assertFailsWith<IllegalArgumentException> {
++            ZecSwapComposition.validate(quote(SwapMode.EXACT_INPUT, externalZec, btc), now)
++        }
++    }
++
++    @Test
++    fun rejectsUnsupportedProviderAndDeadlineAtOrBeforeFundingTime() {
++        assertFailsWith<IllegalArgumentException> {
++            ZecSwapComposition.validate(quote(SwapMode.EXACT_INPUT, zec, btc, provider = "other"), now)
++        }
++        for (deadline in listOf("2026-11-06T12:00:00Z", "2026-11-06T11:59:59Z")) {
++            assertFailsWith<IllegalArgumentException> {
++                ZecSwapComposition.validate(
++                    quote(SwapMode.EXACT_INPUT, zec, btc, deadline = Instant.parse(deadline)),
++                    now
++                )
++            }
++        }
++    }
++
++    @Test
++    fun validatesFormattedInputAmountAtOriginPrecisionWithoutRounding() {
++        val usdc = SwapAssetTestFixture.asset(tokenTicker = "usdc", chainTicker = "eth", decimals = 6)
++        assertFailsWith<IllegalArgumentException> {
++            ZecSwapComposition.validate(quote(SwapMode.FLEX_INPUT, usdc, zec, amount = "12.3456789"), now)
++        }
++        assertFailsWith<IllegalArgumentException> {
++            ZecSwapComposition.validate(quote(SwapMode.EXACT_INPUT, zec, btc, amount = "-1"), now)
++        }
++    }
++
++    private fun quote(
++        mode: SwapMode,
++        origin: SwapAsset,
++        destination: SwapAsset,
++        amount: String = "1.23456789",
++        provider: String = "near",
++        deadline: Instant = future
++    ): SwapQuote {
++        val formatted = BigDecimal(amount)
++        return FakeSwapQuote(
++            originAsset = origin,
++            destinationAsset = destination,
++            mode = mode,
++            amountIn = formatted.movePointRight(origin.decimals),
++            amountInFormatted = formatted,
++            amountOutFormatted = BigDecimal("99.01"),
++            depositAddress = "synthetic-deposit",
++            destinationAddress = "synthetic-destination",
++            refundAddress = "synthetic-refund",
++            provider = provider,
++            deadline = deadline
++        )
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteTest.kt
+index a3e430b3c..56993ca02 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteTest.kt
+@@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.model.near
++import cash.z.ecc.android.sdk.model.Proposal
++import cash.z.ecc.android.sdk.model.Zatoshi
+@@ -6,0 +9,4 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
++import co.electriccoin.zcash.ui.common.model.zcash.getTotal
++import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
++import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
++import co.electriccoin.zcash.ui.common.model.zcash.getTotalUsd
+@@ -8,0 +15,2 @@ import co.electriccoin.zcash.ui.design.util.imageRes
++import io.mockk.every
++import io.mockk.mockk
+@@ -20,0 +29,23 @@ class NearSwapQuoteTest {
++    @Test
++    fun externallyFundedQuoteAddsNoWalletFee() {
++        val quote = nearSwapQuote(quoteResponse())
++
++        assertEquals(0, quote.amountInFormatted.compareTo(quote.getTotal(null)))
++        assertEquals(0, quote.amountInUsd.compareTo(quote.getTotalUsd(null)))
++        assertEquals(0, quote.getTotalFeesUsd(null).signum())
++        assertEquals(Zatoshi(0), quote.getTotalFeesZatoshi(null))
++        assertEquals(0, quote.affiliateFee.signum())
++        assertEquals(0, quote.affiliateFeeUsd.signum())
++    }
++
++    @Test
++    fun walletFundedQuotePricesZcashFeeFromOriginUsdUnitPrice() {
++        val quote = nearSwapQuote(quoteResponse(amountInUsd = BigDecimal("10")))
++        val proposal = mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(1000) }
++
++        assertEquals(0, BigDecimal("1.00001").compareTo(quote.getTotal(proposal)))
++        assertEquals(0, BigDecimal("10.0001").compareTo(quote.getTotalUsd(proposal)))
++        assertEquals(0, BigDecimal("0.0001").compareTo(quote.getTotalFeesUsd(proposal)))
++        assertEquals(Zatoshi(1000), quote.getTotalFeesZatoshi(proposal))
++    }
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt
 new file mode 100644
 index 000000000..e26a87f93
@@ -10344,6 +11007,113 @@ index 000000000..d8641f161
 +            .apply { scope = testScope }
 +            .also { it.requestRefreshAssetsOnce() }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRecoveryRoutingTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRecoveryRoutingTest.kt
+new file mode 100644
+index 000000000..660ac8c75
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRecoveryRoutingTest.kt
+@@ -0,0 +1,101 @@
++package co.electriccoin.zcash.ui.common.repository
++
++import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
++import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
++import co.electriccoin.zcash.ui.common.model.SwapMode
++import co.electriccoin.zcash.ui.common.model.SwapStatus
++import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
++import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
++import co.electriccoin.zcash.ui.common.serialization.METADATA_SERIALIZATION_V1_V2
++import co.electriccoin.zcash.ui.common.serialization.METADATA_SERIALIZATION_V3
++import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataSerializer
++import co.electriccoin.zcash.wallet.foundation.ProviderId
++import co.electriccoin.zcash.wallet.foundation.RecoveryReference
++import io.mockk.coVerify
++import io.mockk.every
++import io.mockk.mockk
++import kotlinx.coroutines.test.runTest
++import java.io.ByteArrayOutputStream
++import java.math.BigDecimal
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++import kotlin.test.assertTrue
++
++class SwapRecoveryRoutingTest {
++    private val serializer = MetadataSerializer()
++    private val assets = mockk<SimpleSwapAssetProvider> {
++        every { get("zec", "zec") } returns SwapAssetTestFixture.zecSimpleAsset()
++        every { get("btc", "btc") } returns SwapAssetTestFixture.simpleAsset()
++    }
++
++    @Test
++    fun legacyV2MigrationKeepsNearDepositAndBusinessDefaults() {
++        assertLegacyRecovery(2)
++    }
++
++    @Test
++    fun legacyV3KeepsNearDepositAndBusinessDefaults() {
++        assertLegacyRecovery(3)
++    }
++
++    @Test
++    fun unknownPersistedProvidersFailBeforeNetworkAndKeepSavedRecord() = runTest {
++        for (version in listOf(2, 3)) {
++            val persisted = serializer.deserialize(fixture(version, "future-provider").byteInputStream())
++            val before = encode(persisted)
++            val business = persisted.accountMetadata.swaps.swapIds.single().toBusinessObject(assets)
++            val dataSource = mockk<SwapDataSource>()
++            val repository = SwapRepositoryImpl(dataSource, mockk(relaxed = true)).apply {
++                scope = backgroundScope
++            }
++
++            val failure = assertFailsWith<UnsupportedSwapRecoveryException> {
++                repository.checkSwapStatus(business)
++            }
++
++            assertTrue(failure.message.orEmpty().contains("saved record has been preserved"))
++            coVerify(exactly = 0) { dataSource.getSupportedTokens() }
++            coVerify(exactly = 0) { dataSource.checkSwapStatus(any(), any()) }
++            assertEquals("future-provider", business.provider)
++            assertEquals(before, encode(persisted))
++            assertEquals(persisted, serializer.deserialize(before.byteInputStream()))
++        }
++    }
++
++    private fun assertLegacyRecovery(version: Int) {
++        val persisted = serializer.deserialize(fixture(version, "near").byteInputStream())
++        val business = persisted.accountMetadata.swaps.swapIds.single().toBusinessObject(assets)
++
++        assertEquals(RecoveryReference(ProviderId("near"), 1, "synthetic-deposit"), business.requireNearRecovery())
++        assertEquals(SwapMode.EXACT_INPUT, business.mode)
++        assertEquals(SwapStatus.SUCCESS, business.status)
++        assertEquals(BigDecimal.ZERO, business.amountOutFormatted)
++        assertEquals("zec", business.origin.tokenTicker)
++        assertEquals("btc", business.destination.tokenTicker)
++        assertEquals(BigDecimal("0.25"), business.totalFeesUsd)
++        assertEquals(1000L, business.totalFees.value)
++        val roundTrip = serializer.deserialize(encode(persisted).byteInputStream())
++        assertEquals(business, roundTrip.accountMetadata.swaps.swapIds.single().toBusinessObject(assets))
++    }
++
++    private fun encode(metadata: MetadataV3): String =
++        ByteArrayOutputStream().also { serializer.serialize(it, metadata) }.toString(Charsets.UTF_8)
++
++    private fun fixture(version: Int, provider: String): String {
++        // The V2 model retained the original persisted version number, 1.
++        val persistedVersion = if (version == 2) METADATA_SERIALIZATION_V1_V2 else METADATA_SERIALIZATION_V3
++        val route = if (version == 2) {
++            """"provider":"$provider.btc.btc""""
++        } else {
++            """"provider":"$provider","fromAsset":"zec.zec","toAsset":"btc.btc",""" +
++                """"exactInput":null,"status":null,"amountOutFormatted":null"""
++        }
++        return """
++            {"version":$persistedVersion,"lastUpdated":1000,"accountMetadata":{
++              "bookmarked":[],"read":[],"annotations":[],"swaps":{
++                "swapIds":[{"depositAddress":"synthetic-deposit","lastUpdated":1000,
++                  "totalFees":1000,"totalFeesUsd":"0.25",$route}],"lastUsedAssetHistory":[]}}}
++        """.trimIndent()
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 index d55620b20..a8a1c5e97 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
@@ -10377,6 +11147,94 @@ index d55620b20..a8a1c5e97 100644
 @@ -764 +760 @@ class SwapRepositoryImplTest {
 -            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } returns quote
 +            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
+new file mode 100644
+index 000000000..c88bca3b4
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
+@@ -0,0 +1,82 @@
++package co.electriccoin.zcash.ui.common.repository
++
++import cash.z.ecc.android.sdk.model.Memo
++import cash.z.ecc.android.sdk.model.Proposal
++import cash.z.ecc.android.sdk.model.UnifiedSpendingKey
++import cash.z.ecc.android.sdk.model.WalletAddress
++import cash.z.ecc.android.sdk.model.Zatoshi
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
++import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
++import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
++import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
++import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
++import co.electriccoin.zcash.ui.common.model.SubmitResult
++import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
++import co.electriccoin.zcash.ui.common.model.SwapMode
++import co.electriccoin.zcash.ui.common.model.SwapQuote
++import io.mockk.coEvery
++import io.mockk.coVerify
++import io.mockk.mockk
++import kotlinx.coroutines.runBlocking
++import java.math.BigDecimal
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++import kotlin.test.assertIs
++import kotlin.test.assertSame
++import kotlin.time.Instant
++
++class ZashiProposalRepositoryTest {
++    private val proposals = mockk<ProposalDataSource>()
++    private val keys = mockk<ZashiSpendingKeyDataSource>()
++    private val repository = ZashiProposalRepositoryImpl(mockk<AccountDataSource>(), proposals, keys)
++
++    @Test
++    fun quoteExpiringDuringSpendingKeyAcquisitionCannotBroadcast() = runBlocking {
++        var currentDeadline = Instant.parse("2100-01-01T00:00:00Z")
++        val quote = object : SwapQuote by quote() {
++            override val deadline: Instant get() = currentDeadline
++        }
++        repository.transactionProposal.value = ExactInputSwapTransactionProposal(
++            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""), mockk<Proposal>(), quote
++        )
++        coEvery { keys.getZashiSpendingKey() } answers {
++            currentDeadline = Instant.parse("2000-01-01T00:00:00Z")
++            mockk<UnifiedSpendingKey>()
++        }
++
++        val error = assertFailsWith<IllegalArgumentException> { repository.submit() }
++
++        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
++        val result = assertIs<SubmitProposalState.Result>(repository.submitState.value)
++        assertSame(error, assertIs<SubmitResult.Error>(result.submitResult).cause)
++    }
++
++    @Test
++    fun nativeSendStillSubmitsWithoutSwapValidation() = runBlocking {
++        val proposal = mockk<Proposal>()
++        val key = mockk<UnifiedSpendingKey>()
++        val expected = SubmitResult.Success(listOf("synthetic-tx"))
++        repository.transactionProposal.value = RegularTransactionProposal(
++            WalletAddress.Unified.new("synthetic-recipient"), Zatoshi(1), Memo(""), proposal
++        )
++        coEvery { keys.getZashiSpendingKey() } returns key
++        coEvery { proposals.submitTransaction(proposal, key) } returns expected
++
++        assertEquals(expected, repository.submit())
++        coVerify(exactly = 1) { proposals.submitTransaction(proposal, key) }
++    }
++
++    private fun quote() = FakeSwapQuote(
++        originAsset = SwapAssetTestFixture.zecAsset(),
++        destinationAsset = SwapAssetTestFixture.asset(),
++        mode = SwapMode.EXACT_INPUT,
++        amountIn = BigDecimal("100000000"),
++        amountInFormatted = BigDecimal.ONE,
++        amountOutFormatted = BigDecimal.ONE,
++        depositAddress = "synthetic-deposit",
++        destinationAddress = "synthetic-destination",
++        refundAddress = "synthetic-refund"
++    )
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateFlexaTransactionUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateFlexaTransactionUseCaseTest.kt
 deleted file mode 100644
 index 0a57ab991..000000000
@@ -10703,6 +11561,32 @@ index acc8741c2..430fc754d 100644
 -                mockk<GetFlexaStatusUseCase> {
 -                    every { observe() } returns MutableStateFlow(Status.DISABLED)
 -                },
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
+index bac1a53ce..435739b90 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
+@@ -3,2 +2,0 @@ package co.electriccoin.zcash.ui.screen.swap.quote
+-import cash.z.ecc.android.sdk.model.Proposal
+-import cash.z.ecc.android.sdk.model.Zatoshi
+@@ -28 +25,0 @@ internal data class FakeSwapQuote(
+-    override val zecExchangeRate: BigDecimal = BigDecimal("30"),
+@@ -35,3 +32,2 @@ internal data class FakeSwapQuote(
+-    override val affiliateFee: BigDecimal = BigDecimal("0.01"),
+-    override val affiliateFeeZatoshi: Zatoshi = Zatoshi(1000),
+-    override val affiliateFeeUsd: BigDecimal = BigDecimal("1"),
++    override val affiliateFee: BigDecimal = BigDecimal.ZERO,
++    override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO,
+@@ -42,8 +38 @@ internal data class FakeSwapQuote(
+-    override fun getTotal(proposal: Proposal?): BigDecimal = amountIn
+-
+-    override fun getTotalUsd(proposal: Proposal?): BigDecimal = amountInUsd
+-
+-    override fun getTotalFeesUsd(proposal: Proposal?): BigDecimal = affiliateFeeUsd
+-
+-    override fun getTotalFeesZatoshi(proposal: Proposal?): Zatoshi = affiliateFeeZatoshi
+-}
++}
+\ No newline at end of file
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 index 38427672d..1181b3696 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
@@ -10892,3 +11776,361 @@ index a6b9a664f..021646f08 100644
 @@ -48 +48 @@ class ZcashUiTestApplication : Application() {
 -                featureVotingModule,
 +                excludedVotingModule,
+diff --git a/wallet-foundation-lib/build.gradle.kts b/wallet-foundation-lib/build.gradle.kts
+new file mode 100644
+index 000000000..8a96dca1c
+--- /dev/null
++++ b/wallet-foundation-lib/build.gradle.kts
+@@ -0,0 +1,23 @@
++plugins {
++    kotlin("jvm")
++    id("secant.dependency-conventions")
++}
++
++kotlin {
++    jvmToolchain(project.property("JVM_TOOLCHAIN").toString().toInt())
++    compilerOptions {
++        val target = project.property("KOTLIN_JVM_TARGET").toString()
++        jvmTarget.set(
++            org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(if (target == "8") "1.8" else target)
++        )
++        allWarningsAsErrors.set(project.property("ZCASH_IS_TREAT_WARNINGS_AS_ERRORS").toString().toBoolean())
++    }
++}
++
++tasks.withType<JavaCompile>().configureEach {
++    options.release.set(project.property("KOTLIN_JVM_TARGET").toString().toInt())
++}
++
++dependencies {
++    testImplementation(kotlin("test-junit"))
++}
+diff --git a/wallet-foundation-lib/src/main/kotlin/co/electriccoin/zcash/wallet/foundation/Contracts.kt b/wallet-foundation-lib/src/main/kotlin/co/electriccoin/zcash/wallet/foundation/Contracts.kt
+new file mode 100644
+index 000000000..b1c5b5859
+--- /dev/null
++++ b/wallet-foundation-lib/src/main/kotlin/co/electriccoin/zcash/wallet/foundation/Contracts.kt
+@@ -0,0 +1,133 @@
++package co.electriccoin.zcash.wallet.foundation
++
++import java.math.BigDecimal
++import java.math.RoundingMode
++import java.time.Instant
++
++/** Identifiers remain case-sensitive and are never silently normalized. */
++data class AssetId(val network: String, val asset: String) {
++    init {
++        requireIdentifier(network)
++        requireIdentifier(asset)
++    }
++}
++
++/** [decimals] is supplied by the owning asset integration; conversion never rounds. */
++class AssetAmount(val asset: AssetId, value: BigDecimal, val decimals: Int) {
++    val value: BigDecimal
++
++    init {
++        require(decimals >= 0) { "Asset decimals must be nonnegative" }
++        require(value.signum() >= 0) { "Amount must be nonnegative" }
++        this.value =
++            try {
++                value.setScale(decimals, RoundingMode.UNNECESSARY)
++            } catch (e: ArithmeticException) {
++                throw IllegalArgumentException("Amount exceeds asset precision", e)
++            }
++    }
++
++    override fun equals(other: Any?): Boolean =
++        other is AssetAmount && asset == other.asset && decimals == other.decimals && value == other.value
++
++    override fun hashCode(): Int = 31 * (31 * asset.hashCode() + value.hashCode()) + decimals
++
++    override fun toString(): String = "${value.toPlainString()} $asset"
++}
++
++enum class QuoteMode { EXACT_INPUT, EXACT_OUTPUT, FLEX_INPUT }
++
++data class ProviderId(val value: String) {
++    init {
++        requireIdentifier(value)
++    }
++}
++
++/** Opaque provider-owned recovery data. Unknown providers require explicit routing failure. */
++data class RecoveryReference(val provider: ProviderId, val schema: Int, val reference: String) {
++    init {
++        require(schema > 0) { "Recovery schema must be positive" }
++        require(reference.isNotBlank()) { "Recovery reference is required" }
++    }
++}
++
++sealed interface Fee {
++    data class Known(val amount: AssetAmount) : Fee
++    data class Estimated(val amount: AssetAmount) : Fee
++    data class Included(val asset: AssetId) : Fee
++    data class Unknown(val asset: AssetId) : Fee
++}
++
++/** A provider may constrain a flexible deposit to an inclusive range. */
++@Suppress("LongParameterList")
++data class DepositInstructions(
++    val amount: AssetAmount,
++    val address: String,
++    val recovery: RecoveryReference,
++    val memo: String? = null,
++    val tag: String? = null,
++    val expiresAt: Instant? = null,
++    val maximumAmount: AssetAmount = amount
++) {
++    init {
++        require(address.isNotBlank()) { "Deposit address is required" }
++        require(memo == null || memo.isNotBlank()) { "Memo must be absent or nonblank" }
++        require(tag == null || tag.isNotBlank()) { "Tag must be absent or nonblank" }
++        require(maximumAmount.asset == amount.asset && maximumAmount.decimals == amount.decimals)
++        require(maximumAmount.value >= amount.value) { "Maximum deposit is below minimum" }
++    }
++}
++
++enum class FundingCapability { EXTERNAL_DEPOSIT, LOCAL_TRANSACTION }
++
++enum class FlowFailure {
++    UNSUPPORTED_MODE, UNSUPPORTED_FUNDING, PROVIDER_MISMATCH, UNSUPPORTED_ASSET,
++    UNSUPPORTED_MEMO, UNSUPPORTED_TAG, EXPIRED, UNSUPPORTED_RANGE
++}
++
++class FlowRejected(val reason: FlowFailure) : IllegalArgumentException("Flow rejected: $reason")
++
++/** Product wiring declares supported behavior without depending on an engine or provider DTO. */
++@Suppress("LongParameterList")
++class FlowComposition(
++    val provider: ProviderId,
++    quoteModes: Set<QuoteMode>,
++    depositAssets: Set<AssetId>,
++    fundingCapabilities: Set<FundingCapability>,
++    val supportsMemo: Boolean = false,
++    val supportsTag: Boolean = false
++) {
++    private val quoteModes = quoteModes.toSet()
++    private val depositAssets = depositAssets.toSet()
++    private val fundingCapabilities = fundingCapabilities.toSet()
++
++    /** Call before approval and again immediately before funding with the current time. */
++    fun validate(
++        mode: QuoteMode,
++        funding: FundingCapability,
++        instructions: DepositInstructions,
++        now: Instant
++    ) {
++        rejectUnless(mode in quoteModes, FlowFailure.UNSUPPORTED_MODE)
++        rejectUnless(funding in fundingCapabilities, FlowFailure.UNSUPPORTED_FUNDING)
++        rejectUnless(instructions.recovery.provider == provider, FlowFailure.PROVIDER_MISMATCH)
++        rejectUnless(instructions.amount.asset in depositAssets, FlowFailure.UNSUPPORTED_ASSET)
++        rejectUnless(instructions.memo == null || supportsMemo, FlowFailure.UNSUPPORTED_MEMO)
++        rejectUnless(instructions.tag == null || supportsTag, FlowFailure.UNSUPPORTED_TAG)
++        rejectUnless(instructions.expiresAt?.let { now < it } != false, FlowFailure.EXPIRED)
++        rejectUnless(
++            mode == QuoteMode.FLEX_INPUT || instructions.amount == instructions.maximumAmount,
++            FlowFailure.UNSUPPORTED_RANGE
++        )
++    }
++}
++
++private fun rejectUnless(condition: Boolean, reason: FlowFailure) {
++    if (!condition) throw FlowRejected(reason)
++}
++
++private fun requireIdentifier(value: String) {
++    require(value.isNotBlank() && value == value.trim() && value.none { it.isISOControl() }) {
++        "Identity must be nonblank, unpadded and contain no control characters"
++    }
++}
+diff --git a/wallet-foundation-lib/src/main/kotlin/co/electriccoin/zcash/wallet/foundation/RequestGeneration.kt b/wallet-foundation-lib/src/main/kotlin/co/electriccoin/zcash/wallet/foundation/RequestGeneration.kt
+new file mode 100644
+index 000000000..213aa3674
+--- /dev/null
++++ b/wallet-foundation-lib/src/main/kotlin/co/electriccoin/zcash/wallet/foundation/RequestGeneration.kt
+@@ -0,0 +1,21 @@
++package co.electriccoin.zcash.wallet.foundation
++
++/** Opaque identity of one request within its owning [RequestGeneration]. */
++class RequestId internal constructor(internal val owner: RequestGeneration, internal val generation: Long)
++
++/**
++ * Invalidates previous requests when a replacement starts or its result is cleared.
++ * Callers must synchronize access, including the current-request check and its resulting state update,
++ * under the same lock. This class does not cancel work or publish results.
++ */
++class RequestGeneration {
++    private var generation = 0L
++
++    fun advance(): RequestId {
++        check(generation < Long.MAX_VALUE) { "Request generation exhausted" }
++        generation += 1
++        return RequestId(this, generation)
++    }
++
++    fun isCurrent(request: RequestId): Boolean = request.owner === this && request.generation == generation
++}
+diff --git a/wallet-foundation-lib/src/test/kotlin/co/electriccoin/zcash/wallet/foundation/ContractsTest.kt b/wallet-foundation-lib/src/test/kotlin/co/electriccoin/zcash/wallet/foundation/ContractsTest.kt
+new file mode 100644
+index 000000000..e9c9085b2
+--- /dev/null
++++ b/wallet-foundation-lib/src/test/kotlin/co/electriccoin/zcash/wallet/foundation/ContractsTest.kt
+@@ -0,0 +1,100 @@
++package co.electriccoin.zcash.wallet.foundation
++
++import java.math.BigDecimal
++import java.time.Instant
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++import kotlin.test.assertNotEquals
++import kotlin.test.assertTrue
++
++class ContractsTest {
++    private val asset = AssetId("example-mainnet", "coin")
++    private val provider = ProviderId("example-provider")
++    private val now = Instant.parse("2026-11-06T12:00:00Z")
++    private val amount = AssetAmount(asset, BigDecimal("1.25"), 2)
++    private val instructions = DepositInstructions(
++        amount = amount,
++        address = "external-destination",
++        recovery = RecoveryReference(provider, 1, "opaque-operation-id"),
++        expiresAt = now.plusSeconds(60)
++    )
++
++    @Test
++    fun identityAndPrecisionArePreserved() {
++        assertNotEquals(asset, AssetId("example-testnet", "coin"))
++        assertNotEquals(asset, AssetId("example-mainnet", "COIN"))
++        assertEquals(amount, AssetAmount(asset, BigDecimal("1.2500"), 2))
++        assertFailsWith<IllegalArgumentException> { AssetAmount(asset, BigDecimal("1.251"), 2) }
++        assertFailsWith<IllegalArgumentException> { AssetAmount(asset, BigDecimal("-1"), 2) }
++        assertFailsWith<IllegalArgumentException> { AssetAmount(asset, BigDecimal.ZERO, -1) }
++        assertFailsWith<IllegalArgumentException> { AssetId(" mainnet", "coin") }
++        assertFailsWith<IllegalArgumentException> { ProviderId("") }
++        assertFailsWith<IllegalArgumentException> { RecoveryReference(provider, 0, "id") }
++    }
++
++    @Test
++    fun feeKnowledgeIsExplicitIncludingKnownZero() {
++        val zero = AssetAmount(asset, BigDecimal.ZERO, 2)
++        val fees: Set<Fee> = setOf(Fee.Known(zero), Fee.Estimated(zero), Fee.Included(asset), Fee.Unknown(asset))
++        assertEquals(4, fees.size)
++        assertTrue(Fee.Known(zero).amount.value.signum() == 0)
++    }
++
++    @Test
++    fun alternativeExternalFundingCompositionNeedsNoLocalWallet() {
++        val composition = externalComposition()
++        composition.validate(QuoteMode.EXACT_INPUT, FundingCapability.EXTERNAL_DEPOSIT, instructions, now)
++        assertFailsWith<IllegalArgumentException> {
++            composition.validate(QuoteMode.EXACT_INPUT, FundingCapability.LOCAL_TRANSACTION, instructions, now)
++        }
++        assertFailsWith<IllegalArgumentException> {
++            composition.validate(QuoteMode.EXACT_OUTPUT, FundingCapability.EXTERNAL_DEPOSIT, instructions, now)
++        }
++    }
++
++    @Test
++    fun unsupportedInstructionsFailBeforeFunding() {
++        val unsupported = listOf(
++            instructions.copy(memo = "required-memo"),
++            instructions.copy(tag = "required-tag"),
++            instructions.copy(expiresAt = now),
++            instructions.copy(recovery = RecoveryReference(ProviderId("other"), 1, "id")),
++            instructions.copy(
++                amount = AssetAmount(AssetId("example-testnet", "coin"), BigDecimal.ONE, 2),
++                maximumAmount = AssetAmount(AssetId("example-testnet", "coin"), BigDecimal.ONE, 2)
++            )
++        )
++        unsupported.forEach {
++            assertFailsWith<IllegalArgumentException> {
++                externalComposition().validate(QuoteMode.EXACT_INPUT, FundingCapability.EXTERNAL_DEPOSIT, it, now)
++            }
++        }
++    }
++
++    @Test
++    fun flexibleRangesAndLocalMemoFundingAreExplicitCapabilities() {
++        val range = instructions.copy(maximumAmount = AssetAmount(asset, BigDecimal("2.50"), 2), memo = "route")
++        val local = FlowComposition(
++            provider,
++            setOf(QuoteMode.EXACT_INPUT, QuoteMode.FLEX_INPUT),
++            setOf(asset),
++            setOf(FundingCapability.LOCAL_TRANSACTION),
++            supportsMemo = true
++        )
++        local.validate(QuoteMode.FLEX_INPUT, FundingCapability.LOCAL_TRANSACTION, range, now)
++        assertFailsWith<IllegalArgumentException> {
++            local.validate(QuoteMode.EXACT_INPUT, FundingCapability.LOCAL_TRANSACTION, range, now)
++        }
++        assertFailsWith<IllegalArgumentException> {
++            instructions.copy(maximumAmount = AssetAmount(asset, BigDecimal.ONE, 2))
++        }
++    }
++
++    private fun externalComposition() = FlowComposition(
++        provider,
++        setOf(QuoteMode.EXACT_INPUT),
++        setOf(asset),
++        setOf(FundingCapability.EXTERNAL_DEPOSIT)
++    )
++}
+diff --git a/wallet-foundation-lib/src/test/kotlin/co/electriccoin/zcash/wallet/foundation/RequestGenerationTest.kt b/wallet-foundation-lib/src/test/kotlin/co/electriccoin/zcash/wallet/foundation/RequestGenerationTest.kt
+new file mode 100644
+index 000000000..2e1df5452
+--- /dev/null
++++ b/wallet-foundation-lib/src/test/kotlin/co/electriccoin/zcash/wallet/foundation/RequestGenerationTest.kt
+@@ -0,0 +1,51 @@
++package co.electriccoin.zcash.wallet.foundation
++
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++class RequestGenerationTest {
++    @Test
++    fun replacingRequestRejectsLateCompletion() {
++        val requests = RequestGeneration()
++        val first = requests.advance()
++        val second = requests.advance()
++        var displayed: String? = null
++        fun complete(request: RequestId, value: String) {
++            if (requests.isCurrent(request)) displayed = value
++        }
++
++        complete(second, "new quote")
++        complete(first, "late quote")
++
++        assertEquals("new quote", displayed)
++        assertFalse(requests.isCurrent(first))
++        assertTrue(requests.isCurrent(second))
++    }
++
++    @Test
++    fun clearingInvalidatesTheOutstandingRequestWithoutNeedingItsCancellation() {
++        val requests = RequestGeneration()
++        val pending = requests.advance()
++        requests.advance()
++
++        assertFalse(requests.isCurrent(pending))
++        val replacement = requests.advance()
++        assertTrue(requests.isCurrent(replacement))
++        assertFalse(requests.isCurrent(pending))
++    }
++
++    @Test
++    fun anotherOwnerCannotPublishEvenWithTheSameGeneration() {
++        val first = RequestGeneration()
++        val second = RequestGeneration()
++        val firstRequest = first.advance()
++        val secondRequest = second.advance()
++
++        assertTrue(first.isCurrent(firstRequest))
++        assertTrue(second.isCurrent(secondRequest))
++        assertFalse(first.isCurrent(secondRequest))
++        assertFalse(second.isCurrent(firstRequest))
++    }
++}

@@ -1,7 +1,5 @@
 package co.electriccoin.zcash.ui.common.model
 
-import cash.z.ecc.android.sdk.model.Proposal
-import cash.z.ecc.android.sdk.model.Zatoshi
 import java.math.BigDecimal
 import kotlin.time.Instant
 
@@ -22,28 +20,19 @@ class FakeSwapQuote(
     override val amountOutFormatted: BigDecimal,
     depositAddress: String,
     destinationAddress: String,
-    refundAddress: String
+    refundAddress: String,
+    override val provider: String = "near",
+    override val deadline: Instant = Instant.parse("2100-01-01T00:00:00Z")
 ) : SwapQuote {
     override val depositAddress: SwapAddress = DynamicSwapAddress(depositAddress)
     override val destinationAddress: SwapAddress = DynamicSwapAddress(destinationAddress)
     override val refundAddress: SwapAddress = DynamicSwapAddress(refundAddress)
-    override val provider: String = "test"
-    override val zecExchangeRate: BigDecimal = BigDecimal.ONE
     override val amountInUsd: BigDecimal = BigDecimal.ONE
     override val amountOut: BigDecimal = BigDecimal.ONE
     override val amountOutUsd: BigDecimal = BigDecimal.ONE
     override val affiliateFee: BigDecimal = BigDecimal.ZERO
-    override val affiliateFeeZatoshi: Zatoshi = Zatoshi(0)
     override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO
     override val timestamp: Instant = Instant.fromEpochMilliseconds(0)
-    override val deadline: Instant = Instant.fromEpochMilliseconds(0)
     override val slippage: BigDecimal = BigDecimal("2")
 
-    override fun getTotal(proposal: Proposal?): BigDecimal = BigDecimal.ZERO
-
-    override fun getTotalUsd(proposal: Proposal?): BigDecimal = BigDecimal.ZERO
-
-    override fun getTotalFeesUsd(proposal: Proposal?): BigDecimal = BigDecimal.ZERO
-
-    override fun getTotalFeesZatoshi(proposal: Proposal?): Zatoshi = Zatoshi(0)
 }

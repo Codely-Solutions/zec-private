@@ -41,7 +41,7 @@ class SyncTests(unittest.TestCase):
         self.assertTrue(sync.critical('feature-voting-other/build.gradle.kts'))
         for path in ('configuration-impl-android-lib/src/main/kotlin/Flags.kt',
                      'spackle-lib/src/main/kotlin/Logging.kt','build-info-lib/src/main/kotlin/BuildInfo.kt',
-                     'scripts/build.sh'):
+                     'scripts/build.sh','wallet-foundation-lib/src/main/kotlin/Flow.kt'):
             with self.subTest(path=path):
                 self.assertTrue(sync.critical(path))
 

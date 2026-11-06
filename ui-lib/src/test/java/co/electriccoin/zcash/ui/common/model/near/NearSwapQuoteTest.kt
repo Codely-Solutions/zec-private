@@ -1,11 +1,19 @@
 package co.electriccoin.zcash.ui.common.model.near
 
+import cash.z.ecc.android.sdk.model.Proposal
+import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapBlockchain
 import co.electriccoin.zcash.ui.common.model.SwapMode
+import co.electriccoin.zcash.ui.common.model.zcash.getTotal
+import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
+import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
+import co.electriccoin.zcash.ui.common.model.zcash.getTotalUsd
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.imageRes
+import io.mockk.every
+import io.mockk.mockk
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -18,6 +26,29 @@ import kotlin.test.assertFailsWith
  * the deliberately-different decimals (8 vs 6) below would break if swapped.
  */
 class NearSwapQuoteTest {
+    @Test
+    fun externallyFundedQuoteAddsNoWalletFee() {
+        val quote = nearSwapQuote(quoteResponse())
+
+        assertEquals(0, quote.amountInFormatted.compareTo(quote.getTotal(null)))
+        assertEquals(0, quote.amountInUsd.compareTo(quote.getTotalUsd(null)))
+        assertEquals(0, quote.getTotalFeesUsd(null).signum())
+        assertEquals(Zatoshi(0), quote.getTotalFeesZatoshi(null))
+        assertEquals(0, quote.affiliateFee.signum())
+        assertEquals(0, quote.affiliateFeeUsd.signum())
+    }
+
+    @Test
+    fun walletFundedQuotePricesZcashFeeFromOriginUsdUnitPrice() {
+        val quote = nearSwapQuote(quoteResponse(amountInUsd = BigDecimal("10")))
+        val proposal = mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(1000) }
+
+        assertEquals(0, BigDecimal("1.00001").compareTo(quote.getTotal(proposal)))
+        assertEquals(0, BigDecimal("10.0001").compareTo(quote.getTotalUsd(proposal)))
+        assertEquals(0, BigDecimal("0.0001").compareTo(quote.getTotalFeesUsd(proposal)))
+        assertEquals(Zatoshi(1000), quote.getTotalFeesZatoshi(proposal))
+    }
+
     @Test
     fun validQuoteIsAccepted() {
         val quote = nearSwapQuote(quoteResponse())
