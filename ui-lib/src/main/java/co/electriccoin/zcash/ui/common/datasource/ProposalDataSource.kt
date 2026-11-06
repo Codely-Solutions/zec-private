@@ -24,15 +24,17 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.requireSpendable
+import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
+import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
 import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import java.math.BigDecimal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.zecdev.zip321.ZIP321
 import org.zecdev.zip321.parser.ParserContext
-import java.math.BigDecimal
 
 interface ProposalDataSource {
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)

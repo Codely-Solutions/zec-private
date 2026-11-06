@@ -4,11 +4,20 @@ import cash.z.ecc.android.sdk.exception.LedgerException
 import cash.z.ecc.android.sdk.exception.PcztException
 import cash.z.ecc.android.sdk.ledger.LedgerSigningProgress
 import cash.z.ecc.android.sdk.model.Pczt
+import cash.z.ecc.android.sdk.model.Memo
+import cash.z.ecc.android.sdk.model.Proposal
+import cash.z.ecc.android.sdk.model.WalletAddress
+import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.LedgerBindingUnusableException
 import co.electriccoin.zcash.ui.common.model.LedgerIssueKind
 import co.electriccoin.zcash.ui.common.model.LedgerIssueRetry
 import co.electriccoin.zcash.ui.common.model.LedgerSigningState
 import co.electriccoin.zcash.ui.common.model.SubmitResult
+import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
+import co.electriccoin.zcash.ui.common.model.SwapAsset
+import co.electriccoin.zcash.ui.common.model.SwapMode
+import co.electriccoin.zcash.ui.common.model.SwapQuote
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -31,7 +40,10 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.test.assertIs
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
+import java.math.BigDecimal
 
 /**
  * The Ledger signing session: the connect/sign state machine, retry over a kept link versus a
@@ -40,6 +52,49 @@ import kotlin.time.Duration.Companion.seconds
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+    @Test
+    fun quoteExpiringWhileAwaitingProofsAfterSigningCannotBroadcast() = runTest(dispatcher) {
+        val proofsGate = CompletableDeferred<Unit>()
+        givenPczt(ledgerAccount(), proofsGate = proofsGate)
+        runCurrent()
+        every { ledgerSigningDataSource.isLinked } returns true
+        coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+        var currentDeadline = Instant.parse("2100-01-01T00:00:00Z")
+        val origin = mockk<SwapAsset>(relaxed = true) {
+            every { tokenTicker } returns "zec"
+            every { chainTicker } returns "zec"
+            every { blockchain.chainTicker } returns "zec"
+            every { assetId } returns "zec-zec"
+            every { decimals } returns 8
+        }
+        val quote = object : SwapQuote by mockk<SwapQuote>() {
+            override val originAsset = origin
+            override val mode = SwapMode.EXACT_INPUT
+            override val provider = "near"
+            override val depositAddress = DynamicSwapAddress("synthetic-deposit")
+            override val amountInFormatted = BigDecimal.ONE
+            override val deadline: Instant get() = currentDeadline
+        }
+        repository.transactionProposal.value = ExactInputSwapTransactionProposal(
+            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""), mockk<Proposal>(), quote
+        )
+        repository.startSigning()
+        runCurrent()
+        assertEquals(LedgerSigningState.Signed, repository.signingState.value)
+        val submitting = async { runCatching { repository.submit() } }
+        runCurrent()
+        assertFalse(submitting.isCompleted)
+
+        currentDeadline = Instant.parse("2000-01-01T00:00:00Z")
+        proofsGate.complete(Unit)
+        runCurrent()
+
+        val error = assertIs<IllegalArgumentException>(submitting.await().exceptionOrNull())
+        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>()) }
+        val result = assertIs<SubmitProposalState.Result>(repository.submitState.value)
+        assertSame(error, assertIs<SubmitResult.Error>(result.submitResult).cause)
+    }
+
     @Test
     fun progressMapsToTheSigningStatesAsItArrives() =
         runTest(dispatcher) {

@@ -16,12 +16,14 @@ import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.model.KeystoneFirmwarePolicy
 import co.electriccoin.zcash.ui.common.model.KeystoneFirmwareVersion
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapQuote
+import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
 import co.electriccoin.zcash.ui.common.model.readKeystoneFwStamp
 import co.electriccoin.zcash.ui.common.provider.KeystoneSDKException
 import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider
@@ -293,6 +295,9 @@ class KeystoneProposalRepositoryImpl(
                         throw cause
                     } else {
                         try {
+                            if (transactionProposal is SwapTransactionProposal) {
+                                ZecSwapComposition.validate(transactionProposal.quote)
+                            }
                             val result =
                                 proposalDataSource.submitTransaction(
                                     pcztWithProofs = pcztWithProofs,

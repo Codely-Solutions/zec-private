@@ -12,11 +12,13 @@ import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionPropo
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapQuote
+import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -137,10 +139,14 @@ class ZashiProposalRepositoryImpl(
                 } else {
                     submitState.update { SubmitProposalState.Submitting }
                     try {
+                        val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
+                        if (transactionProposal is SwapTransactionProposal) {
+                            ZecSwapComposition.validate(transactionProposal.quote)
+                        }
                         val result =
                             proposalDataSource.submitTransaction(
                                 proposal = transactionProposal.proposal,
-                                usk = zashiSpendingKeyDataSource.getZashiSpendingKey()
+                                usk = spendingKey
                             )
                         submitState.update { SubmitProposalState.Result(result) }
                         result

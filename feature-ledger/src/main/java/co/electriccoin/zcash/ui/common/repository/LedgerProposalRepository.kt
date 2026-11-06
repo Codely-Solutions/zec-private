@@ -21,6 +21,7 @@ import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
@@ -31,6 +32,7 @@ import co.electriccoin.zcash.ui.common.model.LedgerSigningDevice
 import co.electriccoin.zcash.ui.common.model.LedgerSigningState
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapQuote
+import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
 import co.electriccoin.zcash.ui.common.model.toLedgerIssue
 import co.electriccoin.zcash.ui.common.provider.LEDGER_SCAN_TIMEOUT
 import kotlinx.coroutines.CancellationException
@@ -579,6 +581,9 @@ class LedgerProposalRepositoryImpl(
                         throw cause
                     } else {
                         try {
+                            if (transactionProposal is SwapTransactionProposal) {
+                                ZecSwapComposition.validate(transactionProposal.quote)
+                            }
                             val result =
                                 proposalDataSource.submitTransaction(
                                     pcztWithProofs = pcztWithProofs,

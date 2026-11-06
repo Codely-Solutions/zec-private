@@ -8,6 +8,7 @@ on:
         options:
           - quotes
           - diagnostics
+          - foundation
         default: quotes
 permissions:
   contents: read
@@ -33,11 +34,18 @@ jobs:
           if [[ "$TEST_PROFILE" == diagnostics ]]; then
             tests=(--tests 'co.electriccoin.zcash.ui.common.usecase.DiagnosticShareTest')
           fi
-          ./gradlew -I .private/robolectric-ci.gradle --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :ui-lib:testZcashmainnetFossReleaseUnitTest "${tests[@]}"
+          if [[ "$TEST_PROFILE" == foundation ]]; then
+            tests=(--tests 'co.electriccoin.zcash.ui.common.model.ZecSwapCompositionTest' --tests 'co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteTest' --tests 'co.electriccoin.zcash.ui.common.repository.SwapRepositoryImplTest' --tests 'co.electriccoin.zcash.ui.common.repository.SwapRecoveryRoutingTest' --tests 'co.electriccoin.zcash.ui.common.repository.ZashiProposalRepositoryTest' --tests 'co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCaseTest')
+          fi
+          ./gradlew -I .private/robolectric-ci.gradle --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :ui-lib:testZcashmainnetFossReleaseUnitTest "${tests[@]}" :wallet-foundation-lib:test :feature-ledger:testZcashmainnetFossReleaseUnitTest --tests 'co.electriccoin.zcash.ui.common.repository.LedgerProposalRepositoryTest' detektAll
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: quote-lifecycle-results
-          path: ui-lib/build/test-results/testZcashmainnetFossReleaseUnitTest/*.xml
+          path: |
+            ui-lib/build/test-results/testZcashmainnetFossReleaseUnitTest/*.xml
+            wallet-foundation-lib/build/test-results/test/*.xml
+            feature-ledger/build/test-results/testZcashmainnetFossReleaseUnitTest/*.xml
+            build/reports/detekt/
           if-no-files-found: error
           retention-days: 3

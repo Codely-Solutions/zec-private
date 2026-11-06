@@ -1,9 +1,5 @@
 package co.electriccoin.zcash.ui.common.model.near
 
-import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
-import cash.z.ecc.android.sdk.model.Proposal
-import cash.z.ecc.android.sdk.model.Zatoshi
-import cash.z.ecc.sdk.extension.ZERO
 import co.electriccoin.zcash.ui.common.datasource.NEAR_SWAP_PROVIDER
 import co.electriccoin.zcash.ui.common.model.SwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAsset
@@ -35,9 +31,9 @@ data class NearSwapQuote(
     val expectedSlippageToleranceBps: Int? = null,
 ) : SwapQuote {
     init {
-        // Guards zecExchangeRate (= amountInUsd / amountInFormatted) and the fee math below it against a
+        // Guards input USD unit pricing (= amountInUsd / amountInFormatted) against a
         // divide-by-zero. A quote with a non-positive input amount is invalid anyway; fail closed with a
-        // clear message rather than letting an ArithmeticException surface from the property initializers.
+        // clear message before presentation attempts to calculate a unit price.
         if (response.quote.amountInFormatted.signum() <= 0) {
             throw SwapQuoteMismatchException.Rejected(
                 type = SwapQuoteMismatchType.NON_POSITIVE_AMOUNT,
@@ -95,10 +91,6 @@ data class NearSwapQuote(
             null -> SwapMode.EXACT_INPUT
         }
 
-    override val zecExchangeRate: BigDecimal =
-        response.quote.amountInUsd
-            .divide(response.quote.amountInFormatted, MathContext.DECIMAL128)
-
     override val amountIn: BigDecimal = response.quote.amountIn
     override val amountInFormatted: BigDecimal = response.quote.amountInFormatted
     override val amountInUsd: BigDecimal = response.quote.amountInUsd
@@ -109,27 +101,11 @@ data class NearSwapQuote(
 
     override val affiliateFee: BigDecimal = BigDecimal.ZERO
 
-    override val affiliateFeeZatoshi: Zatoshi = Zatoshi.ZERO
-
     override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO
 
     override val timestamp: Instant = response.timestamp
 
     override val deadline: Instant = response.quote.deadline
-
-    override fun getTotal(proposal: Proposal?) = amountInFormatted + (getZecFee(proposal) ?: BigDecimal.ZERO)
-
-    override fun getTotalUsd(proposal: Proposal?) = amountInUsd + getZecFeeUsd(proposal)
-
-    override fun getTotalFeesUsd(proposal: Proposal?) = affiliateFeeUsd + getZecFeeUsd(proposal)
-
-    override fun getTotalFeesZatoshi(proposal: Proposal?): Zatoshi =
-        (proposal?.totalFeeRequired() ?: Zatoshi.ZERO) + affiliateFeeZatoshi
-
-    private fun getZecFee(proposal: Proposal?): BigDecimal? = proposal?.totalFeeRequired()?.convertZatoshiToZec()
-
-    private fun getZecFeeUsd(proposal: Proposal?): BigDecimal =
-        zecExchangeRate.multiply(getZecFee(proposal) ?: BigDecimal.ZERO, MathContext.DECIMAL128)
 }
 
 internal fun requireConsistent(

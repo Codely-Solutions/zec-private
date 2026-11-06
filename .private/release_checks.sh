@@ -2,7 +2,7 @@
 # One finite Gradle process/configuration per candidate; no persistent daemon.
 set -euo pipefail
 chmod +x gradlew
-tasks=(:app:privateRuntimeInventory :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease)
+tasks=(:wallet-foundation-lib:test :feature-ledger:testZcashmainnetFossReleaseUnitTest :app:privateRuntimeInventory :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease)
 init=(-I .private/runtime-inventory.gradle -I .private/robolectric-ci.gradle -I .private/release-analysis.gradle -I .private/task-timing.gradle)
 start=$(date +%s)
 ./gradlew "${init[@]}" --profile --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process "${tasks[@]}"

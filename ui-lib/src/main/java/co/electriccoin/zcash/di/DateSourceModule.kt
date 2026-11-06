@@ -10,12 +10,10 @@ import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSource
 import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSourceImpl
 import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSource
 import co.electriccoin.zcash.ui.common.datasource.MessageAvailabilityDataSourceImpl
-import co.electriccoin.zcash.ui.common.datasource.NearSwapDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
 import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
 import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSourceImpl
-import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 import co.electriccoin.zcash.ui.common.datasource.WalletSnapshotDataSource
 import co.electriccoin.zcash.ui.common.datasource.WalletSnapshotDataSourceImpl
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
@@ -32,7 +30,6 @@ val dataSourceModule =
         singleOf(::RestoreTimestampDataSourceImpl) bind RestoreTimestampDataSource::class
         singleOf(::MessageAvailabilityDataSourceImpl) bind MessageAvailabilityDataSource::class
         singleOf(::WalletSnapshotDataSourceImpl) bind WalletSnapshotDataSource::class
-        singleOf(::NearSwapDataSource) bind SwapDataSource::class
         singleOf(::ExchangeRateDataSourceImpl) bind ExchangeRateDataSource::class
         single<FiatCurrencyDataSource> { FiatCurrencyDataSourceImpl(cmcApiProvider = get()) }
         singleOf(::GiftCardDataSourceImpl) bind GiftCardDataSource::class

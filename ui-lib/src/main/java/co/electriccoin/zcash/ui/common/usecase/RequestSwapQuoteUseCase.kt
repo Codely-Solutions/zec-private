@@ -19,6 +19,8 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_OUTPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapQuote
+import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
+import co.electriccoin.zcash.wallet.foundation.FundingCapability
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.requireSpendable
@@ -66,7 +68,7 @@ class RequestSwapQuoteUseCase(
                     slippage = slippage
                 )
             },
-            createProposal = true,
+            funding = ZecSwapComposition.funding(EXACT_INPUT),
             canNavigateToSwapQuote = canNavigateToSwapQuote
         )
     }
@@ -89,7 +91,7 @@ class RequestSwapQuoteUseCase(
                     slippage = slippage
                 )
             },
-            createProposal = true,
+            funding = ZecSwapComposition.funding(EXACT_OUTPUT),
             canNavigateToSwapQuote = canNavigateToSwapQuote
         )
     }
@@ -113,7 +115,7 @@ class RequestSwapQuoteUseCase(
                         slippage = slippage
                     )
             },
-            createProposal = false,
+            funding = ZecSwapComposition.funding(FLEX_INPUT),
             canNavigateToSwapQuote = canNavigateToSwapQuote
         )
     }
@@ -129,7 +131,7 @@ class RequestSwapQuoteUseCase(
     @Suppress("TooGenericExceptionCaught")
     private suspend fun requestQuote(
         requestQuote: suspend () -> Unit,
-        createProposal: Boolean,
+        funding: FundingCapability,
         canNavigateToSwapQuote: () -> Boolean
     ) = withContext(Dispatchers.Default) {
         requestQuote()
@@ -145,7 +147,17 @@ class RequestSwapQuoteUseCase(
             return@withContext
         }
 
-        if (result is SwapQuoteData.Success && createProposal) {
+        if (result is SwapQuoteData.Success) {
+            try {
+                ZecSwapComposition.validate(result.quote)
+            } catch (e: IllegalArgumentException) {
+                swapRepository.clearQuote()
+                navigateToErrorUseCase(ErrorArgs.General(e))
+                return@withContext
+            }
+        }
+
+        if (result is SwapQuoteData.Success && funding == FundingCapability.LOCAL_TRANSACTION) {
             try {
                 createProposal(result.quote)
             } catch (_: TexUnsupportedOnKSException) {
