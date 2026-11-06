@@ -3,7 +3,7 @@
 set -euo pipefail
 chmod +x gradlew
 tasks=(:app:privateRuntimeInventory :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease)
-init=(-I .private/runtime-inventory.gradle -I .private/robolectric-ci.gradle)
+init=(-I .private/runtime-inventory.gradle -I .private/robolectric-ci.gradle -I .private/release-analysis.gradle)
 if [[ "${BUILD_EMULATOR:-false}" == true ]]; then
   init+=(-I .private/tor-ui-abi.gradle)
   tasks+=(:app:assembleZcashmainnetFossDebug)

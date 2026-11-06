@@ -98,7 +98,8 @@ class NearSwapDataSourceTest {
                 PrecisionCase(18, "1.000000000000000001", "1000000000000000001")
             )
             for (case in cases) {
-                val asset = SwapAssetTestFixture.asset(tokenTicker = "precision", chainTicker = "eth", decimals = case.decimals)
+                val asset =
+                    SwapAssetTestFixture.asset(tokenTicker = "precision", chainTicker = "eth", decimals = case.decimals)
                 for (mode in listOf(SwapMode.EXACT_INPUT, SwapMode.EXACT_OUTPUT, SwapMode.FLEX_INPUT)) {
                     val request = slot<QuoteRequest>()
                     coEvery { nearApiProvider.requestQuote(capture(request)) } throws nearError("No quotes found")
@@ -113,7 +114,11 @@ class NearSwapDataSourceTest {
                             slippage = BigDecimal("0.5")
                         )
                     }
-                    assertEquals(0, BigDecimal(case.units).compareTo(request.captured.amount), "$mode with ${case.decimals} decimals")
+                    assertEquals(
+                        0,
+                        BigDecimal(case.units).compareTo(request.captured.amount),
+                        "$mode with ${case.decimals} decimals"
+                    )
                 }
             }
         }
