@@ -51,3 +51,11 @@ Production Detekt retains its rules and existing baseline. Its release-only init
 ## Phase 2 revision 8 evidence
 
 The current receipts supersede revision 7 evidence: testnet producer 42191766043, candidate 42207306770. Real transfer 3a660d0a3c8ef75f9301efd26fa29ed6b42794726703d7106d6e3badc0ce6765 mined at 4588498. Installed v6-to-v8 update, restart, recovery and scoped Tor outage passed. Three fresh unfunded production quote/dismiss cycles passed on the candidate x86_64 build. Production ARM execution and physical hardware execution remain outside this evidence. See core-validation-summary.json for costs and limitations.
+
+## Foundation validation
+
+The engine-independent JVM module compiles and tests exact precision/network identity, explicit fee knowledge, incompatible deposit capabilities, stale/cross-owner request rejection and an alternative memo-bearing composition with a 12-decimal asset and opaque recovery ID. This is structural reuse, not Monero or THORChain settlement evidence.
+
+Current-product regressions cover view-only rejection before quote interpretation, cancellation navigation, legacy V2/V3 metadata migration/round trips, unknown provider rejection before network access, Zcash fee calculations and expiry immediately before software/Ledger submission. Keystone's equivalent final gate is inspected; physical hardware signing is outside automated acceptance.
+
+The signing controller validates the source/digest-bound resolved foundation graph and rejects unexpected engine/product dependencies. Full candidate deterministic checks precede fresh real release acceptance. Superseded Phase 3 sessions remain separately identified and are not relabeled as final-candidate evidence.
