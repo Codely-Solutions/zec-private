@@ -407,12 +407,17 @@ index 48b59db8e..60a94c2fc 100644
 +    <string name="ledger_error_unknown_message">ZEC Private couldn’t connect to your Ledger. Make sure it’s unlocked and nearby, then try again.</string>
 +    <string name="ledger_error_unknown_inlineMessage">ZEC Private couldn’t connect to your Ledger.\nMake sure it’s unlocked and nearby, then try again.</string>
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVM.kt
-index e84eff32e..0a5403c29 100644
+index e84eff32e..dfed08306 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVM.kt
-@@ -134 +134 @@ class MigrationSetupVM(
+@@ -134 +134,6 @@ class MigrationSetupVM(
 -        navigationRouter.forward(ExternalUrl("https://support.zodl.com/article/42-moving-your-funds-to-ironwood"))
-+        navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/WALLET-GUIDE.md#ironwood-migration"))
++        navigationRouter.forward(
++            ExternalUrl(
++                "https://github.com/Sammy-Lastre/zec-private/blob/main/" +
++                    "docs/WALLET-GUIDE.md#ironwood-migration"
++            )
++        )
 diff --git a/feature-viewing-key/src/main/res/values-es/strings.xml b/feature-viewing-key/src/main/res/values-es/strings.xml
 index 466001360..63d154766 100644
 --- a/feature-viewing-key/src/main/res/values-es/strings.xml
@@ -3853,16 +3858,24 @@ index 5144be535..000000000
 -    val VOTING_SERVER_URL = StringConfigurationEntry(ConfigKey("voting_server_url"), "")
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/about/AndroidAbout.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/about/AndroidAbout.kt
-index dcdbdb3cf..e5baedc31 100644
+index dcdbdb3cf..c6c6dfc8f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/about/AndroidAbout.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/about/AndroidAbout.kt
-@@ -31,2 +31,2 @@ internal fun AboutScreen() {
+@@ -31,2 +31,10 @@ internal fun AboutScreen() {
 -        onPrivacyPolicy = { navigationRouter.forward(ExternalUrl("https://zodl.com/privacy-policy/#policy")) },
 -        onTermsOfUse = { navigationRouter.forward(ExternalUrl("https://zodl.com/privacy-policy/")) }
-+        onPrivacyPolicy = { navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/PRIVACY.md")) },
-+        onTermsOfUse = { navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/USE.md")) }
++        onPrivacyPolicy = {
++            navigationRouter.forward(
++                ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/PRIVACY.md")
++            )
++        },
++        onTermsOfUse = {
++            navigationRouter.forward(
++                ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/USE.md")
++            )
++        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/accountlist/AccountListState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/accountlist/AccountListState.kt
-index 9e30ea23f..9375e1993 100644
+index 9e30ea23f..8d19fc756 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/accountlist/AccountListState.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/accountlist/AccountListState.kt
 @@ -20,2 +20 @@ import co.electriccoin.zcash.ui.design.util.stringResByNumber
@@ -3888,7 +3901,7 @@ index 9e30ea23f..9375e1993 100644
 @@ -243 +231 @@ data class AccountListState(
 -            name = stringRes("Zodl"),
 +            name = stringRes("ZEC Private"),
-@@ -304,21 +291,0 @@ data class AccountListSectionState(
+@@ -304,14 +292 @@ data class AccountListSectionState(
 -/**
 - * The Keystone shop card, shown while no Keystone account is connected.
 - */
@@ -3903,13 +3916,7 @@ index 9e30ea23f..9375e1993 100644
 -/**
 - * The section a wallet belongs to, in the order the sections appear.
 - */
--enum class AccountListKind {
--    ZODL,
--    KEYSTONE,
--    LEDGER,
--    VIEW_ONLY
--}
--
++/** The wallet sections, in display order. */
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/accountlist/AccountListVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/accountlist/AccountListVM.kt
 index cf6e70098..703d333b1 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/accountlist/AccountListVM.kt
@@ -4625,12 +4632,13 @@ index df410c53e..a33848695 100644
 +                                subtitle = stringRes(R.string.integrations_redeemGift),
 +                                bigIcon = imageRes(R.drawable.ic_integrations_gift),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/ironwood/IronwoodAnnouncementVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/ironwood/IronwoodAnnouncementVM.kt
-index c54f279c6..2ec8725ad 100644
+index c54f279c6..53d7491da 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/ironwood/IronwoodAnnouncementVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/ironwood/IronwoodAnnouncementVM.kt
-@@ -14 +14 @@ import kotlinx.coroutines.launch
+@@ -14 +14,2 @@ import kotlinx.coroutines.launch
 -private const val GUIDE_URL = "https://support.zodl.com/article/42-moving-your-funds-to-ironwood"
-+private const val GUIDE_URL = "https://github.com/Sammy-Lastre/zec-private/blob/main/docs/WALLET-GUIDE.md#ironwood-migration"
++private const val GUIDE_URL =
++    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#ironwood-migration"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt
 index 607e89dcb..2b3d5f352 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt
@@ -4668,12 +4676,13 @@ index 607e89dcb..2b3d5f352 100644
 +    private fun onWhatsNewClick() =
 +        navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/releases"))
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt
-index 330d59e33..1c133b792 100644
+index 330d59e33..5ec469642 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt
-@@ -23 +23 @@ data object PayInfoArgs
+@@ -23 +23,2 @@ data object PayInfoArgs
 -private const val LEARN_MORE_URL = "https://support.zodl.com/article/24-using-crosspay-to-spend-zec"
-+private const val LEARN_MORE_URL = "https://github.com/Sammy-Lastre/zec-private/blob/main/docs/WALLET-GUIDE.md#crosspay"
++private const val LEARN_MORE_URL =
++    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#crosspay"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveView.kt
 index 31b503b72..975cc45ea 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveView.kt
@@ -4705,20 +4714,22 @@ index 7db73b703..f33664273 100644
 -                                name = stringRes("Zodl"),
 +                                name = stringRes("ZEC Private"),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
-index cd7555ecc..dd0baf991 100644
+index cd7555ecc..5b692645f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
-@@ -23 +23 @@ data object SwapInfoArgs
+@@ -23 +23,2 @@ data object SwapInfoArgs
 -private const val LEARN_MORE_URL = "https://support.zodl.com/article/26-swapping-into-zec"
-+private const val LEARN_MORE_URL = "https://github.com/Sammy-Lastre/zec-private/blob/main/docs/WALLET-GUIDE.md#incoming-swaps"
++private const val LEARN_MORE_URL =
++    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#incoming-swaps"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockView.kt
-index 3341e70f0..3dbc1302a 100644
+index 3341e70f0..649f37619 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockView.kt
-@@ -91,2 +91,2 @@ private fun Content(
+@@ -91,2 +91,3 @@ private fun Content(
 -                    "Zodl uses temporary addresses during swaps and payments to protect your privacy. If too many " +
 -                        "remain unused, Zodl hits a limit and can’t create new ones.",
-+                    "ZEC Private uses temporary addresses during swaps and payments to protect your privacy. If too many " +
++                    "ZEC Private uses temporary addresses during swaps and payments to protect your privacy. " +
++                        "If too many " +
 +                        "remain unused, ZEC Private hits a limit and can’t create new ones.",
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt
 index 2ceac399f..985329123 100644

@@ -289,6 +289,14 @@ data class AccountListSectionState(
     val items: List<WalletListItemState>,
 )
 
+/** The wallet sections, in display order. */
+enum class AccountListKind {
+    ZODL,
+    KEYSTONE,
+    LEDGER,
+    VIEW_ONLY
+}
+
 /**
  * One wallet as [AccountListState.create] needs it.
  *

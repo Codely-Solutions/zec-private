@@ -11,7 +11,8 @@ import co.electriccoin.zcash.ui.screen.ExternalUrl
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
-private const val GUIDE_URL = "https://github.com/Sammy-Lastre/zec-private/blob/main/docs/WALLET-GUIDE.md#ironwood-migration"
+private const val GUIDE_URL =
+    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#ironwood-migration"
 
 /**
  * Marks the announcement as shown at display time, not at dismissal. Home forwards here from a
