@@ -414,7 +414,7 @@ class SwapRepositoryImplTest {
 
             val mismatch = assertExactInputError(repository, SwapQuoteMismatchType.RECIPIENT_ADDRESS)
             assertEquals("deposit", mismatch.depositAddress)
-            assertEquals("test", mismatch.provider)
+            assertEquals("near", mismatch.provider)
             assertEquals(zec, mismatch.originAsset)
             assertEquals(btc, mismatch.destinationAsset)
         }
@@ -669,6 +669,7 @@ class SwapRepositoryImplTest {
     ): TransactionSwapMetadata =
         mockk {
             every { depositAddress } returns address
+            every { provider } returns "near"
             every { origin } returns from
             every { destination } returns to
         }
