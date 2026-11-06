@@ -1,5 +1,5 @@
 {
-  "status": "validated-awaiting-signing",
+  "status": "released-and-independently-verified",
   "phase": 3,
   "source_sha": "b34a56a0b3c0adfc27f30cc19ce7fd82f603858f",
   "candidate_run": 42224726954,
@@ -99,5 +99,41 @@
     "ui": true,
     "personal_wallet_access": false,
     "real_funds_used": false
+  },
+  "release_url": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.9",
+  "release_tag": "v3.19.0-private.9",
+  "apk_sha256": "1e0d808b8610c85b38dbcfae4f8df785ed73d04811eabb0cacf8cfb8613567b7",
+  "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
+  "measurements": {
+    "apk_bytes_before": 67812047,
+    "apk_bytes_after": 67812047,
+    "apk_delta_bytes": 0,
+    "runtime_components_before": 333,
+    "runtime_components_after": 334,
+    "external_library_changes": [],
+    "native_bytes_before": 57019328,
+    "native_bytes_after": 57019328,
+    "production_gradle_seconds_before": 940,
+    "production_gradle_seconds_after": 1022,
+    "emulator_gradle_seconds_before": 603,
+    "emulator_gradle_seconds_after": 794,
+    "production_job_seconds_before": 1036,
+    "production_job_seconds_after": 1156.0,
+    "emulator_job_seconds_before": 638,
+    "emulator_job_seconds_after": 832.0,
+    "core_scenario_seconds_before": 684.8863177,
+    "core_scenario_seconds_after": 622.2991330000004,
+    "all_iteration_hosted_job_seconds": 6983.0,
+    "comparison_limit": "Different source inputs, cache hits and runners. Task durations overlap; no isolated architecture speedup is claimed. Core scenario time excludes Android image/APK preparation."
+  },
+  "superseded_iteration": {
+    "source": "b3e165229975e86e98ba0dad7acb7fec227d610b",
+    "failed_release_run": 42220184831,
+    "passed_core_job": "fdb58cc5448543708f25e22197d3622b",
+    "passed_ui_job": "c33947f4c9ea4ea9a162aec099af5611",
+    "ui_verified_before_manifest_switch": true,
+    "published": false,
+    "reason": "Full suite found outgoing validation ran before the view-only spend guard. Restored ordering; conservative runtime fingerprints require new immutable candidate and real acceptance.",
+    "archive_sha256": "dfe95b53ddf944759af50de26a03bafdbb89748dd396c5e079a0be9fc2f1f537"
   }
 }
