@@ -14,6 +14,11 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
 import kotlin.test.Test
@@ -101,6 +106,52 @@ class GetSwapStatusUseCaseTest {
             assertNull(result.status)
             coVerify(exactly = 0) { swapRepository.checkSwapStatus(any()) }
             verify(exactly = 0) { metadataRepository.updateSwap(any(), any(), any(), any(), any(), any()) }
+        }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun restartResumesSavedReferenceAndRefundStopsPolling() =
+        runTest {
+            val saved = mockk<TransactionSwapMetadata>()
+            val metadataRepository =
+                mockk<MetadataRepository>(relaxed = true) {
+                    coEvery { getSwapMetadata("deposit") } returns saved
+                }
+            val pending = swapStatusResult(swapStatus = SwapStatus.PENDING)
+            val processing = swapStatusResult(swapStatus = SwapStatus.PROCESSING)
+            val refunded = swapStatusResult(swapStatus = SwapStatus.REFUNDED)
+            val swapRepository =
+                mockk<SwapRepository> {
+                    coEvery { checkSwapStatus(saved) } returnsMany listOf(pending, processing, refunded)
+                }
+            val useCase = GetSwapStatusUseCase(metadataRepository, swapRepository)
+            val firstObserver = backgroundScope.launch { useCase.observe("deposit").collect() }
+            runCurrent()
+            coVerify(exactly = 1) { swapRepository.checkSwapStatus(saved) }
+            firstObserver.cancel()
+            runCurrent()
+            advanceTimeBy(60_000)
+            runCurrent()
+            coVerify(exactly = 1) { swapRepository.checkSwapStatus(saved) }
+
+            // A fresh observer reloads the saved route and stops requesting status after refund.
+            val resumed = mutableListOf<SwapQuoteStatusData>()
+            backgroundScope.launch { useCase.observe("deposit").collect { resumed.add(it) } }
+            runCurrent()
+            advanceTimeBy(30_000)
+            runCurrent()
+            assertEquals(SwapStatus.REFUNDED, resumed.last().status?.status)
+            assertNull(resumed.last().error)
+            coVerify(exactly = 2) { metadataRepository.getSwapMetadata("deposit") }
+            coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved) }
+            verify(exactly = 1) {
+                metadataRepository.updateSwap(
+                    "deposit", BigDecimal("1.23"), SwapStatus.REFUNDED, SwapMode.EXACT_INPUT, btc, zec
+                )
+            }
+            advanceTimeBy(120_000)
+            runCurrent()
+            coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved) }
         }
 
     private fun swapStatusResult(

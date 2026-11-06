@@ -8,7 +8,7 @@ import tempfile
 from contextlib import ExitStack
 from pathlib import Path
 import unittest
-from acceptance_policy import requirements, validate_core, validate_quotes, validate_binding, verify_promotion_revision, CORE_STAGES
+from acceptance_policy import input_fingerprint, requirements, validate_core, validate_quotes, validate_binding, verify_promotion_revision, CORE_STAGES
 
 
 class AcceptancePolicyTest(unittest.TestCase):
@@ -70,9 +70,9 @@ class AcceptancePolicyTest(unittest.TestCase):
                        clearnet_fallback=False, personal_wallet_access=False, real_funds_used=False,
                        stages={s: dict(passed=True, txId='a'*64) for s in CORE_STAGES},
                        network_enforcement=dict(passed=True,metadata_no_direct_fallback_observed=True,direct_bulk_targets=['192.0.2.1']), build_source_sha='a'*40,
-                       baseline_source_sha='a0bd21f27bb53af0eeb9b433d0273c6f39b04e19',
+                       baseline_source_sha='b34a56a0b3c0adfc27f30cc19ce7fd82f603858f',
                        build_input_fingerprint='d'*64,
-                       baseline_version_code=3234006, candidate_version_code=3234007)
+                       baseline_version_code=3234009, candidate_version_code=3234010)
         for key in ('candidate_apk_sha256', 'baseline_apk_sha256', 'instrumentation_apk_sha256', 'harness_sha256'):
             receipt[key] = 'b'*64
         receipt['stages']['interruption'].update(sync_restarted=True,synced=True,balance_preserved=True,
@@ -81,20 +81,24 @@ class AcceptancePolicyTest(unittest.TestCase):
         receipt['stages']['fund'].update(funding_txid='c'*64,balance_zatoshi=10000000)
         receipt['funding_setup']=dict(tor_exit_verified=True,persistent_tor_connection=True,txid='c'*64)
         receipt['sync_preflight']=dict(passed=True,mode='advancing-scan',scanned_height=12340,network_height=12345)
-        receipt['stages']['send'].update(fee_zatoshi=10000)
-        receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000)
+        receipt['stages']['send'].update(fee_zatoshi=10000,ui_review=True,ui_cancel_no_submission=True,ui_approval=True)
+        receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000,app_transaction_state='Confirmed')
         return receipt
 
     def test_required_real_evidence(self):
         self.assertTrue(validate_core(self.receipt(), 'inputs'))
         cases = [('network', 'mainnet'), ('input_fingerprint', 'old'),
                  ('evidence_class', 'simulation'), ('clearnet_fallback', True),
-                 ('candidate_apk_sha256', None), ('candidate_version_code', 3234006),
+                 ('candidate_apk_sha256', None), ('candidate_version_code', 3234009),
                  ('baseline_source_sha', 'c'*40), ('passed', False),('sync_preflight',{})]
         for key, value in cases:
             bad = self.receipt(); bad[key] = value
             with self.subTest(key=key), self.assertRaises(ValueError):
                 validate_core(bad, 'inputs')
+        for stage,key,value in [('send','ui_approval',False),('send','ui_cancel_no_submission',False),
+                                ('send','ui_review',False),('restore','app_transaction_state','Pending')]:
+            bad=self.receipt();bad['stages'][stage][key]=value
+            with self.assertRaises(ValueError):validate_core(bad,'inputs')
         for name in CORE_STAGES:
             bad = self.receipt(); del bad['stages'][name]
             with self.subTest(missing=name), self.assertRaises(ValueError):
@@ -114,6 +118,51 @@ class AcceptancePolicyTest(unittest.TestCase):
         self.assertEqual(['production-quotes'], requirements(['ui-lib/src/main/java/SwapRepository.kt'])['profiles'])
         self.assertIn('production-quotes', requirements(['ui-lib/src/main/java/HttpClientProvider.kt'])['profiles'])
         self.assertEqual(['deterministic-regressions'],requirements(['ui-lib/src/test/java/WalletTest.kt'])['profiles'])
+
+    def test_fingerprints_track_shared_and_unknown_inputs_and_ignore_version_labels(self):
+        # Exercise committed trees, including deletion/rename, rather than just path classifiers.
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            def git(*args):
+                return subprocess.check_output(['git',*args],cwd=root,text=True,stderr=subprocess.DEVNULL).strip()
+            git('init','-q')
+            fixture={
+                'gradle.properties':'ZCASH_VERSION_CODE=1\nSDK=stable\n',
+                'ui-lib/src/main/java/SwapRepository.kt':'provider and funding',
+                'wallet-foundation-lib/src/main/kotlin/Flow.kt':'shared composition',
+                'app/src/main/res/xml/network.xml':'network rules',
+                'unknown/runtime.bin':'unclassified',
+                '.private/core-wallet/Flow.kt':'instrumentation',
+                '.private/upgrade-baseline.json':'baseline identity',
+                'README.md':'documentation',
+                'ui-lib/src/test/java/Test.kt':'test-only',
+            }
+            try:
+                for name,value in fixture.items():
+                    path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(value)
+                git('add','-A');base=git('write-tree')
+                original={profile:input_fingerprint(base,root=root,profile=profile)
+                          for profile in ('core-testnet','production-quotes','core-build')}
+                for name in fixture:
+                    path=root/name;path.write_text(fixture[name]+' changed')
+                    if name=='gradle.properties':path.write_text(fixture[name].replace('CODE=1','CODE=2'))
+                    git('add','-A');tree=git('write-tree')
+                    for profile in original:
+                        expected=(name not in ('README.md','ui-lib/src/test/java/Test.kt','gradle.properties')
+                                  and not (profile=='production-quotes' and name.startswith('.private/'))
+                                  and not (profile=='core-build' and name=='.private/upgrade-baseline.json'))
+                        with self.subTest(path=name,profile=profile):
+                            self.assertEqual(expected,input_fingerprint(tree,root=root,profile=profile)!=original[profile])
+                    path.write_text(fixture[name]);git('add','-A')
+                path=root/'unknown/runtime.bin';path.rename(root/'unknown/renamed.bin')
+                git('add','-A');tree=git('write-tree')
+                for profile in original:
+                    self.assertNotEqual(original[profile],input_fingerprint(tree,root=root,profile=profile))
+                (root/'unknown/renamed.bin').unlink();git('add','-A');tree=git('write-tree')
+                self.assertNotEqual(original['core-testnet'],input_fingerprint(tree,root=root))
+            finally:
+                for path in (root/'.git').rglob('*'):
+                    if path.is_file():path.chmod(path.stat().st_mode|stat.S_IWRITE)
 
     def test_quotes_need_real_repeated_tor_evidence(self):
         receipt=dict(schema=1,input_fingerprint='inputs',evidence_class='real-app-production-quotes',

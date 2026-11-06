@@ -47,10 +47,18 @@ class HttpClientProviderTorFailureTest {
         try {
             every { OkHttp.create(any()) } throws AssertionError("Direct HTTP engine is forbidden in this test")
             val api = KtorNearApiProvider(HttpClientProviderImpl(synchronizerProvider, preference))
-            val actual = assertFailsWith<IOException> { api.getSupportedTokens() }
-            assertEquals(failure.message, actual.message)
-            // Coroutine stack recovery can copy an exception while retaining its original cause.
-            assertTrue(generateSequence<Throwable>(actual) { it.cause }.any { it === failure })
+            val requests = listOf<suspend () -> Unit>(
+                { api.getSupportedTokens() },
+                { api.requestQuote(mockk()) },
+                { api.checkSwapStatus("isolated-unfunded-reference") },
+                { api.submitDepositTransaction(mockk()) }
+            )
+            for (request in requests) {
+                val actual = assertFailsWith<IOException> { request() }
+                assertEquals(failure.message, actual.message)
+                // Coroutine stack recovery may copy the exception but retains its cause.
+                assertTrue(generateSequence<Throwable>(actual) { it.cause }.any { it === failure })
+            }
             verify(exactly = 0) { OkHttp.create(any()) }
         } finally {
             unmockkObject(OkHttp)

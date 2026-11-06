@@ -598,12 +598,12 @@ index 96a911cd4..799c7d501 100644
 -    <string name="view_only_remove_message">Removing this account clears its data from Zodl on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 +    <string name="view_only_remove_message">Removing this account clears its data from ZEC Private on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..66aa9424d 100644
+index ec56161b5..e865965d0 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
 -ZCASH_VERSION_CODE=1
-+ZCASH_VERSION_CODE=3234009
++ZCASH_VERSION_CODE=3234010
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
 -ZCASH_RELEASE_APP_NAME=Zodl
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash
@@ -10707,10 +10707,10 @@ index a3e430b3c..56993ca02 100644
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt
 new file mode 100644
-index 000000000..e26a87f93
+index 000000000..2a71971b1
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt
-@@ -0,0 +1,59 @@
+@@ -0,0 +1,67 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -10760,10 +10760,18 @@ index 000000000..e26a87f93
 +        try {
 +            every { OkHttp.create(any()) } throws AssertionError("Direct HTTP engine is forbidden in this test")
 +            val api = KtorNearApiProvider(HttpClientProviderImpl(synchronizerProvider, preference))
-+            val actual = assertFailsWith<IOException> { api.getSupportedTokens() }
-+            assertEquals(failure.message, actual.message)
-+            // Coroutine stack recovery can copy an exception while retaining its original cause.
-+            assertTrue(generateSequence<Throwable>(actual) { it.cause }.any { it === failure })
++            val requests = listOf<suspend () -> Unit>(
++                { api.getSupportedTokens() },
++                { api.requestQuote(mockk()) },
++                { api.checkSwapStatus("isolated-unfunded-reference") },
++                { api.submitDepositTransaction(mockk()) }
++            )
++            for (request in requests) {
++                val actual = assertFailsWith<IOException> { request() }
++                assertEquals(failure.message, actual.message)
++                // Coroutine stack recovery may copy the exception but retains its cause.
++                assertTrue(generateSequence<Throwable>(actual) { it.cause }.any { it === failure })
++            }
 +            verify(exactly = 0) { OkHttp.create(any()) }
 +        } finally {
 +            unmockkObject(OkHttp)
@@ -11370,6 +11378,63 @@ index 000000000..ef29cc3a1
 +        assertEquals("Diagnostic report", shared.getStringExtra(Intent.EXTRA_SUBJECT))
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
+index 40bfe60a6..39059e4b6 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
+@@ -16,0 +17,5 @@ import io.mockk.verify
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.flow.collect
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.test.advanceTimeBy
++import kotlinx.coroutines.test.runCurrent
+@@ -105,0 +111,46 @@ class GetSwapStatusUseCaseTest {
++    @OptIn(ExperimentalCoroutinesApi::class)
++    @Test
++    fun restartResumesSavedReferenceAndRefundStopsPolling() =
++        runTest {
++            val saved = mockk<TransactionSwapMetadata>()
++            val metadataRepository =
++                mockk<MetadataRepository>(relaxed = true) {
++                    coEvery { getSwapMetadata("deposit") } returns saved
++                }
++            val pending = swapStatusResult(swapStatus = SwapStatus.PENDING)
++            val processing = swapStatusResult(swapStatus = SwapStatus.PROCESSING)
++            val refunded = swapStatusResult(swapStatus = SwapStatus.REFUNDED)
++            val swapRepository =
++                mockk<SwapRepository> {
++                    coEvery { checkSwapStatus(saved) } returnsMany listOf(pending, processing, refunded)
++                }
++            val useCase = GetSwapStatusUseCase(metadataRepository, swapRepository)
++            val firstObserver = backgroundScope.launch { useCase.observe("deposit").collect() }
++            runCurrent()
++            coVerify(exactly = 1) { swapRepository.checkSwapStatus(saved) }
++            firstObserver.cancel()
++            runCurrent()
++            advanceTimeBy(60_000)
++            runCurrent()
++            coVerify(exactly = 1) { swapRepository.checkSwapStatus(saved) }
++
++            // A fresh observer reloads the saved route and stops requesting status after refund.
++            val resumed = mutableListOf<SwapQuoteStatusData>()
++            backgroundScope.launch { useCase.observe("deposit").collect { resumed.add(it) } }
++            runCurrent()
++            advanceTimeBy(30_000)
++            runCurrent()
++            assertEquals(SwapStatus.REFUNDED, resumed.last().status?.status)
++            assertNull(resumed.last().error)
++            coVerify(exactly = 2) { metadataRepository.getSwapMetadata("deposit") }
++            coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved) }
++            verify(exactly = 1) {
++                metadataRepository.updateSwap(
++                    "deposit", BigDecimal("1.23"), SwapStatus.REFUNDED, SwapMode.EXACT_INPUT, btc, zec
++                )
++            }
++            advanceTimeBy(120_000)
++            runCurrent()
++            coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved) }
++        }
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 index c01988b65..8d44dda7f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
