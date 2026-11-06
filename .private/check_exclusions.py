@@ -1,6 +1,7 @@
 """Reject reintroduced excluded integrations in source or resolved runtime evidence."""
 import json
 import sys
+from branding_guard import check_branding
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,11 +22,15 @@ def check(root=ROOT):
         if not production.is_dir():
             continue
         for path in production.rglob('*'):
+            if path.is_file() and path.stem in policy.get('forbidden_asset_stems', []):
+                failures.append(str(path.relative_to(root)) + ': excluded product artwork')
             if path.is_file() and path.suffix in {'.kt', '.xml'}:
                 text = path.read_text(encoding='utf-8')
                 for marker in policy.get('forbidden_product_markers', []):
                     if marker in text:
                         failures.append(str(path.relative_to(root)) + ': excluded product marker ' + marker)
+    branding_policy = json.loads((root / '.private/branding-policy.json').read_text())
+    failures.extend(check_branding(root, branding_policy))
     settings = (root / 'settings.gradle.kts').read_text()
     for project in policy['forbidden_projects']:
         if 'include("' + project + '")' in settings:

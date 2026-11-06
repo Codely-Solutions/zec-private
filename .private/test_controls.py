@@ -26,7 +26,7 @@ class ControlsTest(unittest.TestCase):
             root=Path(temp)
             for relative in ['ui-lib/src/main','app/src','gradle.properties','LICENSE',
                              'settings.gradle.kts','app/build.gradle.kts','ui-lib/build.gradle.kts',
-                             '.private/excluded-features.json']:
+                             '.private/excluded-features.json', '.private/branding-policy.json']:
                 source=checks.ROOT/relative
                 target=root/relative
                 target.parent.mkdir(parents=True,exist_ok=True)
@@ -50,7 +50,7 @@ class ControlsTest(unittest.TestCase):
         with fixture_directory() as temp:
             root=Path(temp)
             for relative in ['app/build.gradle.kts','ui-lib/build.gradle.kts','settings.gradle.kts',
-                             '.private/excluded-features.json']:
+                             '.private/excluded-features.json', '.private/branding-policy.json']:
                 target=root/relative
                 target.parent.mkdir(parents=True,exist_ok=True)
                 shutil.copy2(checks.ROOT/relative,target)

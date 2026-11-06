@@ -27,11 +27,15 @@ class SyncTests(unittest.TestCase):
 
     def test_sensitive_wallet_screens_require_review(self):
         base='ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/'
-        for screen in ('walletbackup','restore','onboarding','authentication','tor','send',
+        for screen in ('walletbackup','restore','onboarding','authentication','about','theme','tor','send',
                        'swap','reviewtransaction','signkeystonetransaction','receive','ironwood'):
             with self.subTest(screen=screen):
                 self.assertTrue(sync.critical(base+screen+'/Screen.kt'))
         self.assertFalse(sync.critical(base+'colorpicker/Screen.kt'))
+        for path in ('ui-design-lib/src/main/res/ui/common/drawable-night-v35/app_logo.png',
+                     'ui-lib/src/main/res/ui/about/values/strings.xml',
+                     'ui-design-lib/src/main/java/example/design/theme/Theme.kt'):
+            self.assertTrue(sync.critical(path), path)
         self.assertFalse(sync.critical('feature-voting/src/main/UnusedVotingChange.kt'))
         self.assertTrue(sync.critical('feature-voting'))
         self.assertTrue(sync.critical('feature-voting-other/build.gradle.kts'))
@@ -105,6 +109,35 @@ class SyncTests(unittest.TestCase):
                 self.assertFalse(any(name.startswith('feature-voting/') for name in tree))
                 self.assertFalse(any('/ui/screen/flexa/' in name for name in tree))
             self.assertFalse((Path(temp)/'candidate').exists())
+        self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
+
+    def test_new_upstream_branding_is_rejected_before_branch_push(self):
+        original=sync.run
+        writes=[]
+        with tempfile.TemporaryDirectory() as temp:
+            upstream=Path(temp)/'upstream'
+            original('git','worktree','add','--detach',str(upstream),self.state['sha'])
+            try:
+                added=upstream/'ui-design-lib/src/main/res/ui/common/values/upstream_product.xml'
+                added.write_text('<resources><string name="new_promotion">Choose Zodl today</string></resources>')
+                original('git','add',str(added),cwd=upstream)
+                original('git','-c','user.name=Branding integration test','-c',
+                         'user.email=zec-private@users.noreply.github.com','commit','-m',
+                         'Disposable upstream branding change',cwd=upstream)
+                changed_sha=original('git','rev-parse','HEAD',cwd=upstream)
+                def commands(*args,**kwargs):
+                    if args[:2]==('git','fetch'):return ''
+                    if args[:3]==('git','rev-parse','FETCH_HEAD^{commit}'):return changed_sha
+                    if args[:2]==('git','ls-remote'):return ''
+                    if args[:2]==('git','push'):
+                        writes.append(args);return ''
+                    return original(*args,**kwargs)
+                with patch.dict(os.environ,{'RUNNER_TEMP':temp}),patch.object(sync,'gh',
+                        return_value=[self.release(self.next_tag)]),patch.object(sync,'run',side_effect=commands):
+                    with self.assertRaises(subprocess.CalledProcessError):sync.main()
+                self.assertEqual([],writes)
+            finally:
+                original('git','worktree','remove','--force',str(upstream))
         self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
 
 if __name__=='__main__': unittest.main()

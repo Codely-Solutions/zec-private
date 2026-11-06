@@ -1,0 +1,31 @@
+// Flush each completed task so failure/timeout still leaves bounded task evidence.
+import groovy.json.JsonOutput
+import org.gradle.api.execution.TaskExecutionListener
+import org.gradle.api.tasks.TaskState
+import java.util.concurrent.ConcurrentHashMap
+
+def starts = new ConcurrentHashMap<String, Long>()
+def destination = new File(gradle.startParameter.currentDir, 'artifact/task-timing.jsonl')
+destination.parentFile.mkdirs()
+destination.text = ''
+def lock = new Object()
+def appendRecord = { record ->
+    synchronized (lock) {
+        if (destination.length() + record.getBytes('UTF-8').length <= 500000L) {
+            destination.withWriterAppend('UTF-8') { it.write(record); it.flush() }
+        }
+    }
+}
+gradle.addListener(new TaskExecutionListener() {
+    void beforeExecute(Task task) {
+        starts.put(task.path, System.nanoTime())
+        appendRecord.call(JsonOutput.toJson([task: task.path, outcome: 'STARTED', durationMs: 0]) + '\n')
+    }
+    void afterExecute(Task task, TaskState state) {
+        def started = starts.remove(task.path)
+        def outcome = state.failure != null ? 'FAILED' : state.skipped ? state.skipMessage : state.didWork ? 'EXECUTED' : 'NO_WORK'
+        def record = JsonOutput.toJson([task: task.path, outcome: outcome,
+            durationMs: started == null ? null : (System.nanoTime() - started) / 1000000L]) + '\n'
+        appendRecord.call(record)
+    }
+})
