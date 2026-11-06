@@ -5386,13 +5386,13 @@ index da0613aca..d1521bb2d 100644
 -        affiliateAddress = "affiliate"
 +        slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
-index c0be20563..9dd211a23 100644
+index c0be20563..1bea03a8f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.datasource
 +import cash.z.ecc.android.sdk.Synchronizer
 +import cash.z.ecc.android.sdk.type.AddressType
-@@ -56,0 +59,62 @@ class NearSwapDataSourceTest {
+@@ -56,0 +59,67 @@ class NearSwapDataSourceTest {
 +    @Test
 +    fun externalAddressFamiliesKeepTheirExactRecipientAndRefundEncoding() =
 +        runBlocking {
@@ -5435,7 +5435,8 @@ index c0be20563..9dd211a23 100644
 +                PrecisionCase(18, "1.000000000000000001", "1000000000000000001")
 +            )
 +            for (case in cases) {
-+                val asset = SwapAssetTestFixture.asset(tokenTicker = "precision", chainTicker = "eth", decimals = case.decimals)
++                val asset =
++                    SwapAssetTestFixture.asset(tokenTicker = "precision", chainTicker = "eth", decimals = case.decimals)
 +                for (mode in listOf(SwapMode.EXACT_INPUT, SwapMode.EXACT_OUTPUT, SwapMode.FLEX_INPUT)) {
 +                    val request = slot<QuoteRequest>()
 +                    coEvery { nearApiProvider.requestQuote(capture(request)) } throws nearError("No quotes found")
@@ -5450,16 +5451,20 @@ index c0be20563..9dd211a23 100644
 +                            slippage = BigDecimal("0.5")
 +                        )
 +                    }
-+                    assertEquals(0, BigDecimal(case.units).compareTo(request.captured.amount), "$mode with ${case.decimals} decimals")
++                    assertEquals(
++                        0,
++                        BigDecimal(case.units).compareTo(request.captured.amount),
++                        "$mode with ${case.decimals} decimals"
++                    )
 +                }
 +            }
 +        }
 +
-@@ -96,2 +160 @@ class NearSwapDataSourceTest {
+@@ -96,2 +165 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -111,4 +174,3 @@ class NearSwapDataSourceTest {
+@@ -111,4 +179,3 @@ class NearSwapDataSourceTest {
 -            // The affiliate fee + referral are attached to every request.
 -            assertEquals("zodl", captured.referral)
 -            assertEquals("affiliate", captured.appFees.single().recipient)
@@ -5467,27 +5472,27 @@ index c0be20563..9dd211a23 100644
 +            // Independent quotes carry no affiliate fee or referral.
 +            assertEquals(null, captured.referral)
 +            assertEquals(emptyList(), captured.appFees)
-@@ -132,2 +194 @@ class NearSwapDataSourceTest {
+@@ -132,2 +199 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -159,2 +220 @@ class NearSwapDataSourceTest {
+@@ -159,2 +225 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -182,2 +242 @@ class NearSwapDataSourceTest {
+@@ -182,2 +247 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -205,2 +264 @@ class NearSwapDataSourceTest {
+@@ -205,2 +269 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -235,2 +293 @@ class NearSwapDataSourceTest {
+@@ -235,2 +298 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -244,0 +302,32 @@ class NearSwapDataSourceTest {
+@@ -244,0 +307,32 @@ class NearSwapDataSourceTest {
 +    @Test
 +    fun outgoingQuotesRejectTexDepositsBeforeCreatingAProposal() =
 +        runBlocking {
@@ -5520,19 +5525,19 @@ index c0be20563..9dd211a23 100644
 +            }
 +        }
 +
-@@ -260,2 +349 @@ class NearSwapDataSourceTest {
+@@ -260,2 +354 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -285,2 +373 @@ class NearSwapDataSourceTest {
+@@ -285,2 +378 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -311,2 +398 @@ class NearSwapDataSourceTest {
+@@ -311,2 +403 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -335,2 +421 @@ class NearSwapDataSourceTest {
+@@ -335,2 +426 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
