@@ -357,6 +357,7 @@ class CoreWalletAcceptance {
         if (stage=="sender") receipt.put("scanned_height",fixture().getLong("preflightScannedHeight"))
             .put("network_height",fixture().getLong("preflightNetworkHeight"))
             .put("mode",fixture().getString("preflightMode"))
+        if (stage in listOf("fund", "upgrade")) receipt.put("database_input", databaseInputDiagnostic())
         if (stage=="send") receipt.put("fee_zatoshi",fixture().getLong("feeZatoshi"))
             .put("initial_submit_type",fixture().getString("initialSubmitType")).put("manual_resubmissions",0)
             .put("ui_review",fixture().getBoolean("uiReview"))
@@ -439,7 +440,67 @@ class CoreWalletAcceptance {
             .put("sapling_available_zatoshi", selected.saplingBalance?.available?.value ?: -1L)
             .put("scanned_height", synchronizer.fullyScannedHeight.value?.value ?: -1L)
             .put("sync_status", synchronizer.status.first().toString())
+            .put("database_input", databaseInputDiagnostic())
             .put("log_read_failure_class", readFailureClass ?: "none"))
+    }
+
+    private fun databaseInputDiagnostic(): JSONObject {
+        val result = JSONObject()
+        try {
+            // Only this fresh isolated app's SDK database. Never export keys, addresses, memos or rows.
+            val files = context.noBackupFilesDir.walkTopDown().maxDepth(4).take(1000)
+                .filter { it.isFile && it.name.endsWith("data.sqlite3") }.take(2).toList()
+            result.put("database_count", files.size)
+            check(files.size == 1)
+            android.database.sqlite.SQLiteDatabase.openDatabase(
+                files.single().path, null,
+                android.database.sqlite.SQLiteDatabase.OPEN_READONLY or
+                    android.database.sqlite.SQLiteDatabase.NO_LOCALIZED_COLLATORS
+            ).use { db ->
+                val queries = linkedMapOf(
+                    "accounts" to "SELECT COUNT(*) FROM accounts",
+                    "ironwood_note_counts" to """
+                        SELECT COUNT(*), COALESCE(SUM(rn.value),0), SUM(t.block IS NULL),
+                        SUM(t.mined_height IS NULL), SUM(rn.nf IS NULL),
+                        SUM(rn.recipient_key_scope IS NULL), SUM(rn.commitment_tree_position IS NULL),
+                        SUM(rn.witness_stabilized=1), SUM(rn.lock_expiry_height IS NOT NULL),
+                        MIN(rn.lock_expiry_height), MAX(rn.lock_expiry_height)
+                        FROM ironwood_received_notes rn JOIN transactions t ON t.id_tx=rn.transaction_id
+                    """.trimIndent(),
+                    "checkpoint_counts_and_maxima" to """
+                        SELECT (SELECT COUNT(*) FROM sapling_tree_checkpoints),
+                        (SELECT MAX(checkpoint_id) FROM sapling_tree_checkpoints),
+                        (SELECT COUNT(*) FROM orchard_tree_checkpoints),
+                        (SELECT MAX(checkpoint_id) FROM orchard_tree_checkpoints),
+                        (SELECT COUNT(*) FROM ironwood_tree_checkpoints),
+                        (SELECT MAX(checkpoint_id) FROM ironwood_tree_checkpoints)
+                    """.trimIndent(),
+                    "ironwood_shard_counts" to """
+                        SELECT COUNT(*), SUM(ss.max_priority IS NULL), SUM(ss.max_priority>10)
+                        FROM ironwood_received_notes rn LEFT JOIN v_ironwood_shards_scan_state ss
+                        ON rn.commitment_tree_position>=ss.start_position
+                        AND rn.commitment_tree_position<ss.end_position_exclusive
+                    """.trimIndent()
+                )
+                for ((label, sql) in queries) {
+                    try {
+                        db.rawQuery(sql, null).use { cursor ->
+                            check(cursor.moveToFirst() && cursor.columnCount <= 12)
+                            val values = JSONArray()
+                            for (column in 0 until cursor.columnCount) {
+                                values.put(if (cursor.isNull(column)) JSONObject.NULL else cursor.getLong(column))
+                            }
+                            result.put(label, values)
+                        }
+                    } catch (error: Exception) {
+                        result.put(label + "_error_class", error.javaClass.simpleName)
+                    }
+                }
+            }
+        } catch (error: Exception) {
+            result.put("error_class", error.javaClass.simpleName)
+        }
+        return result
     }
 
     private fun validateSendInput(destination: String, label: String): String {
