@@ -96,7 +96,15 @@ class CommonTransactionDetailMapper {
                     amount = stringResByNumber(swap.amountOutFormatted),
                     fiatAmount = stringResByDynamicCurrencyNumber(swap.amountOutUsd, FiatCurrency.USD.symbol),
                     token = stringRes(destinationAsset.tokenTicker),
-                    chain = destinationAsset.chainName
+                    chain =
+                        destinationAsset.chainName + stringRes(" · ") +
+                            stringRes(
+                                if (swap.executedAmountOut != null) {
+                                    R.string.private_provider_output
+                                } else {
+                                    R.string.private_quoted_output
+                                }
+                            )
                 )
         )
     }

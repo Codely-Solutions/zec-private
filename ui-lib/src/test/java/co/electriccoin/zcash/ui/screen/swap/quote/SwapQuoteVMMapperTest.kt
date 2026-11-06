@@ -99,6 +99,12 @@ class SwapQuoteVMMapperTest {
     }
 
     @Test
+    fun incomingQuoteDoesNotInventAWalletTransactionFee() {
+        val items = createItems(zashi(), SwapAssetTestFixture.zecAsset())
+        assertFalse(items.any { it.description.resourceId() == R.string.private_wallet_transaction_fee })
+    }
+
+    @Test
     fun incomingQuoteFeeNoteRendersWithoutFormatConversionFailure() {
         assertQuoteRowsRender(SwapMode.FLEX_INPUT, SwapAssetTestFixture.zecAsset())
     }
@@ -153,22 +159,16 @@ class SwapQuoteVMMapperTest {
             }
         }
         composeTestRule.waitForIdle()
-        val label = composeTestRule.onNodeWithText("Provider and bridge costs")
-        val included = composeTestRule.onNodeWithText("Included in the quoted amount received")
-        val note = composeTestRule.onNodeWithText(
-            "No affiliate fee. Anonymous API platform fee: 0.25% where applicable. " +
-                "Other swap costs may apply; review the quoted amount received."
-        )
+        val label = composeTestRule.onNodeWithText("NEAR platform fee")
+        val included = composeTestRule.onNodeWithText("0.25% included in quote")
         val labelBounds = label.fetchSemanticsNode().boundsInRoot
         val titleBounds = included.fetchSemanticsNode().boundsInRoot
-        val noteBounds = note.fetchSemanticsNode().boundsInRoot
         val rowBounds = composeTestRule.onNodeWithTag("quote-rows").fetchSemanticsNode().boundsInRoot
         assertTrue(labelBounds.width >= rowBounds.width * .95f, "Provider label lost its available width")
         assertTrue(labelBounds.height < labelBounds.width * .3f, "Provider label became a vertical character column")
         assertTrue(titleBounds.top >= labelBounds.bottom, "Explanation must be below the label")
-        assertTrue(noteBounds.top >= titleBounds.bottom, "Fee note must be below the explanation")
-        assertTrue(noteBounds.bottom - labelBounds.top < rowBounds.width * 1.3f, "Provider block is excessively tall")
-        for (node in listOf(label, included, note)) {
+        assertTrue(titleBounds.bottom - labelBounds.top < rowBounds.width * .7f, "Provider block is excessively tall")
+        for (node in listOf(label, included)) {
             val layouts = mutableListOf<TextLayoutResult>()
             node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action -> action(layouts) }
             assertFalse(layouts.single().hasVisualOverflow, "Provider text is clipped or ellipsized")

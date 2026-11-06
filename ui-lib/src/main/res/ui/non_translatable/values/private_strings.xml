@@ -1,6 +1,9 @@
 <resources>
     <string name="private_wallet_transaction_fee" translatable="false">Wallet transaction fee</string>
-    <string name="private_provider_costs" translatable="false">Provider and bridge costs</string>
-    <string name="private_provider_costs_included" translatable="false">Included in the quoted amount received</string>
-    <string name="private_no_affiliate_fee" translatable="false">No affiliate fee. Anonymous API platform fee: 0.25%% where applicable. Other swap costs may apply; review the quoted amount received.</string>
+    <string name="private_provider_costs" translatable="false">NEAR platform fee</string>
+    <string name="private_provider_costs_included" translatable="false">0.25%% included in quote</string>
+    <string name="private_quoted_output" translatable="false">Quoted output</string>
+    <string name="private_minimum_received" translatable="false">Minimum received: %1$s</string>
+    <string name="private_provider_output" translatable="false">Provider output</string>
+    <string name="private_estimated_output" translatable="false">Quoted output (execution unavailable)</string>
 </resources>
