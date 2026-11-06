@@ -29,6 +29,10 @@ jobs:
         env:
           TEST_PROFILE: ${{ inputs.profile || 'quotes' }}
         run: |
+          if [[ "$TEST_PROFILE" == foundation ]]; then
+            python3 -B .private/test_foundation.py
+            python3 -B .private/test_sync.py
+          fi
           chmod +x gradlew
           tests=(--tests 'co.electriccoin.zcash.ui.common.repository.SwapRepositoryImplTest' --tests 'co.electriccoin.zcash.ui.common.repository.SwapQuoteLifecycleTest' --tests 'co.electriccoin.zcash.ui.common.usecase.CancelSwapQuoteUseCaseTest' --tests 'co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCaseTest' --tests 'co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteVMTest')
           if [[ "$TEST_PROFILE" == diagnostics ]]; then
@@ -37,7 +41,7 @@ jobs:
           if [[ "$TEST_PROFILE" == foundation ]]; then
             tests=(--tests 'co.electriccoin.zcash.ui.common.model.ZecSwapCompositionTest' --tests 'co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteTest' --tests 'co.electriccoin.zcash.ui.common.repository.SwapRepositoryImplTest' --tests 'co.electriccoin.zcash.ui.common.repository.SwapRecoveryRoutingTest' --tests 'co.electriccoin.zcash.ui.common.repository.ZashiProposalRepositoryTest' --tests 'co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCaseTest')
           fi
-          ./gradlew -I .private/robolectric-ci.gradle --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :ui-lib:testZcashmainnetFossReleaseUnitTest "${tests[@]}" :wallet-foundation-lib:test :feature-ledger:testZcashmainnetFossReleaseUnitTest --tests 'co.electriccoin.zcash.ui.common.repository.LedgerProposalRepositoryTest' detektAll
+          ./gradlew -I .private/robolectric-ci.gradle -I .private/release-analysis.gradle --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :ui-lib:testZcashmainnetFossReleaseUnitTest "${tests[@]}" :wallet-foundation-lib:test :feature-ledger:testZcashmainnetFossReleaseUnitTest --tests 'co.electriccoin.zcash.ui.common.repository.LedgerProposalRepositoryTest' detektAll
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:

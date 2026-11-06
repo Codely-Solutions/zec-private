@@ -32,7 +32,8 @@ object ZecSwapComposition {
                 amount = AssetAmount(asset, quote.amountInFormatted, quote.originAsset.decimals),
                 address = quote.depositAddress.address,
                 recovery = RecoveryReference(ProviderId(quote.provider), 1, quote.depositAddress.address),
-                expiresAt = Instant.ofEpochSecond(quote.deadline.epochSeconds, quote.deadline.nanosecondsOfSecond.toLong())
+                expiresAt =
+                    Instant.ofEpochSecond(quote.deadline.epochSeconds, quote.deadline.nanosecondsOfSecond.toLong())
             )
         FlowComposition(
             provider = near,

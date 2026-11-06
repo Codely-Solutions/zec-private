@@ -151,8 +151,10 @@ class RequestSwapQuoteUseCase(
             try {
                 ZecSwapComposition.validate(result.quote)
             } catch (e: IllegalArgumentException) {
-                swapRepository.clearQuote()
-                navigateToErrorUseCase(ErrorArgs.General(e))
+                if (canNavigateToSwapQuote()) {
+                    swapRepository.clearQuote()
+                    navigateToErrorUseCase(ErrorArgs.General(e))
+                }
                 return@withContext
             }
         }

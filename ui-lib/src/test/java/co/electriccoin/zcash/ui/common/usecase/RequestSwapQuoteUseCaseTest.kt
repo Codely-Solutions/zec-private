@@ -476,6 +476,25 @@ class RequestSwapQuoteUseCaseTest {
             verify(exactly = 3) { navigateToError(any(), any()) }
         }
 
+    @Test
+    fun rejectedCompositionCannotReplaceTheCancellationConfirmation() = runBlocking {
+        val invalid = object : SwapQuote by swapQuote(zec, btc) {
+            override val provider: String = "unsupported"
+        }
+        useCase(invalid).requestExactInput(
+            amount = BigDecimal.ONE,
+            address = "destination",
+            selectedAsset = btc,
+            slippage = BigDecimal("2"),
+            canNavigateToSwapQuote = { false }
+        )
+
+        verify(exactly = 0) { swapRepository.clearQuote() }
+        verify(exactly = 0) { navigateToError(any(), any()) }
+        verify(exactly = 0) { navigationRouter.forward(SwapQuoteArgs) }
+        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any()) }
+    }
+
     // region helpers
 
     private fun mismatchError(
