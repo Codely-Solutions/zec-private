@@ -32,6 +32,8 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(1, debug.count('./gradlew '))
         self.assertIn(':app:assembleZcashmainnetFossRelease', release)
         self.assertIn(':ui-lib:testZcashmainnetFossReleaseUnitTest', release)
+        self.assertIn(':wallet-foundation-lib:test', release)
+        self.assertIn(':feature-ledger:testZcashmainnetFossReleaseUnitTest', release)
         self.assertIn(':app:assembleZcashmainnetFossDebug', debug)
         self.assertNotIn('FossRelease', debug)
         self.assertIn('source-sha.txt', debug)
