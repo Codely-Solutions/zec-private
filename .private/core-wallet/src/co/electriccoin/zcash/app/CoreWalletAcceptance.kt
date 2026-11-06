@@ -520,7 +520,7 @@ class CoreWalletAcceptance {
                         var control: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
                         try {
                             var depth = 0
-                            while (control != null && depth++ < 30) {
+                            while (control != null && depth++ < 4) {
                                 val current = control
                                 probe.enabledControl = probe.enabledControl || current.isEnabled
                                 probe.clickableControl = probe.clickableControl || current.isClickable
@@ -530,8 +530,26 @@ class CoreWalletAcceptance {
                                     probe.disabledAncestor = true
                                     break
                                 }
-                                if (current.isClickable && button) {
-                                    if (current.isVisibleToUser && current.isEnabled) {
+                                if (current.isClickable) {
+                                    // Compose does not expose a Button class in this guest. Select the nearest
+                                    // bounded ACTION_CLICK control; never climb into the screen background.
+                                    val bounds = android.graphics.Rect()
+                                    val labelBounds = android.graphics.Rect()
+                                    current.getBoundsInScreen(bounds)
+                                    node.getBoundsInScreen(labelBounds)
+                                    val density = context.resources.displayMetrics.density
+                                    val boundedControl = bounds.height() >= 24 * density &&
+                                        bounds.height() <= 96 * density && bounds.contains(labelBounds)
+                                    val clickAction = current.actionList.any {
+                                        it.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK.id
+                                    }
+                                    if (current.isVisibleToUser && boundedControl && clickAction) {
+                                        println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
+                                            .put("ui_control", "resolved_click")
+                                            .put("ui_outcome", "bounded_enabled_action")
+                                            .put("control_class", current.className?.toString())
+                                            .put("height_dp", bounds.height() / density)
+                                            .put("button_role", button))
                                         return AccessibilityNodeInfo.obtain(current)
                                     }
                                     break
