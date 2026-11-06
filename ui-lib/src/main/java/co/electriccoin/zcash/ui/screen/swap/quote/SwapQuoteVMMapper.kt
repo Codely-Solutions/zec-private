@@ -63,14 +63,14 @@ internal class SwapQuoteVMMapper {
     @Suppress("MagicNumber")
     private fun SwapQuoteInternalState.createInfoText(): StringResource? {
         if (quote.mode == EXACT_OUTPUT) return null
-        quote.minimumAmountOut?.let {
-            return stringRes(
+        val minimum = quote.minimumAmountOut?.let {
+            stringRes(
                 R.string.private_minimum_received,
                 stringResByDynamicCurrencyNumber(it, quote.destinationAsset.tokenTicker)
             )
         }
         val slippageUsd = quote.amountOutUsd.multiply(quote.slippage.divide(BigDecimal(100)))
-        return stringRes(
+        return minimum ?: stringRes(
             R.string.swapAndPay_swapQuoteSlippageWarn,
             stringResByDynamicCurrencyNumber(slippageUsd, FiatCurrency.USD.symbol),
             stringResByNumber(quote.slippage, minDecimals = 0) + stringRes("%")

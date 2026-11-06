@@ -5622,16 +5622,19 @@ index 9f37c1d93..998a4f33e 100644
 -    private fun onCancelPaymentClick() = cancelSwap()
 +    private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..5202e9cf1 100644
+index 717411935..2d9544f30 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 @@ -65,0 +66,6 @@ internal class SwapQuoteVMMapper {
-+        quote.minimumAmountOut?.let {
-+            return stringRes(
++        val minimum = quote.minimumAmountOut?.let {
++            stringRes(
 +                R.string.private_minimum_received,
 +                stringResByDynamicCurrencyNumber(it, quote.destinationAsset.tokenTicker)
 +            )
 +        }
+@@ -67 +73 @@ internal class SwapQuoteVMMapper {
+-        return stringRes(
++        return minimum ?: stringRes(
 @@ -96 +102 @@ internal class SwapQuoteVMMapper {
 -                description = stringRes(R.string.swapAndPay_totalFees),
 +                description = stringRes(R.string.private_wallet_transaction_fee),
