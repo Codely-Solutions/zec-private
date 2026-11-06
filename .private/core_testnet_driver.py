@@ -184,9 +184,9 @@ def run(adb, root, apks, manifest):
         if not targets or not bulk_targets or targets & bulk_targets:
             raise RuntimeError('Missing Tor-resolved destination addresses')
         app_uid = uid()
-        # Independently published Tor relay addresses were fetched through app
-        # Tor. They allow guard rotation and process restarts without permitting
-        # arbitrary direct Internet connections or DNS.
+        # The fixed public relay directory is fetched by bounded direct HTTPS
+        # before wallet creation/firewall installation. It contains no wallet data.
+        # These peers permit Tor rotation, not arbitrary direct wallet requests.
         directory=json.loads(shell('run-as',PACKAGE,'cat','files/core-relays.json'))
         allowed=set()
         for relay in directory['relays']:

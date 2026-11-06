@@ -81,7 +81,8 @@ class AcceptancePolicyTest(unittest.TestCase):
                                                history_preserved=True,metadata_blocked=True,direct_bulk_reachable=True,
                                                metadata_recovered=True,blocked_packets=1,scanned_height=12345)
         receipt['stages']['fund'].update(funding_txid='c'*64,balance_zatoshi=10000000,app_transaction_state='Confirmed')
-        receipt['funding_setup']=dict(tor_exit_verified=True,persistent_tor_connection=True,txid='c'*64)
+        receipt['funding_setup']=dict(tor_exit_verified=False,tor_transport_verified=True,
+                                     proxy_unavailable_failed_closed=True,persistent_tor_connection=True,txid='c'*64)
         receipt['sync_preflight']=dict(passed=True,mode='advancing-scan',scanned_height=12340,network_height=12345)
         receipt['stages']['send'].update(fee_zatoshi=10000,ui_review=True,ui_cancel_no_submission=True,ui_approval=True,ui_approval_actions=1)
         receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000,app_transaction_state='Confirmed')
@@ -110,6 +111,13 @@ class AcceptancePolicyTest(unittest.TestCase):
         for key in ('sync_restarted','synced','balance_preserved','history_preserved','metadata_blocked','direct_bulk_reachable','metadata_recovered'):
             bad=self.receipt();bad['stages']['interruption'][key]=False
             with self.subTest(recovery=key),self.assertRaises(ValueError):validate_core(bad,'inputs')
+        for key in ('tor_transport_verified','proxy_unavailable_failed_closed','persistent_tor_connection'):
+            for value in (None,False):
+                bad=self.receipt();bad['funding_setup'][key]=value
+                with self.subTest(funding=key,value=value),self.assertRaises(ValueError):validate_core(bad,'inputs')
+        bad=self.receipt()
+        bad['funding_setup']=dict(tor_exit_verified=True,persistent_tor_connection=True,txid='c'*64)
+        with self.assertRaises(ValueError):validate_core(bad,'inputs')
 
     def test_conservative_triggers(self):
         self.assertEqual([], requirements(['README.md', '.private/STATUS.md'])['profiles'])
@@ -217,6 +225,64 @@ class AcceptancePolicyTest(unittest.TestCase):
                 harness.write_text('test now waits for enabled control');git('add','-A')
                 git('update-index','--chmod=+x',CORE_TEST_SOURCE);mode=git('write-tree')
                 with self.assertRaises(ValueError):input_fingerprint(mode,root=root,profile='core-runtime')
+            finally:
+                for path in (root/'.git').rglob('*'):
+                    if path.is_file():path.chmod(path.stat().st_mode|stat.S_IWRITE)
+
+    def test_fresh_host_acceptance_can_reuse_only_matching_compiled_inputs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            def git(*args):
+                return subprocess.check_output(['git',*args],cwd=root,text=True,stderr=subprocess.DEVNULL).strip()
+            def commit():
+                git('add','-A');git('-c','user.name=Fixture','-c','user.email=test@example.invalid','commit','-qm','Fixture')
+                return git('rev-parse','HEAD')
+            def receipt_for(revision,producer):
+                receipt=self.receipt()
+                receipt.update(build_source_sha=producer,
+                    input_fingerprint=input_fingerprint(revision,root=root),
+                    runtime_input_fingerprint=input_fingerprint(revision,root=root,profile='core-runtime'),
+                    build_input_fingerprint=input_fingerprint(producer,root=root,profile='core-build'))
+                return receipt
+            git('init','-q')
+            fixture={'app.kt':'product runtime','build.gradle.kts':'build configuration',
+                     CORE_TEST_SOURCE:'compiled instrumentation',
+                     '.private/core-wallet/include.gradle':'test build wiring',
+                     '.github/workflows/core-validation.yml':'producer workflow',
+                     '.private/core_faucet.py':'old host setup',
+                     '.private/acceptance_policy.py':'old host policy'}
+            try:
+                for name,value in fixture.items():
+                    path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(value)
+                producer=commit()
+                old_receipt=receipt_for(producer,producer)
+                (root/'.private/core_faucet.py').write_text('corrected host setup')
+                (root/'.private/acceptance_policy.py').write_text('corrected host policy')
+                current=commit()
+                receipt=receipt_for(current,producer)
+                self.assertNotEqual(old_receipt['input_fingerprint'],receipt['input_fingerprint'])
+                self.assertNotEqual(old_receipt['runtime_input_fingerprint'],receipt['runtime_input_fingerprint'])
+                self.assertEqual(receipt['build_input_fingerprint'],
+                                 input_fingerprint(current,root=root,profile='core-build'))
+                validate_core_sources(receipt,current,current,root=root)
+                # An old full-input receipt is never evidence for the corrected host run.
+                with self.assertRaises(ValueError):validate_core_sources(old_receipt,current,current,root=root)
+                for key in ('input_fingerprint','runtime_input_fingerprint'):
+                    bad=dict(receipt);bad[key]=old_receipt[key]
+                    with self.subTest(stale=key),self.assertRaises(ValueError):
+                        validate_core_sources(bad,current,current,root=root)
+                # Host/controller corrections still require a new production candidate.
+                with self.assertRaises(ValueError):validate_core_sources(receipt,producer,current,root=root)
+                with self.assertRaises(ValueError):verify_promotion_revision(producer,current,root=root)
+                for name in ('app.kt','build.gradle.kts',CORE_TEST_SOURCE,
+                             '.private/core-wallet/include.gradle','.github/workflows/core-validation.yml'):
+                    path=root/name;old=path.read_text();path.write_text(old+' changed')
+                    changed=commit()
+                    # Fresh execution inputs cannot relabel an APK with stale compiled inputs.
+                    fresh=receipt_for(changed,producer)
+                    with self.subTest(compiled=name),self.assertRaises(ValueError):
+                        validate_core_sources(fresh,changed,changed,root=root)
+                    path.write_text(old);commit()
             finally:
                 for path in (root/'.git').rglob('*'):
                     if path.is_file():path.chmod(path.stat().st_mode|stat.S_IWRITE)
