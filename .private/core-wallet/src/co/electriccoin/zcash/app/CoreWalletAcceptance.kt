@@ -241,7 +241,7 @@ class CoreWalletAcceptance {
                     val beforeBalance=balance()
                     val fundingId=fixture().getString("fundingTxId")
                     val endpoint=dependency<PersistableWalletProvider>().requirePersistableWallet().endpoint
-                    check(withTimeout(30_000) { original.validateServerEndpoint(context,endpoint) } == ServerValidation.Valid)
+                    requireEndpointReady(original, "before_outage")
                     val ready=File(context.filesDir,"core-sync-ready.json")
                     ready.writeText(JSONObject().put("ready",true).put("height",height.value).toString())
                     withTimeout(60_000) {
@@ -273,7 +273,7 @@ class CoreWalletAcceptance {
                         recovered.fullyScannedHeight.filterNotNull().first { it.value>=height.value }
                         while (balance()!=beforeBalance) delay(500)
                         dependency<TransactionRepository>().observeTransaction(fundingId).filterNotNull().first { it is ReceiveTransaction.Success }
-                        check(recovered.validateServerEndpoint(context,endpoint) == ServerValidation.Valid)
+                        requireEndpointReady(recovered, "after_outage")
                     }
                     File(context.filesDir,"core-sync-result.json").writeText(JSONObject()
                         .put("sync_restarted",true).put("synced",true).put("balance_preserved",true)
@@ -611,6 +611,7 @@ class CoreWalletAcceptance {
                 save(fixture().put("preflightScannedHeight",checkNotNull(ready.scanned).value)
                     .put("preflightNetworkHeight",checkNotNull(ready.tip).value)
                     .put("preflightMode",if (ready.status == Synchronizer.Status.SYNCED) "caught-up" else "advancing-scan"))
+                requireEndpointReady(ready.sync, "before_funding")
                 // Fail parser/prefill mismatches before the host requests scarce faucet coins.
                 openPrefilledForm(fixture().getString("recipientAddress"))
                 check(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
@@ -634,6 +635,21 @@ class CoreWalletAcceptance {
         check(wallet.network == ZcashNetwork.Testnet)
         check(wallet.seedPhrase.joinToString() == fixture().getString(role + "Seed"))
         dependency<SynchronizerProvider>().getSynchronizer()
+    }
+
+    private suspend fun requireEndpointReady(sync: Synchronizer, label: String) {
+        val endpoint = dependency<PersistableWalletProvider>().requirePersistableWallet().endpoint
+        // Read-only metadata readiness only; never retry a send, approval or broadcast.
+        repeat(3) { attempt ->
+            val result = withTimeoutOrNull(15_000) { sync.validateServerEndpoint(context, endpoint) }
+            if (result == ServerValidation.Valid) return
+            println("CORE_SYNC_DIAGNOSTIC " + JSONObject()
+                .put("readiness", label).put("attempt", attempt + 1)
+                .put("result_class", result?.javaClass?.simpleName ?: "timeout")
+                .put("cause_class", (result as? ServerValidation.InValid)?.reason?.javaClass?.simpleName ?: "none"))
+            if (attempt < 2) delay(2_000)
+        }
+        error("Core Tor metadata readiness was not established")
     }
 
     private suspend fun balance(): Long = dependency<AccountDataSource>().getZashiAccount().totalShieldedBalance?.value ?: -1L
