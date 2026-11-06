@@ -1,6 +1,5 @@
 package co.electriccoin.zcash.ui.common.usecase
 
-import android.app.Application
 import android.content.Intent
 import co.electriccoin.zcash.ui.design.util.stringRes
 import io.mockk.mockk
@@ -19,7 +18,7 @@ import org.robolectric.annotation.Config
 class DiagnosticShareTest {
     @Test(timeout = 30_000)
     fun diagnosticsRequireRecipientSelectionAndContainNoUpstreamAddress() {
-        val context = RuntimeEnvironment.getApplication<Application>()
+        val context = RuntimeEnvironment.getApplication()
         val useCase = SendEmailUseCase(context, mockk(), mockk())
         useCase(
             address = stringRes("user-selected"),

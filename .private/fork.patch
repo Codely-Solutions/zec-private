@@ -10187,13 +10187,12 @@ index 0a57ab991..000000000
 -}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/DiagnosticShareTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/DiagnosticShareTest.kt
 new file mode 100644
-index 000000000..3a035ccf6
+index 000000000..ef29cc3a1
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/DiagnosticShareTest.kt
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,38 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
-+import android.app.Application
 +import android.content.Intent
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import io.mockk.mockk
@@ -10212,7 +10211,7 @@ index 000000000..3a035ccf6
 +class DiagnosticShareTest {
 +    @Test(timeout = 30_000)
 +    fun diagnosticsRequireRecipientSelectionAndContainNoUpstreamAddress() {
-+        val context = RuntimeEnvironment.getApplication<Application>()
++        val context = RuntimeEnvironment.getApplication()
 +        val useCase = SendEmailUseCase(context, mockk(), mockk())
 +        useCase(
 +            address = stringRes("user-selected"),
