@@ -1,0 +1,338 @@
+{
+  "schema": 1,
+  "passed": true,
+  "evidence_class": "real-app-testnet",
+  "network": "zcash-testnet",
+  "clearnet_fallback": false,
+  "direct_bulk_downloads": true,
+  "personal_wallet_access": false,
+  "real_funds_used": false,
+  "stages": {
+    "fund": {
+      "stage": "fund",
+      "passed": true,
+      "network": "zcash-testnet",
+      "transport": "Tor sensitive RPCs; upstream direct bulk",
+      "seconds": 331.8510209,
+      "funding_txid": "2ac597f612ebb5628fa4317626d218f6381991dfd24066b6471c8a9b9f81ad7d",
+      "balance_zatoshi": 10000000
+    },
+    "upgrade": {
+      "stage": "upgrade",
+      "passed": true,
+      "network": "zcash-testnet",
+      "transport": "Tor sensitive RPCs; upstream direct bulk",
+      "seconds": 3.7222474
+    },
+    "interruption": {
+      "passed": true,
+      "metadata_blocked": true,
+      "direct_bulk_reachable": true,
+      "metadata_recovered": true,
+      "blocked_packets": 103,
+      "seconds": 51.8472987000132,
+      "sync_restarted": true,
+      "synced": true,
+      "balance_preserved": true,
+      "history_preserved": true,
+      "scanned_height": 4587255
+    },
+    "send": {
+      "stage": "send",
+      "passed": true,
+      "network": "zcash-testnet",
+      "transport": "Tor sensitive RPCs; upstream direct bulk",
+      "seconds": 55.8422183,
+      "txId": "f148395afb50aed7844a516dd1688d88a8f99347a5ba55decca8b5594ca1ed5c",
+      "fee_zatoshi": 10000,
+      "initial_submit_type": "Success",
+      "manual_resubmissions": 0
+    },
+    "restart": {
+      "stage": "restart",
+      "passed": true,
+      "network": "zcash-testnet",
+      "transport": "Tor sensitive RPCs; upstream direct bulk",
+      "seconds": 3.7346013,
+      "txId": "f148395afb50aed7844a516dd1688d88a8f99347a5ba55decca8b5594ca1ed5c"
+    },
+    "restore": {
+      "stage": "restore",
+      "passed": true,
+      "network": "zcash-testnet",
+      "transport": "Tor sensitive RPCs; upstream direct bulk",
+      "seconds": 34.0191657,
+      "txId": "f148395afb50aed7844a516dd1688d88a8f99347a5ba55decca8b5594ca1ed5c",
+      "mined_height": 4587258,
+      "amount_zatoshi": 1000000,
+      "app_transaction_state": "Pending"
+    }
+  },
+  "input_fingerprint": "a8c0b1041ff0b79ac7237cbe91225bef48708cc8b11ccae2a05d58b6668c0398",
+  "build_input_fingerprint": "0d0a073db3ad3768a220b8b55ab20aef448b14740bb273a05c067a3afc006348",
+  "build_source_sha": "3b213eff5bda7e6af51abda95b91fc2dbab48686",
+  "baseline_source_sha": "a0bd21f27bb53af0eeb9b433d0273c6f39b04e19",
+  "baseline_version_code": 3234006,
+  "candidate_version_code": 3234007,
+  "candidate_apk_sha256": "a4ecb1f02ec11109fd04014a37d3dbc5e8defdf4ce8ffc3fdd430c3f0c224909",
+  "baseline_apk_sha256": "3259dcd7938e8b3814b0ad72a9cb1314efbf26f33f4c1d16bb2b4b9ed475b36c",
+  "instrumentation_apk_sha256": "cc573ef1fa5e9c4c8af50cd1e68474553b2a8566fff1706110a508c115859c4b",
+  "harness_sha256": "a8db870672ccf96364b0ece3256ddcad4786634aad6debc1b90e4046dff393a7",
+  "connection_tracing": true,
+  "bootstrap_policy_sha256": "c9c82d336a50ef5c8f4ce7223b462250a2bf78fe62b704e1835fa35c53aa434c",
+  "sync_preflight": {
+    "stage": "sender",
+    "passed": true,
+    "network": "zcash-testnet",
+    "transport": "Tor sensitive RPCs; upstream direct bulk",
+    "seconds": 19.1807443,
+    "scanned_height": 4587241,
+    "network_height": 4587241,
+    "mode": "caught-up"
+  },
+  "funding_setup": {
+    "txid": "2ac597f612ebb5628fa4317626d218f6381991dfd24066b6471c8a9b9f81ad7d",
+    "provider": "jinolabs-testnet",
+    "tor_exit_verified": true,
+    "persistent_tor_connection": true,
+    "bundle_sha256": "2ee123e9167318a3742778ff704e75f01d4780f05a14522d451fe011011077c4",
+    "download_bytes": 23537200,
+    "expanded_bytes": 16453120,
+    "setup_seconds": 3.527385699999286,
+    "bootstrap_seconds": 6.08023079999839,
+    "proof_compute_seconds": 0.7970628000039142,
+    "claim_seconds": 9.847341599990614,
+    "tor_binary_sha256": "1607d98f5d13859077b1b349c55beba76b09acc788f0431fd824d11966fb1074",
+    "tor_version": "Tor version 0.4.9.15 (git-4d8efff53a86670b).",
+    "seconds": 24.987524099997245
+  },
+  "iptables_denials": [
+    "       0        0 REJECT     17   --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable",
+    "       0        0 REJECT     all  --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable",
+    "       0        0 REJECT     all  --  *      *       0.0.0.0/0            172.235.26.235       reject-with icmp-port-unreachable"
+  ],
+  "ip6tables_denials": [
+    "       0        0 REJECT     17   --  *      *       ::/0                 ::/0                 reject-with icmp6-port-unreachable",
+    "       0        0 REJECT     all  --  *      *       ::/0                 ::/0                 reject-with icmp6-port-unreachable"
+  ],
+  "network_enforcement": {
+    "passed": true,
+    "mode": "direct public bulk endpoint TCP443 plus Tor relay allowlist; sensitive provider direct egress denied; metadata outage assertion",
+    "allowed_relay_peers": 10271,
+    "embedded_bootstrap_pairs": 300,
+    "sensitive_targets": 1,
+    "direct_bulk_targets": [
+      "2a09:8280:1::32:da2a:0",
+      "66.241.124.102"
+    ],
+    "metadata_no_direct_fallback_observed": true,
+    "metadata_rpc_scope": [
+      "getServerInfo",
+      "getLatestBlockHeight"
+    ],
+    "sdk_transport_policy": "published SDK6.0.0 source inspected; bulk direct, sensitive calls Tor"
+  },
+  "seconds": 593.8348645000078,
+  "last_stage": "restore",
+  "connection_trace_header": "# tracer: nop\r\n#\r\n# entries-in-buffer/entries-written: 454/454   #P:2\r\n#\r\n#                                          _-----=> irqs-off/BH-disabled\r\n#                                         / _----=> need-resched\r\n#                                        | / _---=> hardirq/softirq\r\n#                                        || / _--=> preempt-depth\r\n#                                        ||| / _-=> migrate-disable\r\n#                                        |||| /     delay\r\n#           TASK-PID  ",
+  "connection_trace_sample": [
+    "   TlsVerify_101-2165    (    350) [001] .....    45.588128: inet_sock_set_state: family=AF_INET protocol=IPPROTO_TCP sport=0 dport=853 saddr=10.0.2.16 daddr=10.0.2.3 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:10.0.2.3 oldstate=TCP_CLOSE newstate=TCP_SYN_SENT",
+    "        Thread-9-2168    (    971) [001] .....    45.831077: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=0 dport=80 saddr=10.0.2.16 daddr=142.251.110.94 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.110.94 oldstate=TCP_CLOSE newstate=TCP_SYN_SENT",
+    "        Thread-8-2167    (    971) [000] .....    45.879137: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=0 dport=443 saddr=10.0.2.16 daddr=142.251.151.119 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.151.119 oldstate=TCP_CLOSE newstate=TCP_SYN_SENT",
+    "   TlsVerify_101-2176    (    350) [001] .....    46.257624: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=0 dport=853 saddr=0.0.0.0 daddr=0.0.0.0 saddrv6=fec0::fa15:298:c016:c383 daddrv6=fec0::3 oldstate=TCP_CLOSE newstate=TCP_SYN_SENT",
+    "     ksoftirqd/1-26      (     26) [001] ..s1.    46.298822: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=57614 dport=443 saddr=10.0.2.16 daddr=142.251.151.119 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.151.119 oldstate=TCP_SYN_SENT newstate=TCP_ESTABLISHED",
+    "     ksoftirqd/1-26      (     26) [001] ..s1.    46.299269: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=37588 dport=80 saddr=10.0.2.16 daddr=142.251.110.94 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.110.94 oldstate=TCP_SYN_SENT newstate=TCP_ESTABLISHED",
+    "     kworker/1:1-44      (     44) [001] .Ns1.    46.304342: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=51808 dport=853 saddr=0.0.0.0 daddr=0.0.0.0 saddrv6=fec0::fa15:298:c016:c383 daddrv6=fec0::3 oldstate=TCP_SYN_SENT newstate=TCP_CLOSE",
+    "     ksoftirqd/1-26      (     26) [001] ..s1.    46.811706: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=37588 dport=80 saddr=10.0.2.16 daddr=142.251.110.94 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.110.94 oldstate=TCP_ESTABLISHED newstate=TCP_CLOSE_WAIT"
+  ],
+  "application_pids": [
+    2031,
+    2347,
+    2475,
+    2580,
+    2824,
+    2918,
+    3163,
+    3284,
+    3413
+  ],
+  "connection_destinations": [
+    {
+      "address": "10.0.2.3",
+      "port": 853
+    },
+    {
+      "address": "134.130.172.229",
+      "port": 9001
+    },
+    {
+      "address": "144.217.81.135",
+      "port": 9001
+    },
+    {
+      "address": "173.249.215.216",
+      "port": 9001
+    },
+    {
+      "address": "185.204.1.84",
+      "port": 9001
+    },
+    {
+      "address": "185.220.101.202",
+      "port": 8443
+    },
+    {
+      "address": "185.220.101.203",
+      "port": 443
+    },
+    {
+      "address": "185.222.160.3",
+      "port": 443
+    },
+    {
+      "address": "192.42.116.123",
+      "port": 443
+    },
+    {
+      "address": "192.42.116.19",
+      "port": 443
+    },
+    {
+      "address": "194.34.132.51",
+      "port": 9001
+    },
+    {
+      "address": "195.170.172.231",
+      "port": 443
+    },
+    {
+      "address": "2001:470:1f08:1a3::2",
+      "port": 9007
+    },
+    {
+      "address": "2001:470:6e:f0::2",
+      "port": 9001
+    },
+    {
+      "address": "2001:67c:e60:c0c:192:42:116:19",
+      "port": 443
+    },
+    {
+      "address": "2001:bc8:1201:512:da5e:d3ff:fe6c:8241",
+      "port": 993
+    },
+    {
+      "address": "203.159.90.15",
+      "port": 9001
+    },
+    {
+      "address": "207.154.251.134",
+      "port": 9001
+    },
+    {
+      "address": "212.227.224.217",
+      "port": 443
+    },
+    {
+      "address": "2a01:4f8:140:522c::2",
+      "port": 8080
+    },
+    {
+      "address": "2a03:4000:6:2eb2:a4a2:bfff:fe4c:a1a",
+      "port": 9001
+    },
+    {
+      "address": "2a09:8280:1::32:da2a:0",
+      "port": 443
+    },
+    {
+      "address": "2a0b:f4c2:2:1::202",
+      "port": 8443
+    },
+    {
+      "address": "2a0b:f4c2:2:1::203",
+      "port": 443
+    },
+    {
+      "address": "2a12:a800:8:1:203:159:90:15",
+      "port": 9001
+    },
+    {
+      "address": "38.126.254.138",
+      "port": 9001
+    },
+    {
+      "address": "45.132.127.8",
+      "port": 9100
+    },
+    {
+      "address": "46.149.125.9",
+      "port": 9001
+    },
+    {
+      "address": "46.4.74.237",
+      "port": 8080
+    },
+    {
+      "address": "5.135.106.78",
+      "port": 9001
+    },
+    {
+      "address": "5.45.110.42",
+      "port": 9001
+    },
+    {
+      "address": "51.15.95.231",
+      "port": 443
+    },
+    {
+      "address": "51.159.195.41",
+      "port": 993
+    },
+    {
+      "address": "64.65.0.133",
+      "port": 443
+    },
+    {
+      "address": "64.65.2.147",
+      "port": 443
+    },
+    {
+      "address": "66.241.124.102",
+      "port": 443
+    },
+    {
+      "address": "92.27.11.87",
+      "port": 9007
+    },
+    {
+      "address": "93.99.104.31",
+      "port": 9001
+    }
+  ],
+  "connection_destinations_truncated": false,
+  "iptables_counters": [
+    "       0        0 REJECT     17   --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable",
+    "       0        0 REJECT     all  --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable",
+    "       0        0 REJECT     all  --  *      *       0.0.0.0/0            172.235.26.235       reject-with icmp-port-unreachable"
+  ],
+  "ip6tables_counters": [
+    "       0        0 REJECT     17   --  *      *       ::/0                 ::/0                 reject-with icmp6-port-unreachable",
+    "       0        0 REJECT     all  --  *      *       ::/0                 ::/0                 reject-with icmp6-port-unreachable"
+  ],
+  "blocked_connection_diagnostics": [],
+  "transaction_evidence": {
+    "fundingTxId": "2ac597f612ebb5628fa4317626d218f6381991dfd24066b6471c8a9b9f81ad7d",
+    "fundingProvider": "jinolabs-testnet",
+    "fundedBalance": 10000000,
+    "balanceBeforeSend": 10000000,
+    "feeZatoshi": 10000,
+    "senderConfirmedBalance": 8990000,
+    "restoreMinedHeight": 4587258,
+    "restoreTransactionState": "Pending",
+    "candidateTxIds": [
+      "f148395afb50aed7844a516dd1688d88a8f99347a5ba55decca8b5594ca1ed5c"
+    ],
+    "initialSubmitType": "Success"
+  }
+}

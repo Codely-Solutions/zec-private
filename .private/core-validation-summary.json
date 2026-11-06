@@ -1,0 +1,144 @@
+{
+  "status": "real-core-passed-release-pending",
+  "testnet_build_run": 42136496193,
+  "executed_build_source": "3b213eff5bda7e6af51abda95b91fc2dbab48686",
+  "core_guard": "f78167369a194153a229aaea63c23e0e",
+  "guard_receipt_verified": true,
+  "seconds": 593.8348645000078,
+  "stage_seconds": {
+    "fund": 331.8510209,
+    "upgrade": 3.7222474,
+    "interruption": 51.8472987000132,
+    "send": 55.8422183,
+    "restart": 3.7346013,
+    "restore": 34.0191657
+  },
+  "producer_gradle": [
+    "BUILD SUCCESSFUL in 6m 31s",
+    "315 actionable tasks: 147 executed, 168 from cache"
+  ],
+  "baseline_reused": true,
+  "production_quote_evidence_reused": true,
+  "production_quote_executed_source": "a0bd21f27bb53af0eeb9b433d0273c6f39b04e19",
+  "peak_transient_logical_bytes": 8534172324,
+  "budgets": {
+    "job_seconds": 1800,
+    "memory_bytes": 6442450944,
+    "guest_memory_mib": 3072,
+    "guest_cores": 2
+  },
+  "sample_from_prior_equivalent_job": {
+    "utc": "2026-11-06T00:18:03.3757457Z",
+    "job": "e8ae3796b2ed42e69ffe4dddccc7d6f2",
+    "processes": [
+      {
+        "pid": 14984,
+        "parent": 22912,
+        "created": "2026-11-06T00:11:07.828831Z",
+        "name": "python.exe",
+        "workingSetBytes": 41058304,
+        "privateBytes": 26558464,
+        "cpuSeconds": 21.859375
+      },
+      {
+        "pid": 19148,
+        "parent": 14984,
+        "created": "2026-11-06T00:11:07.841003Z",
+        "name": "conhost.exe",
+        "workingSetBytes": 8093696,
+        "privateBytes": 1261568,
+        "cpuSeconds": 0.046875
+      },
+      {
+        "pid": 6324,
+        "parent": 14984,
+        "created": "2026-11-06T00:12:13.13499Z",
+        "name": "emulator.exe",
+        "workingSetBytes": 12886016,
+        "privateBytes": 2736128,
+        "cpuSeconds": 0.03125
+      },
+      {
+        "pid": 16680,
+        "parent": 6324,
+        "created": "2026-11-06T00:12:13.144616Z",
+        "name": "conhost.exe",
+        "workingSetBytes": 8097792,
+        "privateBytes": 1343488,
+        "cpuSeconds": 0.015625
+      },
+      {
+        "pid": 13180,
+        "parent": 6324,
+        "created": "2026-11-06T00:12:13.194831Z",
+        "name": "qemu-system-x86_64-headless.exe",
+        "workingSetBytes": 3832881152,
+        "privateBytes": 4646449152,
+        "cpuSeconds": 184.96875
+      },
+      {
+        "pid": 3316,
+        "parent": 13180,
+        "created": "2026-11-06T00:12:16.036037Z",
+        "name": "netsimd.exe",
+        "workingSetBytes": 26505216,
+        "privateBytes": 15745024,
+        "cpuSeconds": 4.90625
+      },
+      {
+        "pid": 22092,
+        "parent": 14984,
+        "created": "2026-11-06T00:14:52.652356Z",
+        "name": "adb.exe",
+        "workingSetBytes": 12890112,
+        "privateBytes": 3428352,
+        "cpuSeconds": 0.015625
+      }
+    ],
+    "workingSetBytes": 3942412288.0,
+    "privateBytes": 4697522176.0
+  },
+  "cleanup": {
+    "complete": true,
+    "owned_survivors": [],
+    "configuration_unchanged": true
+  },
+  "transaction_evidence": {
+    "fundingTxId": "2ac597f612ebb5628fa4317626d218f6381991dfd24066b6471c8a9b9f81ad7d",
+    "fundingProvider": "jinolabs-testnet",
+    "fundedBalance": 10000000,
+    "balanceBeforeSend": 10000000,
+    "feeZatoshi": 10000,
+    "senderConfirmedBalance": 8990000,
+    "restoreMinedHeight": 4587258,
+    "restoreTransactionState": "Pending",
+    "candidateTxIds": [
+      "f148395afb50aed7844a516dd1688d88a8f99347a5ba55decca8b5594ca1ed5c"
+    ],
+    "initialSubmitType": "Success"
+  },
+  "tor_scope": {
+    "passed": true,
+    "mode": "direct public bulk endpoint TCP443 plus Tor relay allowlist; sensitive provider direct egress denied; metadata outage assertion",
+    "allowed_relay_peers": 10271,
+    "embedded_bootstrap_pairs": 300,
+    "sensitive_targets": 1,
+    "direct_bulk_targets": [
+      "2a09:8280:1::32:da2a:0",
+      "66.241.124.102"
+    ],
+    "metadata_no_direct_fallback_observed": true,
+    "metadata_rpc_scope": [
+      "getServerInfo",
+      "getLatestBlockHeight"
+    ],
+    "sdk_transport_policy": "published SDK6.0.0 source inspected; bulk direct, sensitive calls Tor"
+  },
+  "limitations": [
+    "x86_64 testnet/debug execution; production ARM64 inspection only",
+    "Recipient restore recovered a mined transaction still shown Pending; recipient spendability was not asserted",
+    "Biometric approval UI and funded production swap settlement not executed",
+    "Runtime Tor-outage negative probe covers metadata RPCs; other sensitive SDK routing source-inspected",
+    "Provider sandbox not adopted; shielded TAZ settlement and Tor compatibility unverified"
+  ]
+}
