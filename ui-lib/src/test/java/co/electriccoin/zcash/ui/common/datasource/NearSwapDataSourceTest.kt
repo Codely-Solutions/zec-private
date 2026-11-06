@@ -57,6 +57,37 @@ class NearSwapDataSourceTest {
     private val zec = SwapAssetTestFixture.zecAsset()
 
     @Test
+    fun externalAddressFamiliesKeepTheirExactRecipientAndRefundEncoding() =
+        runBlocking {
+            val addresses = listOf(
+                "btc" to "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+                "eth" to "0x52908400098527886E0F7030069857D2E4169EE7",
+                "sol" to "11111111111111111111111111111111",
+                "xrp" to "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"
+            )
+            for ((chain, address) in addresses) {
+                val asset = SwapAssetTestFixture.asset(tokenTicker = chain, chainTicker = chain)
+                for (outgoing in listOf(false, true)) {
+                    val request = slot<QuoteRequest>()
+                    coEvery { nearApiProvider.requestQuote(capture(request)) } throws nearError("No quotes found")
+                    assertFailsWith<QuoteLowAmountException> {
+                        dataSource.requestQuote(
+                            swapMode = if (outgoing) SwapMode.EXACT_OUTPUT else SwapMode.EXACT_INPUT,
+                            amount = BigDecimal.ONE,
+                            refundAddress = if (outgoing) "zec-refund" else address,
+                            originAsset = if (outgoing) zec else asset,
+                            destinationAddress = if (outgoing) address else "zec-recipient",
+                            destinationAsset = if (outgoing) asset else zec,
+                            slippage = BigDecimal("0.5")
+                        )
+                    }
+                    assertEquals(if (outgoing) address else "zec-recipient", request.captured.recipient)
+                    assertEquals(if (outgoing) "zec-refund" else address, request.captured.refundTo)
+                }
+            }
+        }
+
+    @Test
     fun quoteModesPreserveRepresentativeAtomicUnitPrecisions() =
         runBlocking {
             data class PrecisionCase(val decimals: Int, val value: String, val units: String)
