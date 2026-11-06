@@ -64,5 +64,11 @@ if os.environ.get('BUILD_EMULATOR')=='true':
     proof['emulator']={'apk_sha256':hashlib.sha256(debug[0].read_bytes()).hexdigest(),
                        'architecture':check_apk(debug[0],('x86_64',))}
 proof['runtime_graph_sha256']=hashlib.sha256(runtime_path.read_bytes()).hexdigest()
+from foundation_architecture import check_graph
+foundation_path=root/'artifact/foundation-runtime.json'
+foundation=json.loads(foundation_path.read_text())
+check_graph(foundation)
+if foundation['source_sha']!=sha:raise SystemExit('Foundation graph source mismatch')
+proof['foundation_graph_sha256']=hashlib.sha256(foundation_path.read_bytes()).hexdigest()
 shutil.copy2(apk,out/'zec-private-unsigned.apk')
 (out/'proof.json').write_text(json.dumps(proof,indent=2)+'\n')

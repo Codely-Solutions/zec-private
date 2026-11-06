@@ -98,6 +98,7 @@ jobs:
             app/build/reports/lint-results-*.xml
             build/reports/detekt/
             artifact/runtime.json
+            artifact/foundation-runtime.json
             artifact/near-contract.json
             artifact/gradle-timing.json
             artifact/task-timing.jsonl
