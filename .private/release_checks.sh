@@ -9,7 +9,7 @@ if [[ "${BUILD_EMULATOR:-false}" == true ]]; then
   tasks+=(:app:assembleZcashmainnetFossDebug)
 fi
 start=$(date +%s)
-./gradlew "${init[@]}" --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process "${tasks[@]}"
+./gradlew "${init[@]}" --profile --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process "${tasks[@]}"
 python3 .private/check_exclusions.py artifact/runtime.json
 python3 - "$start" <<'PY'
 import json,sys,time
