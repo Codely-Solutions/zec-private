@@ -4,6 +4,7 @@ from unittest.mock import patch
 from pathlib import Path
 from apk_architecture import check_apk
 from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_binding, verify_promotion_revision
+from foundation_architecture import validate_graph_binding
 
 ROOT=Path(__file__).resolve().parents[1]
 REPO=os.environ['GITHUB_REPOSITORY']
@@ -100,6 +101,7 @@ def main():
     if (hashlib.sha256(runtime_bytes).hexdigest()!=proof.get('runtime_graph_sha256') or
             json.loads(runtime_bytes).get('source_sha')!=expected):
         raise RuntimeError('Invalid runtime graph binding')
+    validate_graph_binding((artifact/'foundation-runtime.json').read_bytes(),proof,expected)
     tag=proof['release_tag']
     if not re.fullmatch(r'v\d+\.\d+\.\d+-private\.\d+',tag): raise RuntimeError('Invalid private release tag')
     # Existing published tags/assets are immutable, including duplicate polling.
