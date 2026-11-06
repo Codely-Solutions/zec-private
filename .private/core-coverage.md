@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: implementation in progress. A test producer or successful build is not a passing transaction receipt.
+Status: real core acceptance passed on 2026-11-06; signed release validation is pending. Exact evidence is in `core-acceptance.json` and `core-validation-summary.json`.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
