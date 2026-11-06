@@ -1325,7 +1325,6 @@
   "ui-lib/src/internal/java/co/electriccoin/zcash/ui/common/provider/CrashReportingStorageProviderImpl.kt": "3d9f2fcb10bedfc0354e5fbfff34c235238ae2c0d585236232d7e496851659b5",
   "ui-lib/src/internal/java/co/electriccoin/zcash/ui/screen/scan/util/QrCodeAnalyzerImpl.kt": "e287c47aa2c6e06db840df4e9fd5fdac94127044a99dace885f4dbb725f89618",
   "ui-lib/src/main/AndroidManifest.xml": "ce61ffabc959325e116e68752cadb054cc9d52376c0f710de927a675ff4d8b46",
-  "ui-lib/src/main/ic_launcher-playstore.png": "cd28f43dece3d33b71cc291c5d38e1c02383bc276b10ef87b2e8eeebde364961",
   "ui-lib/src/main/java/co/electriccoin/zcash/di/AddressBookModule.kt": "2d61564f5782a7de07c18b615daf1c091e16d3e716a0bb23daf354cf13569621",
   "ui-lib/src/main/java/co/electriccoin/zcash/di/CoreModule.kt": "c28f0a842f1e006542cb1f6ac8362aa4c6b48accde57c6d52b56f02af057e09a",
   "ui-lib/src/main/java/co/electriccoin/zcash/di/DateSourceModule.kt": "b402c9e46ea09bacd9ec8832a75540c1f17d42ea6717d1df241191a38217051d",

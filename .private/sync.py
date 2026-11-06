@@ -1,11 +1,18 @@
 """Trusted controller: fetch stable upstream, gate critical diffs, apply exact patch."""
-import hashlib, json, os, re, shutil, subprocess
+import hashlib, json, os, re, shutil, subprocess, sys
 from pathlib import Path
 from acceptance_policy import requirements
 
 ROOT=Path(__file__).resolve().parents[1]
 OFFICIAL='zodl-inc/zodl-android'
+BRANDING_ASSETS = {
+    'app_logo', 'logo_with_hi', 'ic_item_zashi', 'ic_item_zodl_glyph',
+    'zashi_text_logo_small', 'zashi_logo_without_text', 'zashi_logo_sign',
+    'ic_zashi_logo_sign_warn', 'ic_zashi_logo_update_available', 'ic_ironwood_zodl_logos',
+}
 def run(*args,cwd=ROOT):
+    if args[0]=='python3':
+        args=(sys.executable,*args[1:])
     return subprocess.check_output(args,cwd=cwd,text=True).strip()
 def gh(path): return json.loads(run('gh','api',path))
 def version(tag):
@@ -17,9 +24,15 @@ def critical(path):
     # Its root, shared wiring and every retained feature remain review-gated.
     if any(path.startswith(project+'/') for project in excluded_projects()):
         return False
+    # The reusable wallet fingerprints omit appearance/About-only inputs.
+    # Review identity artwork and these surfaces before upstream integration.
+    if ('/src/' in path and '/res/' in path and Path(path).stem in BRANDING_ASSETS):
+        return True
+    if any(part in path for part in ('/design/theme/', '/res/ui/about/', '/res/ui/theme/')):
+        return True
     sensitive_screen=re.match(
         r'^ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/'
-        r'(authentication|walletbackup|restore|onboarding|exportvk|exportdata|deletewallet|tor|'
+        r'(authentication|walletbackup|restore|onboarding|about|theme|exportvk|exportdata|deletewallet|tor|'
         r'chooseserver|send|pay|swap|reviewtransaction|transactionprogress|receive|request|qrcode|'
         r'scan|signkeystonetransaction|connecthw|connectkeystone|scankeystone|selectkeystoneaccount|'
         r'choosehwwallet|ironwood|advancedsettings)/',path)

@@ -14,6 +14,8 @@ jobs:
           fetch-depth: 0
       - name: Fee and authentication regression simulations
         run: python3 .private/test_controls.py
+      - name: Product branding and compatibility exceptions
+        run: python3 -B .private/test_branding.py
       - name: Simulated stable update and incompatible-change checks
         run: python3 .private/test_sync.py
       - name: Test push delivery acceptance

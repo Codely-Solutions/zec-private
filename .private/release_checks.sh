@@ -3,11 +3,7 @@
 set -euo pipefail
 chmod +x gradlew
 tasks=(:app:privateRuntimeInventory :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease)
-init=(-I .private/runtime-inventory.gradle -I .private/robolectric-ci.gradle -I .private/release-analysis.gradle)
-if [[ "${BUILD_EMULATOR:-false}" == true ]]; then
-  init+=(-I .private/tor-ui-abi.gradle)
-  tasks+=(:app:assembleZcashmainnetFossDebug)
-fi
+init=(-I .private/runtime-inventory.gradle -I .private/robolectric-ci.gradle -I .private/release-analysis.gradle -I .private/task-timing.gradle)
 start=$(date +%s)
 ./gradlew "${init[@]}" --profile --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process "${tasks[@]}"
 python3 .private/check_exclusions.py artifact/runtime.json

@@ -29,5 +29,11 @@
     "img_keystone_promo",
     "https://zodl.com/privacy-policy/",
     "https://play.google.com/store/apps/details?id=co.electriccoin.zcash"
+  ],
+  "forbidden_asset_stems": [
+    "img_keystone_promo",
+    "ic_integrations_coinbase",
+    "ic_integrations_coinbase_disabled",
+    "ic_launcher-playstore"
   ]
 }

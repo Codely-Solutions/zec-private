@@ -7,6 +7,40 @@ from apk_architecture import check_apk
 
 
 class PackagingTests(unittest.TestCase):
+    def test_candidate_variants_are_independent_and_promotion_builds_neither(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / '.github/workflows/build-release.yml').read_text()
+        production = workflow.split('  unsigned:\n', 1)[1].split('  emulator:\n', 1)[0]
+        emulator = workflow.split('  emulator:\n', 1)[1].split('  promotion:\n', 1)[0]
+        publish = workflow.split('  publish:\n', 1)[1].split('  failed:\n', 1)[0]
+        for job in (production, emulator):
+            self.assertIn('!inputs.candidate_run', job)
+            self.assertIn('ref: ${{ inputs.source_sha || github.sha }}', job)
+            self.assertNotIn('secrets.', job)
+            self.assertNotIn('needs:', job)
+        self.assertIn('inputs.build_emulator', emulator)
+        self.assertIn('name: isolated-ui-repro-apk', emulator)
+        self.assertNotIn('isolated-ui-repro-apk', production)
+        self.assertIn("!inputs.build_emulator || needs.emulator.result == 'success'", publish)
+        self.assertIn('needs: [unsigned, emulator, promotion]', publish)
+        self.assertIn("needs.emulator.result == 'failure'", workflow.split('  failed:\n', 1)[1])
+        release = (root / '.private/release_checks.sh').read_text()
+        debug = (root / '.private/emulator_checks.sh').read_text()
+        self.assertNotIn('FossDebug', release)
+        self.assertNotIn('BUILD_EMULATOR', release)
+        self.assertEqual(1, release.count('./gradlew '))
+        self.assertEqual(1, debug.count('./gradlew '))
+        self.assertIn(':app:assembleZcashmainnetFossRelease', release)
+        self.assertIn(':ui-lib:testZcashmainnetFossReleaseUnitTest', release)
+        self.assertIn(':app:assembleZcashmainnetFossDebug', debug)
+        self.assertNotIn('FossRelease', debug)
+        self.assertIn('source-sha.txt', debug)
+        self.assertIn('SHA256SUMS', debug)
+        for script in (release, debug):
+            self.assertIn('-I .private/task-timing.gradle', script)
+        self.assertIn('artifact/task-timing.jsonl', production)
+        self.assertIn('artifact/task-timing.jsonl', emulator)
+
     def test_release_rejects_extra_abis_and_missing_engine(self):
         with tempfile.TemporaryDirectory() as temporary:
             apk = Path(temporary) / 'fixture.apk'

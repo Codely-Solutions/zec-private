@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "normalization": "NFC Unicode; concatenate XML element text and descendant text; collapse whitespace to single spaces; SHA256 UTF-8. Android literal backslash escapes remain literal.",
+  "exceptions": [
+    {
+      "path": "ui-design-lib/src/main/res/ui/common/values/strings.xml",
+      "type": "string",
+      "name": "about_description",
+      "sha256": "265de273c524aad5e371810befcc91a3503ab80446aadd2c9cd33536f629bf62",
+      "reason": "Required attribution identifying the upstream open-source wallet; does not claim upstream operation or support."
+    },
+    {
+      "path": "ui-design-lib/src/main/res/ui/common/values/strings.xml",
+      "type": "string",
+      "name": "keystone_addHWWallet_step4",
+      "sha256": "fb0e718334dc050d5aef4ed15c3be5e1b7d03f7b093273e200fab390a9de9a52",
+      "reason": "Actual Keystone firmware companion-app label required for compatible hardware pairing."
+    },
+    {
+      "path": "ui-design-lib/src/main/res/ui/common/values-es/strings.xml",
+      "type": "string",
+      "name": "about_description",
+      "sha256": "fced042b2ea0f99f0f702f9ea19a03a930b927cc7b33eb034013bd661b9a9490",
+      "reason": "Required attribution identifying the upstream open-source wallet; does not claim upstream operation or support."
+    },
+    {
+      "path": "ui-design-lib/src/main/res/ui/common/values-es/strings.xml",
+      "type": "string",
+      "name": "keystone_addHWWallet_step4",
+      "sha256": "74b4af4ab7e3b6a44c9d0f4b2a6d735fdcb09555b3f0a861178e429db447de2c",
+      "reason": "Actual Keystone firmware companion-app label required for compatible hardware pairing."
+    },
+    {
+      "path": "ui-lib/src/main/res/ui/non_translatable/values/strings.xml",
+      "type": "string",
+      "name": "app_name",
+      "sha256": "001e6a3766608b777b80480cf863382586e429f66f4e9b96d1dcac4229a759eb",
+      "reason": "Internal ui-lib fallback zashi-ui; FOSS application resources override this label in the APK."
+    }
+  ]
+}
