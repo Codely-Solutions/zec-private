@@ -346,9 +346,16 @@ class CoreWalletAcceptance {
             dependency<TransactionRepository>().observeTransaction(state.getString("txId"))
                 .filterNotNull().first { it is SendTransaction.Success }
         }
-        check(transaction.amount.value == 1_000_000L)
-        check(transaction.recipient == state.getString("recipientAddress"))
         val fee = checkNotNull(transaction.fee).value
+        // SDK netValue is abs(accountBalanceDelta), including the fee. The
+        // freshly restored recipient independently verifies the payment itself.
+        val recipientMatches = transaction.recipient == state.getString("recipientAddress")
+        println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
+            .put("sender_debit_zatoshi",transaction.amount.value).put("fee_zatoshi",fee)
+            .put("recipient_matches",recipientMatches)
+            .put("mined_height",transaction.overview.minedHeight?.value))
+        check(transaction.amount.value == 1_000_000L + fee)
+        check(recipientMatches)
         check(fee > 0)
         withTimeout(120_000) {
             while (balance() != state.getLong("balanceBeforeSend") - 1_000_000L - fee) delay(2_000)
