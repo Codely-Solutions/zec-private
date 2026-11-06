@@ -4572,7 +4572,7 @@ index 84d9fd0c0..000000000
 -    DISABLED
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
-index 76c590a49..a810e560e 100644
+index 76c590a49..4ed8f617b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 @@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -4598,7 +4598,7 @@ index 76c590a49..a810e560e 100644
 @@ -115 +118 @@ class RequestSwapQuoteUseCase(
 -            createProposal = false,
 +            funding = ZecSwapComposition.funding(FLEX_INPUT),
-@@ -119,0 +123,8 @@ class RequestSwapQuoteUseCase(
+@@ -119,0 +123,25 @@ class RequestSwapQuoteUseCase(
 +    private suspend fun requestFreshAddress(): String? =
 +        try {
 +            accountDataSource.requestNextShieldedAddress(requireFresh = true)
@@ -4607,12 +4607,30 @@ index 76c590a49..a810e560e 100644
 +            null
 +        }
 +
-@@ -123 +134 @@ class RequestSwapQuoteUseCase(
++    private suspend fun rejectUnsupportedFunding(
++        funding: FundingCapability,
++        canNavigate: () -> Boolean
++    ): Boolean {
++        if (funding != FundingCapability.LOCAL_TRANSACTION || accountDataSource.getSelectedAccount().isSpendable) {
++            return false
++        }
++        if (canNavigate()) {
++            swapRepository.clearQuote()
++            zashiProposalRepository.clear()
++            keystoneProposalRepository.clear()
++            ledgerProposalPipeline.clear()
++            navigateToErrorUseCase(ErrorArgs.General(AccountOperationUnsupportedException.viewOnly()))
++        }
++        return true
++    }
++
+@@ -123 +151 @@ class RequestSwapQuoteUseCase(
 -        createProposal: Boolean,
 +        funding: FundingCapability,
-@@ -139 +150,13 @@ class RequestSwapQuoteUseCase(
+@@ -139 +167,14 @@ class RequestSwapQuoteUseCase(
 -        if (result is SwapQuoteData.Success && createProposal) {
 +        if (result is SwapQuoteData.Success) {
++            if (rejectUnsupportedFunding(funding, canNavigateToSwapQuote)) return@withContext
 +            try {
 +                ZecSwapComposition.validate(result.quote)
 +            } catch (e: IllegalArgumentException) {
