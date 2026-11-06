@@ -1,12 +1,37 @@
 {
-  "phase": 1,
-  "forbidden_runtime_groups": ["co.flexa"],
-  "forbidden_projects": ["feature-voting"],
-  "forbidden_source_packages": ["com.flexa", "co.electriccoin.zcash.voting", "co.electriccoin.zcash.ui.screen.flexa", "co.electriccoin.zcash.ui.screen.feedback", "co.electriccoin.zcash.ui.screen.whatsnew"],
+  "phase": 2,
+  "forbidden_runtime_groups": [
+    "co.flexa"
+  ],
+  "forbidden_projects": [
+    "feature-voting"
+  ],
+  "forbidden_source_packages": [
+    "com.flexa",
+    "co.electriccoin.zcash.voting",
+    "co.electriccoin.zcash.ui.screen.flexa",
+    "co.electriccoin.zcash.ui.screen.feedback",
+    "co.electriccoin.zcash.ui.screen.whatsnew"
+  ],
   "compatibility_exceptions": [
     "Shared voting contracts have inert bindings so retained Home lifecycle composition remains intact; no voting implementation or navigation contributor is loaded.",
     "Historical voting preferences and records are not erased. The shared Zcash SDK may retain its own voting APIs.",
     "Ironwood funds-migration announcement, activation logic, warnings and migration feature remain operational safety functions.",
-    "What’s New opens fork releases; generic error/support reporting remains available."
+    "What\u2019s New opens fork releases; generic error/support reporting remains available.",
+    "Gift Zodl/Vizor formats, secret detection, SDK/type/storage names and hardware firmware app label are retained compatibility identifiers.",
+    "Required upstream copyright/license attribution remains; fork policy and guidance replace upstream product destinations.",
+    "Gift Zodl/Vizor formats, secret detection, SDK/type/storage names and hardware firmware app label are retained compatibility identifiers.",
+    "Required upstream copyright/license attribution remains; fork policy and guidance replace upstream product destinations.",
+    "Gift Zodl/Vizor formats, secret detection, SDK/type/storage names and hardware firmware app label are retained compatibility identifiers.",
+    "Required upstream copyright/license attribution remains; fork policy and guidance replace upstream product destinations."
+  ],
+  "forbidden_product_markers": [
+    "discount=Zodl",
+    "KEYSTONE_PROMO_URL",
+    "KeystonePromoState",
+    "hwWallet_promo_",
+    "img_keystone_promo",
+    "https://zodl.com/privacy-policy/",
+    "https://play.google.com/store/apps/details?id=co.electriccoin.zcash"
   ]
 }

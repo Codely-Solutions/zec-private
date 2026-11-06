@@ -6,5 +6,5 @@
     <string name="ironwood_announcement_body_3">You can move them now. We recommend the private option: it splits your balance into smaller transfers that send automatically in the background over time, so they\'re harder to link to you. Or move everything at once in a single transfer.</string>
     <string name="ironwood_announcement_body_guide">Not sure which to choose? Our guide explains both options.</string>
     <string name="ironwood_announcement_body_guide_link">Our guide</string>
-    <string name="ironwood_announcement_primary_button">Go to Zodl</string>
+    <string name="ironwood_announcement_primary_button">Go to ZEC Private</string>
 </resources>

@@ -4,15 +4,15 @@
     <!-- Ledger connect steps -->
     <string name="ledger_flow_title">Connect Your Ledger</string>
     <string name="ledger_flow_step">Step %1$d of %2$d</string>
-    <string name="ledger_intro_message">Pair your Ledger with Zodl over Bluetooth in 4 quick steps.</string>
+    <string name="ledger_intro_message">Pair your Ledger with ZEC Private over Bluetooth in 4 quick steps.</string>
     <string name="ledger_intro_step1_title">Turn on and unlock</string>
     <string name="ledger_intro_step1_message">Enter your PIN and stay on the home screen.</string>
     <string name="ledger_intro_step2_title">Select your Ledger</string>
     <string name="ledger_intro_step2_message">Choose it from the list, then check that the pairing codes match.</string>
     <string name="ledger_intro_step3_title">Open the Zcash app</string>
-    <string name="ledger_intro_step3_message">Zodl asks your Ledger to open it. Confirm on the device.</string>
+    <string name="ledger_intro_step3_message">ZEC Private asks your Ledger to open it. Confirm on the device.</string>
     <string name="ledger_intro_step4_title">Approve on your Ledger</string>
-    <string name="ledger_intro_step4_message">Allow Zodl to view your Zcash account.</string>
+    <string name="ledger_intro_step4_message">Allow ZEC Private to view your Zcash account.</string>
     <string name="ledger_intro_callout_title">Keep It Close</string>
     <string name="ledger_intro_callout_message">Keep your Ledger near your phone until setup is done.</string>
     <string name="ledger_intro_cta">Get Started</string>
@@ -22,7 +22,7 @@
     <string name="ledger_connect_turnOn_check2">Bluetooth is on for your phone</string>
     <string name="ledger_connect_turnOn_check3">Your Ledger is near your phone</string>
     <string name="ledger_connect_turnOn_callout_title">Don’t Open the Zcash App Yet</string>
-    <string name="ledger_connect_turnOn_callout_message">Pairing works best from the home screen. Zodl opens the Zcash app for you in step 3.</string>
+    <string name="ledger_connect_turnOn_callout_message">Pairing works best from the home screen. ZEC Private opens the Zcash app for you in step 3.</string>
     <string name="ledger_connect_continue">Continue</string>
     <string name="ledger_openApp_title">Open the Zcash App</string>
     <string name="ledger_openApp_message">Confirm on your Ledger to open the Zcash app.</string>
@@ -31,9 +31,9 @@
     <string name="ledger_openApp_callout_title">Don’t Have the Zcash App?</string>
     <string name="ledger_openApp_callout_message">Install it from My Ledger in Ledger Wallet, then come back.</string>
     <string name="ledger_handshake_title">Approve on Your Ledger</string>
-    <string name="ledger_handshake_message">Your Ledger will ask to share your Zcash account with Zodl. Check the request and approve it.</string>
+    <string name="ledger_handshake_message">Your Ledger will ask to share your Zcash account with ZEC Private. Check the request and approve it.</string>
     <string name="ledger_handshake_callout_title">Your Recovery Phrase Stays Safe</string>
-    <string name="ledger_handshake_callout_message">Zodl only gets what it needs to show your balance and prepare payments. Every payment still needs your approval on your Ledger.</string>
+    <string name="ledger_handshake_callout_message">ZEC Private only gets what it needs to show your balance and prepare payments. Every payment still needs your approval on your Ledger.</string>
 
     <!-- Device scan and selection -->
     <string name="ledger_scan_searching_title">Searching for Devices...</string>
@@ -72,12 +72,12 @@
     <string name="ledger_error_unavailable_inlineTitle">Bluetooth unavailable on your device</string>
     <string name="ledger_error_unavailable_cta">Close</string>
     <string name="ledger_error_permissions_title">Bluetooth Access Required</string>
-    <string name="ledger_error_permissions_message">Zodl needs Bluetooth access to connect to your Ledger. Turn on Bluetooth in Settings to continue.</string>
-    <string name="ledger_error_permissions_inlineTitle">Zodl needs Bluetooth access to connect to your Ledger.</string>
+    <string name="ledger_error_permissions_message">ZEC Private needs Bluetooth access to connect to your Ledger. Turn on Bluetooth in Settings to continue.</string>
+    <string name="ledger_error_permissions_inlineTitle">ZEC Private needs Bluetooth access to connect to your Ledger.</string>
     <string name="ledger_error_permissions_inlineMessage">Turn on Bluetooth in Settings to continue.</string>
     <string name="ledger_error_permissions_cta">Open System Settings</string>
     <string name="ledger_error_alreadyAdded_title">Account Already Added</string>
-    <string name="ledger_error_alreadyAdded_message">This account is already connected to Zodl.</string>
+    <string name="ledger_error_alreadyAdded_message">This account is already connected to ZEC Private.</string>
     <string name="ledger_error_alreadyAdded_primary">Go to Account</string>
     <string name="ledger_error_alreadyAdded_secondary">Cancel</string>
     <string name="ledger_error_bluetoothOff_title">Bluetooth Off</string>
@@ -92,8 +92,8 @@
     <string name="ledger_error_restartApp_title">Restart the Zcash App</string>
     <string name="ledger_error_restartApp_message">Close and reopen the Zcash app on your Ledger, then try again.</string>
     <string name="ledger_error_unknown_title">Something Went Wrong</string>
-    <string name="ledger_error_unknown_message">Zodl couldn’t connect to your Ledger. Make sure it’s unlocked and nearby, then try again.</string>
-    <string name="ledger_error_unknown_inlineMessage">Zodl couldn’t connect to your Ledger.\nMake sure it’s unlocked and nearby, then try again.</string>
+    <string name="ledger_error_unknown_message">ZEC Private couldn’t connect to your Ledger. Make sure it’s unlocked and nearby, then try again.</string>
+    <string name="ledger_error_unknown_inlineMessage">ZEC Private couldn’t connect to your Ledger.\nMake sure it’s unlocked and nearby, then try again.</string>
 
     <!-- Signing sheet -->
     <string name="ledger_sign_title">Confirm Transaction</string>

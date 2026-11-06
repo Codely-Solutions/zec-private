@@ -18,7 +18,6 @@ import co.electriccoin.zcash.ui.common.usecase.SelectWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyNavigator
 import co.electriccoin.zcash.ui.design.util.ImageResource
-import co.electriccoin.zcash.ui.screen.ExternalUrl
 import co.electriccoin.zcash.ui.screen.accountlist.options.WalletOptionsArgs
 import co.electriccoin.zcash.ui.screen.editaccount.EditAccountArgs
 import kotlinx.coroutines.flow.StateFlow
@@ -58,7 +57,6 @@ class AccountListVM(
             viewOnlyLabel = viewOnlyContent.topBarSubtitle,
             addAccountText = viewOnlyContent.addAccountButton,
             addAccountIcon = viewOnlyContent.addAccountButtonIcon,
-            onKeystonePromoClick = ::onKeystonePromoClick,
             onAddAccountClick = ::onAddAccountClick,
             onBack = ::onBack,
         )
@@ -133,12 +131,6 @@ class AccountListVM(
         { navigationRouter.forward(EditAccountArgs(accountKeyId = accountUuid.toStorageKeyId())) }
 
     /**
-     * Opens the Keystone shop in the in-app browser on top of this screen, so closing the browser
-     * returns to the wallet list.
-     */
-    private fun onKeystonePromoClick() = navigationRouter.forward(ExternalUrl(KEYSTONE_PROMO_URL))
-
-    /**
      * Opens the "Add Account" options, which offer a hardware wallet only while a vendor is still
      * unconnected and always offer importing a viewing key.
      */
@@ -146,7 +138,4 @@ class AccountListVM(
 
     private fun onBack() = navigationRouter.back()
 
-    companion object {
-        const val KEYSTONE_PROMO_URL = "https://keyst.one/shop/products/keystone-3-pro?discount=Zodl"
-    }
 }

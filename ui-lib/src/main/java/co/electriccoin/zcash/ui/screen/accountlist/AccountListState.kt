@@ -17,18 +17,15 @@ import co.electriccoin.zcash.ui.design.util.stringResByNumber
 
 /**
  * The full-screen "Wallets & Hardware" account selector: the wallets grouped into Zodl, Keystone,
- * Ledger and view-only sections, the Keystone promo while no Keystone is connected, and the "Add
- * Account" call to action.
+ * Ledger and view-only sections, and the "Add Account" call to action.
  *
  * @param sections Null while the accounts are loading.
- * @param keystonePromo Null while loading or once a Keystone account is connected.
  * @param addAccountButton Null while the accounts are loading.
  */
 @Immutable
 data class AccountListState(
     val title: StringResource,
     val sections: List<AccountListSectionState>?,
-    val keystonePromo: KeystonePromoState?,
     val addAccountButton: ButtonState?,
     val onBack: () -> Unit,
 ) {
@@ -112,7 +109,6 @@ data class AccountListState(
             viewOnlyLabel: StringResource,
             addAccountText: StringResource,
             @DrawableRes addAccountIcon: Int,
-            onKeystonePromoClick: () -> Unit,
             onAddAccountClick: () -> Unit,
             onBack: () -> Unit,
         ) = AccountListState(
@@ -138,13 +134,6 @@ data class AccountListState(
                         }
                     }
                 },
-            keystonePromo =
-                KeystonePromoState(
-                    title = stringRes(co.electriccoin.zcash.ui.R.string.hwWallet_promo_title),
-                    message = stringRes(co.electriccoin.zcash.ui.R.string.hwWallet_promo_message),
-                    image = imageRes(co.electriccoin.zcash.ui.R.drawable.img_keystone_promo),
-                    onClick = onKeystonePromoClick,
-                ).takeIf { entries != null && entries.none { it.kind == AccountListKind.KEYSTONE } },
             addAccountButton =
                 ButtonState(
                     text = addAccountText,
@@ -229,7 +218,6 @@ data class AccountListState(
                 viewOnlyLabel = stringRes("View Only"),
                 addAccountText = stringRes("Add Account"),
                 addAccountIcon = co.electriccoin.zcash.ui.R.drawable.ic_address_book_plus,
-                onKeystonePromoClick = {},
                 onAddAccountClick = {},
                 onBack = {},
             )
@@ -240,7 +228,7 @@ data class AccountListState(
         ) = AccountListEntry(
             kind = AccountListKind.ZODL,
             icon = imageRes(R.drawable.ic_item_zashi),
-            name = stringRes("Zodl"),
+            name = stringRes("ZEC Private"),
             balance = balance,
             isSelected = isSelected,
             onClick = {},
@@ -300,27 +288,6 @@ data class AccountListSectionState(
     val count: StringResource?,
     val items: List<WalletListItemState>,
 )
-
-/**
- * The Keystone shop card, shown while no Keystone account is connected.
- */
-@Immutable
-data class KeystonePromoState(
-    val title: StringResource,
-    val message: StringResource,
-    val image: ImageResource,
-    val onClick: () -> Unit,
-)
-
-/**
- * The section a wallet belongs to, in the order the sections appear.
- */
-enum class AccountListKind {
-    ZODL,
-    KEYSTONE,
-    LEDGER,
-    VIEW_ONLY
-}
 
 /**
  * One wallet as [AccountListState.create] needs it.

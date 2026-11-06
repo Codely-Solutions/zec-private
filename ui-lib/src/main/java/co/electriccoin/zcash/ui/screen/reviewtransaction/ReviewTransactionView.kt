@@ -559,7 +559,7 @@ private fun ColoredSenderPreview() =
                                         background = Color(PREVIEW_COLOR),
                                         foreground = ImageResource.ByDrawable(R.drawable.ic_item_zodl_glyph)
                                     ),
-                                name = stringRes("Zodl"),
+                                name = stringRes("ZEC Private"),
                             ),
                             FinancialInfoState(
                                 title = stringRes("Fee"),

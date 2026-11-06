@@ -70,18 +70,15 @@
     <string name="walletBirthdayHeightSubtitle">Ingresar la Altura de Cumpleaños de tu billetera nos permite mostrar correctamente todos tus fondos e historial de transacciones.</string>
     <string name="restoreWallet_birthday_estimateDate_title">Primera Transacción de Billetera</string>
     <string name="restoreWallet_birthday_estimated_title">Altura de Bloque Estimada</string>
-    <string name="restoreWallet_birthday_estimated_info">ZODL escaneará y recuperará todas las transacciones realizadas después del siguiente número de bloque.</string>
+    <string name="restoreWallet_birthday_estimated_info">ZEC Private escaneará y recuperará todas las transacciones realizadas después del siguiente número de bloque.</string>
 
     <!-- ===== about ===== -->
     <string name="about_title">Acerca de</string>
-    <string name="about_subtitle">Presentando Zodl</string>
+    <string name="about_subtitle">Presentando ZEC Private</string>
     <string name="about_overflow_menu_content_description">Más opciones</string>
-    <string name="whatsNew_version" formatted="true">Versión de Zodl <xliff:g example="1" id="version">%s</xliff:g></string>
-    <string name="about_debug_menu_app_name">Nombre de la app:<xliff:g example="Zodl" id="app_name">%1$s</xliff:g></string>
+    <string name="about_debug_menu_app_name">Nombre de la app:<xliff:g example="ZEC Private" id="app_name">%1$s</xliff:g></string>
     <string name="about_debug_menu_build">Compilación: <xliff:g example="635dac0eb9ddc2bc6da5177f0dd495d8b76af4dc" id="git_commit_hash">%1$s</xliff:g></string>
-    <string name="about_description">Zodl es una wallet móvil impulsada por Zcash, creada para pagos privados imparables.
-        Está optimizada para almacenar y usar en el mundo real $ZEC protegido: la criptomoneda verdaderamente privada.\n\nDesarrollada por el equipo que estableció el estándar de la industria en privacidad en cadena (on-chain), los desarrolladores originales del protocolo Zcash.
-    </string>
+    <string name="about_description">ZEC Private es una bifurcación independiente de una billetera Zcash para pagos protegidos.\n\nBasada en la billetera de código abierto Zodl. Se conservan los avisos de derechos de autor y licencias en el código fuente y los avisos de dependencias.</string>
     <string name="about_termsOfUse">Términos del Servicio</string>
     <string name="about_unable_to_web_browser">No se pudo encontrar una aplicación de navegador web.</string>
     <string name="about_privacyPolicy">Política de privacidad</string>
@@ -89,14 +86,12 @@
     <!-- ===== account_list ===== -->
     <string name="hwWallet_drawer_title">Billeteras y Dispositivos</string>
     <string name="hwWallet_connect">Conectar Billetera de Hardware</string>
-    <string name="hwWallet_section_zodl">Billetera Zodl</string>
+    <string name="hwWallet_section_zodl">Billetera ZEC Private</string>
     <string name="hwWallet_section_keystone">Billetera Keystone</string>
     <string name="hwWallet_section_keystone_plural">Billeteras Keystone</string>
     <string name="hwWallet_section_ledger">Billetera Ledger</string>
     <string name="hwWallet_section_ledger_plural">Billeteras Ledger</string>
     <string name="hwWallet_walletOptions_contentDescription">Opciones de %1$s</string>
-    <string name="hwWallet_promo_title">Billetera de hardware Keystone</string>
-    <string name="hwWallet_promo_message">Obtén un 5%% de descuento en una billetera de hardware aislada. Código promocional “Zodl”.</string>
     <string name="hwWallet_options_title">Opciones de billetera</string>
     <string name="hwWallet_options_disconnect_title">Desconectar billetera de hardware</string>
     <string name="hwWallet_options_disconnect_keystone">Desvincula tu dispositivo Keystone.</string>
@@ -118,14 +113,14 @@
 
     <!-- ===== advanced_settings ===== -->
     <string name="settings_advanced">Configuración avanzada</string>
-    <string name="settings_recoveryPhrase">Frase de recuperación de Zodl</string>
+    <string name="settings_recoveryPhrase">Frase de recuperación de ZEC Private</string>
     <string name="settings_exportPrivateData">Exportar datos privados</string>
     <string name="settings_chooseServer">Elegir un servidor</string>
     <string name="settings_private">Protección con Tor</string>
     <string name="currencyConversion_title">Conversión de Moneda</string>
     <string name="advanced_settings_crash_reporting">Reporte de fallos</string>
     <string name="settings_deleteZashiWarning">Se te pedirá confirmación en la siguiente pantalla</string>
-    <string name="settings_deleteZashi">Restablecer Zodl</string>
+    <string name="settings_deleteZashi">Restablecer ZEC Private</string>
     <string name="taxExport_taxFile">Exportar archivo fiscal</string>
     <string name="resyncWallet_title">Resincronizar Billetera</string>
     <string name="disconnect_hardware_wallet_biometric_message">Confirma para desconectar tu hardware wallet</string>
@@ -137,8 +132,8 @@
     <string name="disconnectHWWallet_bullet3">Transacciones revertidas posteriormente en una reorganización de cadena</string>
     <string name="keystoneHW">Hardware Keystone</string>
     <string name="currentlyConnected">Conectado actualmente</string>
-    <string name="connectedHWInfo">Si desconectas ahora, tu Keystone dejará de estar vinculado con tu billetera Zodl.</string>
-    <string name="connectedHWInfo_ledger">Si desconectas ahora, tu Ledger dejará de estar vinculado con tu billetera Zodl.</string>
+    <string name="connectedHWInfo">Si desconectas ahora, tu Keystone dejará de estar vinculado con tu billetera ZEC Private.</string>
+    <string name="connectedHWInfo_ledger">Si desconectas ahora, tu Ledger dejará de estar vinculado con tu billetera ZEC Private.</string>
     <string name="disconnectHWWallet_title">Desconectar</string>
     <string name="disconnectHWWallet_button">Desconectar</string>
     <string name="disconnectHWWallet_sheetDesc">Desconectar el hardware wallet no se puede deshacer.</string>
@@ -147,7 +142,7 @@
 
     <!-- ===== authentication ===== -->
     <string name="authentication_system_ui_title">
-        Autenticación para <xliff:g id="app_name" example="Zodl">%1$s</xliff:g>
+        Autenticación para <xliff:g id="app_name" example="ZEC Private">%1$s</xliff:g>
     </string>
     <string name="authentication_system_ui_subtitle">
         Usa biometría o credenciales del dispositivo para acceder a <xliff:g id="use_case" example="Frase de Recuperación">%1$s</xliff:g>.
@@ -173,8 +168,8 @@
         La autenticación fue presentada pero no reconocida. Intenta nuevamente o contacta al equipo de soporte para obtener ayuda.
     </string>
     <string name="disconnectHWWallet_contactSupport">Contactar Soporte</string>
-    <string name="authentication_failed_welcome_icon_cont_desc">Toca para desbloquear la aplicación <xliff:g id="app_name" example="Zodl">%1$s</xliff:g></string>
-    <string name="splash_authTitle">Tu cuenta de Zodl está protegida.</string>
+    <string name="authentication_failed_welcome_icon_cont_desc">Toca para desbloquear la aplicación <xliff:g id="app_name" example="ZEC Private">%1$s</xliff:g></string>
+    <string name="splash_authTitle">Tu cuenta de ZEC Private está protegida.</string>
     <string name="authentication_failed_welcome_subtitle">Toca el ícono de la llave para desbloquearla.</string>
 
     <!-- ===== balances ===== -->
@@ -235,7 +230,7 @@
     <string name="keystone_addHWWallet_howTo">Instrucciones:</string>
     <string name="keystone_addHWWallet_readyToScan">Listo para Escanear</string>
     <string name="keystone_addHWWallet_deviceQuestion">¿Dispositivo Nuevo o Activo?</string>
-    <string name="keystone_addHWWallet_deviceDesc">Conectarte a un hardware wallet que ya estuvo vinculado a Zodl requerirá sincronización para descubrir tu historial de transacciones. Te guiaremos en el proceso.</string>
+    <string name="keystone_addHWWallet_deviceDesc">Conectarte a un hardware wallet que ya estuvo vinculado a ZEC Private requerirá sincronización para descubrir tu historial de transacciones. Te guiaremos en el proceso.</string>
     <string name="keystone_addHWWallet_connectNew">Conectar dispositivo nuevo</string>
     <string name="keystone_addHWWallet_connectActive">Conectar dispositivo activo</string>
     <string name="keystone_addHWWallet_connected">¡Conectado!</string>
@@ -271,23 +266,23 @@
     <string name="swapAndPay_addressBookSelectChain">Seleccionar cadena</string>
 
     <!-- ===== crash_reporting_opt_in ===== -->
-    <string name="crash_reporting_opt_in_title">Ayuda a Mejorar Zodl</string>
+    <string name="crash_reporting_opt_in_title">Ayuda a Mejorar ZEC Private</string>
     <string name="crash_reporting_opt_in_subtitle">Los reportes de fallos son una herramienta esencial para que los desarrolladores mejoren la calidad y confiabilidad de las aplicaciones. Son muy útiles en la práctica para ayudar a corregir errores que provocan cierres inesperados.</string>
     <string name="crash_reporting_opt_in_info">Nota: Los reportes de fallos incluyen información sobre la versión de la app, la hora en que ocurrió el fallo y la traza del error, lo cual permite identificar en qué parte de la app ocurrió el problema. Los datos recopilados están completamente anonimizados.</string>
-    <string name="crash_reporting_opt_in_positive_desc">Compartir reportes de fallos con los desarrolladores de Zodl.</string>
-    <string name="crash_reporting_opt_in_negative_desc">No compartir reportes de fallos con los desarrolladores de Zodl.</string>
+    <string name="crash_reporting_opt_in_positive_desc">Compartir reportes de fallos con los desarrolladores de ZEC Private.</string>
+    <string name="crash_reporting_opt_in_negative_desc">No compartir reportes de fallos con los desarrolladores de ZEC Private.</string>
     <string name="currencyConversion_saveBtn">Guardar cambios</string>
 
     <!-- ===== delete_wallet ===== -->
-    <string name="deleteWallet_title">Restablecer Zodl</string>
+    <string name="deleteWallet_title">Restablecer ZEC Private</string>
     <string name="deleteWallet_message2">Asegúrate de haber guardado tanto tu frase de recuperación secreta como la altura de cumpleaños de la billetera antes de continuar.</string>
-    <string name="delete_wallet_text_2">Restablecer la aplicación Zodl eliminará la base de datos y los datos en
+    <string name="delete_wallet_text_2">Restablecer la aplicación ZEC Private eliminará la base de datos y los datos en
         caché de la aplicación, además de desconectar todas las billeteras de hardware conectadas.</string>
-    <string name="deleteWallet_message4">Una vez que restablezcas Zodl, la única forma de acceder a tus fondos será mediante un proceso de restauración de billetera que requiere tu Frase de Recuperación de Zodl y la Altura de Cumpleaños de la Billetera.</string>
+    <string name="deleteWallet_message4">Una vez que restablezcas ZEC Private, la única forma de acceder a tus fondos será mediante un proceso de restauración de billetera que requiere tu Frase de Recuperación de ZEC Private y la Altura de Cumpleaños de la Billetera.</string>
     <string name="deleteWallet_metadataWarn1">Conserva la copia de seguridad cifrada de los metadatos, que incluye contactos, notas, marcadores y detalles de intercambios/pagos.</string>
     <string name="deleteWallet_metadataWarn2">Estos datos no se podrán recuperar durante la restauración.</string>
     <string name="deleteWallet_sheet_msg">Restablecer la app no se puede deshacer. Necesitarás restaurar tu billetera usando tu frase secreta de recuperación.</string>
-    <string name="deleteWallet_actionButtonTitle">Restablecer Zodl</string>
+    <string name="deleteWallet_actionButtonTitle">Restablecer ZEC Private</string>
     <string name="delete_wallet_failed">Error al eliminar la billetera. Inténtalo nuevamente, por favor.</string>
 
     <!-- ===== error ===== -->
@@ -306,7 +301,7 @@
 
     <!-- ===== exchange_rate ===== -->
     <string name="currencyConversion_ipTitle">Protección de dirección IP</string>
-    <string name="currencyConversion_ipDesc">La función de conversión de moneda de Zodl no compromete tu dirección IP.</string>
+    <string name="currencyConversion_ipDesc">La función de conversión de moneda de ZEC Private no compromete tu dirección IP.</string>
     <string name="exchange_rate_info_subtitle_1_no_cmc">Las tasas de cambio son obtenidas a travez de Tor para proteger tu dirección IP. Verifica si el uso de Tor esta permitido en tu region.</string>
     <string name="currencyConversion_refresh">Actualización de tasa</string>
     <string name="currencyConversion_refreshDesc">La tasa se actualiza automáticamente y también se puede actualizar manualmente.</string>
@@ -339,21 +334,16 @@
     <string name="privateDataConsent_screenTitle">Exportar Datos</string>
     <string name="privateDataConsent_title">Consentimiento para Exportar Datos Privados</string>
     <string name="export_data_text">
-        Al hacer clic en “Estoy de acuerdo” a continuación, das tu consentimiento para exportar todos los datos privados de tus billeteras, como el historial completo de tus billeteras, incluidas las billeteras de hardware conectadas. Toda la información privada, como notas, montos y direcciones de destinatarios, incluso para tu actividad protegida, será exportada.*\n\nEstos datos privados también permiten la capacidad de ver ciertas acciones futuras que realices con Zodl.\n\nCompartir estos datos privados es irrevocable: una vez que hayas compartido estos datos privados con alguien, no hay forma de revocar su acceso.\n\n*Ten en cuenta que estos datos privados no les dan la capacidad de gastar tus fondos, solo la posibilidad de ver lo que haces con ellos.
+        Al hacer clic en “Estoy de acuerdo” a continuación, das tu consentimiento para exportar todos los datos privados de tus billeteras, como el historial completo de tus billeteras, incluidas las billeteras de hardware conectadas. Toda la información privada, como notas, montos y direcciones de destinatarios, incluso para tu actividad protegida, será exportada.*\n\nEstos datos privados también permiten la capacidad de ver ciertas acciones futuras que realices con ZEC Private.\n\nCompartir estos datos privados es irrevocable: una vez que hayas compartido estos datos privados con alguien, no hay forma de revocar su acceso.\n\n*Ten en cuenta que estos datos privados no les dan la capacidad de gastar tus fondos, solo la posibilidad de ver lo que haces con ellos.
     </string>
-    <string name="privateDataConsent_confirmation">Estoy de acuerdo con las Políticas de Exportación de Datos Privados y la Política de Privacidad de Zodl</string>
-    <string name="export_data_export_data_chooser_title">Compartir datos internos de Zodl con:</string>
+    <string name="privateDataConsent_confirmation">Estoy de acuerdo con las Políticas de Exportación de Datos Privados y la Política de Privacidad de ZEC Private</string>
+    <string name="export_data_export_data_chooser_title">Compartir datos internos de ZEC Private con:</string>
     <string name="export_data_unable_to_share">No se encontró una aplicación con la cual compartir.</string>
     <!-- ===== feedback ===== -->
     <string name="support_header">Soporte</string>
-    <string name="sendFeedback_title">Envíanos tus comentarios</string>
-    <string name="sendFeedback_ratingQuestion">¿Cómo ha sido tu experiencia con Zodl?</string>
-    <string name="sendFeedback_howCanWeHelp">¿En qué podemos ayudarte?</string>
-    <string name="sendFeedback_hcwhPlaceholder">Me gustaría preguntar sobre…</string>
     <string name="support_confirmation_dialog_title">Abrir aplicación de correo</string>
-    <string name="support_confirmation_explanation">Zodl está a punto de abrir tu aplicación de correo con un mensaje prellenado.\n\nAsegúrate de presionar enviar dentro de tu aplicación de correo.</string>
-    <string name="sendFeedback_desc">Por favor, infórmanos sobre cualquier problema que hayas tenido o características que te gustaría ver en el futuro.</string>
-    <string name="support_email_part_1">¿Cómo ha sido tu experiencia con Zodl?\n<xliff:g id="emoji_encoding" example="😍">%1$s</xliff:g> <xliff:g id="emoji_order" example="5">%2$s</xliff:g>/5</string>
+    <string name="support_confirmation_explanation">ZEC Private está a punto de abrir tu aplicación de correo con un mensaje prellenado.\n\nAsegúrate de presionar enviar dentro de tu aplicación de correo.</string>
+    <string name="support_email_part_1">¿Cómo ha sido tu experiencia con ZEC Private?\n<xliff:g id="emoji_encoding" example="😍">%1$s</xliff:g> <xliff:g id="emoji_order" example="5">%2$s</xliff:g>/5</string>
     <string name="support_email_part_2">¿En qué podemos ayudarte?\n%s</string>
 
     <!-- ===== home ===== -->
@@ -364,7 +354,7 @@
     <string name="smartBanner_content_backup_title">Respaldo de la Wallet Requerido</string>
     <string name="smartBanner_content_backup_info">Evita la posible pérdida de fondos</string>
     <string name="smartBanner_content_backup_button">Iniciar</string>
-    <string name="smartBanner_content_disconnected_info">Revisa tu conexión y recarga Zodl</string>
+    <string name="smartBanner_content_disconnected_info">Revisa tu conexión y recarga ZEC Private</string>
     <string name="home_message_transparent_balance_subtitle">%1$s %2$s</string>
     <string name="smartBanner_content_shield_title">Saldo No Protegido</string>
     <string name="smartBanner_content_currencyConversion_info">Activa para mostrar valores fiat</string>
@@ -372,10 +362,10 @@
     <string name="home_message_wallet_updating_title">Actualizando Balance…</string>
     <string name="smartBanner_content_updatingBalance_info">Esperando que se procese la última transacción</string>
     <string name="smartBanner_content_restore_title">Restaurando Wallet • %1$.1f%% Completado</string>
-    <string name="smartBanner_content_restore_info">Mantén Zodl abierto en la pantalla activa del teléfono</string>
+    <string name="smartBanner_content_restore_info">Mantén ZEC Private abierto en la pantalla activa del teléfono</string>
     <string name="smartBanner_content_restore_infoSpendable">Tus fondos están listos para ser utilizados ahora</string>
     <string name="smartBannerContentResyncing">Resincronizando</string>
-    <string name="home_message_resyncing_subtitle">Mantén Zodl abierto en la pantalla activa del teléfono</string>
+    <string name="home_message_resyncing_subtitle">Mantén ZEC Private abierto en la pantalla activa del teléfono</string>
     <string name="home_message_syncing_title">Sincronizando • %1$.1f%% Completado</string>
     <string name="smartBanner_content_sync_info">Tu wallet se está actualizando</string>
     <string name="smartBanner_content_syncingError_title">Error al sincronizar</string>
@@ -393,35 +383,35 @@
     <string name="smartBanner_help_shield_notNow">Ahora no</string>
     <string name="smartBanner_help_shield_doNotShowAgain">No volver a mostrar este mensaje.</string>
     <string name="smartBanner_help_shield_title">Siempre Proteger Fondos Transparentes</string>
-    <string name="smartBanner_help_shield_info1">Para proteger la privacidad del usuario, Zodl no permite gastar %s transparentes. Toca el botón "Proteger" abajo para hacer que tus fondos transparentes sean utilizables y tu balance total en Zodl sea privado.</string>
+    <string name="smartBanner_help_shield_info1">Para proteger la privacidad del usuario, ZEC Private no permite gastar %s transparentes. Toca el botón "Proteger" abajo para hacer que tus fondos transparentes sean utilizables y tu balance total en ZEC Private sea privado.</string>
     <string name="smartBanner_help_shield_info2">Esto creará una transacción de protección dentro de la wallet, consolidando tus fondos transparentes y protegidos. (Comisión típica: %1$s %2$s)</string>
     <string name="smartBanner_content_disconnected_title">Wallet Desconectada</string>
-    <string name="smartBanner_help_diconnected_info">Parece que estás sin conexión. Restaura tu conexión a internet para usar la wallet Zodl.</string>
+    <string name="smartBanner_help_diconnected_info">Parece que estás sin conexión. Restaura tu conexión a internet para usar la wallet ZEC Private.</string>
     <string name="smartBanner_help_restore_title">Restauración de Wallet en Progreso</string>
-    <string name="smartBanner_help_restore_info">Zodl está escaneando la blockchain para recuperar tus transacciones. Restaurar wallets antiguas puede tardar horas. Sigue estos pasos para evitar interrupciones:</string>
-    <string name="home_info_restoring_bullet_1">Mantén la app de Zodl abierta en la pantalla activa del teléfono.</string>
+    <string name="smartBanner_help_restore_info">ZEC Private está escaneando la blockchain para recuperar tus transacciones. Restaurar wallets antiguas puede tardar horas. Sigue estos pasos para evitar interrupciones:</string>
+    <string name="home_info_restoring_bullet_1">Mantén la app de ZEC Private abierta en la pantalla activa del teléfono.</string>
     <string name="home_info_restoring_bullet_2">Para evitar que la pantalla se apague, desactiva el modo de ahorro de energía y mantén tu teléfono cargando.</string>
     <string name="smartBanner_help_restore_warning">Los fondos no pueden usarse hasta que tu wallet esté restaurada.</string>
     <string name="smartBanner_help_resync_title">Resincronización en curso</string>
-    <string name="home_info_resyncing_message">Zodl está escaneando la blockchain para mostrar tus transacciones más recientes y asegurar que tus balances estén correctos. Mantén la app de Zodl abierta en la pantalla activa del teléfono para evitar interrupciones.</string>
+    <string name="home_info_resyncing_message">ZEC Private está escaneando la blockchain para mostrar tus transacciones más recientes y asegurar que tus balances estén correctos. Mantén la app de ZEC Private abierta en la pantalla activa del teléfono para evitar interrupciones.</string>
     <string name="smartBanner_help_sync_title">Sincronización de Wallet en Progreso</string>
-    <string name="smartBanner_help_sync_info">Zodl está escaneando la blockchain para mostrar tus transacciones más recientes y asegurar que tus balances estén correctos. Mantén la app de Zodl abierta en la pantalla activa del teléfono para evitar interrupciones.</string>
+    <string name="smartBanner_help_sync_info">ZEC Private está escaneando la blockchain para mostrar tus transacciones más recientes y asegurar que tus balances estén correctos. Mantén la app de ZEC Private abierta en la pantalla activa del teléfono para evitar interrupciones.</string>
     <string name="smartBanner_help_updatingBalance_title">Actualizando Balance</string>
     <string name="smartBanner_help_updatingBalance_info">Tu última transacción se está minando y confirmando.</string>
-    <string name="crash_report_detail_title">Ayuda a Mejorar Zodl</string>
+    <string name="crash_report_detail_title">Ayuda a Mejorar ZEC Private</string>
     <string name="crash_report_detail_subtitle">Los reportes de fallos son una herramienta esencial para los desarrolladores, utilizada para mejorar la calidad y confiabilidad de las apps. Su único propósito es corregir errores que causan cierres inesperados.</string>
     <string name="crash_report_detail_item_title_2">¿Qué no se comparte?</string>
     <string name="crash_report_detail_item_subtitle_1">Usamos Firebase Crashlytics para recopilar reportes de fallos. Incluyen información sobre la versión de la app, la hora del fallo y el stack trace para identificar dónde ocurrió dentro de la app.</string>
-    <string name="crash_report_detail_item_subtitle_2">Zodl no accede ni puede acceder a información sobre usuarios individuales, sus dispositivos, transacciones o su actividad dentro de la app. Los datos son completamente anónimos.</string>
+    <string name="crash_report_detail_item_subtitle_2">ZEC Private no accede ni puede acceder a información sobre usuarios individuales, sus dispositivos, transacciones o su actividad dentro de la app. Los datos son completamente anónimos.</string>
     <string name="crash_report_detail_item_title_1">¿Qué se comparte?</string>
     <string name="torSetup_learn_btnOut">No aceptar</string>
     <string name="torSetup_learn_btnIn">Aceptar</string>
-    <string name="home_message_crash_reporting_title">Ayuda a mejorar Zodl</string>
+    <string name="home_message_crash_reporting_title">Ayuda a mejorar ZEC Private</string>
     <string name="home_message_crash_reporting_subtitle">Permitir compartir reportes de fallos</string>
     <string name="balances_spendableBalance_title">Balance Disponible</string>
     <string name="balances_everythingDone">Todos tus fondos están protegidos y disponibles.</string>
     <string name="balances_infoPending">Pendiente de recibir el cambio de una transacción previa.</string>
-    <string name="balances_infoSyncing">Zodl está escaneando la blockchain para asegurar que tus balances se muestren correctamente.</string>
+    <string name="balances_infoSyncing">ZEC Private está escaneando la blockchain para asegurar que tus balances se muestren correctamente.</string>
     <string name="balances_infoShielding">Protege tu %1$s transparente para hacerlo utilizable y privado. Esto creará una transacción de protección dentro de la wallet, consolidando tus fondos transparentes y protegidos. (Comisión típica: %2$s %3$s)</string>
     <string name="balances_spendableBalance">Protegido (Disponible)</string>
     <string name="balances_pending">Pendiente</string>
@@ -434,29 +424,26 @@
 
     <!-- ===== integrations ===== -->
     <string name="torSetup_option3_title">Integraciones</string>
-    <string name="integrations_coinbase">Compra <xliff:g id="currency" example="ZEC">%1$s</xliff:g> con Coinbase</string>
-    <string name="integrations_coinbase_subtitle">Una manera fácil de comprar <xliff:g id="currency" example="ZEC">%1$s</xliff:g> y recibirlo directamente en tu wallet Zodl.</string>
-    <string name="integrations_info">Las integraciones de Zodl brindan acceso a servicios de terceros. Las funciones e información compartida con ellos están fuera de nuestro control y sujetas a sus políticas de privacidad.</string>
-    <string name="integrations_dialog_info">La información que compartas con los socios de integración de Zodl está sujeta a sus políticas de privacidad.</string>
+    <string name="integrations_info">Las integraciones de ZEC Private brindan acceso a servicios de terceros. Las funciones e información compartida con ellos están fuera de nuestro control y sujetas a sus políticas de privacidad.</string>
+    <string name="integrations_dialog_info">La información que compartas con los socios de integración de ZEC Private está sujeta a sus políticas de privacidad.</string>
     <string name="integrations_disabled_info">Durante el proceso de restauración no es posible usar integraciones de pago.</string>
     <string name="integrations_dialog_more_options">Más opciones</string>
     <string name="integrations_near_swap">Haz swap de %s con NEAR Intents</string>
     <string name="integrations_near_swap_message">Haz swap de %s con otras criptomonedas.</string>
-    <string name="integrations_coinbase_subtitle_disabled">Coinbase Onramp está temporalmente no disponible.</string>
     <string name="integrations_redeemGift">Canjear tarjeta de regalo</string>
     <string name="integrations_redeemGift_subtitle">Escanea o pega una tarjeta de regalo de Zcash para sumar sus fondos a tu billetera.</string>
 
     <!-- ===== keep_open ===== -->
-    <string name="restoreInfo_title">¡Mantén Zodl abierto!</string>
-    <string name="keep_open_description">Zodl está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en sincronizarse. Sigue estos pasos para evitar interrupciones:</string>
-    <string name="keep_open_bullet_1">Mantén la app de Zodl abierta con la pantalla del teléfono activa.</string>
+    <string name="restoreInfo_title">¡Mantén ZEC Private abierto!</string>
+    <string name="keep_open_description">ZEC Private está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en sincronizarse. Sigue estos pasos para evitar interrupciones:</string>
+    <string name="keep_open_bullet_1">Mantén la app de ZEC Private abierta con la pantalla del teléfono activa.</string>
     <string name="keep_open_bullet_2">Para evitar que la pantalla se apague, desactiva el modo de ahorro de energía y mantén el teléfono conectado a la corriente.</string>
-    <string name="keepZodlOpenInstructionsHWWallet">Zodl está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en completar la sincronización. Sigue estos pasos para evitar interrupciones:</string>
+    <string name="keepZodlOpenInstructionsHWWallet">ZEC Private está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en completar la sincronización. Sigue estos pasos para evitar interrupciones:</string>
     <string name="keepZodlOpenSubtitleHWWallet">Tu billetera se está sincronizando.</string>
-    <string name="keep_open_keystone_warning">No podrás usar tus fondos de Zodl hasta que tu billetera Keystone esté sincronizada.</string>
+    <string name="keep_open_keystone_warning">No podrás usar tus fondos de ZEC Private hasta que tu billetera Keystone esté sincronizada.</string>
     <string name="keep_open_hw_wallet_warning">No podrás usar los fondos de esta billetera hasta que termine la sincronización.</string>
     <string name="keepScreenOnSyncing">Mantener la pantalla encendida mientras se sincroniza</string>
-    <string name="keepZodlOpenInstructionsResyncing">Zodl está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en resincronizarse. Sigue estos pasos para evitar interrupciones:</string>
+    <string name="keepZodlOpenInstructionsResyncing">ZEC Private está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en resincronizarse. Sigue estos pasos para evitar interrupciones:</string>
     <string name="keepZodlOpenSubtitleResync">Tu billetera se está resincronizando.</string>
     <string name="keep_open_resync_warning">No podrás usar tus fondos hasta que tu billetera se haya resincronizado.</string>
     <string name="keepScreenOnResyncing">Mantener la pantalla encendida mientras se resincroniza</string>
@@ -482,7 +469,7 @@
     <string name="send_requestPayment_total">Total</string>
     <string name="payment_request_dialog_error_text">Ocurrió un error y el intento de enviar fondos falló. Inténtelo de nuevo, por favor.</string>
     <string name="payment_request_dialog_error_grpc_title">Error de Conexión</string>
-    <string name="payment_request_dialog_error_grpc_text">Zodl encontró algunos problemas de conexión al enviar la transacción a la red. Volverá a intentarlo durante los próximos minutos.</string>
+    <string name="payment_request_dialog_error_grpc_text">ZEC Private encontró algunos problemas de conexión al enviar la transacción a la red. Volverá a intentarlo durante los próximos minutos.</string>
     <string name="payment_request_send_failed_report_unable_open_email">No se pudo iniciar la aplicación de correo.</string>
 
     <!-- ===== qr_code ===== -->
@@ -498,9 +485,9 @@
     <string name="addressDetails_copyAddress">Copiar Dirección</string>
     <string name="qr_code_clipboard_tag">Dirección de Wallet Zcash</string>
     <string name="qr_code_data_unable_to_share">No se pudo encontrar una aplicación para compartir el código QR.</string>
-    <string name="qr_code_share_chooser_title">Mi Dirección %s en Zodl</string>
+    <string name="qr_code_share_chooser_title">Mi Dirección %s en ZEC Private</string>
     <string name="qr_code_share_chooser_text">Hola, ¡escanea este código QR para enviarme un pago en %s! Enlace de descarga:
-        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
+        https://github.com/Sammy-Lastre/zec-private/releases</string>
     <string name="qr_code_wallet_address_shielded_keystone">Dirección Protegida de Keystone</string>
     <string name="qr_code_wallet_address_sapling_keystone">Dirección Sapling de Keystone</string>
     <string name="qr_code_wallet_address_transparent_keystone">Dirección Transparente de Keystone</string>
@@ -523,13 +510,13 @@
     <string name="receive_help_transparent_title">Dirección transparente de Zcash (estática)</string>
     <string name="receive_help_transparent_desc1">Este tipo de dirección funciona como una dirección de Bitcoin y NO OFRECE PRIVACIDAD. Los detalles de las transacciones enviadas a esta dirección serán públicos y visibles en la blockchain.</string>
     <string name="receive_help_transparent_desc2">No recomendamos usar este tipo de dirección a menos que la billetera o casa de cambio desde donde se envían los %s no admita direcciones protegidas de Zcash.</string>
-    <string name="receive_help_transparent_desc3">Para proteger tu privacidad, Zodl te guiará para proteger cualquier %s transparente que recibas con un solo clic.</string>
+    <string name="receive_help_transparent_desc3">Para proteger tu privacidad, ZEC Private te guiará para proteger cualquier %s transparente que recibas con un solo clic.</string>
     <string name="receive_info_transparent_bullet_4">No podrás gastar tus %s transparentes hasta que los protejas.</string>
 
     <!-- ===== redeem_gift ===== -->
     <string name="redeemGift_title">Canjear tarjeta de regalo</string>
     <string name="redeemGift_scan_invalid">Esta no es una tarjeta de regalo válida. Escanea el código QR de la tarjeta o copia su enlace e inténtalo de nuevo.</string>
-    <string name="redeemGift_scan_externalLink">Parece que abriste una tarjeta de regalo desde otra aplicación. Para mayor seguridad y protección, escanea el código QR de la tarjeta de regalo con Zodl.</string>
+    <string name="redeemGift_scan_externalLink">Parece que abriste una tarjeta de regalo desde otra aplicación. Para mayor seguridad y protección, escanea el código QR de la tarjeta de regalo con ZEC Private.</string>
     <string name="redeemGift_paste_title">Pega el enlace de tu tarjeta de regalo</string>
     <string name="redeemGift_paste_subtitle">Pega el enlace que vino con tu tarjeta de regalo de Zcash. Verás el monto antes de canjearla.</string>
     <string name="redeemGift_paste_label">Enlace de la tarjeta de regalo</string>
@@ -542,7 +529,7 @@
     <string name="redeemGift_checking_subtitle">Verificando tu tarjeta de regalo. Esto puede tardar un momento.</string>
     <string name="redeemGift_ready_title">¡Recibiste un regalo!</string>
     <string name="redeemGift_ready_messageLabel">Mensaje de quien la envía</string>
-    <string name="redeemGift_ready_disclaimer">Los fondos se enviarán a tu billetera <xliff:g id="wallet" example="Zodl">%1$s</xliff:g>. La comisión de red ya está descontada del monto mostrado.</string>
+    <string name="redeemGift_ready_disclaimer">Los fondos se enviarán a tu billetera <xliff:g id="wallet" example="ZEC Private">%1$s</xliff:g>. La comisión de red ya está descontada del monto mostrado.</string>
     <string name="redeemGift_ready_disclaimer_noWallet">La comisión de red ya está descontada del monto mostrado.</string>
     <string name="redeemGift_memo">Tarjeta de regalo</string>
     <string name="redeemGift_redeem">Canjear</string>
@@ -595,26 +582,26 @@
     <string name="request_qr_code_data_unable_to_share">No se pudo encontrar una aplicación para compartir el código QR.</string>
     <string name="request_qr_code_share_chooser_title">Solicitar %s</string>
     <string name="request_qr_code_share_chooser_text">Hola, ¡escanea este código QR para enviarme un pago en %s! Enlace de descarga:
-        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
+        https://github.com/Sammy-Lastre/zec-private/releases</string>
 
     <!-- ===== restore ===== -->
     <string name="restore_subtitle">Frase de Recuperación</string>
     <string name="restoreWallet_info">Por favor, ingresa tu frase secreta de recuperación de 24 palabras en el orden correcto.</string>
     <string name="restore_dialog_message_1_bold_part">La Frase Secreta de Recuperación</string>
-    <string name="restore_dialog_message_1">es un conjunto único de 24 palabras que aparecen en un orden preciso. Puede usarse para obtener control total de tus fondos desde cualquier dispositivo a través de cualquier app de billetera Zcash. Piénsala como la llave maestra de tu billetera. Está guardada en la Configuración Avanzada de Zodl.</string>
+    <string name="restore_dialog_message_1">es un conjunto único de 24 palabras que aparecen en un orden preciso. Puede usarse para obtener control total de tus fondos desde cualquier dispositivo a través de cualquier app de billetera Zcash. Piénsala como la llave maestra de tu billetera. Está guardada en la Configuración Avanzada de ZEC Private.</string>
     <string name="restore_dialog_message_2_bold_part">La Altura de Cumpleaños de la Billetera</string>
-    <string name="restore_dialog_message_2">es la altura de bloque (número de bloque en la cadena de bloques) en la que se creó tu billetera. Si alguna vez pierdes acceso a tu app de Zodl y necesitas recuperar tus fondos, proporcionar esta altura junto con tu frase de recuperación puede acelerar significativamente el proceso.</string>
+    <string name="restore_dialog_message_2">es la altura de bloque (número de bloque en la cadena de bloques) en la que se creó tu billetera. Si alguna vez pierdes acceso a tu app de ZEC Private y necesitas recuperar tus fondos, proporcionar esta altura junto con tu frase de recuperación puede acelerar significativamente el proceso.</string>
     <string name="restoreWallet_birthday_estimate">Estimar mi altura de bloque</string>
-    <string name="firstWalletTransactionSubtitleRestore">Decide hasta dónde debe escanear Zodl. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
+    <string name="firstWalletTransactionSubtitleRestore">Decide hasta dónde debe escanear ZEC Private. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
     <string name="root_existingWallet_restore">Restaurar</string>
     <string name="restore_seed_warning_suggestions">Esta palabra no está en el diccionario de frases de recuperación. Por favor selecciona la correcta de las sugerencias.</string>
     <string name="torSettingsSheet_msg">Si Tor está disponible en tu región, recomendamos habilitarlo para una mayor privacidad durante la restauración de la billetera. Este paso es completamente opcional.</string>
     <string name="torSettingsSheet_desc">Redirige tu conexión a través de la red Tor para mayor anonimato y protección de privacidad.</string>
-    <string name="firstWalletTransactionSubtitleResync">Decide hasta dónde debe resincronizarse Zodl. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
-    <string name="resync_bd_estimation_message">Tu billetera se resincronizará desde %1$s (%2$s bloques). Zodl escaneará y recuperará todas las transacciones realizadas después del siguiente número de bloque.</string>
+    <string name="firstWalletTransactionSubtitleResync">Decide hasta dónde debe resincronizarse ZEC Private. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
+    <string name="resync_bd_estimation_message">Tu billetera se resincronizará desde %1$s (%2$s bloques). ZEC Private escaneará y recuperará todas las transacciones realizadas después del siguiente número de bloque.</string>
     <string name="resyncWallet_confirmTitle">Confirmar Resincronización</string>
     <string name="confirm_resync_subtitle">Resincroniza la billetera actual sin restablecer la app. Esto puede usarse para solucionar problemas que normalmente requerirían restaurar tu billetera como corregir tu balance de Keystone.</string>
-    <string name="resyncWallet_dateInfo">A menos que especifiques lo contrario a continuación, Zodl se resincronizará desde la fecha mostrada.</string>
+    <string name="resyncWallet_dateInfo">A menos que especifiques lo contrario a continuación, ZEC Private se resincronizará desde la fecha mostrada.</string>
     <string name="confirm_resync_info">Tu billetera se resincronizará desde %1$s (%2$s bloques). Usa el botón de abajo si deseas cambiarlo.</string>
     <string name="resyncWallet_change">Cambiar</string>
     <string name="resyncWallet_failedTitle">Error de resincronización</string>
@@ -627,7 +614,7 @@
     <!-- ===== scan ===== -->
     <string name="scan_preview_content_description">Cámara</string>
     <string name="scan_settings_open_failed">No se pudo iniciar la aplicación de Configuración.</string>
-    <string name="scan_cameraSettings">La cámara no está autorizada. Por favor, ve a la configuración del sistema de Zodl y actívala.</string>
+    <string name="scan_cameraSettings">La cámara no está autorizada. Por favor, ve a la configuración del sistema de ZEC Private y actívala.</string>
     <string name="scan_state_failed">Falló la inicialización de la cámara. Inténtalo de nuevo, por favor.</string>
     <string name="scan_invalidQR">Este código QR no contiene una dirección Zcash válida.</string>
     <string name="scan_invalidImage">Esta imagen no contiene una dirección Zcash válida.</string>
@@ -637,8 +624,8 @@
     <string name="gallery_content_description">Galería</string>
     <string name="deeplinkWarning_screenTitle">¡Hola!</string>
     <string name="deeplinkWarning_title">Parece que utilizaste una aplicación de terceros para escanear un pago.</string>
-    <string name="deeplinkWarning_desc">Para mayor seguridad y protección, vuelve a escanear el código QR con Zodl.</string>
-    <string name="deeplinkWarning_cta">Reescanear en Zodl</string>
+    <string name="deeplinkWarning_desc">Para mayor seguridad y protección, vuelve a escanear el código QR con ZEC Private.</string>
+    <string name="deeplinkWarning_cta">Reescanear en ZEC Private</string>
 
     <!-- ===== scan_keystone ===== -->
     <string name="scan_keystone_failure">Este código QR no es un wallet Keystone válido.</string>
@@ -646,7 +633,7 @@
     <string name="scan_openSettings">Abrir Configuración</string>
     <string name="scan_keystone_settings_open_failed">No se pudo abrir la aplicación de Configuración.</string>
     <string name="scan_keystone_state_permission">La cámara no está autorizada. Por favor, ve a la configuración del sistema de
-        Zodl y actívala.</string>
+        ZEC Private y actívala.</string>
     <string name="scan_keystone_state_failed">La inicialización de la cámara falló. Por favor, inténtalo nuevamente.</string>
     <string name="scan_keystone_address_validation_failed">Este código QR no es una dirección Zcash válida.</string>
     <string name="scan_keystone_torch_content_description">Alternar linterna de la cámara</string>
@@ -728,13 +715,13 @@
     <string name="send_confirmation_failure_anchor_subtitle">El estado de la cadena cambió mientras se preparaba la transacción. Por favor, espera a que la sincronización termine e intenta de nuevo.</string>
     <string name="send_viewTransaction">Ver Transacción</string>
     <string name="send_confirmation_failure_grpc_title">Problema de Conexión</string>
-    <string name="send_confirmation_failure_grpc_subtitle">Zodl encontró problemas de conexión al enviar la transacción. Reintentará en los próximos minutos.</string>
+    <string name="send_confirmation_failure_grpc_subtitle">ZEC Private encontró problemas de conexión al enviar la transacción. Reintentará en los próximos minutos.</string>
     <string name="send_confirmation_multiple_trx_failure_text">Enviar a este destinatario requirió múltiples
         transacciones, pero solo algunas tuvieron éxito y las demás fallaron. Tus fondos están seguros, pero
         necesitan ser recuperados con nuestra asistencia.\n\nPor favor, usa el botón de abajo para contactarnos. Preparará automáticamente toda la información que necesitamos para ayudarte a restaurar tus fondos.</string>
     <string name="send_confirmation_multiple_trx_failure_copy_button">Copiar IDs de transacción</string>
     <string name="send_confirmation_multiple_trx_failure_ids_title">IDs de Transacción</string>
-    <string name="send_confirmation_multiple_report_text">Hola, equipo de Zodl.\n\nAl enviar una transacción a una dirección TEX, encontré un error. Me comunico para recibir orientación sobre cómo recuperar mis fondos.\n\nGracias.</string>
+    <string name="send_confirmation_multiple_report_text">Hola, equipo de ZEC Private.\n\nAl enviar una transacción a una dirección TEX, encontré un error. Me comunico para recibir orientación sobre cómo recuperar mis fondos.\n\nGracias.</string>
     <string name="send_confirmation_multiple_report_statuses" formatted="true">Estatus de transacciones:</string>
     <string name="send_confirmation_multiple_report_status_success">
         <xliff:g example="1" id="index">%1$d</xliff:g>: Éxito
@@ -802,7 +789,7 @@
     <string name="swap_select_token">Seleccionar token</string>
     <string name="swapAndPay_search">Buscar por nombre o ticker…</string>
     <string name="swapAndPay_slippage">Slippage</string>
-    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de Zodl.</string>
+    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de ZEC Private.</string>
     <string name="swap_slippage_max_threshold">Por favor, ingresa un slippage máximo de 30%%.</string>
     <string name="swap_slippage_info">Podrías recibir hasta %s menos de lo cotizado.</string>
     <string name="swap_slippage_low_warning">El slippage %1$s aumenta la probabilidad de que tu swap no se complete y sea reembolsado. Considera usar %2$s, especialmente para montos mayores.</string>
@@ -846,7 +833,7 @@
     <string name="swapAndPay_payTo">Pagar a</string>
     <string name="swap_to_zec_footer">Usa tu wallet %s \n para depositar fondos. Depositar otros activos puede resultar en pérdida de fondos.</string>
     <string name="swapToZec_info2">%s en %s</string>
-    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en Zodl</string>
+    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en ZEC Private</string>
     <string name="swapToZec_refundAddress">Dirección de reembolso</string>
     <string name="swapToZec_refundAddress_title">Dirección de reembolso</string>
     <string name="swap_refund_address_info_message_empty">Si el swap falla o cambian las condiciones del mercado, tu transacción puede ser reembolsada menos las comisiones de red.\n\nLos reembolsos solo se aplican a swaps de $300 o más. Los swaps de menos de $300 no son elegibles para reembolso.\n\nEl monto reembolsado será devuelto a tu wallet en la moneda de origen. Por favor, ingresa una dirección válida para evitar la pérdida de fondos.</string>
@@ -876,7 +863,7 @@
 
     <!-- ===== tax_export ===== -->
     <string name="taxExport_title">Exportación de Datos</string>
-    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="Zodl" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
+    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="ZEC Private" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
     <string name="taxExport_download">Descargar</string>
 
     <!-- ===== tex_unsupported ===== -->
@@ -886,11 +873,11 @@
     <string name="texKeystone_warn2">Por favor, utiliza los pasos a continuación para completar tu transacción.</string>
     <string name="texKeystone_workaround">Pasos alternativos</string>
     <string name="tex_unsupported_step_1_badge">Paso 1</string>
-    <string name="texKeystone_step1_title">Envía primero a Zodl</string>
-    <string name="texKeystone_step1_desc">Transfiere ZEC a tu dirección protegida de Zodl</string>
+    <string name="texKeystone_step1_title">Envía primero a ZEC Private</string>
+    <string name="texKeystone_step1_desc">Transfiere ZEC a tu dirección protegida de ZEC Private</string>
     <string name="tex_unsupported_step_2_badge">Paso 2</string>
-    <string name="texKeystone_step2_title">Envía desde Zodl a la dirección TEX</string>
-    <string name="texKeystone_step2_desc">Una vez recibido en Zodl, envía los tokens a tu dirección TEX de destino final</string>
+    <string name="texKeystone_step2_title">Envía desde ZEC Private a la dirección TEX</string>
+    <string name="texKeystone_step2_desc">Una vez recibido en ZEC Private, envía los tokens a tu dirección TEX de destino final</string>
 
     <!-- ===== tor ===== -->
     <string name="torSetup_title">Protección con Tor</string>
@@ -940,7 +927,7 @@
     <string name="swapAndPay_executedSlippage">Slippage realizado</string>
     <string name="swapAndPay_maxSlippageTitle">Slippage máximo</string>
     <string name="transactionHistory_timestamp">Marca de tiempo</string>
-    <string name="swapAndPay_refundInfo">Tu depósito fue detectado pero el swap no pudo completarse. Tus fondos han sido devueltos, descontando las comisiones de transacción. Si aún no los recibiste, contacta al equipo de soporte de Zodl.</string>
+    <string name="swapAndPay_refundInfo">Tu depósito fue detectado pero el swap no pudo completarse. Tus fondos han sido devueltos, descontando las comisiones de transacción. Si aún no los recibiste, contacta al equipo de soporte de ZEC Private.</string>
     <string name="swapAndPay_refundTitle">Fondos devueltos</string>
     <string name="swapAndPay_processingMsg">Tu swap se ha demorado. Los swaps generalmente se completan en minutos, pero pueden tardar más según las condiciones del mercado.</string>
     <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos y no recibiste tu swap, contacta a soporte para que podamos resolverlo.</string>
@@ -949,7 +936,7 @@
     <string name="swapAndPay_expiredTitle">Swap expirado</string>
     <string name="reportSwap_report">Reportar problema</string>
     <string name="reportSwap_title">Reportar problema con swap</string>
-    <string name="reportSwap_msg">Al tocar el botón de abajo, se enviarán detalles de este swap (como la dirección de depósito y el activo destino) al equipo de soporte de Zodl para que puedan ayudarte a resolver tu problema. La información de la transacción se incluye automáticamente.</string>
+    <string name="reportSwap_msg">Al tocar el botón de abajo, se enviarán detalles de este swap (como la dirección de depósito y el activo destino) al equipo de soporte de ZEC Private para que puedan ayudarte a resolver tu problema. La información de la transacción se incluye automáticamente.</string>
     <string name="transaction_detail_support_email_subject">Problema con transacción de swap</string>
     <string name="transaction_detail_support_email_body">Por favor describe tu problema aquí:\n\n\n\nDetalles del swap:\nDirección de depósito: %1$s\nActivo de origen: %2$s\nActivo destino: %3$s</string>
     <string name="swap_mismatch_title">Los detalles del swap no coincidieron</string>
@@ -957,8 +944,8 @@
     <string name="swap_mismatch_msg_2">Te agradeceríamos que nos lo reportaras para que podamos investigarlo con el proveedor de swap.</string>
     <string name="swap_mismatch_msg_3">Lo reportes o no, también puedes intentarlo de nuevo. Si los detalles coinciden, no verás esta pantalla y podrás continuar.</string>
     <string name="swap_mismatch_goBack">Volver</string>
-    <string name="swap_mismatch_support_email_subject">Zodl Swap: discrepancia en la API</string>
-    <string name="swap_mismatch_support_email_body">Zodl detectó el siguiente error en la respuesta de la API del proveedor de swap. Proporcionar estos detalles nos permite plantearlo con ellos para investigarlo. No compartiremos tus datos personales con el proveedor de swap. Puedes enviarlo tal cual o incluir una nota para nosotros. Gracias de antemano.\n\nProveedor de swap: %1$s\nTipo de swap: %2$s\nTipo de discrepancia: %3$s\nID de cotización: %4$s</string>
+    <string name="swap_mismatch_support_email_subject">ZEC Private Swap: discrepancia en la API</string>
+    <string name="swap_mismatch_support_email_body">ZEC Private detectó el siguiente error en la respuesta de la API del proveedor de swap. Proporcionar estos detalles nos permite plantearlo con ellos para investigarlo. No compartiremos tus datos personales con el proveedor de swap. Puedes enviarlo tal cual o incluir una nota para nosotros. Gracias de antemano.\n\nProveedor de swap: %1$s\nTipo de swap: %2$s\nTipo de discrepancia: %3$s\nID de cotización: %4$s</string>
     <string name="swap_mismatch_mode_swap">Swap</string>
     <string name="swap_mismatch_mode_crosspay">CrossPay</string>
     <string name="swap_mismatch_mode_swapIntoZec">Swap a ZEC</string>
@@ -1043,13 +1030,13 @@
     <string name="annotation_save">Guardar nota</string>
 
     <!-- ===== update ===== -->
-    <string name="update_title_available">Zodl aquí.</string>
+    <string name="update_title_available">ZEC Private aquí.</string>
     <string name="osStatusError_title">No eres tú, soy yo.</string>
     <string name="update_description_required">
-        Hay una actualización requerida para Zodl que realiza importantes mejoras en el rendimiento y/o la seguridad.
+        Hay una actualización requerida para ZEC Private que realiza importantes mejoras en el rendimiento y/o la seguridad.
     </string>
     <string name="update_description_available">
-        Hay una nueva versión de Zodl que realiza actualizaciones menores para mejorar el rendimiento y/o la seguridad.\n\nPor favor, toma un momento para actualizar a la última versión.
+        Hay una nueva versión de ZEC Private que realiza actualizaciones menores para mejorar el rendimiento y/o la seguridad.\n\nPor favor, toma un momento para actualizar a la última versión.
     </string>
     <string name="update_link_text">Obtén más información sobre esta actualización aquí.</string>
     <string name="update_download_button">Actualizar</string>
@@ -1061,7 +1048,7 @@
 
     <!-- ===== warning ===== -->
     <string name="notEnoughFreeSpace_title">No hay suficiente espacio disponible</string>
-    <string name="notEnoughFreeSpace_messagePre">Zodl requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
+    <string name="notEnoughFreeSpace_messagePre">ZEC Private requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
     <string name="not_enough_space_description_2"><xliff:g example="300" id="available_megabytes">%1$d</xliff:g> MB disponibles</string>
     <string name="not_enough_space_description_3">. La sincronización permanecerá en pausa hasta que haya más espacio disponible.\n\n~<xliff:g example="300" id="required_megabytes">%1$d</xliff:g> MB adicionales son necesarios para continuar</string>
     <string name="not_enough_space_system_settings_btn">Configuración del sistema</string>
@@ -1083,10 +1070,10 @@
     <string name="migration_notification_manualConfirmationWithCounts">La transferencia %1$d de %2$d está lista. Toca para confirmar.</string>
     <string name="migration_notification_manualConfirmationGeneric">Una transferencia de migración está lista. Toca para confirmar.</string>
     <string name="migration_notification_torFailureTitle">Migración: No se pudo conectar a Tor</string>
-    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre Zodl para resolverlo.</string>
+    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre ZEC Private para resolverlo.</string>
     <string name="migration_notification_stepDueText">Tu migración está lista para continuar — toca para ejecutar el siguiente paso.</string>
-    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre Zodl para revisar los detalles.</string>
-    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre Zodl para continuar tu migración.</string>
+    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre ZEC Private para revisar los detalles.</string>
+    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre ZEC Private para continuar tu migración.</string>
     <string name="migration_notification_completeTitle">Migración a Ironwood completada</string>
     <string name="migration_notification_completeText">Todos tus fondos han sido migrados a Ironwood.</string>
 
@@ -1098,7 +1085,7 @@
     <string name="restartMigration_summaryMigratedValue">%1$d de %2$d transferencias</string>
     <string name="restartMigration_summaryRemainingLabel">Saldo restante</string>
     <string name="restartMigration_warning">Esto cancela el plan de migración actual. No se puede deshacer una vez confirmado.</string>
-    <string name="restartMigration_support">Si reiniciar no resuelve el problema, contacta al soporte de Zodl a través de Enviar comentarios.</string>
+    <string name="restartMigration_support">Si reiniciar no resuelve el problema, contacta al soporte de ZEC Private a través de Enviar comentarios.</string>
     <string name="restartMigration_next">Siguiente</string>
     <string name="restartMigration_confirmTitle">¿Reiniciar esta migración?</string>
     <string name="restartMigration_confirmMessage">Se creará un nuevo plan para tu saldo restante de %1$s. Las %2$d transferencias ya completadas se mantienen como están y no se repetirán.</string>
@@ -1171,14 +1158,14 @@
     <string name="migrationComplete_residueRecommendationBody">%1$s todavía está en Orchard. Mover un monto tan específico podría vincular tus fondos de Ironwood con tu historial de Orchard. Te recomendamos bloquearlo en su lugar.</string>
 
     <string name="migrationNotifPermission_title">Permitir notificaciones</string>
-    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras Zodl. Recibe avisos sobre:</string>
+    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras ZEC Private. Recibe avisos sobre:</string>
     <string name="migrationNotifPermission_statusTitle">Estado de la migración</string>
     <string name="migrationNotifPermission_statusBody">Te avisaremos cuando tus fondos se hayan migrado por completo a Ironwood.</string>
     <string name="migrationNotifPermission_actionNeededTitle">Acción necesaria</string>
     <string name="migrationNotifPermission_actionNeededBody">Si se pierde una ventana de envío, te pediremos que abras la app y envíes una transferencia manualmente.</string>
     <string name="migrationNotifPermission_planChangesTitle">Cambios en el plan de transferencias</string>
     <string name="migrationNotifPermission_planChangesBody">Si se gastan los fondos asignados o una transferencia programada ya no se puede enviar, te lo haremos saber.</string>
-    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir Zodl para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
+    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir ZEC Private para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
 
     <string name="migrationCustomServerTor_title">Tu servidor no admite Tor</string>
     <string name="migrationCustomServerTor_bodyImmediate">La transacción de migración no se puede transmitir por Tor cuando usas un servidor personalizado. Si continúas, esta transacción se enviará sin la protección de IP de Tor.</string>
@@ -1207,7 +1194,7 @@
     <string name="migrationLockExplainer_bullet1Prefix">Bloquear marca este saldo como </string>
     <string name="migrationLockExplainer_bullet1Bold">no gastable</string>
     <string name="migrationLockExplainer_bullet1Suffix">, así no podrá comprometer tu privacidad en futuras transacciones.</string>
-    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de Zodl/Keystone.</string>
+    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de ZEC Private/Keystone.</string>
     <string name="migrationLockExplainer_bullet2Suffix"> Restaurar tu wallet no lo trasladará.</string>
     <string name="migrationLockExplainer_bullet3Prefix">Una futura versión te permitirá </string>
     <string name="migrationLockExplainer_bullet3Bold">desbloquear este saldo.</string>
@@ -1240,7 +1227,7 @@
     <string name="migrationHowItWorks_splitScheduleTitle">Dividir y programar</string>
     <string name="migrationHowItWorks_splitScheduleDescription">Tu saldo se divide en montos más pequeños y se distribuye en el tiempo, lo que dificulta vincularlos entre sí.</string>
     <string name="migrationHowItWorks_approveOnceTitle">Aprueba una vez</string>
-    <string name="migrationHowItWorks_approveOnceDescription">Zodl se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
+    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
     <string name="migrationHowItWorks_ifSomethingFailsTitle">Si algo falla</string>
     <string name="migrationHowItWorks_ifSomethingFailsDescription">Te avisaremos para que puedas completarla manualmente.</string>
     <string name="migrationHowItWorks_largeBalanceTitle">Saldo grande</string>
@@ -1254,7 +1241,7 @@
     <string name="migrationReview_signing">Firmando...</string>
     <string name="migrationReview_confirm">Confirmar</string>
     <string name="migrationReview_confirmTransferPlanTitle">Confirmar plan de transferencias</string>
-    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, Zodl te avisará la próxima vez que abras la app.</string>
+    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, ZEC Private te avisará la próxima vez que abras la app.</string>
     <string name="migrationReview_roundOfTotal">Ronda %1$d de %2$d</string>
     <string name="migrationReview_startMigration">Iniciar migración</string>
     <string name="migrationReview_sendImmediately">Enviar de inmediato</string>
@@ -1269,14 +1256,14 @@
     <string name="migrationKeystoneSign_reject">Rechazar</string>
 
     <string name="migrationBattery_title">Permitir envío en segundo plano</string>
-    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, Zodl necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para Zodl en la configuración de tu dispositivo.</string>
+    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, ZEC Private necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para ZEC Private en la configuración de tu dispositivo.</string>
     <string name="migrationBattery_scheduledWindowsTitle">Las transferencias se envían en sus ventanas programadas</string>
-    <string name="migrationBattery_scheduledWindowsBody">Zodl se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
+    <string name="migrationBattery_scheduledWindowsBody">ZEC Private se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
     <string name="migrationBattery_noNeedToOpenTitle">No hace falta abrir la app para cada envío</string>
     <string name="migrationBattery_noNeedToOpenBody">Una vez que confirmes el nuevo calendario, enviaremos las transferencias en segundo plano.</string>
     <string name="migrationBattery_fixedScheduleTitle">Se envían en un horario fijo, no según tu actividad</string>
-    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres Zodl.</string>
-    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir Zodl manualmente en cada horario programado para enviar.</string>
+    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres ZEC Private.</string>
+    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir ZEC Private manualmente en cada horario programado para enviar.</string>
 
     <string name="migrationScheduled_schedulingTitle">Programando...</string>
     <string name="migrationScheduled_schedulingSubtitle">Se está confirmando el calendario de migración de tus ZEC.</string>
@@ -1298,14 +1285,13 @@
     <string name="migrationHome_defaultSubtitle">Mueve tus fondos a Ironwood.</string>
     <string name="migrationHome_residueTitle">%1$s restante en Orchard</string>
     <string name="migrationHome_residueSubtitle">Toca para decidir qué hacer con él</string>
-    <string name="coinVote_confirmSubmission_detailExcludedWeight">Excluido de esta votación</string>
 
     <string name="migrationSetup_automaticPausedSubtitle">Disponible después de la actualización de la red, alrededor del %1$s</string>
     <string name="migrationSetup_automaticPausedSubtitleNoDate">Disponible después de la actualización de la red</string>
     <string name="migrationUpgradePaused_title">La migración está en pausa</string>
     <string name="migrationUpgradePaused_message">Una migración programada no puede iniciarse antes de la actualización de la red. Inténtalo de nuevo después.</string>
-    <string name="migrationTipUnavailable_title">Zodl sigue sincronizando</string>
-    <string name="migrationTipUnavailable_message">Zodl debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
+    <string name="migrationTipUnavailable_title">ZEC Private sigue sincronizando</string>
+    <string name="migrationTipUnavailable_message">ZEC Private debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
     <string name="migrationHome_upgradeStoppedTitle">Migración detenida</string>
     <string name="migrationHome_upgradeStoppedSubtitle">La actualización de la red de Zcash detuvo tu migración antes de que terminara. Las transferencias confirmadas no se ven afectadas. Los fondos de las transferencias sin confirmar pueden seguir sin estar disponibles hasta que esas transacciones caduquen y tu billetera se sincronice. Toca para migrar lo que queda.</string>
     <string name="colorPicker_title">Colores</string>
