@@ -345,7 +345,7 @@ private fun ZashiPreview() =
                         listOf(
                             ReceiveAddressState(
                                 icon = imageRes(R.drawable.ic_zec_round_full),
-                                title = stringRes("Zodl"),
+                                title = stringRes("ZEC Private"),
                                 subtitle = styledStringResource("subtitle"),
                                 isShielded = true,
                                 onCopyClicked = {},
@@ -362,7 +362,7 @@ private fun ZashiPreview() =
                             ),
                             ReceiveAddressState(
                                 icon = imageRes(R.drawable.ic_zec_round_full),
-                                title = stringRes("Zodl"),
+                                title = stringRes("ZEC Private"),
                                 subtitle = styledStringResource("subtitle"),
                                 isShielded = false,
                                 onCopyClicked = {},
@@ -396,7 +396,7 @@ private fun KeystonePreview() =
                         listOf(
                             ReceiveAddressState(
                                 icon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_item_keystone),
-                                title = stringRes("Zodl"),
+                                title = stringRes("ZEC Private"),
                                 subtitle = styledStringResource("subtitle"),
                                 isShielded = true,
                                 onCopyClicked = {},
@@ -413,7 +413,7 @@ private fun KeystonePreview() =
                             ),
                             ReceiveAddressState(
                                 icon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_item_keystone),
-                                title = stringRes("Zodl"),
+                                title = stringRes("ZEC Private"),
                                 subtitle = styledStringResource("subtitle"),
                                 isShielded = false,
                                 onCopyClicked = {},

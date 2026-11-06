@@ -138,7 +138,7 @@ internal data class EditAccountState(
         private fun previewZodl(image: ImageResource) =
             create(
                 image = image,
-                name = stringRes("Zodl"),
+                name = stringRes("ZEC Private"),
                 nameLength = null,
                 isDuplicate = false,
                 canSave = false,

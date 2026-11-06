@@ -9,7 +9,7 @@
     <string name="view_only_unsupported_message">Esta cuenta se importó con una clave de visualización. Puede ver su saldo y su actividad, pero no puede enviar, proteger, intercambiar, votar ni migrar fondos.</string>
     <string name="view_only_receive_shielded_title">Dirección protegida de Zcash</string>
     <string name="view_only_receive_transparent_title">Dirección transparente de Zcash</string>
-    <string name="view_only_integrations_disabled_info">Cambia de una cuenta de solo lectura a Zodl para usar Flexa.</string>
+    <string name="view_only_integrations_disabled_info">Cambia de una cuenta de solo lectura a ZEC Private para usar Flexa.</string>
 
     <string name="view_only_add_account_hardware_title">Conectar billetera de hardware</string>
     <string name="view_only_add_account_hardware_subtitle">Vincula tu billetera de hardware</string>
@@ -51,7 +51,7 @@
     <string name="view_only_birthday_subtitle">Elige la fecha aproximada de la primera transacción de esta cuenta. Si no estás seguro/a, elige una fecha anterior.</string>
     <string name="view_only_birthday_enter_manually">Ingresar altura de bloque</string>
 
-    <string name="view_only_keep_open_description">Zodl está escaneando la cadena de bloques para recuperar las transacciones de esta cuenta. Las billeteras más antiguas pueden tardar horas en sincronizarse. Sigue estos pasos para evitar interrupciones:</string>
+    <string name="view_only_keep_open_description">ZEC Private está escaneando la cadena de bloques para recuperar las transacciones de esta cuenta. Las billeteras más antiguas pueden tardar horas en sincronizarse. Sigue estos pasos para evitar interrupciones:</string>
     <string name="view_only_keep_open_subtitle">Tu cuenta se está sincronizando.</string>
     <string name="view_only_keep_open_warning">El saldo y la actividad de esta cuenta estarán completos cuando termine la sincronización.</string>
     <string name="view_only_keep_open_checkbox">Mantener la pantalla encendida durante la sincronización</string>
@@ -60,7 +60,7 @@
     <string name="view_only_remove_account">Eliminar cuenta</string>
 
     <string name="view_only_remove_title">¿Eliminar esta cuenta?</string>
-    <string name="view_only_remove_message">Al eliminar esta cuenta se borran sus datos de Zodl en este dispositivo, pero se conservan tus contactos de la libreta de direcciones y los demás metadatos de la cuenta. Eliminar la cuenta no elimina su historial en la cadena. Puedes recuperarla cuando quieras volviendo a agregar la cuenta.</string>
+    <string name="view_only_remove_message">Al eliminar esta cuenta se borran sus datos de ZEC Private en este dispositivo, pero se conservan tus contactos de la libreta de direcciones y los demás metadatos de la cuenta. Eliminar la cuenta no elimina su historial en la cadena. Puedes recuperarla cuando quieras volviendo a agregar la cuenta.</string>
     <string name="view_only_remove_cancel">Cancelar</string>
     <string name="view_only_remove_biometric_message">Confirma para eliminar esta cuenta</string>
 </resources>

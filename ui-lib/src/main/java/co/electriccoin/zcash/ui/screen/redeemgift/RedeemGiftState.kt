@@ -326,7 +326,7 @@ sealed interface RedeemGiftState {
                 redeemable = Zatoshi(PREVIEW_AMOUNT),
                 ticker = stringRes(CURRENCY_TICKER),
                 message = message,
-                walletName = stringRes("Zodl"),
+                walletName = stringRes("ZEC Private"),
                 onRedeem = {},
                 onBack = {}
             )

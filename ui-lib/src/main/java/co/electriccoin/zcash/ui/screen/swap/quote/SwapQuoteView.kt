@@ -348,7 +348,7 @@ private fun SuccessPreview() =
                         listOf(
                             SwapQuoteInfoItem(
                                 description = stringRes("Pay from"),
-                                title = stringRes("Zodl").withStyle(),
+                                title = stringRes("ZEC Private").withStyle(),
                                 subtitle = null
                             ),
                             SwapQuoteInfoItem(

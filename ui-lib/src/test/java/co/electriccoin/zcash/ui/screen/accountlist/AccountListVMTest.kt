@@ -27,7 +27,6 @@ import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.asPrivacySensitive
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
-import co.electriccoin.zcash.ui.screen.ExternalUrl
 import co.electriccoin.zcash.ui.screen.accountlist.options.WalletOptionsArgs
 import co.electriccoin.zcash.ui.screen.editaccount.EditAccountArgs
 import io.mockk.coVerify
@@ -426,50 +425,6 @@ class AccountListVMTest {
         }
 
     @Test
-    fun thePromoShowsUntilAKeystoneIsConnected() =
-        runTest {
-            listOf(
-                listOf(zodl(id = 1, isSelected = true)),
-                listOf(zodl(id = 1, isSelected = true), ledger(id = 2, isSelected = false)),
-                listOf(zodl(id = 1, isSelected = true), viewOnly(id = 2, isSelected = false)),
-            ).forEach { accounts ->
-                val vm = vm(accounts)
-                collect(vm)
-                assertNotNull(vm.state.value.keystonePromo)
-            }
-
-            listOf(
-                listOf(zodl(id = 1, isSelected = true), keystone(id = 2, isSelected = false)),
-                listOf(
-                    zodl(id = 1, isSelected = true),
-                    keystone(id = 2, isSelected = false),
-                    ledger(id = 3, isSelected = false)
-                ),
-            ).forEach { accounts ->
-                val vm = vm(accounts)
-                collect(vm)
-                assertNull(vm.state.value.keystonePromo)
-            }
-        }
-
-    @Test
-    fun thePromoOpensTheKeystoneShopInTheBrowserOnTopOfThisScreen() =
-        runTest {
-            val navigationRouter = mockk<NavigationRouter>(relaxed = true)
-            val vm = vm(listOf(zodl(id = 1, isSelected = true)), navigationRouter = navigationRouter)
-            collect(vm)
-
-            val promo = assertNotNull(vm.state.value.keystonePromo)
-            assertEquals(stringRes(UiR.string.hwWallet_promo_title), promo.title)
-            promo.onClick()
-
-            verify(exactly = 1) {
-                navigationRouter.forward(ExternalUrl("https://keyst.one/shop/products/keystone-3-pro?discount=Zodl"))
-            }
-            verify(exactly = 0) { navigationRouter.replace(*anyVararg()) }
-        }
-
-    @Test
     fun theCallToActionShowsOnceTheAccountsAreLoadedWhateverIsConnected() =
         runTest {
             listOf(
@@ -497,7 +452,6 @@ class AccountListVMTest {
 
             val state = vm.state.value
             assertNull(state.sections)
-            assertNull(state.keystonePromo)
             assertNull(state.addAccountButton)
             assertEquals(stringRes(UiR.string.hwWallet_drawer_title), state.title)
         }

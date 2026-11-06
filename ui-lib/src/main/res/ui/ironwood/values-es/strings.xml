@@ -6,5 +6,5 @@
     <string name="ironwood_announcement_body_3">Puedes moverlos ahora. Recomendamos la opción privada: divide tu saldo en transferencias más pequeñas que se envían automáticamente en segundo plano a lo largo del tiempo, para que sea más difícil vincularlas contigo. O muévelo todo de una vez en una sola transferencia.</string>
     <string name="ironwood_announcement_body_guide">¿No sabes cuál elegir? Nuestra guía explica ambas opciones.</string>
     <string name="ironwood_announcement_body_guide_link">Nuestra guía</string>
-    <string name="ironwood_announcement_primary_button">Ir a Zodl</string>
+    <string name="ironwood_announcement_primary_button">Ir a ZEC Private</string>
 </resources>

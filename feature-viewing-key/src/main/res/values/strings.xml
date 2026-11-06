@@ -9,7 +9,7 @@
     <string name="view_only_unsupported_message">This account was imported with a viewing key. It can see its balance and activity, but it cannot send, shield, swap, vote or migrate funds.</string>
     <string name="view_only_receive_shielded_title">Zcash Shielded Address</string>
     <string name="view_only_receive_transparent_title">Zcash Transparent Address</string>
-    <string name="view_only_integrations_disabled_info">Switch from a view-only account to Zodl to use Flexa.</string>
+    <string name="view_only_integrations_disabled_info">Switch from a view-only account to ZEC Private to use Flexa.</string>
 
     <string name="view_only_add_account_hardware_title">Connect hardware wallet</string>
     <string name="view_only_add_account_hardware_subtitle">Pair your hardware wallet device</string>
@@ -51,7 +51,7 @@
     <string name="view_only_birthday_subtitle">Choose the approximate date of this account\'s first transaction. If you\'re not sure, choose an earlier date.</string>
     <string name="view_only_birthday_enter_manually">Enter block height</string>
 
-    <string name="view_only_keep_open_description">Zodl is scanning the blockchain to retrieve this account’s transactions. Older wallets can take hours to complete syncing. Follow these steps to prevent interruption:</string>
+    <string name="view_only_keep_open_description">ZEC Private is scanning the blockchain to retrieve this account’s transactions. Older wallets can take hours to complete syncing. Follow these steps to prevent interruption:</string>
     <string name="view_only_keep_open_subtitle">Your account is being synced.</string>
     <string name="view_only_keep_open_warning">This account’s balance and activity are complete once syncing finishes.</string>
     <string name="view_only_keep_open_checkbox">Keep screen on while syncing</string>
@@ -60,7 +60,7 @@
     <string name="view_only_remove_account">Remove Account</string>
 
     <string name="view_only_remove_title">Remove this account?</string>
-    <string name="view_only_remove_message">Removing this account clears its data from Zodl on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
+    <string name="view_only_remove_message">Removing this account clears its data from ZEC Private on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
     <string name="view_only_remove_cancel">Cancel</string>
     <string name="view_only_remove_biometric_message">Confirm to remove this account</string>
 </resources>
