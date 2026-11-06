@@ -142,9 +142,9 @@ class CoreWalletAcceptance {
                     val proposals = dependency<ZashiProposalRepository>()
                     check(proposals.submitState.value == null)
                     var reviewAttempt = 0
+                    openPrefilledForm(destination)
                     suspend fun openReview() {
                         reviewAttempt++
-                        openPrefilledForm(destination)
                         val logBoundary = "CORE_REVIEW_BEGIN_" + reviewAttempt
                         android.util.Log.i("CoreReview", logBoundary)
                         try {
@@ -154,7 +154,20 @@ class CoreWalletAcceptance {
                             throw error
                         }
                         val proposal = withTimeoutOrNull(60_000) {
-                            proposals.transactionProposal.filterNotNull().first()
+                            var pending = proposals.transactionProposal.value
+                            while (pending == null) {
+                                val insufficientTitle = context.getString(
+                                    co.electriccoin.zcash.ui.R.string.sheet_insufficientBalance_title
+                                )
+                                if (hasUiText(insufficientTitle)) {
+                                    // Capture eligibility at rejection, before asynchronous sync changes it.
+                                    proposalFailureDiagnostic(logBoundary, reviewAttempt)
+                                    error("Core UI proposal reported insufficient funds")
+                                }
+                                delay(200)
+                                pending = proposals.transactionProposal.value
+                            }
+                            pending
                         }
                         if (proposal == null) {
                             // Keep the bounded log classification last, even if input validation fails.
@@ -172,9 +185,13 @@ class CoreWalletAcceptance {
                                 "orchard_continue"
                             )
                         }
-                        waitUi(context.getString(co.electriccoin.zcash.ui.R.string.send_confirmationTitle), "review_title")
-                        waitUi("core-testnet-acceptance", "review_memo")
+                        // SmallTopAppBar uppercases titles; body and button text retain their case.
+                        waitUi(
+                            context.getString(co.electriccoin.zcash.ui.R.string.send_confirmationTitle).uppercase(),
+                            "review_title"
+                        )
                         waitUi("0.01", "review_amount", exact = false)
+                        waitReviewMemo()
                         check(proposal.amount.value == 1_000_000L)
                         check(proposal.destination.address == destination)
                         check(proposal.memo.value == "core-testnet-acceptance")
@@ -184,7 +201,8 @@ class CoreWalletAcceptance {
                     withTimeout(15_000) { proposals.transactionProposal.first { it == null } }
                     check(proposals.submitState.value == null)
                     check(balance() == before)
-                    // Re-enter the actual form/review path. No submission occurs on cancellation.
+                    waitUi(destination, "cancel_retained_recipient")
+                    // Cancellation retains Send; do not push a duplicate route or prefill consumer.
                     openReview()
                     state.put("sendAttempted", true).put("balanceBeforeSend", before)
                         .put("uiReview", true).put("uiCancelNoSubmission", true)
@@ -420,7 +438,9 @@ class CoreWalletAcceptance {
             .put("review_attempt", reviewAttempt)
             .put("insufficient_balance_sheet", visible(co.electriccoin.zcash.ui.R.string.sheet_insufficientBalance_title))
             .put("form_review_visible", visible(co.electriccoin.zcash.ui.design.R.string.send_review))
-            .put("review_title_visible", visible(co.electriccoin.zcash.ui.R.string.send_confirmationTitle))
+            .put("review_title_visible", hasUiText(
+                context.getString(co.electriccoin.zcash.ui.R.string.send_confirmationTitle).uppercase()
+            ))
             .put("own_uid_log_available", logAvailable).put("log_byte_cap_reached", capped)
             .put("proposal_error_logged", logs.contains("Error creating proposal"))
             .put("send_validation_failed_logged", logs.contains("Send failed with"))
@@ -480,6 +500,25 @@ class CoreWalletAcceptance {
                         FROM ironwood_received_notes rn LEFT JOIN v_ironwood_shards_scan_state ss
                         ON rn.commitment_tree_position>=ss.start_position
                         AND rn.commitment_tree_position<ss.end_position_exclusive
+                    """.trimIndent(),
+                    "note_height_ranges" to """
+                        SELECT MIN(t.block), MAX(t.block), MIN(t.mined_height), MAX(t.mined_height),
+                        MIN(t.trust_status), MAX(t.trust_status)
+                        FROM ironwood_received_notes rn JOIN transactions t ON t.id_tx=rn.transaction_id
+                    """.trimIndent(),
+                    "legacy_tip_and_anchor" to """
+                        WITH h AS (SELECT MAX(block_range_end) AS target FROM scan_queue),
+                        a AS (SELECT target,
+                        (SELECT MAX(checkpoint_id) FROM sapling_tree_checkpoints
+                         WHERE checkpoint_id<=target-3) AS s,
+                        (SELECT MAX(checkpoint_id) FROM orchard_tree_checkpoints
+                         WHERE checkpoint_id<=target-3) AS o FROM h),
+                        c AS (SELECT target,s,o,CASE WHEN s IS NULL THEN o WHEN o IS NULL THEN s
+                        ELSE MIN(s,o) END AS anchor FROM a)
+                        SELECT target,s,o,anchor,EXISTS(SELECT 1
+                        FROM v_ironwood_shard_unscanned_ranges r WHERE r.block_range_start<=c.anchor
+                        AND c.anchor BETWEEN r.subtree_start_height AND IFNULL(r.subtree_end_height,c.anchor))
+                        FROM c
                     """.trimIndent()
                 )
                 for ((label, sql) in queries) {
@@ -633,12 +672,57 @@ class CoreWalletAcceptance {
         return null
     }
 
+    @Suppress("DEPRECATION")
+    private fun hasUiText(text: String): Boolean {
+        val node = findUi(text, true, false, UiProbe()) ?: return false
+        node.recycle()
+        return true
+    }
+
+    @Suppress("DEPRECATION")
+    private suspend fun waitReviewMemo() {
+        // The review body scrolls independently of the fixed approval footer.
+        repeat(4) {
+            if (hasUiText("core-testnet-acceptance")) return
+            val root = instrumentation.uiAutomation.rootInActiveWindow ?: return@repeat
+            val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
+            pending.add(root)
+            var count = 0
+            var scrolled = false
+            try {
+                while (pending.isNotEmpty() && count++ < 500 && !scrolled) {
+                    val node = pending.removeFirst()
+                    try {
+                        if (node.isVisibleToUser && node.isScrollable) {
+                            scrolled = node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                        }
+                        if (!scrolled) {
+                            for (index in 0 until node.childCount) node.getChild(index)?.let { pending.add(it) }
+                        }
+                    } finally {
+                        node.recycle()
+                    }
+                }
+            } finally {
+                while (pending.isNotEmpty()) pending.removeFirst().recycle()
+            }
+            delay(300)
+        }
+        waitUi("core-testnet-acceptance", "review_memo")
+    }
+
     private fun uiDiagnostic(label: String, outcome: String, probe: UiProbe) {
         println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
             .put("ui_control", label).put("ui_outcome", outcome)
             .put("root_present", probe.rootPresent).put("visible_match", probe.visibleMatch)
             .put("enabled_control", probe.enabledControl).put("clickable_control", probe.clickableControl)
-            .put("disabled_ancestor", probe.disabledAncestor).put("button_role", probe.buttonRole))
+            .put("disabled_ancestor", probe.disabledAncestor).put("button_role", probe.buttonRole)
+            .put("confirmation_visible", hasUiText(
+                context.getString(co.electriccoin.zcash.ui.R.string.send_confirmationTitle).uppercase()
+            ))
+            .put("insufficient_funds_visible", hasUiText(
+                context.getString(co.electriccoin.zcash.ui.R.string.sheet_insufficientBalance_title)
+            )))
     }
 
     private suspend fun awaitUi(
