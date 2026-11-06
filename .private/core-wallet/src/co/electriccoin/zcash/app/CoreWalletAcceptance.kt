@@ -130,10 +130,14 @@ class CoreWalletAcceptance {
                             PrefillSendData.All(Zatoshi(1_000_000), destination, null, listOf("core-testnet-acceptance"))
                         ).join()
                         clickUi(context.getString(co.electriccoin.zcash.ui.design.R.string.send_review))
-                        waitUi("core-testnet-acceptance")
-                        waitUi("0.01", exact = false)
                         val proposal = proposals.getTransactionProposal()
                         check(proposal is co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal)
+                        if (proposal.proposal.usesOrchardInputs()) {
+                            clickUi(context.getString(co.electriccoin.zcash.ui.R.string.send_orchardWarning_continue))
+                        }
+                        waitUi("core-testnet-acceptance")
+                        waitUi("0.01", exact = false)
+                        check(proposal.amount.value == 1_000_000L)
                         check(proposal.destination.address == destination)
                         check(proposal.memo.value == "core-testnet-acceptance")
                     }
