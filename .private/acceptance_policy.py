@@ -127,8 +127,8 @@ def validate_core(receipt, expected_inputs):
     send=stages['send']
     if not all(send.get(key) is True for key in ('ui_review','ui_cancel_no_submission','ui_approval')):
         raise ValueError('Actual review/cancellation/approval UI evidence required')
-    if stages['restore'].get('app_transaction_state') != 'Confirmed':
-        raise ValueError('Recovered incoming transaction must reach the app confirmed state')
+    if stages['fund'].get('app_transaction_state') != 'Confirmed':
+        raise ValueError('The reused incoming funding transaction must reach the app confirmed state')
     funding=receipt.get('funding_setup',{})
     if (funding.get('tor_exit_verified') is not True or funding.get('persistent_tor_connection') is not True or
             funding.get('txid')!=stages['fund']['funding_txid']):

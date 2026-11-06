@@ -78,7 +78,7 @@ class AcceptancePolicyTest(unittest.TestCase):
         receipt['stages']['interruption'].update(sync_restarted=True,synced=True,balance_preserved=True,
                                                history_preserved=True,metadata_blocked=True,direct_bulk_reachable=True,
                                                metadata_recovered=True,blocked_packets=1,scanned_height=12345)
-        receipt['stages']['fund'].update(funding_txid='c'*64,balance_zatoshi=10000000)
+        receipt['stages']['fund'].update(funding_txid='c'*64,balance_zatoshi=10000000,app_transaction_state='Confirmed')
         receipt['funding_setup']=dict(tor_exit_verified=True,persistent_tor_connection=True,txid='c'*64)
         receipt['sync_preflight']=dict(passed=True,mode='advancing-scan',scanned_height=12340,network_height=12345)
         receipt['stages']['send'].update(fee_zatoshi=10000,ui_review=True,ui_cancel_no_submission=True,ui_approval=True)
@@ -96,7 +96,7 @@ class AcceptancePolicyTest(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 validate_core(bad, 'inputs')
         for stage,key,value in [('send','ui_approval',False),('send','ui_cancel_no_submission',False),
-                                ('send','ui_review',False),('restore','app_transaction_state','Pending')]:
+                                ('send','ui_review',False),('fund','app_transaction_state','Pending')]:
             bad=self.receipt();bad['stages'][stage][key]=value
             with self.assertRaises(ValueError):validate_core(bad,'inputs')
         for name in CORE_STAGES:
