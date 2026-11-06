@@ -106,7 +106,6 @@ jobs:
             artifact/foundation-runtime.json
             artifact/near-contract.json
             artifact/gradle-timing.json
-            artifact/gradle-resource.json
             artifact/task-timing.jsonl
             artifact/proof.json
             artifact/core-acceptance.json
@@ -151,7 +150,6 @@ jobs:
         with:
           name: emulator-validation-reports
           path: |
-            artifact/gradle-resource.json
             artifact/task-timing.jsonl
             build/reports/profile/
           if-no-files-found: ignore

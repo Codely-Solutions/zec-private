@@ -11,6 +11,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_VERSION = 1
+CORE_TEST_SOURCE = '.private/core-wallet/src/co/electriccoin/zcash/app/CoreWalletAcceptance.kt'
+PROFILES = {'core-testnet', 'core-build', 'production-quotes', 'core-runtime'}
+CORE_BINDING = 'core-runtime-v1'
 CORE_STAGES = {'fund', 'upgrade', 'send', 'restart', 'restore', 'interruption'}
 
 
@@ -40,13 +43,20 @@ def relevant(path):
 def input_fingerprint(revision='HEAD', root=ROOT, profile='core-testnet'):
     # One bounded Git inventory. Blob IDs refer to canonical committed bytes,
     # independent of Windows checkout line endings; no subprocess per file.
+    if profile not in PROFILES:
+        raise ValueError('Unknown acceptance profile: '+profile)
     rows = git('ls-tree', '-r', '-z', revision, root=root).decode().split('\0')
     entries = {}
+    test_source_metadata = None
     for row in rows:
         if not row:
             continue
         metadata, path = row.split('\t', 1)
+        if path == CORE_TEST_SOURCE:
+            test_source_metadata = metadata
         selected=relevant(path)
+        if profile=='core-runtime' and path==CORE_TEST_SOURCE:
+            selected=False
         if profile=='production-quotes' and path.startswith(('.private/','.github/')):
             selected=False
         if profile=='core-build' and path.startswith(('.private/','.github/')):
@@ -54,6 +64,8 @@ def input_fingerprint(revision='HEAD', root=ROOT, profile='core-testnet'):
                 '.private/tor-ui-abi.gradle','.github/workflows/core-validation.yml'}
         if selected:
             entries[path] = metadata
+    if profile=='core-runtime' and not (test_source_metadata or '').startswith('100644 blob '):
+        raise ValueError('Dedicated instrumentation must remain a normal tracked source file')
     # Version increments select an update target, not a different wallet engine.
     # All other Gradle properties (identity, SDK and behavior switches) stay bound.
     if 'gradle.properties' in entries:
@@ -127,6 +139,8 @@ def validate_core(receipt, expected_inputs):
     send=stages['send']
     if not all(send.get(key) is True for key in ('ui_review','ui_cancel_no_submission','ui_approval')):
         raise ValueError('Actual review/cancellation/approval UI evidence required')
+    if send.get('ui_approval_actions') != 1:
+        raise ValueError('Exactly one real UI approval action required')
     if stages['fund'].get('app_transaction_state') != 'Confirmed':
         raise ValueError('The reused incoming funding transaction must reach the app confirmed state')
     funding=receipt.get('funding_setup',{})
@@ -136,6 +150,8 @@ def validate_core(receipt, expected_inputs):
     for key in ('candidate_apk_sha256', 'baseline_apk_sha256', 'instrumentation_apk_sha256', 'harness_sha256'):
         if not re.fullmatch('[0-9a-f]{64}', str(receipt.get(key, ''))):
             raise ValueError('Missing executed artifact/harness digest: ' + key)
+    if not re.fullmatch('[0-9a-f]{64}',str(receipt.get('runtime_input_fingerprint',''))):
+        raise ValueError('Missing product-runtime input fingerprint')
     if not re.fullmatch('[0-9a-f]{64}',str(receipt.get('build_input_fingerprint',''))):
         raise ValueError('Missing relevant executed-build input fingerprint')
     if not re.fullmatch('[0-9a-f]{40}', str(receipt.get('build_source_sha', ''))):
@@ -150,6 +166,25 @@ def validate_core(receipt, expected_inputs):
     if len(txids) != 1 or not re.fullmatch('[0-9a-f]{64}', str(next(iter(txids)))):
         raise ValueError('Transaction identity not preserved through restart/restore')
     return True
+
+
+def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=None, root=ROOT):
+    # For late test-only attestations use the trusted current acceptance source.
+    # A controller-prepared upstream child instead owns its candidate app inputs,
+    # preserving the existing separately gated upstream integration path.
+    acceptance_revision = acceptance_revision or product_revision
+    validate_core(receipt, input_fingerprint(acceptance_revision, root=root))
+    runtime = input_fingerprint(product_revision, root=root, profile='core-runtime')
+    for revision in (acceptance_revision, receipt['build_source_sha']):
+        if input_fingerprint(revision, root=root, profile='core-runtime') != runtime:
+            raise ValueError('Executed wallet runtime differs from the production candidate')
+    if receipt.get('runtime_input_fingerprint') != runtime:
+        raise ValueError('Receipt wallet runtime binding mismatch')
+    compiled = receipt['build_input_fingerprint']
+    for revision in (acceptance_revision, receipt['build_source_sha']):
+        if input_fingerprint(revision, root=root, profile='core-build') != compiled:
+            raise ValueError('Executed instrumentation differs from current compiled test inputs')
+    return runtime
 
 
 def validate_quotes(receipt, expected_inputs):
@@ -169,6 +204,8 @@ def validate_quotes(receipt, expected_inputs):
 
 def validate_binding(proof, profile, expected_inputs, trusted_bytes, artifact_bytes, allow_late=False):
     bound=proof.get(profile,{})
+    if profile=='core_acceptance' and bound.get('binding')!=CORE_BINDING:
+        raise ValueError('Missing versioned core product-runtime binding')
     if (allow_late and bound.get('status')=='pending' and bound.get('input_fingerprint')==expected_inputs
             and artifact_bytes is None):
         # The trusted controller has independently validated the real receipt.
@@ -185,7 +222,7 @@ ATTESTATION_PATHS={'.private/core-acceptance.json','.private/quote-acceptance.js
 
 
 def validate_attestation_changes(paths):
-    if set(paths)-ATTESTATION_PATHS:
+    if set(paths)-(ATTESTATION_PATHS | {CORE_TEST_SOURCE}):
         raise ValueError('Candidate or controller changed after validation; rebuild required')
 
 
@@ -202,6 +239,8 @@ def verify_promotion_revision(candidate, controller, root=ROOT):
                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     paths=git('diff','--no-renames','--name-only',candidate,controller,root=root).decode().splitlines()
     validate_attestation_changes(paths)
+    if input_fingerprint(candidate,root=root,profile='core-runtime') != input_fingerprint(controller,root=root,profile='core-runtime'):
+        raise ValueError('Product runtime changed after the validated candidate')
     return True
 
 

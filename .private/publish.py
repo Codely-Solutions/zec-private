@@ -3,7 +3,7 @@ import base64, hashlib, importlib.util, json, os, re, shutil, subprocess, tempfi
 from unittest.mock import patch
 from pathlib import Path
 from apk_architecture import check_apk
-from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_binding, verify_promotion_revision
+from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_binding, verify_promotion_revision, validate_core_sources, CORE_BINDING
 from foundation_architecture import validate_graph_binding
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -72,11 +72,10 @@ def main():
     # Controller-owned attestation is independent of the untrusted build output.
     core_bytes=(ROOT/'.private/core-acceptance.json').read_bytes()
     core=json.loads(core_bytes)
-    core_inputs=input_fingerprint(expected)
-    validate_core(core,core_inputs)
-    if (input_fingerprint(core['build_source_sha'],profile='core-build')!=core.get('build_input_fingerprint') or
-            input_fingerprint(expected,profile='core-build')!=core.get('build_input_fingerprint')):
-        raise RuntimeError('Executed core build does not match current relevant inputs')
+    acceptance_revision=controller if late_attestation else expected
+    core_inputs=validate_core_sources(core,expected,acceptance_revision)
+    if proof.get('core_acceptance',{}).get('binding')!=CORE_BINDING:
+        raise RuntimeError('Missing versioned candidate product-runtime binding')
     core_artifact=artifact/'core-acceptance.json'
     validate_binding(proof,'core_acceptance',core_inputs,core_bytes,
                      core_artifact.read_bytes() if core_artifact.exists() else None,allow_late=late_attestation)

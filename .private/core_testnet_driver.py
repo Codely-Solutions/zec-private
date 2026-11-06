@@ -29,6 +29,7 @@ def run(adb, root, apks, manifest):
     report = dict(schema=1, passed=False, evidence_class='real-app-testnet', network='zcash-testnet',
                   clearnet_fallback=False, direct_bulk_downloads=True,personal_wallet_access=False, real_funds_used=False,
                   stages=stages, input_fingerprint=manifest['input_fingerprint'],
+                  runtime_input_fingerprint=manifest['runtime_input_fingerprint'],
                   build_input_fingerprint=manifest['build_input_fingerprint'],
                   build_source_sha=manifest['build_source_sha'],
                   baseline_source_sha=manifest['baseline_source_sha'],

@@ -13,6 +13,6 @@ if (run['conclusion']!='success' or run['event']!='workflow_dispatch' or
 with open(os.environ['GITHUB_OUTPUT'],'a') as output:
     output.write('source_sha='+run['head_sha']+'\n')
 
-# Only bounded receipt/document additions may follow validation. Runtime source,
-# build inputs, workflows and signing/controller code must remain unchanged.
+# Only attestations and the dedicated AndroidTest Kotlin file may follow validation.
+# Runtime, Gradle wiring, host policy, workflows and signing code remain unchanged.
 verify_promotion_revision(run['head_sha'],os.environ['GITHUB_SHA'])

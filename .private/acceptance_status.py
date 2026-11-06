@@ -2,7 +2,7 @@
 import json
 import os
 from pathlib import Path
-from acceptance_policy import input_fingerprint, validate_core, validate_quotes
+from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_core_sources
 
 root=Path(__file__).resolve().parents[1]
 pending=[]
@@ -14,10 +14,7 @@ for profile,name,validate in (('core-testnet','core-acceptance.json',validate_co
         receipt=json.loads(path.read_text())
         validate(receipt,fingerprint)
         if profile=='core-testnet':
-            build_inputs=receipt.get('build_input_fingerprint')
-            if (input_fingerprint(receipt['build_source_sha'],profile='core-build')!=build_inputs or
-                    input_fingerprint(profile='core-build')!=build_inputs):
-                raise ValueError('Executed core build inputs differ')
+            validate_core_sources(receipt)
         elif input_fingerprint(receipt['build_source_sha'],profile=profile)!=fingerprint:
             raise ValueError('Executed quote build inputs differ')
     except (OSError,ValueError,KeyError):

@@ -2,7 +2,7 @@
 import hashlib,json,os,re,shutil,subprocess,zipfile
 from pathlib import Path
 from apk_architecture import check_apk
-from acceptance_policy import input_fingerprint, validate_core, validate_quotes
+from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_core_sources, CORE_BINDING
 root=Path(__file__).resolve().parents[1]
 apks=list((root/'app/build/outputs/apk/zcashmainnetFoss/release').glob('*unsigned.apk'))
 if len(apks)!=1: raise SystemExit('Expected exactly one unsigned FOSS release APK')
@@ -42,11 +42,11 @@ proof['architecture']=architecture
 proof['workflow_run_id']=os.environ.get('GITHUB_RUN_ID')
 core_inputs=input_fingerprint(sha)
 core_path=root/'.private/core-acceptance.json'
-proof['core_acceptance']={'input_fingerprint':core_inputs,'status':'pending'}
+proof['core_acceptance']={'input_fingerprint':input_fingerprint(sha,profile='core-runtime'),'binding':CORE_BINDING,'status':'pending'}
 if core_path.exists():
     core=json.loads(core_path.read_text())
     if core.get('input_fingerprint')==core_inputs:
-        validate_core(core,core_inputs)
+        validate_core_sources(core,sha)
         shutil.copy2(core_path,out/'core-acceptance.json')
         proof['core_acceptance'].update(status='passed',receipt_sha256=hashlib.sha256(core_path.read_bytes()).hexdigest())
 quote_inputs=input_fingerprint(sha,profile='production-quotes')
