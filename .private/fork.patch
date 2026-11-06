@@ -11118,7 +11118,7 @@ index 000000000..660ac8c75
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
-index d55620b20..a8a1c5e97 100644
+index d55620b20..331047916 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 @@ -4 +3,0 @@ import cash.z.ecc.android.sdk.model.WalletAddress
@@ -11147,7 +11147,12 @@ index d55620b20..a8a1c5e97 100644
 @@ -391 +387 @@ class SwapRepositoryImplTest {
 -                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } throws
 +                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } throws
-@@ -764 +760 @@ class SwapRepositoryImplTest {
+@@ -421 +417 @@ class SwapRepositoryImplTest {
+-            assertEquals("test", mismatch.provider)
++            assertEquals("near", mismatch.provider)
+@@ -675,0 +672 @@ class SwapRepositoryImplTest {
++            every { provider } returns "near"
+@@ -764 +761 @@ class SwapRepositoryImplTest {
 -            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } returns quote
 +            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
