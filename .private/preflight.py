@@ -1,0 +1,83 @@
+"""Bounded, offline candidate checks before Java, Gradle or emulator setup."""
+import ast
+import json
+import re
+import subprocess
+from pathlib import Path
+
+from check import check
+from sync import source_state
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def git(root, *args):
+    return subprocess.check_output(['git', *args], cwd=root, text=True, timeout=30)
+
+
+def controller_checks(root):
+    errors = []
+    for path in sorted((root / '.private').glob('*.py')):
+        try:
+            ast.parse(path.read_text(encoding='utf-8'), filename=str(path))
+        except SyntaxError as error:
+            errors.append(f'{path.relative_to(root)}:{error.lineno}: {error.msg}')
+    for path in sorted((root / '.github/workflows').glob('*.y*ml')):
+        text = path.read_text(encoding='utf-8')
+        # Check concrete repository script bindings, without pretending to parse YAML.
+        for binding in re.findall(r'(?<![\w/])\.private/[\w./-]+\.(?:py|sh)', text):
+            if not (root / binding).is_file():
+                errors.append(f'{path.name}: missing local script {binding}')
+    return errors
+
+
+def changed_kotlin(root, base):
+    """Catch the long changed declarations that previously cost a CI iteration."""
+    errors = []
+    paths = git(root, 'diff', '--name-only', '-z', base, '--', '*.kt', '*.kts').split('\0')
+    for name in filter(None, paths):
+        if not re.search(r'/src/(?:main|test)/.*\.kt$', name):
+            continue  # Match production/unit-test sources, excluding private instrumentation and scripts.
+        path = root / name
+        if not path.is_file():
+            continue
+        diff = git(root, 'diff', '--unified=0', base, '--', name)
+        line = 0
+        for value in diff.splitlines():
+            if value.startswith('@@'):
+                line = int(re.search(r'\+(\d+)', value).group(1)) - 1
+            elif value.startswith('+') and not value.startswith('+++'):
+                line += 1
+                if len(value[1:]) > 120:
+                    errors.append(f'{name}:{line}: changed Kotlin line exceeds 120 columns')
+            elif value.startswith(' '):
+                line += 1
+    return errors
+
+
+def run(root=ROOT, base='HEAD'):
+    errors = controller_checks(root)
+    if git(root, 'rev-parse', '--is-shallow-repository').strip() != 'false':
+        errors.append('Checkout is shallow; use fetch-depth: 0 before acceptance selection')
+    git(root, 'rev-parse', '--verify', base + '^{commit}')
+    expected = json.loads((root / '.private/source-state.json').read_text())
+    if source_state(root) != expected:
+        errors.append('Source differs from source-state.json; refresh reviewed fork.patch and normalized state together')
+    try:
+        git(root, 'apply', '--numstat', str(root / '.private/fork.patch'))
+    except subprocess.CalledProcessError:
+        errors.append('fork.patch is malformed; regenerate it from reviewed source changes')
+    errors.extend(changed_kotlin(root, base))
+    errors.extend(check(root))
+    return errors
+
+
+if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--base', required=True, help='reviewed comparison commit for changed Kotlin lines')
+    args = parser.parse_args()
+    failures = run(base=args.base)
+    if failures:
+        raise SystemExit('\n'.join(failures))
+    print('Offline preflight passed; compilation, full deterministic tests and acceptance remain required.')

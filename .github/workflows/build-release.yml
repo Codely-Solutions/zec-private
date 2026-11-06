@@ -49,6 +49,10 @@ jobs:
           fetch-depth: 0
       - id: identity
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Offline preflight before Java and Gradle setup
+        run: |
+          baseline=$(python3 -c 'import json; print(json.load(open(".private/upgrade-baseline.json"))["source_sha"])')
+          python3 -B .private/preflight.py --base "$baseline"
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
@@ -58,11 +62,12 @@ jobs:
           cache-read-only: false
       - name: Fork regression checks
         run: |
-          python3 .private/check.py
           python3 .private/test_controls.py
           python3 .private/test_packaging.py
           python3 -B .private/test_branding.py
           python3 -B .private/test_foundation.py
+          python3 -B .private/test_preflight.py
+          python3 -B .private/test_actions_artifact_cleanup.py
           python3 -B .private/test_acceptance_policy.py
           python3 -B .private/test_sync.py
       - name: Select acceptance by exact relevant inputs before expensive preparation
@@ -101,6 +106,7 @@ jobs:
             artifact/foundation-runtime.json
             artifact/near-contract.json
             artifact/gradle-timing.json
+            artifact/gradle-resource.json
             artifact/task-timing.jsonl
             artifact/proof.json
             artifact/core-acceptance.json
@@ -119,6 +125,10 @@ jobs:
           ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
+      - name: Offline preflight before Java and Gradle setup
+        run: |
+          baseline=$(python3 -c 'import json; print(json.load(open(".private/upgrade-baseline.json"))["source_sha"])')
+          python3 -B .private/preflight.py --base "$baseline"
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
         with:
           distribution: temurin
@@ -141,6 +151,7 @@ jobs:
         with:
           name: emulator-validation-reports
           path: |
+            artifact/gradle-resource.json
             artifact/task-timing.jsonl
             build/reports/profile/
           if-no-files-found: ignore

@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "release": "v3.19.0-private.9",
+  "source_sha": "b34a56a0b3c0adfc27f30cc19ce7fd82f603858f",
+  "version_code": 3234009,
+  "package": "com.personal.zecprivate.testnet.foss.debug",
+  "artifact": {
+    "id": 13504698066,
+    "digest": "sha256:8950aae3db1f52735665daf800555c3d7462e8d7c1581ec9542d17f7cb670624",
+    "size_in_bytes": 70199784,
+    "expires_at": "2026-11-09T13:17:12Z"
+  },
+  "next_use": "In-place revision 9 to next candidate lifecycle; replace only after next signed release and fixture verification"
+}

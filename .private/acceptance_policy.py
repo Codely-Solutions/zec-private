@@ -26,7 +26,7 @@ def relevant(path):
             '.private/acceptance_policy.py', '.private/core_testnet_driver.py',
             '.private/run_tor_emulator.py', '.private/admit_core_emulator.py', '.private/core-network-policy.json',
             '.private/tor_differential_driver.py', '.private/strip_emulator_apk.py',
-            '.private/core_faucet.py',
+            '.private/core_faucet.py', '.private/upgrade-baseline.json',
             '.private/tor-ui-abi.gradle', '.github/workflows/core-validation.yml'}
     if path.startswith(('.idea/','docs/')) or '/src/test/' in path or '/src/androidTest/' in path:
         return False
@@ -124,6 +124,11 @@ def validate_core(receipt, expected_inputs):
             stages['fund'].get('balance_zatoshi',0)<=0 or stages['send'].get('fee_zatoshi',0)<=0 or
             stages['restore'].get('mined_height',0)<=0 or stages['restore'].get('amount_zatoshi')!=1000000):
         raise ValueError('Missing real transaction accounting/confirmation evidence')
+    send=stages['send']
+    if not all(send.get(key) is True for key in ('ui_review','ui_cancel_no_submission','ui_approval')):
+        raise ValueError('Actual review/cancellation/approval UI evidence required')
+    if stages['restore'].get('app_transaction_state') != 'Confirmed':
+        raise ValueError('Recovered incoming transaction must reach the app confirmed state')
     funding=receipt.get('funding_setup',{})
     if (funding.get('tor_exit_verified') is not True or funding.get('persistent_tor_connection') is not True or
             funding.get('txid')!=stages['fund']['funding_txid']):
@@ -135,7 +140,9 @@ def validate_core(receipt, expected_inputs):
         raise ValueError('Missing relevant executed-build input fingerprint')
     if not re.fullmatch('[0-9a-f]{40}', str(receipt.get('build_source_sha', ''))):
         raise ValueError('Missing build source identity')
-    if receipt.get('baseline_source_sha') != 'a0bd21f27bb53af0eeb9b433d0273c6f39b04e19':
+    baseline = json.loads((ROOT / '.private/upgrade-baseline.json').read_text())
+    if (receipt.get('baseline_source_sha') != baseline['source_sha'] or
+            receipt.get('baseline_version_code') != baseline['version_code']):
         raise ValueError('Unexpected migration baseline')
     if receipt.get('candidate_version_code', 0) <= receipt.get('baseline_version_code', 0):
         raise ValueError('Update did not increase versionCode')

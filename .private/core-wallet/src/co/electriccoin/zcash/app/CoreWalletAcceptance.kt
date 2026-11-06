@@ -2,6 +2,13 @@ package co.electriccoin.zcash.app
 
 import androidx.test.platform.app.InstrumentationRegistry
 import android.content.Intent
+import android.view.accessibility.AccessibilityNodeInfo
+import android.accessibilityservice.AccessibilityService
+import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.screen.send.Send
+import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
+import co.electriccoin.zcash.ui.common.usecase.PrefillSendData
+import co.electriccoin.zcash.ui.common.repository.SubmitProposalState
 import cash.z.ecc.android.sdk.model.BlockHeight
 import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.SeedPhrase
@@ -113,12 +120,39 @@ class CoreWalletAcceptance {
                     val before = balance()
                     val destination = state.getString("recipientAddress")
                     check(destination.startsWith("utest1"))
-                    val address = checkNotNull(dependency<TransactionRepository>().resolveWalletAddress(destination))
-                    dependency<CreateProposalUseCase>()(ZecSend(address, Zatoshi(1_000_000), Memo("core-testnet-acceptance"), null), false)
-                    dependency<ZashiProposalRepository>().getTransactionProposal()
-                    // Persist intent before submission; no retry after an ambiguous broadcast.
-                    state.put("sendAttempted", true).put("balanceBeforeSend", before); save(state)
-                    val result = dependency<ZashiProposalRepository>().submit()
+                    checkNotNull(dependency<TransactionRepository>().resolveWalletAddress(destination))
+                    check(!context.getSystemService(android.app.KeyguardManager::class.java).isDeviceSecure)
+                    val proposals = dependency<ZashiProposalRepository>()
+                    check(proposals.submitState.value == null)
+                    suspend fun openReview() {
+                        dependency<NavigationRouter>().forward(Send())
+                        dependency<PrefillSendUseCase>().request(
+                            PrefillSendData.All(Zatoshi(1_000_000), destination, null, listOf("core-testnet-acceptance"))
+                        ).join()
+                        clickUi(context.getString(co.electriccoin.zcash.ui.design.R.string.send_review))
+                        waitUi("core-testnet-acceptance")
+                        waitUi("0.01", exact = false)
+                        val proposal = proposals.getTransactionProposal()
+                        check(proposal is co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal)
+                        check(proposal.destination.address == destination)
+                        check(proposal.memo.value == "core-testnet-acceptance")
+                    }
+                    openReview()
+                    check(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
+                    withTimeout(15_000) { proposals.transactionProposal.first { it == null } }
+                    check(proposals.submitState.value == null)
+                    check(balance() == before)
+                    // Re-enter the actual form/review path. No submission occurs on cancellation.
+                    openReview()
+                    state.put("sendAttempted", true).put("balanceBeforeSend", before)
+                        .put("uiReview", true).put("uiCancelNoSubmission", true)
+                    save(state)
+                    // One real UI approval only. No direct repository submit or auth substitution.
+                    clickUi(context.getString(co.electriccoin.zcash.ui.R.string.tabs_send))
+                    val result = withTimeout(180_000) {
+                        proposals.submitState.filterNotNull().first { it is SubmitProposalState.Result }
+                    }.let { (it as SubmitProposalState.Result).submitResult }
+                    save(fixture().put("uiApproval", true))
                     fun safeDescription(value: String?): String? = value
                         ?.replace(Regex("[0-9a-fA-F]{64,}"), "[hex omitted]")
                         ?.replace(Regex("utest1[a-z0-9]+"), "[isolated test address]")?.take(400)
@@ -132,7 +166,7 @@ class CoreWalletAcceptance {
                         is SubmitResult.Success -> Unit
                     }
                     println("CORE_SEND_DIAGNOSTIC $diagnostic")
-                    save(state.put("initialSubmitType",result.javaClass.simpleName).put("candidateTxIds",JSONArray(result.txIds)))
+                    save(state.put("uiApproval",true).put("initialSubmitType",result.javaClass.simpleName).put("candidateTxIds",JSONArray(result.txIds)))
                     // The app deliberately keeps attempted gRPC failures pending
                     // for SDK resubmission. Observe that exact transaction; never
                     // invoke submit again or accept an unconfirmed result.
@@ -155,12 +189,18 @@ class CoreWalletAcceptance {
                         dependency<TransactionRepository>().observeTransaction(state.getString("txId"))
                             .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight!=null }
                     }
+                    val confirmed = withTimeout(600_000) {
+                        dependency<TransactionRepository>().observeTransaction(state.getString("txId"))
+                            .filterNotNull().first { it is ReceiveTransaction.Success }
+                    }
+                    check(confirmed.amount.value == 1_000_000L)
+                    state.put("restoreFirstMinedState",transaction.overview.transactionState.toString())
                     check(transaction.amount.value == 1_000_000L)
                     check("core-testnet-acceptance" in dependency<TransactionRepository>().getMemos(transaction))
                     awaitBalance(1_000_000)
                     check(balance() == 1_000_000L)
                     save(state.put("restoreMinedHeight",checkNotNull(transaction.overview.minedHeight).value)
-                        .put("restoreTransactionState",transaction.overview.transactionState.toString()))
+                        .put("restoreTransactionState",confirmed.overview.transactionState.toString()))
                 }
                 "transport" -> {
                     val provider=dependency<SynchronizerProvider>()
@@ -263,10 +303,42 @@ class CoreWalletAcceptance {
             .put("mode",fixture().getString("preflightMode"))
         if (stage=="send") receipt.put("fee_zatoshi",fixture().getLong("feeZatoshi"))
             .put("initial_submit_type",fixture().getString("initialSubmitType")).put("manual_resubmissions",0)
+            .put("ui_review",fixture().getBoolean("uiReview"))
+            .put("ui_cancel_no_submission",fixture().getBoolean("uiCancelNoSubmission"))
+            .put("ui_approval",fixture().getBoolean("uiApproval"))
+            .put("setup","production prefill bus; actual form Review and approval clicks")
+            .put("biometric_prompt_executed",false)
         if (stage=="restore") receipt.put("mined_height",fixture().getLong("restoreMinedHeight"))
             .put("amount_zatoshi",1_000_000L).put("app_transaction_state",fixture().getString("restoreTransactionState"))
+            .put("first_mined_state",fixture().getString("restoreFirstMinedState"))
         // No exception messages, seeds, addresses, HTTP bodies or private fixture are printed.
         println("CORE_RESULT $receipt")
+    }
+
+    private fun findUi(text: String, exact: Boolean): AccessibilityNodeInfo? {
+        val root = instrumentation.uiAutomation.rootInActiveWindow ?: return null
+        val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
+        pending.add(root)
+        var count = 0
+        while (pending.isNotEmpty() && count++ < 500) {
+            val node = pending.removeFirst()
+            val value = node.text?.toString().orEmpty()
+            if ((exact && value == text) || (!exact && value.contains(text))) return node
+            for (index in 0 until node.childCount) node.getChild(index)?.let { pending.add(it) }
+        }
+        return null
+    }
+
+    private suspend fun waitUi(text: String, exact: Boolean = true): AccessibilityNodeInfo = withTimeout(60_000) {
+        var node = findUi(text, exact)
+        while (node == null) { delay(200); node = findUi(text, exact) }
+        node
+    }
+
+    private suspend fun clickUi(text: String) {
+        var node = waitUi(text)
+        while (!node.isClickable) node = checkNotNull(node.parent)
+        check(node.isEnabled && node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
