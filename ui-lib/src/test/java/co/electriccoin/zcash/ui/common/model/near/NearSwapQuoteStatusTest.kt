@@ -85,6 +85,25 @@ class NearSwapQuoteStatusTest {
         assertEquals(ModelSwapStatus.REFUNDED, swap.status)
     }
 
+    @Test
+    fun executedOutputUsesRawBaseUnitsWhenFormattedFieldIsMissing() {
+        val original = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
+        val swap = original.copy(
+            response = original.response.copy(swapDetails = SwapDetails(amountOut = BigDecimal("2300001")))
+        )
+        assertEquals(BigDecimal("2.300001"), swap.executedAmountOut)
+        assertEquals(BigDecimal("2.300001"), swap.amountOutFormatted)
+        assertEquals(BigDecimal("2"), swap.quotedAmountOut)
+    }
+
+    @Test
+    fun missingExecutionRemainsExplicitEvenWhenStatusIsSuccessful() {
+        val swap = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
+        assertEquals(null, swap.executedAmountOut)
+        assertEquals(BigDecimal("2"), swap.amountOutFormatted)
+        assertEquals(BigDecimal("2.000000"), swap.quote.minimumAmountOut)
+    }
+
     private fun nearSwapQuoteStatus(serverStatus: SwapStatus, deadline: Instant) =
         NearSwapQuoteStatus(
             response =

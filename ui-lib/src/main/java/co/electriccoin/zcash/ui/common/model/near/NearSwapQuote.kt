@@ -98,6 +98,7 @@ data class NearSwapQuote(
     override val amountOut: BigDecimal = response.quote.amountOut
     override val amountOutUsd: BigDecimal = response.quote.amountOutUsd
     override val amountOutFormatted: BigDecimal = response.quote.amountOutFormatted
+    override val minimumAmountOut: BigDecimal = response.quote.minAmountOut.movePointLeft(destinationAsset.decimals)
 
     override val affiliateFee: BigDecimal = BigDecimal.ZERO
 

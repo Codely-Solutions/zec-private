@@ -42,7 +42,7 @@ class ControlsTest(unittest.TestCase):
             self.assertTrue(checks.check(root))
             p.write_text(p.read_text().replace('// Authorization: Bearer regression',''))
             p=root/'ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml'
-            p.write_text(p.read_text().replace('0.25%% where applicable','0.25% where applicable'))
+            p.write_text(p.read_text().replace('0.25%% included in quote','0.25% included in quote'))
             self.assertTrue(checks.check(root))
 
     def test_excluded_integrations_cannot_return(self):

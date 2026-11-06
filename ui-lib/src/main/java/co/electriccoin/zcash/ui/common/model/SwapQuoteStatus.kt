@@ -18,11 +18,12 @@ interface SwapQuoteStatus {
     val maxSlippage: BigDecimal
     val mode: SwapMode
 
-    val amountInFee: BigDecimal
     val amountInFormatted: BigDecimal
     val amountInUsd: BigDecimal
     val amountOutFormatted: BigDecimal
     val amountOutUsd: BigDecimal
+    val quotedAmountOut: BigDecimal get() = amountOutFormatted
+    val executedAmountOut: BigDecimal? get() = null
     val depositedAmountFormatted: BigDecimal?
     val refundedFormatted: BigDecimal?
 }

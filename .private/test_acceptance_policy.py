@@ -1,6 +1,7 @@
 """Small negative cases for promotion evidence; no emulator or network."""
 import copy
 import hashlib
+import json
 import os
 import subprocess
 import stat
@@ -67,14 +68,15 @@ class AcceptancePolicyTest(unittest.TestCase):
             with self.assertRaises(ValueError):verify_promotion_revision(candidate,changed,root=root)
 
     def receipt(self):
+        baseline = json.loads(Path(__file__).with_name('upgrade-baseline.json').read_text())
         receipt = dict(schema=1, input_fingerprint='inputs', passed=True,
                        evidence_class='real-app-testnet', network='zcash-testnet',
                        clearnet_fallback=False, personal_wallet_access=False, real_funds_used=False,
                        stages={s: dict(passed=True, txId='a'*64) for s in CORE_STAGES},
                        network_enforcement=dict(passed=True,metadata_no_direct_fallback_observed=True,direct_bulk_targets=['192.0.2.1']), build_source_sha='a'*40,
-                       baseline_source_sha='b34a56a0b3c0adfc27f30cc19ce7fd82f603858f',
+                       baseline_source_sha=baseline['source_sha'],
                        build_input_fingerprint='d'*64,runtime_input_fingerprint='e'*64,
-                       baseline_version_code=3234009, candidate_version_code=3234010)
+                       baseline_version_code=baseline['version_code'], candidate_version_code=baseline['version_code']+1)
         for key in ('candidate_apk_sha256', 'baseline_apk_sha256', 'instrumentation_apk_sha256', 'harness_sha256'):
             receipt[key] = 'b'*64
         receipt['stages']['interruption'].update(sync_restarted=True,synced=True,balance_preserved=True,

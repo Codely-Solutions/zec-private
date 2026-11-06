@@ -13,7 +13,6 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.PENDING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PROCESSING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.REFUNDED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
-import co.electriccoin.zcash.ui.common.model.isZCashAsset
 import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.SwapData
@@ -74,7 +73,7 @@ class SwapDetailVM(
                             onClick = ::onCopyDepositAddressClick
                         ),
                     recipient = createRecipientState(swapData),
-                    totalFees = createTotalFeesState(swapData),
+                    totalFees = createQuotedOutputState(swapData),
                     maxSlippage = createSlippageState(swapData),
                     timestamp =
                         TransactionDetailInfoRowState(
@@ -108,23 +107,15 @@ class SwapDetailVM(
         navigationRouter.forward(SwapSupportArgs(depositAddress))
     }
 
-    private fun createTotalFeesState(swapData: SwapData): TransactionDetailInfoRowState =
+    private fun createQuotedOutputState(swapData: SwapData): TransactionDetailInfoRowState =
         TransactionDetailInfoRowState(
-            title = stringRes(R.string.swapAndPay_totalFees),
+            title = stringRes(R.string.private_quoted_output),
             message =
-                if (swapData.status != null) {
-                    val text =
-                        stringResByCurrencyNumber(
-                            amount = swapData.status.amountInFee,
-                            ticker = swapData.status.originAsset.tokenTicker
-                        )
-                    if (swapData.status.destinationAsset.isZCashAsset) {
-                        stringRes("~") + text
-                    } else {
-                        text
-                    }
-                } else {
-                    null
+                swapData.status?.let {
+                    stringResByCurrencyNumber(
+                        amount = it.quotedAmountOut,
+                        ticker = it.destinationAsset.tokenTicker
+                    )
                 }?.withStyle()
         )
 
@@ -196,7 +187,14 @@ class SwapDetailVM(
                     PENDING -> stringRes(R.string.swapAndPay_status_pendingDeposit)
                     INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
                     PROCESSING -> stringRes(R.string.swapToZec_swapProcessing)
-                    SUCCESS -> stringRes(R.string.swapStatus_swapped)
+                    SUCCESS ->
+                        stringRes(
+                            if (swapData.status.executedAmountOut != null) {
+                                R.string.private_provider_output
+                            } else {
+                                R.string.private_estimated_output
+                            }
+                        )
                     REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
                     FAILED -> stringRes(R.string.swapStatus_swapFailed)
                     null -> null

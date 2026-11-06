@@ -120,7 +120,7 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxWidth(),
                         state =
                             TransactionDetailInfoRowState(
-                                title = stringRes(R.string.swapAndPay_totalFees),
+                                title = stringRes(R.string.private_wallet_transaction_fee),
                                 message = state.totalFees?.withStyle(),
                             )
                     )

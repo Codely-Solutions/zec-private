@@ -1,14 +1,14 @@
 {
   "schema": 1,
-  "release": "v3.19.0-private.9",
-  "source_sha": "b34a56a0b3c0adfc27f30cc19ce7fd82f603858f",
-  "version_code": 3234009,
+  "release": "v3.19.0-private.10",
+  "source_sha": "3ea69ed649628b2ba2b210de13962d580fc1daef",
+  "version_code": 3234010,
   "package": "com.personal.zecprivate.testnet.foss.debug",
   "artifact": {
-    "id": 13504698066,
-    "digest": "sha256:8950aae3db1f52735665daf800555c3d7462e8d7c1581ec9542d17f7cb670624",
-    "size_in_bytes": 70199784,
-    "expires_at": "2026-11-09T13:17:12Z"
+    "id": 13546461251,
+    "digest": "sha256:c1fbfd303532e11c40f09a1b36382fe9bfa2530b5b735af763d01a9221c7b316",
+    "size_in_bytes": 70239766,
+    "expires_at": "2026-11-09T22:32:43Z"
   },
-  "next_use": "In-place revision 9 to next candidate lifecycle; replace only after next signed release and fixture verification"
+  "next_use": "Revision 10 to 11 installed update; durable identical seedless release fixture recorded in parent provenance"
 }

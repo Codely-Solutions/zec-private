@@ -188,8 +188,7 @@ class TransactionDetailVM(
                                     value = transaction.recipient?.address.orEmpty()
                                 ),
                             totalFees =
-                                transaction.metadata.swapMetadata
-                                    ?.totalFees
+                                transaction.transaction.fee
                                     ?.let { stringRes(it) },
                             recipientAddress = recipient?.let { stringResByAddress(it) },
                             transactionId =

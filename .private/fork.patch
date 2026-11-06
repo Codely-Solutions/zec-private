@@ -243,130 +243,25 @@ index 000000000..365b74624
 +The current product uses Zcash wallet infrastructure, NEAR 1Click for swaps/status, and CoinMarketCap for fiat conversion where configured. Gift redemption accepts compatible legacy Zodl and Vizor links. These are functional compatibility boundaries, not endorsements. Provider fees and exchange spreads may apply; a zero fork affiliate fee does not mean a free swap. Review the received amount and current provider conditions.
 +
 +No automatic export of personal wallet data is authorized by this document. Required upstream and dependency copyright/license notices remain in the source and dependency notices.
-diff --git a/docs/UPSTREAM-README.md b/docs/UPSTREAM-README.md
+diff --git a/docs/SWAP-AMOUNTS.md b/docs/SWAP-AMOUNTS.md
 new file mode 100644
-index 000000000..b6a983dc7
+index 000000000..90e65f31c
 --- /dev/null
-+++ b/docs/UPSTREAM-README.md
-@@ -0,0 +1,94 @@
-+# Zodl Android Wallet
++++ b/docs/SWAP-AMOUNTS.md
+@@ -0,0 +1,13 @@
++# Swap amounts and costs
 +
-+This is the official home of the Zodl Zcash wallet for Android, a no-frills
-+Zcash mobile wallet leveraging the [Zcash Android SDK](https://github.com/zcash/zcash-android-wallet-sdk).
++The quote is an estimate of output. Its minimum output is the provider's base-unit guarantee converted using the destination asset's decimals. The review shows that minimum for floating-output swaps. CrossPay retains its maximum-input slippage allowance.
 +
-+# Download
++Status output comes from the provider's settled amount when available, including raw base-unit output when the formatted field is absent. Otherwise the displayed value remains explicitly quoted. Provider output is not an independently measured wallet credit. The wallet's received transaction records its own scanned net value. A provider/bridge reporting difference must not be silently corrected with a guessed constant.
 +
-+[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
-+     alt="Get it on F-Droid"
-+     height="80">](https://foss.zodl.com)
-+[<img src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png"
-+     alt="Get it on Google Play"
-+     height="80">](https://play.google.com/store/apps/details?id=co.electriccoin.zcash)
++The fork submits no app fees. Current unauthenticated 1Click requests use EXACT_INPUT, EXACT_OUTPUT or FLEX_INPUT. NEAR documents a 0.25% platform charge on non-ANY_INPUT quotes, included in the returned quote. This is not the total swap cost. Protocol, route and bridge costs or favourable execution may also affect output. Do not subtract an included fee a second time or infer aggregate fees from independently priced fiat values.
 +
-+Zodl runs its own F-Droid repository at <https://foss.zodl.com>. To add it to
-+your F-Droid client, tap this link on Android:
++The review omits a wallet fee for externally funded incoming swaps. Outgoing swaps retain the wallet proposal fee; completed outgoing details use the actual wallet transaction fee rather than historical aggregate metadata. Legacy stored fee fields remain readable for compatibility.
 +
-+```
-+fdroidrepos://foss.zodl.com/fdroid/repo?fingerprint=7e751ab710159dff44f55631f910ba4033f0ebd2f867691af633cece4ddb62e4
-+```
++Official rules: https://docs.near-intents.org/resources/fees (reviewed 2026-11-07). Provider status is evidence of its report, not proof of shielded output value. Personal examples and raw provider responses stay outside this public repository.
 +
-+…or add the URL manually in **F-Droid → Settings → Repositories → +**:
-+`https://foss.zodl.com/fdroid/repo` (fingerprint
-+`7e751ab710159dff44f55631f910ba4033f0ebd2f867691af633cece4ddb62e4`).
-+
-+Unlike the `f-droid.org` build, our repo ships the same build-time
-+integrations as the Google Play release (Flexa, CMC, Crashlytics) and is
-+signed with the same upload key — no reinstall needed when switching.
-+
-+Or download the latest APK from the [Releases Section](https://github.com/zodl-inc/zodl-android/releases/latest).
-+
-+# Zodl Support
-+
-+Obtain help for Zodl and connect with our team at [support.zodl.com](https://support.zodl.com/).
-+
-+# Reporting an issue
-+
-+If you'd like to report a technical issue or feature request for the Android
-+Wallet, please file a GitHub issue [here](https://github.com/zodl-inc/zodl-android/issues/new/choose).
-+
-+For feature requests and issues related to the Zodl user interface that are
-+not Android-specific, please file a GitHub issue [here](https://github.com/zodl-inc/zodl-project/issues/new/choose).
-+
-+If you wish to report a security issue, please follow our
-+[Responsible Disclosure guidelines](https://github.com/zodl-inc/zodl-project/blob/master/responsible_disclosure.md).
-+See the [Wallet App Threat Model](https://github.com/zodl-inc/zodl-project/blob/master/wallet_threat_model.md)
-+for more information about the security and privacy limitations of the wallet.
-+
-+General Zcash questions and/or support requests and are best directed to either:
-+ * [Zcash Forum](https://forum.zcashcommunity.com/)
-+ * [Discord Community](https://discord.io/zcash-community)
-+
-+# Contributing
-+
-+Contributions are very much welcomed!  Please read our 
-+[Contributing Guidelines](docs/CONTRIBUTING.md) to learn about our process.
-+
-+# Getting Started
-+
-+If you'd like to compile this application from source, please see our 
-+[Setup Documentation](docs/Setup.md) to get started.
-+
-+# Forking
-+
-+If you plan to fork the project to create a new app of your own, please make
-+the following changes.  (If you're making a GitHub fork to contribute back to
-+the project, these steps are not necessary.)
-+
-+1. Change the app name under [gradle.properties](gradle.properties)
-+    1. See `ZCASH_RELEASE_APP_NAME`
-+1. Change the package name under [app/build.gradle.kts](app/build.gradle.kts)
-+    1. See `ZCASH_RELEASE_PACKAGE_NAME`
-+1. Change the support email address under [strings.xml](ui-lib/src/main/res/ui/non_translatable/values/strings.xml)
-+    1. See `support_email_address`
-+1. Remove any copyrighted Zcash icons, logos, or assets
-+    1. ui-lib/src/main/res/common/ - All of the the ic_launcher assets
-+1. Optional
-+    1. Configure secrets and variables for [Continuous Integration](docs/CI.md)
-+    1. Configure Firebase API keys and place them under `app/src/debug/google-services.json` and `app/src/release/google-services.json`
-+
-+# Known Issues
-+
-+1. During builds, a warning will be printed that says "Unable to detect AGP
-+   versions for included builds. All projects in the build should use the same
-+   AGP version."  This can be safely ignored.  The version under
-+   build-conventions is the same as the version used elsewhere in the
-+   application.
-+1. When the code coverage Gradle property
-+   `IS_ANDROID_INSTRUMENTATION_TEST_COVERAGE_ENABLED` is enabled, the debug app
-+   APK cannot be run.  The coverage flag should therefore only be set when
-+   running automated tests.
-+1. Test coverage for Compose code will be low, due to [known limitations](https://github.com/jacoco/jacoco/issues/1208) in the interaction between Compose and Jacoco.
-+1. Adding the `espresso-contrib` dependency will cause builds to fail, due to conflicting classes.  This is a [known issue](https://github.com/zcash/zcash-android-wallet-sdk/issues/306) with the Zcash Android SDK.
-+1. During app first launch, the following exception starting with `AndroidKeysetManager: keyset not found, will generate a new one` is printed twice.  This exception is not an error, and the code is not being invoked twice.
-diff --git a/docs/UPSTREAM-dependabot.yml b/docs/UPSTREAM-dependabot.yml
-new file mode 100644
-index 000000000..146265093
---- /dev/null
-+++ b/docs/UPSTREAM-dependabot.yml
-@@ -0,0 +1,17 @@
-+version: 2
-+updates:
-+  - package-ecosystem: "github-actions"
-+    directory: "/"
-+    schedule:
-+      interval: "daily"
-+
-+  - package-ecosystem: "docker"
-+    directory: ".github/actions/antivirus/"
-+    schedule:
-+      interval: "daily"
-+
-+  - package-ecosystem: "gradle"
-+    directory: "/"
-+    schedule:
-+      interval: "weekly"
-+    open-pull-requests-limit: 10
-\ No newline at end of file
++Upstream integrations must preserve amount provenance, base-unit conversion, zero app fees, actual wallet fee presentation and history amount search. Deterministic regressions and real Tor quote acceptance cover these boundaries. Funded production settlement is outside automated acceptance.
 diff --git a/docs/USE.md b/docs/USE.md
 new file mode 100644
 index 000000000..8ca8e572c
@@ -598,12 +493,12 @@ index 96a911cd4..799c7d501 100644
 -    <string name="view_only_remove_message">Removing this account clears its data from Zodl on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 +    <string name="view_only_remove_message">Removing this account clears its data from ZEC Private on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..e865965d0 100644
+index ec56161b5..cc32080cc 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
 -ZCASH_VERSION_CODE=1
-+ZCASH_VERSION_CODE=3234010
++ZCASH_VERSION_CODE=3234011
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
 -ZCASH_RELEASE_APP_NAME=Zodl
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash
@@ -3560,7 +3455,7 @@ index 13e9d0788..d1112a657 100644
 -    @Throws(ResponseException::class, AssetNotFoundException::class)
 +    @Throws(AssetNotFoundException::class)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
-index ab4d7ab5b..6693c38d3 100644
+index ab4d7ab5b..65a02b4b5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
 @@ -3,2 +2,0 @@ package co.electriccoin.zcash.ui.common.model
@@ -3568,9 +3463,11 @@ index ab4d7ab5b..6693c38d3 100644
 -import cash.z.ecc.android.sdk.model.Zatoshi
 @@ -16 +13,0 @@ interface SwapQuote {
 -    val zecExchangeRate: BigDecimal
-@@ -27 +23,0 @@ interface SwapQuote {
+@@ -24,0 +22 @@ interface SwapQuote {
++    val minimumAmountOut: BigDecimal? get() = null
+@@ -27 +24,0 @@ interface SwapQuote {
 -    val affiliateFeeZatoshi: Zatoshi
-@@ -35,8 +31 @@ interface SwapQuote {
+@@ -35,7 +31,0 @@ interface SwapQuote {
 -    fun getTotal(proposal: Proposal?): BigDecimal
 -
 -    fun getTotalUsd(proposal: Proposal?): BigDecimal
@@ -3578,9 +3475,15 @@ index ab4d7ab5b..6693c38d3 100644
 -    fun getTotalFeesUsd(proposal: Proposal?): BigDecimal
 -
 -    fun getTotalFeesZatoshi(proposal: Proposal?): Zatoshi
--}
-+}
-\ No newline at end of file
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuoteStatus.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuoteStatus.kt
+index b7f89d023..c6539991a 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuoteStatus.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuoteStatus.kt
+@@ -21 +20,0 @@ interface SwapQuoteStatus {
+-    val amountInFee: BigDecimal
+@@ -25,0 +25,2 @@ interface SwapQuoteStatus {
++    val quotedAmountOut: BigDecimal get() = amountOutFormatted
++    val executedAmountOut: BigDecimal? get() = null
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ZecSwapComposition.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ZecSwapComposition.kt
 new file mode 100644
 index 000000000..d21d293af
@@ -3636,7 +3539,7 @@ index 000000000..d21d293af
 +    private fun SwapAsset.foundationId() = AssetId("mainnet:${blockchain.chainTicker}", assetId)
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
-index e5b3ebffe..0377cf78e 100644
+index e5b3ebffe..08ecdc02e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
 @@ -3,6 +2,0 @@ package co.electriccoin.zcash.ui.common.model.near
@@ -3659,7 +3562,9 @@ index e5b3ebffe..0377cf78e 100644
 -        response.quote.amountInUsd
 -            .divide(response.quote.amountInFormatted, MathContext.DECIMAL128)
 -
-@@ -113,24 +102 @@ data class NearSwapQuote(
+@@ -111,0 +101 @@ data class NearSwapQuote(
++    override val minimumAmountOut: BigDecimal = response.quote.minAmountOut.movePointLeft(destinationAsset.decimals)
+@@ -113,24 +103 @@ data class NearSwapQuote(
 -    override val affiliateFee: BigDecimal =
 -        response.quote.amountInFormatted
 -            .multiply(
@@ -3685,7 +3590,7 @@ index e5b3ebffe..0377cf78e 100644
 -                .convertZecToZatoshi()
 -        }
 +    override val affiliateFee: BigDecimal = BigDecimal.ZERO
-@@ -138,7 +104 @@ data class NearSwapQuote(
+@@ -138,7 +105 @@ data class NearSwapQuote(
 -    override val affiliateFeeUsd: BigDecimal =
 -        response.quote.amountInUsd
 -            .coerceAtLeast(BigDecimal(0))
@@ -3694,7 +3599,7 @@ index e5b3ebffe..0377cf78e 100644
 -                MathContext.DECIMAL128
 -            )
 +    override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO
-@@ -149,14 +108,0 @@ data class NearSwapQuote(
+@@ -149,14 +109,0 @@ data class NearSwapQuote(
 -
 -    override fun getTotal(proposal: Proposal?) = amountInFormatted + (getZecFee(proposal) ?: BigDecimal.ZERO)
 -
@@ -3710,22 +3615,38 @@ index e5b3ebffe..0377cf78e 100644
 -    private fun getZecFeeUsd(proposal: Proposal?): BigDecimal =
 -        zecExchangeRate.multiply(getZecFee(proposal) ?: BigDecimal.ZERO, MathContext.DECIMAL128)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
-index b2c6505ad..f52ec2420 100644
+index b2c6505ad..81ccde220 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.common.model.near
 -import co.electriccoin.zcash.ui.common.datasource.AFFILIATE_FEE_BPS
-@@ -28 +27 @@ data class NearSwapQuoteStatus(
+@@ -28 +27,7 @@ data class NearSwapQuoteStatus(
 -            // zecExchangeRate divides by the effective amountInFormatted (swapDetails value when present),
++            require(details.amountOut == null || details.amountOut.signum() >= 0) {
++                "Swap status has negative output"
++            }
++            require(details.amountOutFormatted == null || details.amountOutFormatted.signum() >= 0) {
++                "Swap status has negative formatted output"
++            }
 +            // Input USD unit pricing divides by the effective amountInFormatted (swapDetails value when present),
-@@ -102,6 +101 @@ data class NearSwapQuoteStatus(
+@@ -102,7 +106,0 @@ data class NearSwapQuoteStatus(
 -    override val amountInFee: BigDecimal =
 -        amountInFormatted
 -            .multiply(
 -                BigDecimal(AFFILIATE_FEE_BPS).divide(BigDecimal("10000"), MathContext.DECIMAL128),
 -                MathContext.DECIMAL128
 -            )
-+    override val amountInFee: BigDecimal = BigDecimal.ZERO
+-
+@@ -111,2 +109,7 @@ data class NearSwapQuoteStatus(
+-    override val amountOutFormatted: BigDecimal =
+-        response.swapDetails?.amountOutFormatted ?: quote.amountOutFormatted
++    override val quotedAmountOut: BigDecimal = quote.amountOutFormatted
++
++    override val executedAmountOut: BigDecimal? =
++        response.swapDetails?.amountOutFormatted
++            ?: response.swapDetails?.amountOut?.movePointLeft(destination.decimals)
++
++    override val amountOutFormatted: BigDecimal = executedAmountOut ?: quotedAmountOut
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteRequest.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteRequest.kt
 index d8016e519..37dcf12b4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteRequest.kt
@@ -4524,6 +4445,13 @@ index 565cd3bea..dc5c326ec 100644
 @@ -37,0 +40,2 @@ class ErrorMapperUseCase(
 +    private val scope by lazy { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
 +
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCase.kt
+index 48c238fb1..2c0064b49 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCase.kt
+@@ -261 +261 @@ class GetFilteredActivitiesUseCase(
+-                    (stringResByNumber(activity.activity.swap.totalFeesUsd) + stringRes(" ZEC"))
++                    (stringResByNumber(activity.activity.swap.amountOutFormatted) + stringRes(" ZEC"))
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetFlexaStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetFlexaStatusUseCase.kt
 deleted file mode 100644
 index 84d9fd0c0..000000000
@@ -5586,6 +5514,50 @@ index 7db73b703..f33664273 100644
 @@ -562 +562 @@ private fun ColoredSenderPreview() =
 -                                name = stringRes("Zodl"),
 +                                name = stringRes("ZEC Private"),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
+index a874453ef..68553b869 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
+@@ -16 +15,0 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
+-import co.electriccoin.zcash.ui.common.model.isZCashAsset
+@@ -77 +76 @@ class SwapDetailVM(
+-                    totalFees = createTotalFeesState(swapData),
++                    totalFees = createQuotedOutputState(swapData),
+@@ -111 +110 @@ class SwapDetailVM(
+-    private fun createTotalFeesState(swapData: SwapData): TransactionDetailInfoRowState =
++    private fun createQuotedOutputState(swapData: SwapData): TransactionDetailInfoRowState =
+@@ -113 +112 @@ class SwapDetailVM(
+-            title = stringRes(R.string.swapAndPay_totalFees),
++            title = stringRes(R.string.private_quoted_output),
+@@ -115,13 +114,5 @@ class SwapDetailVM(
+-                if (swapData.status != null) {
+-                    val text =
+-                        stringResByCurrencyNumber(
+-                            amount = swapData.status.amountInFee,
+-                            ticker = swapData.status.originAsset.tokenTicker
+-                        )
+-                    if (swapData.status.destinationAsset.isZCashAsset) {
+-                        stringRes("~") + text
+-                    } else {
+-                        text
+-                    }
+-                } else {
+-                    null
++                swapData.status?.let {
++                    stringResByCurrencyNumber(
++                        amount = it.quotedAmountOut,
++                        ticker = it.destinationAsset.tokenTicker
++                    )
+@@ -199 +190,8 @@ class SwapDetailVM(
+-                    SUCCESS -> stringRes(R.string.swapStatus_swapped)
++                    SUCCESS ->
++                        stringRes(
++                            if (swapData.status.executedAmountOut != null) {
++                                R.string.private_provider_output
++                            } else {
++                                R.string.private_estimated_output
++                            }
++                        )
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
 index cd7555ecc..5b692645f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
@@ -5650,19 +5622,26 @@ index 9f37c1d93..998a4f33e 100644
 -    private fun onCancelPaymentClick() = cancelSwap()
 +    private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..8d3a5b371 100644
+index 717411935..5202e9cf1 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-@@ -96 +96 @@ internal class SwapQuoteVMMapper {
+@@ -65,0 +66,6 @@ internal class SwapQuoteVMMapper {
++        quote.minimumAmountOut?.let {
++            return stringRes(
++                R.string.private_minimum_received,
++                stringResByDynamicCurrencyNumber(it, quote.destinationAsset.tokenTicker)
++            )
++        }
+@@ -96 +102 @@ internal class SwapQuoteVMMapper {
 -                description = stringRes(R.string.swapAndPay_totalFees),
 +                description = stringRes(R.string.private_wallet_transaction_fee),
-@@ -108,0 +109,6 @@ internal class SwapQuoteVMMapper {
+@@ -107,0 +114,6 @@ internal class SwapQuoteVMMapper {
++            ).takeIf { !quote.destinationAsset.isZCashAsset && totalFeesZatoshi.value > 0 },
 +            SwapQuoteInfoItem(
 +                description = stringRes(R.string.private_provider_costs),
 +                title = stringRes(R.string.private_provider_costs_included).withStyle(),
-+                subtitle = stringRes(R.string.private_no_affiliate_fee).withStyle(),
++                subtitle = null,
 +                layout = SwapQuoteInfoLayout.STACKED
-+            ),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 index 1fa0df8d6..187ee7e7f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
@@ -5716,6 +5695,36 @@ index 1fa0df8d6..187ee7e7f 100644
 @@ -307 +351 @@ private fun SuccessPreview() =
 -                                title = stringRes("Zodl").withStyle(),
 +                                title = stringRes("ZEC Private").withStyle(),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
+index c9e6612fa..63eee36c5 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
+@@ -99 +99,9 @@ class CommonTransactionDetailMapper {
+-                    chain = destinationAsset.chainName
++                    chain =
++                        destinationAsset.chainName + stringRes(" · ") +
++                            stringRes(
++                                if (swap.executedAmountOut != null) {
++                                    R.string.private_provider_output
++                                } else {
++                                    R.string.private_quoted_output
++                                }
++                            )
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
+index 00fe60557..f7dbc6170 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
+@@ -191,2 +191 @@ class TransactionDetailVM(
+-                                transaction.metadata.swapMetadata
+-                                    ?.totalFees
++                                transaction.transaction.fee
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
+index ad8bc8549..028003b5c 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
+@@ -123 +123 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+-                                title = stringRes(R.string.swapAndPay_totalFees),
++                                title = stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/whatsnew/AndroidWhatsNew.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/whatsnew/AndroidWhatsNew.kt
 deleted file mode 100644
 index 33610ecb3..000000000
@@ -10258,15 +10267,18 @@ index 423d6742d..a8aeb88ba 100644
 +    <string name="ironwood_announcement_primary_button">Go to ZEC Private</string>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
-index 000000000..50f80d556
+index 000000000..3af6c3588
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
-@@ -0,0 +1,6 @@
+@@ -0,0 +1,9 @@
 +<resources>
 +    <string name="private_wallet_transaction_fee" translatable="false">Wallet transaction fee</string>
-+    <string name="private_provider_costs" translatable="false">Provider and bridge costs</string>
-+    <string name="private_provider_costs_included" translatable="false">Included in the quoted amount received</string>
-+    <string name="private_no_affiliate_fee" translatable="false">No affiliate fee. Anonymous API platform fee: 0.25%% where applicable. Other swap costs may apply; review the quoted amount received.</string>
++    <string name="private_provider_costs" translatable="false">NEAR platform fee</string>
++    <string name="private_provider_costs_included" translatable="false">0.25%% included in quote</string>
++    <string name="private_quoted_output" translatable="false">Quoted output</string>
++    <string name="private_minimum_received" translatable="false">Minimum received: %1$s</string>
++    <string name="private_provider_output" translatable="false">Provider output</string>
++    <string name="private_estimated_output" translatable="false">Quoted output (execution unavailable)</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/strings.xml
 index 813f56457..972dcc8f8 100644
@@ -10666,6 +10678,30 @@ index 000000000..68c54e72d
 +        )
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt
+index 1f1b3f2c9..7ddb3ff5a 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt
+@@ -87,0 +88,19 @@ class NearSwapQuoteStatusTest {
++    @Test
++    fun executedOutputUsesRawBaseUnitsWhenFormattedFieldIsMissing() {
++        val original = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
++        val swap = original.copy(
++            response = original.response.copy(swapDetails = SwapDetails(amountOut = BigDecimal("2300001")))
++        )
++        assertEquals(BigDecimal("2.300001"), swap.executedAmountOut)
++        assertEquals(BigDecimal("2.300001"), swap.amountOutFormatted)
++        assertEquals(BigDecimal("2"), swap.quotedAmountOut)
++    }
++
++    @Test
++    fun missingExecutionRemainsExplicitEvenWhenStatusIsSuccessful() {
++        val swap = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
++        assertEquals(null, swap.executedAmountOut)
++        assertEquals(BigDecimal("2"), swap.amountOutFormatted)
++        assertEquals(BigDecimal("2.000000"), swap.quote.minimumAmountOut)
++    }
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteTest.kt
 index a3e430b3c..56993ca02 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteTest.kt
@@ -11378,6 +11414,84 @@ index 000000000..ef29cc3a1
 +        assertEquals("Diagnostic report", shared.getStringExtra(Intent.EXTRA_SUBJECT))
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCaseTest.kt
+new file mode 100644
+index 000000000..a21e89296
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCaseTest.kt
+@@ -0,0 +1,72 @@
++package co.electriccoin.zcash.ui.common.usecase
++
++import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
++import co.electriccoin.zcash.ui.common.repository.TransactionFilterRepositoryImpl
++import co.electriccoin.zcash.ui.common.repository.TransactionRepository
++import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
++import io.mockk.coEvery
++import io.mockk.every
++import io.mockk.mockk
++import kotlinx.coroutines.flow.filterNotNull
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.flow.flowOf
++import kotlinx.coroutines.test.runTest
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import java.math.BigDecimal
++import java.time.Instant
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class GetFilteredActivitiesUseCaseTest {
++    private val activity =
++        ActivityData.BySwap(
++            mockk<TransactionSwapMetadata> {
++                every { lastUpdated } returns Instant.EPOCH
++                every { depositAddress } returns "synthetic-deposit"
++                every { amountOutFormatted } returns BigDecimal("1.23456789")
++                every { totalFeesUsd } returns BigDecimal.ZERO
++            }
++        )
++
++    @Test
++    fun incomingSwapMatchesReceivedAmount() =
++        runTest {
++            assertEquals(listOf(activity), filteredActivities("1.23456789"))
++        }
++
++    @Test
++    fun incomingSwapDoesNotMatchUnrelatedUsdFee() =
++        runTest {
++            assertTrue(filteredActivities("0.00").isEmpty())
++        }
++
++    private suspend fun filteredActivities(query: String): List<ActivityData> {
++        val getActivities =
++            mockk<GetActivitiesUseCase> {
++                every { observe() } returns flowOf(listOf(activity))
++            }
++        val transactionRepository =
++            mockk<TransactionRepository> {
++                every { observeTransactionsByMemo(any()) } returns flowOf(emptyList())
++            }
++        val restoreTimestamp =
++            mockk<RestoreTimestampDataSource> {
++                coEvery { getOrCreate() } returns Instant.EPOCH
++            }
++        val filters = TransactionFilterRepositoryImpl().apply { applyFulltext(query) }
++        return GetFilteredActivitiesUseCase(
++            getActivities = getActivities,
++            transactionFilterRepository = filters,
++            transactionRepository = transactionRepository,
++            restoreTimestampDataSource = restoreTimestamp,
++            addressBookRepository = mockk(),
++            context = RuntimeEnvironment.getApplication(),
++        ).observe().filterNotNull().first()
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
 index 40bfe60a6..39059e4b6 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
@@ -11698,7 +11812,7 @@ index bac1a53ce..f2affb203 100644
 -}
 +) : SwapQuote
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-index 38427672d..1181b3696 100644
+index 38427672d..a96a0fd03 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 @@ -2,0 +3,20 @@ package co.electriccoin.zcash.ui.screen.swap.quote
@@ -11742,6 +11856,12 @@ index 38427672d..1181b3696 100644
 +    val composeTestRule = createComposeRule()
 +
 @@ -68,0 +101,98 @@ class SwapQuoteVMMapperTest {
++    @Test
++    fun incomingQuoteDoesNotInventAWalletTransactionFee() {
++        val items = createItems(zashi(), SwapAssetTestFixture.zecAsset())
++        assertFalse(items.any { it.description.resourceId() == R.string.private_wallet_transaction_fee })
++    }
++
 +    @Test
 +    fun incomingQuoteFeeNoteRendersWithoutFormatConversionFailure() {
 +        assertQuoteRowsRender(SwapMode.FLEX_INPUT, SwapAssetTestFixture.zecAsset())
@@ -11797,22 +11917,16 @@ index 38427672d..1181b3696 100644
 +            }
 +        }
 +        composeTestRule.waitForIdle()
-+        val label = composeTestRule.onNodeWithText("Provider and bridge costs")
-+        val included = composeTestRule.onNodeWithText("Included in the quoted amount received")
-+        val note = composeTestRule.onNodeWithText(
-+            "No affiliate fee. Anonymous API platform fee: 0.25% where applicable. " +
-+                "Other swap costs may apply; review the quoted amount received."
-+        )
++        val label = composeTestRule.onNodeWithText("NEAR platform fee")
++        val included = composeTestRule.onNodeWithText("0.25% included in quote")
 +        val labelBounds = label.fetchSemanticsNode().boundsInRoot
 +        val titleBounds = included.fetchSemanticsNode().boundsInRoot
-+        val noteBounds = note.fetchSemanticsNode().boundsInRoot
 +        val rowBounds = composeTestRule.onNodeWithTag("quote-rows").fetchSemanticsNode().boundsInRoot
 +        assertTrue(labelBounds.width >= rowBounds.width * .95f, "Provider label lost its available width")
 +        assertTrue(labelBounds.height < labelBounds.width * .3f, "Provider label became a vertical character column")
 +        assertTrue(titleBounds.top >= labelBounds.bottom, "Explanation must be below the label")
-+        assertTrue(noteBounds.top >= titleBounds.bottom, "Fee note must be below the explanation")
-+        assertTrue(noteBounds.bottom - labelBounds.top < rowBounds.width * 1.3f, "Provider block is excessively tall")
-+        for (node in listOf(label, included, note)) {
++        assertTrue(titleBounds.bottom - labelBounds.top < rowBounds.width * .7f, "Provider block is excessively tall")
++        for (node in listOf(label, included)) {
 +            val layouts = mutableListOf<TextLayoutResult>()
 +            node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action -> action(layouts) }
 +            assertFalse(layouts.single().hasVisualOverflow, "Provider text is clipped or ellipsized")

@@ -63,6 +63,12 @@ internal class SwapQuoteVMMapper {
     @Suppress("MagicNumber")
     private fun SwapQuoteInternalState.createInfoText(): StringResource? {
         if (quote.mode == EXACT_OUTPUT) return null
+        quote.minimumAmountOut?.let {
+            return stringRes(
+                R.string.private_minimum_received,
+                stringResByDynamicCurrencyNumber(it, quote.destinationAsset.tokenTicker)
+            )
+        }
         val slippageUsd = quote.amountOutUsd.multiply(quote.slippage.divide(BigDecimal(100)))
         return stringRes(
             R.string.swapAndPay_swapQuoteSlippageWarn,
@@ -105,11 +111,11 @@ internal class SwapQuoteVMMapper {
                         .takeIf {
                             quote.mode == EXACT_OUTPUT
                         }?.withStyle()
-            ),
+            ).takeIf { !quote.destinationAsset.isZCashAsset && totalFeesZatoshi.value > 0 },
             SwapQuoteInfoItem(
                 description = stringRes(R.string.private_provider_costs),
                 title = stringRes(R.string.private_provider_costs_included).withStyle(),
-                subtitle = stringRes(R.string.private_no_affiliate_fee).withStyle(),
+                subtitle = null,
                 layout = SwapQuoteInfoLayout.STACKED
             ),
             if (quote.mode == EXACT_OUTPUT) {

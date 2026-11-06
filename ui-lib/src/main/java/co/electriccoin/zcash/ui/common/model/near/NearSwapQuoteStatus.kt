@@ -24,6 +24,12 @@ data class NearSwapQuoteStatus(
     init {
         val details = response.swapDetails
         if (details != null) {
+            require(details.amountOut == null || details.amountOut.signum() >= 0) {
+                "Swap status has negative output"
+            }
+            require(details.amountOutFormatted == null || details.amountOutFormatted.signum() >= 0) {
+                "Swap status has negative formatted output"
+            }
             // Input USD unit pricing divides by the effective amountInFormatted (swapDetails value when present),
             // so reject a non-positive server-supplied value to avoid a divide-by-zero. A null value is
             // fine: it falls back to the quote's amountInFormatted, which is already guarded.
@@ -98,12 +104,15 @@ data class NearSwapQuoteStatus(
 
     override val amountInFormatted: BigDecimal = response.swapDetails?.amountInFormatted ?: quote.amountInFormatted
 
-    override val amountInFee: BigDecimal = BigDecimal.ZERO
-
     override val amountInUsd: BigDecimal = response.swapDetails?.amountInUsd ?: quote.amountInUsd
 
-    override val amountOutFormatted: BigDecimal =
-        response.swapDetails?.amountOutFormatted ?: quote.amountOutFormatted
+    override val quotedAmountOut: BigDecimal = quote.amountOutFormatted
+
+    override val executedAmountOut: BigDecimal? =
+        response.swapDetails?.amountOutFormatted
+            ?: response.swapDetails?.amountOut?.movePointLeft(destination.decimals)
+
+    override val amountOutFormatted: BigDecimal = executedAmountOut ?: quotedAmountOut
 
     override val amountOutUsd: BigDecimal = response.swapDetails?.amountOutUsd ?: quote.amountOutUsd
 
