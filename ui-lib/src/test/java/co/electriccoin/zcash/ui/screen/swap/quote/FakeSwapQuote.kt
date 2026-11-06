@@ -34,5 +34,4 @@ internal data class FakeSwapQuote(
     override val timestamp: Instant = Clock.System.now(),
     override val deadline: Instant = Clock.System.now(),
     override val slippage: BigDecimal = BigDecimal("1"),
-) : SwapQuote {
-}
+) : SwapQuote

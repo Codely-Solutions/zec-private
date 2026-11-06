@@ -11584,7 +11584,7 @@ index acc8741c2..430fc754d 100644
 -                    every { observe() } returns MutableStateFlow(Status.DISABLED)
 -                },
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
-index bac1a53ce..435739b90 100644
+index bac1a53ce..f2affb203 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
 @@ -3,2 +2,0 @@ package co.electriccoin.zcash.ui.screen.swap.quote
@@ -11598,7 +11598,8 @@ index bac1a53ce..435739b90 100644
 -    override val affiliateFeeUsd: BigDecimal = BigDecimal("1"),
 +    override val affiliateFee: BigDecimal = BigDecimal.ZERO,
 +    override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO,
-@@ -42,8 +38 @@ internal data class FakeSwapQuote(
+@@ -41,9 +37 @@ internal data class FakeSwapQuote(
+-) : SwapQuote {
 -    override fun getTotal(proposal: Proposal?): BigDecimal = amountIn
 -
 -    override fun getTotalUsd(proposal: Proposal?): BigDecimal = amountInUsd
@@ -11607,8 +11608,7 @@ index bac1a53ce..435739b90 100644
 -
 -    override fun getTotalFeesZatoshi(proposal: Proposal?): Zatoshi = affiliateFeeZatoshi
 -}
-+}
-\ No newline at end of file
++) : SwapQuote
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 index 38427672d..1181b3696 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
