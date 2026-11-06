@@ -8,7 +8,7 @@ import tempfile
 from contextlib import ExitStack
 from pathlib import Path
 import unittest
-from acceptance_policy import input_fingerprint, requirements, validate_core, validate_quotes, validate_binding, verify_promotion_revision, CORE_STAGES
+from acceptance_policy import input_fingerprint, requirements, validate_core, validate_quotes, validate_binding, verify_promotion_revision, CORE_STAGES, CORE_TEST_SOURCE, CORE_BINDING, validate_core_sources
 
 
 class AcceptancePolicyTest(unittest.TestCase):
@@ -18,14 +18,14 @@ class AcceptancePolicyTest(unittest.TestCase):
 
     def test_receipt_substitution_and_missing_proof_block(self):
         receipt=b'trusted acceptance'
-        proof={'core_acceptance':dict(status='passed',input_fingerprint='inputs',
+        proof={'core_acceptance':dict(status='passed',binding=CORE_BINDING,input_fingerprint='inputs',
                                       receipt_sha256=hashlib.sha256(receipt).hexdigest())}
         validate_binding(proof,'core_acceptance','inputs',receipt,receipt)
         for changed in ({}, {'core_acceptance':dict(proof['core_acceptance'],status='pending')},
                         {'core_acceptance':dict(proof['core_acceptance'],receipt_sha256='a'*64)}):
             with self.assertRaises(ValueError):validate_binding(changed,'core_acceptance','inputs',receipt,receipt)
         with self.assertRaises(ValueError):validate_binding(proof,'core_acceptance','inputs',receipt,b'other receipt')
-        pending={'core_acceptance':dict(status='pending',input_fingerprint='inputs')}
+        pending={'core_acceptance':dict(status='pending',binding=CORE_BINDING,input_fingerprint='inputs')}
         with self.assertRaises(ValueError):validate_binding(pending,'core_acceptance','inputs',receipt,None)
         validate_binding(pending,'core_acceptance','inputs',receipt,None,allow_late=True)
         with self.assertRaises(ValueError):validate_binding(pending,'core_acceptance','inputs',receipt,b'forged',allow_late=True)
@@ -49,8 +49,10 @@ class AcceptancePolicyTest(unittest.TestCase):
                 return git('rev-parse','HEAD')
             git('init','-q')
             (root/'app.kt').write_text('immutable runtime')
+            harness=root/CORE_TEST_SOURCE
+            harness.parent.mkdir(parents=True,exist_ok=True);harness.write_text('dedicated test source')
             candidate=commit()
-            (root/'.private').mkdir()
+            (root/'.private').mkdir(exist_ok=True)
             (root/'.private/core-acceptance.json').write_text('{}')
             attestation=commit()
             self.assertTrue(verify_promotion_revision(candidate,attestation,root=root))
@@ -71,7 +73,7 @@ class AcceptancePolicyTest(unittest.TestCase):
                        stages={s: dict(passed=True, txId='a'*64) for s in CORE_STAGES},
                        network_enforcement=dict(passed=True,metadata_no_direct_fallback_observed=True,direct_bulk_targets=['192.0.2.1']), build_source_sha='a'*40,
                        baseline_source_sha='b34a56a0b3c0adfc27f30cc19ce7fd82f603858f',
-                       build_input_fingerprint='d'*64,
+                       build_input_fingerprint='d'*64,runtime_input_fingerprint='e'*64,
                        baseline_version_code=3234009, candidate_version_code=3234010)
         for key in ('candidate_apk_sha256', 'baseline_apk_sha256', 'instrumentation_apk_sha256', 'harness_sha256'):
             receipt[key] = 'b'*64
@@ -81,7 +83,7 @@ class AcceptancePolicyTest(unittest.TestCase):
         receipt['stages']['fund'].update(funding_txid='c'*64,balance_zatoshi=10000000,app_transaction_state='Confirmed')
         receipt['funding_setup']=dict(tor_exit_verified=True,persistent_tor_connection=True,txid='c'*64)
         receipt['sync_preflight']=dict(passed=True,mode='advancing-scan',scanned_height=12340,network_height=12345)
-        receipt['stages']['send'].update(fee_zatoshi=10000,ui_review=True,ui_cancel_no_submission=True,ui_approval=True)
+        receipt['stages']['send'].update(fee_zatoshi=10000,ui_review=True,ui_cancel_no_submission=True,ui_approval=True,ui_approval_actions=1)
         receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000,app_transaction_state='Confirmed')
         return receipt
 
@@ -89,14 +91,14 @@ class AcceptancePolicyTest(unittest.TestCase):
         self.assertTrue(validate_core(self.receipt(), 'inputs'))
         cases = [('network', 'mainnet'), ('input_fingerprint', 'old'),
                  ('evidence_class', 'simulation'), ('clearnet_fallback', True),
-                 ('candidate_apk_sha256', None), ('candidate_version_code', 3234009),
+                 ('runtime_input_fingerprint',None), ('candidate_apk_sha256', None), ('candidate_version_code', 3234009),
                  ('baseline_source_sha', 'c'*40), ('passed', False),('sync_preflight',{})]
         for key, value in cases:
             bad = self.receipt(); bad[key] = value
             with self.subTest(key=key), self.assertRaises(ValueError):
                 validate_core(bad, 'inputs')
         for stage,key,value in [('send','ui_approval',False),('send','ui_cancel_no_submission',False),
-                                ('send','ui_review',False),('fund','app_transaction_state','Pending')]:
+                                ('send','ui_review',False),('send','ui_approval_actions',2),('fund','app_transaction_state','Pending')]:
             bad=self.receipt();bad['stages'][stage][key]=value
             with self.assertRaises(ValueError):validate_core(bad,'inputs')
         for name in CORE_STAGES:
@@ -132,7 +134,8 @@ class AcceptancePolicyTest(unittest.TestCase):
                 'wallet-foundation-lib/src/main/kotlin/Flow.kt':'shared composition',
                 'app/src/main/res/xml/network.xml':'network rules',
                 'unknown/runtime.bin':'unclassified',
-                '.private/core-wallet/Flow.kt':'instrumentation',
+                '.private/core-wallet/Flow.kt':'unknown test source',
+                CORE_TEST_SOURCE:'dedicated instrumentation',
                 '.private/upgrade-baseline.json':'baseline identity',
                 'README.md':'documentation',
                 'ui-lib/src/test/java/Test.kt':'test-only',
@@ -142,7 +145,7 @@ class AcceptancePolicyTest(unittest.TestCase):
                     path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_text(value)
                 git('add','-A');base=git('write-tree')
                 original={profile:input_fingerprint(base,root=root,profile=profile)
-                          for profile in ('core-testnet','production-quotes','core-build')}
+                          for profile in ('core-testnet','production-quotes','core-build','core-runtime')}
                 for name in fixture:
                     path=root/name;path.write_text(fixture[name]+' changed')
                     if name=='gradle.properties':path.write_text(fixture[name].replace('CODE=1','CODE=2'))
@@ -150,7 +153,8 @@ class AcceptancePolicyTest(unittest.TestCase):
                     for profile in original:
                         expected=(name not in ('README.md','ui-lib/src/test/java/Test.kt','gradle.properties')
                                   and not (profile=='production-quotes' and name.startswith('.private/'))
-                                  and not (profile=='core-build' and name=='.private/upgrade-baseline.json'))
+                                  and not (profile=='core-build' and name=='.private/upgrade-baseline.json')
+                                  and not (profile=='core-runtime' and name==CORE_TEST_SOURCE))
                         with self.subTest(path=name,profile=profile):
                             self.assertEqual(expected,input_fingerprint(tree,root=root,profile=profile)!=original[profile])
                     path.write_text(fixture[name]);git('add','-A')
@@ -163,6 +167,64 @@ class AcceptancePolicyTest(unittest.TestCase):
             finally:
                 for path in (root/'.git').rglob('*'):
                     if path.is_file():path.chmod(path.stat().st_mode|stat.S_IWRITE)
+
+    def test_test_source_can_follow_candidate_without_changing_product_binding(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            def git(*args):
+                return subprocess.check_output(['git',*args],cwd=root,text=True,stderr=subprocess.DEVNULL).strip()
+            def commit():
+                git('add','-A');git('-c','user.name=Fixture','-c','user.email=test@example.invalid','commit','-qm','Fixture')
+                return git('rev-parse','HEAD')
+            git('init','-q');(root/'app.kt').write_text('unchanged product')
+            harness=root/CORE_TEST_SOURCE;harness.parent.mkdir(parents=True);harness.write_text('old test')
+            try:
+                candidate=commit();harness.write_text('test now waits for enabled control');accepted=commit()
+                self.assertTrue(verify_promotion_revision(candidate,accepted,root=root))
+                receipt=self.receipt();receipt.update(build_source_sha=accepted,
+                    input_fingerprint=input_fingerprint(accepted,root=root),
+                    build_input_fingerprint=input_fingerprint(accepted,root=root,profile='core-build'),
+                    runtime_input_fingerprint=input_fingerprint(candidate,root=root,profile='core-runtime'))
+                self.assertEqual(receipt['runtime_input_fingerprint'],validate_core_sources(receipt,candidate,accepted,root=root))
+                for key,value in [('runtime_input_fingerprint','f'*64),('input_fingerprint','old'),
+                                  ('build_input_fingerprint','f'*64),('build_source_sha',candidate)]:
+                    bad=dict(receipt);bad[key]=value
+                    with self.subTest(stale=key),self.assertRaises(ValueError):
+                        validate_core_sources(bad,candidate,accepted,root=root)
+                # A controller-prepared upstream child owns its changed app inputs.
+                (root/'app.kt').write_text('reviewed upstream product change');child=commit()
+                child_receipt=dict(receipt,build_source_sha=child,
+                    input_fingerprint=input_fingerprint(child,root=root),
+                    build_input_fingerprint=input_fingerprint(child,root=root,profile='core-build'),
+                    runtime_input_fingerprint=input_fingerprint(child,root=root,profile='core-runtime'))
+                validate_core_sources(child_receipt,child,root=root)
+                self.assertFalse(verify_promotion_revision(child,candidate,root=root))
+                (root/'app.kt').write_text('unchanged product');commit()
+                forbidden=['app.kt','build.gradle.kts','.private/core-wallet/include.gradle',
+                           '.private/core-wallet/src/Other.kt','.private/core_testnet_driver.py',
+                           '.private/acceptance_policy.py','.github/workflows/core-validation.yml']
+                for name in forbidden:
+                    path=root/name;path.parent.mkdir(parents=True,exist_ok=True)
+                    old=path.read_bytes() if path.exists() else None;path.write_text('changed trust or runtime input')
+                    changed=commit()
+                    with self.subTest(forbidden=name),self.assertRaises(ValueError):
+                        verify_promotion_revision(candidate,changed,root=root)
+                    if old is None:path.unlink()
+                    else:path.write_bytes(old)
+                    commit()
+                harness.unlink();git('add','-A');deleted=git('write-tree')
+                with self.assertRaises(ValueError):input_fingerprint(deleted,root=root,profile='core-runtime')
+                harness.write_text('test now waits for enabled control');git('add','-A')
+                git('update-index','--chmod=+x',CORE_TEST_SOURCE);mode=git('write-tree')
+                with self.assertRaises(ValueError):input_fingerprint(mode,root=root,profile='core-runtime')
+            finally:
+                for path in (root/'.git').rglob('*'):
+                    if path.is_file():path.chmod(path.stat().st_mode|stat.S_IWRITE)
+
+    def test_unknown_profile_and_unversioned_core_proof_are_rejected(self):
+        with self.assertRaises(ValueError):input_fingerprint(profile='core-runtmie')
+        raw=b'accepted';proof={'core_acceptance':dict(status='pending',input_fingerprint='inputs')}
+        with self.assertRaises(ValueError):validate_binding(proof,'core_acceptance','inputs',raw,None,allow_late=True)
 
     def test_quotes_need_real_repeated_tor_evidence(self):
         receipt=dict(schema=1,input_fingerprint='inputs',evidence_class='real-app-production-quotes',

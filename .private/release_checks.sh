@@ -6,7 +6,7 @@ tasks=(:wallet-foundation-lib:test :feature-ledger:testZcashmainnetFossReleaseUn
 init=(-I .private/runtime-inventory.gradle -I .private/robolectric-ci.gradle -I .private/release-analysis.gradle -I .private/task-timing.gradle)
 start=$(date +%s)
 mkdir -p artifact
-/usr/bin/time -f '{"elapsed_seconds":%e,"max_rss_kib":%M,"user_seconds":%U,"system_seconds":%S,"exit":%x}' -o artifact/gradle-resource.json ./gradlew "${init[@]}" --profile --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process "${tasks[@]}"
+./gradlew "${init[@]}" --profile --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process "${tasks[@]}"
 python3 .private/check_exclusions.py artifact/runtime.json
 python3 - "$start" <<'PY'
 import json,sys,time

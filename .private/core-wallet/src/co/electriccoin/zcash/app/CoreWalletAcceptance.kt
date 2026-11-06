@@ -59,6 +59,7 @@ class CoreWalletAcceptance {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val arguments = InstrumentationRegistry.getArguments()
+    private var approvalActions = 0
     private inline fun <reified T : Any> dependency(): T = GlobalContext.get().get()
     // The guarded host briefly preserves this fixture around explicit target-data
     // erasure. It restores only this seed/birthday fixture, never an SDK database.
@@ -134,17 +135,30 @@ class CoreWalletAcceptance {
                     check(proposals.submitState.value == null)
                     suspend fun openReview() {
                         dependency<NavigationRouter>().forward(Send())
-                        dependency<PrefillSendUseCase>().request(
+                        val prefill = dependency<PrefillSendUseCase>().request(
                             PrefillSendData.All(Zatoshi(1_000_000), destination, null, listOf("core-testnet-acceptance"))
-                        ).join()
-                        clickUi(context.getString(co.electriccoin.zcash.ui.design.R.string.send_review))
-                        val proposal = proposals.getTransactionProposal()
+                        )
+                        try {
+                            val delivered = withTimeoutOrNull(60_000) { prefill.join(); true } == true
+                            if (!delivered) uiDiagnostic("form_prefill", "handoff_timeout", UiProbe())
+                            check(delivered) { "Core UI prefill handoff timed out" }
+                        } finally {
+                            prefill.cancel()
+                        }
+                        clickUi(context.getString(co.electriccoin.zcash.ui.design.R.string.send_review), "form_review")
+                        val proposal = withTimeout(60_000) {
+                            proposals.transactionProposal.filterNotNull().first()
+                        }
                         check(proposal is co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal)
                         if (proposal.proposal.usesOrchardInputs()) {
-                            clickUi(context.getString(co.electriccoin.zcash.ui.R.string.send_orchardWarning_continue))
+                            clickUi(
+                                context.getString(co.electriccoin.zcash.ui.R.string.send_orchardWarning_continue),
+                                "orchard_continue"
+                            )
                         }
-                        waitUi("core-testnet-acceptance")
-                        waitUi("0.01", exact = false)
+                        waitUi(context.getString(co.electriccoin.zcash.ui.R.string.send_confirmationTitle), "review_title")
+                        waitUi("core-testnet-acceptance", "review_memo")
+                        waitUi("0.01", "review_amount", exact = false)
                         check(proposal.amount.value == 1_000_000L)
                         check(proposal.destination.address == destination)
                         check(proposal.memo.value == "core-testnet-acceptance")
@@ -160,7 +174,7 @@ class CoreWalletAcceptance {
                         .put("uiReview", true).put("uiCancelNoSubmission", true)
                     save(state)
                     // One real UI approval only. No direct repository submit or auth substitution.
-                    clickUi(context.getString(co.electriccoin.zcash.ui.R.string.tabs_send))
+                    clickUi(context.getString(co.electriccoin.zcash.ui.R.string.tabs_send), "review_approve")
                     val result = withTimeout(180_000) {
                         proposals.submitState.filterNotNull().first { it is SubmitProposalState.Result }
                     }.let { (it as SubmitProposalState.Result).submitResult }
@@ -313,6 +327,7 @@ class CoreWalletAcceptance {
             .put("ui_review",fixture().getBoolean("uiReview"))
             .put("ui_cancel_no_submission",fixture().getBoolean("uiCancelNoSubmission"))
             .put("ui_approval",fixture().getBoolean("uiApproval"))
+            .put("ui_approval_actions",approvalActions)
             .put("setup","production prefill bus; actual form Review and approval clicks")
             .put("biometric_prompt_executed",false)
         if (stage=="restore") receipt.put("mined_height",fixture().getLong("restoreMinedHeight"))
@@ -322,30 +337,113 @@ class CoreWalletAcceptance {
         println("CORE_RESULT $receipt")
     }
 
-    private fun findUi(text: String, exact: Boolean): AccessibilityNodeInfo? {
+    private class UiProbe {
+        var rootPresent = false
+        var visibleMatch = false
+        var enabledControl = false
+        var clickableControl = false
+    }
+
+    @Suppress("DEPRECATION")
+    private fun findUi(text: String, exact: Boolean, clickable: Boolean, probe: UiProbe): AccessibilityNodeInfo? {
         val root = instrumentation.uiAutomation.rootInActiveWindow ?: return null
+        probe.rootPresent = true
         val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
         pending.add(root)
         var count = 0
-        while (pending.isNotEmpty() && count++ < 500) {
-            val node = pending.removeFirst()
-            val value = node.text?.toString().orEmpty()
-            if ((exact && value == text) || (!exact && value.contains(text))) return node
-            for (index in 0 until node.childCount) node.getChild(index)?.let { pending.add(it) }
+        try {
+            while (pending.isNotEmpty() && count++ < 500) {
+                val node = pending.removeFirst()
+                try {
+                    val value = node.text?.toString().orEmpty()
+                    val matches = if (exact) value == text else value.contains(text)
+                    if (matches && node.isVisibleToUser) {
+                        probe.visibleMatch = true
+                        if (!clickable) return AccessibilityNodeInfo.obtain(node)
+                        var control: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
+                        try {
+                            var depth = 0
+                            while (control != null && depth++ < 30) {
+                                val current = control
+                                probe.enabledControl = probe.enabledControl || current.isEnabled
+                                probe.clickableControl = probe.clickableControl || current.isClickable
+                                if (current.isClickable) {
+                                    if (current.isVisibleToUser && current.isEnabled) {
+                                        return AccessibilityNodeInfo.obtain(current)
+                                    }
+                                    break
+                                }
+                                control = current.parent
+                                current.recycle()
+                            }
+                        } finally {
+                            control?.recycle()
+                        }
+                    }
+                    for (index in 0 until node.childCount) node.getChild(index)?.let { pending.add(it) }
+                } finally {
+                    node.recycle()
+                }
+            }
+        } finally {
+            while (pending.isNotEmpty()) pending.removeFirst().recycle()
         }
         return null
     }
 
-    private suspend fun waitUi(text: String, exact: Boolean = true): AccessibilityNodeInfo = withTimeout(60_000) {
-        var node = findUi(text, exact)
-        while (node == null) { delay(200); node = findUi(text, exact) }
-        checkNotNull(node)
+    private fun uiDiagnostic(label: String, outcome: String, probe: UiProbe) {
+        println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
+            .put("ui_control", label).put("ui_outcome", outcome)
+            .put("root_present", probe.rootPresent).put("visible_match", probe.visibleMatch)
+            .put("enabled_control", probe.enabledControl).put("clickable_control", probe.clickableControl))
     }
 
-    private suspend fun clickUi(text: String) {
-        var node = waitUi(text)
-        while (!node.isClickable) node = checkNotNull(node.parent)
-        check(node.isEnabled && node.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+    private suspend fun awaitUi(
+        text: String,
+        label: String,
+        exact: Boolean = true,
+        clickable: Boolean = false,
+    ): AccessibilityNodeInfo {
+        val probe = UiProbe()
+        val node = withTimeoutOrNull(60_000) {
+            var found = findUi(text, exact, clickable, probe)
+            while (found == null) {
+                delay(200)
+                found = findUi(text, exact, clickable, probe)
+            }
+            found
+        }
+        if (node == null) {
+            uiDiagnostic(label, "readiness_timeout", probe)
+            error("Core UI control readiness timed out")
+        }
+        return node
+    }
+
+    @Suppress("DEPRECATION")
+    private suspend fun waitUi(text: String, label: String, exact: Boolean = true) {
+        awaitUi(text, label, exact).recycle()
+    }
+
+    @Suppress("DEPRECATION")
+    private suspend fun clickUi(text: String, label: String) {
+        val node = awaitUi(text, label, clickable = true)
+        try {
+            // Readiness may be polled; an action with an ambiguous result is never retried.
+            if (label == "review_approve") approvalActions++
+            val acted = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            if (!acted) {
+                uiDiagnostic(label, "single_action_rejected", UiProbe().apply {
+                    rootPresent = true
+                    visibleMatch = node.isVisibleToUser
+                    enabledControl = node.isEnabled
+                    clickableControl = node.isClickable
+                })
+            }
+            check(acted) { "Core UI single action rejected" }
+        } finally {
+            node.recycle()
+        }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
