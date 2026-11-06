@@ -1661,7 +1661,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RejectIfSelectedAccountCannotSpendUseCase.kt": "2c40cb1dbf8d6093b92b427d196ec40124e61f33a5c4747754a3a3b2709a5fb1",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RemindWalletBackupLaterUseCase.kt": "6e03623e1212d2bfbcb591c34e25a76956a7e309733195ee8ac6aff4cc3e0c4f",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RenameViewOnlyAccountUseCase.kt": "af25922072e4793f617029569d963c2e61e909a0ead176b7177ace9712401789",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt": "b01abe9cf85ce5069cf5dbd39ed83ec63dc37100aba42708bd4a27ee7f63c101",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt": "31520764c9c1715a882f6ab7be7f1fdbcd55ab1ae881a4b0f5eeb53f0aee76d2",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RescanBlockchainUseCase.kt": "a9610f687b265f6221b6996ffa904565c1c2a74ed79bcabbe31f76b43575dbaf",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RescanQrUseCase.kt": "823d3fea8a4fb26dfc643df75772b3d8fef64a32fe7121373056834f646f2e5a",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ResetTransactionFiltersUseCase.kt": "7a1e8089bad676fe552626148de24bd1ba19d5feb151f6ec175e50392b89fe1b",

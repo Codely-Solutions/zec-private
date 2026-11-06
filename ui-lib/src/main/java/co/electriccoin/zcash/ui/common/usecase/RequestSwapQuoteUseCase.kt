@@ -128,6 +128,23 @@ class RequestSwapQuoteUseCase(
             null
         }
 
+    private suspend fun rejectUnsupportedFunding(
+        funding: FundingCapability,
+        canNavigate: () -> Boolean
+    ): Boolean {
+        if (funding != FundingCapability.LOCAL_TRANSACTION || accountDataSource.getSelectedAccount().isSpendable) {
+            return false
+        }
+        if (canNavigate()) {
+            swapRepository.clearQuote()
+            zashiProposalRepository.clear()
+            keystoneProposalRepository.clear()
+            ledgerProposalPipeline.clear()
+            navigateToErrorUseCase(ErrorArgs.General(AccountOperationUnsupportedException.viewOnly()))
+        }
+        return true
+    }
+
     @Suppress("TooGenericExceptionCaught")
     private suspend fun requestQuote(
         requestQuote: suspend () -> Unit,
@@ -148,6 +165,7 @@ class RequestSwapQuoteUseCase(
         }
 
         if (result is SwapQuoteData.Success) {
+            if (rejectUnsupportedFunding(funding, canNavigateToSwapQuote)) return@withContext
             try {
                 ZecSwapComposition.validate(result.quote)
             } catch (e: IllegalArgumentException) {
