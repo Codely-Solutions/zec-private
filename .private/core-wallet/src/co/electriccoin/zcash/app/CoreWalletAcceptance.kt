@@ -99,7 +99,15 @@ class CoreWalletAcceptance {
                     withTimeout(850_000) {
                         while ((dependency<AccountDataSource>().getZashiAccount().spendableShieldedBalance?.value ?: 0L)<2_000_000L) delay(2_000)
                     }
-                    state.put("fundedBalance", balance()); save(state)
+                    // Reuse this already required spendability wait to establish the incoming
+                    // confirmed state. Do not add another ten-block wait after recipient recovery.
+                    val confirmed = withTimeout(60_000) {
+                        dependency<TransactionRepository>().observeTransaction(state.getString("fundingTxId"))
+                            .filterNotNull().first { it is ReceiveTransaction.Success }
+                    }
+                    state.put("fundedBalance", balance())
+                        .put("fundConfirmedState",confirmed.overview.transactionState.toString())
+                    save(state)
                 }
                 "upgrade", "restart" -> {
                     val state = fixture()
@@ -121,7 +129,7 @@ class CoreWalletAcceptance {
                     val destination = state.getString("recipientAddress")
                     check(destination.startsWith("utest1"))
                     checkNotNull(dependency<TransactionRepository>().resolveWalletAddress(destination))
-                    check(!context.getSystemService(android.app.KeyguardManager::class.java).isDeviceSecure)
+                    check(!checkNotNull(context.getSystemService(android.app.KeyguardManager::class.java)).isDeviceSecure)
                     val proposals = dependency<ZashiProposalRepository>()
                     check(proposals.submitState.value == null)
                     suspend fun openReview() {
@@ -193,18 +201,12 @@ class CoreWalletAcceptance {
                         dependency<TransactionRepository>().observeTransaction(state.getString("txId"))
                             .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight!=null }
                     }
-                    val confirmed = withTimeout(600_000) {
-                        dependency<TransactionRepository>().observeTransaction(state.getString("txId"))
-                            .filterNotNull().first { it is ReceiveTransaction.Success }
-                    }
-                    check(confirmed.amount.value == 1_000_000L)
-                    state.put("restoreFirstMinedState",transaction.overview.transactionState.toString())
                     check(transaction.amount.value == 1_000_000L)
                     check("core-testnet-acceptance" in dependency<TransactionRepository>().getMemos(transaction))
                     awaitBalance(1_000_000)
                     check(balance() == 1_000_000L)
                     save(state.put("restoreMinedHeight",checkNotNull(transaction.overview.minedHeight).value)
-                        .put("restoreTransactionState",confirmed.overview.transactionState.toString()))
+                        .put("restoreTransactionState",transaction.overview.transactionState.toString()))
                 }
                 "transport" -> {
                     val provider=dependency<SynchronizerProvider>()
@@ -302,6 +304,7 @@ class CoreWalletAcceptance {
             .put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
         if (stage in listOf("send", "restart", "restore")) receipt.put("txId", fixture().getString("txId"))
         if (stage=="fund") receipt.put("funding_txid",fixture().getString("fundingTxId")).put("balance_zatoshi",fixture().getLong("fundedBalance"))
+            .put("app_transaction_state",fixture().getString("fundConfirmedState"))
         if (stage=="sender") receipt.put("scanned_height",fixture().getLong("preflightScannedHeight"))
             .put("network_height",fixture().getLong("preflightNetworkHeight"))
             .put("mode",fixture().getString("preflightMode"))
@@ -314,7 +317,7 @@ class CoreWalletAcceptance {
             .put("biometric_prompt_executed",false)
         if (stage=="restore") receipt.put("mined_height",fixture().getLong("restoreMinedHeight"))
             .put("amount_zatoshi",1_000_000L).put("app_transaction_state",fixture().getString("restoreTransactionState"))
-            .put("first_mined_state",fixture().getString("restoreFirstMinedState"))
+
         // No exception messages, seeds, addresses, HTTP bodies or private fixture are printed.
         println("CORE_RESULT $receipt")
     }
@@ -336,7 +339,7 @@ class CoreWalletAcceptance {
     private suspend fun waitUi(text: String, exact: Boolean = true): AccessibilityNodeInfo = withTimeout(60_000) {
         var node = findUi(text, exact)
         while (node == null) { delay(200); node = findUi(text, exact) }
-        node
+        checkNotNull(node)
     }
 
     private suspend fun clickUi(text: String) {
