@@ -2,15 +2,27 @@
   "schema": 1,
   "evidence_class": "real-app-production-quotes",
   "passed": true,
-  "build_source_sha": "a0bd21f27bb53af0eeb9b433d0273c6f39b04e19",
-  "input_fingerprint": "ade8ad7cf4a2d0ffd21af0ca082a59f43055e60b50b93823fcf9dd35de38ff07",
-  "executed_apk_sha256": "2b775fe29901cc0c2d017d6484d18b03e3d43ea4131965ecb22636db491484c1",
+  "build_source_sha": "53d211a213dc20b1e8eb3ce37649607c88b5d819",
+  "input_fingerprint": "e88a5182cb3b45a5069159842358bfcbe6a8813d304cf4427cc54a34f61af7a7",
+  "executed_apk_sha256": "92878ff747c9ba08e3d771ed3f4a7953400c5090adb0ad82443d35cf09cde699",
+  "original_apk_sha256": "4f986db0c95e8c51ac461e85f39c1765e45cadf9ab5ddca8ba1f6e7160b461d5",
   "quote_requests": 3,
   "quote_reviews": 3,
   "dismissals": 3,
   "tor_enabled": true,
   "funds_transferred": false,
   "personal_wallet_access": false,
-  "original_evidence": ".private/size-workflow-validation.json",
-  "reuse_reason": "Production app/build inputs unchanged except version labels; core harness is test-only"
+  "artifact_id": 13497671834,
+  "workflow_run_id": 42207306770,
+  "archive_sha256": "69369f72820bd38c154e162dfc7c78e47174a3e90b3436b7eb081f352c433ced",
+  "apk_preparation": {
+    "originalSha256": "4f986db0c95e8c51ac461e85f39c1765e45cadf9ab5ddca8ba1f6e7160b461d5",
+    "testedSha256": "92878ff747c9ba08e3d771ed3f4a7953400c5090adb0ad82443d35cf09cde699",
+    "preservedExecutionEntries": 33,
+    "executionEntriesDigest": "cf372645a7435973e8294eb28b01407fcd5ff0c2b5e718794b998706fdcff062",
+    "executionEntriesUnchanged": true,
+    "abi": "x86_64",
+    "signing": "ephemeral test key; not release key"
+  },
+  "guard_job": "42b21dfff89341b6afcc18b419314805"
 }

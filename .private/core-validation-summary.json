@@ -1,431 +1,74 @@
 {
-  "status": "released-and-independently-verified",
-  "testnet_build_run": 42136496193,
-  "executed_build_source": "3b213eff5bda7e6af51abda95b91fc2dbab48686",
-  "core_guard": "f78167369a194153a229aaea63c23e0e",
-  "guard_receipt_verified": true,
-  "seconds": 593.8348645000078,
-  "stage_seconds": {
-    "fund": 331.8510209,
-    "upgrade": 3.7222474,
-    "interruption": 51.8472987000132,
-    "send": 55.8422183,
-    "restart": 3.7346013,
-    "restore": 34.0191657
-  },
-  "producer_gradle": [
-    "BUILD SUCCESSFUL in 6m 31s",
-    "315 actionable tasks: 147 executed, 168 from cache"
-  ],
-  "baseline_reused": true,
-  "production_quote_evidence_reused": true,
-  "production_quote_executed_source": "a0bd21f27bb53af0eeb9b433d0273c6f39b04e19",
-  "peak_transient_logical_bytes": 8534172324,
-  "budgets": {
-    "job_seconds": 1800,
-    "memory_bytes": 6442450944,
-    "guest_memory_mib": 3072,
-    "guest_cores": 2
-  },
-  "sample_from_prior_equivalent_job": {
-    "utc": "2026-11-06T00:18:03.3757457Z",
-    "job": "e8ae3796b2ed42e69ffe4dddccc7d6f2",
-    "processes": [
-      {
-        "pid": 14984,
-        "parent": 22912,
-        "created": "2026-11-06T00:11:07.828831Z",
-        "name": "python.exe",
-        "workingSetBytes": 41058304,
-        "privateBytes": 26558464,
-        "cpuSeconds": 21.859375
-      },
-      {
-        "pid": 19148,
-        "parent": 14984,
-        "created": "2026-11-06T00:11:07.841003Z",
-        "name": "conhost.exe",
-        "workingSetBytes": 8093696,
-        "privateBytes": 1261568,
-        "cpuSeconds": 0.046875
-      },
-      {
-        "pid": 6324,
-        "parent": 14984,
-        "created": "2026-11-06T00:12:13.13499Z",
-        "name": "emulator.exe",
-        "workingSetBytes": 12886016,
-        "privateBytes": 2736128,
-        "cpuSeconds": 0.03125
-      },
-      {
-        "pid": 16680,
-        "parent": 6324,
-        "created": "2026-11-06T00:12:13.144616Z",
-        "name": "conhost.exe",
-        "workingSetBytes": 8097792,
-        "privateBytes": 1343488,
-        "cpuSeconds": 0.015625
-      },
-      {
-        "pid": 13180,
-        "parent": 6324,
-        "created": "2026-11-06T00:12:13.194831Z",
-        "name": "qemu-system-x86_64-headless.exe",
-        "workingSetBytes": 3832881152,
-        "privateBytes": 4646449152,
-        "cpuSeconds": 184.96875
-      },
-      {
-        "pid": 3316,
-        "parent": 13180,
-        "created": "2026-11-06T00:12:16.036037Z",
-        "name": "netsimd.exe",
-        "workingSetBytes": 26505216,
-        "privateBytes": 15745024,
-        "cpuSeconds": 4.90625
-      },
-      {
-        "pid": 22092,
-        "parent": 14984,
-        "created": "2026-11-06T00:14:52.652356Z",
-        "name": "adb.exe",
-        "workingSetBytes": 12890112,
-        "privateBytes": 3428352,
-        "cpuSeconds": 0.015625
-      }
-    ],
-    "workingSetBytes": 3942412288.0,
-    "privateBytes": 4697522176.0
-  },
-  "cleanup": {
-    "complete": true,
-    "owned_survivors": [],
-    "configuration_unchanged": true
-  },
-  "transaction_evidence": {
-    "fundingTxId": "2ac597f612ebb5628fa4317626d218f6381991dfd24066b6471c8a9b9f81ad7d",
+  "status": "validated-awaiting-signing",
+  "candidate_run": 42207306770,
+  "source_sha": "53d211a213dc20b1e8eb3ce37649607c88b5d819",
+  "testnet_build_run": 42191766043,
+  "core_guard": "a8cc224805134344a4ae3146722bca88",
+  "core_seconds": 684.8863177,
+  "core_transaction_evidence": {
+    "fundingTxId": "8aa1f451c4b21f9470864fafea17041205eeadd7dffbc3851f3f31c8c20f6cda",
     "fundingProvider": "jinolabs-testnet",
     "fundedBalance": 10000000,
     "balanceBeforeSend": 10000000,
     "feeZatoshi": 10000,
     "senderConfirmedBalance": 8990000,
-    "restoreMinedHeight": 4587258,
+    "restoreMinedHeight": 4588498,
     "restoreTransactionState": "Pending",
     "candidateTxIds": [
-      "f148395afb50aed7844a516dd1688d88a8f99347a5ba55decca8b5594ca1ed5c"
+      "3a660d0a3c8ef75f9301efd26fa29ed6b42794726703d7106d6e3badc0ce6765"
     ],
     "initialSubmitType": "Success"
   },
-  "tor_scope": {
+  "production_quote_receipt": {
+    "schema": 1,
+    "evidence_class": "real-app-production-quotes",
     "passed": true,
-    "mode": "direct public bulk endpoint TCP443 plus Tor relay allowlist; sensitive provider direct egress denied; metadata outage assertion",
-    "allowed_relay_peers": 10271,
-    "embedded_bootstrap_pairs": 300,
-    "sensitive_targets": 1,
-    "direct_bulk_targets": [
-      "2a09:8280:1::32:da2a:0",
-      "66.241.124.102"
-    ],
-    "metadata_no_direct_fallback_observed": true,
-    "metadata_rpc_scope": [
-      "getServerInfo",
-      "getLatestBlockHeight"
-    ],
-    "sdk_transport_policy": "published SDK6.0.0 source inspected; bulk direct, sensitive calls Tor"
+    "build_source_sha": "53d211a213dc20b1e8eb3ce37649607c88b5d819",
+    "input_fingerprint": "e88a5182cb3b45a5069159842358bfcbe6a8813d304cf4427cc54a34f61af7a7",
+    "executed_apk_sha256": "92878ff747c9ba08e3d771ed3f4a7953400c5090adb0ad82443d35cf09cde699",
+    "original_apk_sha256": "4f986db0c95e8c51ac461e85f39c1765e45cadf9ab5ddca8ba1f6e7160b461d5",
+    "quote_requests": 3,
+    "quote_reviews": 3,
+    "dismissals": 3,
+    "tor_enabled": true,
+    "funds_transferred": false,
+    "personal_wallet_access": false,
+    "artifact_id": 13497671834,
+    "workflow_run_id": 42207306770,
+    "archive_sha256": "69369f72820bd38c154e162dfc7c78e47174a3e90b3436b7eb081f352c433ced",
+    "apk_preparation": {
+      "originalSha256": "4f986db0c95e8c51ac461e85f39c1765e45cadf9ab5ddca8ba1f6e7160b461d5",
+      "testedSha256": "92878ff747c9ba08e3d771ed3f4a7953400c5090adb0ad82443d35cf09cde699",
+      "preservedExecutionEntries": 33,
+      "executionEntriesDigest": "cf372645a7435973e8294eb28b01407fcd5ff0c2b5e718794b998706fdcff062",
+      "executionEntriesUnchanged": true,
+      "abi": "x86_64",
+      "signing": "ephemeral test key; not release key"
+    },
+    "guard_job": "42b21dfff89341b6afcc18b419314805"
   },
+  "tests": {
+    "tests": 1392,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "runtime_components": 333,
+  "baseline_runtime_components": 333,
+  "production_gradle_seconds": 940,
+  "emulator_gradle_seconds": 603,
+  "baseline_production_gradle_seconds": 971,
+  "cache_effects": "Different cache hits and inputs; timings are not a controlled speedup.",
+  "workflow_change": "Parallel untrusted production and emulator jobs, one assembly per variant; promotion signs existing artifact without rebuilding.",
   "limitations": [
-    "x86_64 testnet/debug execution; production ARM64 inspection only",
-    "Recipient restore recovered a mined transaction still shown Pending; recipient spendability was not asserted",
-    "Biometric approval UI and funded production swap settlement not executed",
-    "Runtime Tor-outage negative probe covers metadata RPCs; other sensitive SDK routing source-inspected",
-    "Provider sandbox not adopted; shielded TAZ settlement and Tor compatibility unverified"
+    "Production ARM inspected, not executed",
+    "Restored recipient mined output/amount/memo verified; UI remained Pending",
+    "Hardware entry exercised without physical device",
+    "Private GitHub documentation links require repository access"
   ],
-  "release_tag": "v3.19.0-private.7",
-  "release_url": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.7",
-  "release_validation": {
-    "release_tag": "v3.19.0-private.7",
-    "source_sha": "c248aca4f30daa17ef91e05148627f094062945d",
-    "ci_run": 42139327785,
-    "package": "com.personal.zecprivate.foss",
-    "versionCode": 3234007,
-    "versionName": "3.19.0",
-    "debuggable": false,
-    "apk_bytes": 67930887,
-    "apk_sha256": "cca0077b44ede5fa58bd1ca58120227ad2b95e1d1e9ce333aabb7e4885f2ba00",
-    "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
-    "signature_verified": true,
-    "zipalign_16k_verified": true,
-    "provider_unique": true,
-    "license_preserved": true,
-    "excluded_runtime_components_absent": true,
-    "original_package_descriptors_absent": true,
-    "runtimeComparison": {
-      "baselineComponents": 351,
-      "candidateComponents": 333,
-      "removed": [
-        "androidx.compose.runtime:runtime-livedata:1.10.6",
-        "androidx.webkit:webkit:1.14.0",
-        "co.flexa:core:1.1.3",
-        "co.flexa:spend:1.1.3",
-        "com.caverock:androidsvg-aar:1.4",
-        "com.google.accompanist:accompanist-drawablepainter:0.32.0",
-        "com.squareup.okhttp3:logging-interceptor:5.1.0",
-        "com.squareup.okhttp3:okhttp-sse:5.1.0",
-        "commons-codec:commons-codec:1.15",
-        "io.coil-kt:coil-base:2.7.0",
-        "io.coil-kt:coil-compose-base:2.7.0",
-        "io.coil-kt:coil-compose:2.7.0",
-        "io.coil-kt:coil-svg:2.7.0",
-        "io.coil-kt:coil:2.7.0",
-        "joda-time:joda-time:2.12.7",
-        "org.jetbrains.kotlin:kotlin-android-extensions-runtime:2.1.0",
-        "org.jetbrains.kotlin:kotlin-parcelize-runtime:2.1.0",
-        "project :feature-voting"
-      ],
-      "added": [],
-      "retainedVersionsUnchanged": true
-    },
-    "architecture": {
-      "abis": [
-        "arm64-v8a"
-      ],
-      "native_bytes": 57019328
-    },
-    "promotion_run": 42141531890,
-    "signedPayloadMatchesValidatedUnsigned": true,
-    "apk_bytes_saved": 0,
-    "tests": {
-      "tests": 1393,
-      "failures": 0,
-      "errors": 0,
-      "skipped": 0
-    },
-    "required_regressions_passed": [
-      "aKeystoneAccountHasNoRemovedMerchantNotice",
-      "aLedgerAccountHasNoRemovedMerchantNotice",
-      "cancellingPendingIncomingRequestDoesNotPoisonTheNextQuote",
-      "dismissedIncomingQuoteCanBeRequestedAgainWithoutRestart",
-      "dismissedRequestCannotPublishLateNetworkErrorOverNextQuote",
-      "dismissedRequestCannotPublishLateSuccessOverNextQuote",
-      "externalAddressFamiliesKeepTheirExactRecipientAndRefundEncoding",
-      "incomingQuoteCostsFitNarrowScreenWithLargeText",
-      "incomingQuoteFeeNoteRendersWithoutFormatConversionFailure",
-      "newRequestClearsPreviousErrorBeforeBackgroundDispatch",
-      "outgoingExactInputCostsFitNarrowScreenWithLargeText",
-      "outgoingExactInputFeeNoteRendersWithoutFormatConversionFailure",
-      "outgoingExactOutputCostsFitNarrowScreenWithLargeText",
-      "outgoingExactOutputFeeNoteRendersWithoutFormatConversionFailure",
-      "quoteModesPreserveRepresentativeAtomicUnitPrecisions",
-      "sheetDismissalCallbacksOnlyCancelOnce",
-      "theSheetKeepsGiftCardAndMoreButNoMerchantEntry",
-      "transientIncomingFailureCanBeRetriedWithoutRestart",
-      "unavailableSynchronizerStopsSwapApiWithoutDirectFallback",
-      "unavailableTorClientStopsSwapApiWithoutDirectFallback"
-    ],
-    "layout_preview_sha256": {
-      "exact_input-320-1.6.png": "3e71c35a8e03f4d53fe6429be2276d7dc530fbb79b4a067192704126696e92bb",
-      "exact_input-360-1.0.png": "564904058dbea11e5ce647dc5d35ca3d83fd98ce29bc814c700c01ec2d464aaf",
-      "exact_output-320-1.6.png": "1d46b22fe97f2bb8a64b9a5bd6995e676808471003c9b961adf773ce9c629256",
-      "exact_output-360-1.0.png": "bab1f35d77611b38ba2071dcb9a06b9caaef2ce84e6cf3d3c4de1cdb91fe5437",
-      "flex_input-320-1.6.png": "0ea044609dc4ddcfd21aaeeb2252b7500fe5a7818e47fd4f4c3864376f1c647b",
-      "flex_input-360-1.0.png": "376b88bbc50c3f93867b5488b63618b67f0e29a44b741b2983c0f73411ea1d7d"
-    },
-    "core_transaction_evidence": {
-      "fundingTxId": "2ac597f612ebb5628fa4317626d218f6381991dfd24066b6471c8a9b9f81ad7d",
-      "fundingProvider": "jinolabs-testnet",
-      "fundedBalance": 10000000,
-      "balanceBeforeSend": 10000000,
-      "feeZatoshi": 10000,
-      "senderConfirmedBalance": 8990000,
-      "restoreMinedHeight": 4587258,
-      "restoreTransactionState": "Pending",
-      "candidateTxIds": [
-        "f148395afb50aed7844a516dd1688d88a8f99347a5ba55decca8b5594ca1ed5c"
-      ],
-      "initialSubmitType": "Success"
-    },
-    "core_stages": {
-      "fund": {
-        "stage": "fund",
-        "passed": true,
-        "network": "zcash-testnet",
-        "transport": "Tor sensitive RPCs; upstream direct bulk",
-        "seconds": 331.8510209,
-        "funding_txid": "2ac597f612ebb5628fa4317626d218f6381991dfd24066b6471c8a9b9f81ad7d",
-        "balance_zatoshi": 10000000
-      },
-      "upgrade": {
-        "stage": "upgrade",
-        "passed": true,
-        "network": "zcash-testnet",
-        "transport": "Tor sensitive RPCs; upstream direct bulk",
-        "seconds": 3.7222474
-      },
-      "interruption": {
-        "passed": true,
-        "metadata_blocked": true,
-        "direct_bulk_reachable": true,
-        "metadata_recovered": true,
-        "blocked_packets": 103,
-        "seconds": 51.8472987000132,
-        "sync_restarted": true,
-        "synced": true,
-        "balance_preserved": true,
-        "history_preserved": true,
-        "scanned_height": 4587255
-      },
-      "send": {
-        "stage": "send",
-        "passed": true,
-        "network": "zcash-testnet",
-        "transport": "Tor sensitive RPCs; upstream direct bulk",
-        "seconds": 55.8422183,
-        "txId": "f148395afb50aed7844a516dd1688d88a8f99347a5ba55decca8b5594ca1ed5c",
-        "fee_zatoshi": 10000,
-        "initial_submit_type": "Success",
-        "manual_resubmissions": 0
-      },
-      "restart": {
-        "stage": "restart",
-        "passed": true,
-        "network": "zcash-testnet",
-        "transport": "Tor sensitive RPCs; upstream direct bulk",
-        "seconds": 3.7346013,
-        "txId": "f148395afb50aed7844a516dd1688d88a8f99347a5ba55decca8b5594ca1ed5c"
-      },
-      "restore": {
-        "stage": "restore",
-        "passed": true,
-        "network": "zcash-testnet",
-        "transport": "Tor sensitive RPCs; upstream direct bulk",
-        "seconds": 34.0191657,
-        "txId": "f148395afb50aed7844a516dd1688d88a8f99347a5ba55decca8b5594ca1ed5c",
-        "mined_height": 4587258,
-        "amount_zatoshi": 1000000,
-        "app_transaction_state": "Pending"
-      }
-    },
-    "production_quote_receipt": {
-      "schema": 1,
-      "evidence_class": "real-app-production-quotes",
-      "passed": true,
-      "build_source_sha": "a0bd21f27bb53af0eeb9b433d0273c6f39b04e19",
-      "input_fingerprint": "ade8ad7cf4a2d0ffd21af0ca082a59f43055e60b50b93823fcf9dd35de38ff07",
-      "executed_apk_sha256": "2b775fe29901cc0c2d017d6484d18b03e3d43ea4131965ecb22636db491484c1",
-      "quote_requests": 3,
-      "quote_reviews": 3,
-      "dismissals": 3,
-      "tor_enabled": true,
-      "funds_transferred": false,
-      "personal_wallet_access": false,
-      "original_evidence": ".private/size-workflow-validation.json",
-      "reuse_reason": "Production app/build inputs unchanged except version labels; core harness is test-only"
-    },
-    "upgradeTest": "Real v6-to-v7 testnet installed update executed; permanent production package/certificate/version inspected",
-    "production_arm_apk_executed": false,
-    "real_testnet_transfer_executed": true,
-    "funded_production_settlement_tested": false,
-    "junit_suite_seconds_cumulative": 94.61000000000003,
-    "new_boundary_test_seconds": {
-      "quoteModesPreserveRepresentativeAtomicUnitPrecisions": 0.013,
-      "externalAddressFamiliesKeepTheirExactRecipientAndRefundEncoding": 0.007
-    }
-  },
-  "executed_apk_preparation": {
-    "app-zcashtestnet-foss-debug-androidTest.apk": {
-      "originalSha256": "cc573ef1fa5e9c4c8af50cd1e68474553b2a8566fff1706110a508c115859c4b",
-      "testedSha256": "bb282b5bcb8b5d7808fe389a13600d7038b6ce8112acb9158353487404d8074d",
-      "preservedExecutionEntries": 7,
-      "executionEntriesDigest": "7d45b5c87a09bb118f242128b9abbef729aec01073f0cf657cfede62adea30d0",
-      "executionEntriesUnchanged": true,
-      "abi": "x86_64",
-      "signing": "ephemeral test key; not release key"
-    },
-    "app-zcashtestnet-foss-debug.apk": {
-      "originalSha256": "a4ecb1f02ec11109fd04014a37d3dbc5e8defdf4ce8ffc3fdd430c3f0c224909",
-      "testedSha256": "ce94a979440c1cb8c87a068edb6862d7365abc1d14aae04fec27b5ac664495d2",
-      "preservedExecutionEntries": 33,
-      "executionEntriesDigest": "06539d4f131062f675ad5a363a94a4c49784e3e13dea7b7b28106d56630f07fe",
-      "executionEntriesUnchanged": true,
-      "abi": "x86_64",
-      "signing": "ephemeral test key; not release key"
-    },
-    "baseline-ui.apk": {
-      "originalSha256": "3259dcd7938e8b3814b0ad72a9cb1314efbf26f33f4c1d16bb2b4b9ed475b36c",
-      "testedSha256": "7ebac51608c7b43df7341950e706593b064b0213084496d79b69a357912c756a",
-      "preservedExecutionEntries": 33,
-      "executionEntriesDigest": "46fe63dfdaaa9f5e170275edaa17d25b9f5bc9fecc2c1f798189c1a2271d4a7f",
-      "executionEntriesUnchanged": true,
-      "abi": "x86_64",
-      "signing": "ephemeral test key; not release key"
-    }
-  },
-  "execution_setup_receipt_sha256": "2aa41faaaf276ccdf0a3485c716ee760e7cce77c6352773acd07ff0d00909052",
-  "workflow_costs": {
-    "candidate_job_seconds": 1101,
-    "candidate_gradle_seconds": 971,
-    "candidate_gradle_invocations": 1,
-    "promotion_resolution_job_seconds": 9,
-    "signing_job_seconds": 23,
-    "promotion_gradle_invocations": 0,
-    "testnet_producer_job_seconds": 461,
-    "testnet_producer_gradle_seconds": 391,
-    "lifecycle_seconds": 593.8348645000078,
-    "new_boundary_test_seconds": {
-      "quoteModesPreserveRepresentativeAtomicUnitPrecisions": 0.013,
-      "externalAddressFamiliesKeepTheirExactRecipientAndRefundEncoding": 0.007
-    },
-    "full_unit_suite_seconds_cumulative": 94.61000000000003,
-    "v6_candidate_gradle_seconds": 1753,
-    "v6_candidate_included_optional_debug": true,
-    "comparison_limit": "Different variant scope, cache state and runner conditions; no controlled speedup claim.",
-    "unsegmented_setup": "Image download/extraction, APK preparation, emulator boot and installation are outside the 593.835-second lifecycle timer; no separate precise setup duration was retained.",
-    "one_time_discarded_native_runner_seconds": 1714,
-    "one_time_failed_cancelled_release_runner_seconds": 546
-  },
-  "upstream": {
-    "discovery_run": 42137687047,
-    "discovery_passed": true,
-    "schedule": "17 */6 * * *",
-    "stable_tag": "3.19.0-3234",
-    "stable_sha": "a57ea1455840a0d97eb0b2a3d2557480dfe5bda7",
-    "publication_requires_matching_real_acceptance": true,
-    "native_sdk_replacement": false
-  },
-  "guest_storage": {
-    "requested_bytes": 2147483648,
-    "actual_partition_kib": 6082144,
-    "before": "Filesystem       1K-blocks   Used Available Use% Mounted on\r\n/dev/block/dm-43   6082144 272640   5667292   5% /data/user/0",
-    "after": "Filesystem       1K-blocks   Used Available Use% Mounted on\r\n/dev/block/dm-43   6082144 407900   5674244   7% /mnt/pass_through/0/emulated"
-  },
-  "final_cleanup": {
-    "testnet_guard": "f78167369a194153a229aaea63c23e0e",
-    "delivery_guard": "31b5e26ee55e466196cf70efcd94016d",
-    "cache_guard": "f6dd76f2547943a38bd9d6584d0c0e0a",
-    "receipts_verified": true,
-    "owned_survivors": [],
-    "registered_roots": [],
-    "observed_host_free_increase_after_guest_cleanup_bytes": 2835685376,
-    "ci_cache_bytes_removed": 6211497174,
-    "ci_artifact_bytes_removed": 671509925,
-    "cache_bytes_retained": 3725185747,
-    "cache_count_retained": 19,
-    "retained_current_artifacts": [
-      13466098632,
-      13468048720,
-      13467688834
-    ],
-    "artifact_retention_days": 3,
-    "permanent_outputs": "One current signed APK, permanent release assets and compact source/validation/cleanup evidence; protected SDK/cache and signing custody unchanged.",
-    "preexisting_unassigned_helper_roots": [
-      1240,
-      20040,
-      17948,
-      6432,
-      18592
-    ],
-    "helper_limitation": "Five pre-existing roots, including duplicate REPL connections, remain unassigned and preserved. No claim of global helper cleanliness.",
-    "configuration_unchanged": true
+  "upstream_discovery_run": 42209043985,
+  "cleanup": {
+    "core": true,
+    "ui": true
   }
 }

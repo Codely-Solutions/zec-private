@@ -47,3 +47,7 @@ Representative unit cases cover 0/6/8/18 decimal atomic units across all three q
 The bounded sandbox review is recorded in `core-provider-review.json`. Tidepool advertises a 1Click-compatible testnet service, but its detailed documentation described the TAZ bridge as disabled, and the published OpenAPI did not establish a shielded Zcash route. Tor compatibility and actual BTC/TAZ settlement were not verified. Adoption is deferred; this prerequisite does not claim testnet cross-chain settlement or a live provider refund.
 
 Production Detekt retains its rules and existing baseline. Its release-only init excludes the procedural private instrumentation source, which is outside the shipped source sets and separately compiled by the core producer. That harness is checked through exact source/APK bindings, review and real execution. This does not exempt production Kotlin or the ordinary unit tests from analysis.
+
+## Phase 2 revision 8 evidence
+
+The current receipts supersede revision 7 evidence: testnet producer 42191766043, candidate 42207306770. Real transfer 3a660d0a3c8ef75f9301efd26fa29ed6b42794726703d7106d6e3badc0ce6765 mined at 4588498. Installed v6-to-v8 update, restart, recovery and scoped Tor outage passed. Three fresh unfunded production quote/dismiss cycles passed on the candidate x86_64 build. Production ARM execution and physical hardware execution remain outside this evidence. See core-validation-summary.json for costs and limitations.
