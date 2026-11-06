@@ -3,6 +3,7 @@ from pathlib import Path
 import re
 import json
 import sys
+import hashlib
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -14,6 +15,14 @@ def check_graph(evidence):
         if component != 'project :wallet-foundation-lib' and not component.startswith(
                 ('org.jetbrains.kotlin:kotlin-stdlib:', 'org.jetbrains:annotations:')):
             raise ValueError('Concrete or unexpected foundation runtime dependency: ' + component)
+
+
+def validate_graph_binding(raw, proof, expected):
+    evidence=json.loads(raw)
+    if (hashlib.sha256(raw).hexdigest()!=proof.get('foundation_graph_sha256') or
+            evidence.get('source_sha')!=expected):
+        raise ValueError('Foundation graph source/digest mismatch')
+    check_graph(evidence)
 
 
 def check(root=ROOT):

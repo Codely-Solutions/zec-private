@@ -3,11 +3,21 @@ import os
 import shutil
 import tempfile
 import unittest
+import hashlib
+import json
 from pathlib import Path
-from foundation_architecture import ROOT, check, check_graph
+from foundation_architecture import ROOT, check, check_graph, validate_graph_binding
 
 
 class FoundationArchitectureTest(unittest.TestCase):
+    def test_signing_rejects_missing_digest_or_substituted_graph(self):
+        raw=json.dumps(dict(source_sha='expected',configuration='runtimeClasspath',
+                            components=['project :wallet-foundation-lib'])).encode()
+        proof=dict(foundation_graph_sha256=hashlib.sha256(raw).hexdigest())
+        validate_graph_binding(raw,proof,'expected')
+        for candidate,identity,source in ((raw,{},'expected'),(raw,proof,'other'),(raw+b' ',proof,'expected')):
+            with self.assertRaises(ValueError):validate_graph_binding(candidate,identity,source)
+
     def test_resolved_graph_rejects_engine_and_product_dependencies(self):
         evidence=dict(configuration='runtimeClasspath', components=[
             'project :wallet-foundation-lib','org.jetbrains.kotlin:kotlin-stdlib:2.3.10'])
