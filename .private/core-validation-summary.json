@@ -1,5 +1,5 @@
 {
-  "status": "validated-awaiting-signing",
+  "status": "released-and-independently-verified",
   "candidate_run": 42207306770,
   "source_sha": "53d211a213dc20b1e8eb3ce37649607c88b5d819",
   "testnet_build_run": 42191766043,
@@ -64,11 +64,208 @@
     "Production ARM inspected, not executed",
     "Restored recipient mined output/amount/memo verified; UI remained Pending",
     "Hardware entry exercised without physical device",
-    "Private GitHub documentation links require repository access"
+    "Private GitHub documentation links require repository access",
+    "Helper connection ownership remains unresolved; preserved rather than terminating potentially unrelated processes."
   ],
   "upstream_discovery_run": 42209043985,
   "cleanup": {
     "core": true,
-    "ui": true
-  }
+    "ui": true,
+    "guard_roots_removed": true,
+    "owned_guard_survivors": [],
+    "helper_ownership_limitation": "15 recognized helper roots remain: 10 in recorded baseline and 5 later connections of unresolved ownership. No helper termination occurred; auto-review rejected insufficient ownership proof. No nested app servers or sandbox workers were observed in these trees."
+  },
+  "release_url": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.8",
+  "promotion_run": 42210936257,
+  "apk_bytes": 67812047,
+  "apk_sha256": "9d7ea0c94a1025503bf09afb4821653ccf9c1e102559f4cd688ab4bb2c2f66a9",
+  "baseline_apk_bytes": 67930887,
+  "apk_bytes_saved": 118840,
+  "signed_payload_matches_validated_unsigned": true,
+  "production_arm_executed": false,
+  "workflow_costs": [
+    {
+      "run": 42190288948,
+      "job": "unsigned",
+      "conclusion": "failure",
+      "seconds": 248.0,
+      "gradle": [
+        "157 actionable tasks: 76 executed, 81 from cache",
+        "BUILD FAILED in 2m 14s"
+      ]
+    },
+    {
+      "run": 42190288948,
+      "job": "failed",
+      "conclusion": "success",
+      "seconds": 9.0,
+      "gradle": []
+    },
+    {
+      "run": 42190293620,
+      "job": "testnet",
+      "conclusion": "failure",
+      "seconds": 249.0,
+      "gradle": [
+        "277 actionable tasks: 149 executed, 128 from cache",
+        "BUILD FAILED in 3m 22s"
+      ]
+    },
+    {
+      "run": 42190293620,
+      "job": "baseline",
+      "conclusion": "success",
+      "seconds": 752.0,
+      "gradle": [
+        "BUILD SUCCESSFUL in 11m 54s",
+        "266 actionable tasks: 173 executed, 93 from cache"
+      ]
+    },
+    {
+      "run": 42190612965,
+      "job": "probe",
+      "conclusion": "success",
+      "seconds": 81.0,
+      "gradle": [
+        "BUILD SUCCESSFUL in 48s",
+        "34 actionable tasks: 34 executed"
+      ]
+    },
+    {
+      "run": 42191077731,
+      "job": "testnet",
+      "conclusion": "cancelled",
+      "seconds": 92.0,
+      "gradle": []
+    },
+    {
+      "run": 42191082101,
+      "job": "unsigned",
+      "conclusion": "cancelled",
+      "seconds": 95.0,
+      "gradle": []
+    },
+    {
+      "run": 42191082101,
+      "job": "publish",
+      "conclusion": "cancelled",
+      "seconds": -1.0,
+      "gradle": []
+    },
+    {
+      "run": 42191082101,
+      "job": "failed",
+      "conclusion": "cancelled",
+      "seconds": 0.0,
+      "gradle": []
+    },
+    {
+      "run": 42191766043,
+      "job": "testnet",
+      "conclusion": "success",
+      "seconds": 451.0,
+      "gradle": [
+        "BUILD SUCCESSFUL in 6m 36s",
+        "315 actionable tasks: 169 executed, 146 from cache"
+      ]
+    },
+    {
+      "run": 42191772130,
+      "job": "unsigned",
+      "conclusion": "cancelled",
+      "seconds": 2126.0,
+      "gradle": []
+    },
+    {
+      "run": 42191772130,
+      "job": "publish",
+      "conclusion": "cancelled",
+      "seconds": 0.0,
+      "gradle": []
+    },
+    {
+      "run": 42191772130,
+      "job": "failed",
+      "conclusion": "cancelled",
+      "seconds": 0.0,
+      "gradle": []
+    },
+    {
+      "run": 42196387487,
+      "job": "lifecycle",
+      "conclusion": "failure",
+      "seconds": 328.0,
+      "gradle": [
+        "164 actionable tasks: 93 executed, 71 from cache",
+        "BUILD FAILED in 4m 23s"
+      ]
+    },
+    {
+      "run": 42197205907,
+      "job": "lifecycle",
+      "conclusion": "success",
+      "seconds": 298.0,
+      "gradle": [
+        "BUILD SUCCESSFUL in 3m 51s",
+        "166 actionable tasks: 69 executed, 97 from cache"
+      ]
+    },
+    {
+      "run": 42198392039,
+      "job": "unsigned",
+      "conclusion": "failure",
+      "seconds": 2586.0,
+      "gradle": []
+    },
+    {
+      "run": 42198392039,
+      "job": "failed",
+      "conclusion": "success",
+      "seconds": 5.0,
+      "gradle": []
+    },
+    {
+      "run": 42207306770,
+      "job": "emulator",
+      "conclusion": "success",
+      "seconds": 638.0,
+      "gradle": [
+        "BUILD SUCCESSFUL in 10m 3s",
+        "266 actionable tasks: 126 executed, 140 from cache"
+      ]
+    },
+    {
+      "run": 42207306770,
+      "job": "unsigned",
+      "conclusion": "success",
+      "seconds": 1036.0,
+      "gradle": [
+        "BUILD SUCCESSFUL in 15m 40s",
+        "505 actionable tasks: 315 executed, 190 from cache"
+      ]
+    },
+    {
+      "run": 42209043985,
+      "job": "prepare",
+      "conclusion": "success",
+      "seconds": 17.0,
+      "gradle": []
+    },
+    {
+      "run": 42210936257,
+      "job": "promotion",
+      "conclusion": "success",
+      "seconds": 8.0,
+      "gradle": []
+    },
+    {
+      "run": 42210936257,
+      "job": "publish",
+      "conclusion": "success",
+      "seconds": 26.0,
+      "gradle": []
+    }
+  ],
+  "total_recorded_ci_job_seconds": 9044.0,
+  "cache_cleanup_bytes": 2179466474
 }
