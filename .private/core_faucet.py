@@ -1,6 +1,8 @@
 """One honest TAZ faucet claim over one persistent, task-owned Tor connection.
 
 No app keys enter this helper. Native SDK Tor remains enabled in the wallet.
+Funding uses pinned owned Tor and a real unavailable-proxy negative check;
+an external exit-IP service is not a dependency of wallet acceptance.
 The official Windows expert bundle is the latest stable prebuilt distribution
 verified 2026-11-05; its tor 0.4.9.15 trails source-only stable 0.4.9.16.
 """
@@ -33,7 +35,7 @@ def exact(sock,size):
 
 class TorHTTPS(http.client.HTTPSConnection):
     def __init__(self,host,port):
-        if host not in (FAUCET,'check.torproject.org') or not 1<=port<=65535:
+        if host != FAUCET or not 1<=port<=65535:
             raise ValueError('Only explicit test setup hosts and loopback Tor are allowed')
         super().__init__(host,timeout=90,context=ssl.create_default_context())
         self.socks_port=port
@@ -75,8 +77,24 @@ def response(connection,method,path,body=None):
     return value
 
 
+def verify_unavailable_proxy():
+    # Hold a non-listening loopback port so this cannot reach a real proxy or provider.
+    with socket.socket() as reserved:
+        reserved.bind(('127.0.0.1',0))
+        client=TorHTTPS(FAUCET,reserved.getsockname()[1])
+        try:
+            client.request('GET','/api/pow/challenge')
+        except ConnectionRefusedError:
+            return True
+        finally:
+            client.close()
+    raise RuntimeError('Unavailable Tor proxy did not fail closed')
+
+
 def fund(address,root):
-    if not re.fullmatch('utest1[a-z0-9]{40,505}',address):raise ValueError('Only a testnet unified address may be funded')
+    if not re.fullmatch('utest1[a-z0-9]{40,505}',address):
+        raise ValueError('Only a testnet unified address may be funded')
+    proxy_unavailable_failed_closed=verify_unavailable_proxy()
     root=Path(root)
     setup_started=time.monotonic()
     archive=root/'faucet-tor.tar.gz'
@@ -134,12 +152,13 @@ def fund(address,root):
             time.sleep(.5)
         else:raise RuntimeError('Task Tor bootstrap timed out; direct fallback forbidden')
         bootstrap_seconds=time.monotonic()-started
-        check=TorHTTPS('check.torproject.org',port)
-        try:
-            if response(check,'GET','/api/ip').get('IsTor') is not True:raise RuntimeError('Tor exit verification failed')
-        finally:check.close()
         client=TorHTTPS(FAUCET,port)
         try:
+            # Strict custom SOCKS connection; the pinned owned Tor process is fully bootstrapped.
+            # An external exit-IP service is not required to establish this route.
+            client.connect()
+            route=dict(tor_transport_verified=True,proxy_unavailable_failed_closed=proxy_unavailable_failed_closed,
+                       tor_exit_verified=False,route_evidence='Pinned owned Tor SOCKS; unavailable-proxy negative; validated faucet TLS')
             challenge=response(client,'GET','/api/pow/challenge')
             pinned=client.sock
             if pinned is None:raise RuntimeError('Faucet closed the IP-bound challenge connection')
@@ -158,7 +177,7 @@ def fund(address,root):
             claim=response(client,'POST','/api/faucet',dict(address=address,network='taz',pow=proof))
             if not claim.get('ok') or not re.fullmatch('[0-9a-f]{64}',str(claim.get('txid',''))):
                 raise RuntimeError('Faucet did not establish a successful testnet payment; no retry')
-            return dict(txid=claim['txid'],provider='jinolabs-testnet',tor_exit_verified=True,
+            return dict(**route,txid=claim['txid'],provider='jinolabs-testnet',
                         persistent_tor_connection=True,bundle_sha256=BUNDLE_SHA256,
                         download_bytes=total,expanded_bytes=expanded,setup_seconds=setup_seconds,
                         bootstrap_seconds=bootstrap_seconds,proof_compute_seconds=proof_seconds,

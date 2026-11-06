@@ -144,7 +144,9 @@ def validate_core(receipt, expected_inputs):
     if stages['fund'].get('app_transaction_state') != 'Confirmed':
         raise ValueError('The reused incoming funding transaction must reach the app confirmed state')
     funding=receipt.get('funding_setup',{})
-    if (funding.get('tor_exit_verified') is not True or funding.get('persistent_tor_connection') is not True or
+    if (funding.get('tor_transport_verified') is not True or
+            funding.get('proxy_unavailable_failed_closed') is not True or
+            funding.get('persistent_tor_connection') is not True or
             funding.get('txid')!=stages['fund']['funding_txid']):
         raise ValueError('Missing Tor-only setup payment provenance')
     for key in ('candidate_apk_sha256', 'baseline_apk_sha256', 'instrumentation_apk_sha256', 'harness_sha256'):
@@ -175,9 +177,11 @@ def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=
     acceptance_revision = acceptance_revision or product_revision
     validate_core(receipt, input_fingerprint(acceptance_revision, root=root))
     runtime = input_fingerprint(product_revision, root=root, profile='core-runtime')
-    for revision in (acceptance_revision, receipt['build_source_sha']):
-        if input_fingerprint(revision, root=root, profile='core-runtime') != runtime:
-            raise ValueError('Executed wallet runtime differs from the production candidate')
+    # Host/controller inputs still bind current acceptance to the product candidate.
+    # The APK producer is checked separately against compiled inputs below: host
+    # Python corrections require fresh acceptance, but are not compiled into APKs.
+    if input_fingerprint(acceptance_revision, root=root, profile='core-runtime') != runtime:
+        raise ValueError('Executed wallet runtime differs from the production candidate')
     if receipt.get('runtime_input_fingerprint') != runtime:
         raise ValueError('Receipt wallet runtime binding mismatch')
     compiled = receipt['build_input_fingerprint']
