@@ -133,6 +133,7 @@ class CoreWalletAcceptance {
                     val state = fixture()
                     checkWallet("sender")
                     check(!state.has("sendAttempted"))
+                    awaitBalance(state.getLong("fundedBalance"))
                     val before = balance()
                     val destination = state.getString("recipientAddress")
                     check(destination.startsWith("utest1"))
@@ -140,8 +141,12 @@ class CoreWalletAcceptance {
                     check(!checkNotNull(context.getSystemService(android.app.KeyguardManager::class.java)).isDeviceSecure)
                     val proposals = dependency<ZashiProposalRepository>()
                     check(proposals.submitState.value == null)
+                    var reviewAttempt = 0
                     suspend fun openReview() {
+                        reviewAttempt++
                         openPrefilledForm(destination)
+                        val logBoundary = java.text.SimpleDateFormat("MM-dd HH:mm:ss.SSS", java.util.Locale.US)
+                            .format(java.util.Date())
                         clickUi(context.getString(co.electriccoin.zcash.ui.design.R.string.send_review), "form_review")
                         val proposal = withTimeoutOrNull(60_000) {
                             proposals.transactionProposal.filterNotNull().first()
@@ -152,7 +157,7 @@ class CoreWalletAcceptance {
                             println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
                                 .put("ui_control", "form_review").put("ui_outcome", "proposal_timeout")
                                 .put("submit_state_class", proposals.submitState.value?.javaClass?.simpleName ?: "none"))
-                            proposalFailureDiagnostic()
+                            proposalFailureDiagnostic(logBoundary, reviewAttempt)
                             error("Core UI review did not create a proposal")
                         }
                         check(proposal is co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal)
@@ -343,7 +348,7 @@ class CoreWalletAcceptance {
         println("CORE_RESULT $receipt")
     }
 
-    private fun proposalFailureDiagnostic() {
+    private suspend fun proposalFailureDiagnostic(logBoundary: String, reviewAttempt: Int) {
         var logAvailable = false
         var capped = false
         var logs = ""
@@ -351,7 +356,7 @@ class CoreWalletAcceptance {
         try {
             // Static command plus our own UID only. Never emit captured log lines or messages.
             val descriptor = instrumentation.uiAutomation.executeShellCommand(
-                "logcat -d -v brief --uid=" + android.os.Process.myUid() + " -t 400"
+                "logcat -d -v brief --uid=" + android.os.Process.myUid() + " -T '" + logBoundary + "'"
             )
             android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { stream ->
                 val bytes = ByteArray(65_536)
@@ -373,13 +378,33 @@ class CoreWalletAcceptance {
         val exceptionClasses = Regex(
             "\\b(?:[a-zA-Z_$][a-zA-Z0-9_$]*\\.)+[A-Za-z_$][A-Za-z0-9_$]*(?:Exception|Error)\\b"
         ).findAll(logs).map { it.value }.distinct().take(6).toList()
+        val insufficient = Regex("Insufficient balance \\(have ([0-9]{1,16}), need ([0-9]{1,16}) including fee\\)")
+            .find(logs)
+        val selected = dependency<AccountDataSource>().getSelectedAccount()
+        val zashi = dependency<AccountDataSource>().getZashiAccount()
+        val synchronizer = dependency<SynchronizerProvider>().getSynchronizer()
         println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
             .put("ui_control", "form_review").put("ui_outcome", "proposal_log_classification")
+            .put("review_attempt", reviewAttempt)
             .put("own_uid_log_available", logAvailable).put("log_byte_cap_reached", capped)
             .put("proposal_error_logged", logs.contains("Error creating proposal"))
             .put("send_validation_failed_logged", logs.contains("Send failed with"))
             .put("invalid_enums", JSONArray(invalidEnums))
             .put("exception_classes", JSONArray(exceptionClasses))
+            .put("regular_proposal_frame", logs.contains("ProposalDataSourceImpl") && logs.contains("createProposal"))
+            .put("send_view_model_frame", logs.contains("SendViewModel"))
+            .put("native_insufficient_balance", insufficient != null)
+            .put("native_available_zatoshi", insufficient?.groupValues?.get(1)?.toLongOrNull() ?: -1L)
+            .put("native_required_zatoshi", insufficient?.groupValues?.get(2)?.toLongOrNull() ?: -1L)
+            .put("native_additional_change", logs.contains("The transaction requires an additional change output of"))
+            .put("selected_is_zashi", selected.sdkAccount.accountUuid == zashi.sdkAccount.accountUuid)
+            .put("selected_total_zatoshi", selected.totalShieldedBalance?.value ?: -1L)
+            .put("selected_spendable_zatoshi", selected.spendableShieldedBalance?.value ?: -1L)
+            .put("orchard_available_zatoshi", selected.orchardBalance?.available?.value ?: -1L)
+            .put("ironwood_available_zatoshi", selected.ironwoodBalance?.available?.value ?: -1L)
+            .put("sapling_available_zatoshi", selected.saplingBalance?.available?.value ?: -1L)
+            .put("scanned_height", synchronizer.fullyScannedHeight.value?.value ?: -1L)
+            .put("sync_status", synchronizer.status.first().toString())
             .put("log_read_failure_class", readFailureClass ?: "none"))
     }
 
