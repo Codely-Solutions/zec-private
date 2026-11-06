@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: real core acceptance passed on 2026-11-06; signed release validation is pending. Exact evidence is in `core-acceptance.json` and `core-validation-summary.json`.
+Status: completed on 2026-11-06 and released as v3.19.0-private.7; signed release independently verified. Exact evidence is in `core-acceptance.json` and `core-validation-summary.json`.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|

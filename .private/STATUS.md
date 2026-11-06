@@ -1,3 +1,58 @@
+# Revision 7 — core validation prerequisite complete
+
+Published [v3.19.0-private.7](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.7).
+ARM64-only APK: 67,930,887 bytes, unchanged from revision 6. Package and permanent
+certificate are preserved; versionCode is 3234007. Runtime components remain 333.
+
+The actual installed testnet app received 0.1 TAZ, survived an in-place v6-to-v7
+update and a Tor-only outage, sent 0.01 TAZ with a 0.0001 TAZ fee, preserved its
+state across restart, and recovered the same mined transaction and memo from the
+recipient seed after clearing app data. Transfer:
+`f148395afb50aed7844a516dd1688d88a8f99347a5ba55decca8b5594ca1ed5c`,
+mined height 4587258. Sender balance: 0.0899 TAZ. No real funds or personal wallet
+data were used. The restored recipient still displayed Pending; its mined output,
+amount and memo were verified, without a redundant spendability wait.
+
+Upstream direct public bulk downloads and normal DNS remain enabled. Sensitive
+metadata/transaction/provider requests retain Tor without direct fallback. The
+outage probe covered endpoint metadata RPCs while direct bulk TLS remained
+reachable; other sensitive SDK routing was source-inspected. The native SDK fork
+and baseline bridge detour were removed and never shipped.
+
+All 1,393 selected unit tests passed with no failures, errors or skips; lint,
+production Detekt, layout previews, runtime/architecture checks, real Tor API
+contracts and disposable upstream integration passed. The two new boundary tests
+used 0.020 seconds combined. Earlier three real production quote/dismiss cycles
+were reused because their relevant committed inputs still match; those were not
+rerun or relabeled as v7 execution.
+
+Real core acceptance took 593.835 seconds, including a 331.851-second funding and
+spendability wait. Its testnet producer used 6m31s of Gradle time. Production Gradle
+used 16m11s; candidate job 18m21s. Promotion used a 9-second resolver and 23-second
+signer, with no Gradle or APK rebuild. Earlier scope/cache differences prevent a
+controlled timing comparison. Measured costs and discarded development attempts
+are separate in `core-validation-summary.json`.
+
+Independent downloaded-release verification checked manifest/certificate, ARM64
+ELF headers, alignment, license, test reports and exact evidence bindings. Every
+signed payload entry matches the validated unsigned APK. Testnet execution was
+x86_64/debug with a disposable certificate; production ARM64 was inspected only.
+Biometric approval UI and funded production cross-chain settlement were not run.
+The reviewed sandbox did not establish shielded TAZ settlement/Tor compatibility.
+
+Upstream discovery 42137687047 passed against stable 3.19.0-3234; its six-hour
+schedule remains enabled. Signing now requires matching real core/quote evidence;
+changed relevant inputs can block publication while discovery/preparation continue.
+
+All task-owned Android/Tor workers and registered temporary roots were removed,
+with no owned survivors or configuration drift. Redundant task CI caches and
+artifacts were cleaned, preserving current short-lived evidence and protected
+pre-task caches. Five pre-existing unassigned helper roots were preserved; the
+duplicate REPL group remains an ownership limitation. See the compact cleanup
+receipt in `core-validation-summary.json`. Later roadmap phases remain deferred.
+
+---
+
 # Revision 6 — ARM64 and workflow cleanup complete
 
 Published [v3.19.0-private.6](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.6).
