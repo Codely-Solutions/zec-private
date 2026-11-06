@@ -430,6 +430,7 @@ class CoreWalletAcceptance {
         val node = awaitUi(text, label, clickable = true)
         try {
             // Readiness may be polled; an action with an ambiguous result is never retried.
+            check(label != "review_approve" || approvalActions == 0) { "Core approval may be attempted only once" }
             if (label == "review_approve") approvalActions++
             val acted = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
             if (!acted) {
