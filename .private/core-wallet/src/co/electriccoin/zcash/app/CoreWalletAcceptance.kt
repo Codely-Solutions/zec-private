@@ -9,6 +9,13 @@ import co.electriccoin.zcash.ui.screen.send.Send
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendData
 import co.electriccoin.zcash.ui.common.repository.SubmitProposalState
+import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
+import co.electriccoin.zcash.ui.screen.send.model.AmountState
+import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.getString
+import co.electriccoin.zcash.ui.design.util.TickerLocation
+import co.electriccoin.zcash.ui.design.util.StringResource.Companion.NUMBER_FORMAT_LOCALE
+import cash.z.ecc.android.sdk.model.ZecSendExt
 import cash.z.ecc.android.sdk.model.BlockHeight
 import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.SeedPhrase
@@ -134,20 +141,19 @@ class CoreWalletAcceptance {
                     val proposals = dependency<ZashiProposalRepository>()
                     check(proposals.submitState.value == null)
                     suspend fun openReview() {
-                        dependency<NavigationRouter>().forward(Send())
-                        val prefill = dependency<PrefillSendUseCase>().request(
-                            PrefillSendData.All(Zatoshi(1_000_000), destination, null, listOf("core-testnet-acceptance"))
-                        )
-                        try {
-                            val delivered = withTimeoutOrNull(60_000) { prefill.join(); true } == true
-                            if (!delivered) uiDiagnostic("form_prefill", "handoff_timeout", UiProbe())
-                            check(delivered) { "Core UI prefill handoff timed out" }
-                        } finally {
-                            prefill.cancel()
-                        }
+                        openPrefilledForm(destination)
                         clickUi(context.getString(co.electriccoin.zcash.ui.design.R.string.send_review), "form_review")
-                        val proposal = withTimeout(60_000) {
+                        val proposal = withTimeoutOrNull(60_000) {
                             proposals.transactionProposal.filterNotNull().first()
+                        }
+                        if (proposal == null) {
+                            // Keep the bounded log classification last, even if input validation fails.
+                            runCatching { validateSendInput(destination, "proposal_timeout") }
+                            println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
+                                .put("ui_control", "form_review").put("ui_outcome", "proposal_timeout")
+                                .put("submit_state_class", proposals.submitState.value?.javaClass?.simpleName ?: "none"))
+                            proposalFailureDiagnostic()
+                            error("Core UI review did not create a proposal")
                         }
                         check(proposal is co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal)
                         if (proposal.proposal.usesOrchardInputs()) {
@@ -337,6 +343,96 @@ class CoreWalletAcceptance {
         println("CORE_RESULT $receipt")
     }
 
+    private fun proposalFailureDiagnostic() {
+        var logAvailable = false
+        var capped = false
+        var logs = ""
+        var readFailureClass: String? = null
+        try {
+            // Static command plus our own UID only. Never emit captured log lines or messages.
+            val descriptor = instrumentation.uiAutomation.executeShellCommand(
+                "logcat -d -v brief --uid=" + android.os.Process.myUid() + " -t 400"
+            )
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { stream ->
+                val bytes = ByteArray(65_536)
+                var count = 0
+                while (count < bytes.size) {
+                    val read = stream.read(bytes, count, bytes.size - count)
+                    if (read < 0) break
+                    count += read
+                }
+                capped = count == bytes.size
+                logs = String(bytes, 0, count, Charsets.UTF_8)
+                logAvailable = true
+            }
+        } catch (error: Exception) {
+            readFailureClass = error.javaClass.name
+        }
+        val invalidEnums = listOf("INVALID_AMOUNT", "INVALID_ADDRESS", "INVALID_MEMO")
+            .filter { Regex("\\b" + it + "\\b").containsMatchIn(logs) }
+        val exceptionClasses = Regex(
+            "\\b(?:[a-zA-Z_$][a-zA-Z0-9_$]*\\.)+[A-Za-z_$][A-Za-z0-9_$]*(?:Exception|Error)\\b"
+        ).findAll(logs).map { it.value }.distinct().take(6).toList()
+        println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
+            .put("ui_control", "form_review").put("ui_outcome", "proposal_log_classification")
+            .put("own_uid_log_available", logAvailable).put("log_byte_cap_reached", capped)
+            .put("proposal_error_logged", logs.contains("Error creating proposal"))
+            .put("send_validation_failed_logged", logs.contains("Send failed with"))
+            .put("invalid_enums", JSONArray(invalidEnums))
+            .put("exception_classes", JSONArray(exceptionClasses))
+            .put("log_read_failure_class", readFailureClass ?: "none"))
+    }
+
+    private fun validateSendInput(destination: String, label: String): String {
+        try {
+            // Mirror AndroidSend's prefill formatting and SendButton's independent SDK validation.
+            val formatted = stringRes(Zatoshi(1_000_000), TickerLocation.HIDDEN).getString(context)
+            val amount = AmountState.newFromZec(
+                value = formatted,
+                fiatValue = "",
+                isTransparentOrTextRecipient = false,
+                exchangeRateState = dependency<ExchangeRateRepository>().state.value,
+            )
+            val rendered = amount.value.getString(context)
+            val validation = ZecSendExt.new(NUMBER_FORMAT_LOCALE, destination, rendered, "core-testnet-acceptance")
+            val errors = if (validation is ZecSendExt.ZecSendValidation.Invalid) {
+                validation.validationErrors.map { it.name }
+            } else emptyList()
+            println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
+                .put("ui_control", label).put("ui_outcome", "input_validation")
+                .put("amount_state_class", amount.javaClass.simpleName)
+                .put("sdk_validation_class", validation.javaClass.simpleName)
+                .put("invalid_enums", JSONArray(errors)))
+            check(amount is AmountState.Valid && amount.zatoshi.value == 1_000_000L)
+            check(validation is ZecSendExt.ZecSendValidation.Valid && validation.zecSend.amount.value == 1_000_000L)
+            return rendered
+        } catch (error: Exception) {
+            println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
+                .put("ui_control", label).put("ui_outcome", "input_validation_exception")
+                .put("exception_class", error.javaClass.simpleName))
+            throw IllegalStateException("Core UI input validation failed")
+        }
+    }
+
+    private suspend fun openPrefilledForm(destination: String) {
+        val renderedAmount = validateSendInput(destination, "form_prefill")
+        dependency<NavigationRouter>().forward(Send())
+        val prefill = dependency<PrefillSendUseCase>().request(
+            PrefillSendData.All(Zatoshi(1_000_000), destination, null, listOf("core-testnet-acceptance"))
+        )
+        try {
+            val delivered = withTimeoutOrNull(60_000) { prefill.join(); true } == true
+            if (!delivered) uiDiagnostic("form_prefill", "handoff_timeout", UiProbe())
+            check(delivered) { "Core UI prefill handoff timed out" }
+        } finally {
+            prefill.cancel()
+        }
+        // Channel handoff precedes address validation and Compose state updates.
+        waitUi(destination, "form_recipient")
+        waitUi(renderedAmount, "form_amount")
+        waitUi("core-testnet-acceptance", "form_memo")
+    }
+
     private class UiProbe {
         var rootPresent = false
         var visibleMatch = false
@@ -490,6 +586,9 @@ class CoreWalletAcceptance {
                 save(fixture().put("preflightScannedHeight",checkNotNull(ready.scanned).value)
                     .put("preflightNetworkHeight",checkNotNull(ready.tip).value)
                     .put("preflightMode",if (ready.status == Synchronizer.Status.SYNCED) "caught-up" else "advancing-scan"))
+                // Fail parser/prefill mismatches before the host requests scarce faucet coins.
+                openPrefilledForm(fixture().getString("recipientAddress"))
+                check(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
             } catch (error: Exception) {
                 val currentError = provider.error.value
                 println("CORE_SYNC_DIAGNOSTIC " + JSONObject()
