@@ -67,6 +67,8 @@ class CoreWalletAcceptance {
     private val context = instrumentation.targetContext
     private val arguments = InstrumentationRegistry.getArguments()
     private var approvalActions = 0
+    private var reviewReadyChecks = 0
+    private var reviewReadyWaitMillis = 0L
     private inline fun <reified T : Any> dependency(): T = GlobalContext.get().get()
     // The guarded host briefly preserves this fixture around explicit target-data
     // erasure. It restores only this seed/birthday fixture, never an SDK database.
@@ -145,6 +147,7 @@ class CoreWalletAcceptance {
                     openPrefilledForm(destination)
                     suspend fun openReview() {
                         reviewAttempt++
+                        awaitReviewSync()
                         val logBoundary = "CORE_REVIEW_BEGIN_" + reviewAttempt
                         android.util.Log.i("CoreReview", logBoundary)
                         try {
@@ -382,6 +385,8 @@ class CoreWalletAcceptance {
             .put("ui_cancel_no_submission",fixture().getBoolean("uiCancelNoSubmission"))
             .put("ui_approval",fixture().getBoolean("uiApproval"))
             .put("ui_approval_actions",approvalActions)
+            .put("ui_review_sync_checks",reviewReadyChecks)
+            .put("ui_review_sync_wait_millis",reviewReadyWaitMillis)
             .put("setup","production prefill bus; actual form Review and approval clicks")
             .put("biometric_prompt_executed",false)
         if (stage=="restore") receipt.put("mined_height",fixture().getLong("restoreMinedHeight"))
@@ -677,6 +682,45 @@ class CoreWalletAcceptance {
         val node = findUi(text, true, false, UiProbe()) ?: return false
         node.recycle()
         return true
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun awaitReviewSync() {
+        val provider = dependency<SynchronizerProvider>()
+        data class Snapshot(
+            val sync: Synchronizer,
+            val status: Synchronizer.Status,
+            val tip: BlockHeight?,
+            val scanned: BlockHeight?
+        )
+        var last: Snapshot? = null
+        val started = System.nanoTime()
+        try {
+            val ready = withTimeout(120_000) {
+                provider.synchronizer.filterNotNull().flatMapLatest { current ->
+                    combine(current.status, current.networkHeight, current.fullyScannedHeight) { status, tip, scanned ->
+                        Snapshot(current, status, tip, scanned)
+                    }
+                }.first { snapshot ->
+                    last = snapshot
+                    snapshot.status == Synchronizer.Status.SYNCED && snapshot.tip != null &&
+                        snapshot.scanned != null && snapshot.scanned.value >= snapshot.tip.value &&
+                        provider.synchronizer.value === snapshot.sync
+                }
+            }
+            check(provider.synchronizer.value === ready.sync)
+            reviewReadyChecks++
+            reviewReadyWaitMillis += (System.nanoTime() - started) / 1_000_000
+            println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
+                .put("ui_control", "review_sync_precondition").put("ui_outcome", "current_instance_synced")
+                .put("network_height", ready.tip?.value).put("scanned_height", ready.scanned?.value))
+        } catch (error: Exception) {
+            println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
+                .put("ui_control", "review_sync_precondition").put("ui_outcome", "not_ready")
+                .put("status", last?.status?.toString()).put("network_height", last?.tip?.value)
+                .put("scanned_height", last?.scanned?.value).put("exception_class", error.javaClass.simpleName))
+            throw error
+        }
     }
 
     @Suppress("DEPRECATION")
