@@ -28,8 +28,16 @@ internal fun AboutScreen() {
         onBack = { navigationRouter.back() },
         configInfo = configInfo,
         versionInfo = versionInfo,
-        onPrivacyPolicy = { navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/PRIVACY.md")) },
-        onTermsOfUse = { navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/USE.md")) }
+        onPrivacyPolicy = {
+            navigationRouter.forward(
+                ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/PRIVACY.md")
+            )
+        },
+        onTermsOfUse = {
+            navigationRouter.forward(
+                ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/USE.md")
+            )
+        }
     )
 }
 

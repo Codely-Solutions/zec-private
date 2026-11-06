@@ -131,7 +131,12 @@ class MigrationSetupVM(
     }
 
     private fun onFindOutMore() =
-        navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/WALLET-GUIDE.md#ironwood-migration"))
+        navigationRouter.forward(
+            ExternalUrl(
+                "https://github.com/Sammy-Lastre/zec-private/blob/main/" +
+                    "docs/WALLET-GUIDE.md#ironwood-migration"
+            )
+        )
 
     private fun onConfirm() {
         val currentGate = gate.value ?: return

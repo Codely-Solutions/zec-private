@@ -20,4 +20,5 @@ fun PayInfoScreen() {
 @Serializable
 data object PayInfoArgs
 
-private const val LEARN_MORE_URL = "https://github.com/Sammy-Lastre/zec-private/blob/main/docs/WALLET-GUIDE.md#crosspay"
+private const val LEARN_MORE_URL =
+    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#crosspay"

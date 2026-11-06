@@ -48,6 +48,17 @@ def check(root=ROOT):
                 for marker in policy.get('forbidden_product_markers', []):
                     if marker in text:
                         failures.append(str(path.relative_to(root)) + ': excluded product marker ' + marker)
+    # Check product markers across all retained production modules and resources.
+    for module in root.iterdir():
+        production = module / 'src/main'
+        if not production.is_dir():
+            continue
+        for path in production.rglob('*'):
+            if path.is_file() and path.suffix in {'.kt', '.xml'}:
+                text = path.read_text(encoding='utf-8')
+                for marker in policy.get('forbidden_product_markers', []):
+                    if marker in text:
+                        failures.append(str(path.relative_to(root)) + ': excluded product marker ' + marker)
     settings = (root / 'settings.gradle.kts').read_text()
     for project in policy['forbidden_projects']:
         if 'include("' + project + '")' in settings:

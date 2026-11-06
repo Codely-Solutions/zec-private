@@ -88,7 +88,8 @@ private fun Content(
             Text(
                 modifier = Modifier.fillMaxWidth(),
                 text =
-                    "ZEC Private uses temporary addresses during swaps and payments to protect your privacy. If too many " +
+                    "ZEC Private uses temporary addresses during swaps and payments to protect your privacy. " +
+                        "If too many " +
                         "remain unused, ZEC Private hits a limit and can’t create new ones.",
                 style = ZashiTypography.textSm,
                 color = ZashiColors.Text.textTertiary,

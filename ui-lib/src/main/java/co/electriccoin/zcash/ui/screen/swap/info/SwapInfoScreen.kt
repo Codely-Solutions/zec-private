@@ -20,4 +20,5 @@ fun SwapInfoScreen() {
 @Serializable
 data object SwapInfoArgs
 
-private const val LEARN_MORE_URL = "https://github.com/Sammy-Lastre/zec-private/blob/main/docs/WALLET-GUIDE.md#incoming-swaps"
+private const val LEARN_MORE_URL =
+    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#incoming-swaps"
