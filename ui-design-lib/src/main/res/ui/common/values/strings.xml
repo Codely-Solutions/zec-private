@@ -14,7 +14,7 @@
     <string name="coinVote_error_title">Something went wrong</string>
     <string name="swapAndPay_failure_wrongDesc">We couldn\’t load the assets. Please check your connection and try again.</string>
     <string name="disconnectHWWallet_tryAgain">Try again</string>
-    <string name="disconnectHWWallet_contactSupport">Contact Support</string>
+    <string name="disconnectHWWallet_contactSupport">Export diagnostics</string>
     <string name="general_show">Show</string>
     <string name="general_hide">Hide</string>
     <string name="general_more">More</string>
@@ -164,15 +164,15 @@
     <string name="authentication_toast_canceled">Authentication canceled</string>
     <string name="authentication_toast_failed">Authentication failed</string>
     <string name="authentication_error_title">Authentication error</string>
-    <string name="authentication_error_text">Authentication failed for the following reason. Retry the authentication, or contact the support team for help.</string>
+    <string name="authentication_error_text">Authentication failed for the following reason. Retry the authentication, or export diagnostics if the problem persists.</string>
     <string name="authentication_error_details">
         Error code: <xliff:g id="code" example="-1">%1$d</xliff:g>\nError message: <xliff:g id="message" example="No device credential">%2$s</xliff:g>
     </string>
     <string name="coinVote_common_retry">Retry</string>
-    <string name="errorPage_action_contactSupport">Contact Support</string>
+    <string name="errorPage_action_contactSupport">Export diagnostics</string>
     <string name="authentication_failed_title">Authentication failed</string>
     <string name="authentication_failed_text">
-        Authentication was presented but not recognized. Retry authentication, or contact the support team for help.
+        Authentication was presented but not recognized. Retry authentication, or export diagnostics if the problem persists.
     </string>
     <string name="authentication_failed_welcome_icon_cont_desc">Tap to unlock <xliff:g id="app_name" example="ZEC Private">%1$s</xliff:g> app</string>
     <string name="splash_authTitle">Your ZEC Private account is secured.</string>
@@ -298,7 +298,7 @@
 
     <!-- ===== error ===== -->
     <string name="error_general_title">An error occurred</string>
-    <string name="error_general_message">Unknown cause. Please contact our support team if the problem persists
+    <string name="error_general_message">Unknown cause. Export diagnostics if the problem persists
         .\n\n%s</string>
     <string name="smartBanner_help_syncError_title">Syncing error</string>
     <string name="shieldFunds_error_title">Shielding error</string>
@@ -365,9 +365,8 @@
     <!-- ===== feedback ===== -->
     <string name="support_header">Support</string>
     <string name="tabs_send">Send</string>
-    <string name="support_confirmation_dialog_title">Open e-mail app</string>
-    <string name="support_confirmation_explanation">ZEC Private is about to
-        open your e-mail app with a pre-filled message.\n\nBe sure to hit send within your e-mail app.</string>
+    <string name="support_confirmation_dialog_title">Export diagnostics</string>
+    <string name="support_confirmation_explanation">Choose an app and recipient to share diagnostics. Review the contents before sharing; no support team receives them automatically.</string>
     <string name="support_email_part_1">How is your ZEC Private experience?\n<xliff:g id="emoji_encoding" example="😍">%1$s</xliff:g> <xliff:g id="emoji_order" example="5">%2$s</xliff:g>/5</string>
     <string name="support_email_part_2">How can we help you?\n%s</string>
 
@@ -989,25 +988,25 @@
     <string name="swapAndPay_executedSlippage">Realized slippage</string>
     <string name="swapAndPay_maxSlippageTitle">Max slippage</string>
     <string name="transactionHistory_timestamp">Timestamp</string>
-    <string name="swapAndPay_refundInfo">Your deposit was detected but the swap could not be completed. Your funds have been returned, minus transaction fees. If you haven\'t received them, contact the ZEC Private support team.</string>
+    <string name="swapAndPay_refundInfo">Your deposit was detected but the swap could not be completed. The provider reports a refund, minus transaction fees. If it has not arrived, preserve the swap details and check its status with the provider.</string>
     <string name="swapAndPay_refundTitle">Funds Returned</string>
     <string name="swapAndPay_processingMsg">Your swap has been delayed. Swaps typically complete in minutes but may take longer depending on market conditions.</string>
-    <string name="swapAndPay_failedMsg">This swap could not be completed. If you deposited funds and didn\'t receive your swap, contact support so we can help resolve it.</string>
+    <string name="swapAndPay_failedMsg">This swap could not be completed. If you deposited funds, preserve the swap details and inspect its status or refund with the provider before sending again.</string>
     <string name="swapAndPay_failedTitle">Swap Failed</string>
-    <string name="swapAndPay_expiredMsg">This swap expired after its 24-hour validity window. If you didn\'t send funds, no action is needed. If you did send funds, contact support so we can help.</string>
+    <string name="swapAndPay_expiredMsg">This swap expired. If you did not send funds, no action is needed. If you did, preserve the swap details and inspect its status or refund with the provider.</string>
     <string name="swapAndPay_expiredTitle">Swap Expired</string>
     <string name="reportSwap_report">Report Issue</string>
     <string name="reportSwap_title">Report Swap Issue</string>
-    <string name="reportSwap_msg">Tapping the button below will send details about this swap (like the deposit address and target asset) to the ZEC Private support team so they can help resolve your issue. The transaction info is included automatically.</string>
+    <string name="reportSwap_msg">Export details of this swap, including its deposit address and target asset. Choose the recipient yourself and review the contents before sharing. No report is sent automatically.</string>
     <string name="transaction_detail_support_email_subject">Swap Transaction Issue</string>
     <string name="transaction_detail_support_email_body">Please describe your issue here:\n\n\n\nSwap Details:\nDeposit Address: %1$s\nSource Asset: %2$s\nTarget Asset: %3$s</string>
     <string name="swap_mismatch_title">Swap details didn\’t match</string>
     <string name="swap_mismatch_msg_1">We received a quote back from the swap provider, however, it didn\’t match some details you provided. We make this check to ensure your swap is what you expect.</string>
-    <string name="swap_mismatch_msg_2">We\’d appreciate you reporting this to us so we can investigate it with the swap provider.</string>
+    <string name="swap_mismatch_msg_2">You can export diagnostic details for investigation. Review them before choosing a recipient.</string>
     <string name="swap_mismatch_msg_3">Reported or not, you can also try again. If the details match, you won\’t see this screen and you\’ll be able to proceed.</string>
     <string name="swap_mismatch_goBack">Go back</string>
     <string name="swap_mismatch_support_email_subject">ZEC Private Swap: API mismatch</string>
-    <string name="swap_mismatch_support_email_body">ZEC Private detected the following error in the API response from the swap provider. Providing these details allows us to raise it with them to investigate. We won\’t relay your personal details to the swap provider. You can send this as-is, or include a note to us. Thanks in advance.\n\nSwap provider: %1$s\nSwap type: %2$s\nMismatch type: %3$s\nQuote ID: %4$s</string>
+    <string name="swap_mismatch_support_email_body">ZEC Private rejected a swap-provider response that did not match the request. Review these diagnostic details before sharing.\n\nSwap provider: %1$s\nSwap type: %2$s\nMismatch type: %3$s\nQuote ID: %4$s</string>
     <string name="swap_mismatch_mode_swap">Swap</string>
     <string name="swap_mismatch_mode_crosspay">CrossPay</string>
     <string name="swap_mismatch_mode_swapIntoZec">Swap into ZEC</string>
@@ -1211,7 +1210,7 @@
     <string name="restartMigration_summaryMigratedValue">%1$d of %2$d transfers</string>
     <string name="restartMigration_summaryRemainingLabel">Remaining balance</string>
     <string name="restartMigration_warning">This cancels the current migration plan. It cannot be undone once confirmed.</string>
-    <string name="restartMigration_support">If restarting doesn\'t resolve the issue, please reach out to ZEC Private Support via Send Feedback.</string>
+    <string name="restartMigration_support">If restarting does not resolve the issue, preserve your recovery information and export diagnostics from the error screen. Never share your recovery phrase.</string>
     <string name="restartMigration_next">Next</string>
     <string name="restartMigration_confirmTitle">Restart this migration?</string>
     <string name="restartMigration_confirmMessage">A new plan will be created for your remaining %1$s. The %2$d transfers already completed stay as they are and won\'t be repeated.</string>
@@ -1281,9 +1280,9 @@
     <string name="migrationComplete_orchardBalanceLockedBody">%1$s is now locked in Orchard. Locking keeps this amount unspendable to protect your privacy.</string>
     <string name="migrationComplete_transfersProgress">%1$d of %2$d sent</string>
     <string name="migrationComplete_migrateAnywayFailureNetworkError">Couldn\'t reach the network. Check your connection and try again.</string>
-    <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Please contact support.</string>
-    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Please contact support.</string>
-    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Please contact support.</string>
+    <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Preserve the transaction details and export diagnostics.</string>
+    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Preserve the transaction details and export diagnostics.</string>
+    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Preserve the transaction details and export diagnostics.</string>
     <string name="migrationComplete_residueTitle">You’ve moved to Ironwood</string>
     <string name="migrationComplete_residueSubtitle">A small balance is still sitting in Orchard.</string>
     <string name="migrationComplete_inIronwoodLabel">In Ironwood</string>
