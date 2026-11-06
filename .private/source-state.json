@@ -2754,7 +2754,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelSwapUseCaseTest.kt": "e18417e2082c7985ef811960c84f01a67c695a87427f536b988fd65f3e63df5c",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ClearClipboardUseCaseTest.kt": "618dbb9bb04c169eea7145e7bb06c31a6299ae047897c02e932ce11eae5e2f42",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCaseTest.kt": "4419ac5d855e541b3363145df566e85d7c77881283a83cb83611fbfdbbc9e15b",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/DiagnosticShareTest.kt": "dcdf1ec597a87a33bbc4ff634a83cddf91900b115cf8ee7b5c12214231d20df4",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/DiagnosticShareTest.kt": "77597f8d14d40472428a8aefd4f9672e6b27ae9534b5989e3252ba47140fc5d3",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/EditAccountFixtures.kt": "b27d388a278435d9448384a8ae96801e4dbc9ff3d2d2a1c7605235ea9bdec3c4",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/FilterSwapAssetsUseCaseTest.kt": "07e6e762c2ec44359b5ba4a323055bf05b0a42e2b41ee7b9842a9852c90d145e",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/FilterSwapBlockchainsUseCaseTest.kt": "ebfae054c0752dd60d6fe6c2e5002d2b0f267972fbc36a0ac8c0d921e3065280",

@@ -1,6 +1,14 @@
 name: Check quote dismissal and retry
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: Targeted development checks; release validation still runs the full suite
+        type: choice
+        options:
+          - quotes
+          - diagnostics
+        default: quotes
 permissions:
   contents: read
 jobs:
@@ -17,9 +25,15 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
       - name: Controlled unfunded quote lifecycle tests
+        env:
+          TEST_PROFILE: ${{ inputs.profile || 'quotes' }}
         run: |
           chmod +x gradlew
-          ./gradlew -I .private/robolectric-ci.gradle --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :ui-lib:testZcashmainnetFossReleaseUnitTest --tests 'co.electriccoin.zcash.ui.common.repository.SwapRepositoryImplTest' --tests 'co.electriccoin.zcash.ui.common.repository.SwapQuoteLifecycleTest' --tests 'co.electriccoin.zcash.ui.common.usecase.CancelSwapQuoteUseCaseTest' --tests 'co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCaseTest' --tests 'co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteVMTest'
+          tests=(--tests 'co.electriccoin.zcash.ui.common.repository.SwapRepositoryImplTest' --tests 'co.electriccoin.zcash.ui.common.repository.SwapQuoteLifecycleTest' --tests 'co.electriccoin.zcash.ui.common.usecase.CancelSwapQuoteUseCaseTest' --tests 'co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCaseTest' --tests 'co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteVMTest')
+          if [[ "$TEST_PROFILE" == diagnostics ]]; then
+            tests=(--tests 'co.electriccoin.zcash.ui.common.usecase.DiagnosticShareTest')
+          fi
+          ./gradlew -I .private/robolectric-ci.gradle --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :ui-lib:testZcashmainnetFossReleaseUnitTest "${tests[@]}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
