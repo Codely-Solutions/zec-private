@@ -3583,10 +3583,10 @@ index ab4d7ab5b..6693c38d3 100644
 \ No newline at end of file
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ZecSwapComposition.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ZecSwapComposition.kt
 new file mode 100644
-index 000000000..eb152bc57
+index 000000000..d21d293af
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ZecSwapComposition.kt
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,48 @@
 +package co.electriccoin.zcash.ui.common.model
 +
 +import co.electriccoin.zcash.wallet.foundation.AssetAmount
@@ -3621,7 +3621,8 @@ index 000000000..eb152bc57
 +                amount = AssetAmount(asset, quote.amountInFormatted, quote.originAsset.decimals),
 +                address = quote.depositAddress.address,
 +                recovery = RecoveryReference(ProviderId(quote.provider), 1, quote.depositAddress.address),
-+                expiresAt = Instant.ofEpochSecond(quote.deadline.epochSeconds, quote.deadline.nanosecondsOfSecond.toLong())
++                expiresAt =
++                    Instant.ofEpochSecond(quote.deadline.epochSeconds, quote.deadline.nanosecondsOfSecond.toLong())
 +            )
 +        FlowComposition(
 +            provider = near,
@@ -4571,7 +4572,7 @@ index 84d9fd0c0..000000000
 -    DISABLED
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
-index 76c590a49..5e460bb86 100644
+index 76c590a49..a810e560e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 @@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -4609,14 +4610,16 @@ index 76c590a49..5e460bb86 100644
 @@ -123 +134 @@ class RequestSwapQuoteUseCase(
 -        createProposal: Boolean,
 +        funding: FundingCapability,
-@@ -139 +150,11 @@ class RequestSwapQuoteUseCase(
+@@ -139 +150,13 @@ class RequestSwapQuoteUseCase(
 -        if (result is SwapQuoteData.Success && createProposal) {
 +        if (result is SwapQuoteData.Success) {
 +            try {
 +                ZecSwapComposition.validate(result.quote)
 +            } catch (e: IllegalArgumentException) {
-+                swapRepository.clearQuote()
-+                navigateToErrorUseCase(ErrorArgs.General(e))
++                if (canNavigateToSwapQuote()) {
++                    swapRepository.clearQuote()
++                    navigateToErrorUseCase(ErrorArgs.General(e))
++                }
 +                return@withContext
 +            }
 +        }
@@ -11345,12 +11348,12 @@ index 000000000..ef29cc3a1
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
-index c01988b65..9de3f9ace 100644
+index c01988b65..8d44dda7f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 @@ -6,0 +7 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.datasource.FreshShieldedAddressUnavailableException
-@@ -404,0 +406,73 @@ class RequestSwapQuoteUseCaseTest {
+@@ -404,0 +406,92 @@ class RequestSwapQuoteUseCaseTest {
 +    @Test
 +    fun incomingQuotesUseIndependentShieldedRecipients() =
 +        runBlocking {
@@ -11424,7 +11427,26 @@ index c01988b65..9de3f9ace 100644
 +            verify(exactly = 3) { navigateToError(any(), any()) }
 +        }
 +
-@@ -494 +568 @@ class RequestSwapQuoteUseCaseTest {
++    @Test
++    fun rejectedCompositionCannotReplaceTheCancellationConfirmation() = runBlocking {
++        val invalid = object : SwapQuote by swapQuote(zec, btc) {
++            override val provider: String = "unsupported"
++        }
++        useCase(invalid).requestExactInput(
++            amount = BigDecimal.ONE,
++            address = "destination",
++            selectedAsset = btc,
++            slippage = BigDecimal("2"),
++            canNavigateToSwapQuote = { false }
++        )
++
++        verify(exactly = 0) { swapRepository.clearQuote() }
++        verify(exactly = 0) { navigateToError(any(), any()) }
++        verify(exactly = 0) { navigationRouter.forward(SwapQuoteArgs) }
++        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any()) }
++    }
++
+@@ -494 +587 @@ class RequestSwapQuoteUseCaseTest {
 -        coEvery { accountDataSource.requestNextShieldedAddress() } returns shieldedAddress
 +        coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returns shieldedAddress
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
@@ -11970,6 +11992,73 @@ index 000000000..213aa3674
 +    }
 +
 +    fun isCurrent(request: RequestId): Boolean = request.owner === this && request.generation == generation
++}
+diff --git a/wallet-foundation-lib/src/test/kotlin/co/electriccoin/zcash/wallet/foundation/CompositionFixtureTest.kt b/wallet-foundation-lib/src/test/kotlin/co/electriccoin/zcash/wallet/foundation/CompositionFixtureTest.kt
+new file mode 100644
+index 000000000..eebe6ea19
+--- /dev/null
++++ b/wallet-foundation-lib/src/test/kotlin/co/electriccoin/zcash/wallet/foundation/CompositionFixtureTest.kt
+@@ -0,0 +1,61 @@
++package co.electriccoin.zcash.wallet.foundation
++
++import java.math.BigDecimal
++import java.time.Instant
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++
++/** Structural reuse only: these adapters have no network, signing, custody or settlement implementation. */
++class CompositionFixtureTest {
++    @Test
++    fun anotherProductCanComposeMemoFundingWithoutZcashOrNear() {
++        val asset = AssetId("fixture-network", "fixture-asset")
++        val provider = MemoProvider(asset)
++        val funding = FundingRecorder()
++        val composition = FlowComposition(
++            provider.id, setOf(QuoteMode.EXACT_INPUT), setOf(asset),
++            setOf(FundingCapability.LOCAL_TRANSACTION), supportsMemo = true
++        )
++        val quote = provider.quote()
++
++        composition.validate(QuoteMode.EXACT_INPUT, FundingCapability.LOCAL_TRANSACTION, quote, provider.now)
++        // A product owns this explicit approval boundary; validation itself never funds anything.
++        assertEquals(0, funding.calls)
++        funding.approve(quote)
++        assertEquals("memo-is-required", funding.approved?.memo)
++        assertEquals(1, funding.calls)
++
++        val incompatible = FlowComposition(
++            provider.id, setOf(QuoteMode.EXACT_INPUT), setOf(asset),
++            setOf(FundingCapability.EXTERNAL_DEPOSIT)
++        )
++        val rejected = assertFailsWith<FlowRejected> {
++            incompatible.validate(QuoteMode.EXACT_INPUT, FundingCapability.EXTERNAL_DEPOSIT, quote, provider.now)
++            funding.approve(quote)
++        }
++        assertEquals(FlowFailure.UNSUPPORTED_MEMO, rejected.reason)
++        assertEquals(1, funding.calls)
++    }
++
++    private class MemoProvider(private val asset: AssetId) {
++        val id = ProviderId("memo-provider-fixture")
++        val now = Instant.parse("2026-11-06T12:00:00Z")
++
++        fun quote() = DepositInstructions(
++            AssetAmount(asset, BigDecimal("1.234567890123"), 12),
++            "fixture-destination", RecoveryReference(id, 2, "opaque-id-not-a-deposit-address"),
++            memo = "memo-is-required", expiresAt = now.plusSeconds(60)
++        )
++    }
++
++    private class FundingRecorder {
++        var calls = 0
++        var approved: DepositInstructions? = null
++
++        fun approve(instructions: DepositInstructions) {
++            calls++
++            approved = instructions
++        }
++    }
 +}
 diff --git a/wallet-foundation-lib/src/test/kotlin/co/electriccoin/zcash/wallet/foundation/ContractsTest.kt b/wallet-foundation-lib/src/test/kotlin/co/electriccoin/zcash/wallet/foundation/ContractsTest.kt
 new file mode 100644
