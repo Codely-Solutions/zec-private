@@ -22,6 +22,9 @@ import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.android.sdk.model.ZecSend
+import cash.z.ecc.android.sdk.model.TransactionId
+import co.electriccoin.lightwallet.client.model.Response
+import co.electriccoin.lightwallet.client.model.RawTransactionUnsafe
 import cash.z.ecc.android.sdk.type.ServerValidation
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.internal.Backend
@@ -54,6 +57,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import org.json.JSONArray
 import org.junit.Test
@@ -86,7 +91,7 @@ class CoreWalletAcceptance {
         val started = System.nanoTime()
         withTimeout(900_000) {
             dependency<IsTorEnabledStorageProvider>().store(true)
-            if (stage != "networkTargets") {
+            if (stage !in listOf("networkTargets", "rpcProbe")) {
                 val intent = checkNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 instrumentation.startActivitySync(intent)
@@ -211,6 +216,8 @@ class CoreWalletAcceptance {
                         .put("uiReview", true).put("uiCancelNoSubmission", true)
                     save(state)
                     // One real UI approval only. No direct repository submit or auth substitution.
+                    val approvalBoundary = "CORE_APPROVAL_BEGIN_1"
+                    android.util.Log.i("CoreReview", approvalBoundary)
                     clickUi(context.getString(co.electriccoin.zcash.ui.R.string.tabs_send), "review_approve")
                     val result = withTimeout(180_000) {
                         proposals.submitState.filterNotNull().first { it is SubmitProposalState.Result }
@@ -227,6 +234,9 @@ class CoreWalletAcceptance {
                         is SubmitResult.Partial -> diagnostic.put("statuses",JSONArray(result.statuses.map { safeDescription(it) }))
                         is SubmitResult.Error -> diagnostic.put("cause_class",result.cause.javaClass.simpleName)
                         is SubmitResult.Success -> Unit
+                    }
+                    if (result is SubmitResult.GrpcFailure) {
+                        diagnostic.put("rpc_failure", submissionRpcDiagnostic(approvalBoundary))
                     }
                     println("CORE_SEND_DIAGNOSTIC $diagnostic")
                     save(state.put("uiApproval",true).put("initialSubmitType",result.javaClass.simpleName).put("candidateTxIds",JSONArray(result.txIds)))
@@ -305,6 +315,15 @@ class CoreWalletAcceptance {
                         .put("sync_restarted",true).put("synced",true).put("balance_preserved",true)
                         .put("history_preserved",true).put("scanned_height",recovered.fullyScannedHeight.value?.value).toString())
                 }
+                "rpcProbe" -> {
+                    check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
+                    val tor = createPublicProbeTor()
+                    try {
+                        save(fixture().put("nativeRpcProbe", nativeRpcProbe(tor, arguments.getString("probeTxId"))))
+                    } finally {
+                        withContext(NonCancellable) { tor.dispose() }
+                    }
+                }
                 "networkTargets" -> {
                     check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
                     val backend=Proxy.newProxyInstance(Backend::class.java.classLoader,arrayOf(Backend::class.java)) { _, _, _ ->
@@ -312,6 +331,7 @@ class CoreWalletAcceptance {
                     } as Backend
                     val tor=TorClient.new(File(context.cacheDir,"core-bootstrap-tor"),backend)
                     try {
+                        save(fixture().put("nativeRpcProbe", nativeRpcProbe(tor, null)))
                         val isolated=tor.isolatedTorClient()
                         HttpClient(TorHttp) {
                             engine { this.tor=isolated; retryLimit=1 }
@@ -361,7 +381,7 @@ class CoreWalletAcceptance {
                             save(fixture().put("publicRelayFetchMillis", (System.nanoTime() - publicStarted) / 1_000_000))
                         }
                     } finally {
-                        tor.dispose()
+                        withContext(NonCancellable) { tor.dispose() }
                     }
                 }
                 else -> error("Unsupported core stage")
@@ -371,6 +391,9 @@ class CoreWalletAcceptance {
             .put("network", "zcash-testnet").put("transport", "Tor sensitive RPCs; upstream direct bulk")
             .put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
         if (stage in listOf("send", "restart", "restore")) receipt.put("txId", fixture().getString("txId"))
+        if (stage in listOf("rpcProbe", "networkTargets", "fund")) {
+            receipt.put("native_rpc_probe", fixture().getJSONObject("nativeRpcProbe"))
+        }
         if (stage=="fund") receipt.put("funding_txid",fixture().getString("fundingTxId")).put("balance_zatoshi",fixture().getLong("fundedBalance"))
             .put("app_transaction_state",fixture().getString("fundConfirmedState"))
             .put("public_relay_directory_transport", "direct HTTPS before wallet firewall; no wallet data")
@@ -394,6 +417,116 @@ class CoreWalletAcceptance {
 
         // No exception messages, seeds, addresses, HTTP bodies or private fixture are printed.
         println("CORE_RESULT $receipt")
+    }
+
+    private suspend fun createPublicProbeTor(): TorClient {
+        val backend = Proxy.newProxyInstance(Backend::class.java.classLoader, arrayOf(Backend::class.java)) { _, _, _ ->
+            error("Wallet access forbidden during unfunded native RPC diagnostic")
+        } as Backend
+        return TorClient.new(File(context.cacheDir, "core-rpc-probe-tor"), backend)
+    }
+
+    private fun rejectionCode(description: String): Int? =
+        Regex("Failed to submit transaction \\((-?\\d+)\\):").find(description)
+            ?.groupValues?.get(1)?.toIntOrNull()
+
+    private suspend fun nativeRpcProbe(tor: TorClient, lookupTxId: String?): JSONObject {
+        val result = JSONObject().put("wallet_access", false).put("valid_transaction_submissions", 0)
+        val started = System.nanoTime()
+        val isolated = tor.isolatedTorClient()
+        try {
+            val client = isolated.createWalletClient("https://testnet.zec.rocks:443")
+            try {
+                val height = withTimeout(30_000) { client.getLatestBlockHeight() }
+                result.put("height_response_class", height.javaClass.simpleName)
+                if (height is Response.Success) {
+                    result.put("height", height.result.value)
+                } else {
+                    val failure = height as Response.Failure
+                    result.put("sdk_code", failure.code)
+                    println("CORE_NATIVE_ERROR " + result.put("probe_stage", "latest_height"))
+                    error("Unfunded native Tor latest-height RPC failed")
+                }
+                if (lookupTxId != null) {
+                    check(lookupTxId.matches(Regex("[0-9a-f]{64}")))
+                    val lookup = withTimeout(30_000) {
+                        client.fetchTransaction(TransactionId.new(lookupTxId).value.byteArray)
+                    }
+                    val detail = JSONObject().put("response_class", lookup.javaClass.simpleName)
+                    if (lookup is Response.Success) {
+                        val transaction = lookup.result
+                        detail.put("known", true).put("state", transaction.javaClass.simpleName)
+                        if (transaction is RawTransactionUnsafe.MainChain) {
+                            detail.put("height", transaction.height.value)
+                        }
+                    } else {
+                        detail.put("known", false).put("sdk_code", (lookup as Response.Failure).code)
+                    }
+                    result.put("lookup_tx_id", lookupTxId).put("previous_test_transaction_lookup", detail)
+                }
+                // One malformed byte cannot be a valid signed transaction and spends no funds.
+                val rejected = withTimeout(30_000) { client.submitTransaction(byteArrayOf(0)) }
+                result.put("malformed_submit_calls", 1).put("submit_response_class", rejected.javaClass.simpleName)
+                val code = when (rejected) {
+                    is Response.Failure -> {
+                        result.put("sdk_code", rejected.code)
+                        rejectionCode(rejected.description.orEmpty())
+                    }
+                    is Response.Success -> rejected.result.code.takeIf { it != 0 }
+                }
+                result.put("native_rejection_code", code ?: JSONObject.NULL)
+                result.put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
+                if (code == null || code == 0) {
+                    println("CORE_NATIVE_ERROR " + result.put("probe_stage", "malformed_submit"))
+                    error("Native Tor malformed-transaction RPC did not establish server rejection")
+                }
+                return result
+            } finally {
+                withContext(NonCancellable) { client.dispose() }
+            }
+        } catch (error: Exception) {
+            result.put("exception_class", error.javaClass.simpleName)
+                .put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
+            println("CORE_NATIVE_ERROR $result")
+            throw error
+        } finally {
+            withContext(NonCancellable) { isolated.dispose() }
+        }
+    }
+
+    private fun submissionRpcDiagnostic(boundary: String): JSONObject {
+        val result = JSONObject()
+        try {
+            val descriptor = instrumentation.uiAutomation.executeShellCommand(
+                "timeout 3 logcat -d -b main -v raw --uid=" + android.os.Process.myUid()
+            )
+            val captured = android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use {
+                String(it.readNBytes(2_097_152), Charsets.UTF_8)
+            }
+            val start = captured.lastIndexOf(boundary)
+            result.put("approval_marker_found", start >= 0)
+            if (start >= 0) {
+                val logs = captured.substring(start)
+                val code = rejectionCode(logs)
+                result.put("native_rejection_code", code ?: JSONObject.NULL)
+                result.put("height_preflight_failed", logs.contains(
+                    "Could not read the server height before submitting"
+                ))
+                result.put("sdk_submit_failure_logged", logs.contains(
+                    "FAILURE! submit transaction failed with gRPC response"
+                ))
+                result.put("raw_submit_results_logged", logs.contains("Internal transaction submit results:"))
+                val relevant = logs.lineSequence().filter { it.contains("Failed to submit transaction (") }.take(3)
+                val tokens = relevant.flatMap { line ->
+                    Regex("\\b(?:[a-z][a-z0-9]+-){1,8}[a-z0-9]+\\b").findAll(line)
+                        .map { it.value.take(80) }
+                }.distinct().take(12).toList()
+                result.put("rejection_reason_tokens", JSONArray(tokens))
+            }
+        } catch (error: Exception) {
+            result.put("capture_failure_class", error.javaClass.simpleName)
+        }
+        return result
     }
 
     @Suppress("DEPRECATION")
