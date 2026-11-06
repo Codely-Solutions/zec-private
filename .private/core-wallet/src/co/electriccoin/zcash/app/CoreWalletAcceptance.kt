@@ -372,6 +372,7 @@ class CoreWalletAcceptance {
         println("CORE_RESULT $receipt")
     }
 
+    @Suppress("DEPRECATION")
     private suspend fun proposalFailureDiagnostic(logBoundary: String, reviewAttempt: Int) {
         var logAvailable = false
         var capped = false
@@ -629,6 +630,7 @@ class CoreWalletAcceptance {
         }
     }
 
+    @Suppress("DEPRECATION")
     @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun createWallet(role: String) {
         check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
