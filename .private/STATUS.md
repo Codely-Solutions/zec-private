@@ -1,7 +1,11 @@
-# Revision 9 — Composable Wallet Foundation validated
+# Revision 9 — Composable Wallet Foundation released
 
 Candidate 42224726954 at `b34a56a0b3c0adfc27f30cc19ce7fd82f603858f` passed required unit, lint, Detekt, dependency-direction, Tor API and disposable upstream integration gates. The real testnet lifecycle passed in 622.3 seconds. Receive, installed update, Tor interruption/recovery, send/mining, restart and clean seed restoration used one isolated transaction. Three real unfunded BTC→ZEC quotes were reviewed and dismissed over Tor. See core-validation-summary.json for exact artifacts and limits.
 
 The foundation separates exact values, funding/deposit capabilities, typed request ownership and recovery references from SDK/provider code. The app selects NEAR; Zcash fee presentation and account-specific signing remain in the Zcash integration. Existing metadata schemas, gift protections, hardware/view-only support and CrossPay remain. Unknown recovery providers are rejected without rewriting their saved records. The full suite caught and corrected view-only guard ordering before release.
 
-Production packaging remains ARM64-only. The x86_64 emulator executed testnet/debug behavior; production ARM and permanent signing identity are inspected separately. Signing promotes the validated unsigned artifact without rebuilding it. Upstream discovery remains enabled; architecture and artifact/evidence gates apply to prepared updates. XMR and THORChain implementations remain separately scoped.
+Production packaging remains ARM64-only. The x86_64 emulator executed testnet/debug behavior; production ARM and permanent signing identity are inspected separately. Signing promoted the validated unsigned artifact without rebuilding it; independent verification confirmed unchanged payload entries and the permanent certificate. Upstream discovery remains enabled; architecture and artifact/evidence gates apply to prepared updates. XMR and THORChain implementations remain separately scoped.
+
+Signed release: https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.9
+
+APK: 67,812,047 bytes, unchanged from revision 8. SHA256 `1e0d808b8610c85b38dbcfae4f8df785ed73d04811eabb0cacf8cfb8613567b7`. Required gates passed 1,692 cases, including the full impacted Ledger module and the reusable foundation tests. The production graph adds only `project :wallet-foundation-lib`; retained external versions and native-library bytes are unchanged. Production/emulator Gradle times were 1,022/794 seconds versus 940/603 seconds in revision 8; cache/input differences prevent causal performance claims. Full iteration costs include superseded diagnostics and failures.
