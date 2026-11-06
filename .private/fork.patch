@@ -5386,13 +5386,44 @@ index da0613aca..d1521bb2d 100644
 -        affiliateAddress = "affiliate"
 +        slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
-index c0be20563..59ecd8310 100644
+index c0be20563..9dd211a23 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.datasource
 +import cash.z.ecc.android.sdk.Synchronizer
 +import cash.z.ecc.android.sdk.type.AddressType
-@@ -56,0 +59,31 @@ class NearSwapDataSourceTest {
+@@ -56,0 +59,62 @@ class NearSwapDataSourceTest {
++    @Test
++    fun externalAddressFamiliesKeepTheirExactRecipientAndRefundEncoding() =
++        runBlocking {
++            val addresses = listOf(
++                "btc" to "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
++                "eth" to "0x52908400098527886E0F7030069857D2E4169EE7",
++                "sol" to "11111111111111111111111111111111",
++                "xrp" to "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"
++            )
++            for ((chain, address) in addresses) {
++                val asset = SwapAssetTestFixture.asset(tokenTicker = chain, chainTicker = chain)
++                for (outgoing in listOf(false, true)) {
++                    val request = slot<QuoteRequest>()
++                    coEvery { nearApiProvider.requestQuote(capture(request)) } throws nearError("No quotes found")
++                    assertFailsWith<QuoteLowAmountException> {
++                        dataSource.requestQuote(
++                            swapMode = if (outgoing) SwapMode.EXACT_OUTPUT else SwapMode.EXACT_INPUT,
++                            amount = BigDecimal.ONE,
++                            refundAddress = if (outgoing) "zec-refund" else address,
++                            originAsset = if (outgoing) zec else asset,
++                            destinationAddress = if (outgoing) address else "zec-recipient",
++                            destinationAsset = if (outgoing) asset else zec,
++                            slippage = BigDecimal("0.5")
++                        )
++                    }
++                    assertEquals(if (outgoing) address else "zec-recipient", request.captured.recipient)
++                    assertEquals(if (outgoing) "zec-refund" else address, request.captured.refundTo)
++                }
++            }
++        }
++
 +    @Test
 +    fun quoteModesPreserveRepresentativeAtomicUnitPrecisions() =
 +        runBlocking {
@@ -5424,11 +5455,11 @@ index c0be20563..59ecd8310 100644
 +            }
 +        }
 +
-@@ -96,2 +129 @@ class NearSwapDataSourceTest {
+@@ -96,2 +160 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -111,4 +143,3 @@ class NearSwapDataSourceTest {
+@@ -111,4 +174,3 @@ class NearSwapDataSourceTest {
 -            // The affiliate fee + referral are attached to every request.
 -            assertEquals("zodl", captured.referral)
 -            assertEquals("affiliate", captured.appFees.single().recipient)
@@ -5436,27 +5467,27 @@ index c0be20563..59ecd8310 100644
 +            // Independent quotes carry no affiliate fee or referral.
 +            assertEquals(null, captured.referral)
 +            assertEquals(emptyList(), captured.appFees)
-@@ -132,2 +163 @@ class NearSwapDataSourceTest {
+@@ -132,2 +194 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -159,2 +189 @@ class NearSwapDataSourceTest {
+@@ -159,2 +220 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -182,2 +211 @@ class NearSwapDataSourceTest {
+@@ -182,2 +242 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -205,2 +233 @@ class NearSwapDataSourceTest {
+@@ -205,2 +264 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -235,2 +262 @@ class NearSwapDataSourceTest {
+@@ -235,2 +293 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -244,0 +271,32 @@ class NearSwapDataSourceTest {
+@@ -244,0 +302,32 @@ class NearSwapDataSourceTest {
 +    @Test
 +    fun outgoingQuotesRejectTexDepositsBeforeCreatingAProposal() =
 +        runBlocking {
@@ -5489,19 +5520,19 @@ index c0be20563..59ecd8310 100644
 +            }
 +        }
 +
-@@ -260,2 +318 @@ class NearSwapDataSourceTest {
+@@ -260,2 +349 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -285,2 +342 @@ class NearSwapDataSourceTest {
+@@ -285,2 +373 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -311,2 +367 @@ class NearSwapDataSourceTest {
+@@ -311,2 +398 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -335,2 +390 @@ class NearSwapDataSourceTest {
+@@ -335,2 +421 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
