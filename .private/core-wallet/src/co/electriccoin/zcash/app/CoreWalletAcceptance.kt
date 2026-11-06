@@ -145,9 +145,14 @@ class CoreWalletAcceptance {
                     suspend fun openReview() {
                         reviewAttempt++
                         openPrefilledForm(destination)
-                        val logBoundary = java.text.SimpleDateFormat("MM-dd HH:mm:ss.SSS", java.util.Locale.US)
-                            .format(java.util.Date())
-                        clickUi(context.getString(co.electriccoin.zcash.ui.design.R.string.send_review), "form_review")
+                        val logBoundary = "CORE_REVIEW_BEGIN_" + reviewAttempt
+                        android.util.Log.i("CoreReview", logBoundary)
+                        try {
+                            clickUi(context.getString(co.electriccoin.zcash.ui.design.R.string.send_review), "form_review")
+                        } catch (error: Exception) {
+                            proposalFailureDiagnostic(logBoundary, reviewAttempt)
+                            throw error
+                        }
                         val proposal = withTimeoutOrNull(60_000) {
                             proposals.transactionProposal.filterNotNull().first()
                         }
@@ -375,10 +380,10 @@ class CoreWalletAcceptance {
         try {
             // Static command plus our own UID only. Never emit captured log lines or messages.
             val descriptor = instrumentation.uiAutomation.executeShellCommand(
-                "logcat -d -v brief --uid=" + android.os.Process.myUid() + " -T '" + logBoundary + "'"
+                "logcat -d -v raw --uid=" + android.os.Process.myUid() + " -t 600"
             )
             android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { stream ->
-                val bytes = ByteArray(65_536)
+                val bytes = ByteArray(131_072)
                 var count = 0
                 while (count < bytes.size) {
                     val read = stream.read(bytes, count, bytes.size - count)
@@ -386,8 +391,10 @@ class CoreWalletAcceptance {
                     count += read
                 }
                 capped = count == bytes.size
-                logs = String(bytes, 0, count, Charsets.UTF_8)
-                logAvailable = true
+                val captured = String(bytes, 0, count, Charsets.UTF_8)
+                val boundary = captured.lastIndexOf(logBoundary)
+                logAvailable = boundary >= 0
+                logs = if (logAvailable) captured.substring(boundary + logBoundary.length) else ""
             }
         } catch (error: Exception) {
             readFailureClass = error.javaClass.name
@@ -395,16 +402,23 @@ class CoreWalletAcceptance {
         val invalidEnums = listOf("INVALID_AMOUNT", "INVALID_ADDRESS", "INVALID_MEMO")
             .filter { Regex("\\b" + it + "\\b").containsMatchIn(logs) }
         val exceptionClasses = Regex(
-            "\\b(?:[a-zA-Z_$][a-zA-Z0-9_$]*\\.)+[A-Za-z_$][A-Za-z0-9_$]*(?:Exception|Error)\\b"
+            "\\b(?:[a-zA-Z_$][a-zA-Z0-9_$]*\\.)+[A-Z][A-Za-z0-9_$]*(?:Exception|Error)\\b"
         ).findAll(logs).map { it.value }.distinct().take(6).toList()
         val insufficient = Regex("Insufficient balance \\(have ([0-9]{1,16}), need ([0-9]{1,16}) including fee\\)")
             .find(logs)
         val selected = dependency<AccountDataSource>().getSelectedAccount()
         val zashi = dependency<AccountDataSource>().getZashiAccount()
         val synchronizer = dependency<SynchronizerProvider>().getSynchronizer()
+        fun visible(id: Int): Boolean {
+            val node = findUi(context.getString(id), true, false, UiProbe())
+            return (node != null).also { node?.recycle() }
+        }
         println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
             .put("ui_control", "form_review").put("ui_outcome", "proposal_log_classification")
             .put("review_attempt", reviewAttempt)
+            .put("insufficient_balance_sheet", visible(co.electriccoin.zcash.ui.R.string.sheet_insufficientBalance_title))
+            .put("form_review_visible", visible(co.electriccoin.zcash.ui.design.R.string.send_review))
+            .put("review_title_visible", visible(co.electriccoin.zcash.ui.R.string.send_confirmationTitle))
             .put("own_uid_log_available", logAvailable).put("log_byte_cap_reached", capped)
             .put("proposal_error_logged", logs.contains("Error creating proposal"))
             .put("send_validation_failed_logged", logs.contains("Send failed with"))
@@ -482,6 +496,8 @@ class CoreWalletAcceptance {
         var visibleMatch = false
         var enabledControl = false
         var clickableControl = false
+        var disabledAncestor = false
+        var buttonRole = false
     }
 
     @Suppress("DEPRECATION")
@@ -507,7 +523,13 @@ class CoreWalletAcceptance {
                                 val current = control
                                 probe.enabledControl = probe.enabledControl || current.isEnabled
                                 probe.clickableControl = probe.clickableControl || current.isClickable
-                                if (current.isClickable) {
+                                val button = current.className?.toString() == "android.widget.Button"
+                                probe.buttonRole = probe.buttonRole || button
+                                if (!current.isEnabled) {
+                                    probe.disabledAncestor = true
+                                    break
+                                }
+                                if (current.isClickable && button) {
                                     if (current.isVisibleToUser && current.isEnabled) {
                                         return AccessibilityNodeInfo.obtain(current)
                                     }
@@ -535,7 +557,8 @@ class CoreWalletAcceptance {
         println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
             .put("ui_control", label).put("ui_outcome", outcome)
             .put("root_present", probe.rootPresent).put("visible_match", probe.visibleMatch)
-            .put("enabled_control", probe.enabledControl).put("clickable_control", probe.clickableControl))
+            .put("enabled_control", probe.enabledControl).put("clickable_control", probe.clickableControl)
+            .put("disabled_ancestor", probe.disabledAncestor).put("button_role", probe.buttonRole))
     }
 
     private suspend fun awaitUi(
@@ -572,9 +595,28 @@ class CoreWalletAcceptance {
             // Readiness may be polled; an action with an ambiguous result is never retried.
             check(label != "review_approve" || approvalActions == 0) { "Core approval may be attempted only once" }
             if (label == "review_approve") approvalActions++
-            val acted = node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            val bounds = android.graphics.Rect()
+            node.getBoundsInScreen(bounds)
+            check(!bounds.isEmpty && bounds.centerX() > 0 && bounds.centerY() > 0)
+            val downTime = android.os.SystemClock.uptimeMillis()
+            fun inject(action: Int): Boolean {
+                val event = android.view.MotionEvent.obtain(
+                    downTime, android.os.SystemClock.uptimeMillis(), action,
+                    bounds.exactCenterX(), bounds.exactCenterY(), 0
+                )
+                event.source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                return try {
+                    instrumentation.uiAutomation.injectInputEvent(event, true)
+                } finally {
+                    event.recycle()
+                }
+            }
+            val down = inject(android.view.MotionEvent.ACTION_DOWN)
+            android.os.SystemClock.sleep(60)
+            val up = inject(android.view.MotionEvent.ACTION_UP)
+            val acted = down && up
             if (!acted) {
-                uiDiagnostic(label, "single_action_rejected", UiProbe().apply {
+                uiDiagnostic(label, "single_touch_rejected", UiProbe().apply {
                     rootPresent = true
                     visibleMatch = node.isVisibleToUser
                     enabledControl = node.isEnabled
@@ -633,6 +675,12 @@ class CoreWalletAcceptance {
                 requireEndpointReady(ready.sync, "before_funding")
                 // Fail parser/prefill mismatches before the host requests scarce faucet coins.
                 openPrefilledForm(fixture().getString("recipientAddress"))
+                // A zero-balance wallet must not resolve Review to a clickable background ancestor.
+                val disabledReview = findUi(
+                    context.getString(co.electriccoin.zcash.ui.design.R.string.send_review), true, true, UiProbe()
+                )
+                disabledReview?.recycle()
+                check(disabledReview == null) { "Core UI selector escaped a disabled Review button" }
                 check(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
             } catch (error: Exception) {
                 val currentError = provider.error.value
