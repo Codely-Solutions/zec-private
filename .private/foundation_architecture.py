@@ -1,8 +1,19 @@
 """Dependency direction and selected-product assembly checks; no wallet data."""
 from pathlib import Path
 import re
+import json
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def check_graph(evidence):
+    if evidence.get('configuration') != 'runtimeClasspath' or not evidence.get('components'):
+        raise ValueError('Missing resolved foundation runtime graph')
+    for component in evidence['components']:
+        if component != 'project :wallet-foundation-lib' and not component.startswith(
+                ('org.jetbrains.kotlin:kotlin-stdlib:', 'org.jetbrains:annotations:')):
+            raise ValueError('Concrete or unexpected foundation runtime dependency: ' + component)
 
 
 def check(root=ROOT):
@@ -37,4 +48,6 @@ if __name__ == '__main__':
     failures = check()
     if failures:
         raise SystemExit('\n'.join(failures))
+    if len(sys.argv) == 2:
+        check_graph(json.loads(Path(sys.argv[1]).read_text()))
     print('Foundation dependency direction and selected-product assembly passed')

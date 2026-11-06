@@ -20,6 +20,15 @@ gradle.projectsEvaluated {
             output.parentFile.mkdirs()
             def sha = ['git', 'rev-parse', 'HEAD'].execute(null, rootProject.projectDir).text.trim()
             output.text = JsonOutput.prettyPrint(JsonOutput.toJson([source_sha: sha, configuration: name, components: components])) + '\n'
+            def foundation = rootProject.project(':wallet-foundation-lib')
+            def shared = foundation.configurations.getByName('runtimeClasspath')
+            def sharedComponents = shared.incoming.resolutionResult.allComponents.collect {
+                it.id.displayName
+            }.sort()
+            def sharedOutput = new File(output.parentFile, 'foundation-runtime.json')
+            sharedOutput.text = JsonOutput.prettyPrint(JsonOutput.toJson([
+                source_sha: sha, configuration: 'runtimeClasspath', components: sharedComponents
+            ])) + '\n'
         }
     }
 }
