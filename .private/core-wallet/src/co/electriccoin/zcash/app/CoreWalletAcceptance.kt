@@ -310,12 +310,29 @@ class CoreWalletAcceptance {
                             }
                             check(addresses.length() > 0)
                             println("CORE_TARGETS $addresses")
-                            val directory = JSONObject(client.get(
+                            // Public firewall fixture only: no wallet, account or provider data.
+                            // Sensitive requests below still use native Tor under the installed firewall.
+                            val publicStarted = System.nanoTime()
+                            val connection = java.net.URL(
                                 "https://onionoo.torproject.org/details?running=true&fields=or_addresses"
-                            ).bodyAsText())
+                            ).openConnection() as javax.net.ssl.HttpsURLConnection
+                            val directory = try {
+                                connection.connectTimeout = 20_000
+                                connection.readTimeout = 20_000
+                                connection.instanceFollowRedirects = false
+                                connection.useCaches = false
+                                connection.setRequestProperty("Connection", "close")
+                                check(connection.responseCode == 200)
+                                val bytes = connection.inputStream.use { it.readNBytes(2_097_153) }
+                                check(bytes.size in 1..2_097_152)
+                                JSONObject(String(bytes, Charsets.UTF_8))
+                            } finally {
+                                connection.disconnect()
+                            }
                             val relays = directory.getJSONArray("relays")
                             check(relays.length() in 1000..20000)
                             File(context.filesDir, "core-relays.json").writeText(directory.toString())
+                            save(fixture().put("publicRelayFetchMillis", (System.nanoTime() - publicStarted) / 1_000_000))
                         }
                     } finally {
                         tor.dispose()
@@ -330,6 +347,8 @@ class CoreWalletAcceptance {
         if (stage in listOf("send", "restart", "restore")) receipt.put("txId", fixture().getString("txId"))
         if (stage=="fund") receipt.put("funding_txid",fixture().getString("fundingTxId")).put("balance_zatoshi",fixture().getLong("fundedBalance"))
             .put("app_transaction_state",fixture().getString("fundConfirmedState"))
+            .put("public_relay_directory_transport", "direct HTTPS before wallet firewall; no wallet data")
+            .put("public_relay_fetch_millis",fixture().getLong("publicRelayFetchMillis"))
         if (stage=="sender") receipt.put("scanned_height",fixture().getLong("preflightScannedHeight"))
             .put("network_height",fixture().getLong("preflightNetworkHeight"))
             .put("mode",fixture().getString("preflightMode"))
