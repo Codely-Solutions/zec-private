@@ -68,4 +68,4 @@ jobs:
         with:
           name: core-testnet-baseline
           path: core-baseline/
-          retention-days: 3
+          retention-days: 30

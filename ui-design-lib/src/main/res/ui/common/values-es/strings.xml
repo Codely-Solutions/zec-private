@@ -157,17 +157,17 @@
     <string name="authentication_toast_canceled">Autenticación cancelada</string>
     <string name="authentication_toast_failed">Autenticación fallida</string>
     <string name="authentication_error_title">Error de autenticación</string>
-    <string name="authentication_error_text">La autenticación falló por la siguiente razón. Intenta nuevamente o contacta al equipo de soporte para obtener ayuda.</string>
+    <string name="authentication_error_text">La autenticación falló por la siguiente razón. Intenta nuevamente o exporta el diagnóstico si el problema continúa.</string>
     <string name="authentication_error_details">
         Código de error: <xliff:g id="code" example="-1">%1$d</xliff:g>\nMensaje de error: <xliff:g id="message" example="Sin credenciales del dispositivo">%2$s</xliff:g>
     </string>
     <string name="coinVote_common_retry">Reintentar</string>
-    <string name="errorPage_action_contactSupport">Contactar Soporte</string>
+    <string name="errorPage_action_contactSupport">Exportar diagnóstico</string>
     <string name="authentication_failed_title">Autenticación fallida</string>
     <string name="authentication_failed_text">
-        La autenticación fue presentada pero no reconocida. Intenta nuevamente o contacta al equipo de soporte para obtener ayuda.
+        La autenticación fue presentada pero no reconocida. Intenta nuevamente o exporta el diagnóstico si el problema continúa.
     </string>
-    <string name="disconnectHWWallet_contactSupport">Contactar Soporte</string>
+    <string name="disconnectHWWallet_contactSupport">Exportar diagnóstico</string>
     <string name="authentication_failed_welcome_icon_cont_desc">Toca para desbloquear la aplicación <xliff:g id="app_name" example="ZEC Private">%1$s</xliff:g></string>
     <string name="splash_authTitle">Tu cuenta de ZEC Private está protegida.</string>
     <string name="authentication_failed_welcome_subtitle">Toca el ícono de la llave para desbloquearla.</string>
@@ -287,7 +287,7 @@
 
     <!-- ===== error ===== -->
     <string name="error_general_title">Ocurrió un error</string>
-    <string name="error_general_message">Causa desconocida. Por favor, contacta a nuestro equipo de soporte si el problema persiste.\n\n%s</string>
+    <string name="error_general_message">Causa desconocida. Por favor, exporta el diagnóstico si el problema persiste.\n\n%s</string>
     <string name="smartBanner_help_syncError_title">Error de sincronización</string>
     <string name="shieldFunds_error_title">Error de protección</string>
     <string name="shieldFunds_error_failure_message">Ocurrió un error durante la última transacción de protección. Puedes intentarlo nuevamente más tarde o reportar este problema si persiste.\n\n%s</string>
@@ -341,8 +341,8 @@
     <string name="export_data_unable_to_share">No se encontró una aplicación con la cual compartir.</string>
     <!-- ===== feedback ===== -->
     <string name="support_header">Soporte</string>
-    <string name="support_confirmation_dialog_title">Abrir aplicación de correo</string>
-    <string name="support_confirmation_explanation">ZEC Private está a punto de abrir tu aplicación de correo con un mensaje prellenado.\n\nAsegúrate de presionar enviar dentro de tu aplicación de correo.</string>
+    <string name="support_confirmation_dialog_title">Exportar diagnóstico</string>
+    <string name="support_confirmation_explanation">Elige una aplicación y destinatario para compartir el diagnóstico. Revisa su contenido antes de compartirlo; ningún equipo de soporte lo recibe automáticamente.</string>
     <string name="support_email_part_1">¿Cómo ha sido tu experiencia con ZEC Private?\n<xliff:g id="emoji_encoding" example="😍">%1$s</xliff:g> <xliff:g id="emoji_order" example="5">%2$s</xliff:g>/5</string>
     <string name="support_email_part_2">¿En qué podemos ayudarte?\n%s</string>
 
@@ -927,25 +927,25 @@
     <string name="swapAndPay_executedSlippage">Slippage realizado</string>
     <string name="swapAndPay_maxSlippageTitle">Slippage máximo</string>
     <string name="transactionHistory_timestamp">Marca de tiempo</string>
-    <string name="swapAndPay_refundInfo">Tu depósito fue detectado pero el swap no pudo completarse. Tus fondos han sido devueltos, descontando las comisiones de transacción. Si aún no los recibiste, contacta al equipo de soporte de ZEC Private.</string>
+    <string name="swapAndPay_refundInfo">Se detectó tu depósito, pero el swap no pudo completarse. El proveedor indica un reembolso, menos las comisiones. Si no llegó, conserva los detalles y consulta su estado con el proveedor.</string>
     <string name="swapAndPay_refundTitle">Fondos devueltos</string>
     <string name="swapAndPay_processingMsg">Tu swap se ha demorado. Los swaps generalmente se completan en minutos, pero pueden tardar más según las condiciones del mercado.</string>
-    <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos y no recibiste tu swap, contacta a soporte para que podamos resolverlo.</string>
+    <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos, conserva los detalles y revisa su estado o reembolso con el proveedor antes de enviar de nuevo.</string>
     <string name="swapAndPay_failedTitle">Swap fallido</string>
-    <string name="swapAndPay_expiredMsg">Este swap venció tras su ventana de validez de 24 horas. Si no enviaste fondos, no es necesario hacer nada. Si enviaste fondos, contacta a soporte para que podamos ayudarte.</string>
+    <string name="swapAndPay_expiredMsg">Este swap caducó. Si no enviaste fondos, no debes hacer nada. Si enviaste, conserva los detalles y revisa su estado o reembolso con el proveedor.</string>
     <string name="swapAndPay_expiredTitle">Swap expirado</string>
     <string name="reportSwap_report">Reportar problema</string>
     <string name="reportSwap_title">Reportar problema con swap</string>
-    <string name="reportSwap_msg">Al tocar el botón de abajo, se enviarán detalles de este swap (como la dirección de depósito y el activo destino) al equipo de soporte de ZEC Private para que puedan ayudarte a resolver tu problema. La información de la transacción se incluye automáticamente.</string>
+    <string name="reportSwap_msg">Exporta detalles de este swap, como la dirección de depósito y el activo destino. Elige el destinatario y revisa el contenido antes de compartirlo. No se envía ningún informe automáticamente.</string>
     <string name="transaction_detail_support_email_subject">Problema con transacción de swap</string>
     <string name="transaction_detail_support_email_body">Por favor describe tu problema aquí:\n\n\n\nDetalles del swap:\nDirección de depósito: %1$s\nActivo de origen: %2$s\nActivo destino: %3$s</string>
     <string name="swap_mismatch_title">Los detalles del swap no coincidieron</string>
     <string name="swap_mismatch_msg_1">Recibimos una cotización del proveedor de swap, pero no coincidió con algunos de los detalles que proporcionaste. Hacemos esta comprobación para asegurarnos de que tu swap sea el que esperas.</string>
-    <string name="swap_mismatch_msg_2">Te agradeceríamos que nos lo reportaras para que podamos investigarlo con el proveedor de swap.</string>
+    <string name="swap_mismatch_msg_2">Puedes exportar detalles de diagnóstico para investigar el problema. Revísalos antes de elegir un destinatario.</string>
     <string name="swap_mismatch_msg_3">Lo reportes o no, también puedes intentarlo de nuevo. Si los detalles coinciden, no verás esta pantalla y podrás continuar.</string>
     <string name="swap_mismatch_goBack">Volver</string>
     <string name="swap_mismatch_support_email_subject">ZEC Private Swap: discrepancia en la API</string>
-    <string name="swap_mismatch_support_email_body">ZEC Private detectó el siguiente error en la respuesta de la API del proveedor de swap. Proporcionar estos detalles nos permite plantearlo con ellos para investigarlo. No compartiremos tus datos personales con el proveedor de swap. Puedes enviarlo tal cual o incluir una nota para nosotros. Gracias de antemano.\n\nProveedor de swap: %1$s\nTipo de swap: %2$s\nTipo de discrepancia: %3$s\nID de cotización: %4$s</string>
+    <string name="swap_mismatch_support_email_body">ZEC Private rechazó una respuesta del proveedor que no coincidía con la solicitud. Revisa estos detalles antes de compartirlos.\n\nProveedor: %1$s\nTipo de swap: %2$s\nDiscrepancia: %3$s\nID de cotización: %4$s</string>
     <string name="swap_mismatch_mode_swap">Swap</string>
     <string name="swap_mismatch_mode_crosspay">CrossPay</string>
     <string name="swap_mismatch_mode_swapIntoZec">Swap a ZEC</string>
@@ -1085,7 +1085,7 @@
     <string name="restartMigration_summaryMigratedValue">%1$d de %2$d transferencias</string>
     <string name="restartMigration_summaryRemainingLabel">Saldo restante</string>
     <string name="restartMigration_warning">Esto cancela el plan de migración actual. No se puede deshacer una vez confirmado.</string>
-    <string name="restartMigration_support">Si reiniciar no resuelve el problema, contacta al soporte de ZEC Private a través de Enviar comentarios.</string>
+    <string name="restartMigration_support">Si reiniciar no resuelve el problema, conserva tus datos de recuperación y exporta el diagnóstico desde la pantalla de error. Nunca compartas tu frase de recuperación.</string>
     <string name="restartMigration_next">Siguiente</string>
     <string name="restartMigration_confirmTitle">¿Reiniciar esta migración?</string>
     <string name="restartMigration_confirmMessage">Se creará un nuevo plan para tu saldo restante de %1$s. Las %2$d transferencias ya completadas se mantienen como están y no se repetirán.</string>

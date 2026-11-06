@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
+import android.content.Intent
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.NEAR_SWAP_PROVIDER
 import co.electriccoin.zcash.ui.common.model.SubmitResult
@@ -235,18 +236,17 @@ class SendEmailUseCase(
     }
 
     /**
-     * Internal method to send support email with fallback to text sharing.
+     * Export diagnostics through a user-selected share target; no upstream recipient.
      */
     private fun sendSupportEmail(
         subject: String,
         messageBody: String
     ) {
-        EmailUtil.sendEmailWithTextFallback(
-            context = context,
-            recipientAddress = context.getString(R.string.support_email_address),
-            subject = subject,
-            messageBody = messageBody
-        )
+        val shareIntent = Intent.createChooser(
+            EmailUtil.newTextShareIntent(subject = subject, messageBody = messageBody),
+            null
+        ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        runCatching { context.startActivity(shareIntent) }
     }
 
     private fun SwapAsset.value() =
