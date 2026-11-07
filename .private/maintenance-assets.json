@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "storage": "Authenticated maintenance draft; no wallet data or seeds",
+  "draft_release_id": 437433586,
+  "fixtures": {
+    "v3.19.0-private.11": {
+      "TESTNET_UPGRADE_FIXTURE.json": {
+        "release_asset_id": 720071462,
+        "size_in_bytes": 2097,
+        "digest": "sha256:51cedf4912822ee3a49a841b931f98e9939a4d4c4e7bbcaf83cbe28c7cd9f84b",
+        "original_asset_id": 719369918,
+        "source_release": "v3.19.0-private.11"
+      },
+      "TESTNET_UPGRADE_FIXTURE.zip": {
+        "release_asset_id": 720071778,
+        "size_in_bytes": 65406039,
+        "digest": "sha256:6001c9203fce965ef12017944840483daa9c548c0035def567be40cb13a17b9a",
+        "original_asset_id": 719369917,
+        "source_release": "v3.19.0-private.11"
+      }
+    },
+    "v3.19.0-private.10": {
+      "TESTNET_UPGRADE_FIXTURE.json": {
+        "release_asset_id": 720072335,
+        "size_in_bytes": 2096,
+        "digest": "sha256:41feebd5b0f1e46b1e719c8428eb20a075d76ab0709c0cd7c794f40471e0acba",
+        "original_asset_id": 718880932,
+        "source_release": "v3.19.0-private.10"
+      },
+      "TESTNET_UPGRADE_FIXTURE.zip": {
+        "release_asset_id": 720072607,
+        "size_in_bytes": 65403381,
+        "digest": "sha256:6178059217f53624dacecb104f01d553325cc14928849e4b7e9bb758cd39a72b",
+        "original_asset_id": 718880931,
+        "source_release": "v3.19.0-private.10"
+      }
+    }
+  },
+  "validation": {
+    "v3.19.0-private.11": {
+      "path": ".private/release-evidence/v3.19.0-private.11.json",
+      "digest": "sha256:eb4175095e94ee9ec7ab2417fe5372d2ecc4fd1545987da6237f7970b73a5734",
+      "original_asset_id": 719362420
+    },
+    "v3.19.0-private.9": {
+      "path": ".private/release-evidence/v3.19.0-private.9.json",
+      "digest": "sha256:4d0d88a709bd1e66728e8a9dc24db8b013941ccc8f5c9feb3a738032d5c9f80c",
+      "original_asset_id": 717373436
+    },
+    "v3.19.0-private.8": {
+      "path": ".private/release-evidence/v3.19.0-private.8.json",
+      "digest": "sha256:e7f4fc6388264d764e0d59b3dac6a8d74562d3a67d815166d768feee60373b12",
+      "original_asset_id": 716947563
+    },
+    "v3.19.0-private.7": {
+      "path": ".private/release-evidence/v3.19.0-private.7.json",
+      "digest": "sha256:4a2e7af946f9b9b0c8bad604cccf0261761930998462f0b610cc3c36877460f1",
+      "original_asset_id": 715428903
+    },
+    "v3.19.0-private.10": {
+      "path": ".private/release-evidence/v3.19.0-private.10.json",
+      "digest": "sha256:3eaa27f23095ab8b38c473da2bbe86c056db54d3b7ac92a5b33ba0eae7036c5a",
+      "original_asset_id": 718870901
+    }
+  },
+  "other_evidence": {
+    "717438307": {
+      "path": ".private/release-evidence/v3.19.0-private.9-phase3-cleanup-receipt.json",
+      "digest": "sha256:c8197b2ff30fa34594e5a47ce420cd116026f71e3cf47e714619b3b7ebdc7d15",
+      "source_release": "v3.19.0-private.9",
+      "name": "phase3-cleanup-receipt.json"
+    },
+    "717438308": {
+      "path": ".private/release-evidence/v3.19.0-private.9-phase3-validation-summary.json",
+      "digest": "sha256:041e5ead81dcf2472dcd14db5b27be706cfb316db18552f73a37a698b989417d",
+      "source_release": "v3.19.0-private.9",
+      "name": "phase3-validation-summary.json"
+    },
+    "716963494": {
+      "path": ".private/release-evidence/v3.19.0-private.8-phase2-cleanup-receipt.json",
+      "digest": "sha256:622e36f7d0d9fca8dfc5efbd02a3537b720e58cd6777cf9db7c938ac5e53c2f9",
+      "source_release": "v3.19.0-private.8",
+      "name": "phase2-cleanup-receipt.json"
+    },
+    "716959540": {
+      "path": ".private/release-evidence/v3.19.0-private.8-phase2-validation-summary.json",
+      "digest": "sha256:2d0a97d25f3fdc101c76b3996b7fac0309c2387cb0c99f7e8afd396abd44d79c",
+      "source_release": "v3.19.0-private.8",
+      "name": "phase2-validation-summary.json"
+    },
+    "715451389": {
+      "path": ".private/release-evidence/v3.19.0-private.7-core-validation-summary.json",
+      "digest": "sha256:db0c751057d75d8beb515c2dc4162ccad889bf9bc7a9f0512c3e6301787a02d4",
+      "source_release": "v3.19.0-private.7",
+      "name": "core-validation-summary.json"
+    }
+  }
+}

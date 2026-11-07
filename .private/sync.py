@@ -129,6 +129,7 @@ def main():
         remove_excluded_projects(candidate)
         shutil.rmtree(candidate/'.github/workflows')
         (candidate/'.github/dependabot.yml').unlink(missing_ok=True)
+        shutil.copy2(ROOT/'.github/dependabot.yml',candidate/'.github/dependabot.yml')
         shutil.copytree(ROOT/'.github/workflows',candidate/'.github/workflows')
         shutil.copytree(ROOT/'.private',candidate/'.private',ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
         shutil.copy2(ROOT/'README.md',candidate/'README.md')

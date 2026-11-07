@@ -1,63 +1,26 @@
 # ZEC Private Android
 
-Personal fork of [Zodl Android](https://github.com/zodl-inc/zodl-android), based on stable release `3.19.0-3234`, commit `a57ea1455840a0d97eb0b2a3d2557480dfe5bda7`, published October 29, 2026. Upstream copyright and MIT license remain in LICENSE. Original setup and security documentation remain in docs/.
+A personal Android Zcash wallet fork with shielded payments, swaps through NEAR Intents, and Keystone hardware-wallet support.
 
-Download signed APKs from [Releases](https://github.com/Sammy-Lastre/zec-private/releases). See `.private/STATUS.md` for the latest verified release, source and artifact identities, validation evidence and limits.
+## Download and install
 
-## Differences
+Download **zec-private-latest.apk** from the [latest release](https://github.com/Sammy-Lastre/zec-private/releases/latest). Releases support **ARM64 Android devices**. Check the accompanying `SHA256SUMS` before installing; Android may ask you to allow installation from the app opening the APK.
 
-Revision 5 removes Flexa merchant spending, the coinholder-voting implementation and the redundant feedback form. What's New opens this fork's releases. Core wallet operations, gift redemption, hardware/view-only support, CrossPay, recovery and operational Ironwood migration guidance remain. `.private/excluded-features.json` records exclusions and compatibility exceptions; release checks inspect resolved dependencies to prevent reintroduction. Removing Flexa exposed implicit library downgrades, so Compose and Room retain the effective versions already shipped in revision 4.
+Install updates over the existing wallet. Keep your recovery material secure, and never uninstall the wallet to resolve an update failure without securing it first. The package is `com.personal.zecprivate.foss`, so it can coexist with the official wallet.
 
-The mainnet FOSS release is named ZEC Private. Its installed package is `com.personal.zecprivate.foss`. Its file-provider authorities also use the fork identity, allowing coexistence with official Zodl FOSS. The launcher uses original geometric artwork. Upstream's MIT notice is preserved in LICENSE and bundled as `assets/UPSTREAM-LICENSE.txt`. Fork support is through this private repository; the upstream support mailbox is removed.
+## Features
 
-NEAR quote requests send `appFees: []`, omit the Zodl referral, and contain no partner JWT or personal API key. The fork requests **0% app/affiliate fee**, including no remaining Zodl 0.67% charge.
+- Send, receive and recover Zcash; use hardware and view-only wallets.
+- Swap supported assets with no app or affiliate fee. Provider, network and exchange costs remain; review the quoted amount before confirming.
+- Use Tor for sensitive wallet and provider requests. Bulk compact-block downloads use a direct connection.
+- Keep gift redemption and existing swap recovery, with advertisements, referrals, Flexa merchant spending and coinholder voting removed.
 
-The published anonymous API platform rate is **0.25% on non-`ANY_INPUT` quotes**. It is not the total swap cost. NEAR also lists a **0.0001% protocol fee per transaction**; route-dependent bridge/network costs and exchange pricing or spread can affect the result. The usual authenticated 0.20% schedule is an alternative, not another charge added to anonymous 0.25%. `ANY_INPUT` platform-fee exemption does not remove other costs. Review the quoted received amount and wallet transaction fee before confirming. Sources: [NEAR fee schedule](https://docs.near-intents.org/resources/fees) and [API authentication rules](https://docs.near-intents.org/integration/distribution-channels/1click-api/authentication).
+## Privacy and verification
 
-Wallet encryption, recovery, transaction construction, local signing, Tor selection and swap refund paths are inherited. Incoming swap orchestration requests a fresh shielded recipient; outgoing swap orchestration requests a fresh shielded refund address and uses the quote-specific provider deposit. New swap quotes requiring a TEX deposit are rejected because the SDK can introduce a wallet-owned transparent intermediate for TEX sends. Existing status/refund recovery remains supported. These paths have not yet been established by a completed device acceptance test. No real funds, wallet seeds or spending keys are needed by CI.
+Swap providers can see quote details, addresses, amounts and timing. Public-chain transactions can be correlated. Fresh shielded addresses and Tor reduce some exposure; they do not guarantee anonymity.
 
-## Privacy boundaries
+Read the [wallet guide](docs/WALLET-GUIDE.md) for fees, privacy boundaries and signature verification. [Validation status](.private/STATUS.md) records the latest release evidence and limits. Automated acceptance uses an isolated testnet emulator; production ARM hardware, biometric approval and funded production swap settlement require separate verification.
 
-NEAR sees the quote's assets, quantities, recipient, refund address, deposit address and timing. It may correlate requests and public settlement records. The BTC side is public. Counterparties and network observers may correlate amounts and timing across chains. Fresh shielded addresses reduce address reuse; they do not establish anonymity or erase provider records. The SDK's address derivation and shielded sending are security-critical dependencies.
+## Development and attribution
 
-The existing Tor preference is preserved. When Tor is enabled, the shared HTTP provider constructs the Tor client without a direct fallback. Swap traffic otherwise follows the user's existing setting; this fork does not force a new global Tor default. Swaps require fresh-address generation to succeed; its timeout cannot fall back to an existing wallet address. Release HTTP body logging remains disabled. No analytics or quote proxy is added. Read the upstream wallet threat model linked in `docs/UPSTREAM-README.md`.
-
-## Building and installing
-
-Use the checked-in Gradle wrapper, JDK 21 toolchain and Android SDK 36. Keep dependency locks and wrapper checksums intact. This fork pins `com.zodl.android` SDK `6.0.0`, verified from Maven Central and the official source tag. Upstream's app tag used `6.0.0-SNAPSHOT`; the stable replacement passed the release build and unit suite. Physical ARM-device and funded-transaction acceptance are separate from the isolated emulator checks recorded in STATUS.
-
-Run `python3 .private/check.py` and `python3 .private/test_controls.py`, then `./gradlew --no-daemon --no-watch-fs --max-workers=2 :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease`. Release debuggability and debug-key signing are disabled. Supply release-signing Gradle properties from a private environment only, or sign the unsigned APK in a separate process using Android apksigner.
-
-Download signed APKs and SHA256SUMS from this private repository's GitHub Releases. Check the checksum and signing certificate before installing. Android may require enabling installation for the application used to open the APK. Updates must use the same signing key and a higher versionCode. Never uninstall an existing wallet to resolve an update failure without independently securing its recovery material. Automatic phone installation is not configured.
-
-## Upstream updates
-
-`sync-upstream.yml` polls the official GitHub Releases API every six hours and supports Run workflow. Drafts and prereleases are excluded. `.private/upstream.json` records the last integrated upstream identity. `.private/fork.patch` is the exact fork delta; `.private/` and trusted workflows are overlaid separately from upstream.
-
-The controller fetches the exact upstream tag, resolves its commit, checks critical differences, applies the patch with `git apply --check`, and prepares an update branch. A reusable workflow explicitly chains build, test, signing and publication; it does not depend on GITHUB_TOKEN pushes triggering another workflow. CI also checks unauthenticated live quotes, an unused quote's status, deposit input validation and the outgoing deposit-address contract using public fixtures without funds. A valid funded deposit submission is deliberately not tested. Critical wallet/swap/privacy/build-trust changes, including recovery, signing and Tor screens, stop automation and open a review issue. Patch conflicts and failed tests preserve the last release. This conservative gate can require review for normal upstream releases when critical code changes.
-
-Unsigned builds receive no signing secrets. The signing job checks out the controller revision, downloads only the current run's validated artifact, verifies its bound source SHA, hash, package and version, and invokes SDK signing tools without running upstream Gradle scripts. Pull requests have no signing workflow. All external Actions are pinned to official immutable revisions. Upstream workflows are disabled in this fork.
-
-Private release tags use `v<upstream-version>-private.<revision>`, with the revision stored in `.private/release-revision.json`. Android versionCode is at least the upstream build number times 1000 plus one, and strictly exceeds the stored code even if upstream resets its build counter. The publisher independently compares previous releases. Published tags and assets are never replaced. Previous releases are retained. Candidate commits retain the controller revision and upstream commit as parents. After publication, a normal fast-forward push records integration; concurrent modifications cause the push to fail instead of being overwritten. The signing job needs a fresh signing credential for every future key rotation, and Android update compatibility must be handled separately.
-
-For a manual build use Actions → Build and publish ZEC Private → Run workflow. Rebuilding an already published version intentionally refuses to replace it. For a new private revision of the same upstream version, increase `private_revision` in `.private/release-revision.json` and `ZCASH_VERSION_CODE`, and regenerate `.private/fork.patch` and `.private/source-state.json` before dispatching. Preserve the signing key. For a normal new upstream stable version, use Follow stable upstream releases; it prepares the code and tag automatically.
-
-## Signing custody and notifications
-
-The dedicated RSA-4096 signing certificate SHA-256 is `41:01:74:E0:D6:80:63:8D:19:64:7F:46:E0:E4:B4:1E:A6:25:3C:23:51:AD:FA:84:C5:D9:B1:78:8D:2D:A1:68`. Signing secrets were authorized separately and stored as Actions secrets. Wallet secrets are never CI inputs.
-
-The local signing files are outside this repository at `D:\Data\Crypto\zec-private\signing\`: `release.p12`, `release-backup.p12`, and `password.txt`. Copy the backup and password to separate encrypted offline storage; two files on one drive are not an independent disaster-recovery backup. Restore the exact keystore and alias `zec-private`, then restore the matching Actions secrets. Never generate a replacement key for a routine update.
-
-The ntfy URL is in Actions secret `NTFY_URL` and the private local file `D:\Data\Crypto\zec-private\signing\ntfy-url.txt`. Install ntfy on Android, add a subscription using that file's server/topic, and allow Android notifications and background delivery. Keep the topic private: possession permits subscribing and publishing on the public ntfy service. Push acceptance by the service does not prove delivery to your phone. Notification text contains only build/release information and GitHub links. GitHub Actions, review issues and Releases remain available if push delivery fails.
-
-## Validation and recovery
-
-The current production run, APK digest and acceptance limits are recorded in `.private/STATUS.md`. The local deliverable is `dist/zec-private-latest.apk`; `dist/verification.json`, `dist/tests.json` and `dist/SHA256SUMS` hold its independent evidence. Checks cover the release manifest, signature, permanent certificate, unique provider authority, upstream license and 16 KiB ZIP alignment. ZIP alignment does not independently establish every native library's runtime compatibility.
-
-Full simulated stable upgrade acceptance creates a local synthetic upstream commit, runs the real patch controller and full Android build, then signs on a separate machine using the permanent key. It first restores the original malformed percent text and requires all three quote modes to reproduce the reported formatter crash, then restores the exact corrected source and runs the full suite. It also tests duplicate polling, a tampered APK and disposable state advancement. It uploads a compact receipt, removes temporary source/unsigned artifacts and deletes the signed test APK. It never publishes a fake release or changes the real integration state. Expected fee, quote-text and critical-change failures send clearly marked TEST notifications. Actual GitHub publication is established by the production run above. Run this workflow after changes to trusted update/signing controls.
-
-The FOSS crash provider is disabled and store-only crash dependencies are excluded. Flexa declarations, initialization, account flow and libraries are removed. The shared Zcash SDK can still contain voting APIs even though the app's voting feature is excluded. Deferred integrations remain supported; this fork does not claim that every optional SDK capability has been stripped from the binary.
-
-Local Gradle attempts were stopped by resource-guard receipt/inventory failures before a compiler result. Their owned processes and disposable caches were removed. Release validation therefore used isolated GitHub-hosted runners. The local signed APK subsequently passed independent guarded verification.
-
-Revision 1 remains immutable and marked affected. Install the latest signed revision over the existing app; the retained package and signing certificate, together with an increased versionCode, support an in-place update. Historical [full upgrade acceptance](https://github.com/Sammy-Lastre/zec-private/actions/runs/41936825170) is recorded in `.private/upgrade-acceptance.json`; current update and UI evidence is linked from STATUS. The user subsequently reported that revision 4's quote retry works on their phone. The six quote layout previews were visually reviewed and later builds compare their hashes.
+See [maintenance and builds](.private/MAINTENANCE.md) for upstream updates, release controls and signing. This fork tracks stable [Zodl Android](https://github.com/zodl-inc/zodl-android) releases. Upstream copyright and the [MIT license](LICENSE) are preserved; the original documentation is in [docs](docs/UPSTREAM-README.md).

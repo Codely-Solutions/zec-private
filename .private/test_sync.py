@@ -83,6 +83,9 @@ class SyncTests(unittest.TestCase):
                     sync.main()
                     tree=original('git','ls-tree','-r','--name-only',output.call_args.kwargs['source_sha']).splitlines()
                     self.assertFalse(any(name.startswith('feature-voting/') for name in tree))
+                    self.assertIn('.github/dependabot.yml',tree)
+                    self.assertEqual(original('git','show',output.call_args.kwargs['source_sha']+':.github/dependabot.yml'),
+                                     (sync.ROOT/'.github/dependabot.yml').read_text().strip())
                     self.assertEqual(1,len(writes))
             finally:
                 original('git','worktree','remove','--force',str(upstream))
