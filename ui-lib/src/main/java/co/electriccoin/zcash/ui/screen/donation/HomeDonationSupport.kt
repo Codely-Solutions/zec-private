@@ -137,6 +137,7 @@ internal fun DonationShortcut(state: HomeDonationSupportState) {
                     onClick = { tooltip.dismiss(); state.onDonate() },
                 ),
                 modifier = Modifier.size(40.dp),
+                iconTint = ZashiColors.Text.textPrimary,
             )
         },
     )
