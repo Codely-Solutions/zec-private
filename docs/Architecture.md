@@ -1,3 +1,5 @@
+> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../docs/FOUNDATION.md) for the fork architecture.
+
 # Design and Architecture
 _Note: This document will continue to be updated as the app is implemented._
 

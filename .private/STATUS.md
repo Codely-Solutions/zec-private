@@ -1,4 +1,6 @@
-# Revision 13 — donations signed and independently verified
+# Last published release — revision 13
+
+This record describes the published artifact below. It is not validation of the current working branch; consult the local checkpoint for paused development.
 
 Candidate 42367044863 at `d12dea751a4dbab29671acab394777a7c613774c` passed all 1,724 tests and required release checks. Optional shielded donations use normal review/authentication, default to a zero saved suggestion and never spend automatically. Unsupported multi-recipient payment requests are rejected before signing. Actual network costs remain visible.
 

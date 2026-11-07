@@ -1,3 +1,5 @@
+> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../docs/FOUNDATION.md) for the fork architecture.
+
 # Setup Guide
 The app is built with Gradle and can be compiled on macOS, Windows, and Linux.  Development is typically done with the latest stable release of Android Studio.
 
@@ -55,7 +57,7 @@ Start by making sure the command line with Gradle works first, because **all the
     1. Open Android Studio
     1. From within Android Studio, choose to open an existing project and navigate to the root of the checked out repo.  Point Android Studio to the root of the git repo as (do not point it to the `app` module, as that is just a subset of the project and cannot be opened by itself)
         1. Note: When first opening the project, Android Studio will warn that Gradle checksums are not fully supported.  Choose the "Use checksum" option.  This is a security feature that we have explicitly enabled.
-        1. Shortly after opening the project, Android Studio may prompt about updating the Android Gradle Plugin.  DO NOT DO THIS.  If you do so, the build will fail because the project also has dependency locking enabled as a security feature.  To learn more, see [Build integrity.md](Build%20Integrity.md)
+        1. Shortly after opening the project, Android Studio may prompt about updating the Android Gradle Plugin.  DO NOT DO THIS.  If you do so, the build will fail because the project also has dependency locking enabled as a security feature.  To learn more, see [Build integrity.md](Build%20integrity.md)
         1. Android Studio may prompt about updating the Kotlin plugin.  Do this.  Our application often uses a newer version of Kotlin than is bundled with Android Studio.
     1. After Android Studio finishes syncing with Gradle, select which build variant you'd like your built app to have. From the top menu bar, select Build -> Select Built Variant and then choose from variants of Mainnet or Testnet (for more information see section [Build variants](Setup.md#build-variants) below). After build variant selection, look for the green "play" run button in the toolbar. To the left of it, choose the "app" run configuration under the dropdown menu. Then hit the run button
 
@@ -87,7 +89,7 @@ A variety of Gradle tasks are set up within the project, and these tasks are als
  * `dependencyUpdates` - Checks for available dependency updates.  It will only suggest final releases, unless a particular dependency is already using a non-final release (e.g. alpha, beta, RC).
 
 A few notes on running instrumentation tests on the `ui-screenshot-test` module:
- - Screenshots are generated automatically and copied to [/ui-screenshot-test/build/output](../ui-screenshot-test/build/outputs)
+ - Screenshots are generated automatically and copied to `ui-screenshot-test/build/outputs` (generated output, when that upstream test module is used)
  - Running the Android tests on the `ui-screenshot-test` module will erase the data stored by the app. This is because Test Orchestrator is required to reset app state to successfully perform integration tests.
 
 Gradle Managed Devices are also configured with our build scripts.  We have found best results running tests one module at a time, rather than trying to run them all at once.  For example: `./gradlew :ui-lib:pixel2TargetDebugAndroidTest` will run the UI tests on a Pixel 2 sized device using our target API version.

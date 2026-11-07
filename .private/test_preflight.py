@@ -18,6 +18,17 @@ class PreflightTests(unittest.TestCase):
             self.assertTrue(any('controller.py:1' in error for error in errors))
             self.assertTrue(any('missing.py' in error for error in errors))
 
+    def test_active_document_links_resolve_and_external_links_are_ignored(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'README.md').write_text('[guide](guide%20one.md) [web](https://example.org/x)')
+            errors = preflight.documentation_links(root, ('README.md',))
+            self.assertEqual(len(errors), 1)
+            self.assertIn('guide one.md', errors[0])
+            (root / 'guide one.md').write_text('Guide')
+            self.assertEqual(preflight.documentation_links(root, ('README.md',)), [])
+            self.assertTrue(preflight.documentation_links(root, ('missing.md',)))
+
     def test_changed_long_kotlin_declaration_reports_exact_line(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

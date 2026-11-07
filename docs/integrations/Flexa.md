@@ -1,3 +1,5 @@
+> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../../docs/FOUNDATION.md) for the fork architecture.
+
 # Flexa Integration
 - Flexa is a digital payment platform that allows merchants to accept various digital assets, including 
   cryptocurrencies, as payment. It provides a seamless and secure way for users to pay with their digital wallets at 
