@@ -1,28 +1,23 @@
 # ZEC Private Android
 
-A personal Android Zcash wallet fork with shielded payments, swaps through NEAR Intents, and Keystone hardware-wallet support.
+An independent Android Zcash wallet with shielded payments, NEAR Intents swaps, Tor, and hardware/view-only wallet support.
 
-## Download and install
+## Install
 
-Download **zec-private-latest.apk** from the [latest release](https://github.com/Sammy-Lastre/zec-private/releases/latest). Releases support **ARM64 Android devices**. Check the accompanying `SHA256SUMS` before installing; Android may ask you to allow installation from the app opening the APK.
+Download **zec-private-latest.apk** from the [latest release](https://github.com/Sammy-Lastre/zec-private/releases/latest). Requires an **ARM64 Android device**. See the [wallet guide](docs/WALLET-GUIDE.md#installation-and-updates) to verify the download.
 
-Install updates over the existing wallet. Keep your recovery material secure, and never uninstall the wallet to resolve an update failure without securing it first. The package is `com.personal.zecprivate.foss`, so it can coexist with the official wallet.
+Install updates over the existing app. Keep your recovery phrase and birthday safe before troubleshooting; uninstalling can erase your wallet data.
 
-## Features
+## Use the wallet
 
-- Send, receive and recover Zcash; use hardware and view-only wallets.
-- Swap supported assets with no app or affiliate fee. Provider, network and exchange costs remain; review the quoted amount before confirming.
-- Use Tor for sensitive wallet and provider requests. Bulk compact-block downloads use a direct connection.
-- Keep gift redemption and existing swap recovery, with advertisements, referrals, Flexa merchant spending and coinholder voting removed.
+- Send, receive and recover Zcash, redeem gifts, or swap supported assets.
+- ZEC Private adds no app or affiliate fee. Network and provider costs still apply; review the amounts before confirming.
+- Tor protects sensitive wallet and provider requests when enabled. Public block downloads remain direct. See [privacy](docs/PRIVACY.md) for what providers can see.
 
-## Privacy and verification
+Read the [wallet guide](docs/WALLET-GUIDE.md) for payments, swaps and recovery, or [support development](docs/DONATIONS.md) with an optional donation.
 
-Swap providers can see quote details, addresses, amounts and timing. Public-chain transactions can be correlated. Fresh shielded addresses and Tor reduce some exposure; they do not guarantee anonymity.
+## Development
 
-Read the [wallet guide](docs/WALLET-GUIDE.md) for fees, privacy boundaries and signature verification. [Validation status](.private/STATUS.md) records the latest release evidence and limits. Automated acceptance uses an isolated testnet emulator; production ARM hardware, biometric approval and funded production swap settlement require separate verification.
+[Build and maintain the fork](.private/MAINTENANCE.md) · [Release validation](.private/STATUS.md)
 
-## Development and attribution
-
-See [maintenance and builds](.private/MAINTENANCE.md) for upstream updates, release controls and signing. This fork tracks stable [Zodl Android](https://github.com/zodl-inc/zodl-android) releases. Upstream copyright and the [MIT license](LICENSE) are preserved; the original documentation is in [docs](docs/UPSTREAM-README.md).
-
-[Support development](docs/DONATIONS.md) with an optional shielded ZEC or external XMR donation.
+This fork tracks stable [Zodl Android](https://github.com/zodl-inc/zodl-android) releases. Upstream copyright and the [MIT license](LICENSE) are preserved. The [original README](docs/UPSTREAM-README.md) is retained for reference.

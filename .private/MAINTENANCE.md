@@ -9,10 +9,12 @@ Use the checked-in Gradle wrapper, JDK 21 and Android SDK 36. Preserve dependenc
 ```sh
 python3 .private/check.py
 python3 .private/test_controls.py
-./gradlew --no-daemon --no-watch-fs --max-workers=2 --continue :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease
+./gradlew --no-daemon --no-watch-fs --max-workers=2 :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease
 ```
 
 Use the applicable resource guard and project acceptance policy. Build each required variant once per candidate and promote its validated unsigned artifact after acceptance. Production APKs are ARM64-only; x86_64 is reserved for isolated emulator debug acceptance. Release debuggability and debug-key signing are disabled.
+
+[Swap amount rules](SWAP-AMOUNTS.md) explain amount provenance and fee accounting for maintainers.
 
 Full evidence binds the source, workflow run, artifact digests and applicable wallet/quote acceptance. Static checks and a successful build alone do not authorize signing. Manifest, certificate, provider authority, license, architecture and 16 KiB ZIP alignment are inspected separately; ZIP alignment alone does not establish native runtime compatibility.
 
@@ -42,7 +44,7 @@ Notifications contain build/release information and GitHub links. The ntfy topic
 
 ## Release descriptions
 
-Add concise user-facing changes to `release-notes.json`, keyed by the exact private tag. Unlisted tags link to upstream changes. Recurring fees, privacy boundaries and acceptance methodology belong in the [wallet guide](../docs/WALLET-GUIDE.md) and bound validation evidence. Preserve the `Android versionCode: N` line: the publisher uses it to reject non-increasing updates.
+Add concise user-facing changes to `release-notes.json`, keyed by the exact private tag. Unlisted tags link to upstream changes. User help belongs in the [wallet guide](../docs/WALLET-GUIDE.md); test methodology and provenance belong in bound validation evidence. Preserve the `Android versionCode: N` line: the publisher uses it to reject non-increasing updates.
 
 ## Dependency update policy
 
