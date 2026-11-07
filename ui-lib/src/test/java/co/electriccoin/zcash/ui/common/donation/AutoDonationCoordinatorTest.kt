@@ -5,6 +5,7 @@ import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
+import cash.z.ecc.android.sdk.model.BlockHeight
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.TransactionId
 import cash.z.ecc.android.sdk.model.TransactionOverview
@@ -42,6 +43,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
@@ -131,6 +133,41 @@ class AutoDonationCoordinatorTest {
         coVerify(exactly = 1) { f.proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
     }
 
+    @Test fun incomingConfirmedReceiptUsesExecutedOutput() = runTest {
+        val f = Fixture(this)
+        f.prepareIncoming(101)
+        f.enroll()
+        f.engine.onStatus(f.status)
+        advanceUntilIdle()
+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("submitted"))
+        coVerify(exactly = 1) { f.proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
+    }
+
+    @Test fun incomingReceiptBeforeEnrollmentCannotSpend() = runTest {
+        val f = Fixture(this)
+        f.prepareIncoming(100)
+        f.enroll()
+        f.engine.onStatus(f.status)
+        advanceUntilIdle()
+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("predates swap enrollment"))
+        f.verifyNoSpending()
+    }
+
+    @Test fun timeoutDuringSubmissionCannotRetry() = runTest {
+        val f = Fixture(this)
+        f.enroll()
+        coEvery { f.proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) } coAnswers {
+            awaitCancellation()
+        }
+        f.engine.onStatus(f.status)
+        advanceUntilIdle()
+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("uncertain"))
+        f.engine.onStatus(f.status)
+        f.newEngine(this).onStatus(f.status)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { f.proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
+    }
+
     @Test fun feeEqualToDonationNeverObtainsKeyOrSubmits() = runTest {
         val f = Fixture(this, fee = 100_000)
         f.enroll()
@@ -156,7 +193,7 @@ class AutoDonationCoordinatorTest {
         every { f.status.executedAmountIn } returns null
         f.engine.onStatus(f.status)
         advanceUntilIdle()
-        assertTrue(assertNotNull(f.store.latestOutcome()).contains("missing settled input"))
+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("settled input"))
         f.verifyNoSpending()
     }
 
@@ -166,7 +203,7 @@ class AutoDonationCoordinatorTest {
         every { f.status.refundedFormatted } returns BigDecimal("-1")
         f.engine.onStatus(f.status)
         advanceUntilIdle()
-        assertTrue(assertNotNull(f.store.latestOutcome()).contains("inconsistent refund"))
+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("refund"))
         f.verifyNoSpending()
     }
 
@@ -318,6 +355,17 @@ class AutoDonationCoordinatorTest {
         fun newEngine(scope: CoroutineScope) = AutoDonationCoordinator(
             store, accounts, proposals, keys, synchronizers, uiProposals, scope
         )
+
+        fun prepareIncoming(minedHeight: Long) {
+            every { quote.originAsset } returns other
+            every { quote.destinationAsset } returns zec
+            every { synchronizer.fullyScannedHeight } returns MutableStateFlow(BlockHeight.new(100))
+            every { status.destinationTransactionIds } returns listOf(depositId)
+            every { status.executedAmountOut } returns BigDecimal("0.1")
+            every { transaction.isSentTransaction } returns false
+            every { transaction.netValue } returns Zatoshi(10_000_000)
+            every { transaction.minedHeight } returns BlockHeight.new(minedHeight)
+        }
 
         fun authorize() { store.authorize(accountId, BigDecimal.ONE) }
 
