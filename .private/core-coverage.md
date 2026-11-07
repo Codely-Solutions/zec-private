@@ -1,12 +1,12 @@
 # Core acceptance coverage
 
-Status: signed revision 12 independently verified on 2026-11-07. Exact current evidence is in core-acceptance.json and core-validation-summary.json.
+Status: revision 13 candidate validated on 2026-11-07; signed delivery verification pending. Exact current evidence is in core-acceptance.json and core-validation-summary.json.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
 | Quote dismissal poisons the next request; stale callbacks overwrite state | Existing deterministic cancellation tests and real unfunded production quote UI receipt | Reuse only while the relevant production source/build inputs match; short Tor session when invalidated. |
 | Wallet cannot receive or spend; wrong recipient, amount, memo or fee | Installed testnet app graph, real faucet payment, app proposal creation/submission and sender/recipient history | One small transfer reused by the other core assertions; no exhaustive asset matrix. |
-| Installed update loses wallet or transaction data | Prior revision 11 testnet build updated in place to candidate; seed identity, funded balance and account behavior checked | Same isolated guest and funding fixture; dedicated disposable test certificate, separate permanent release checks. |
+| Installed update loses wallet or transaction data | Prior revision 12 testnet build updated in place to candidate; seed identity, funded balance and account behavior checked | Same isolated guest and funding fixture; dedicated disposable test certificate, separate permanent release checks. |
 | Restart loses transaction state or recovery fails | Process restart followed by clean target-data erase and seed/birthday restoration into recipient wallet | Reuse the same test transaction; restoration cannot reuse the populated target database. |
 | Tor interruption causes direct fallback or unrecoverable state | App-native Tor request during a controlled app-UID outage; dual-stack egress enforcement and rejection counters | One interruption before broadcast, with bounded recovery; retain deterministic failure/race tests for diagnosis. |
 | Unvalidated or wrong candidate enters signing | Trusted controller independently checks current relevant-input fingerprint, receipt identity and artifact digests | Fast early status check prevents unnecessary release preparation; unsigned artifact promotion remains separate from secrets. |
@@ -71,3 +71,11 @@ Fingerprint mutation tests reject stale receipts, unknown profiles, relevant sou
 ## Swap accuracy and clarity
 
 Synthetic regressions cover raw-only execution, missing execution, fee omission, received-amount search, exact minimum/top-up amounts and computed token inputs at origin precision. Six normal/large-text quote layouts were visually reviewed. Live isolated Tor acceptance checks the included platform fee and minimum-output text. These checks do not establish funded production settlement or decrypt personal shielded notes. Isolated test seeds exist in the disposable guest and briefly in guarded-driver memory during recovery orchestration; no seeds are retained or published.
+
+## Donation revision 13 acceptance
+
+Production source `d12dea751a4dbab29671acab394777a7c613774c` passed 1,724 tests. The executed emulator/testnet build source was `686a9f10b80fd44b9467c092ace4cdcd80767b1a`; exact compiled-input fingerprints match because the later diff changes ordinary test fixtures only. Production Gradle took 892 seconds in one invocation; revision 12 took 905 seconds, with cache effects preventing a causal speed comparison.
+
+The existing real transfer is now a shielded donation through Support development and the normal review/authentication path. Cancellation leaves no submission, then one explicit approval creates the observed transfer. The same transaction verifies sender accounting, installed-update preservation, restart, clean recipient recovery and empty identifying memo. Saved suggestion and cooldown persistence are checked after the real restart. The pinned SDK's two-payment proposal is constructed without signing; unsupported counts are then rejected by the wallet. Legacy incomplete review is established from source plus SDK acceptance; no hidden-output transaction is signed.
+
+Three unfunded production quote/dismiss cycles and the zero-balance Support UI run separately over enabled Tor. Provider-success invitation gating is inspected and covered by retained status behavior; this work does not establish funded production provider settlement or donation conversion effectiveness. Production ARM64 is inspected, while x86_64 emulator binaries execute. No personal wallet, accepted swap or real funds are used.
