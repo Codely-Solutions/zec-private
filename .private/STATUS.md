@@ -1,7 +1,9 @@
-# Revision 11 — swap accuracy and clarity validated
+# Revision 11 — swap accuracy and clarity signed and verified
 
 Candidate 42326943115 at `170eb24caaa90969849c3f8dcfcb77f4016196ab` passed all 1705 required tests, release analysis, packaging and actual disposable upstream integration. One real isolated testnet lifecycle took 745.8 seconds and reused a transaction for update, restart and clean recovery. Three unfunded production BTC-to-ZEC quote/dismiss cycles ran over Tor. The live review showed the included platform fee and minimum output with no placeholder wallet fee.
 
 Provider execution and quoted output have explicit provenance; raw-only output is scaled by destination decimals. Incoming history search uses output amount. Outgoing details use the actual transaction fee, while incoming details omit the unsupported total-fee figure. Exact minimum, recovery top-up and computed token inputs preserve atomic precision. No fee is deducted a second time. Persisted formats, refund recovery and app identity remain compatible.
 
-The exact validated production payload is promoted to signing without rebuilding. ARM64 production packaging and permanent certificate are inspected separately from x86_64 emulator execution. Upstream discovery remains enabled. Personal reconciliation evidence stays outside this public repository. Provider reporting may remain conservative relative to wallet credit; no guessed bridge adjustment is applied. Donations and Phase 4 remain outside this release.
+The exact validated production payload was promoted to signing without rebuilding. ARM64 production packaging and permanent certificate are inspected separately from x86_64 emulator execution. Upstream discovery remains enabled. Personal reconciliation evidence stays outside this public repository. Provider reporting may remain conservative relative to wallet credit; no guessed bridge adjustment is applied. Donations and Phase 4 remain outside this release.
+
+Signed release: [v3.19.0-private.11](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.11). Independent inspection verified package/version, permanent certificate, ARM64 architecture, 16 KiB alignment and exact unsigned payload preservation. APK SHA-256: `0f8801e9732cded3e685df5c44543edace46dc886e5f04dd11745960f511dfe6`.
