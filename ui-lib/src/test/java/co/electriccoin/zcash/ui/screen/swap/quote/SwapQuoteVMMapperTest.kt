@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.swap.quote
 
+import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
@@ -33,13 +34,17 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
+import co.electriccoin.zcash.ui.design.util.getString
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import java.io.File
+import java.math.BigDecimal
+import java.util.Locale
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.Test
@@ -102,6 +107,32 @@ class SwapQuoteVMMapperTest {
     fun incomingQuoteDoesNotInventAWalletTransactionFee() {
         val items = createItems(zashi(), SwapAssetTestFixture.zecAsset())
         assertFalse(items.any { it.description.resourceId() == R.string.private_wallet_transaction_fee })
+    }
+
+    @Test
+    fun tokenAmountsAndMinimumKeepExactAtomicPrecision() {
+        val quote = FakeSwapQuote(
+            destinationAsset = SwapAssetTestFixture.zecAsset(),
+            mode = SwapMode.FLEX_INPUT,
+            amountInFormatted = BigDecimal("0.00012345"),
+            amountOutFormatted = BigDecimal("0.12345678"),
+            minimumAmountOut = BigDecimal("0.12283949"),
+        )
+        val state = mapper.createState(
+            SwapQuoteInternalState(null, quote, zashi()),
+            onBack = {},
+            onSubmitQuoteClick = {},
+            onNavigateToOnRampSwap = {}
+        )
+        val context: Application = RuntimeEnvironment.getApplication()
+        assertEquals("0.00012345", state.from.amount.getString(context, Locale.US))
+        assertEquals("0.12345678", state.to.amount.getString(context, Locale.US))
+        assertEquals(
+            "Minimum received: 0.12283949 zec",
+            checkNotNull(state.infoText).getString(context, Locale.US)
+        )
+        val total = (state.amount.title as StyledStringResource.ByStringResource).resource
+        assertEquals("0.00012345 btc", total.getString(context, Locale.US))
     }
 
     @Test

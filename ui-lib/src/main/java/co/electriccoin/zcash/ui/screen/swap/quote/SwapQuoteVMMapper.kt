@@ -12,8 +12,8 @@ import co.electriccoin.zcash.ui.design.component.SwapTokenAmountState
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByAddress
+import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
-import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.transactiondetail.swapQuoteChainIcon
@@ -66,7 +66,7 @@ internal class SwapQuoteVMMapper {
         val minimum = quote.minimumAmountOut?.let {
             stringRes(
                 R.string.private_minimum_received,
-                stringResByDynamicCurrencyNumber(it, quote.destinationAsset.tokenTicker)
+                stringResByCurrencyNumber(it, quote.destinationAsset.tokenTicker, minDecimals = 0)
             )
         }
         val slippageUsd = quote.amountOutUsd.multiply(quote.slippage.divide(BigDecimal(100)))
@@ -100,12 +100,7 @@ internal class SwapQuoteVMMapper {
             ).takeIf { !quote.destinationAsset.isZCashAsset },
             SwapQuoteInfoItem(
                 description = stringRes(R.string.private_wallet_transaction_fee),
-                title =
-                    if (quote.destinationAsset.isZCashAsset) {
-                        stringResByDynamicCurrencyNumber(totalFees, quote.originAsset.tokenTicker)
-                    } else {
-                        stringRes(totalFeesZatoshi)
-                    }.withStyle(),
+                title = stringRes(totalFeesZatoshi).withStyle(),
                 subtitle =
                     stringResByDynamicCurrencyNumber(totalFeesUsd, FiatCurrency.USD.symbol)
                         .takeIf {
@@ -146,7 +141,7 @@ internal class SwapQuoteVMMapper {
     private fun SwapQuoteInternalState.createTotalAmountState(): SwapQuoteInfoItem =
         SwapQuoteInfoItem(
             description = stringRes(R.string.swapAndPay_totalAmount),
-            title = stringResByDynamicCurrencyNumber(total, quote.originAsset.tokenTicker).withStyle(),
+            title = stringResByCurrencyNumber(total, quote.originAsset.tokenTicker, minDecimals = 0).withStyle(),
             subtitle = stringResByDynamicCurrencyNumber(totalUsd, FiatCurrency.USD.symbol).withStyle()
         )
 
@@ -154,7 +149,7 @@ internal class SwapQuoteVMMapper {
         SwapTokenAmountState(
             bigIcon = quote.originAsset.swapQuoteTokenIcon(),
             smallIcon = quote.originAsset.swapQuoteChainIcon(isShielded = true),
-            amount = stringResByDynamicNumber(quote.amountInFormatted),
+            amount = stringResByNumber(quote.amountInFormatted, minDecimals = 0),
             fiatAmount = stringResByDynamicCurrencyNumber(quote.amountInUsd, FiatCurrency.USD.symbol),
             token = stringRes(quote.originAsset.tokenTicker),
             chain = quote.originAsset.chainName
@@ -165,8 +160,9 @@ internal class SwapQuoteVMMapper {
             bigIcon = quote.destinationAsset.swapQuoteTokenIcon(),
             smallIcon = quote.destinationAsset.swapQuoteChainIcon(isShielded = true),
             amount =
-                stringResByDynamicNumber(
+                stringResByNumber(
                     quote.amountOutFormatted.setScale(quote.destinationAsset.decimals, RoundingMode.DOWN),
+                    minDecimals = 0,
                 ),
             fiatAmount = stringResByDynamicCurrencyNumber(quote.amountOutUsd, FiatCurrency.USD.symbol),
             token = stringRes(quote.destinationAsset.tokenTicker),

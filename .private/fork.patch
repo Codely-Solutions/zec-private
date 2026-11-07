@@ -245,13 +245,13 @@ index 000000000..365b74624
 +No automatic export of personal wallet data is authorized by this document. Required upstream and dependency copyright/license notices remain in the source and dependency notices.
 diff --git a/docs/SWAP-AMOUNTS.md b/docs/SWAP-AMOUNTS.md
 new file mode 100644
-index 000000000..90e65f31c
+index 000000000..f491b86e4
 --- /dev/null
 +++ b/docs/SWAP-AMOUNTS.md
 @@ -0,0 +1,13 @@
 +# Swap amounts and costs
 +
-+The quote is an estimate of output. Its minimum output is the provider's base-unit guarantee converted using the destination asset's decimals. The review shows that minimum for floating-output swaps. CrossPay retains its maximum-input slippage allowance.
++The quote is an estimate of output. Its minimum output is the provider's base-unit guarantee converted using the destination asset's decimals. Token amounts, deposit totals and that minimum retain exact asset precision; compact fiat formatting is not suitable for a token guarantee because it may round upward. The review shows the minimum for floating-output swaps. CrossPay retains its maximum-input slippage allowance.
 +
 +Status output comes from the provider's settled amount when available, including raw base-unit output when the formatted field is absent. Otherwise the displayed value remains explicitly quoted. Provider output is not an independently measured wallet credit. The wallet's received transaction records its own scanned net value. A provider/bridge reporting difference must not be silently corrected with a guessed constant.
 +
@@ -5589,7 +5589,7 @@ index 2ceac399f..985329123 100644
 +    STACKED
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
-index 9f37c1d93..998a4f33e 100644
+index 9f37c1d93..61457e85a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
 @@ -17,0 +18,4 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -5597,54 +5597,88 @@ index 9f37c1d93..998a4f33e 100644
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalUsd
+@@ -30 +34 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+-import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
++import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 @@ -55,0 +60,2 @@ internal class SwapQuoteVM(
 +    private var isClosing = false
 +
 @@ -80 +86 @@ internal class SwapQuoteVM(
 -                    cancelSwapQuote()
 +                    onBack()
-@@ -159 +165,3 @@ internal class SwapQuoteVM(
+@@ -109 +115 @@ internal class SwapQuoteVM(
+-                        stringResByDynamicCurrencyNumber(
++                        stringResByCurrencyNumber(
+@@ -111 +117,2 @@ internal class SwapQuoteVM(
+-                            ticker = quote.exception.asset.tokenTicker
++                            ticker = quote.exception.asset.tokenTicker,
++                            minDecimals = 0,
+@@ -159 +166,3 @@ internal class SwapQuoteVM(
 -    private fun onEditPaymentClick() = cancelSwapQuote()
 +    private fun onEditPaymentClick() = onBack()
 +
 +    private fun onBack() = closeQuote { cancelSwapQuote() }
-@@ -161 +169,5 @@ internal class SwapQuoteVM(
+@@ -161 +170,5 @@ internal class SwapQuoteVM(
 -    private fun onBack() = cancelSwapQuote()
 +    private fun closeQuote(action: () -> Unit) {
 +        if (isClosing) return
 +        isClosing = true
 +        action()
 +    }
-@@ -163 +175 @@ internal class SwapQuoteVM(
+@@ -163 +176 @@ internal class SwapQuoteVM(
 -    private fun onBackDuringError() = cancelSwapQuote()
 +    private fun onBackDuringError() = onBack()
-@@ -167 +179 @@ internal class SwapQuoteVM(
+@@ -167 +180 @@ internal class SwapQuoteVM(
 -    private fun onCancelPaymentClick() = cancelSwap()
 +    private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
+@@ -177 +189,0 @@ internal data class SwapQuoteInternalState(
+-    val totalFees = quote.affiliateFee
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..2d9544f30 100644
+index 717411935..99b496ecf 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
+@@ -14,0 +15 @@ import co.electriccoin.zcash.ui.design.util.stringResByAddress
++import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
+@@ -16 +16,0 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
+-import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
 @@ -65,0 +66,6 @@ internal class SwapQuoteVMMapper {
 +        val minimum = quote.minimumAmountOut?.let {
 +            stringRes(
 +                R.string.private_minimum_received,
-+                stringResByDynamicCurrencyNumber(it, quote.destinationAsset.tokenTicker)
++                stringResByCurrencyNumber(it, quote.destinationAsset.tokenTicker, minDecimals = 0)
 +            )
 +        }
 @@ -67 +73 @@ internal class SwapQuoteVMMapper {
 -        return stringRes(
 +        return minimum ?: stringRes(
-@@ -96 +102 @@ internal class SwapQuoteVMMapper {
+@@ -96,7 +102,2 @@ internal class SwapQuoteVMMapper {
 -                description = stringRes(R.string.swapAndPay_totalFees),
+-                title =
+-                    if (quote.destinationAsset.isZCashAsset) {
+-                        stringResByDynamicCurrencyNumber(totalFees, quote.originAsset.tokenTicker)
+-                    } else {
+-                        stringRes(totalFeesZatoshi)
+-                    }.withStyle(),
 +                description = stringRes(R.string.private_wallet_transaction_fee),
-@@ -107,0 +114,6 @@ internal class SwapQuoteVMMapper {
++                title = stringRes(totalFeesZatoshi).withStyle(),
+@@ -107,0 +109,6 @@ internal class SwapQuoteVMMapper {
 +            ).takeIf { !quote.destinationAsset.isZCashAsset && totalFeesZatoshi.value > 0 },
 +            SwapQuoteInfoItem(
 +                description = stringRes(R.string.private_provider_costs),
 +                title = stringRes(R.string.private_provider_costs_included).withStyle(),
 +                subtitle = null,
 +                layout = SwapQuoteInfoLayout.STACKED
+@@ -137 +144 @@ internal class SwapQuoteVMMapper {
+-            title = stringResByDynamicCurrencyNumber(total, quote.originAsset.tokenTicker).withStyle(),
++            title = stringResByCurrencyNumber(total, quote.originAsset.tokenTicker, minDecimals = 0).withStyle(),
+@@ -145 +152 @@ internal class SwapQuoteVMMapper {
+-            amount = stringResByDynamicNumber(quote.amountInFormatted),
++            amount = stringResByNumber(quote.amountInFormatted, minDecimals = 0),
+@@ -156 +163 @@ internal class SwapQuoteVMMapper {
+-                stringResByDynamicNumber(
++                stringResByNumber(
+@@ -157,0 +165 @@ internal class SwapQuoteVMMapper {
++                    minDecimals = 0,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 index 1fa0df8d6..187ee7e7f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
@@ -11789,7 +11823,7 @@ index acc8741c2..430fc754d 100644
 -                    every { observe() } returns MutableStateFlow(Status.DISABLED)
 -                },
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
-index bac1a53ce..f2affb203 100644
+index bac1a53ce..de6622a6f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
 @@ -3,2 +2,0 @@ package co.electriccoin.zcash.ui.screen.swap.quote
@@ -11797,13 +11831,14 @@ index bac1a53ce..f2affb203 100644
 -import cash.z.ecc.android.sdk.model.Zatoshi
 @@ -28 +25,0 @@ internal data class FakeSwapQuote(
 -    override val zecExchangeRate: BigDecimal = BigDecimal("30"),
-@@ -35,3 +32,2 @@ internal data class FakeSwapQuote(
+@@ -35,3 +32,3 @@ internal data class FakeSwapQuote(
 -    override val affiliateFee: BigDecimal = BigDecimal("0.01"),
 -    override val affiliateFeeZatoshi: Zatoshi = Zatoshi(1000),
 -    override val affiliateFeeUsd: BigDecimal = BigDecimal("1"),
++    override val minimumAmountOut: BigDecimal? = null,
 +    override val affiliateFee: BigDecimal = BigDecimal.ZERO,
 +    override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO,
-@@ -41,9 +37 @@ internal data class FakeSwapQuote(
+@@ -41,9 +38 @@ internal data class FakeSwapQuote(
 -) : SwapQuote {
 -    override fun getTotal(proposal: Proposal?): BigDecimal = amountIn
 -
@@ -11815,10 +11850,11 @@ index bac1a53ce..f2affb203 100644
 -}
 +) : SwapQuote
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-index 38427672d..a96a0fd03 100644
+index 38427672d..694938011 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-@@ -2,0 +3,20 @@ package co.electriccoin.zcash.ui.screen.swap.quote
+@@ -2,0 +3,21 @@ package co.electriccoin.zcash.ui.screen.swap.quote
++import android.app.Application
 +import android.graphics.Bitmap
 +import android.graphics.Canvas
 +import android.view.View
@@ -11839,30 +11875,61 @@ index 38427672d..a96a0fd03 100644
 +import androidx.compose.ui.unit.dp
 +import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.onNodeWithText
-@@ -15,0 +36,5 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
+@@ -15,0 +37,8 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
++import co.electriccoin.zcash.ui.design.util.getString
 +import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 +import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 +import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 +import java.io.File
++import java.math.BigDecimal
++import java.util.Locale
 +import org.junit.Rule
-@@ -18,0 +44 @@ import org.robolectric.annotation.Config
+@@ -17,0 +47 @@ import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
+@@ -18,0 +49 @@ import org.robolectric.annotation.Config
 +import org.robolectric.annotation.GraphicsMode
-@@ -20,0 +47,2 @@ import kotlin.test.assertEquals
+@@ -20,0 +52,2 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertTrue
-@@ -31 +59,2 @@ import kotlin.test.assertEquals
+@@ -31 +64,2 @@ import kotlin.test.assertEquals
 -@Config(sdk = [34])
 +@Config(sdk = [34], qualifiers = "w411dp-h891dp")
 +@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@@ -32,0 +62,3 @@ class SwapQuoteVMMapperTest {
+@@ -32,0 +67,3 @@ class SwapQuoteVMMapperTest {
 +    @get:Rule
 +    val composeTestRule = createComposeRule()
 +
-@@ -68,0 +101,98 @@ class SwapQuoteVMMapperTest {
+@@ -68,0 +106,124 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun incomingQuoteDoesNotInventAWalletTransactionFee() {
 +        val items = createItems(zashi(), SwapAssetTestFixture.zecAsset())
 +        assertFalse(items.any { it.description.resourceId() == R.string.private_wallet_transaction_fee })
++    }
++
++    @Test
++    fun tokenAmountsAndMinimumKeepExactAtomicPrecision() {
++        val quote = FakeSwapQuote(
++            destinationAsset = SwapAssetTestFixture.zecAsset(),
++            mode = SwapMode.FLEX_INPUT,
++            amountInFormatted = BigDecimal("0.00012345"),
++            amountOutFormatted = BigDecimal("0.12345678"),
++            minimumAmountOut = BigDecimal("0.12283949"),
++        )
++        val state = mapper.createState(
++            SwapQuoteInternalState(null, quote, zashi()),
++            onBack = {},
++            onSubmitQuoteClick = {},
++            onNavigateToOnRampSwap = {}
++        )
++        val context: Application = RuntimeEnvironment.getApplication()
++        assertEquals("0.00012345", state.from.amount.getString(context, Locale.US))
++        assertEquals("0.12345678", state.to.amount.getString(context, Locale.US))
++        assertEquals(
++            "Minimum received: 0.12283949 zec",
++            checkNotNull(state.infoText).getString(context, Locale.US)
++        )
++        val total = (state.amount.title as StyledStringResource.ByStringResource).resource
++        assertEquals("0.00012345 btc", total.getString(context, Locale.US))
 +    }
 +
 +    @Test
@@ -11958,12 +12025,22 @@ index 38427672d..a96a0fd03 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
-index 3027e6cda..bbd688270 100644
+index 3027e6cda..60dbff0cc 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
-@@ -21,0 +22 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
+@@ -7,0 +8 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.datasource.QuoteLowAmountException
+@@ -21,0 +23,2 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
++import co.electriccoin.zcash.ui.design.util.getString
 +import io.mockk.verify
-@@ -96,0 +98,14 @@ class SwapQuoteVMTest {
+@@ -36,0 +40 @@ import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
+@@ -37,0 +42,2 @@ import org.robolectric.annotation.Config
++import java.math.BigDecimal
++import java.util.Locale
+@@ -42,0 +49 @@ import kotlin.test.assertNotNull
++import kotlin.test.assertTrue
+@@ -96,0 +104,35 @@ class SwapQuoteVMTest {
 +    @Test
 +    fun sheetDismissalCallbacksOnlyCancelOnce() =
 +        runTest {
@@ -11978,13 +12055,44 @@ index 3027e6cda..bbd688270 100644
 +            verify(exactly = 1) { cancelQuote() }
 +        }
 +
-@@ -105 +120,4 @@ class SwapQuoteVMTest {
++    @Test
++    fun lowAmountErrorKeepsExactProviderThreshold() =
++        runTest {
++            val vm = vm(
++                account = zashi(),
++                quoteData = SwapQuoteData.Error(
++                    mode = SwapMode.FLEX_INPUT,
++                    exception = QuoteLowAmountException(
++                        asset = SwapAssetTestFixture.zecAsset(),
++                        amount = BigDecimal("12283949"),
++                        amountFormatted = BigDecimal("0.12283949"),
++                    ),
++                ),
++            )
++            collect(vm)
++
++            val state = assertNotNull(vm.state.value) as SwapQuoteState.Error
++            val subtitle = state.subtitle.getString(RuntimeEnvironment.getApplication(), Locale.US)
++            assertTrue(subtitle.contains("0.12283949 zec"), subtitle)
++        }
++
+@@ -105 +147,7 @@ class SwapQuoteVMTest {
 -    private fun vm(account: WalletAccount) =
 +    private fun vm(
 +        account: WalletAccount,
 +        cancelQuote: CancelSwapQuoteUseCase = mockk(relaxed = true),
++        quoteData: SwapQuoteData = SwapQuoteData.Success(
++            quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
++        ),
 +    ) =
-@@ -128 +146 @@ class SwapQuoteVMTest {
+@@ -122,5 +170 @@ class SwapQuoteVMTest {
+-                        MutableStateFlow(
+-                            SwapQuoteData.Success(
+-                                quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
+-                            )
+-                        )
++                        MutableStateFlow(quoteData)
+@@ -128 +172 @@ class SwapQuoteVMTest {
 -            cancelSwapQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true),
 +            cancelSwapQuote = cancelQuote,
 diff --git a/ui-screenshot-test/build.gradle.kts b/ui-screenshot-test/build.gradle.kts

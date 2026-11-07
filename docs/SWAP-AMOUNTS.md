@@ -1,6 +1,6 @@
 # Swap amounts and costs
 
-The quote is an estimate of output. Its minimum output is the provider's base-unit guarantee converted using the destination asset's decimals. The review shows that minimum for floating-output swaps. CrossPay retains its maximum-input slippage allowance.
+The quote is an estimate of output. Its minimum output is the provider's base-unit guarantee converted using the destination asset's decimals. Token amounts, deposit totals and that minimum retain exact asset precision; compact fiat formatting is not suitable for a token guarantee because it may round upward. The review shows the minimum for floating-output swaps. CrossPay retains its maximum-input slippage allowance.
 
 Status output comes from the provider's settled amount when available, including raw base-unit output when the formatted field is absent. Otherwise the displayed value remains explicitly quoted. Provider output is not an independently measured wallet credit. The wallet's received transaction records its own scanned net value. A provider/bridge reporting difference must not be silently corrected with a guessed constant.
 
