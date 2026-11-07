@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.donation
 
 import android.content.Context
 import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.junit.Before
@@ -106,6 +107,23 @@ class DonationPreferencesTest {
         assertTrue(preferences.mayInvite(2_000_000 + DonationPolicy.COOLDOWN_MILLIS))
         preferences.recordDonationCompleted(1_000_000, now = 3_000_000)
         assertTrue(preferences.mayInvite(2_000_000 + DonationPolicy.COOLDOWN_MILLIS))
+    }
+
+    @Test
+    fun liveSuppressionObserverIgnoresDisplayAndReleasesWithItsOwner() {
+        val preferences = DonationPreferences(context)
+        var changes = 0
+        val release = preferences.observeSuppression { changes++ }
+        preferences.recordInvitationDisplayed(1_000_000)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(0, changes)
+        preferences.recordDonationCompleted(1_000_000, now = 2_000_000)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(1, changes)
+        release()
+        preferences.declinePermanently()
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(1, changes)
     }
 
 }

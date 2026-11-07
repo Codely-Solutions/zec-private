@@ -5339,10 +5339,10 @@ index 000000000..14a4deb26
 +data class DonationArgs(val basisZec: String? = null)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt
 new file mode 100644
-index 000000000..743ec89b6
+index 000000000..c504b0a03
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,66 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import android.content.Context
@@ -5395,6 +5395,15 @@ index 000000000..743ec89b6
 +    }
 +
 +    fun declinePermanently() = preferences.edit().putBoolean("never_ask", true).apply()
++
++    /** The caller owns this observer and releases it with its UI lifecycle. */
++    fun observeSuppression(onSuppressed: () -> Unit): () -> Unit {
++        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
++            if (key == "never_ask" || key == "last_donation_completion") onSuppressed()
++        }
++        preferences.registerOnSharedPreferenceChangeListener(listener)
++        return { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
++    }
 +
 +    private companion object {
 +        val LOCK = Any()
@@ -5670,10 +5679,10 @@ index 000000000..999cff62d
 +)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt
 new file mode 100644
-index 000000000..7fbe39961
+index 000000000..f198ea2e3
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt
-@@ -0,0 +1,151 @@
+@@ -0,0 +1,159 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.compose.foundation.background
@@ -5689,6 +5698,7 @@ index 000000000..7fbe39961
 +import androidx.compose.material3.PlainTooltip
 +import androidx.compose.material3.Text
 +import androidx.compose.material3.rememberTooltipState
++import androidx.compose.runtime.DisposableEffect
 +import androidx.compose.runtime.Composable
 +import androidx.compose.runtime.LaunchedEffect
 +import androidx.compose.runtime.getValue
@@ -5721,6 +5731,13 @@ index 000000000..7fbe39961
 +    val eligibleAtEntry = remember { preferences.mayInviteOnHomeEntry(System.currentTimeMillis()) }
 +    var dismissed by remember { mutableStateOf(false) }
 +    var introduction by remember { mutableStateOf(false) }
++    DisposableEffect(preferences) {
++        val release = preferences.observeSuppression {
++            dismissed = true
++            introduction = false
++        }
++        onDispose { release() }
++    }
 +    val showInvitation = eligibleAtEntry && !dismissed && !blocked
 +    LaunchedEffect(showInvitation, blocked) {
 +        if (showInvitation) {
@@ -6344,7 +6361,7 @@ index c7a9b6193..000000000
 -        }
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt
-index 627591300..2132ad93e 100644
+index 627591300..18e06ea59 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt
 @@ -4,0 +5,6 @@ package co.electriccoin.zcash.ui.screen.home
@@ -6358,7 +6375,7 @@ index 627591300..2132ad93e 100644
 +    val donationRouter = koinInject<NavigationRouter>()
 @@ -39,0 +47,4 @@ internal fun AndroidHome() {
 +        val support = rememberHomeDonationSupport(
-+            blocked = it.message != null || !it.isSyncComplete || appBarState == null,
++            blocked = it.message != null || !it.isSyncComplete,
 +            onDonate = { donationRouter.forward(DonationArgs()) },
 +        )
 @@ -44 +55,3 @@ internal fun AndroidHome() {
@@ -13346,14 +13363,15 @@ index 000000000..dbd1be1d4
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt
 new file mode 100644
-index 000000000..41aff93f6
+index 000000000..359f3acd3
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt
-@@ -0,0 +1,111 @@
+@@ -0,0 +1,129 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import android.content.Context
 +import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
++import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertTrue
 +import org.junit.Before
@@ -13458,6 +13476,23 @@ index 000000000..41aff93f6
 +        assertTrue(preferences.mayInvite(2_000_000 + DonationPolicy.COOLDOWN_MILLIS))
 +        preferences.recordDonationCompleted(1_000_000, now = 3_000_000)
 +        assertTrue(preferences.mayInvite(2_000_000 + DonationPolicy.COOLDOWN_MILLIS))
++    }
++
++    @Test
++    fun liveSuppressionObserverIgnoresDisplayAndReleasesWithItsOwner() {
++        val preferences = DonationPreferences(context)
++        var changes = 0
++        val release = preferences.observeSuppression { changes++ }
++        preferences.recordInvitationDisplayed(1_000_000)
++        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
++        assertEquals(0, changes)
++        preferences.recordDonationCompleted(1_000_000, now = 2_000_000)
++        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
++        assertEquals(1, changes)
++        release()
++        preferences.declinePermanently()
++        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
++        assertEquals(1, changes)
 +    }
 +
 +}

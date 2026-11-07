@@ -51,6 +51,15 @@ class DonationPreferences(context: Context) {
 
     fun declinePermanently() = preferences.edit().putBoolean("never_ask", true).apply()
 
+    /** The caller owns this observer and releases it with its UI lifecycle. */
+    fun observeSuppression(onSuppressed: () -> Unit): () -> Unit {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "never_ask" || key == "last_donation_completion") onSuppressed()
+        }
+        preferences.registerOnSharedPreferenceChangeListener(listener)
+        return { preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
     private companion object {
         val LOCK = Any()
     }
