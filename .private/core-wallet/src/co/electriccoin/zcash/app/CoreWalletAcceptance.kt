@@ -55,6 +55,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -1453,8 +1454,18 @@ class CoreWalletAcceptance {
         val approvalsBefore = approvalActions
         val balanceBefore = balance()
         coordinator.onStatus(status)
+        val donationStore = dependency<AutoDonationStore>()
         val transaction = withTimeout(240_000) {
-            sync.getTransactions(account.sdkAccount.accountUuid).first { history ->
+            combine(sync.getTransactions(account.sdkAccount.accountUuid), flow {
+                while (true) { emit(Unit); delay(500) }
+            }) { history, _ -> history }.first { history ->
+                val outcome = donationStore.latestOutcome()
+                if (outcome != null && !outcome.startsWith("Automatic donation of ")) {
+                    println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
+                        .put("ui_control", "automatic_donation").put("ui_outcome", "terminal_without_success")
+                        .put("diagnostic", donationStore.latestDiagnostic?.let(::JSONObject)))
+                    error("Automatic donation did not report submission success")
+                }
                 history.any { it.isSentTransaction && it.txId.txIdString() !in before &&
                     it.minedHeight != null }
             }.single { it.isSentTransaction && it.txId.txIdString() !in before }

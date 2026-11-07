@@ -3632,10 +3632,10 @@ index 13e9d0788..d1112a657 100644
 +    @Throws(AssetNotFoundException::class)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinator.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinator.kt
 new file mode 100644
-index 000000000..763ce6dae
+index 000000000..53de4fc79
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinator.kt
-@@ -0,0 +1,188 @@
+@@ -0,0 +1,222 @@
 +package co.electriccoin.zcash.ui.common.donation
 +
 +import cash.z.ecc.android.sdk.model.Memo
@@ -3712,16 +3712,19 @@ index 000000000..763ce6dae
 +        val key = status.depositAddress.address
 +        val enrollment = runCatching { store.reserve(key) }.getOrNull() ?: return
 +        scope.launch {
++            val diagnostic = AttemptDiagnostic(store)
 +            try {
 +                // Leave margin for the SDK's ten-confirmation receipt policy.
 +                val reason = withTimeoutOrNull(30 * 60 * 1000L) {
-+                    donate(status, enrollment)
++                    donate(status, enrollment, diagnostic)
 +                } ?: "Automatic donation outcome uncertain. Check Activity."
 +                store.outcome(key, reason)
 +            } catch (e: CancellationException) {
++                diagnostic.failure(e)
 +                store.outcome(key, "Automatic donation outcome uncertain. Check Activity.")
 +                throw e
-+            } catch (_: Exception) {
++            } catch (e: Exception) {
++                diagnostic.failure(e)
 +                store.outcome(key, "Automatic donation outcome uncertain. Check Activity.")
 +            }
 +        }
@@ -3756,7 +3759,10 @@ index 000000000..763ce6dae
 +        }
 +    }
 +
-+    private suspend fun donate(status: SwapQuoteStatus, enrollment: JSONObject): String {
++    private suspend fun donate(
++        status: SwapQuoteStatus, enrollment: JSONObject, diagnostic: AttemptDiagnostic
++    ): String {
++        diagnostic.stage = "native_evidence"
 +        val incoming = enrollment.getBoolean("incoming")
 +        val txids = if (incoming) status.destinationTransactionIds.map(store::hash) else {
 +            val values = enrollment.getJSONArray("txids")
@@ -3790,6 +3796,7 @@ index 000000000..763ce6dae
 +            }
 +            delay(5_000)
 +        }
++        diagnostic.stage = "spending_gate"
 +        return AutoDonationSpendingGate.mutex.withLock {
 +            if (hasActiveUiSpend()) return@withLock "Skipped: another transaction is under review"
 +            val consent = store.consent() ?: return@withLock "Skipped: authorization unavailable"
@@ -3800,8 +3807,11 @@ index 000000000..763ce6dae
 +            if ((account.spendableShieldedBalance?.value ?: 0L) <= amount) {
 +                return@withLock "Skipped: insufficient shielded funds"
 +            }
++            diagnostic.stage = "recipient"
 +            val send = ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(amount), Memo(""), null)
++            diagnostic.stage = "proposal"
 +            val proposal = proposals.createProposal(account, send)
++            diagnostic.stage = "shielded_validation"
 +            DonationPolicy.requireShielded(proposal.proposal, send)
 +            val fee = proposal.proposal.totalFeeRequired().value
 +            if (fee >= amount) return@withLock "Skipped: network fee is at least the donation"
@@ -3810,10 +3820,14 @@ index 000000000..763ce6dae
 +            }
 +            if (hasActiveUiSpend()) return@withLock "Skipped: another transaction is under review"
 +            if (account(enrollment) == null) return@withLock "Skipped: authorization unavailable"
++            diagnostic.stage = "spending_key"
 +            val key = keys.getZashiSpendingKey()
 +            if (account(enrollment) == null || hasActiveUiSpend()) return@withLock "Skipped: authorization changed"
 +            DonationPolicy.requireShielded(proposal.proposal, send)
++            diagnostic.stage = "submission"
 +            val result = proposals.submitTransaction(proposal.proposal, key)
++            diagnostic.submission(result)
++            diagnostic.stage = "record_transaction"
 +            store.recordTransactionIds(status.depositAddress.address, result.txIds)
 +            if (result is SubmitResult.Success) {
 +                val displayAmount = BigDecimal.valueOf(amount, 8).stripTrailingZeros().toPlainString()
@@ -3823,6 +3837,26 @@ index 000000000..763ce6dae
 +            }
 +        }
 +    }
++
++    /** Fixed stages and classes only; never exception messages or transaction/provider contents. */
++    private class AttemptDiagnostic(private val store: AutoDonationStore) {
++        var stage = "reserved"
++        fun failure(error: Exception) = store.diagnostic(JSONObject().put("stage", stage)
++            .put("result", "exception").put("exception_class", error.javaClass.simpleName)
++            .put("cause_classes", JSONArray(generateSequence(error as Throwable) { it.cause }
++                .take(4).map { it.javaClass.simpleName }.toList())))
++        fun submission(result: SubmitResult) {
++            val value = JSONObject().put("stage", stage).put("result", result.javaClass.simpleName)
++            when (result) {
++                is SubmitResult.Failure -> value.put("sdk_code", result.code)
++                is SubmitResult.Error -> value.put("exception_class", result.cause.javaClass.simpleName)
++                is SubmitResult.GrpcFailure -> value.put("reason", result.reason?.name)
++                else -> Unit
++            }
++            store.diagnostic(value)
++        }
++    }
++
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationSpendingGate.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationSpendingGate.kt
 new file mode 100644
@@ -3840,10 +3874,10 @@ index 000000000..1aaf7c22b
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationStore.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationStore.kt
 new file mode 100644
-index 000000000..65563b903
+index 000000000..d678b3dc9
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationStore.kt
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,78 @@
 +package co.electriccoin.zcash.ui.common.donation
 +
 +import android.content.Context
@@ -3891,6 +3925,12 @@ index 000000000..65563b903
 +
 +    @Synchronized fun disable() { check(prefs.edit().remove("consent").commit()) }
 +    fun latestOutcome(): String? = prefs.getString("outcome", null)
++
++    val latestDiagnostic: String? get() = prefs.getString("diagnostic", null)
++
++    @Synchronized internal fun diagnostic(value: JSONObject) {
++        check(prefs.edit().putString("diagnostic", value.toString()).commit())
++    }
 +
 +    internal fun hash(value: String): String = MessageDigest.getInstance("SHA-256")
 +        .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
@@ -12146,10 +12186,10 @@ index 4c13e2085..1a88b2241 100644
 +        const val ZIP321_RECIPIENT = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt
 new file mode 100644
-index 000000000..c804d635f
+index 000000000..4a7ed72c3
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt
-@@ -0,0 +1,426 @@
+@@ -0,0 +1,433 @@
 +package co.electriccoin.zcash.ui.common.donation
 +
 +import android.content.Context
@@ -12387,6 +12427,13 @@ index 000000000..c804d635f
 +        assertTrue(assertNotNull(f.store.latestOutcome()).contains("uncertain"))
 +        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
 +        f.verifyNoSigning()
++        val diagnostic = org.json.JSONObject(assertNotNull(f.store.latestDiagnostic))
++        assertTrue(diagnostic.getString("stage") == "shielded_validation")
++        assertTrue(diagnostic.getString("exception_class") == "IllegalArgumentException")
++        assertTrue(!diagnostic.toString().contains("deposit"))
++        f.engine.onStatus(f.status)
++        advanceUntilIdle()
++        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
 +    }
 +
 +    @Test fun revocationQueuedBeforeCommitGateWins() = runTest {
