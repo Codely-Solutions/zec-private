@@ -1,0 +1,61 @@
+{
+  "status": "guard-owned execution cleaned; shared helper ownership remains unresolved",
+  "guard_jobs": [
+    "d7492b6fb47449a582d8d14fac6caee4",
+    "b2e20d08c4d248fca3d83bd7d3110d9e",
+    "c9711aef862344bebe214c977845eb8a",
+    "8e05c5a83e0744a383d6984c0d2bc05a",
+    "44f9640380fe4334a9766c37b58c1081"
+  ],
+  "owned_survivors": [],
+  "disposable_roots_remaining": [],
+  "receipt_archive": {
+    "path": "phase3-final-execution-receipts.zip",
+    "sha256": "6d0084e02be5607c5405dcb40924bb5d43088400186108c7c3c4e8a56b37abde",
+    "remaining_shared_receipts": 60
+  },
+  "removed_scripts": [
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase3_edit.py",
+      "bytes": 3451,
+      "sha256": "734cd057596736a06e56db485954f854b5d50efd39d785eabb5a87d05cff7a40"
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase3_integrate.py",
+      "bytes": 3079,
+      "sha256": "dc2ee28a9196c474a95dc68f697395025573efb08667bf1cee5983b804f93bf0"
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase3_controls.py",
+      "bytes": 3082,
+      "sha256": "e3c78ddb06273f3641e09cbce825c387b92e5757927126dc9ca5fa629fabbf76"
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase3_prepare.py",
+      "bytes": 2026,
+      "sha256": "5491d7e8f6ac29c6553ac6ce60fd576d4d42b486d97c3d28756a365958abca2b"
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase3_validation_setup.py",
+      "bytes": 1309,
+      "sha256": "8e1deb0b87f1f43e148a265fce1876e51218ea59a2607b48d637f86c4da49c2a"
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase3_correct_candidate.py",
+      "bytes": 1870,
+      "sha256": "c1a22cd4e4dfbb5c3d6d28383e0a1f8ef5fda30baf96fa385886f1c472925217"
+    }
+  ],
+  "remote_cache_bytes_removed": 56343729,
+  "retained": "Current signed APK, reproducible verification tools, compact evidence, current and baseline acceptance artifacts, managed SDKs and signing custody.",
+  "helper_audit": {
+    "unresolved_duplicate_groups": 4,
+    "ownership_verified": false,
+    "action": "Unassigned shared helper trees preserved; no broad termination."
+  },
+  "limits": [
+    "Final memory peak was not measured; enforced core budgets were 3072 MiB/2 guest cores and 6 GiB Windows Job.",
+    "No production ARM execution or funded production settlement.",
+    "Superseded hosted diagnostic artifacts retain bounded expiry; no published history removed."
+  ]
+}

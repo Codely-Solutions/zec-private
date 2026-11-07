@@ -279,11 +279,44 @@ index 000000000..8ca8e572c
 +The app can export diagnostics using Android sharing. Choose the recipient yourself and inspect sensitive content first. No staffed support inbox is configured. Do not post secret-bearing exports to GitHub. GitHub release and documentation links require repository access.
 diff --git a/docs/WALLET-GUIDE.md b/docs/WALLET-GUIDE.md
 new file mode 100644
-index 000000000..692a16bf3
+index 000000000..493bdcaf7
 --- /dev/null
 +++ b/docs/WALLET-GUIDE.md
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,58 @@
 +# Wallet guide
++
++## Installation and updates
++
++Use the APK and `SHA256SUMS` from this repository's [Releases](https://github.com/Sammy-Lastre/zec-private/releases). Production releases support ARM64. Updates require the same signing key and a higher Android versionCode. Preserve your recovery material before troubleshooting an installation, and avoid uninstalling an existing wallet.
++
++The release signing certificate SHA-256 is:
++
++```text
++41:01:74:E0:D6:80:63:8D:19:64:7F:46:E0:E4:B4:1E:A6:25:3C:23:51:AD:FA:84:C5:D9:B1:78:8D:2D:A1:68
++```
++
++Check the APK checksum against `SHA256SUMS` and its certificate with Android SDK `apksigner verify --print-certs`. A checksum establishes agreement with the downloaded checksum file; verify the expected certificate as well. Automatic phone installation is not configured.
++
++## Swap costs
++
++Quote requests use `appFees: []`, omit the upstream referral, and carry no partner JWT or personal API key. ZEC Private requests a 0% app/affiliate fee. Provider, bridge, execution and network costs, together with exchange pricing or spread, can affect the amount received.
++
++NEAR's published anonymous API platform rate is 0.25% for non-`ANY_INPUT` quotes. Its authenticated 0.20% schedule is an alternative rate. NEAR also lists a 0.0001% protocol fee per transaction. An `ANY_INPUT` platform-fee exemption still leaves other costs. Consult the [fee schedule](https://docs.near-intents.org/resources/fees) and [authentication rules](https://docs.near-intents.org/integration/distribution-channels/1click-api/authentication) for current terms, and review the quoted received amount and wallet transaction fee before confirming.
++
++## Privacy boundaries
++
++NEAR sees quote assets, quantities, recipient, refund address, deposit address and timing. It may correlate requests and public settlement records. Public-chain counterparties and network observers may correlate amounts and timing across chains.
++
++Incoming swaps request a fresh shielded recipient. Outgoing swaps request a fresh shielded refund address and use the provider's quote-specific deposit address. Address-generation failure cannot fall back to an existing wallet address. New quotes requiring a TEX deposit are rejected because SDK TEX sends can introduce a wallet-owned transparent intermediate. Existing status and refund recovery remain supported.
++
++Tor protects sensitive wallet metadata, transaction and provider requests when enabled, without a direct fallback for those requests. Bulk compact-block downloads and their normal DNS remain direct. Normal DNS is permitted. Release HTTP body logging is disabled; the fork adds no analytics or quote proxy. Fresh addresses and Tor do not erase provider records or establish anonymity. See the upstream threat model linked in [the original README](UPSTREAM-README.md).
++
++## Validation and support
++
++[STATUS](../.private/STATUS.md) records current release evidence. Release validation distinguishes inspected ARM64 production packaging from x86_64 emulator execution. Testnet acceptance covers wallet operations, installed updates, restart, seed recovery and scoped Tor interruption. Unfunded production quote acceptance is separate from funded swap settlement. ARM hardware and biometric approval UI have separate acceptance limits.
++
++Diagnostics open Android's share chooser. Choose the recipient yourself; exporting does not contact a staffed support team or automatically escalate a provider issue. Upstream's support mailbox is removed from this fork.
++
 +
 +## Incoming swaps
 +
@@ -493,12 +526,12 @@ index 96a911cd4..799c7d501 100644
 -    <string name="view_only_remove_message">Removing this account clears its data from Zodl on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 +    <string name="view_only_remove_message">Removing this account clears its data from ZEC Private on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..cc32080cc 100644
+index ec56161b5..ad110aeff 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
 -ZCASH_VERSION_CODE=1
-+ZCASH_VERSION_CODE=3234011
++ZCASH_VERSION_CODE=3234012
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
 -ZCASH_RELEASE_APP_NAME=Zodl
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash
@@ -518,6 +551,19 @@ index ec56161b5..cc32080cc 100644
 @@ -208 +205 @@ ZCASH_BIP39_VERSION=1.0.9
 -ZCASH_SDK_VERSION=6.0.0-SNAPSHOT
 +ZCASH_SDK_VERSION=6.0.0
+@@ -215 +212,2 @@ JVM_TOOLCHAIN=21
+-# This shouldn't be changed, as Android doesn't support targets beyond Java 8
++# Java 8 bytecode remains the current compatibility target; newer Android Java
++# language levels require aligned Kotlin/Java targets and desugaring review.
+diff --git a/gradle/wrapper/gradle-wrapper.properties b/gradle/wrapper/gradle-wrapper.properties
+index 207c4600b..f900c2060 100644
+--- a/gradle/wrapper/gradle-wrapper.properties
++++ b/gradle/wrapper/gradle-wrapper.properties
+@@ -3,2 +3,2 @@ distributionPath=wrapper/dists
+-distributionSha256Sum=f1771298a70f6db5a29daf62378c4e18a17fc33c9ba6b14362e0cdf40610380d
+-distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.4-bin.zip
++distributionSha256Sum=7988ed071b2a07900e2ec715fca15c6ab72bce6db433af301fa7fa7e9407bd24
++distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.6-bin.zip
 diff --git a/settings.gradle.kts b/settings.gradle.kts
 index 5831568a4..8a9b07649 100644
 --- a/settings.gradle.kts

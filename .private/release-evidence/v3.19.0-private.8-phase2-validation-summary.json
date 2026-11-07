@@ -1,0 +1,271 @@
+{
+  "status": "released-and-independently-verified",
+  "candidate_run": 42207306770,
+  "source_sha": "53d211a213dc20b1e8eb3ce37649607c88b5d819",
+  "testnet_build_run": 42191766043,
+  "core_guard": "a8cc224805134344a4ae3146722bca88",
+  "core_seconds": 684.8863177,
+  "core_transaction_evidence": {
+    "fundingTxId": "8aa1f451c4b21f9470864fafea17041205eeadd7dffbc3851f3f31c8c20f6cda",
+    "fundingProvider": "jinolabs-testnet",
+    "fundedBalance": 10000000,
+    "balanceBeforeSend": 10000000,
+    "feeZatoshi": 10000,
+    "senderConfirmedBalance": 8990000,
+    "restoreMinedHeight": 4588498,
+    "restoreTransactionState": "Pending",
+    "candidateTxIds": [
+      "3a660d0a3c8ef75f9301efd26fa29ed6b42794726703d7106d6e3badc0ce6765"
+    ],
+    "initialSubmitType": "Success"
+  },
+  "production_quote_receipt": {
+    "schema": 1,
+    "evidence_class": "real-app-production-quotes",
+    "passed": true,
+    "build_source_sha": "53d211a213dc20b1e8eb3ce37649607c88b5d819",
+    "input_fingerprint": "e88a5182cb3b45a5069159842358bfcbe6a8813d304cf4427cc54a34f61af7a7",
+    "executed_apk_sha256": "92878ff747c9ba08e3d771ed3f4a7953400c5090adb0ad82443d35cf09cde699",
+    "original_apk_sha256": "4f986db0c95e8c51ac461e85f39c1765e45cadf9ab5ddca8ba1f6e7160b461d5",
+    "quote_requests": 3,
+    "quote_reviews": 3,
+    "dismissals": 3,
+    "tor_enabled": true,
+    "funds_transferred": false,
+    "personal_wallet_access": false,
+    "artifact_id": 13497671834,
+    "workflow_run_id": 42207306770,
+    "archive_sha256": "69369f72820bd38c154e162dfc7c78e47174a3e90b3436b7eb081f352c433ced",
+    "apk_preparation": {
+      "originalSha256": "4f986db0c95e8c51ac461e85f39c1765e45cadf9ab5ddca8ba1f6e7160b461d5",
+      "testedSha256": "92878ff747c9ba08e3d771ed3f4a7953400c5090adb0ad82443d35cf09cde699",
+      "preservedExecutionEntries": 33,
+      "executionEntriesDigest": "cf372645a7435973e8294eb28b01407fcd5ff0c2b5e718794b998706fdcff062",
+      "executionEntriesUnchanged": true,
+      "abi": "x86_64",
+      "signing": "ephemeral test key; not release key"
+    },
+    "guard_job": "42b21dfff89341b6afcc18b419314805"
+  },
+  "tests": {
+    "tests": 1392,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "runtime_components": 333,
+  "baseline_runtime_components": 333,
+  "production_gradle_seconds": 940,
+  "emulator_gradle_seconds": 603,
+  "baseline_production_gradle_seconds": 971,
+  "cache_effects": "Different cache hits and inputs; timings are not a controlled speedup.",
+  "workflow_change": "Parallel untrusted production and emulator jobs, one assembly per variant; promotion signs existing artifact without rebuilding.",
+  "limitations": [
+    "Production ARM inspected, not executed",
+    "Restored recipient mined output/amount/memo verified; UI remained Pending",
+    "Hardware entry exercised without physical device",
+    "Private GitHub documentation links require repository access",
+    "Helper connection ownership remains unresolved; preserved rather than terminating potentially unrelated processes."
+  ],
+  "upstream_discovery_run": 42209043985,
+  "cleanup": {
+    "core": true,
+    "ui": true,
+    "guard_roots_removed": true,
+    "owned_guard_survivors": [],
+    "helper_ownership_limitation": "15 recognized helper roots remain: 10 in recorded baseline and 5 later connections of unresolved ownership. No helper termination occurred; auto-review rejected insufficient ownership proof. No nested app servers or sandbox workers were observed in these trees."
+  },
+  "release_url": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.8",
+  "promotion_run": 42210936257,
+  "apk_bytes": 67812047,
+  "apk_sha256": "9d7ea0c94a1025503bf09afb4821653ccf9c1e102559f4cd688ab4bb2c2f66a9",
+  "baseline_apk_bytes": 67930887,
+  "apk_bytes_saved": 118840,
+  "signed_payload_matches_validated_unsigned": true,
+  "production_arm_executed": false,
+  "workflow_costs": [
+    {
+      "run": 42190288948,
+      "job": "unsigned",
+      "conclusion": "failure",
+      "seconds": 248.0,
+      "gradle": [
+        "157 actionable tasks: 76 executed, 81 from cache",
+        "BUILD FAILED in 2m 14s"
+      ]
+    },
+    {
+      "run": 42190288948,
+      "job": "failed",
+      "conclusion": "success",
+      "seconds": 9.0,
+      "gradle": []
+    },
+    {
+      "run": 42190293620,
+      "job": "testnet",
+      "conclusion": "failure",
+      "seconds": 249.0,
+      "gradle": [
+        "277 actionable tasks: 149 executed, 128 from cache",
+        "BUILD FAILED in 3m 22s"
+      ]
+    },
+    {
+      "run": 42190293620,
+      "job": "baseline",
+      "conclusion": "success",
+      "seconds": 752.0,
+      "gradle": [
+        "BUILD SUCCESSFUL in 11m 54s",
+        "266 actionable tasks: 173 executed, 93 from cache"
+      ]
+    },
+    {
+      "run": 42190612965,
+      "job": "probe",
+      "conclusion": "success",
+      "seconds": 81.0,
+      "gradle": [
+        "BUILD SUCCESSFUL in 48s",
+        "34 actionable tasks: 34 executed"
+      ]
+    },
+    {
+      "run": 42191077731,
+      "job": "testnet",
+      "conclusion": "cancelled",
+      "seconds": 92.0,
+      "gradle": []
+    },
+    {
+      "run": 42191082101,
+      "job": "unsigned",
+      "conclusion": "cancelled",
+      "seconds": 95.0,
+      "gradle": []
+    },
+    {
+      "run": 42191082101,
+      "job": "publish",
+      "conclusion": "cancelled",
+      "seconds": -1.0,
+      "gradle": []
+    },
+    {
+      "run": 42191082101,
+      "job": "failed",
+      "conclusion": "cancelled",
+      "seconds": 0.0,
+      "gradle": []
+    },
+    {
+      "run": 42191766043,
+      "job": "testnet",
+      "conclusion": "success",
+      "seconds": 451.0,
+      "gradle": [
+        "BUILD SUCCESSFUL in 6m 36s",
+        "315 actionable tasks: 169 executed, 146 from cache"
+      ]
+    },
+    {
+      "run": 42191772130,
+      "job": "unsigned",
+      "conclusion": "cancelled",
+      "seconds": 2126.0,
+      "gradle": []
+    },
+    {
+      "run": 42191772130,
+      "job": "publish",
+      "conclusion": "cancelled",
+      "seconds": 0.0,
+      "gradle": []
+    },
+    {
+      "run": 42191772130,
+      "job": "failed",
+      "conclusion": "cancelled",
+      "seconds": 0.0,
+      "gradle": []
+    },
+    {
+      "run": 42196387487,
+      "job": "lifecycle",
+      "conclusion": "failure",
+      "seconds": 328.0,
+      "gradle": [
+        "164 actionable tasks: 93 executed, 71 from cache",
+        "BUILD FAILED in 4m 23s"
+      ]
+    },
+    {
+      "run": 42197205907,
+      "job": "lifecycle",
+      "conclusion": "success",
+      "seconds": 298.0,
+      "gradle": [
+        "BUILD SUCCESSFUL in 3m 51s",
+        "166 actionable tasks: 69 executed, 97 from cache"
+      ]
+    },
+    {
+      "run": 42198392039,
+      "job": "unsigned",
+      "conclusion": "failure",
+      "seconds": 2586.0,
+      "gradle": []
+    },
+    {
+      "run": 42198392039,
+      "job": "failed",
+      "conclusion": "success",
+      "seconds": 5.0,
+      "gradle": []
+    },
+    {
+      "run": 42207306770,
+      "job": "emulator",
+      "conclusion": "success",
+      "seconds": 638.0,
+      "gradle": [
+        "BUILD SUCCESSFUL in 10m 3s",
+        "266 actionable tasks: 126 executed, 140 from cache"
+      ]
+    },
+    {
+      "run": 42207306770,
+      "job": "unsigned",
+      "conclusion": "success",
+      "seconds": 1036.0,
+      "gradle": [
+        "BUILD SUCCESSFUL in 15m 40s",
+        "505 actionable tasks: 315 executed, 190 from cache"
+      ]
+    },
+    {
+      "run": 42209043985,
+      "job": "prepare",
+      "conclusion": "success",
+      "seconds": 17.0,
+      "gradle": []
+    },
+    {
+      "run": 42210936257,
+      "job": "promotion",
+      "conclusion": "success",
+      "seconds": 8.0,
+      "gradle": []
+    },
+    {
+      "run": 42210936257,
+      "job": "publish",
+      "conclusion": "success",
+      "seconds": 26.0,
+      "gradle": []
+    }
+  ],
+  "total_recorded_ci_job_seconds": 9044.0,
+  "cache_cleanup_bytes": 2179466474
+}

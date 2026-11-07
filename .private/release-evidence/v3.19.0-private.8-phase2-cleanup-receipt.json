@@ -1,0 +1,59 @@
+{
+  "removed_mechanical_outputs": [
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase2_branding.py",
+      "bytes": 4183
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase2_checkout.py",
+      "bytes": 353
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase2_diagnostics.py",
+      "bytes": 3467
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase2_edit.py",
+      "bytes": 2879
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase2_fix.py",
+      "bytes": 2623
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase2_integrate_branding.py",
+      "bytes": 3858
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase2_prepare_ui.py",
+      "bytes": 2248
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase2_prepare_verifier.py",
+      "bytes": 1579
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase2_prune.py",
+      "bytes": 1311
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase2_stage_ui.py",
+      "bytes": 1011
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase2_support.py",
+      "bytes": 5166
+    },
+    {
+      "path": "D:\\Data\\Crypto\\zec-private\\phase2-inventory-matches.txt",
+      "bytes": 636907
+    }
+  ],
+  "local_bytes_removed": 665585,
+  "guard_owned_roots_remaining": 0,
+  "guard_owned_process_survivors": [],
+  "ci_cache_bytes_recovered": 2179466474,
+  "retained": "One current signed APK, six current previews, compact reports/hashes, reproducible validation harnesses; existing managed SDK/cache and signing custody preserved",
+  "helpers": "15 recognized connections retained, ownership unresolved; auto-review rejected proposed cleanup for insufficient evidence; none terminated",
+  "host_space_note": "Guard scratch roots verified removed. Host free-space deltas include concurrent system activity and are not attributed byte-for-byte to this task."
+}

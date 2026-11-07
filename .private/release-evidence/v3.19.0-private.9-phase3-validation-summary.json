@@ -1,0 +1,139 @@
+{
+  "status": "released-and-independently-verified",
+  "phase": 3,
+  "source_sha": "b34a56a0b3c0adfc27f30cc19ce7fd82f603858f",
+  "candidate_run": 42224726954,
+  "baseline": "v3.19.0-private.8",
+  "tests": {
+    "tests": 1692,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "runtime_components": 334,
+  "foundation_runtime": {
+    "source_sha": "b34a56a0b3c0adfc27f30cc19ce7fd82f603858f",
+    "configuration": "runtimeClasspath",
+    "components": [
+      "org.jetbrains.kotlin:kotlin-stdlib:2.3.10",
+      "org.jetbrains:annotations:13.0",
+      "project :wallet-foundation-lib"
+    ]
+  },
+  "production_gradle_seconds": 1022,
+  "core_seconds": 622.2991330000004,
+  "testnet_build_run": 42223349859,
+  "core_guard": "b2e20d08c4d248fca3d83bd7d3110d9e",
+  "core_transaction_evidence": {
+    "fundingTxId": "ae01e8af2e44381cce855d7508c7165c457c2b36208ff643cb0bab58899cbf6a",
+    "fundingProvider": "jinolabs-testnet",
+    "fundedBalance": 10000000,
+    "balanceBeforeSend": 10000000,
+    "feeZatoshi": 10000,
+    "senderConfirmedBalance": 8990000,
+    "restoreMinedHeight": 4589139,
+    "restoreTransactionState": "Pending",
+    "candidateTxIds": [
+      "e6e3c762d6677a8ec6634abb6f1d56c80a745a8e960c5188682774c0d766cbe5"
+    ],
+    "initialSubmitType": "Success"
+  },
+  "production_quote_receipt": {
+    "schema": 1,
+    "evidence_class": "real-app-production-quotes",
+    "passed": true,
+    "build_source_sha": "b34a56a0b3c0adfc27f30cc19ce7fd82f603858f",
+    "input_fingerprint": "5c4a0289e4dbcafd6e6b76b3f1999222ca2b1989618d4ac549aa9c0ac8284efa",
+    "executed_apk_sha256": "388f1f63db5b5d5a82a2edee7755b5fab0c13b617ee96971c071b7f8d6ecbc55",
+    "original_apk_sha256": "0ef547adbb4615a747ac02e28a93633ee58f4305021cc4d0e891087982c8f6c4",
+    "quote_requests": 3,
+    "quote_reviews": 3,
+    "dismissals": 3,
+    "tor_enabled": true,
+    "funds_transferred": false,
+    "personal_wallet_access": false,
+    "artifact_id": 13506456358,
+    "workflow_run_id": 42224726954,
+    "archive_sha256": "c4e06ca88f5ef8f0ee2b4e098aa36d66c0d461068ca797781cd6d2cfa7818c89",
+    "apk_preparation": {
+      "originalSha256": "0ef547adbb4615a747ac02e28a93633ee58f4305021cc4d0e891087982c8f6c4",
+      "testedSha256": "388f1f63db5b5d5a82a2edee7755b5fab0c13b617ee96971c071b7f8d6ecbc55",
+      "preservedExecutionEntries": 33,
+      "executionEntriesDigest": "e4250937fafd17b0060f5fa52f65fcb878512691932386af9f6e042e67f10bf7",
+      "executionEntriesUnchanged": true,
+      "abi": "x86_64",
+      "signing": "ephemeral test key; not release key"
+    },
+    "guard_job": "c9711aef862344bebe214c977845eb8a",
+    "provider_timeouts": []
+  },
+  "source_measurements": {
+    "baseline": "v3.19.0-private.8",
+    "baseline_checkout": "bda4df8ec17765f417d4642abcacbea4307c94b5",
+    "candidate_source": "b34a56a0b3c0adfc27f30cc19ce7fd82f603858f",
+    "project_includes_before": 20,
+    "project_includes_after": 21,
+    "patch_bytes_before": 697025,
+    "patch_bytes_after": 765395,
+    "patch_hunks_before": 582,
+    "patch_hunks_after": 663,
+    "source_dependency_direction": "app product selection -> ZEC integration/presentation -> SDK/provider-independent JVM foundation",
+    "additional_shipping_engines": 0,
+    "external_dependency_versions_changed": false
+  },
+  "upstream_discovery_run": 42217580249,
+  "workflow_changes": [
+    "SDK/provider-independent JVM foundation with resolved graph bound at signing",
+    "Expanded targeted view-only/presentation checks; independent failures collected in one Gradle invocation",
+    "Full deterministic candidate success precedes fresh real release acceptance"
+  ],
+  "limitations": [
+    "Production ARM64 inspected, not executed; x86_64 emulator execution used isolated debug/testnet packages and test certificates",
+    "No physical hardware signer, biometric approval UI or funded production swap settlement executed",
+    "Recipient recovery verified a mined transaction and exact amount/memo; actual restored state: Pending",
+    "Existing Zcash custody and presentation remain explicit product integrations; XMR and THORChain are design scenarios",
+    "Upstream integration was checked against the pinned official stable base and disposable synthetic changes; unknown future updates remain review-gated"
+  ],
+  "cleanup": {
+    "core": true,
+    "ui": true,
+    "personal_wallet_access": false,
+    "real_funds_used": false
+  },
+  "release_url": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.9",
+  "release_tag": "v3.19.0-private.9",
+  "apk_sha256": "1e0d808b8610c85b38dbcfae4f8df785ed73d04811eabb0cacf8cfb8613567b7",
+  "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
+  "measurements": {
+    "apk_bytes_before": 67812047,
+    "apk_bytes_after": 67812047,
+    "apk_delta_bytes": 0,
+    "runtime_components_before": 333,
+    "runtime_components_after": 334,
+    "external_library_changes": [],
+    "native_bytes_before": 57019328,
+    "native_bytes_after": 57019328,
+    "production_gradle_seconds_before": 940,
+    "production_gradle_seconds_after": 1022,
+    "emulator_gradle_seconds_before": 603,
+    "emulator_gradle_seconds_after": 794,
+    "production_job_seconds_before": 1036,
+    "production_job_seconds_after": 1156.0,
+    "emulator_job_seconds_before": 638,
+    "emulator_job_seconds_after": 832.0,
+    "core_scenario_seconds_before": 684.8863177,
+    "core_scenario_seconds_after": 622.2991330000004,
+    "all_iteration_hosted_job_seconds": 6983.0,
+    "comparison_limit": "Different source inputs, cache hits and runners. Task durations overlap; no isolated architecture speedup is claimed. Core scenario time excludes Android image/APK preparation."
+  },
+  "superseded_iteration": {
+    "source": "b3e165229975e86e98ba0dad7acb7fec227d610b",
+    "failed_release_run": 42220184831,
+    "passed_core_job": "fdb58cc5448543708f25e22197d3622b",
+    "passed_ui_job": "c33947f4c9ea4ea9a162aec099af5611",
+    "ui_verified_before_manifest_switch": true,
+    "published": false,
+    "reason": "Full suite found outgoing validation ran before the view-only spend guard. Restored ordering; conservative runtime fingerprints require new immutable candidate and real acceptance.",
+    "archive_sha256": "dfe95b53ddf944759af50de26a03bafdbb89748dd396c5e079a0be9fc2f1f537"
+  }
+}

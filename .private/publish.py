@@ -10,6 +10,23 @@ ROOT=Path(__file__).resolve().parents[1]
 REPO=os.environ['GITHUB_REPOSITORY']
 CERT='410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168'
 def run(*args): return subprocess.check_output(args,text=True).strip()
+def release_notes(proof):
+    tag=proof['release_tag']
+    changes=json.loads((ROOT/'.private/release-notes.json').read_text()).get(tag,[])
+    if not isinstance(changes,list) or len(changes)>6 or any(not isinstance(item,str) or not item.strip() or len(item)>300 for item in changes):
+        raise RuntimeError('Release changes must be a list of nonempty strings')
+    upstream=f'https://github.com/zodl-inc/zodl-android/releases/tag/{proof["upstream"]["tag"]}'
+    lines=[f'ZEC Private {tag}', '', *[f'- {item}' for item in changes]]
+    if changes: lines.append('')
+    lines.extend([
+        'Install **zec-private-latest.apk** (ARM64 Android). Check `SHA256SUMS`; install over the existing wallet.',
+        f'Android versionCode: {proof["versionCode"]}', '',
+        f'[Upstream changes]({upstream}) · '
+        f'[Wallet guide](https://github.com/{REPO}/blob/{tag}/docs/WALLET-GUIDE.md) · '
+        f'[Validation details](https://github.com/{REPO}/blob/main/.private/release-evidence/{tag}.json)',
+    ])
+    return '\n'.join(lines)+'\n'
+
 def record_integration(path, upstream):
     path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(upstream,indent=2)+'\n')
@@ -140,7 +157,7 @@ def main():
     digest=hashlib.sha256(signed.read_bytes()).hexdigest()
     checksum=dist/'SHA256SUMS';checksum.write_text(digest+'  zec-private-latest.apk\n')
     notes=dist/'release-notes.md'
-    notes.write_text(f'ZEC Private {tag}\n\nUpstream: {proof["upstream"]["tag"]}\nCommit: {proof["upstream"]["sha"]}\nAndroid versionCode: {proof["versionCode"]}\n\nFork: no affiliate fee, no partner JWT or referral; separate FOSS identity.\nNEAR platform, bridge, execution and network costs remain.\n\nARM64-only: 32-bit Android is no longer supported. Existing ARM64 wallets retain their update identity.\nValidated: Kotlin unit tests, Android lint, Detekt, static fork checks and real unfunded production quotes over Tor.\nCore wallet acceptance uses isolated x86_64 testnet wallets: receive, send, confirmation, installed update, restart, seed recovery and Tor interruption/recovery. See VALIDATION.json for exact executed APKs, sources and evidence.\nProduction ARM64 binaries were inspected; automated ARM hardware execution was outside scope. Biometric approval UI and funded production swap settlement were not exercised.\nOnly valueless testnet coins were transferred; no real funds were used.\n\nUpstream changes: https://github.com/zodl-inc/zodl-android/releases/tag/{proof["upstream"]["tag"]}\n')
+    notes.write_text(release_notes(proof))
     if os.environ.get('SIMULATION')=='true':
         try:
             simulation_receipt(proof,signed,digest,dist)
@@ -152,12 +169,18 @@ def main():
     validation=dist/'VALIDATION.json'
     validation.write_text(json.dumps(dict(source_sha=expected,controller_sha=controller,artifact_run_id=proof['workflow_run_id'],
         apk_sha256=digest,core=core,production_quotes=quote,production_arm_executed=False,real_funds_used=False),indent=2)+'\n')
-    run('gh','release','create',tag,str(signed),str(checksum),str(validation),'--repo',REPO,'--target',expected,'--title',tag,'--notes-file',str(notes))
+    validation_bytes=validation.read_bytes()
+    run('gh','release','create',tag,str(signed),str(checksum),'--repo',REPO,'--target',expected,'--title',tag,'--notes-file',str(notes))
     # Advance the integrated state only after publication. Candidate is already a full patched tree.
     run('git','fetch','origin',expected)
     run('git','checkout','--detach',controller if late_attestation else expected)
     record_integration(ROOT/'.private/upstream.json',proof['upstream'])
-    run('git','add','.private/upstream.json')
+    evidence=ROOT/'.private/release-evidence'/f'{tag}.json'
+    evidence.parent.mkdir(exist_ok=True)
+    if evidence.exists():
+        raise RuntimeError('Refusing to replace an existing release evidence record')
+    evidence.write_bytes(validation_bytes)
+    run('git','add','.private/upstream.json',str(evidence.relative_to(ROOT)))
     run('git','-c','user.name=ZEC Private automation','-c','user.email=zec-private@users.noreply.github.com','commit','--allow-empty','-m','Record verified release '+tag)
     new=run('git','rev-parse','HEAD')
     # Candidate trees retain the controller as a parent. Normal fast-forward

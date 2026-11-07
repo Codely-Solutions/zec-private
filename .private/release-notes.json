@@ -1,0 +1,10 @@
+{
+  "v3.19.0-private.12": [
+    "Update Gradle to 8.14.6 with security fixes.",
+    "Simplify the download documentation and release assets."
+  ],
+  "v3.19.0-private.11": [
+    "Correct swap amount precision, minimums and recovery top-ups.",
+    "Clarify quoted output and transaction fees in swap details."
+  ]
+}

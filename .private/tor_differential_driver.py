@@ -3,8 +3,13 @@ import json,hashlib,subprocess,zipfile
 
 def fetch_baseline(root, manifest, target_name="baseline-app.apk"):
     archive=root/'baseline.zip'
+    if manifest.get('release_asset_id'):
+        endpoint='repos/Sammy-Lastre/zec-private/releases/assets/'+str(int(manifest['release_asset_id']))
+        command=[r'C:\Program Files\GitHub CLI\gh.exe','api','-H','Accept: application/octet-stream',endpoint]
+    else:
+        command=[r'C:\Program Files\GitHub CLI\gh.exe','api','repos/Sammy-Lastre/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip']
     with archive.open('wb') as out:
-        subprocess.run([r'C:\Program Files\GitHub CLI\gh.exe','api','repos/Sammy-Lastre/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip'],stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)
+        subprocess.run(command,stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)
     assert archive.stat().st_size<=manifest['size_in_bytes']+1048576
     assert 'sha256:'+hashlib.sha256(archive.read_bytes()).hexdigest()==manifest['digest']
     with zipfile.ZipFile(archive) as z:
