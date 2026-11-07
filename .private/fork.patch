@@ -3625,10 +3625,10 @@ index 13e9d0788..d1112a657 100644
 +    @Throws(AssetNotFoundException::class)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinator.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinator.kt
 new file mode 100644
-index 000000000..b2cad2fb4
+index 000000000..862729bfc
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinator.kt
-@@ -0,0 +1,183 @@
+@@ -0,0 +1,181 @@
 +package co.electriccoin.zcash.ui.common.donation
 +
 +import cash.z.ecc.android.sdk.model.Memo
@@ -3729,6 +3729,14 @@ index 000000000..b2cad2fb4
 +        return accounts.getZashiAccount().takeIf { it.sdkAccount.accountUuid.toString() == consent.accountUuid }
 +    }
 +
++    private fun settledInput(status: SwapQuoteStatus, deposited: Long): Long? {
++        val settled = status.executedAmountIn?.movePointRight(8)?.longValueExact() ?: return null
++        if (settled <= 0 || settled > deposited) return null
++        val refund = status.refundedFormatted?.movePointRight(8)?.longValueExact()
++        if (refund != null && (refund < 0 || refund > deposited || deposited - refund != settled)) return null
++        return settled
++    }
++
 +    private suspend fun donate(status: SwapQuoteStatus, enrollment: JSONObject): String {
 +        val incoming = enrollment.getBoolean("incoming")
 +        val txids = if (incoming) status.destinationTransactionIds.map(store::hash) else {
@@ -3762,17 +3770,7 @@ index 000000000..b2cad2fb4
 +                    ?: return "Skipped: missing executed amount evidence"
 +                if (basis != actual || basis <= 0L) return "Skipped: received or spent amount differs"
 +                if (!incoming) {
-+                    val settled = status.executedAmountIn?.movePointRight(8)?.longValueExact()
-+                        ?: return "Skipped: missing settled input evidence"
-+                    if (settled <= 0 || settled > basis) return "Skipped: invalid settled input evidence"
-+                    status.refundedFormatted?.let { refund ->
-+                        val refundZatoshi = refund.movePointRight(8).longValueExact()
-+                        if (refundZatoshi < 0 || refundZatoshi > basis || basis - refundZatoshi != settled) {
-+                            return "Skipped: inconsistent refund evidence"
-+                        }
-+                    }
-+                    // The provider's settled input is authoritative when its optional refund is absent.
-+                    basis = settled
++                    basis = settledInput(status, basis) ?: return "Skipped: inconsistent settled input or refund"
 +                }
 +                break
 +            }
@@ -5918,10 +5916,10 @@ index 000000000..bea36b052
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
 new file mode 100644
-index 000000000..172e8da72
+index 000000000..9249f3d42
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
-@@ -0,0 +1,246 @@
+@@ -0,0 +1,233 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.activity.compose.BackHandler
@@ -5961,19 +5959,6 @@ index 000000000..172e8da72
 +import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 +import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 +import co.electriccoin.zcash.ui.design.util.stringRes
-+
-+internal data class DonationViewState(
-+    val automationEnabled: Boolean = false,
-+    val percent: String = "0.25",
-+    val amount: String = "",
-+    val busy: Boolean = false,
-+    val error: Boolean = false,
-+    val unsupported: Boolean = false,
-+    val canReview: Boolean = false,
-+    val canSaveAuto: Boolean = false,
-+    val automationSaved: Boolean = false,
-+    val autoOutcome: String? = null,
-+)
 +
 +@Suppress("LongParameterList", "LongMethod", "MagicNumber")
 +@Composable
@@ -6169,6 +6154,27 @@ index 000000000..172e8da72
 +    )
 +}
 \ No newline at end of file
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt
+new file mode 100644
+index 000000000..9fcc355b3
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt
+@@ -0,0 +1,15 @@
++package co.electriccoin.zcash.ui.screen.donation
++
++internal data class DonationViewState(
++    val automationEnabled: Boolean = false,
++    val percent: String = "0.25",
++    val amount: String = "",
++    val busy: Boolean = false,
++    val error: Boolean = false,
++    val unsupported: Boolean = false,
++    val canReview: Boolean = false,
++    val canSaveAuto: Boolean = false,
++    val automationSaved: Boolean = false,
++    val autoOutcome: String? = null,
++)
++
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt
 index d03354a1e..59f3a7516 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt
@@ -11785,7 +11791,7 @@ index 423d6742d..a8aeb88ba 100644
 +    <string name="ironwood_announcement_primary_button">Go to ZEC Private</string>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
-index 000000000..176e23c3b
+index 000000000..83866f4de
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 @@ -0,0 +1,29 @@
@@ -11812,7 +11818,7 @@ index 000000000..176e23c3b
 +    <string name="private_support_auto_off">Off</string>
 +    <string name="private_support_auto_on">On</string>
 +    <string name="private_support_auto_description">Donate your chosen percentage after each successful swap. Skip when the donation network fee is equal to or greater than the donation.</string>
-+    <string name="private_support_auto_percent">Percentage of each swap</string>
++    <string name="private_support_auto_percent">Percentage of ZEC swapped</string>
 +    <string name="private_support_auto_save">Save automatic donations</string>
 +    <string name="private_support_auto_authorize">Enable automatic donations of %1$s%% after successful swaps</string>
 +    <string name="private_support_auto_saved">Saved: %1$s%% after successful swaps</string>

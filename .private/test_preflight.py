@@ -32,6 +32,18 @@ class PreflightTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp, patch.object(preflight, 'git', return_value='Gone.kt\0'):
             self.assertEqual(preflight.changed_kotlin(Path(temp), 'HEAD'), [])
 
+    def test_view_state_must_have_its_own_matching_file(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'DonationView.kt'
+            path.write_text('internal data class DonationViewState(val enabled: Boolean)\n'
+                            '@Composable\nfun DonationView() {}\n')
+            self.assertTrue(preflight.declaration_name_errors(path, path.name))
+            state = Path(temp) / 'DonationViewState.kt'
+            state.write_text('internal data class DonationViewState(val enabled: Boolean)\n')
+            self.assertEqual(preflight.declaration_name_errors(state, state.name), [])
+            path.write_text('@Composable\nfun DonationView() {}\n')
+            self.assertEqual(preflight.declaration_name_errors(path, path.name), [])
+
 
 if __name__ == '__main__':
     unittest.main()
