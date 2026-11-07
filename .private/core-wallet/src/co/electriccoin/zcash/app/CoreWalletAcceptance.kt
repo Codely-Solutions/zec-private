@@ -103,6 +103,45 @@ class CoreWalletAcceptance {
                 withTimeout(15_000) { dependency<ApplicationStateProvider>().isInForeground.first { it } }
             }
             when (stage) {
+                "donationUiProbe" -> {
+                    var step = "create_empty_wallet"
+                    try {
+                        donationUiMarker(step, "begin")
+                        createWallet("uiProbe")
+                        check(!checkNotNull(context.getSystemService(android.app.KeyguardManager::class.java)).isDeviceSecure)
+                        val proposals = dependency<ZashiProposalRepository>()
+                        val automatic = dependency<AutoDonationStore>()
+                        check(proposals.transactionProposal.value == null && proposals.submitState.value == null)
+                        check(automatic.consent() == null && approvalActions == 0)
+                        val account = dependency<AccountDataSource>().getZashiAccount()
+                        step = "open_support"
+                        donationUiMarker(step, "begin")
+                        dependency<NavigationRouter>().forward(DonationArgs("2"))
+                        step = "enable_choice"
+                        scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_on))
+                        clickUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_on), "probe_auto_on")
+                        step = "set_percentage"
+                        setDonationPercent("100")
+                        step = "save_authorization"
+                        scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_save))
+                        clickUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_save), "probe_auto_save")
+                        step = "verify_authorization"
+                        val consent = withTimeout(15_000) {
+                            while (automatic.consent()?.percent?.compareTo(BigDecimal(100)) != 0) delay(100)
+                            checkNotNull(automatic.consent())
+                        }
+                        check(consent.accountUuid == account.sdkAccount.accountUuid.toString())
+                        step = "disable_authorization"
+                        AutoDonationSpendingGate.mutex.withLock { automatic.disable() }
+                        check(automatic.consent() == null)
+                        check(proposals.transactionProposal.value == null && proposals.submitState.value == null)
+                        check(approvalActions == 0)
+                        donationUiMarker("probe_complete", "authorization_verified_without_spending")
+                    } catch (error: Exception) {
+                        donationUiMarker(step, "failed_" + error.javaClass.simpleName)
+                        throw error
+                    }
+                }
                 "recipient" -> createWallet("recipient")
                 "sender" -> createWallet("sender")
                 "fund" -> {
@@ -459,6 +498,9 @@ class CoreWalletAcceptance {
         val receipt = JSONObject().put("stage", stage).put("passed", true)
             .put("network", "zcash-testnet").put("transport", "Tor sensitive RPCs; upstream direct bulk")
             .put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
+        if (stage == "donationUiProbe") receipt.put("donation_ui_probe", true)
+            .put("fresh_ui_authorization", true).put("authorization_disabled", true)
+            .put("funding_requested", false).put("proposal_created", false).put("payment_approval_actions", 0)
         if (stage in listOf("send", "restart", "restore")) receipt.put("txId", fixture().getString("txId"))
         if (stage in listOf("rpcProbe", "networkTargets", "fund")) {
             receipt.put("native_rpc_probe", fixture().getJSONObject("nativeRpcProbe"))
@@ -1214,44 +1256,104 @@ class CoreWalletAcceptance {
     }
 
     @Suppress("DEPRECATION")
-    private suspend fun setDonationPercent(value: String) = withTimeout(15_000) {
+    private fun donationEditableFields(): List<AccessibilityNodeInfo> {
+        val root = instrumentation.uiAutomation.rootInActiveWindow ?: return emptyList()
+        check(root.packageName?.toString() == context.packageName)
+        val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
+        val editable = mutableListOf<AccessibilityNodeInfo>()
+        pending.add(root)
+        var count = 0
+        try {
+            while (pending.isNotEmpty() && count++ < 500) {
+                val node = pending.removeFirst()
+                try {
+                    if (node.isEditable) editable.add(AccessibilityNodeInfo.obtain(node))
+                    // Match the bridge's depth-first Column order: amount first, percentage second.
+                    for (index in node.childCount - 1 downTo 0) node.getChild(index)?.let(pending::addFirst)
+                } finally { node.recycle() }
+            }
+        } finally { while (pending.isNotEmpty()) pending.removeFirst().recycle() }
+        return editable
+    }
+
+    @Suppress("DEPRECATION")
+    private fun enabledWithAncestors(node: AccessibilityNodeInfo): Boolean {
+        if (!node.isEnabled) return false
+        var parent = node.parent
+        try {
+            while (parent != null) {
+                val current = parent
+                if (!current.isEnabled) return false
+                parent = current.parent
+                current.recycle()
+            }
+        } finally { parent?.recycle() }
+        return true
+    }
+
+    private fun donationUiMarker(step: String, outcome: String, fields: Int = -1, rect: String? = null) {
+        println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject().put("ui_control", "donation_ui_$step")
+            .put("ui_outcome", outcome).put("editable_count", fields).put("target_rect", rect)
+            .put("field_label", context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_percent)))
+    }
+
+    @Suppress("DEPRECATION")
+    private suspend fun setDonationPercent(value: String) {
         val label = context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_percent)
-        while (true) {
-            val root = instrumentation.uiAutomation.rootInActiveWindow
-            val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
-            root?.let(pending::add)
-            var changed = false
-            var count = 0
-            try {
-                while (pending.isNotEmpty() && count++ < 500) {
-                    val node = pending.removeFirst()
+        val title = context.getString(co.electriccoin.zcash.ui.R.string.private_support_title)
+        donationUiMarker("percent_screen", "checking_support_screen")
+        check(hasUiText(title) || hasUiText(title.uppercase()))
+        scrollToText(label)
+        check(hasUiText(label))
+        var actionAttempted = false
+        var revealRequested = false
+        var amountBeforeEdit: String? = null
+        try {
+            withTimeout(15_000) {
+                while (!actionAttempted) {
+                    val fields = donationEditableFields()
                     try {
-                        if (node.contentDescription?.toString() == label && node.isVisibleToUser && node.isEnabled &&
-                            node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT }) {
-                            var parent = node.parent
-                            var enabled = true
-                            try {
-                                while (parent != null) {
-                                    val current = parent
-                                    if (!current.isEnabled) enabled = false
-                                    parent = current.parent
-                                    current.recycle()
-                                }
-                            } finally { parent?.recycle() }
-                            check(enabled)
+                        donationUiMarker("percent_selector", "editable_inventory", fields.size)
+                        check(fields.size == 2) { "Support screen must have amount and percentage inputs" }
+                        val percentage = fields[1]
+                        check(percentage.text?.toString() == "0.25") { "Unexpected initial percentage" }
+                        check(enabledWithAncestors(percentage))
+                        if (!revealRequested || !percentage.isVisibleToUser) {
+                            revealRequested = true
+                            val shown = percentage.performAction(AccessibilityNodeInfo.ACTION_SHOW_ON_SCREEN)
+                            donationUiMarker("percent_reveal", if (shown) "show_requested" else "scroll_required", fields.size)
+                            if (!shown) scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_save))
+                        } else {
+                            val bounds = android.graphics.Rect()
+                            percentage.getBoundsInScreen(bounds)
+                            check(!bounds.isEmpty)
+                            check(percentage.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT })
                             val args = android.os.Bundle().apply {
                                 putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
                             }
-                            check(node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args))
-                            changed = true
-                            break
+                            amountBeforeEdit = fields[0].text?.toString()
+                            actionAttempted = true
+                            donationUiMarker("percent_set_text", "single_action", fields.size, bounds.flattenToString())
+                            check(percentage.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args))
                         }
-                        for (index in 0 until node.childCount) node.getChild(index)?.let(pending::add)
-                    } finally { node.recycle() }
+                    } finally { fields.forEach { it.recycle() } }
+                    if (!actionAttempted) delay(150)
                 }
-            } finally { while (pending.isNotEmpty()) pending.removeFirst().recycle() }
-            if (changed) break
-            delay(150)
+                // Read-only polling verifies the action; an ambiguous edit is never repeated.
+                while (true) {
+                    val fields = donationEditableFields()
+                    val verified = try {
+                        fields.size == 2 && fields[1].text?.toString() == value &&
+                            fields[0].text?.toString() == amountBeforeEdit && enabledWithAncestors(fields[1])
+                    } finally { fields.forEach { it.recycle() } }
+                    if (verified) break
+                    delay(100)
+                }
+                donationUiMarker("percent_verify", "value_verified", 2)
+            }
+        } catch (error: Exception) {
+            donationUiMarker("percent_failure", if (actionAttempted) "after_single_action" else "before_action")
+            throw error
         }
     }
 
