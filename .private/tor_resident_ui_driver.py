@@ -12,11 +12,12 @@ def run(adb, root, apks, manifest):
     version=int(re.search(r'versionCode=(\d+)',info)[1])
     assert version==(manifest['baselineVersionCode'] if baseline else manifest['expectedVersionCode'])
     upgrade=None
-    adb('forward','tcp:8877','tcp:8777',timeout=15)
+    bridge_port=getattr(adb,'bridge_port',8877)
+    adb('forward','tcp:'+str(bridge_port),'tcp:8777',timeout=15)
     watcher_log=(root/'ui-instrumentation.log').open('wb')
     watcher=subprocess.Popen(adb.command_base+['shell','am','instrument','-w','-r','zec.uibridge/zec.uibridge.Bridge'],env=adb.environment,stdout=watcher_log,stderr=watcher_log,creationflags=0x08000000)
     def request(command):
-        with socket.create_connection(('127.0.0.1',8877),timeout=10) as conn:
+        with socket.create_connection(('127.0.0.1',bridge_port),timeout=10) as conn:
             conn.settimeout(20);conn.sendall((json.dumps(command)+'\n').encode());data=b''
             while b'\n' not in data:
                 chunk=conn.recv(65536)
@@ -148,5 +149,5 @@ def run(adb, root, apks, manifest):
             try:watcher.wait(timeout=10)
             except subprocess.TimeoutExpired:pass
         watcher_log.close()
-        try:adb('forward','--remove','tcp:8877',timeout=10,check=False)
+        try:adb('forward','--remove','tcp:'+str(bridge_port),timeout=10,check=False)
         except (OSError,subprocess.TimeoutExpired):pass

@@ -28,6 +28,7 @@ def relevant(path):
         return path.startswith(('.private/core-wallet/',)) or path in {
             '.private/acceptance_policy.py', '.private/core_testnet_driver.py',
             '.private/run_tor_emulator.py', '.private/admit_core_emulator.py', '.private/core-network-policy.json',
+            '.private/emulator_session.py', '.private/emulator_batch.py', '.private/admit_emulator_batch.py',
             '.private/tor_differential_driver.py', '.private/strip_emulator_apk.py',
             '.private/core_faucet.py', '.private/upgrade-baseline.json',
             '.private/tor-ui-abi.gradle', '.github/workflows/core-validation.yml'}

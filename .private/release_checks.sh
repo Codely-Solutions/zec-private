@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # One finite Gradle process/configuration per candidate; no persistent daemon.
 set -euo pipefail
+PYTHONPATH=.private python3 -B -m unittest test_emulator_session test_emulator_batch
 chmod +x gradlew
 tasks=(:wallet-foundation-lib:test :feature-ledger:testZcashmainnetFossReleaseUnitTest :app:privateRuntimeInventory :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease)
 init=(-I .private/runtime-inventory.gradle -I .private/robolectric-ci.gradle -I .private/release-analysis.gradle -I .private/task-timing.gradle)
