@@ -80,7 +80,7 @@ def run(adb, root, apks, manifest):
             diagnostic['sync']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_SYNC_DIAGNOSTIC ')][-1:]
             diagnostic['native_errors']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_NATIVE_ERROR ')][-3:]
             diagnostic['submission']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_SEND_DIAGNOSTIC ')][-1:]
-            diagnostic['accounting']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_ACCOUNTING_DIAGNOSTIC ')][-1:]
+            diagnostic['accounting']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_ACCOUNTING_DIAGNOSTIC ')][-6:]
             native=adb('logcat','-d','-v','raw','-t','120','--uid='+str(app_uid),'-s','slipstream:V',timeout=15).stdout.decode(errors='replace')
             diagnostic['native_engine']=[re.sub(r'\b[0-9a-fA-F]{64,}\b','[hex omitted]',line)[:400]
                 for line in native.splitlines() if re.search(r'stall|error|fail|warn|counter',line,re.I)
@@ -385,7 +385,7 @@ def run(adb, root, apks, manifest):
             private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15,check=False).stdout)
             allowed_fields=('claimId','fundingTxId','fundingProvider','fundedBalance','balanceBeforeSend','feeZatoshi','senderConfirmedBalance','restoreMinedHeight','restoreTransactionState','candidateTxIds','initialSubmitType','autoTxId','autoAmountZatoshi','autoFeeZatoshi',
                             'autoEnabledUiConsent','autoUiApprovalActions','autoExactlyOnce','autoDepositRawConfirmed','autoNativeMined',
-                            'autoConsentDisabled','autoProviderEvidence','autoRestoreAmountZatoshi','autoRestoreMinedHeight','autoRestartMined')
+                            'autoConsentDisabled','autoProviderEvidence','autoPrepareProbe','autoRestoreAmountZatoshi','autoRestoreMinedHeight','autoRestartMined')
             report['transaction_evidence']={key:private[key] for key in allowed_fields if key in private}
         except (ValueError,subprocess.SubprocessError):pass
         (root/'core-testnet-result.json').write_text(json.dumps(report,indent=2)+'\n')

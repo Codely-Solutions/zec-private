@@ -738,7 +738,9 @@ class CoreWalletAcceptance {
     }
 
     @Suppress("DEPRECATION")
-    private suspend fun proposalFailureDiagnostic(logBoundary: String, reviewAttempt: Int) {
+    private suspend fun proposalFailureDiagnostic(
+        logBoundary: String, reviewAttempt: Int, controlLabel: String = "form_review"
+    ) {
         var logAvailable = false
         var capped = false
         var logs = ""
@@ -780,7 +782,7 @@ class CoreWalletAcceptance {
             return (node != null).also { node?.recycle() }
         }
         println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
-            .put("ui_control", "form_review").put("ui_outcome", "proposal_log_classification")
+            .put("ui_control", controlLabel).put("ui_outcome", "proposal_log_classification")
             .put("review_attempt", reviewAttempt)
             .put("insufficient_balance_sheet", visible(co.electriccoin.zcash.ui.R.string.sheet_insufficientBalance_title))
             .put("form_review_visible", visible(co.electriccoin.zcash.ui.design.R.string.send_review))
@@ -805,6 +807,7 @@ class CoreWalletAcceptance {
             .put("ironwood_available_zatoshi", selected.ironwoodBalance?.available?.value ?: -1L)
             .put("sapling_available_zatoshi", selected.saplingBalance?.available?.value ?: -1L)
             .put("scanned_height", synchronizer.fullyScannedHeight.value?.value ?: -1L)
+            .put("network_height", synchronizer.networkHeight.value?.value ?: -1L)
             .put("sync_status", synchronizer.status.first().toString())
             .put("database_input", databaseInputDiagnostic())
             .put("log_read_failure_class", readFailureClass ?: "none"))
@@ -867,6 +870,10 @@ class CoreWalletAcceptance {
                         FROM c
                     """.trimIndent()
                 )
+                queries["orchard_note_counts"] = requireNotNull(queries["ironwood_note_counts"])
+                    .replace("ironwood_received_notes", "orchard_received_notes")
+                queries["orchard_shard_counts"] = requireNotNull(queries["ironwood_shard_counts"])
+                    .replace("ironwood", "orchard")
                 for ((label, sql) in queries) {
                     try {
                         db.rawQuery(sql, null).use { cursor ->
@@ -1452,6 +1459,8 @@ class CoreWalletAcceptance {
         val before = sync.getTransactions(account.sdkAccount.accountUuid).first().map { it.txId.txIdString() }.toSet()
         val approvalsBefore = approvalActions
         val balanceBefore = balance()
+        val prepareBoundary = "CORE_AUTOMATIC_PREPARE_BEGIN"
+        println(prepareBoundary)
         coordinator.onStatus(status)
         val donationStore = dependency<AutoDonationStore>()
         val transaction = withTimeout(240_000) {
@@ -1463,6 +1472,37 @@ class CoreWalletAcceptance {
                     println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
                         .put("ui_control", "automatic_donation").put("ui_outcome", "terminal_without_success")
                         .put("diagnostic", donationStore.latestDiagnostic?.let(::JSONObject)))
+                    if (JSONObject(donationStore.latestDiagnostic ?: "{}").optString("stage") == "proposal") {
+                        proposalFailureDiagnostic(prepareBoundary, 0, "automatic_before_ready")
+                        val probe = JSONObject().put("signing_calls", 0).put("submission_calls", 0)
+                        try {
+                            awaitReviewSync()
+                            val currentAccount = dependency<AccountDataSource>().getZashiAccount()
+                            val send = ZecSend(
+                                cash.z.ecc.android.sdk.model.WalletAddress.Unified.new(
+                                    checkNotNull(co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy.recipient())
+                                ), Zatoshi(1_000_000L), Memo(""), null
+                            )
+                            val boundary = "CORE_AUTOMATIC_READONLY_PREPARE_BEGIN"
+                            println(boundary)
+                            try {
+                                val proposal = dependency<co.electriccoin.zcash.ui.common.datasource.ProposalDataSource>()
+                                    .createProposal(currentAccount, send)
+                                co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
+                                    .requireShielded(proposal.proposal, send)
+                                probe.put("proposal_after_sync", "success")
+                                    .put("fee_zatoshi", proposal.proposal.totalFeeRequired().value)
+                            } catch (failure: Exception) {
+                                probe.put("proposal_after_sync", failure.javaClass.simpleName)
+                                proposalFailureDiagnostic(boundary, 0, "automatic_after_ready")
+                            }
+                        } catch (failure: Exception) {
+                            probe.put("readiness_failure_class", failure.javaClass.simpleName)
+                        }
+                        save(fixture().put("autoPrepareProbe", probe))
+                        println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
+                            .put("ui_control", "automatic_readonly_prepare").put("probe", probe))
+                    }
                     error("Automatic donation did not report submission success")
                 }
                 history.any { it.isSentTransaction && it.txId.txIdString() !in before &&
