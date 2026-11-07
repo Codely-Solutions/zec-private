@@ -1,5 +1,5 @@
 {
-  "status": "validated-awaiting-signing",
+  "status": "signed-and-independently-verified",
   "scope": "optional shielded donations and payment-review safety",
   "source_sha": "d12dea751a4dbab29671acab394777a7c613774c",
   "candidate_run": 42367044863,
@@ -98,5 +98,12 @@
     "External XMR address publication adds no Monero engine",
     "Donation proposals require one all-shielded SDK step; unsupported shapes fail closed"
   ],
-  "upstream": "Stable discovery retained; actual disposable integration and sensitive donation/common-path review gates passed"
+  "upstream": "Stable discovery retained; actual disposable integration and sensitive donation/common-path review gates passed",
+  "release": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.13",
+  "signed_apk": {
+    "apk_bytes": 67844815,
+    "apk_sha256": "c8a1852e622ab861f598480cb6ad811c845ebbea870295fb200e72ee804eb4b8",
+    "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
+    "signedPayloadMatchesValidatedUnsigned": true
+  }
 }

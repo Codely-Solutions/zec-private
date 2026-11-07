@@ -1,7 +1,9 @@
-# Revision 13 — donations validated, awaiting signing
+# Revision 13 — donations signed and independently verified
 
 Candidate 42367044863 at `d12dea751a4dbab29671acab394777a7c613774c` passed all 1,724 tests and required release checks. Optional shielded donations use normal review/authentication, default to a zero saved suggestion and never spend automatically. Unsupported multi-recipient payment requests are rejected before signing. Actual network costs remain visible.
 
 The isolated lifecycle executed a real shielded testnet donation, cancellation/review, installed revision-12 update, restart, recipient recovery and scoped Tor interruption/recovery. Core and UI APKs were reused from `686a9f10b80fd44b9467c092ace4cdcd80767b1a` after exact relevant-input equality established that later corrections changed tests only. Each receipt retains its actual executed source and APK digest. Production quotes remain unfunded.
 
-Upstream discovery, package identity, ARM64-only production, x86_64 emulator support and build/signing separation remain. The validated unsigned artifact will be promoted without rebuilding. Production ARM execution, physical signing/biometric UI and funded production settlement are outside this evidence. XMR/THORChain implementation remains unplanned.
+Upstream discovery, package identity, ARM64-only production, x86_64 emulator support and build/signing separation remain. The validated unsigned artifact was promoted without rebuilding. Production ARM execution, physical signing/biometric UI and funded production settlement are outside this evidence. XMR/THORChain implementation remains unplanned.
+
+Signed [revision 13](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.13) preserves the permanent certificate and every validated unsigned payload entry. APK: 67844815 bytes; SHA-256 `c8a1852e622ab861f598480cb6ad811c845ebbea870295fb200e72ee804eb4b8`. Production remains ARM64-only. Compared with revision 12, the signed APK grew 32,768 bytes and the resolved runtime graph remains 334 components. The next seedless revision 13 fixture was independently downloaded and verified in authenticated maintenance storage; revision 12 remains the completed lifecycle baseline.

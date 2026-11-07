@@ -10,13 +10,6 @@
         "digest": "sha256:51cedf4912822ee3a49a841b931f98e9939a4d4c4e7bbcaf83cbe28c7cd9f84b",
         "original_asset_id": 719369918,
         "source_release": "v3.19.0-private.11"
-      },
-      "TESTNET_UPGRADE_FIXTURE.zip": {
-        "release_asset_id": 720071778,
-        "size_in_bytes": 65406039,
-        "digest": "sha256:6001c9203fce965ef12017944840483daa9c548c0035def567be40cb13a17b9a",
-        "original_asset_id": 719369917,
-        "source_release": "v3.19.0-private.11"
       }
     },
     "v3.19.0-private.10": {
@@ -40,6 +33,20 @@
         "size_in_bytes": 2109,
         "digest": "sha256:9ded49ad69beff6979b577ccac36cb95ba832680c4eac394031d1869f8601656",
         "source_release": "v3.19.0-private.12"
+      }
+    },
+    "v3.19.0-private.13": {
+      "TESTNET_UPGRADE_FIXTURE.zip": {
+        "release_asset_id": 720610488,
+        "size_in_bytes": 65435432,
+        "digest": "sha256:f8318f146fa0f1c733331cf3eae44c0eb24babebe85fe1c492f7d543b40c8604",
+        "source_release": "v3.19.0-private.13"
+      },
+      "TESTNET_UPGRADE_FIXTURE.json": {
+        "release_asset_id": 720610487,
+        "size_in_bytes": 2109,
+        "digest": "sha256:7a60d659043e33608d8b2435a8b6ba79dcce5d8cf2c23e33394b370be9dc0adf",
+        "source_release": "v3.19.0-private.13"
       }
     }
   },
@@ -127,6 +134,14 @@
       "original_asset_id": 718880931,
       "source_release": "v3.19.0-private.10",
       "reason": "No active baseline uses revision10; revision11 is the current tested baseline and revision12 is preserved for the next update check"
+    },
+    "v3.19.0-private.11": {
+      "release_asset_id": 720071778,
+      "size_in_bytes": 65406039,
+      "digest": "sha256:6001c9203fce965ef12017944840483daa9c548c0035def567be40cb13a17b9a",
+      "original_asset_id": 719369917,
+      "source_release": "v3.19.0-private.11",
+      "reason": "Revision12 baseline verified; revision13 replacement uploaded and independently downloaded with exact digest"
     }
   }
 }

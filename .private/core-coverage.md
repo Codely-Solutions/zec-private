@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision 13 candidate validated on 2026-11-07; signed delivery verification pending. Exact current evidence is in core-acceptance.json and core-validation-summary.json.
+Status: signed revision 13 independently verified on 2026-11-07. Exact current evidence is in core-acceptance.json and core-validation-summary.json.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
@@ -79,3 +79,5 @@ Production source `d12dea751a4dbab29671acab394777a7c613774c` passed 1,724 tests.
 The existing real transfer is now a shielded donation through Support development and the normal review/authentication path. Cancellation leaves no submission, then one explicit approval creates the observed transfer. The same transaction verifies sender accounting, installed-update preservation, restart, clean recipient recovery and empty identifying memo. Saved suggestion and cooldown persistence are checked after the real restart. The pinned SDK's two-payment proposal is constructed without signing; unsupported counts are then rejected by the wallet. Legacy incomplete review is established from source plus SDK acceptance; no hidden-output transaction is signed.
 
 Three unfunded production quote/dismiss cycles and the zero-balance Support UI run separately over enabled Tor. Provider-success invitation gating is inspected and covered by retained status behavior; this work does not establish funded production provider settlement or donation conversion effectiveness. Production ARM64 is inspected, while x86_64 emulator binaries execute. No personal wallet, accepted swap or real funds are used.
+
+Signed revision 13 preserves the validated unsigned payload, permanent certificate and package. No rebuild occurred during promotion. Exact seedless revision 13 fixture provenance is in the maintenance index; it retains the executed build source, distinct from the production source.
