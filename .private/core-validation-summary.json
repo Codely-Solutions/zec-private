@@ -1,5 +1,5 @@
 {
-  "status": "validated-awaiting-signing",
+  "status": "signed-and-independently-verified",
   "scope": "toolchain and release maintenance",
   "source_sha": "4e4bff9cf1b52d9322000ef181a7c8be5577a802",
   "candidate_run": 42355250478,
@@ -69,5 +69,9 @@
     "Funded production settlement, physical signer and biometric approval UI were not executed",
     "Patch/minor updates are automated proposals with read-only configuration checks; merging and signing remain gated",
     "Gradle 9 migration and a Java bytecode target change are deferred pending demonstrated compatibility and benefit"
-  ]
+  ],
+  "release_url": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.12",
+  "signed_apk_sha256": "b528bd3ccfb2c197d4fa9f2e88fd8d705144ba5ad23be72d45cb3ef1daff0ceb",
+  "signed_apk_bytes": 67812047,
+  "promotion_run": 42358457283
 }
