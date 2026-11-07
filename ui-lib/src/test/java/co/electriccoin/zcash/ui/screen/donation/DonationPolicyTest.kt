@@ -11,31 +11,10 @@ import cash.z.wallet.sdk.internal.ffi.ProposalOuterClass.ValuePool
 import io.mockk.every
 import io.mockk.mockk
 import org.junit.Test
-import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class DonationPolicyTest {
-    @Test
-    fun exactPercentageUsesZatoshiAndRoundsDown() {
-        assertEquals(1_234_567L, DonationPolicy.suggestedZatoshi(BigDecimal("1.23456789"), BigDecimal("1")))
-        assertEquals(0L, DonationPolicy.suggestedZatoshi(BigDecimal("0.00000001"), BigDecimal("99")))
-        assertEquals(100_000_000L, DonationPolicy.suggestedZatoshi(BigDecimal.ONE, BigDecimal("100")))
-        assertEquals(0L, DonationPolicy.suggestedZatoshi(BigDecimal.ONE, BigDecimal.ZERO))
-    }
-
-    @Test
-    fun invalidPercentAndBasisAreRejected() {
-        for (percent in listOf("-0.01", "100.01")) {
-            assertFailsWith<IllegalArgumentException> {
-                DonationPolicy.suggestedZatoshi(BigDecimal.ONE, BigDecimal(percent))
-            }
-        }
-        assertFailsWith<IllegalArgumentException> {
-            DonationPolicy.suggestedZatoshi(BigDecimal("-1"), BigDecimal.ONE)
-        }
-    }
-
     @Test
     fun shieldedInputOutputAndChangeAreAccepted() {
         for (pool in listOf(ValuePool.Sapling, ValuePool.Orchard, ValuePool.Ironwood)) {

@@ -12,7 +12,6 @@ class SaveORSwapUseCase(
     private val swapRepository: SwapRepository,
     private val metadataRepository: MetadataRepository,
     private val navigationRouter: NavigationRouter,
-    private val autoDonations: co.electriccoin.zcash.ui.common.donation.AutoDonationCoordinator? = null,
     // private val ephemeralAddressRepository: EphemeralAddressRepository,
 ) {
     suspend operator fun invoke() {
@@ -29,7 +28,6 @@ class SaveORSwapUseCase(
                 origin = quote.originAsset,
                 destination = quote.destinationAsset
             )
-            autoDonations?.enroll(quote)
             // ephemeralAddressRepository.invalidate()
             swapRepository.clear()
             navigationRouter.backToRoot()

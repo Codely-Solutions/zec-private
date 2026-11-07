@@ -29,11 +29,6 @@ import cash.z.ecc.android.sdk.type.ServerValidation
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.internal.Backend
 import cash.z.ecc.android.sdk.internal.model.TorClient
-import cash.z.ecc.android.sdk.internal.model.LazyTorClient
-import cash.z.ecc.android.sdk.util.WalletClientFactory
-import co.electriccoin.lightwallet.client.CombinedWalletClient
-import co.electriccoin.lightwallet.client.ServiceMode
-import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import cash.z.ecc.android.sdk.internal.model.TorHttp
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -55,7 +50,6 @@ import io.ktor.client.HttpClient
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
@@ -70,11 +64,6 @@ import org.json.JSONArray
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 import java.io.File
-import co.electriccoin.zcash.ui.common.model.*
-import co.electriccoin.zcash.ui.screen.donation.*
-import co.electriccoin.zcash.ui.common.donation.*
-import java.math.BigDecimal
-import kotlinx.coroutines.sync.withLock
 import java.lang.reflect.Proxy
 
 /** Exercises the installed app graph. No mocks, SDK-only wallet, or mainnet spending. */
@@ -100,7 +89,7 @@ class CoreWalletAcceptance {
         check(arguments.getString("isolatedTestnet") == "valueless-coins-only")
         val stage = checkNotNull(arguments.getString("stage"))
         val started = System.nanoTime()
-        withTimeout(if (stage == "send") 1_560_000L else 900_000L) {
+        withTimeout(900_000) {
             dependency<IsTorEnabledStorageProvider>().store(true)
             if (stage !in listOf("networkTargets", "rpcProbe")) {
                 val intent = checkNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
@@ -109,45 +98,6 @@ class CoreWalletAcceptance {
                 withTimeout(15_000) { dependency<ApplicationStateProvider>().isInForeground.first { it } }
             }
             when (stage) {
-                "donationUiProbe" -> {
-                    var step = "create_empty_wallet"
-                    try {
-                        donationUiMarker(step, "begin")
-                        createWallet("uiProbe")
-                        check(!checkNotNull(context.getSystemService(android.app.KeyguardManager::class.java)).isDeviceSecure)
-                        val proposals = dependency<ZashiProposalRepository>()
-                        val automatic = dependency<AutoDonationStore>()
-                        check(proposals.transactionProposal.value == null && proposals.submitState.value == null)
-                        check(automatic.consent() == null && approvalActions == 0)
-                        val account = dependency<AccountDataSource>().getZashiAccount()
-                        step = "open_support"
-                        donationUiMarker(step, "begin")
-                        dependency<NavigationRouter>().forward(DonationArgs("2"))
-                        step = "enable_choice"
-                        scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_on))
-                        clickUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_on), "probe_auto_on")
-                        step = "set_percentage"
-                        setDonationPercent("100")
-                        step = "save_authorization"
-                        scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_save))
-                        clickUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_save), "probe_auto_save")
-                        step = "verify_authorization"
-                        val consent = withTimeout(15_000) {
-                            while (automatic.consent()?.percent?.compareTo(BigDecimal(100)) != 0) delay(100)
-                            checkNotNull(automatic.consent())
-                        }
-                        check(consent.accountUuid == account.sdkAccount.accountUuid.toString())
-                        step = "disable_authorization"
-                        AutoDonationSpendingGate.mutex.withLock { automatic.disable() }
-                        check(automatic.consent() == null)
-                        check(proposals.transactionProposal.value == null && proposals.submitState.value == null)
-                        check(approvalActions == 0)
-                        donationUiMarker("probe_complete", "authorization_verified_without_spending")
-                    } catch (error: Exception) {
-                        donationUiMarker(step, "failed_" + error.javaClass.simpleName)
-                        throw error
-                    }
-                }
                 "recipient" -> createWallet("recipient")
                 "sender" -> createWallet("sender")
                 "fund" -> {
@@ -225,26 +175,8 @@ class CoreWalletAcceptance {
                     save(state.put("multiRecipientSdkAccepted", true).put("multiRecipientRejectedByWallet", true)
                         .put("multiRecipientPayments", requested).put("multiRecipientSubmitted", false))
                     co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy.setIsolatedTestnetRecipient(destination)
-                    co.electriccoin.zcash.ui.screen.donation.DonationPreferences(context).percent = "0.5".toBigDecimal()
                     dependency<NavigationRouter>().forward(co.electriccoin.zcash.ui.screen.donation.DonationArgs("2"))
-                    // Fresh production UI consent, distinct from the legacy saved suggestion.
-                    val automatic = dependency<AutoDonationStore>()
-                    check(automatic.consent() == null)
-                    scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_on))
-                    clickUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_on), "auto_on")
-                    scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_percent))
-                    setDonationPercent("100")
-                    scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_save))
-                    clickUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_save), "auto_authorize_once")
-                    val consent = withTimeout(15_000) {
-                        while (automatic.consent()?.percent?.compareTo(BigDecimal(100)) != 0) delay(100)
-                        checkNotNull(automatic.consent())
-                    }
-                    check(consent.accountUuid == account.sdkAccount.accountUuid.toString())
-                    save(state.put("autoEnabledUiConsent", true))
-                    // A quote created after authorization is required by production enrollment policy.
-                    while (System.currentTimeMillis() / 1000L <= consent.authorizedAtSeconds) delay(100)
-                    val automaticQuote = isolatedOutgoingQuote(destination, account.unifiedAddress)
+                    enterDonationAmount("0.01")
                     scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_review))
                     suspend fun openReview() {
                         reviewAttempt++
@@ -347,12 +279,7 @@ class CoreWalletAcceptance {
                         "Submission did not establish one accepted or SDK-pending transaction"
                     }
                     state.put("txId", result.txIds.single()); save(state)
-                    dependency<AutoDonationCoordinator>().enroll(automaticQuote, result.txIds)
                     checkSent()
-                    // Follow the real completion action; do not clear production proposal state by hand.
-                    clickUi(context.getString(co.electriccoin.zcash.ui.R.string.send_viewTransaction), "manual_view_transaction")
-                    withTimeout(15_000) { proposals.transactionProposal.first { it == null } }
-                    acceptAutomaticDonation(automaticQuote)
                 }
                 "restore" -> {
                     val state = fixture()
@@ -369,17 +296,8 @@ class CoreWalletAcceptance {
                     }
                     check(transaction.amount.value == 1_000_000L)
                     check(dependency<TransactionRepository>().getMemos(transaction).all { it.isEmpty() })
-                    val automatic = withTimeout(600_000) {
-                        dependency<TransactionRepository>().observeTransaction(state.getString("autoTxId"))
-                            .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight != null }
-                    }
-                    check(automatic.amount.value == state.getLong("autoAmountZatoshi"))
-                    check(dependency<TransactionRepository>().getMemos(automatic).all { it.isEmpty() })
-                    val totalReceived = 1_000_000L + automatic.amount.value
-                    awaitBalance(totalReceived)
-                    check(balance() == totalReceived)
-                    state.put("autoRestoreAmountZatoshi", automatic.amount.value)
-                        .put("autoRestoreMinedHeight", checkNotNull(automatic.overview.minedHeight).value)
+                    awaitBalance(1_000_000)
+                    check(balance() == 1_000_000L)
                     save(state.put("restoreMinedHeight",checkNotNull(transaction.overview.minedHeight).value)
                         .put("restoreTransactionState",transaction.overview.transactionState.toString()))
                 }
@@ -445,6 +363,7 @@ class CoreWalletAcceptance {
                     } as Backend
                     val tor=TorClient.new(File(context.cacheDir,"core-bootstrap-tor"),backend)
                     try {
+                        save(fixture().put("nativeRpcProbe", nativeRpcProbe(tor, null)))
                         val isolated=tor.isolatedTorClient()
                         HttpClient(TorHttp) {
                             engine { this.tor=isolated; retryLimit=1 }
@@ -503,11 +422,8 @@ class CoreWalletAcceptance {
         val receipt = JSONObject().put("stage", stage).put("passed", true)
             .put("network", "zcash-testnet").put("transport", "Tor sensitive RPCs; upstream direct bulk")
             .put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
-        if (stage == "donationUiProbe") receipt.put("donation_ui_probe", true)
-            .put("fresh_ui_authorization", true).put("authorization_disabled", true)
-            .put("funding_requested", false).put("proposal_created", false).put("payment_approval_actions", 0)
         if (stage in listOf("send", "restart", "restore")) receipt.put("txId", fixture().getString("txId"))
-        if (stage == "rpcProbe") {
+        if (stage in listOf("rpcProbe", "networkTargets", "fund")) {
             receipt.put("native_rpc_probe", fixture().getJSONObject("nativeRpcProbe"))
         }
         if (stage=="fund") receipt.put("funding_txid",fixture().getString("fundingTxId")).put("balance_zatoshi",fixture().getLong("fundedBalance"))
@@ -532,22 +448,7 @@ class CoreWalletAcceptance {
             .put("multi_recipient_wallet_rejected",fixture().getBoolean("multiRecipientRejectedByWallet"))
             .put("multi_recipient_submitted",false)
             .put("biometric_prompt_executed",false)
-        if (stage=="send") receipt
-            .put("auto_enabled_ui_consent", fixture().getBoolean("autoEnabledUiConsent"))
-            .put("auto_payment_approval_actions", fixture().getInt("autoUiApprovalActions"))
-            .put("auto_exactly_once", fixture().getBoolean("autoExactlyOnce"))
-            .put("auto_deposit_raw_confirmed", fixture().getBoolean("autoDepositRawConfirmed"))
-            .put("auto_native_mined", fixture().getBoolean("autoNativeMined"))
-            .put("auto_consent_disabled", fixture().getBoolean("autoConsentDisabled"))
-            .put("auto_provider_evidence", fixture().getString("autoProviderEvidence"))
-            .put("auto_amount_zatoshi", fixture().getLong("autoAmountZatoshi"))
-            .put("auto_fee_zatoshi", fixture().getLong("autoFeeZatoshi"))
-            .put("auto_tx_id", fixture().getString("autoTxId"))
-        if (stage=="restart") receipt.put("auto_restart_mined", fixture().getBoolean("autoRestartMined"))
-        if (stage=="restore") receipt
-            .put("auto_received_zatoshi", fixture().getLong("autoRestoreAmountZatoshi"))
-            .put("auto_mined_height", fixture().getLong("autoRestoreMinedHeight"))
-            .put("mined_height",fixture().getLong("restoreMinedHeight"))
+        if (stage=="restore") receipt.put("mined_height",fixture().getLong("restoreMinedHeight"))
             .put("amount_zatoshi",1_000_000L).put("app_transaction_state",fixture().getString("restoreTransactionState"))
 
         // No exception messages, seeds, addresses, HTTP bodies or private fixture are printed.
@@ -562,72 +463,8 @@ class CoreWalletAcceptance {
     }
 
     private fun rejectionCode(description: String): Int? =
-        Regex("""Failed to submit transaction \((-?\d+)\):""").find(description)
+        Regex("Failed to submit transaction \\((-?\\d+)\\):").find(description)
             ?.groupValues?.get(1)?.toIntOrNull()
-
-    /** Only these fixed diagnostic categories can leave captured native exception text. */
-    private fun safeRpcReasons(text: String?): List<String> {
-        val lowered = text.orEmpty().lowercase()
-        return listOf("timeout", "timed out", "tor", "uninitialized", "disposed", "connection refused",
-            "connection reset", "tls", "certificate", "handshake", "dns", "network unreachable",
-            "circuit", "bootstrap", "unavailable", "transport", "invalid argument", "deserialize")
-            .filter { if (it == "tor") Regex("""\btor\b""").containsMatchIn(lowered) else lowered.contains(it) }.take(12)
-    }
-
-    /** Reproduces production's cached Group Tor client, without constructing a wallet or transaction. */
-    private suspend fun groupedNativeRpcProbe(tor: TorClient): JSONObject {
-        val result = JSONObject().put("wallet_access", false).put("valid_transaction_submissions", 0)
-            .put("service_mode", "Tor Group").put("malformed_submit_calls", 0)
-        val holder = LazyTorClient { tor.isolatedTorClient() }
-        var ownedClient: CombinedWalletClient? = null
-        var stage = "combined_client_create"
-        val started = System.nanoTime()
-        try {
-            val client = WalletClientFactory(context, holder).create(
-                LightWalletEndpoint(host = "testnet.zec.rocks", port = 443, isSecure = true)
-            )
-            ownedClient = client
-            // The same deterministic, non-wallet group name is reused for height and malformed submit.
-            val group = ServiceMode.Group("submit-" + "0".repeat(64))
-            stage = "group_latest_height"
-            val height = withTimeout(30_000) { client.getLatestBlockHeight(serviceMode = group) }
-            result.put("height_response_class", height.javaClass.simpleName)
-            when (height) {
-                is Response.Success -> { check(height.result.value > 0); result.put("height", height.result.value) }
-                is Response.Failure -> {
-                    result.put("sdk_code", height.code).put("cause_class", height.cause.javaClass.simpleName)
-                        .put("reason_tokens", JSONArray(safeRpcReasons(height.description)))
-                    error("Unfunded grouped Tor latest-height failed")
-                }
-            }
-            stage = "group_malformed_submit"
-            result.put("malformed_submit_calls", 1)
-            val rejected = withTimeout(30_000) { client.submitTransaction(tx = byteArrayOf(0), serviceMode = group) }
-            result.put("submit_response_class", rejected.javaClass.simpleName)
-            val code = when (rejected) {
-                is Response.Success -> rejected.result.code
-                is Response.Failure -> {
-                    result.put("sdk_code", rejected.code).put("cause_class", rejected.cause.javaClass.simpleName)
-                        .put("reason_tokens", JSONArray(safeRpcReasons(rejected.description)))
-                    rejectionCode(rejected.description.orEmpty())
-                }
-            }
-            result.put("native_rejection_code", code ?: JSONObject.NULL)
-            check(code == -22) { "Grouped Tor malformed transaction must reach node deserialization rejection" }
-            return result.put("passed", true)
-        } catch (error: Exception) {
-            result.put("probe_stage", stage).put("exception_class", error.javaClass.simpleName)
-                .put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
-            if (!result.has("reason_tokens")) result.put("reason_tokens", JSONArray(safeRpcReasons(error.message)))
-            println("CORE_NATIVE_ERROR $result")
-            throw error
-        } finally {
-            result.put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
-            withContext(NonCancellable) {
-                try { ownedClient?.dispose() } finally { holder.dispose() }
-            }
-        }
-    }
 
     private suspend fun nativeRpcProbe(tor: TorClient, lookupTxId: String?): JSONObject {
         val result = JSONObject().put("wallet_access", false).put("valid_transaction_submissions", 0)
@@ -679,7 +516,6 @@ class CoreWalletAcceptance {
                     println("CORE_NATIVE_ERROR " + result.put("probe_stage", "malformed_submit"))
                     error("Native Tor malformed-transaction RPC did not establish server rejection")
                 }
-                result.put("grouped_submit_probe", groupedNativeRpcProbe(tor))
                 return result
             } finally {
                 withContext(NonCancellable) { client.dispose() }
@@ -716,20 +552,12 @@ class CoreWalletAcceptance {
                     "FAILURE! submit transaction failed with gRPC response"
                 ))
                 result.put("raw_submit_results_logged", logs.contains("Internal transaction submit results:"))
-                val internal = logs.lineSequence()
-                    .filter { it.contains("Internal transaction submit results:") }.take(3).joinToString("\n")
-                val codes = Regex("""\bcode\s*[=:]\s*(-?\d{1,8})\b""").findAll(internal)
-                    .mapNotNull { it.groupValues[1].toIntOrNull() }.distinct().take(8).toList()
-                result.put("internal_sdk_codes", JSONArray(codes))
-                result.put("internal_reason_tokens", JSONArray(safeRpcReasons(internal)))
-                result.put("internal_failure_classes", JSONArray(listOf("OverTor", "Connection",
-                    "DeadlineExceeded", "Unavailable", "UninitializedTorClientException", "IllegalStateException",
-                    "TimeoutCancellationException").filter { internal.contains(it) }))
-                result.put("internal_tor_failure", internal.contains("isTorFailure=true") ||
-                    internal.contains("isTorFailure: true"))
-                val rejectionLines = logs.lineSequence().filter { it.contains("Failed to submit transaction (") }
-                    .take(3).joinToString("\n")
-                result.put("rejection_reason_tokens", JSONArray(safeRpcReasons(rejectionLines)))
+                val relevant = logs.lineSequence().filter { it.contains("Failed to submit transaction (") }.take(3)
+                val tokens = relevant.flatMap { line ->
+                    Regex("\\b(?:[a-z][a-z0-9]+-){1,8}[a-z0-9]+\\b").findAll(line)
+                        .map { it.value.take(80) }
+                }.distinct().take(12).toList()
+                result.put("rejection_reason_tokens", JSONArray(tokens))
             }
         } catch (error: Exception) {
             result.put("capture_failure_class", error.javaClass.simpleName)
@@ -738,9 +566,7 @@ class CoreWalletAcceptance {
     }
 
     @Suppress("DEPRECATION")
-    private suspend fun proposalFailureDiagnostic(
-        logBoundary: String, reviewAttempt: Int, controlLabel: String = "form_review"
-    ) {
+    private suspend fun proposalFailureDiagnostic(logBoundary: String, reviewAttempt: Int) {
         var logAvailable = false
         var capped = false
         var logs = ""
@@ -782,7 +608,7 @@ class CoreWalletAcceptance {
             return (node != null).also { node?.recycle() }
         }
         println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
-            .put("ui_control", controlLabel).put("ui_outcome", "proposal_log_classification")
+            .put("ui_control", "form_review").put("ui_outcome", "proposal_log_classification")
             .put("review_attempt", reviewAttempt)
             .put("insufficient_balance_sheet", visible(co.electriccoin.zcash.ui.R.string.sheet_insufficientBalance_title))
             .put("form_review_visible", visible(co.electriccoin.zcash.ui.design.R.string.send_review))
@@ -807,7 +633,6 @@ class CoreWalletAcceptance {
             .put("ironwood_available_zatoshi", selected.ironwoodBalance?.available?.value ?: -1L)
             .put("sapling_available_zatoshi", selected.saplingBalance?.available?.value ?: -1L)
             .put("scanned_height", synchronizer.fullyScannedHeight.value?.value ?: -1L)
-            .put("network_height", synchronizer.networkHeight.value?.value ?: -1L)
             .put("sync_status", synchronizer.status.first().toString())
             .put("database_input", databaseInputDiagnostic())
             .put("log_read_failure_class", readFailureClass ?: "none"))
@@ -870,10 +695,6 @@ class CoreWalletAcceptance {
                         FROM c
                     """.trimIndent()
                 )
-                queries["orchard_note_counts"] = requireNotNull(queries["ironwood_note_counts"])
-                    .replace("ironwood_received_notes", "orchard_received_notes")
-                queries["orchard_shard_counts"] = requireNotNull(queries["ironwood_shard_counts"])
-                    .replace("ironwood", "orchard")
                 for ((label, sql) in queries) {
                     try {
                         db.rawQuery(sql, null).use { cursor ->
@@ -1072,8 +893,41 @@ class CoreWalletAcceptance {
     }
 
     @Suppress("DEPRECATION")
+    private suspend fun enterDonationAmount(amount: String) {
+        withTimeout(15_000) {
+            while (true) {
+                val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
+                instrumentation.uiAutomation.rootInActiveWindow?.let { pending.add(it) }
+                var entered = false
+                var count = 0
+                try {
+                    while (pending.isNotEmpty() && count++ < 500 && !entered) {
+                        val node = pending.removeFirst()
+                        try {
+                            if (node.isVisibleToUser && node.isEnabled && node.isEditable) {
+                                val arguments = android.os.Bundle().apply {
+                                    putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, amount)
+                                }
+                                entered = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+                            }
+                            if (!entered) {
+                                for (index in 0 until node.childCount) node.getChild(index)?.let { pending.add(it) }
+                            }
+                        } finally {
+                            node.recycle()
+                        }
+                    }
+                } finally {
+                    while (pending.isNotEmpty()) pending.removeFirst().recycle()
+                }
+                if (entered) return@withTimeout
+                delay(200)
+            }
+        }
+    }
+
     private suspend fun scrollToText(text: String) {
-        repeat(8) { attempt ->
+        repeat(4) {
             if (hasUiText(text)) return
             val root = instrumentation.uiAutomation.rootInActiveWindow ?: return@repeat
             val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
@@ -1085,9 +939,7 @@ class CoreWalletAcceptance {
                     val node = pending.removeFirst()
                     try {
                         if (node.isVisibleToUser && node.isScrollable) {
-                            val direction = if (attempt < 4) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
-                                else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
-                            scrolled = node.performAction(direction)
+                            scrolled = node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
                         }
                         if (!scrolled) {
                             for (index in 0 until node.childCount) node.getChild(index)?.let { pending.add(it) }
@@ -1283,270 +1135,11 @@ class CoreWalletAcceptance {
         while (balance() < minimum) delay(2_000)
     }
 
-    /** Only the provider result is synthetic; keys, proposals, Tor broadcast and confirmations are real. */
-    private fun isolatedOutgoingQuote(destination: String, refund: String): SwapQuote {
-        fun asset(token: String, chain: String, precision: Int): SwapAsset {
-            val simple = dependency<co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider>().get(token, chain)
-            return object : SwapAsset {
-                override val tokenTicker = simple.tokenTicker
-                override val tokenName = simple.tokenName
-                override val tokenIcon = simple.tokenIcon
-                override val blockchain = simple.blockchain
-                override val usdPrice: BigDecimal? = null
-                override val assetId = "isolated-$token-$chain"
-                override val decimals = precision
-            }
-        }
-        return object : SwapQuote {
-            override val originAsset = asset("ZEC", "zec", 8)
-            override val destinationAsset = asset("USDC", "eth", 6)
-            override val depositAddress = ZcashShieldedSwapAddress(destination)
-            override val destinationAddress = DynamicSwapAddress("isolated-synthetic-provider-destination")
-            override val refundAddress = ZcashShieldedSwapAddress(refund)
-            override val provider = "isolated-synthetic-provider"
-            override val mode = SwapMode.EXACT_INPUT
-            override val amountIn = BigDecimal(1_000_000)
-            override val amountInFormatted = BigDecimal("0.01")
-            override val amountInUsd = BigDecimal.ZERO
-            override val amountOut = BigDecimal(1_000_000)
-            override val amountOutFormatted = BigDecimal.ONE
-            override val amountOutUsd = BigDecimal.ZERO
-            override val affiliateFee = BigDecimal.ZERO
-            override val affiliateFeeUsd = BigDecimal.ZERO
-            override val slippage = BigDecimal.ZERO
-            override val timestamp = kotlin.time.Clock.System.now()
-            override val deadline = timestamp + kotlin.time.Duration.parse("15m")
-        }
-    }
-
-    private fun successfulIsolatedSwap(quote: SwapQuote): SwapQuoteStatus = object : SwapQuoteStatus {
-        override val originAsset = quote.originAsset
-        override val destinationAsset = quote.destinationAsset
-        override val depositAddress = quote.depositAddress
-        override val destinationAddress = quote.destinationAddress
-        override val timestamp = java.time.Instant.ofEpochSecond(quote.timestamp.epochSeconds)
-        override val deadline = quote.deadline
-        override val status = SwapStatus.SUCCESS
-        override val isSlippageRealized = true
-        override val maxSlippage = BigDecimal.ZERO
-        override val mode = quote.mode
-        override val amountInFormatted = quote.amountInFormatted
-        override val amountInUsd = BigDecimal.ZERO
-        override val amountOutFormatted = BigDecimal.ONE
-        override val amountOutUsd = BigDecimal.ZERO
-        override val executedAmountIn = quote.amountInFormatted
-        override val executedAmountOut = BigDecimal.ONE
-        override val depositedAmountFormatted = quote.amountInFormatted
-        override val refundedFormatted = BigDecimal.ZERO
-    }
-
-    @Suppress("DEPRECATION")
-    private fun donationEditableFields(): List<AccessibilityNodeInfo> {
-        val root = instrumentation.uiAutomation.rootInActiveWindow ?: return emptyList()
-        check(root.packageName?.toString() == context.packageName)
-        val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
-        val editable = mutableListOf<AccessibilityNodeInfo>()
-        pending.add(root)
-        var count = 0
-        try {
-            while (pending.isNotEmpty() && count++ < 500) {
-                val node = pending.removeFirst()
-                try {
-                    if (node.isEditable) editable.add(AccessibilityNodeInfo.obtain(node))
-                    // Match the bridge's depth-first Column order: amount first, percentage second.
-                    for (index in node.childCount - 1 downTo 0) node.getChild(index)?.let(pending::addFirst)
-                } finally { node.recycle() }
-            }
-        } finally { while (pending.isNotEmpty()) pending.removeFirst().recycle() }
-        return editable
-    }
-
-    @Suppress("DEPRECATION")
-    private fun enabledWithAncestors(node: AccessibilityNodeInfo): Boolean {
-        if (!node.isEnabled) return false
-        var parent = node.parent
-        try {
-            while (parent != null) {
-                val current = parent
-                if (!current.isEnabled) return false
-                parent = current.parent
-                current.recycle()
-            }
-        } finally { parent?.recycle() }
-        return true
-    }
-
-    private fun donationUiMarker(step: String, outcome: String, fields: Int = -1, rect: String? = null) {
-        println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject().put("ui_control", "donation_ui_$step")
-            .put("ui_outcome", outcome).put("editable_count", fields).put("target_rect", rect)
-            .put("field_label", context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_percent)))
-    }
-
-    @Suppress("DEPRECATION")
-    private suspend fun setDonationPercent(value: String) {
-        val label = context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_percent)
-        val title = context.getString(co.electriccoin.zcash.ui.R.string.private_support_title)
-        donationUiMarker("percent_screen", "checking_support_screen")
-        check(hasUiText(title) || hasUiText(title.uppercase()))
-        scrollToText(label)
-        check(hasUiText(label))
-        var actionAttempted = false
-        var revealRequested = false
-        var amountBeforeEdit: String? = null
-        try {
-            withTimeout(15_000) {
-                while (!actionAttempted) {
-                    val fields = donationEditableFields()
-                    try {
-                        donationUiMarker("percent_selector", "editable_inventory", fields.size)
-                        check(fields.size == 2) { "Support screen must have amount and percentage inputs" }
-                        val percentage = fields[1]
-                        check(percentage.text?.toString() == "0.25") { "Unexpected initial percentage" }
-                        check(enabledWithAncestors(percentage))
-                        if (!revealRequested || !percentage.isVisibleToUser) {
-                            revealRequested = true
-                            val shown = percentage.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id)
-                            donationUiMarker("percent_reveal", if (shown) "show_requested" else "scroll_required", fields.size)
-                            if (!shown) scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_save))
-                        } else {
-                            val bounds = android.graphics.Rect()
-                            percentage.getBoundsInScreen(bounds)
-                            check(!bounds.isEmpty)
-                            check(percentage.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT })
-                            val args = android.os.Bundle().apply {
-                                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
-                            }
-                            amountBeforeEdit = fields[0].text?.toString()
-                            actionAttempted = true
-                            donationUiMarker("percent_set_text", "single_action", fields.size, bounds.flattenToString())
-                            check(percentage.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args))
-                        }
-                    } finally { fields.forEach { it.recycle() } }
-                    if (!actionAttempted) delay(150)
-                }
-                // Read-only polling verifies the action; an ambiguous edit is never repeated.
-                while (true) {
-                    val fields = donationEditableFields()
-                    val verified = try {
-                        fields.size == 2 && fields[1].text?.toString() == value &&
-                            fields[0].text?.toString() == amountBeforeEdit && enabledWithAncestors(fields[1])
-                    } finally { fields.forEach { it.recycle() } }
-                    if (verified) break
-                    delay(100)
-                }
-                donationUiMarker("percent_verify", "value_verified", 2)
-            }
-        } catch (error: Exception) {
-            donationUiMarker("percent_failure", if (actionAttempted) "after_single_action" else "before_action")
-            throw error
-        }
-    }
-
-    private suspend fun acceptAutomaticDonation(quote: SwapQuote) {
-        val coordinator = dependency<AutoDonationCoordinator>()
-        val status = successfulIsolatedSwap(quote)
-        val sync = dependency<SynchronizerProvider>().getSynchronizer()
-        val account = dependency<AccountDataSource>().getZashiAccount()
-        // The app marks outgoing payments successful when mined. Production automation additionally
-        // requires the SDK's raw ten-confirmation state for its deposit; wait for that exact proof once.
-        val depositTxId = fixture().getString("txId")
-        withTimeout(1_200_000) {
-            sync.getTransactions(account.sdkAccount.accountUuid).first { history ->
-                history.any { it.txId.txIdString() == depositTxId && it.isSentTransaction &&
-                    it.transactionState == cash.z.ecc.android.sdk.model.TransactionState.Confirmed }
-            }
-        }
-        val before = sync.getTransactions(account.sdkAccount.accountUuid).first().map { it.txId.txIdString() }.toSet()
-        val approvalsBefore = approvalActions
-        val balanceBefore = balance()
-        val prepareBoundary = "CORE_AUTOMATIC_PREPARE_BEGIN"
-        println(prepareBoundary)
-        coordinator.onStatus(status)
-        val donationStore = dependency<AutoDonationStore>()
-        val transaction = withTimeout(240_000) {
-            combine(sync.getTransactions(account.sdkAccount.accountUuid), flow {
-                while (true) { emit(Unit); delay(500) }
-            }) { history, _ -> history }.first { history ->
-                val outcome = donationStore.latestOutcome()
-                if (outcome != null && !outcome.startsWith("Automatic donation of ")) {
-                    println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
-                        .put("ui_control", "automatic_donation").put("ui_outcome", "terminal_without_success")
-                        .put("diagnostic", donationStore.latestDiagnostic?.let(::JSONObject)))
-                    if (JSONObject(donationStore.latestDiagnostic ?: "{}").optString("stage") == "proposal") {
-                        proposalFailureDiagnostic(prepareBoundary, 0, "automatic_before_ready")
-                        val probe = JSONObject().put("signing_calls", 0).put("submission_calls", 0)
-                        try {
-                            awaitReviewSync()
-                            val currentAccount = dependency<AccountDataSource>().getZashiAccount()
-                            val send = ZecSend(
-                                cash.z.ecc.android.sdk.model.WalletAddress.Unified.new(
-                                    checkNotNull(co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy.recipient())
-                                ), Zatoshi(1_000_000L), Memo(""), null
-                            )
-                            val boundary = "CORE_AUTOMATIC_READONLY_PREPARE_BEGIN"
-                            println(boundary)
-                            try {
-                                val proposal = dependency<co.electriccoin.zcash.ui.common.datasource.ProposalDataSource>()
-                                    .createProposal(currentAccount, send)
-                                co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
-                                    .requireShielded(proposal.proposal, send)
-                                probe.put("proposal_after_sync", "success")
-                                    .put("fee_zatoshi", proposal.proposal.totalFeeRequired().value)
-                            } catch (failure: Exception) {
-                                probe.put("proposal_after_sync", failure.javaClass.simpleName)
-                                proposalFailureDiagnostic(boundary, 0, "automatic_after_ready")
-                            }
-                        } catch (failure: Exception) {
-                            probe.put("readiness_failure_class", failure.javaClass.simpleName)
-                        }
-                        save(fixture().put("autoPrepareProbe", probe))
-                        println("CORE_ACCOUNTING_DIAGNOSTIC " + JSONObject()
-                            .put("ui_control", "automatic_readonly_prepare").put("probe", probe))
-                    }
-                    error("Automatic donation did not report submission success")
-                }
-                history.any { it.isSentTransaction && it.txId.txIdString() !in before &&
-                    it.minedHeight != null }
-            }.single { it.isSentTransaction && it.txId.txIdString() !in before }
-        }
-        val fee = checkNotNull(transaction.feePaid).value
-        check(fee > 0 && fee < 1_000_000L)
-        check(transaction.netValue.value == 1_000_000L + fee)
-        val displayed = dependency<TransactionRepository>().observeTransaction(transaction.txId.txIdString())
-            .filterNotNull().first { it is SendTransaction.Success }
-        check(displayed.recipient == fixture().getString("recipientAddress"))
-        check(dependency<TransactionRepository>().getMemos(displayed).all { it.isEmpty() })
-        withTimeout(120_000) { while (balance() != balanceBefore - 1_000_000L - fee) delay(1_000) }
-        coordinator.onStatus(status)
-        delay(10_000)
-        val after = sync.getTransactions(account.sdkAccount.accountUuid).first()
-        check(after.count { it.isSentTransaction && it.txId.txIdString() !in before } == 1)
-        check(approvalActions == approvalsBefore)
-        AutoDonationSpendingGate.mutex.withLock { dependency<AutoDonationStore>().disable() }
-        check(dependency<AutoDonationStore>().consent() == null)
-        save(fixture().put("autoTxId", transaction.txId.txIdString()).put("autoAmountZatoshi", 1_000_000L)
-            .put("autoFeeZatoshi", fee).put("autoUiApprovalActions", 0).put("autoExactlyOnce", true)
-            .put("autoDepositRawConfirmed", true).put("autoNativeMined", true).put("autoConsentDisabled", true)
-            .put("autoProviderEvidence", "synthetic-success; real native shielded transaction")
-            .put("senderConfirmedBalance", balance()))
-    }
-
     private suspend fun checkSent() {
         val state = fixture()
         val transaction = withTimeout(600_000) {
             dependency<TransactionRepository>().observeTransaction(state.getString("txId"))
                 .filterNotNull().first { it is SendTransaction.Success }
-        }
-        if (state.has("autoTxId")) {
-            val automatic = withTimeout(120_000) {
-                dependency<TransactionRepository>().observeTransaction(state.getString("autoTxId"))
-                    .filterNotNull().first { it is SendTransaction.Success }
-            }
-            check(automatic.overview.minedHeight != null)
-            check(automatic.amount.value == state.getLong("autoAmountZatoshi") + state.getLong("autoFeeZatoshi"))
-            check(automatic.recipient == state.getString("recipientAddress"))
-            check(dependency<AutoDonationStore>().consent() == null)
-            save(state.put("autoRestartMined", true))
         }
         val fee = checkNotNull(transaction.fee).value
         // SDK netValue is abs(accountBalanceDelta), including the fee. The
@@ -1560,8 +1153,7 @@ class CoreWalletAcceptance {
         check(recipientMatches)
         check(fee > 0)
         withTimeout(120_000) {
-            while (balance() != state.getLong("balanceBeforeSend") - 1_000_000L - fee -
-                state.optLong("autoAmountZatoshi", 0L) - state.optLong("autoFeeZatoshi", 0L)) delay(2_000)
+            while (balance() != state.getLong("balanceBeforeSend") - 1_000_000L - fee) delay(2_000)
         }
         save(state.put("feeZatoshi", fee).put("senderConfirmedBalance", balance()))
     }

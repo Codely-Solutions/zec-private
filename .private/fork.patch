@@ -188,7 +188,7 @@ index ebbd24d3c..edac136cd 100644
 -            "ZCASH_FLEXA_KEY" to "",
 diff --git a/docs/DONATIONS.md b/docs/DONATIONS.md
 new file mode 100644
-index 000000000..e86ea0cec
+index 000000000..0d083c596
 --- /dev/null
 +++ b/docs/DONATIONS.md
 @@ -0,0 +1,27 @@
@@ -196,7 +196,7 @@ index 000000000..e86ea0cec
 +
 +Donations help fund development and maintenance. They are optional.
 +
-+Open **Settings → More → Support development** to donate shielded ZEC. Choose **Donate once** to review a payment, or enable **Automatic swap donations** to authorize a percentage of future successful swaps. Automatic support starts off and skips a donation when its extra network fee is at least the donation amount.
++Open **Settings → More → Support development** to donate shielded ZEC. Enter an amount and review the payment before sending.
 +
 +You can also donate using the addresses below. Check the asset, network and destination before sending.
 +
@@ -304,7 +304,7 @@ index 000000000..cdadb0a3b
 +See the [wallet guide](WALLET-GUIDE.md) for instructions and [privacy](PRIVACY.md) before sharing diagnostics.
 diff --git a/docs/WALLET-GUIDE.md b/docs/WALLET-GUIDE.md
 new file mode 100644
-index 000000000..2fa44e8b5
+index 000000000..79ff48538
 --- /dev/null
 +++ b/docs/WALLET-GUIDE.md
 @@ -0,0 +1,43 @@
@@ -348,7 +348,7 @@ index 000000000..2fa44e8b5
 +
 +## Donations and diagnostics
 +
-+[Support development](DONATIONS.md) is optional. Automatic swap donations start off. Enabling them authorizes the chosen percentage for future successful swaps, without another donation prompt. Payments whose network fee is at least the donation amount are skipped. One-time donations retain their payment review. In-app donations require a software wallet.
++[Support development](DONATIONS.md) is optional. Choose an amount and review each payment before sending. In-app donations require a software wallet.
 +
 +Diagnostics open Android's share chooser. Inspect the export and choose its recipient yourself; no staffed support inbox is configured. See [privacy](PRIVACY.md) before sharing wallet information.
 diff --git a/docs/donations/xmr-address.png b/docs/donations/xmr-address.png
@@ -3355,7 +3355,7 @@ index 1c2a8787c..baba05669 100644
 @@ -53 +50,0 @@ val repositoryModule =
 -        singleOf(::FlexaRepositoryImpl) bind FlexaRepository::class
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
-index c9262f680..cb2f43a50 100644
+index c9262f680..ff439e9e7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 @@ -12 +11,0 @@ import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
@@ -3364,16 +3364,11 @@ index c9262f680..cb2f43a50 100644
 -import co.electriccoin.zcash.ui.common.usecase.GetFlexaStatusUseCase
 @@ -137 +134,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 -import co.electriccoin.zcash.ui.common.usecase.SendSupportEmailUseCase
-@@ -173,0 +171,4 @@ val useCaseModule =
-+        single { co.electriccoin.zcash.ui.common.donation.AutoDonationStore(get()) }
-+        single {
-+            co.electriccoin.zcash.ui.common.donation.AutoDonationCoordinator(get(), get(), get(), get(), get(), get())
-+        }
-@@ -201 +201,0 @@ val useCaseModule =
+@@ -201 +197,0 @@ val useCaseModule =
 -        factoryOf(::SendSupportEmailUseCase)
-@@ -256 +255,0 @@ val useCaseModule =
+@@ -256 +251,0 @@ val useCaseModule =
 -        factoryOf(::CreateFlexaTransactionUseCase)
-@@ -261 +259,0 @@ val useCaseModule =
+@@ -261 +255,0 @@ val useCaseModule =
 -        factoryOf(::GetFlexaStatusUseCase)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt
 index 50bcc0da8..904bf2920 100644
@@ -3630,332 +3625,6 @@ index 13e9d0788..d1112a657 100644
 @@ -35 +31 @@ interface SwapDataSource {
 -    @Throws(ResponseException::class, AssetNotFoundException::class)
 +    @Throws(AssetNotFoundException::class)
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinator.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinator.kt
-new file mode 100644
-index 000000000..53de4fc79
---- /dev/null
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinator.kt
-@@ -0,0 +1,222 @@
-+package co.electriccoin.zcash.ui.common.donation
-+
-+import cash.z.ecc.android.sdk.model.Memo
-+import cash.z.ecc.android.sdk.model.TransactionOverview
-+import cash.z.ecc.android.sdk.model.TransactionState
-+import cash.z.ecc.android.sdk.model.WalletAddress
-+import cash.z.ecc.android.sdk.model.Zatoshi
-+import cash.z.ecc.android.sdk.model.ZecSend
-+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
-+import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
-+import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
-+import co.electriccoin.zcash.ui.common.model.SwapQuote
-+import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
-+import co.electriccoin.zcash.ui.common.model.SubmitResult
-+import co.electriccoin.zcash.ui.common.model.SwapStatus
-+import co.electriccoin.zcash.ui.common.model.ZodlAccount
-+import co.electriccoin.zcash.ui.common.model.isZCashAsset
-+import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
-+import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
-+import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
-+import kotlinx.coroutines.CancellationException
-+import kotlinx.coroutines.CoroutineScope
-+import kotlinx.coroutines.Dispatchers
-+import kotlinx.coroutines.SupervisorJob
-+import kotlinx.coroutines.delay
-+import kotlinx.coroutines.flow.first
-+import kotlinx.coroutines.launch
-+import kotlinx.coroutines.sync.withLock
-+import kotlinx.coroutines.withTimeoutOrNull
-+import org.json.JSONArray
-+import org.json.JSONObject
-+import java.math.BigDecimal
-+
-+/** Only enrolled future swaps can consume the narrowly scoped automatic spending authorization. */
-+@Suppress("TooGenericExceptionCaught", "MagicNumber", "ReturnCount", "CyclomaticComplexMethod", "LongMethod")
-+class AutoDonationCoordinator(
-+    private val store: AutoDonationStore,
-+    private val accounts: AccountDataSource,
-+    private val proposals: ProposalDataSource,
-+    private val keys: ZashiSpendingKeyDataSource,
-+    private val synchronizers: SynchronizerProvider,
-+    private val uiProposals: ZashiProposalRepository,
-+    private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-+) {
-+
-+    suspend fun enroll(quote: SwapQuote, depositTxIds: List<String> = emptyList()) {
-+        try {
-+            enrollInternal(quote, depositTxIds)
-+        } catch (e: CancellationException) {
-+            throw e
-+        } catch (_: Exception) {
-+            // Failure to persist a donation enrollment must leave the swap usable.
-+        }
-+    }
-+
-+    private suspend fun enrollInternal(quote: SwapQuote, depositTxIds: List<String>) {
-+        val consent = store.consent() ?: return
-+        if (quote.timestamp.epochSeconds <= consent.authorizedAtSeconds) return
-+        val account = accounts.getSelectedAccount() as? ZodlAccount ?: return
-+        if (account.sdkAccount.accountUuid.toString() != consent.accountUuid) return
-+        if (!quote.originAsset.isZCashAsset && !quote.destinationAsset.isZCashAsset) return
-+
-+        val scanHeight = if (quote.destinationAsset.isZCashAsset) {
-+            synchronizers.getSynchronizer().fullyScannedHeight.value?.value ?: return
-+        } else 0L
-+        store.enroll(quote.depositAddress.address, JSONObject().put("consent", consent.id)
-+            .put("account", consent.accountUuid).put("incoming", quote.destinationAsset.isZCashAsset)
-+            .put("destination", store.hash(quote.destinationAddress.address)).put("scanHeight", scanHeight)
-+            .put("txids", JSONArray(depositTxIds.map(store::hash))))
-+    }
-+
-+    fun onStatus(status: SwapQuoteStatus) {
-+        if (status.status != SwapStatus.SUCCESS) return
-+        val key = status.depositAddress.address
-+        val enrollment = runCatching { store.reserve(key) }.getOrNull() ?: return
-+        scope.launch {
-+            val diagnostic = AttemptDiagnostic(store)
-+            try {
-+                // Leave margin for the SDK's ten-confirmation receipt policy.
-+                val reason = withTimeoutOrNull(30 * 60 * 1000L) {
-+                    donate(status, enrollment, diagnostic)
-+                } ?: "Automatic donation outcome uncertain. Check Activity."
-+                store.outcome(key, reason)
-+            } catch (e: CancellationException) {
-+                diagnostic.failure(e)
-+                store.outcome(key, "Automatic donation outcome uncertain. Check Activity.")
-+                throw e
-+            } catch (e: Exception) {
-+                diagnostic.failure(e)
-+                store.outcome(key, "Automatic donation outcome uncertain. Check Activity.")
-+            }
-+        }
-+    }
-+
-+    private fun hasActiveUiSpend(): Boolean = uiProposals.transactionProposal.value != null &&
-+        (uiProposals.submitState.value as? co.electriccoin.zcash.ui.common.repository.SubmitProposalState.Result)
-+            ?.submitResult !is SubmitResult.Success
-+
-+    private suspend fun account(enrollment: JSONObject): ZodlAccount? {
-+        val consent = store.consent() ?: return null
-+        if (consent.id != enrollment.getString("consent") ||
-+            consent.accountUuid != enrollment.getString("account")) return null
-+        return accounts.getZashiAccount().takeIf { it.sdkAccount.accountUuid.toString() == consent.accountUuid }
-+    }
-+
-+    private fun settledInput(status: SwapQuoteStatus, deposited: Long): Long? {
-+        val settled = status.executedAmountIn?.movePointRight(8)?.longValueExact() ?: return null
-+        if (settled <= 0 || settled > deposited) return null
-+        val refund = status.refundedFormatted?.movePointRight(8)?.longValueExact()
-+        if (refund == null) return settled
-+        if (refund < 0 || refund > deposited) return null
-+        if (deposited - refund != settled) return null
-+        return settled
-+    }
-+
-+    private fun nativeBasis(transactions: List<TransactionOverview>, incoming: Boolean): Long? {
-+        if (incoming) return transactions.fold(0L) { sum, tx -> Math.addExact(sum, tx.netValue.value) }
-+        if (transactions.any { it.feePaid == null }) return null
-+        return transactions.fold(0L) { sum, tx ->
-+            Math.addExact(sum, Math.subtractExact(tx.netValue.value, requireNotNull(tx.feePaid).value))
-+        }
-+    }
-+
-+    private suspend fun donate(
-+        status: SwapQuoteStatus, enrollment: JSONObject, diagnostic: AttemptDiagnostic
-+    ): String {
-+        diagnostic.stage = "native_evidence"
-+        val incoming = enrollment.getBoolean("incoming")
-+        val txids = if (incoming) status.destinationTransactionIds.map(store::hash) else {
-+            val values = enrollment.getJSONArray("txids")
-+            (0 until values.length()).map { values.getString(it) }
-+        }
-+        if (txids.isEmpty() || txids.distinct().size != txids.size) return "Skipped: missing transaction evidence"
-+        if (enrollment.getString("destination") != store.hash(status.destinationAddress.address)) {
-+            return "Skipped: destination changed"
-+        }
-+        val synchronizer = synchronizers.getSynchronizer()
-+        var basis: Long
-+        while (true) {
-+            val account = account(enrollment) ?: return "Skipped: authorization unavailable"
-+            if (hasActiveUiSpend()) return "Skipped: another transaction is under review"
-+            val history = synchronizer.getTransactions(account.sdkAccount.accountUuid).first()
-+            val matching = history.filter { store.hash(it.txId.txIdString()) in txids }
-+            if (matching.size == txids.size && matching.all { it.transactionState == TransactionState.Confirmed }) {
-+                if (incoming && matching.any { (it.minedHeight?.value ?: 0L) <= enrollment.getLong("scanHeight") }) {
-+                    return "Skipped: receipt predates swap enrollment"
-+                }
-+                if (matching.any { it.isSentTransaction == incoming }) return "Skipped: transaction direction differs"
-+                basis = nativeBasis(matching, incoming) ?: return "Skipped: missing network fee evidence"
-+                val evidence = if (incoming) status.executedAmountOut else status.depositedAmountFormatted
-+                val actual = evidence?.let { runCatching { it.movePointRight(8).longValueExact() }.getOrNull() }
-+                    ?: return "Skipped: missing executed amount evidence"
-+                if (basis != actual || basis <= 0L) return "Skipped: received or spent amount differs"
-+                if (!incoming) {
-+                    basis = settledInput(status, basis) ?: return "Skipped: inconsistent settled input or refund"
-+                }
-+                break
-+            }
-+            delay(5_000)
-+        }
-+        diagnostic.stage = "spending_gate"
-+        return AutoDonationSpendingGate.mutex.withLock {
-+            if (hasActiveUiSpend()) return@withLock "Skipped: another transaction is under review"
-+            val consent = store.consent() ?: return@withLock "Skipped: authorization unavailable"
-+            val amount = DonationPolicy.suggestedZatoshi(BigDecimal.valueOf(basis, 8), consent.percent)
-+            if (amount <= 0) return@withLock "Skipped: donation rounds to zero"
-+            val recipient = DonationPolicy.recipient() ?: return@withLock "Skipped: recipient unavailable"
-+            val account = account(enrollment) ?: return@withLock "Skipped: authorization unavailable"
-+            if ((account.spendableShieldedBalance?.value ?: 0L) <= amount) {
-+                return@withLock "Skipped: insufficient shielded funds"
-+            }
-+            diagnostic.stage = "recipient"
-+            val send = ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(amount), Memo(""), null)
-+            diagnostic.stage = "proposal"
-+            val proposal = proposals.createProposal(account, send)
-+            diagnostic.stage = "shielded_validation"
-+            DonationPolicy.requireShielded(proposal.proposal, send)
-+            val fee = proposal.proposal.totalFeeRequired().value
-+            if (fee >= amount) return@withLock "Skipped: network fee is at least the donation"
-+            if ((account(enrollment)?.spendableShieldedBalance?.value ?: 0L) < Math.addExact(amount, fee)) {
-+                return@withLock "Skipped: insufficient shielded funds"
-+            }
-+            if (hasActiveUiSpend()) return@withLock "Skipped: another transaction is under review"
-+            if (account(enrollment) == null) return@withLock "Skipped: authorization unavailable"
-+            diagnostic.stage = "spending_key"
-+            val key = keys.getZashiSpendingKey()
-+            if (account(enrollment) == null || hasActiveUiSpend()) return@withLock "Skipped: authorization changed"
-+            DonationPolicy.requireShielded(proposal.proposal, send)
-+            diagnostic.stage = "submission"
-+            val result = proposals.submitTransaction(proposal.proposal, key)
-+            diagnostic.submission(result)
-+            diagnostic.stage = "record_transaction"
-+            store.recordTransactionIds(status.depositAddress.address, result.txIds)
-+            if (result is SubmitResult.Success) {
-+                val displayAmount = BigDecimal.valueOf(amount, 8).stripTrailingZeros().toPlainString()
-+                "Automatic donation of $displayAmount ZEC submitted."
-+            } else {
-+                "Automatic donation outcome uncertain. Check Activity."
-+            }
-+        }
-+    }
-+
-+    /** Fixed stages and classes only; never exception messages or transaction/provider contents. */
-+    private class AttemptDiagnostic(private val store: AutoDonationStore) {
-+        var stage = "reserved"
-+        fun failure(error: Exception) = store.diagnostic(JSONObject().put("stage", stage)
-+            .put("result", "exception").put("exception_class", error.javaClass.simpleName)
-+            .put("cause_classes", JSONArray(generateSequence(error as Throwable) { it.cause }
-+                .take(4).map { it.javaClass.simpleName }.toList())))
-+        fun submission(result: SubmitResult) {
-+            val value = JSONObject().put("stage", stage).put("result", result.javaClass.simpleName)
-+            when (result) {
-+                is SubmitResult.Failure -> value.put("sdk_code", result.code)
-+                is SubmitResult.Error -> value.put("exception_class", result.cause.javaClass.simpleName)
-+                is SubmitResult.GrpcFailure -> value.put("reason", result.reason?.name)
-+                else -> Unit
-+            }
-+            store.diagnostic(value)
-+        }
-+    }
-+
-+}
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationSpendingGate.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationSpendingGate.kt
-new file mode 100644
-index 000000000..1aaf7c22b
---- /dev/null
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationSpendingGate.kt
-@@ -0,0 +1,8 @@
-+package co.electriccoin.zcash.ui.common.donation
-+
-+import kotlinx.coroutines.sync.Mutex
-+
-+/** Serializes automatic spending, software transaction review and authorization changes. */
-+object AutoDonationSpendingGate {
-+    val mutex = Mutex()
-+}
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationStore.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationStore.kt
-new file mode 100644
-index 000000000..d678b3dc9
---- /dev/null
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationStore.kt
-@@ -0,0 +1,78 @@
-+package co.electriccoin.zcash.ui.common.donation
-+
-+import android.content.Context
-+import co.electriccoin.zcash.ui.common.model.VersionInfo
-+import org.json.JSONObject
-+import java.math.BigDecimal
-+import java.util.UUID
-+import java.security.MessageDigest
-+
-+/** A new authorization is deliberately independent of the legacy suggestion preference. */
-+data class AutoDonationConsent(
-+    val id: String,
-+    val accountUuid: String,
-+    val percent: BigDecimal,
-+    val network: String,
-+    val authorizedAtSeconds: Long,
-+)
-+
-+class AutoDonationStore(context: Context) {
-+    private companion object {
-+        val journalLock = Any()
-+        val MAX_PERCENT = BigDecimal(100)
-+        const val MILLIS_PER_SECOND = 1000L
-+    }
-+    private val prefs = context.getSharedPreferences("private_auto_donation_v1", Context.MODE_PRIVATE)
-+
-+    @Synchronized fun consent(): AutoDonationConsent? = runCatching {
-+        val json = JSONObject(prefs.getString("consent", null) ?: return null)
-+        AutoDonationConsent(json.getString("id"), json.getString("account"),
-+            json.getString("percent").toBigDecimal(), json.getString("network"), json.getLong("authorizedAt"))
-+            .takeIf { it.network == VersionInfo.NETWORK_DIMENSION.name && it.percent > BigDecimal.ZERO &&
-+                it.percent <= MAX_PERCENT }
-+    }.getOrNull()
-+
-+    /** Caller must obtain fresh explicit authorization for this account and percentage first. */
-+    @Synchronized fun authorize(accountUuid: String, percent: BigDecimal): AutoDonationConsent {
-+        require(accountUuid.isNotBlank() && percent > BigDecimal.ZERO && percent <= MAX_PERCENT)
-+        val value = AutoDonationConsent(UUID.randomUUID().toString(), accountUuid, percent,
-+            VersionInfo.NETWORK_DIMENSION.name, System.currentTimeMillis() / MILLIS_PER_SECOND)
-+        check(prefs.edit().putString("consent", JSONObject().put("id", value.id).put("account", accountUuid)
-+            .put("percent", percent.toPlainString()).put("network", value.network)
-+            .put("authorizedAt", value.authorizedAtSeconds).toString()).commit())
-+        return value
-+    }
-+
-+    @Synchronized fun disable() { check(prefs.edit().remove("consent").commit()) }
-+    fun latestOutcome(): String? = prefs.getString("outcome", null)
-+
-+    val latestDiagnostic: String? get() = prefs.getString("diagnostic", null)
-+
-+    @Synchronized internal fun diagnostic(value: JSONObject) {
-+        check(prefs.edit().putString("diagnostic", value.toString()).commit())
-+    }
-+
-+    internal fun hash(value: String): String = MessageDigest.getInstance("SHA-256")
-+        .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
-+
-+    internal fun enroll(key: String, enrollment: JSONObject) = synchronized(journalLock) {
-+        if (!prefs.contains("swap:${hash(key)}")) {
-+            check(prefs.edit().putString("swap:${hash(key)}", enrollment.toString()).commit())
-+        }
-+    }
-+    internal fun reserve(key: String): JSONObject? = synchronized(journalLock) {
-+        val value = prefs.getString("swap:${hash(key)}", null)?.let(::JSONObject) ?: return@synchronized null
-+        if (value.optBoolean("consumed")) return@synchronized null
-+        value.put("consumed", true)
-+        // Persist before launching work. A crash leaves this swap consumed, never payable again.
-+        check(prefs.edit().putString("swap:${hash(key)}", value.toString()).commit())
-+        value
-+    }
-+    internal fun recordTransactionIds(key: String, ids: List<String>) = synchronized(journalLock) {
-+        check(prefs.edit().putString("transactions:${hash(key)}", org.json.JSONArray(ids).toString()).commit())
-+    }
-+
-+    @Synchronized internal fun outcome(key: String, reason: String) {
-+        check(prefs.edit().putString("outcome", reason).putString("result:${hash(key)}", reason).commit())
-+    }
-+}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt
 index befe3b652..3c6b6ef3a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt
@@ -4230,10 +3899,10 @@ index f0ef84ad1..c81390205 100644
 +    val destinationChainTxHashes: List<TransactionChainHash>? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
 new file mode 100644
-index 000000000..8b30dde65
+index 000000000..6d709397b
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,80 @@
 +package co.electriccoin.zcash.ui.common.model.zcash
 +
 +import cash.z.ecc.android.sdk.model.Proposal
@@ -4242,8 +3911,6 @@ index 000000000..8b30dde65
 +import co.electriccoin.zcash.ui.BuildConfig
 +import co.electriccoin.zcash.ui.common.model.NetworkDimension
 +import co.electriccoin.zcash.ui.common.model.VersionInfo
-+import java.math.BigDecimal
-+import java.math.RoundingMode
 +import org.zecdev.zip321.ZIP321
 +import org.zecdev.zip321.parser.ParserContext
 +
@@ -4264,11 +3931,6 @@ index 000000000..8b30dde65
 +    fun setIsolatedTestnetRecipient(address: String) {
 +        check(BuildConfig.DEBUG && VersionInfo.NETWORK_DIMENSION == NetworkDimension.TESTNET)
 +        isolatedTestnetRecipient = address
-+    }
-+
-+    fun suggestedZatoshi(basisZec: BigDecimal, percent: BigDecimal): Long {
-+        require(basisZec.signum() >= 0 && percent >= BigDecimal.ZERO && percent <= BigDecimal(100))
-+        return basisZec.multiply(percent).movePointRight(6).setScale(0, RoundingMode.DOWN).longValueExact()
 +    }
 +
 +    /** Inspect the SDK's actual proposal, not a balance estimate or the address prefix. */
@@ -4971,21 +4633,19 @@ index 36d947b49..4bef6c4cf 100644
 +            quote.value = null
 +        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
-index 0a5bfe73c..e49739838 100644
+index 0a5bfe73c..4188c0849 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
-@@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.repository
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.repository
 +import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
-+import co.electriccoin.zcash.ui.common.donation.AutoDonationSpendingGate
-+import kotlinx.coroutines.sync.withLock
-@@ -14,0 +18 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+@@ -14,0 +16 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 +import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
-@@ -19,0 +24 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
+@@ -19,0 +22 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
 +import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
-@@ -37,0 +43,2 @@ interface ZashiProposalRepository {
+@@ -37,0 +41,2 @@ interface ZashiProposalRepository {
 +    suspend fun createDonationProposal(zecSend: ZecSend): RegularTransactionProposal
 +
-@@ -83,0 +91,8 @@ class ZashiProposalRepositoryImpl(
+@@ -83,0 +89,8 @@ class ZashiProposalRepositoryImpl(
 +    override suspend fun createDonationProposal(zecSend: ZecSend): RegularTransactionProposal =
 +        createProposalInternal {
 +            val account = accountDataSource.getSelectedAccount()
@@ -4994,100 +4654,27 @@ index 0a5bfe73c..e49739838 100644
 +            proposalDataSource.createProposal(account, zecSend).copy(isDonation = true)
 +        }
 +
-@@ -128 +143 @@ class ZashiProposalRepositoryImpl(
--    @Suppress("TooGenericExceptionCaught", "UseCheckOrError")
-+    @Suppress("TooGenericExceptionCaught", "UseCheckOrError", "NestedBlockDepth")
-@@ -132,18 +147,37 @@ class ZashiProposalRepositoryImpl(
--                val transactionProposal = transactionProposal.value
--                if (transactionProposal == null) {
--                    val cause = IllegalStateException("Transaction proposal is null")
--                    submitState.update { SubmitProposalState.Result(SubmitResult.Error(cause)) }
--                    throw cause
--                } else {
--                    submitState.update { SubmitProposalState.Submitting }
--                    try {
--                        val result =
--                            proposalDataSource.submitTransaction(
--                                proposal = transactionProposal.proposal,
--                                usk = zashiSpendingKeyDataSource.getZashiSpendingKey()
--                            )
--                        submitState.update { SubmitProposalState.Result(result) }
--                        result
--                    } catch (e: Exception) {
--                        submitState.update { SubmitProposalState.Result(SubmitResult.Error(e)) }
--                        throw e
-+                AutoDonationSpendingGate.mutex.withLock {
-+                    val transactionProposal = transactionProposal.value
-+                    if (transactionProposal == null) {
-+                        val cause = IllegalStateException("Transaction proposal is null")
-+                        submitState.update { SubmitProposalState.Result(SubmitResult.Error(cause)) }
-+                        throw cause
-+                    } else {
-+                        submitState.update { SubmitProposalState.Submitting }
-+                        try {
-+                            val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
-+                            if (transactionProposal is RegularTransactionProposal && transactionProposal.isDonation) {
-+                                require(transactionProposal.destination.address ==
-+                                    DonationPolicy.recipient())
-+                                DonationPolicy.requireShielded(
-+                                    transactionProposal.proposal,
-+                                    ZecSend(
-+                                        transactionProposal.destination,
-+                                        transactionProposal.amount,
-+                                        transactionProposal.memo,
-+                                        null
-+                                    )
+@@ -139,0 +153,17 @@ class ZashiProposalRepositoryImpl(
++                        val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
++                        if (transactionProposal is RegularTransactionProposal && transactionProposal.isDonation) {
++                            require(transactionProposal.destination.address ==
++                                DonationPolicy.recipient())
++                            DonationPolicy.requireShielded(
++                                transactionProposal.proposal,
++                                ZecSend(
++                                    transactionProposal.destination,
++                                    transactionProposal.amount,
++                                    transactionProposal.memo,
++                                    null
 +                                )
-+                            }
-+                            if (transactionProposal is SwapTransactionProposal) {
-+                                ZecSwapComposition.validate(transactionProposal.quote)
-+                            }
-+                            val result =
-+                                proposalDataSource.submitTransaction(
-+                                    proposal = transactionProposal.proposal,
-+                                    usk = spendingKey
-+                                )
-+                            submitState.update { SubmitProposalState.Result(result) }
-+                            result
-+                        } catch (e: Exception) {
-+                            submitState.update { SubmitProposalState.Result(SubmitResult.Error(e)) }
-+                            throw e
++                            )
 +                        }
-@@ -161,16 +195,18 @@ class ZashiProposalRepositoryImpl(
--    private inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
--        val proposal =
--            try {
--                block()
--            } catch (e: TransactionProposalNotCreatedException) {
--                Twig.error(e) { "Unable to create proposal" }
--                transactionProposal.update { null }
--                throw e
--            } catch (e: InsufficientFundsException) {
--                Twig.error(e) { "Insufficient funds" }
--                transactionProposal.update { null }
--                throw e
--            }
--        transactionProposal.update { proposal }
--        return proposal
--    }
-+    private suspend fun <T : TransactionProposal> createProposalInternal(block: suspend () -> T): T =
-+        AutoDonationSpendingGate.mutex.withLock {
-+            val proposal =
-+                try {
-+                    block()
-+                } catch (e: TransactionProposalNotCreatedException) {
-+                    Twig.error(e) { "Unable to create proposal" }
-+                    transactionProposal.update { null }
-+                    throw e
-+                } catch (e: InsufficientFundsException) {
-+                    Twig.error(e) { "Insufficient funds" }
-+                    transactionProposal.update { null }
-+                    throw e
-+                }
-+            submitState.update { null }
-+            transactionProposal.update { proposal }
-+            proposal
-+        }
++                        if (transactionProposal is SwapTransactionProposal) {
++                            ZecSwapComposition.validate(transactionProposal.quote)
++                        }
+@@ -143 +173 @@ class ZashiProposalRepositoryImpl(
+-                                usk = zashiSpendingKeyDataSource.getZashiSpendingKey()
++                                usk = spendingKey
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCase.kt
 index 1d3fdf0e2..f1f74ce28 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCase.kt
@@ -5282,14 +4869,6 @@ index 84d9fd0c0..000000000
 -    ENABLED,
 -    DISABLED
 -}
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-index a33c847ad..8c400cd5a 100644
---- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-@@ -18,0 +19 @@ class GetSwapStatusUseCase(
-+    private val autoDonations: co.electriccoin.zcash.ui.common.donation.AutoDonationCoordinator? = null,
-@@ -61,0 +63 @@ class GetSwapStatusUseCase(
-+                        autoDonations?.onStatus(result)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
 index eab9cf9da..0c491fdc7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
@@ -5301,14 +4880,6 @@ index eab9cf9da..0c491fdc7 100644
 +            navigateToErrorUseCase(ErrorArgs.General(UnsupportedZip321PaymentCountException()))
 +            return
 +        }
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt
-index db95c0420..6a2c80897 100644
---- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt
-@@ -13,0 +14 @@ class ProcessSwapTransactionUseCase(
-+    private val autoDonations: co.electriccoin.zcash.ui.common.donation.AutoDonationCoordinator? = null,
-@@ -17,0 +19 @@ class ProcessSwapTransactionUseCase(
-+        autoDonations?.enroll(transactionProposal.quote, result.txIds.filter { it.isNotEmpty() })
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 index 76c590a49..4ed8f617b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
@@ -5381,14 +4952,6 @@ index 76c590a49..4ed8f617b 100644
 +        }
 +
 +        if (result is SwapQuoteData.Success && funding == FundingCapability.LOCAL_TRANSACTION) {
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SaveORSwapUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SaveORSwapUseCase.kt
-index 548d25575..9f548f62c 100644
---- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SaveORSwapUseCase.kt
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SaveORSwapUseCase.kt
-@@ -14,0 +15 @@ class SaveORSwapUseCase(
-+    private val autoDonations: co.electriccoin.zcash.ui.common.donation.AutoDonationCoordinator? = null,
-@@ -30,0 +32 @@ class SaveORSwapUseCase(
-+            autoDonations?.enroll(quote)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
 index 51caa9e19..8e640d823 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
@@ -5707,28 +5270,19 @@ index 000000000..14a4deb26
 +data class DonationArgs(val basisZec: String? = null)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt
 new file mode 100644
-index 000000000..271ffcd64
+index 000000000..579c201e8
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,20 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import android.content.Context
 +import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
-+import java.math.BigDecimal
 +
-+/** Local suggestions and prompt suppression only. These preferences never authorize a payment. */
++/** Local suppression settings for the optional donation invitation. */
 +@Suppress("MagicNumber")
 +class DonationPreferences(context: Context) {
 +    private val preferences = context.getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE)
-+
-+    var percent: BigDecimal
-+        get() = preferences.getString("percent", "0")?.toBigDecimalOrNull()
-+            ?.takeIf { it >= BigDecimal.ZERO && it <= BigDecimal(100) } ?: BigDecimal.ZERO
-+        set(value) {
-+            require(value >= BigDecimal.ZERO && value <= BigDecimal(100))
-+            preferences.edit().putString("percent", value.toPlainString()).apply()
-+        }
 +
 +    fun mayInvite(now: Long): Boolean {
 +        val last = preferences.getLong("last_invitation", 0)
@@ -5742,166 +5296,72 @@ index 000000000..271ffcd64
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt
 new file mode 100644
-index 000000000..bea36b052
+index 000000000..fca069669
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt
-@@ -0,0 +1,222 @@
+@@ -0,0 +1,128 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.compose.foundation.layout.Column
 +import androidx.compose.foundation.layout.padding
 +import androidx.compose.material3.Text
-+import androidx.compose.ui.Modifier
-+import androidx.compose.ui.res.stringResource
-+import androidx.compose.ui.unit.dp
-+import co.electriccoin.zcash.ui.design.component.ZashiTextButton
-+import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
-+import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
-+import androidx.compose.runtime.Composable
-+import androidx.compose.runtime.LaunchedEffect
 +import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.Composable
 +import androidx.compose.runtime.getValue
 +import androidx.compose.runtime.mutableStateOf
 +import androidx.compose.runtime.remember
 +import androidx.compose.runtime.rememberCoroutineScope
 +import androidx.compose.runtime.saveable.rememberSaveable
 +import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
 +import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.res.stringResource
++import androidx.compose.ui.unit.dp
 +import cash.z.ecc.android.sdk.model.Memo
 +import cash.z.ecc.android.sdk.model.WalletAddress
 +import cash.z.ecc.android.sdk.model.Zatoshi
 +import cash.z.ecc.android.sdk.model.ZecSend
-+import co.electriccoin.zcash.ui.common.donation.AutoDonationStore
-+import co.electriccoin.zcash.ui.common.donation.AutoDonationSpendingGate
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
++import co.electriccoin.zcash.ui.common.model.ZodlAccount
++import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
++import co.electriccoin.zcash.ui.design.component.ZashiTextButton
++import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
++import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
-+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
-+import co.electriccoin.zcash.ui.common.model.ZodlAccount
-+import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
-+import co.electriccoin.zcash.ui.common.repository.BiometricRepository
-+import co.electriccoin.zcash.ui.common.repository.BiometricRequest
-+import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
-+import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.screen.ExternalUrl
 +import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionArgs
-+import java.math.BigDecimal
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.launch
-+import kotlinx.coroutines.sync.withLock
 +import org.koin.compose.koinInject
 +
 +@Suppress("MagicNumber", "CyclomaticComplexMethod", "TooGenericExceptionCaught", "LongMethod")
 +@Composable
-+fun DonationScreen(args: DonationArgs) {
++fun DonationScreen(@Suppress("UNUSED_PARAMETER") args: DonationArgs) {
 +    val router = koinInject<NavigationRouter>()
 +    val accounts = koinInject<AccountDataSource>()
 +    val proposals = koinInject<ZashiProposalRepository>()
-+    val biometrics = koinInject<BiometricRepository>()
 +    val context = LocalContext.current
 +    val preferences = remember(context) { DonationPreferences(context) }
-+    val automatic = remember(context) { AutoDonationStore(context) }
 +    val scope = rememberCoroutineScope()
 +    val account by accounts.selectedAccount.collectAsState(initial = null)
-+    val accountId = account?.sdkAccount?.accountUuid?.toString()
-+    val basis = args.basisZec?.toBigDecimalOrNull()?.takeIf { it.signum() > 0 }
-+    var consent by remember { mutableStateOf(automatic.consent()) }
-+    var enabled by rememberSaveable(accountId) {
-+        mutableStateOf(consent?.accountUuid == accountId && accountId != null)
-+    }
-+    var percent by rememberSaveable(accountId) {
-+        mutableStateOf(consent?.takeIf { it.accountUuid == accountId }?.percent?.toPlainString() ?: "0.25")
-+    }
-+    var amount by rememberSaveable {
-+        mutableStateOf(
-+            basis?.let { BigDecimal.valueOf(DonationPolicy.suggestedZatoshi(it, preferences.percent), 8) }
-+                ?.takeIf { it.signum() > 0 }?.toPlainString().orEmpty()
-+        )
-+    }
++    var amount by rememberSaveable { mutableStateOf("") }
 +    var busy by remember { mutableStateOf(false) }
 +    var failed by remember { mutableStateOf(false) }
 +    var unsupported by remember { mutableStateOf(false) }
-+    var saveFailed by remember { mutableStateOf(false) }
-+    LaunchedEffect(accountId) {
-+        consent = automatic.consent()
-+        enabled = consent?.accountUuid == accountId && accountId != null
-+        percent = consent?.takeIf { it.accountUuid == accountId }?.percent?.toPlainString() ?: "0.25"
-+    }
-+    val percentage = percent.toBigDecimalOrNull()?.takeIf { it > BigDecimal.ZERO && it <= BigDecimal(100) }
 +    val zatoshi = amount.toBigDecimalOrNull()?.let {
 +        runCatching { it.movePointRight(8).longValueExact() }.getOrNull()?.takeIf { value -> value > 0 }
 +    }
-+    val saved = consent?.takeIf { it.accountUuid == accountId }
-+    val changed = enabled && (saved == null || saved.percent.compareTo(percentage ?: BigDecimal.ZERO) != 0)
 +    DonationView(
 +        state = DonationViewState(
-+            automationEnabled = enabled,
-+            percent = percent,
 +            amount = amount,
 +            busy = busy,
 +            error = failed,
 +            unsupported = unsupported || (account != null && account !is ZodlAccount),
 +            canReview = zatoshi != null && DonationPolicy.recipient() != null && account is ZodlAccount,
-+            canSaveAuto = changed && percentage != null && account is ZodlAccount,
-+            automationSaved = saved != null && !changed && enabled,
-+            autoOutcome = if (saveFailed) context.getString(R.string.private_support_auto_save_failed)
-+                else automatic.latestOutcome(),
 +        ),
-+        onToggleAuto = { value ->
-+            enabled = value
-+            failed = false
-+            if (!value) {
-+                busy = true
-+                scope.launch {
-+                    try {
-+                        AutoDonationSpendingGate.mutex.withLock { automatic.disable() }
-+                        consent = null
-+                    } catch (_: Exception) {
-+                        saveFailed = true
-+                        consent = automatic.consent()
-+                        enabled = consent?.accountUuid == accountId
-+                    } finally {
-+                        busy = false
-+                    }
-+                }
-+            }
-+        },
-+        onPercentChanged = { percent = it },
 +        onAmountChanged = { amount = it; failed = false },
-+        onSaveAuto = {
-+            if (!busy && percentage != null && account is ZodlAccount) {
-+                val approvedAccount = requireNotNull(accountId)
-+                val approvedPercent = percentage
-+                busy = true
-+                scope.launch {
-+                    try {
-+                        biometrics.requestBiometrics(
-+                            BiometricRequest(
-+                                stringRes(R.string.private_support_auto_authorize, approvedPercent.toPlainString())
-+                            )
-+                        )
-+                        val current = accounts.getSelectedAccount()
-+                        check(current is ZodlAccount && current.sdkAccount.accountUuid.toString() == approvedAccount)
-+                        AutoDonationSpendingGate.mutex.withLock {
-+                            val selected = accounts.getSelectedAccount()
-+                            check(selected is ZodlAccount &&
-+                                selected.sdkAccount.accountUuid.toString() == approvedAccount)
-+                            automatic.authorize(approvedAccount, approvedPercent)
-+                        }
-+                        consent = automatic.consent()
-+                        saveFailed = false
-+                        preferences.postpone(System.currentTimeMillis())
-+                    } catch (e: CancellationException) {
-+                        throw e
-+                    } catch (_: Exception) {
-+                        saveFailed = true
-+                        consent = automatic.consent()
-+                        enabled = consent?.accountUuid == accountId
-+                    } finally {
-+                        busy = false
-+                    }
-+                }
-+            }
-+        },
 +        onReview = {
 +            if (!busy && zatoshi != null) {
 +                busy = true
@@ -5945,7 +5405,7 @@ index 000000000..bea36b052
 +    val preferences = remember(context) { DonationPreferences(context) }
 +    var visible by remember {
 +        mutableStateOf(
-+            AutoDonationStore(context).consent() == null && preferences.mayInvite(System.currentTimeMillis())
++            preferences.mayInvite(System.currentTimeMillis())
 +        )
 +    }
 +    if (visible) {
@@ -5970,16 +5430,15 @@ index 000000000..bea36b052
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
 new file mode 100644
-index 000000000..9249f3d42
+index 000000000..b3daf1701
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
-@@ -0,0 +1,233 @@
+@@ -0,0 +1,153 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.activity.compose.BackHandler
 +import androidx.compose.foundation.layout.Arrangement
 +import androidx.compose.foundation.layout.Column
-+import androidx.compose.foundation.layout.Row
 +import androidx.compose.foundation.layout.fillMaxWidth
 +import androidx.compose.foundation.layout.padding
 +import androidx.compose.foundation.rememberScrollState
@@ -5993,36 +5452,29 @@ index 000000000..9249f3d42
 +import androidx.compose.ui.res.stringResource
 +import androidx.compose.ui.semantics.contentDescription
 +import androidx.compose.ui.semantics.semantics
-+import androidx.compose.ui.semantics.selected
 +import androidx.compose.ui.text.font.FontWeight
 +import androidx.compose.ui.text.input.ImeAction
 +import androidx.compose.ui.text.input.KeyboardType
 +import androidx.compose.ui.unit.dp
-+import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
-+import co.electriccoin.zcash.ui.design.component.ChipButtonState
 +import co.electriccoin.zcash.ui.design.component.ZashiButton
 +import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
-+import co.electriccoin.zcash.ui.design.component.ZashiChipButton
 +import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
-+import co.electriccoin.zcash.ui.design.component.ZashiTextFieldDefaults
 +import co.electriccoin.zcash.ui.design.component.ZashiTextField
++import co.electriccoin.zcash.ui.design.component.ZashiTextFieldDefaults
 +import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarBackNavigation
 +import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
-+import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 +import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 +import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
-+import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.design.theme.ZcashTheme
++import co.electriccoin.zcash.ui.R
 +
 +@Suppress("LongParameterList", "LongMethod", "MagicNumber")
 +@Composable
 +internal fun DonationView(
 +    state: DonationViewState,
-+    onToggleAuto: (Boolean) -> Unit,
-+    onPercentChanged: (String) -> Unit,
 +    onAmountChanged: (String) -> Unit,
 +    onReview: () -> Unit,
-+    onSaveAuto: () -> Unit,
 +    onExternalAddresses: () -> Unit,
 +    onBack: () -> Unit,
 +) {
@@ -6042,6 +5494,7 @@ index 000000000..9249f3d42
 +            verticalArrangement = Arrangement.spacedBy(16.dp)
 +        ) {
 +            DonationHeading(stringResource(R.string.private_support_once))
++            DonationMessage(stringResource(R.string.private_support_description))
 +            DonationInput(
 +                label = stringResource(R.string.private_support_amount),
 +                value = state.amount,
@@ -6062,57 +5515,6 @@ index 000000000..9249f3d42
 +            if (state.unsupported) {
 +                DonationMessage(stringResource(R.string.private_support_software_only))
 +            }
-+            DonationHeading(
-+                text = stringResource(R.string.private_support_auto_title),
-+                modifier = Modifier.padding(top = 16.dp)
-+            )
-+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-+                DonationChoice(
-+                    label = stringResource(R.string.private_support_auto_off),
-+                    selected = !state.automationEnabled,
-+                    enabled = !state.busy,
-+                    onClick = { onToggleAuto(false) }
-+                )
-+                DonationChoice(
-+                    label = stringResource(R.string.private_support_auto_on),
-+                    selected = state.automationEnabled,
-+                    enabled = !state.busy,
-+                    onClick = { onToggleAuto(true) }
-+                )
-+            }
-+            DonationMessage(stringResource(R.string.private_support_auto_description))
-+            if (state.automationEnabled) {
-+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-+                    listOf("0.25", "0.5", "1").forEach { value ->
-+                        DonationChoice(
-+                            label = "$value%",
-+                            selected = state.percent.toBigDecimalOrNull()?.compareTo(value.toBigDecimal()) == 0,
-+                            enabled = !state.busy,
-+                            onClick = { onPercentChanged(value) }
-+                        )
-+                    }
-+                }
-+                DonationInput(
-+                    label = stringResource(R.string.private_support_auto_percent),
-+                    value = state.percent,
-+                    suffix = "%",
-+                    enabled = !state.busy,
-+                    onValueChange = onPercentChanged
-+                )
-+            }
-+            if (state.automationEnabled) {
-+                ZashiButton(
-+                    text = stringResource(R.string.private_support_auto_save),
-+                    onClick = onSaveAuto,
-+                    enabled = state.canSaveAuto && !state.busy,
-+                    colors = ZashiButtonDefaults.secondaryColors(),
-+                    modifier = Modifier.fillMaxWidth()
-+                )
-+                if (state.automationSaved) {
-+                    DonationMessage(stringResource(R.string.private_support_auto_saved, state.percent))
-+                }
-+            }
-+            state.autoOutcome?.let { DonationMessage(it) }
 +            ZashiButton(
 +                text = stringResource(R.string.private_support_addresses),
 +                onClick = onExternalAddresses,
@@ -6145,19 +5547,6 @@ index 000000000..9249f3d42
 +}
 +
 +@Composable
-+private fun DonationChoice(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
-+    ZashiChipButton(
-+        state = ChipButtonState(
-+            text = stringRes(label),
-+            startIcon = if (selected) co.electriccoin.zcash.ui.design.R.drawable.ic_radio_button_checked else null,
-+            isEnabled = enabled,
-+            onClick = onClick
-+        ),
-+        modifier = Modifier.semantics { this.selected = selected }
-+    )
-+}
-+
-+@Composable
 +private fun DonationInput(
 +    label: String,
 +    value: String,
@@ -6184,25 +5573,16 @@ index 000000000..9249f3d42
 +
 +@PreviewScreens
 +@Composable
-+private fun DonationOffPreview() = ZcashTheme {
++private fun DonationPreviewScreen() = ZcashTheme {
 +    DonationPreview(DonationViewState(amount = "0.01", canReview = true))
-+}
-+
-+@PreviewScreens
-+@Composable
-+private fun DonationOnPreview() = ZcashTheme {
-+    DonationPreview(DonationViewState(automationEnabled = true, percent = "0.5", automationSaved = true))
 +}
 +
 +@Composable
 +private fun DonationPreview(state: DonationViewState) {
 +    DonationView(
 +        state = state,
-+        onToggleAuto = {},
-+        onPercentChanged = {},
 +        onAmountChanged = {},
 +        onReview = {},
-+        onSaveAuto = {},
 +        onExternalAddresses = {},
 +        onBack = {}
 +    )
@@ -6210,23 +5590,18 @@ index 000000000..9249f3d42
 \ No newline at end of file
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt
 new file mode 100644
-index 000000000..5b5ce67d0
+index 000000000..999cff62d
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt
-@@ -0,0 +1,14 @@
+@@ -0,0 +1,9 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +internal data class DonationViewState(
-+    val automationEnabled: Boolean = false,
-+    val percent: String = "0.25",
 +    val amount: String = "",
 +    val busy: Boolean = false,
 +    val error: Boolean = false,
 +    val unsupported: Boolean = false,
 +    val canReview: Boolean = false,
-+    val canSaveAuto: Boolean = false,
-+    val automationSaved: Boolean = false,
-+    val autoOutcome: String? = null,
 +)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt
 index d03354a1e..59f3a7516 100644
@@ -11844,10 +11219,10 @@ index 423d6742d..a8aeb88ba 100644
 +    <string name="ironwood_announcement_primary_button">Go to ZEC Private</string>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
-index 000000000..83866f4de
+index 000000000..39275bb8b
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,21 @@
 +<resources>
 +    <string name="private_wallet_transaction_fee" translatable="false">Zcash network fee</string>
 +    <string name="private_provider_costs" translatable="false">NEAR platform fee</string>
@@ -11867,15 +11242,7 @@ index 000000000..83866f4de
 +    <string name="private_support_not_now">Not now</string>
 +    <string name="private_support_never">Don’t ask again</string>
 +    <string name="private_support_once">Donate once</string>
-+    <string name="private_support_auto_title">Automatic swap donations</string>
-+    <string name="private_support_auto_off">Off</string>
-+    <string name="private_support_auto_on">On</string>
-+    <string name="private_support_auto_description">Donate your chosen percentage after each successful swap. Skip when the donation network fee is equal to or greater than the donation.</string>
-+    <string name="private_support_auto_percent">Percentage of ZEC swapped</string>
-+    <string name="private_support_auto_save">Save automatic donations</string>
-+    <string name="private_support_auto_authorize">Enable automatic donations of %1$s%% after successful swaps</string>
-+    <string name="private_support_auto_saved">Saved: %1$s%% after successful swaps</string>
-+    <string name="private_support_auto_save_failed">Automatic donations were not saved. Try again.</string>
++    <string name="private_support_description">Choose an amount to support ZEC Private development. Your donation uses a shielded address. Review the amount and network fee before sending.</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/strings.xml
 index 813f56457..972dcc8f8 100644
@@ -12184,519 +11551,6 @@ index 4c13e2085..1a88b2241 100644
 +
 @@ -150,0 +189 @@ class ProposalDataSourceTest {
 +        const val ZIP321_RECIPIENT = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU"
-diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt
-new file mode 100644
-index 000000000..4a7ed72c3
---- /dev/null
-+++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt
-@@ -0,0 +1,433 @@
-+package co.electriccoin.zcash.ui.common.donation
-+
-+import android.content.Context
-+import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
-+import cash.z.ecc.android.sdk.Synchronizer
-+import cash.z.ecc.android.sdk.model.Account
-+import cash.z.ecc.android.sdk.model.AccountUuid
-+import cash.z.ecc.android.sdk.model.BlockHeight
-+import cash.z.ecc.android.sdk.model.Proposal
-+import cash.z.ecc.android.sdk.model.TransactionId
-+import cash.z.ecc.android.sdk.model.TransactionOverview
-+import cash.z.ecc.android.sdk.model.TransactionState
-+import cash.z.ecc.android.sdk.model.UnifiedSpendingKey
-+import cash.z.ecc.android.sdk.model.Zatoshi
-+import cash.z.wallet.sdk.internal.ffi.ProposalOuterClass
-+import cash.z.wallet.sdk.internal.ffi.ProposalOuterClass.ValuePool
-+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
-+import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
-+import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
-+import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
-+import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
-+import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
-+import co.electriccoin.zcash.ui.common.model.SubmitResult
-+import co.electriccoin.zcash.ui.common.model.SwapAsset
-+import co.electriccoin.zcash.ui.common.model.SwapQuote
-+import co.electriccoin.zcash.ui.common.model.SwapMode
-+import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
-+import co.electriccoin.zcash.ui.common.model.SwapStatus
-+import co.electriccoin.zcash.ui.common.model.ZodlAccount
-+import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
-+import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
-+import co.electriccoin.zcash.ui.common.repository.SubmitProposalState
-+import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
-+import io.mockk.coEvery
-+import io.mockk.coVerify
-+import io.mockk.every
-+import io.mockk.mockk
-+import kotlinx.coroutines.CoroutineScope
-+import kotlinx.coroutines.ExperimentalCoroutinesApi
-+import kotlinx.coroutines.flow.MutableStateFlow
-+import kotlinx.coroutines.flow.flowOf
-+import kotlinx.coroutines.launch
-+import kotlinx.coroutines.awaitCancellation
-+import kotlinx.coroutines.sync.withLock
-+import kotlinx.coroutines.test.advanceUntilIdle
-+import kotlinx.coroutines.test.runCurrent
-+import kotlinx.coroutines.test.runTest
-+import org.junit.Before
-+import org.junit.Test
-+import org.junit.runner.RunWith
-+import org.robolectric.RobolectricTestRunner
-+import org.robolectric.RuntimeEnvironment
-+import org.robolectric.annotation.Config
-+import java.math.BigDecimal
-+import kotlin.test.assertNotNull
-+import kotlin.test.assertNull
-+import kotlin.test.assertTrue
-+import kotlin.time.Clock
-+import kotlin.time.Duration.Companion.seconds
-+
-+/** No SDK signer, broadcaster, wallet seed or network implementation is instantiated. */
-+@RunWith(RobolectricTestRunner::class)
-+@Config(sdk = [34])
-+@OptIn(ExperimentalCoroutinesApi::class)
-+class AutoDonationCoordinatorTest {
-+    private val context: Context get() = RuntimeEnvironment.getApplication()
-+
-+    @Before fun reset() {
-+        context.getSharedPreferences("private_auto_donation_v1", Context.MODE_PRIVATE).edit().clear().commit()
-+        context.getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE).edit().clear().commit()
-+    }
-+
-+    @Test fun savedSuggestionAndUnenrolledSuccessCannotSpend() = runTest {
-+        DonationPreferences(context).percent = BigDecimal.ONE
-+        val f = Fixture(this)
-+        f.engine.enroll(f.quote, listOf(f.depositId))
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertNull(f.store.latestOutcome())
-+        f.verifyNoSpending()
-+    }
-+
-+    @Test fun historicalQuoteCannotEnrollAfterAuthorization() = runTest {
-+        val f = Fixture(this)
-+        f.authorize()
-+        f.quote.timestamp = Clock.System.now() - 60.seconds
-+        f.engine.enroll(f.quote, listOf(f.depositId))
-+        assertNull(f.store.reserve("deposit"))
-+        f.verifyNoSpending()
-+    }
-+
-+    @Test fun revocationAfterEnrollmentPreventsSpendingAndConsumesEnrollment() = runTest {
-+        val f = Fixture(this)
-+        f.enroll()
-+        f.store.disable()
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("authorization unavailable"))
-+        assertNull(f.store.reserve("deposit"))
-+        f.verifyNoSpending()
-+    }
-+
-+    @Test fun reauthorizationCannotRevivePreviouslyEnrolledSwap() = runTest {
-+        val f = Fixture(this)
-+        f.enroll()
-+        f.store.authorize(f.accountId, BigDecimal("2"))
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        f.verifyNoSpending()
-+    }
-+
-+    @Test fun successAndReplayCreateOnlyOneDonation() = runTest {
-+        val f = Fixture(this)
-+        f.enroll()
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("submitted"))
-+        f.engine.onStatus(f.status)
-+        f.newEngine(this).onStatus(f.status)
-+        advanceUntilIdle()
-+        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
-+        coVerify(exactly = 1) { f.keys.getZashiSpendingKey() }
-+        coVerify(exactly = 1) { f.proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
-+    }
-+
-+    @Test fun incomingConfirmedReceiptUsesExecutedOutput() = runTest {
-+        val f = Fixture(this)
-+        f.prepareIncoming(101)
-+        f.enroll()
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("submitted"))
-+        coVerify(exactly = 1) { f.proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
-+    }
-+
-+    @Test fun incomingReceiptBeforeEnrollmentCannotSpend() = runTest {
-+        val f = Fixture(this)
-+        f.prepareIncoming(100)
-+        f.enroll()
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("predates swap enrollment"))
-+        f.verifyNoSpending()
-+    }
-+
-+    @Test fun timeoutDuringSubmissionCannotRetry() = runTest {
-+        val f = Fixture(this)
-+        f.enroll()
-+        coEvery { f.proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) } coAnswers {
-+            awaitCancellation()
-+        }
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("uncertain"))
-+        f.engine.onStatus(f.status)
-+        f.newEngine(this).onStatus(f.status)
-+        advanceUntilIdle()
-+        coVerify(exactly = 1) { f.proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
-+    }
-+
-+    @Test fun feeEqualToDonationNeverObtainsKeyOrSubmits() = runTest {
-+        val f = Fixture(this, fee = 100_000)
-+        f.enroll()
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("network fee"))
-+        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
-+        f.verifyNoSigning()
-+    }
-+
-+    @Test fun feeGreaterThanDonationNeverObtainsKeyOrSubmits() = runTest {
-+        val f = Fixture(this, fee = 100_001)
-+        f.enroll()
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("network fee"))
-+        f.verifyNoSigning()
-+    }
-+
-+    @Test fun unknownExecutedAmountCannotFallBackToQuote() = runTest {
-+        val f = Fixture(this)
-+        f.enroll()
-+        f.status.executedAmountIn = null
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("settled input"))
-+        f.verifyNoSpending()
-+    }
-+
-+    @Test fun negativeRefundCannotIncreaseDonationBasis() = runTest {
-+        val f = Fixture(this)
-+        f.enroll()
-+        f.status.refundedFormatted = BigDecimal("-1")
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("refund"))
-+        f.verifyNoSpending()
-+    }
-+
-+    @Test fun missingDepositEvidenceCannotSpend() = runTest {
-+        val f = Fixture(this)
-+        f.authorize()
-+        f.engine.enroll(f.quote)
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("missing transaction evidence"))
-+        f.verifyNoSpending()
-+    }
-+
-+    @Test fun duplicateDepositProofCannotCountTheSameSpendTwice() = runTest {
-+        val f = Fixture(this)
-+        f.authorize()
-+        f.engine.enroll(f.quote, listOf(f.depositId, f.depositId))
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("missing transaction evidence"))
-+        f.verifyNoSpending()
-+    }
-+
-+    @Test fun providerAmountMustEqualConfirmedNativeDeposit() = runTest {
-+        val f = Fixture(this)
-+        f.enroll()
-+        f.status.depositedAmountFormatted = BigDecimal("0.2")
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("amount differs"))
-+        f.verifyNoSpending()
-+    }
-+
-+    @Test fun malformedProposalCannotReachSigner() = runTest {
-+        val f = Fixture(this, malformedProposal = true)
-+        f.enroll()
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("uncertain"))
-+        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
-+        f.verifyNoSigning()
-+        val diagnostic = org.json.JSONObject(assertNotNull(f.store.latestDiagnostic))
-+        assertTrue(diagnostic.getString("stage") == "shielded_validation")
-+        assertTrue(diagnostic.getString("exception_class") == "IllegalArgumentException")
-+        assertTrue(!diagnostic.toString().contains("deposit"))
-+        f.engine.onStatus(f.status)
-+        advanceUntilIdle()
-+        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
-+    }
-+
-+    @Test fun revocationQueuedBeforeCommitGateWins() = runTest {
-+        val f = Fixture(this)
-+        f.enroll()
-+        AutoDonationSpendingGate.mutex.lock()
-+        try {
-+            launch { AutoDonationSpendingGate.mutex.withLock { f.store.disable() } }
-+            runCurrent()
-+            f.engine.onStatus(f.status)
-+            runCurrent()
-+            f.verifyNoSpending()
-+        } finally {
-+            AutoDonationSpendingGate.mutex.unlock()
-+        }
-+        advanceUntilIdle()
-+        assertNull(f.store.consent())
-+        f.verifyNoSpending()
-+    }
-+
-+    @Test fun manualProposalPublishedAtCommitGatePreventsAutomaticSpend() = runTest {
-+        val f = Fixture(this)
-+        f.enroll()
-+        AutoDonationSpendingGate.mutex.lock()
-+        try {
-+            f.engine.onStatus(f.status)
-+            runCurrent()
-+            f.manualProposal.value = mockk()
-+        } finally {
-+            AutoDonationSpendingGate.mutex.unlock()
-+        }
-+        advanceUntilIdle()
-+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("another transaction"))
-+        f.verifyNoSpending()
-+    }
-+
-+    private inner class Fixture(scope: CoroutineScope, fee: Long = 10_000, malformedProposal: Boolean = false) {
-+        val store = AutoDonationStore(context)
-+        val accountUuid = AccountUuid.new(ByteArray(16) { it.toByte() })
-+        val accountId = accountUuid.toString()
-+        private val sdkAccount = Account.new(accountUuid)
-+        private val account = mockk<ZodlAccount> {
-+            every { sdkAccount } returns this@Fixture.sdkAccount
-+            every { spendableShieldedBalance } returns Zatoshi(100_000_000)
-+        }
-+        private val accounts = mockk<AccountDataSource> {
-+            coEvery { getSelectedAccount() } returns account
-+            coEvery { getZashiAccount() } returns account
-+        }
-+        val keys = mockk<ZashiSpendingKeyDataSource> {
-+            coEvery { getZashiSpendingKey() } returns mockk()
-+        }
-+        val manualProposal = MutableStateFlow<TransactionProposal?>(null)
-+        private val uiProposals = mockk<ZashiProposalRepository> {
-+            every { transactionProposal } returns manualProposal
-+            every { submitState } returns MutableStateFlow<SubmitProposalState?>(null)
-+        }
-+        private val nativeTxId = TransactionId.new(ByteArray(32) { (it + 1).toByte() })
-+        val depositId = nativeTxId.txIdString()
-+        private val transaction = mockk<TransactionOverview> {
-+            every { txId } returns nativeTxId
-+            every { transactionState } returns TransactionState.Confirmed
-+            every { isSentTransaction } returns true
-+            // Native wallet debit includes the network fee; swap deposit excludes it.
-+            every { netValue } returns Zatoshi(10_010_000)
-+            every { feePaid } returns Zatoshi(10_000)
-+        }
-+        private val synchronizer = mockk<Synchronizer> {
-+            coEvery { getTransactions(accountUuid) } returns flowOf(listOf(transaction))
-+        }
-+        private val synchronizers = mockk<SynchronizerProvider> {
-+            coEvery { getSynchronizer() } returns this@Fixture.synchronizer
-+        }
-+        private val zec = mockk<SwapAsset> {
-+            every { tokenTicker } returns "zec"
-+            every { chainTicker } returns "zec"
-+        }
-+        private val other = mockk<SwapAsset> {
-+            every { tokenTicker } returns "btc"
-+            every { chainTicker } returns "btc"
-+        }
-+        val quote = TestQuote(zec, other)
-+        val status = TestStatus(quote)
-+        private val proposal = proposal(fee, malformedProposal)
-+        val proposals = mockk<ProposalDataSource> {
-+            coEvery { createProposal(any(), any()) } answers {
-+                val send = secondArg<cash.z.ecc.android.sdk.model.ZecSend>()
-+                RegularTransactionProposal(send.destination, send.amount, send.memo, proposal)
-+            }
-+            coEvery { submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) } returns
-+                SubmitResult.Success(listOf("mock-donation-id"))
-+        }
-+        val engine = newEngine(scope)
-+
-+        fun newEngine(scope: CoroutineScope) = AutoDonationCoordinator(
-+            store, accounts, proposals, keys, synchronizers, uiProposals, scope
-+        )
-+
-+        fun prepareIncoming(minedHeight: Long) {
-+            quote.originAsset = other
-+            quote.destinationAsset = zec
-+            every { synchronizer.fullyScannedHeight } returns MutableStateFlow(BlockHeight.new(100))
-+            status.destinationTransactionIds = listOf(depositId)
-+            status.executedAmountOut = BigDecimal("0.1")
-+            every { transaction.isSentTransaction } returns false
-+            every { transaction.netValue } returns Zatoshi(10_000_000)
-+            every { transaction.minedHeight } returns BlockHeight.new(minedHeight)
-+        }
-+
-+        fun authorize() { store.authorize(accountId, BigDecimal.ONE) }
-+
-+        suspend fun enroll() {
-+            authorize()
-+            engine.enroll(quote, listOf(depositId))
-+        }
-+
-+        fun verifyNoSigning() {
-+            coVerify(exactly = 0) { keys.getZashiSpendingKey() }
-+            coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
-+        }
-+
-+        fun verifyNoSpending() {
-+            coVerify(exactly = 0) { proposals.createProposal(any(), any()) }
-+            verifyNoSigning()
-+        }
-+    }
-+
-+    /** Concrete address-bearing values avoid MockK reflection through inline SwapAddress getters. */
-+    private class TestQuote(
-+        override var originAsset: SwapAsset,
-+        override var destinationAsset: SwapAsset,
-+    ) : SwapQuote {
-+        override val depositAddress = DynamicSwapAddress("deposit")
-+        override val destinationAddress = DynamicSwapAddress("destination")
-+        override val refundAddress = DynamicSwapAddress("refund")
-+        override val provider = "test-provider"
-+        override val mode = SwapMode.EXACT_INPUT
-+        override val amountIn = BigDecimal(10_000_000)
-+        override val amountInFormatted = BigDecimal("0.1")
-+        override val amountInUsd = BigDecimal.ZERO
-+        override val amountOut = BigDecimal(10_000_000)
-+        override val amountOutFormatted = BigDecimal("0.1")
-+        override val amountOutUsd = BigDecimal.ZERO
-+        override val affiliateFee = BigDecimal.ZERO
-+        override val affiliateFeeUsd = BigDecimal.ZERO
-+        override val slippage = BigDecimal.ZERO
-+        override var timestamp = Clock.System.now() + 5.seconds
-+        override val deadline get() = timestamp + 60.seconds
-+    }
-+
-+    private class TestStatus(private val quote: TestQuote) : SwapQuoteStatus {
-+        override val originAsset get() = quote.originAsset
-+        override val destinationAsset get() = quote.destinationAsset
-+        override val depositAddress get() = quote.depositAddress
-+        override val destinationAddress get() = quote.destinationAddress
-+        override val timestamp get() = java.time.Instant.ofEpochSecond(quote.timestamp.epochSeconds)
-+        override val deadline get() = quote.deadline
-+        override val status = SwapStatus.SUCCESS
-+        override val mode get() = quote.mode
-+        override val isSlippageRealized = true
-+        override val maxSlippage = BigDecimal.ZERO
-+        override val amountInFormatted get() = quote.amountInFormatted
-+        override val amountInUsd get() = quote.amountInUsd
-+        override val amountOutFormatted get() = quote.amountOutFormatted
-+        override val amountOutUsd get() = quote.amountOutUsd
-+        override var depositedAmountFormatted: BigDecimal? = BigDecimal("0.1")
-+        override var executedAmountIn: BigDecimal? = BigDecimal("0.1")
-+        override var executedAmountOut: BigDecimal? = null
-+        override var refundedFormatted: BigDecimal? = BigDecimal.ZERO
-+        override var destinationTransactionIds: List<String> = emptyList()
-+    }
-+
-+    private fun proposal(fee: Long, malformed: Boolean): Proposal {
-+        val step = ProposalOuterClass.ProposalStep.newBuilder()
-+            .setTransactionRequest("zcash:${DonationPolicy.RECIPIENT}?amount=0.001")
-+            .addInputs(ProposalOuterClass.ProposedInput.newBuilder().setReceivedOutput(
-+                ProposalOuterClass.ReceivedOutput.newBuilder().setValuePool(ValuePool.Orchard).setValue(100_000 + fee)
-+            ))
-+            .addPaymentOutputPools(ProposalOuterClass.PaymentOutputPool.newBuilder().setValuePool(ValuePool.Orchard))
-+            .setBalance(ProposalOuterClass.TransactionBalance.newBuilder().setFeeRequired(fee))
-+        if (malformed) step.clearInputs()
-+        val bytes = ProposalOuterClass.Proposal.newBuilder().setFeeRule(ProposalOuterClass.FeeRule.Zip317)
-+            .addSteps(step).build().toByteArray()
-+        return mockk {
-+            every { toByteArray() } returns bytes
-+            every { totalFeeRequired() } returns Zatoshi(fee)
-+        }
-+    }
-+}
-diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationStoreTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationStoreTest.kt
-new file mode 100644
-index 000000000..58a1a8992
---- /dev/null
-+++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationStoreTest.kt
-@@ -0,0 +1,68 @@
-+package co.electriccoin.zcash.ui.common.donation
-+
-+import android.content.Context
-+import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
-+import org.json.JSONObject
-+import org.junit.Before
-+import org.junit.Test
-+import org.junit.runner.RunWith
-+import org.robolectric.RobolectricTestRunner
-+import org.robolectric.RuntimeEnvironment
-+import org.robolectric.annotation.Config
-+import java.math.BigDecimal
-+import kotlin.test.assertEquals
-+import kotlin.test.assertNotEquals
-+import kotlin.test.assertNotNull
-+import kotlin.test.assertNull
-+import kotlin.test.assertTrue
-+
-+@RunWith(RobolectricTestRunner::class)
-+@Config(sdk = [34])
-+class AutoDonationStoreTest {
-+    private val context: Context get() = RuntimeEnvironment.getApplication()
-+
-+    @Before fun reset() {
-+        context.getSharedPreferences("private_auto_donation_v1", Context.MODE_PRIVATE).edit().clear().commit()
-+        context.getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE).edit().clear().commit()
-+    }
-+
-+    @Test fun legacyPercentageDoesNotAuthorizeSpending() {
-+        DonationPreferences(context).percent = BigDecimal.ONE
-+        assertNull(AutoDonationStore(context).consent())
-+    }
-+
-+    @Test fun newAuthorizationHasFreshIdentityAndDisableSurvivesReload() {
-+        val store = AutoDonationStore(context)
-+        val first = store.authorize("account", BigDecimal("0.5"))
-+        assertEquals(first, AutoDonationStore(context).consent())
-+        val second = store.authorize("account", BigDecimal("0.5"))
-+        assertNotEquals(first.id, second.id)
-+        store.disable()
-+        assertNull(AutoDonationStore(context).consent())
-+    }
-+
-+    @Test fun reservationSurvivesCrashBeforeResultAndCannotBeReenrolled() {
-+        val store = AutoDonationStore(context)
-+        store.enroll("sensitive-deposit", JSONObject().put("consent", "one"))
-+        assertNotNull(store.reserve("sensitive-deposit"))
-+        val reopened = AutoDonationStore(context)
-+        assertNull(reopened.reserve("sensitive-deposit"))
-+        reopened.enroll("sensitive-deposit", JSONObject().put("consent", "two"))
-+        assertNull(reopened.reserve("sensitive-deposit"))
-+        val keys = context.getSharedPreferences("private_auto_donation_v1", Context.MODE_PRIVATE).all.keys
-+        assertTrue(keys.none { it.contains("sensitive-deposit") })
-+    }
-+
-+    @Test fun transactionIdsStaySeparateFromReadableOutcome() {
-+        val store = AutoDonationStore(context)
-+        store.recordTransactionIds("swap", listOf("transaction-id"))
-+        store.outcome("swap", "Automatic donation outcome uncertain. Check Activity.")
-+        assertEquals("Automatic donation outcome uncertain. Check Activity.", store.latestOutcome())
-+        val prefs = context.getSharedPreferences("private_auto_donation_v1", Context.MODE_PRIVATE)
-+        assertEquals("[\"transaction-id\"]", prefs.getString("transactions:${store.hash("swap")}", null))
-+    }
-+
-+    @Test fun unrelatedAndHistoricalSwapsHaveNoReservation() {
-+        assertNull(AutoDonationStore(context).reserve("never-enrolled"))
-+    }
-+}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt
 new file mode 100644
 index 000000000..508f860ac
@@ -14062,10 +12916,10 @@ index 708658383..b6cff1756 100644
 -            assertNull(state.keystonePromo)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt
 new file mode 100644
-index 000000000..577b1aa68
+index 000000000..dbd1be1d4
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt
-@@ -0,0 +1,160 @@
+@@ -0,0 +1,139 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
@@ -14079,31 +12933,10 @@ index 000000000..577b1aa68
 +import io.mockk.every
 +import io.mockk.mockk
 +import org.junit.Test
-+import java.math.BigDecimal
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
 +
 +class DonationPolicyTest {
-+    @Test
-+    fun exactPercentageUsesZatoshiAndRoundsDown() {
-+        assertEquals(1_234_567L, DonationPolicy.suggestedZatoshi(BigDecimal("1.23456789"), BigDecimal("1")))
-+        assertEquals(0L, DonationPolicy.suggestedZatoshi(BigDecimal("0.00000001"), BigDecimal("99")))
-+        assertEquals(100_000_000L, DonationPolicy.suggestedZatoshi(BigDecimal.ONE, BigDecimal("100")))
-+        assertEquals(0L, DonationPolicy.suggestedZatoshi(BigDecimal.ONE, BigDecimal.ZERO))
-+    }
-+
-+    @Test
-+    fun invalidPercentAndBasisAreRejected() {
-+        for (percent in listOf("-0.01", "100.01")) {
-+            assertFailsWith<IllegalArgumentException> {
-+                DonationPolicy.suggestedZatoshi(BigDecimal.ONE, BigDecimal(percent))
-+            }
-+        }
-+        assertFailsWith<IllegalArgumentException> {
-+            DonationPolicy.suggestedZatoshi(BigDecimal("-1"), BigDecimal.ONE)
-+        }
-+    }
-+
 +    @Test
 +    fun shieldedInputOutputAndChangeAreAccepted() {
 +        for (pool in listOf(ValuePool.Sapling, ValuePool.Orchard, ValuePool.Ironwood)) {
@@ -14228,25 +13061,22 @@ index 000000000..577b1aa68
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt
 new file mode 100644
-index 000000000..efb84a40e
+index 000000000..d34212350
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt
-@@ -0,0 +1,64 @@
+@@ -0,0 +1,42 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
-+import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 +import android.content.Context
-+import org.junit.Before
-+import org.junit.Test
-+import org.junit.runner.RunWith
-+import org.robolectric.RobolectricTestRunner
-+import org.robolectric.RuntimeEnvironment
-+import org.robolectric.annotation.Config
-+import java.math.BigDecimal
-+import kotlin.test.assertEquals
-+import kotlin.test.assertFailsWith
++import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 +import kotlin.test.assertFalse
 +import kotlin.test.assertTrue
++import org.junit.Before
++import org.junit.runner.RunWith
++import org.junit.Test
++import org.robolectric.annotation.Config
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
 +
 +@RunWith(RobolectricTestRunner::class)
 +@Config(sdk = [34])
@@ -14256,25 +13086,6 @@ index 000000000..efb84a40e
 +    @Before
 +    fun reset() {
 +        context.getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE).edit().clear().commit()
-+    }
-+
-+    @Test
-+    fun suggestionsDefaultToZeroAndPersistExactPercent() {
-+        assertEquals(BigDecimal.ZERO, DonationPreferences(context).percent)
-+        DonationPreferences(context).percent = BigDecimal("1.23456789")
-+        assertEquals(BigDecimal("1.23456789"), DonationPreferences(context).percent)
-+    }
-+
-+    @Test
-+    fun invalidStoredPercentDefaultsToZeroAndInvalidWritesAreRejected() {
-+        val storage = context.getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE)
-+        for (value in listOf("invalid", "-1", "101")) {
-+            storage.edit().putString("percent", value).commit()
-+            assertEquals(BigDecimal.ZERO, DonationPreferences(context).percent)
-+        }
-+        for (value in listOf("-0.01", "100.01")) {
-+            assertFailsWith<IllegalArgumentException> { DonationPreferences(context).percent = BigDecimal(value) }
-+        }
 +    }
 +
 +    @Test

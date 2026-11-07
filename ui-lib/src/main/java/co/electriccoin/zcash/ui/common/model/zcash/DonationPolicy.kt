@@ -6,8 +6,6 @@ import cash.z.wallet.sdk.internal.ffi.ProposalOuterClass
 import co.electriccoin.zcash.ui.BuildConfig
 import co.electriccoin.zcash.ui.common.model.NetworkDimension
 import co.electriccoin.zcash.ui.common.model.VersionInfo
-import java.math.BigDecimal
-import java.math.RoundingMode
 import org.zecdev.zip321.ZIP321
 import org.zecdev.zip321.parser.ParserContext
 
@@ -28,11 +26,6 @@ object DonationPolicy {
     fun setIsolatedTestnetRecipient(address: String) {
         check(BuildConfig.DEBUG && VersionInfo.NETWORK_DIMENSION == NetworkDimension.TESTNET)
         isolatedTestnetRecipient = address
-    }
-
-    fun suggestedZatoshi(basisZec: BigDecimal, percent: BigDecimal): Long {
-        require(basisZec.signum() >= 0 && percent >= BigDecimal.ZERO && percent <= BigDecimal(100))
-        return basisZec.multiply(percent).movePointRight(6).setScale(0, RoundingMode.DOWN).longValueExact()
     }
 
     /** Inspect the SDK's actual proposal, not a balance estimate or the address prefix. */
