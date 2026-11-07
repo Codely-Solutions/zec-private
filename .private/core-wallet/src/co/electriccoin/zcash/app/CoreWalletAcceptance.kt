@@ -445,7 +445,6 @@ class CoreWalletAcceptance {
                     } as Backend
                     val tor=TorClient.new(File(context.cacheDir,"core-bootstrap-tor"),backend)
                     try {
-                        save(fixture().put("nativeRpcProbe", nativeRpcProbe(tor, null)))
                         val isolated=tor.isolatedTorClient()
                         HttpClient(TorHttp) {
                             engine { this.tor=isolated; retryLimit=1 }
@@ -508,7 +507,7 @@ class CoreWalletAcceptance {
             .put("fresh_ui_authorization", true).put("authorization_disabled", true)
             .put("funding_requested", false).put("proposal_created", false).put("payment_approval_actions", 0)
         if (stage in listOf("send", "restart", "restore")) receipt.put("txId", fixture().getString("txId"))
-        if (stage in listOf("rpcProbe", "networkTargets", "fund")) {
+        if (stage == "rpcProbe") {
             receipt.put("native_rpc_probe", fixture().getJSONObject("nativeRpcProbe"))
         }
         if (stage=="fund") receipt.put("funding_txid",fixture().getString("fundingTxId")).put("balance_zatoshi",fixture().getLong("fundedBalance"))
