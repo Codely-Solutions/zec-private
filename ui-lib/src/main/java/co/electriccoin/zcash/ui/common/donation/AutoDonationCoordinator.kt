@@ -77,7 +77,7 @@ class AutoDonationCoordinator(
             try {
                 val reason = withTimeoutOrNull(15 * 60 * 1000L) {
                     donate(status, enrollment)
-                } ?: "Skipped: receipt confirmation timed out"
+                } ?: "Automatic donation outcome uncertain. Check Activity."
                 store.outcome(key, reason)
             } catch (e: CancellationException) {
                 store.outcome(key, "Automatic donation outcome uncertain. Check Activity.")
