@@ -39,12 +39,12 @@ class DonationPreferences(context: Context) {
     fun postpone(now: Long) = preferences.edit().putLong("last_invitation", now).apply()
 
     /** Use the confirmed completion time, so re-observing history cannot restart the cooldown. */
-    fun recordDonationCompleted(completedAt: Long) = synchronized(LOCK) {
+    fun recordDonationCompleted(completedAt: Long, now: Long = System.currentTimeMillis()) = synchronized(LOCK) {
         val lastCompletion = preferences.getLong("last_donation_completion", 0)
         if (completedAt > lastCompletion) {
             preferences.edit()
                 .putLong("last_donation_completion", completedAt)
-                .putLong("last_invitation", maxOf(completedAt, preferences.getLong("last_invitation", 0)))
+                .putLong("last_invitation", maxOf(now, preferences.getLong("last_invitation", 0)))
                 .apply()
         }
     }

@@ -25,7 +25,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.compose.ZashiTooltipBox
 import co.electriccoin.zcash.ui.design.component.IconButtonState
@@ -36,13 +35,11 @@ import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.withTimeoutOrNull
-import org.koin.compose.koinInject
 
 
 @Composable
-internal fun rememberHomeDonationSupport(blocked: Boolean): HomeDonationSupportState {
+internal fun rememberHomeDonationSupport(blocked: Boolean, onDonate: () -> Unit): HomeDonationSupportState {
     val context = LocalContext.current
-    val router = koinInject<NavigationRouter>()
     val preferences = remember(context) { DonationPreferences(context) }
     // Snapshot at entry: newly observed success waits until the next home visit.
     val eligibleAtEntry = remember { preferences.mayInviteOnHomeEntry(System.currentTimeMillis()) }
@@ -68,7 +65,7 @@ internal fun rememberHomeDonationSupport(blocked: Boolean): HomeDonationSupportS
             dismissed = true
             introduction = false
             preferences.postpone(System.currentTimeMillis())
-            router.forward(DonationArgs())
+            onDonate()
         },
         onLater = {
             preferences.postpone(System.currentTimeMillis())

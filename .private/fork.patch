@@ -188,7 +188,7 @@ index ebbd24d3c..edac136cd 100644
 -            "ZCASH_FLEXA_KEY" to "",
 diff --git a/docs/DONATIONS.md b/docs/DONATIONS.md
 new file mode 100644
-index 000000000..0d083c596
+index 000000000..ab8f147d4
 --- /dev/null
 +++ b/docs/DONATIONS.md
 @@ -0,0 +1,27 @@
@@ -196,7 +196,7 @@ index 000000000..0d083c596
 +
 +Donations help fund development and maintenance. They are optional.
 +
-+Open **Settings → More → Support development** to donate shielded ZEC. Enter an amount and review the payment before sending.
++Tap the hand-and-heart icon on Home, or open **Settings → More → Support development** to donate shielded ZEC. Enter an amount and review the payment before sending.
 +
 +You can also donate using the addresses below. Check the asset, network and destination before sending.
 +
@@ -5339,7 +5339,7 @@ index 000000000..14a4deb26
 +data class DonationArgs(val basisZec: String? = null)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt
 new file mode 100644
-index 000000000..858521c25
+index 000000000..743ec89b6
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt
 @@ -0,0 +1,57 @@
@@ -5384,12 +5384,12 @@ index 000000000..858521c25
 +    fun postpone(now: Long) = preferences.edit().putLong("last_invitation", now).apply()
 +
 +    /** Use the confirmed completion time, so re-observing history cannot restart the cooldown. */
-+    fun recordDonationCompleted(completedAt: Long) = synchronized(LOCK) {
++    fun recordDonationCompleted(completedAt: Long, now: Long = System.currentTimeMillis()) = synchronized(LOCK) {
 +        val lastCompletion = preferences.getLong("last_donation_completion", 0)
 +        if (completedAt > lastCompletion) {
 +            preferences.edit()
 +                .putLong("last_donation_completion", completedAt)
-+                .putLong("last_invitation", maxOf(completedAt, preferences.getLong("last_invitation", 0)))
++                .putLong("last_invitation", maxOf(now, preferences.getLong("last_invitation", 0)))
 +                .apply()
 +        }
 +    }
@@ -5670,10 +5670,10 @@ index 000000000..999cff62d
 +)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt
 new file mode 100644
-index 000000000..1ef4aee42
+index 000000000..7fbe39961
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt
-@@ -0,0 +1,154 @@
+@@ -0,0 +1,151 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.compose.foundation.background
@@ -5701,7 +5701,6 @@ index 000000000..1ef4aee42
 +import androidx.compose.ui.res.painterResource
 +import androidx.compose.ui.res.stringResource
 +import androidx.compose.ui.unit.dp
-+import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.compose.ZashiTooltipBox
 +import co.electriccoin.zcash.ui.design.component.IconButtonState
@@ -5712,13 +5711,11 @@ index 000000000..1ef4aee42
 +import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import kotlinx.coroutines.withTimeoutOrNull
-+import org.koin.compose.koinInject
 +
 +
 +@Composable
-+internal fun rememberHomeDonationSupport(blocked: Boolean): HomeDonationSupportState {
++internal fun rememberHomeDonationSupport(blocked: Boolean, onDonate: () -> Unit): HomeDonationSupportState {
 +    val context = LocalContext.current
-+    val router = koinInject<NavigationRouter>()
 +    val preferences = remember(context) { DonationPreferences(context) }
 +    // Snapshot at entry: newly observed success waits until the next home visit.
 +    val eligibleAtEntry = remember { preferences.mayInviteOnHomeEntry(System.currentTimeMillis()) }
@@ -5744,7 +5741,7 @@ index 000000000..1ef4aee42
 +            dismissed = true
 +            introduction = false
 +            preferences.postpone(System.currentTimeMillis())
-+            router.forward(DonationArgs())
++            onDonate()
 +        },
 +        onLater = {
 +            preferences.postpone(System.currentTimeMillis())
@@ -6347,23 +6344,29 @@ index c7a9b6193..000000000
 -        }
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt
-index 627591300..af3fdf78d 100644
+index 627591300..2132ad93e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt
-@@ -4,0 +5,3 @@ package co.electriccoin.zcash.ui.screen.home
+@@ -4,0 +5,6 @@ package co.electriccoin.zcash.ui.screen.home
 +import co.electriccoin.zcash.ui.screen.donation.rememberHomeDonationSupport
 +import co.electriccoin.zcash.ui.screen.donation.DonationShortcut
 +import co.electriccoin.zcash.ui.screen.donation.HomeDonationInvitation
-@@ -39,0 +43,3 @@ internal fun AndroidHome() {
++import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.screen.donation.DonationArgs
++import org.koin.compose.koinInject
+@@ -18,0 +25 @@ internal fun AndroidHome() {
++    val donationRouter = koinInject<NavigationRouter>()
+@@ -39,0 +47,4 @@ internal fun AndroidHome() {
 +        val support = rememberHomeDonationSupport(
-+            blocked = it.message != null || !it.isSyncComplete || appBarState == null
++            blocked = it.message != null || !it.isSyncComplete || appBarState == null,
++            onDonate = { donationRouter.forward(DonationArgs()) },
 +        )
-@@ -44 +50,3 @@ internal fun AndroidHome() {
+@@ -44 +55,3 @@ internal fun AndroidHome() {
 -            transactionWidgetState = transactionWidgetState
 +            transactionWidgetState = transactionWidgetState,
 +            supportAction = { DonationShortcut(support) },
 +            supportInvitation = if (support.showInvitation) ({ HomeDonationInvitation(support) }) else null,
-@@ -49,0 +58 @@ internal fun AndroidHome() {
+@@ -49,0 +63 @@ internal fun AndroidHome() {
 +@Suppress("MatchingDeclarationName")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeView.kt
 index 34fb7e33b..a772c9ecb 100644
@@ -13343,10 +13346,10 @@ index 000000000..dbd1be1d4
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt
 new file mode 100644
-index 000000000..d5ad9e327
+index 000000000..41aff93f6
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt
-@@ -0,0 +1,101 @@
+@@ -0,0 +1,111 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import android.content.Context
@@ -13423,9 +13426,9 @@ index 000000000..d5ad9e327
 +    fun replayedDonationHistoryDoesNotExtendCooldownOrQualifyActivity() {
 +        val preferences = DonationPreferences(context)
 +        val completedAt = 1_000_000L
-+        preferences.recordDonationCompleted(completedAt)
-+        preferences.recordDonationCompleted(completedAt - 1)
-+        preferences.recordDonationCompleted(completedAt)
++        preferences.recordDonationCompleted(completedAt, now = completedAt)
++        preferences.recordDonationCompleted(completedAt - 1, now = completedAt - 1)
++        preferences.recordDonationCompleted(completedAt, now = completedAt)
 +        assertFalse(preferences.mayInvite(completedAt + DonationPolicy.COOLDOWN_MILLIS - 1))
 +        assertTrue(preferences.mayInvite(completedAt + DonationPolicy.COOLDOWN_MILLIS))
 +        assertFalse(preferences.mayInviteOnHomeEntry(completedAt + DonationPolicy.COOLDOWN_MILLIS))
@@ -13435,18 +13438,28 @@ index 000000000..d5ad9e327
 +    fun historicalDonationCannotShortenRecentInvitationCooldown() {
 +        val preferences = DonationPreferences(context)
 +        preferences.recordInvitationDisplayed(2_000_000)
-+        preferences.recordDonationCompleted(1_000_000)
++        preferences.recordDonationCompleted(1_000_000, now = 1_000_000)
 +        assertFalse(preferences.mayInvite(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
 +    }
 +
 +    @Test
 +    fun donationCooldownDefersIntroductionWithoutConsumingIt() {
 +        val preferences = DonationPreferences(context)
-+        preferences.recordDonationCompleted(1_000_000)
++        preferences.recordDonationCompleted(1_000_000, now = 1_000_000)
 +        assertFalse(preferences.claimAutomaticIntroduction(1_000_000))
 +        assertTrue(preferences.claimAutomaticIntroduction(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
 +        assertFalse(DonationPreferences(context).claimAutomaticIntroduction(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
 +    }
++    @Test
++    fun confirmedDonationGetsFullCooldownFromObservationRatherThanMinedTime() {
++        val preferences = DonationPreferences(context)
++        preferences.recordDonationCompleted(1_000_000, now = 2_000_000)
++        assertFalse(preferences.mayInvite(2_000_000 + DonationPolicy.COOLDOWN_MILLIS - 1))
++        assertTrue(preferences.mayInvite(2_000_000 + DonationPolicy.COOLDOWN_MILLIS))
++        preferences.recordDonationCompleted(1_000_000, now = 3_000_000)
++        assertTrue(preferences.mayInvite(2_000_000 + DonationPolicy.COOLDOWN_MILLIS))
++    }
++
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt
 index acc8741c2..430fc754d 100644

@@ -28,10 +28,15 @@ class DonationReviewActivity : ComponentActivity() {
         check(co.electriccoin.zcash.ui.BuildConfig.DEBUG)
         val dark = intent.getBooleanExtra("dark", true)
         val requested = intent.getStringExtra("screen") ?: "home"
+        val preferences = DonationPreferences(this)
+        if (requested != "revisit") {
+            getSharedPreferences("private_donation_suggestions", MODE_PRIVATE).edit().clear().commit()
+            if (requested == "invitation" || requested == "backup") preferences.recordSuccessfulTransaction()
+            if (requested == "home") preferences.claimAutomaticIntroduction()
+        }
         setContent {
             ZcashTheme(appearanceMode = if (dark) AppearanceMode.DARK else AppearanceMode.LIGHT, isOledEnabled = dark) {
-                var screen by remember { mutableStateOf(requested) }
-                var dismissed by remember { mutableStateOf(false) }
+                var screen by remember { mutableStateOf(if (requested == "revisit") "home" else requested) }
                 var amount by remember { mutableStateOf("") }
                 if (screen == "donation") {
                     DonationView(
@@ -42,12 +47,9 @@ class DonationReviewActivity : ComponentActivity() {
                         onBack = { screen = "home" },
                     )
                 } else {
-                    val support = HomeDonationSupportState(
-                        showInvitation = screen == "invitation" && !dismissed,
-                        showIntroduction = screen == "introduction" && !dismissed,
+                    val support = rememberHomeDonationSupport(
+                        blocked = screen == "backup",
                         onDonate = { screen = "donation" },
-                        onLater = { dismissed = true },
-                        onNever = { dismissed = true },
                     )
                     val activity = ActivityWidgetStateFixture.new().copy(
                         header = ActivityWidgetStateFixture.new().header.copy(title = stringRes("Activity")),
