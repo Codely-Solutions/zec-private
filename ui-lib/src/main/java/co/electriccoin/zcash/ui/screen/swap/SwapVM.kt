@@ -36,6 +36,7 @@ import co.electriccoin.zcash.ui.design.component.TextSelection
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
+import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.screen.swap.info.SwapRefundAddressInfoArgs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,6 +49,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import java.math.RoundingMode
 import kotlin.time.Duration.Companion.milliseconds
 
 @Suppress("TooManyFunctions")
@@ -327,23 +329,31 @@ internal class SwapVM(
     }
 
     private fun onSwapCurrencyTypeClick(newTextFieldAmount: BigDecimal?) {
-        val value =
-            newTextFieldAmount
-                ?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) }
-                ?: stringRes("")
         internalState.update {
+            val isTokenInput = it.currencyType == CurrencyType.FIAT
+            val decimals = if (it.swapDirection == SWAP_FROM_ZEC) 8 else it.swapAsset?.decimals
+            val amount =
+                if (isTokenInput && decimals != null) {
+                    newTextFieldAmount?.setScale(decimals, RoundingMode.DOWN)?.stripTrailingZeros()
+                } else {
+                    newTextFieldAmount
+                }
+            val value =
+                amount?.let { number ->
+                    if (isTokenInput) {
+                        stringResByNumber(number, minDecimals = 0, includeGroupingSeparator = false)
+                    } else {
+                        stringResByDynamicNumber(number, includeGroupingSeparator = false)
+                    }
+                } ?: stringRes("")
             it.copy(
                 amountTextState =
                     NumberTextFieldInnerState(
                         innerTextFieldState = InnerTextFieldState(value = value, selection = TextSelection.End),
-                        amount = newTextFieldAmount,
-                        lastValidAmount = newTextFieldAmount
+                        amount = amount,
+                        lastValidAmount = amount
                     ),
-                currencyType =
-                    when (it.currencyType) {
-                        CurrencyType.TOKEN -> CurrencyType.FIAT
-                        CurrencyType.FIAT -> CurrencyType.TOKEN
-                    }
+                currencyType = if (isTokenInput) CurrencyType.TOKEN else CurrencyType.FIAT
             )
         }
     }

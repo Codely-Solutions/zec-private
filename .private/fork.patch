@@ -3454,6 +3454,17 @@ index 13e9d0788..d1112a657 100644
 @@ -35 +31 @@ interface SwapDataSource {
 -    @Throws(ResponseException::class, AssetNotFoundException::class)
 +    @Throws(AssetNotFoundException::class)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt
+index befe3b652..3c6b6ef3a 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt
+@@ -12,0 +13 @@ import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
+@@ -14 +14,0 @@ import co.electriccoin.zcash.ui.design.util.stringResByDateTime
+-import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
+@@ -119 +119 @@ class SwapSupportMapper {
+-                stringResByDynamicCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker)
++                stringResByCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker, minDecimals = 0)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
 index ab4d7ab5b..65a02b4b5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
@@ -5476,6 +5487,24 @@ index 607e89dcb..2b3d5f352 100644
 -    private fun onWhatsNewClick() = navigationRouter.forward(WHATS_NEW)
 +    private fun onWhatsNewClick() =
 +        navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/releases"))
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
+index b6549dd8b..077e63fa3 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
+@@ -34,0 +35 @@ import java.math.MathContext
++import java.math.RoundingMode
+@@ -148 +149 @@ internal class ExactOutputVMMapper {
+-                fiat.divide(asset.usdPrice, MathContext.DECIMAL128)
++                fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
+@@ -155 +156 @@ internal class ExactOutputVMMapper {
+-                            ?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) }
++                            ?.let { stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false) }
+@@ -227 +228 @@ internal class ExactOutputVMMapper {
+-                        fiat.divide(asset.usdPrice, MathContext.DECIMAL128)
++                        fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
+@@ -235 +236 @@ internal class ExactOutputVMMapper {
+-                                        stringResByDynamicNumber(it, includeGroupingSeparator = false)
++                                        stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt
 index 330d59e33..5ec469642 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt
@@ -5514,6 +5543,48 @@ index 7db73b703..f33664273 100644
 @@ -562 +562 @@ private fun ColoredSenderPreview() =
 -                                name = stringRes("Zodl"),
 +                                name = stringRes("ZEC Private"),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
+index 79f574053..ddb3b4e79 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
+@@ -38,0 +39 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
++import co.electriccoin.zcash.ui.design.util.stringResByNumber
+@@ -50,0 +52 @@ import java.math.BigDecimal
++import java.math.RoundingMode
+@@ -330,4 +331,0 @@ internal class SwapVM(
+-        val value =
+-            newTextFieldAmount
+-                ?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) }
+-                ?: stringRes("")
+@@ -334,0 +333,16 @@ internal class SwapVM(
++            val isTokenInput = it.currencyType == CurrencyType.FIAT
++            val decimals = if (it.swapDirection == SWAP_FROM_ZEC) 8 else it.swapAsset?.decimals
++            val amount =
++                if (isTokenInput && decimals != null) {
++                    newTextFieldAmount?.setScale(decimals, RoundingMode.DOWN)?.stripTrailingZeros()
++                } else {
++                    newTextFieldAmount
++                }
++            val value =
++                amount?.let { number ->
++                    if (isTokenInput) {
++                        stringResByNumber(number, minDecimals = 0, includeGroupingSeparator = false)
++                    } else {
++                        stringResByDynamicNumber(number, includeGroupingSeparator = false)
++                    }
++                } ?: stringRes("")
+@@ -339,2 +353,2 @@ internal class SwapVM(
+-                        amount = newTextFieldAmount,
+-                        lastValidAmount = newTextFieldAmount
++                        amount = amount,
++                        lastValidAmount = amount
+@@ -342,5 +356 @@ internal class SwapVM(
+-                currencyType =
+-                    when (it.currencyType) {
+-                        CurrencyType.TOKEN -> CurrencyType.FIAT
+-                        CurrencyType.FIAT -> CurrencyType.TOKEN
+-                    }
++                currencyType = if (isTokenInput) CurrencyType.TOKEN else CurrencyType.FIAT
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 index a874453ef..68553b869 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
@@ -10576,6 +10647,46 @@ index c0be20563..1bea03a8f 100644
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt
+new file mode 100644
+index 000000000..91be3aea3
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt
+@@ -0,0 +1,34 @@
++package co.electriccoin.zcash.ui.common.mapper
++
++import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
++import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
++import co.electriccoin.zcash.ui.common.model.SwapStatus
++import co.electriccoin.zcash.ui.design.util.StyledStringResource
++import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
++import io.mockk.every
++import io.mockk.mockk
++import java.math.BigDecimal
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertNotNull
++import kotlin.time.Instant
++
++class SwapSupportMapperTest {
++    @Test
++    fun incompleteDepositKeepsExactRequiredTokenAmount() {
++        val quoteStatus = mockk<SwapQuoteStatus> {
++            every { status } returns SwapStatus.INCOMPLETE_DEPOSIT
++            every { amountInFormatted } returns BigDecimal("0.22283949")
++            every { depositedAmountFormatted } returns BigDecimal("0.1")
++            every { originAsset } returns SwapAssetTestFixture.zecAsset()
++            every { deadline } returns Instant.fromEpochSeconds(0)
++        }
++        val message = assertNotNull(SwapSupportMapper().getMessage(quoteStatus))
++        val text = message.text as StyledStringResource.ByResource
++        val required = text.args.first() as StyledStringResource.ByStringResource
++        assertEquals(
++            stringResByCurrencyNumber(BigDecimal("0.12283949"), "zec", minDecimals = 0),
++            required.resource
++        )
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt
 index 3f54429cb..4c5470daa 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/FakeSwapQuote.kt
@@ -11822,6 +11933,94 @@ index acc8741c2..430fc754d 100644
 -                mockk<GetFlexaStatusUseCase> {
 -                    every { observe() } returns MutableStateFlow(Status.DISABLED)
 -                },
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt
+index d59e700c3..4a60acef4 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt
+@@ -12,0 +13 @@ import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.design.util.stringResByNumber
+@@ -23,0 +25 @@ import kotlin.test.assertNull
++import kotlin.test.assertNotNull
+@@ -92,0 +95,38 @@ class ExactOutputVMMapperGiftCardLinkTest {
++    @Test
++    fun computedTokenInputMatchesRequestedAtomicAmount() {
++        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 8)
++        val fiat = NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499"))
++        val computed = mapper.createAmountInnerState(fiat, NumberTextFieldInnerState(), asset)
++        val expected = BigDecimal("0.12283949")
++        assertEquals(expected, computed.amount)
++        assertEquals(
++            stringResByNumber(expected, minDecimals = 0, includeGroupingSeparator = false),
++            computed.innerTextFieldState.value
++        )
++
++        var requested: BigDecimal? = null
++        val state = mapper.createState(
++            internalState("ordinary-address").copy(asset = asset, amount = computed, fiatAmount = fiat),
++            callbacks.copy(onRequestSwapQuoteClick = { amount, _, _ -> requested = amount })
++        )
++        assertNotNull(state.primaryButton).onClick()
++        assertEquals(expected, requested)
++    }
++
++    @Test
++    fun fiatEditUsesExactAtomicTokenAmount() {
++        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 6)
++        var updated: NumberTextFieldInnerState? = null
++        val state = mapper.createState(
++            internalState("ordinary-address").copy(asset = asset),
++            callbacks.copy(onTextFieldChange = { amount, _ -> updated = amount })
++        )
++        state.amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499")))
++        val expected = BigDecimal("0.122839")
++        assertEquals(expected, assertNotNull(updated).amount)
++        assertEquals(
++            stringResByNumber(expected, minDecimals = 0, includeGroupingSeparator = false),
++            assertNotNull(updated).innerTextFieldState.value
++        )
++    }
++
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
+index bf5467055..3b956901d 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
+@@ -431,0 +432,36 @@ class SwapVMTest {
++    @Test
++    fun computedTokenInputKeepsDisplayedAndStoredAmountIdentical() =
++        runTest {
++            val harness = harness()
++            harness.collectState(this)
++            harness.onSwapCurrencyTypeClick(BigDecimal("5"))
++            harness.onSwapCurrencyTypeClick(BigDecimal("0.123456789"))
++
++            val amountState = harness.capturedState.amountTextState
++            val expected = BigDecimal("0.12345678")
++            assertEquals(0, expected.compareTo(amountState.amount))
++            assertEquals(0, expected.compareTo(amountState.lastValidAmount))
++            assertEquals(
++                co.electriccoin.zcash.ui.design.util.stringResByNumber(
++                    expected,
++                    minDecimals = 0,
++                    includeGroupingSeparator = false
++                ),
++                amountState.innerTextFieldState.value
++            )
++        }
++
++    @Test
++    fun computedZecInputUsesOriginPrecisionInsteadOfDestinationPrecision() =
++        runTest {
++            val asset = SwapAssetTestFixture.asset(decimals = 6)
++            val harness = harness(preselect = asset, assets = SwapAssetTestFixture.assetsData(data = listOf(asset)))
++            harness.collectState(this)
++            harness.onChangeButtonClick()
++            harness.onSwapCurrencyTypeClick(BigDecimal("5"))
++            harness.onSwapCurrencyTypeClick(BigDecimal("0.123456789"))
++
++            assertEquals(SwapDirection.SWAP_FROM_ZEC, harness.capturedState.swapDirection)
++            assertEquals(0, BigDecimal("0.12345678").compareTo(harness.capturedState.amountTextState.amount))
++        }
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
 index bac1a53ce..de6622a6f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt

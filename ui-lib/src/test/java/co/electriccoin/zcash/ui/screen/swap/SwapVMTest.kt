@@ -430,6 +430,42 @@ class SwapVMTest {
         }
 
     @Test
+    fun computedTokenInputKeepsDisplayedAndStoredAmountIdentical() =
+        runTest {
+            val harness = harness()
+            harness.collectState(this)
+            harness.onSwapCurrencyTypeClick(BigDecimal("5"))
+            harness.onSwapCurrencyTypeClick(BigDecimal("0.123456789"))
+
+            val amountState = harness.capturedState.amountTextState
+            val expected = BigDecimal("0.12345678")
+            assertEquals(0, expected.compareTo(amountState.amount))
+            assertEquals(0, expected.compareTo(amountState.lastValidAmount))
+            assertEquals(
+                co.electriccoin.zcash.ui.design.util.stringResByNumber(
+                    expected,
+                    minDecimals = 0,
+                    includeGroupingSeparator = false
+                ),
+                amountState.innerTextFieldState.value
+            )
+        }
+
+    @Test
+    fun computedZecInputUsesOriginPrecisionInsteadOfDestinationPrecision() =
+        runTest {
+            val asset = SwapAssetTestFixture.asset(decimals = 6)
+            val harness = harness(preselect = asset, assets = SwapAssetTestFixture.assetsData(data = listOf(asset)))
+            harness.collectState(this)
+            harness.onChangeButtonClick()
+            harness.onSwapCurrencyTypeClick(BigDecimal("5"))
+            harness.onSwapCurrencyTypeClick(BigDecimal("0.123456789"))
+
+            assertEquals(SwapDirection.SWAP_FROM_ZEC, harness.capturedState.swapDirection)
+            assertEquals(0, BigDecimal("0.12345678").compareTo(harness.capturedState.amountTextState.amount))
+        }
+
+    @Test
     fun preselectChainSkippedWhenSwappingFromZec() =
         runTest {
             val harness =

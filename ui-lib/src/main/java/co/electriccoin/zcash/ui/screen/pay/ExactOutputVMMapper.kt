@@ -32,6 +32,7 @@ import co.electriccoin.zcash.ui.util.isServiceUnavailable
 import io.ktor.client.plugins.ResponseException
 import java.math.BigDecimal
 import java.math.MathContext
+import java.math.RoundingMode
 
 @Suppress("TooManyFunctions")
 internal class ExactOutputVMMapper {
@@ -145,14 +146,14 @@ internal class ExactOutputVMMapper {
             if (fiat == null || asset?.usdPrice == null) {
                 null
             } else {
-                fiat.divide(asset.usdPrice, MathContext.DECIMAL128)
+                fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
             }
         return amountInnerState.copy(
             innerTextFieldState =
                 amountInnerState.innerTextFieldState.copy(
                     value =
                         amount
-                            ?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) }
+                            ?.let { stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false) }
                             ?: stringRes(""),
                     selection = TextSelection.End
                 ),
@@ -224,7 +225,7 @@ internal class ExactOutputVMMapper {
                     if (fiat == null || asset?.usdPrice == null) {
                         null
                     } else {
-                        fiat.divide(asset.usdPrice, MathContext.DECIMAL128)
+                        fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
                     }
                 onTextFieldChange(
                     state.amount.copy(
@@ -232,7 +233,7 @@ internal class ExactOutputVMMapper {
                             state.amount.innerTextFieldState.copy(
                                 value =
                                     amount?.let {
-                                        stringResByDynamicNumber(it, includeGroupingSeparator = false)
+                                        stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false)
                                     } ?: stringRes(""),
                                 selection = TextSelection.End
                             ),
