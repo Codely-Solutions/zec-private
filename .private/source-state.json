@@ -2266,7 +2266,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryState.kt": "6f06718740e7e4b85643d3cf135feb588121c8fc3aa2f52ac27ee80b1c593fa6",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVM.kt": "6bf961d89cb3e846037ea68fb2cce50393ec819945cfe5ec2128e9e4e2bd2aa7",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryView.kt": "9f61ee2ecf00f6bbbc49d3f27e1c469a91b25ad6360487f6151c4b311dc779de",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityStateFixture.kt": "00517aedf6b96de8c5ff4cd12b1cb19f28bb1ebd1fe4539dfe881e4a3a06827e",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityStateFixture.kt": "b67e2d926ff063338d9449515709bdef22295dc0ae7038f56987bc13053d8599",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/widget/ActivityWidget.kt": "bb2c1db4cb72065ca31ee785f523553ee9290d05717106755bd748639a76ce12",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/widget/ActivityWidgetHeader.kt": "7695068d873e14bdb7bb25245a3ec5edd6e6b945023d8c7a28e2bd12ba8ba3ce",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/widget/ActivityWidgetState.kt": "9740126afbdb380ed9217c8ec0b73102409274e261e617d080d2c770ca5635ef",
