@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.donation
 
 import cash.z.ecc.android.sdk.model.Memo
+import cash.z.ecc.android.sdk.model.TransactionOverview
 import cash.z.ecc.android.sdk.model.TransactionState
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
@@ -102,8 +103,18 @@ class AutoDonationCoordinator(
         val settled = status.executedAmountIn?.movePointRight(8)?.longValueExact() ?: return null
         if (settled <= 0 || settled > deposited) return null
         val refund = status.refundedFormatted?.movePointRight(8)?.longValueExact()
-        if (refund != null && (refund < 0 || refund > deposited || deposited - refund != settled)) return null
+        if (refund == null) return settled
+        if (refund < 0 || refund > deposited) return null
+        if (deposited - refund != settled) return null
         return settled
+    }
+
+    private fun nativeBasis(transactions: List<TransactionOverview>, incoming: Boolean): Long? {
+        if (incoming) return transactions.fold(0L) { sum, tx -> Math.addExact(sum, tx.netValue.value) }
+        if (transactions.any { it.feePaid == null }) return null
+        return transactions.fold(0L) { sum, tx ->
+            Math.addExact(sum, Math.subtractExact(tx.netValue.value, requireNotNull(tx.feePaid).value))
+        }
     }
 
     private suspend fun donate(status: SwapQuoteStatus, enrollment: JSONObject): String {
@@ -128,12 +139,7 @@ class AutoDonationCoordinator(
                     return "Skipped: receipt predates swap enrollment"
                 }
                 if (matching.any { it.isSentTransaction == incoming }) return "Skipped: transaction direction differs"
-                basis = if (incoming) matching.fold(0L) { sum, tx -> Math.addExact(sum, tx.netValue.value) } else {
-                    if (matching.any { it.feePaid == null }) return "Skipped: missing network fee evidence"
-                    matching.fold(0L) { sum, tx ->
-                        Math.addExact(sum, Math.subtractExact(tx.netValue.value, requireNotNull(tx.feePaid).value))
-                    }
-                }
+                basis = nativeBasis(matching, incoming) ?: return "Skipped: missing network fee evidence"
                 val evidence = if (incoming) status.executedAmountOut else status.depositedAmountFormatted
                 val actual = evidence?.let { runCatching { it.movePointRight(8).longValueExact() }.getOrNull() }
                     ?: return "Skipped: missing executed amount evidence"
