@@ -1,32 +1,29 @@
 {
   "status": "validated-awaiting-signing",
-  "scope": "workflow-reliability",
-  "revision": 10,
-  "baseline": "v3.19.0-private.9",
-  "source_sha": "5e97bfde957268d07cdf69fa061eb397fbec5848",
-  "candidate_run": 42280205451,
+  "scope": "swap accuracy and clarity",
+  "source_sha": "170eb24caaa90969849c3f8dcfcb77f4016196ab",
+  "candidate_run": 42326943115,
+  "baseline": "v3.19.0-private.10",
   "tests": {
-    "tests": 1693,
+    "tests": 1705,
     "failures": 0,
     "errors": 0,
     "skipped": 0
   },
-  "production_gradle_seconds": 672,
   "runtime_components": 334,
-  "core_seconds": 542.7031554999994,
-  "core_guard": "7adac4f10c6848b4932a4ff2679e9f9b",
-  "testnet_build_run": 42304987100,
+  "production_gradle_seconds": 846,
+  "core_seconds": 745.8055187999998,
   "core_transaction_evidence": {
-    "fundingTxId": "7dc6cf25fa88de96b48d458cc64ff233954fc8e54ec8a4d4c2d3976be5248e59",
+    "fundingTxId": "cd68a195e531714ec4a6ca2a6b46edfc5826dc9e7de0116549bac1808d2ff2c6",
     "fundingProvider": "jinolabs-testnet",
     "fundedBalance": 10000000,
     "balanceBeforeSend": 10000000,
     "feeZatoshi": 10000,
     "senderConfirmedBalance": 8990000,
-    "restoreMinedHeight": 4592308,
+    "restoreMinedHeight": 4592855,
     "restoreTransactionState": "Pending",
     "candidateTxIds": [
-      "c66224d8a3722826c687883cb7e20fcd8a0e01ee4c33ab65ccc393df142c2860"
+      "42b7de2d866c2c5238c189d3b4874e37e7254b1ad5d61da3895932fb1ec4eaa5"
     ],
     "initialSubmitType": "Success"
   },
@@ -34,46 +31,44 @@
     "schema": 1,
     "evidence_class": "real-app-production-quotes",
     "passed": true,
-    "build_source_sha": "b34a56a0b3c0adfc27f30cc19ce7fd82f603858f",
-    "input_fingerprint": "5c4a0289e4dbcafd6e6b76b3f1999222ca2b1989618d4ac549aa9c0ac8284efa",
-    "executed_apk_sha256": "388f1f63db5b5d5a82a2edee7755b5fab0c13b617ee96971c071b7f8d6ecbc55",
-    "original_apk_sha256": "0ef547adbb4615a747ac02e28a93633ee58f4305021cc4d0e891087982c8f6c4",
+    "build_source_sha": "170eb24caaa90969849c3f8dcfcb77f4016196ab",
+    "input_fingerprint": "4d137f9f83a21a012fe1936c3a0055a1d4ea015d9b5ef4d9df44ec5f1530548c",
+    "executed_apk_sha256": "5e33fba6d5317df4c2bc95fb9447587e78e79e69bb7d8ce40cabdaf5a0f290e5",
+    "original_apk_sha256": "08c93e6caca89ee565f780cbeac3ca1c20fd2bad29b1ac01415f635353b260b2",
     "quote_requests": 3,
     "quote_reviews": 3,
     "dismissals": 3,
     "tor_enabled": true,
     "funds_transferred": false,
     "personal_wallet_access": false,
-    "artifact_id": 13506456358,
-    "workflow_run_id": 42224726954,
-    "archive_sha256": "c4e06ca88f5ef8f0ee2b4e098aa36d66c0d461068ca797781cd6d2cfa7818c89",
+    "artifact_id": 13555787713,
+    "workflow_run_id": 42326943115,
+    "archive_sha256": "389f9b7deb979adc72df556cfd10b45ea3e23d101555b9f4d3bcf0b34a1d71a5",
     "apk_preparation": {
-      "originalSha256": "0ef547adbb4615a747ac02e28a93633ee58f4305021cc4d0e891087982c8f6c4",
-      "testedSha256": "388f1f63db5b5d5a82a2edee7755b5fab0c13b617ee96971c071b7f8d6ecbc55",
+      "originalSha256": "08c93e6caca89ee565f780cbeac3ca1c20fd2bad29b1ac01415f635353b260b2",
+      "testedSha256": "5e33fba6d5317df4c2bc95fb9447587e78e79e69bb7d8ce40cabdaf5a0f290e5",
       "preservedExecutionEntries": 33,
-      "executionEntriesDigest": "e4250937fafd17b0060f5fa52f65fcb878512691932386af9f6e042e67f10bf7",
+      "executionEntriesDigest": "d46b953b2baa0be50d85aeaeb4ce286666c798c392ecb8f443673766f11a4b05",
       "executionEntriesUnchanged": true,
       "abi": "x86_64",
       "signing": "ephemeral test key; not release key"
     },
-    "guard_job": "c9711aef862344bebe214c977845eb8a",
-    "provider_timeouts": []
+    "guard_job": "c52f335ec22e4891842a841133e44130",
+    "provider_timeouts": [],
+    "presentation": {
+      "passed": true,
+      "platform_fee_included": true,
+      "minimum_received_visible": true,
+      "placeholder_wallet_fee_absent": true
+    }
   },
-  "upstream_discovery_run": 42279316800,
+  "amount_reporting": "Provider output is explicitly separate from quoted output and wallet credit; raw-only status output is converted by asset decimals",
+  "cost_presentation": "No placeholder incoming wallet fee or aggregate fee claim; actual outgoing wallet fee retained; current NEAR platform percentage included in quote",
+  "upstream": "Discovery remains enabled; actual disposable integration and protected-change gates passed",
   "limitations": [
-    "Production ARM64 inspected, not executed; real isolated x86_64 testnet execution uses test signing",
-    "No physical hardware signer, OS biometric prompt or funded production swap/refund settlement executed",
-    "Tor outage covers sensitive metadata while public bulk remains reachable; no ambiguous broadcast outage injected",
-    "Production quote receipt retains its original revision 9 binary/source identity because relevant inputs match",
-    "Production and instrumentation retain distinct committed source identities with matching runtime inputs; diagnostic Git labels differ"
-  ],
-  "testnet_artifact": {
-    "id": 13546461251,
-    "archive_sha256": "c1fbfd303532e11c40f09a1b36382fe9bfa2530b5b735af763d01a9221c7b316",
-    "size_in_bytes": 70239766,
-    "workflow_run": 42304987100,
-    "build_source_sha": "3ea69ed649628b2ba2b210de13962d580fc1daef",
-    "candidate_apk_sha256": "710a9616eb52f37c5b7c8ad113f69fb95d49dee1f05fef0ab666551566c0883e",
-    "instrumentation_apk_sha256": "e517954cedb61b517d86ef1da503ccf4974ad73089f2762e29a97a7731c2dc5c"
-  }
+    "Production ARM64 inspected, not executed; isolated x86_64 debug/testnet binaries executed",
+    "Funded production swap settlement, physical signer and biometric approval UI were not executed",
+    "Provider-reported output can retain a conservative bridge network-fee allowance; wallet receipt is a separate measurement",
+    "Personal investigation identifiers, raw replies and screenshots are excluded from this public repository"
+  ]
 }

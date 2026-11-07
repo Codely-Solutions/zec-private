@@ -1,12 +1,12 @@
 # Core acceptance coverage
 
-Status: completed through signed revision 9, independently verified on 2026-11-06. Exact current evidence is in core-acceptance.json and core-validation-summary.json.
+Status: candidate revision 11 validated on 2026-11-07; signing and independent delivery inspection follow. Exact current evidence is in core-acceptance.json and core-validation-summary.json.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
 | Quote dismissal poisons the next request; stale callbacks overwrite state | Existing deterministic cancellation tests and real unfunded production quote UI receipt | Reuse only while the relevant production source/build inputs match; short Tor session when invalidated. |
 | Wallet cannot receive or spend; wrong recipient, amount, memo or fee | Installed testnet app graph, real faucet payment, app proposal creation/submission and sender/recipient history | One small transfer reused by the other core assertions; no exhaustive asset matrix. |
-| Installed update loses wallet or transaction data | Prior revision 6 testnet build updated in place to candidate; seed identity, funded balance and account behavior checked | Same isolated guest and funding fixture; dedicated disposable test certificate, separate permanent release checks. |
+| Installed update loses wallet or transaction data | Prior revision 10 testnet build updated in place to candidate; seed identity, funded balance and account behavior checked | Same isolated guest and funding fixture; dedicated disposable test certificate, separate permanent release checks. |
 | Restart loses transaction state or recovery fails | Process restart followed by clean target-data erase and seed/birthday restoration into recipient wallet | Reuse the same test transaction; restoration cannot reuse the populated target database. |
 | Tor interruption causes direct fallback or unrecoverable state | App-native Tor request during a controlled app-UID outage; dual-stack egress enforcement and rejection counters | One interruption before broadcast, with bounded recovery; retain deterministic failure/race tests for diagnosis. |
 | Unvalidated or wrong candidate enters signing | Trusted controller independently checks current relevant-input fingerprint, receipt identity and artifact digests | Fast early status check prevents unnecessary release preparation; unsigned artifact promotion remains separate from secrets. |
@@ -67,3 +67,7 @@ The native scenario uses the actual prefilled send form, Review, review cancella
 The saved-reference refund polling test uses virtual time to establish resumption and terminal-stop behavior. It does not claim actual process death or production refund settlement. Existing serialization and provider-routing tests cover the adjacent boundaries. The two provider transport negative tests exercise tokens, quote, status and deposit submission with a direct-engine trap.
 
 Fingerprint mutation tests reject stale receipts, unknown profiles, relevant source/host/workflow/build changes, deletion and file-mode changes. Committed-tree cases also prove fresh host-only acceptance can reuse matching compiled inputs while rejecting the old production candidate and any changed app, build, instrumentation or producer workflow. The controlled exception for one private instrumentation file preserves separate full-test, compiled-test and runtime fingerprints. Production quote inputs retain conservative selection. No overlapping live asset matrix or broadcast-outage retry scenario was added.
+
+## Swap accuracy and clarity
+
+Synthetic regressions cover raw-only execution, missing execution, fee omission, received-amount search, exact minimum/top-up amounts and computed token inputs at origin precision. Six normal/large-text quote layouts were visually reviewed. Live isolated Tor acceptance checks the included platform fee and minimum-output text. These checks do not establish funded production settlement or decrypt personal shielded notes. Isolated test seeds exist in the disposable guest and briefly in guarded-driver memory during recovery orchestration; no seeds are retained or published.
