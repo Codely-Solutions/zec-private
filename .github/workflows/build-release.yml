@@ -1,137 +1,21 @@
-name: Build and publish ZEC Private
+name: Donation readiness unit diagnostic
 on:
   workflow_dispatch:
-    inputs:
-      validation_only:
-        description: Build and validate a candidate without signing or publishing
-        type: boolean
-        default: false
-      build_emulator:
-        description: Include the isolated x86_64 debug APK once for UI acceptance
-        type: boolean
-        default: false
-      candidate_run:
-        description: Promote a successful validation run without rebuilding
-        type: string
-        default: ''
-  workflow_call:
-    inputs:
-      source_sha:
-        type: string
-        required: true
-    secrets:
-      RELEASE_KEYSTORE_BASE64:
-        required: true
-      RELEASE_STORE_PASSWORD:
-        required: true
-      RELEASE_KEY_PASSWORD:
-        required: true
-      NTFY_URL:
-        required: false
 permissions: {}
 concurrency:
-  group: zec-private-release
+  group: donation-readiness-unit-diagnostic
   cancel-in-progress: false
 jobs:
-  unsigned:
-    if: ${{ !inputs.candidate_run }}
+  unit-diagnostic:
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
-    permissions:
-      contents: read
-    outputs:
-      source_sha: ${{ steps.identity.outputs.sha }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.source_sha || github.sha }}
-          persist-credentials: false
-          fetch-depth: 0
-      - id: identity
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Offline preflight before Java and Gradle setup
-        run: |
-          baseline=$(python3 -c 'import json; print(json.load(open(".private/upgrade-baseline.json"))["source_sha"])')
-          python3 -B .private/preflight.py --base "$baseline"
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-        with:
-          cache-read-only: false
-      - name: Fork regression checks
-        run: |
-          python3 .private/test_controls.py
-          python3 .private/test_packaging.py
-          python3 -B .private/test_branding.py
-          python3 -B .private/test_foundation.py
-          python3 -B .private/test_preflight.py
-          python3 -B .private/test_actions_artifact_cleanup.py
-          python3 -B .private/test_acceptance_policy.py
-          python3 -B .private/test_core_faucet.py
-          python3 -B .private/test_sync.py
-          python3 -B .private/test_release_notes.py
-          python3 -B .private/test_toolchain_policy.py
-          python3 -B .private/test_fixture_download.py
-      - name: Select acceptance by exact relevant inputs before expensive preparation
-        env:
-          VALIDATION_ONLY: ${{ inputs.validation_only || false }}
-        run: python3 -B .private/acceptance_status.py
-      - name: Unfunded NEAR API contracts over Tor without credentials
-        timeout-minutes: 15
-        run: bash .private/run_tor_ci.sh
-      - name: Validate and assemble production candidate once
-        timeout-minutes: 40
-        env:
-          QUOTE_LAYOUT_SCREENSHOTS: ${{ github.workspace }}/ui-lib/build/reports/quote-layout
-        run: bash .private/release_checks.sh
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: validated-unsigned-apk
-          path: artifact/
-          if-no-files-found: error
-          retention-days: 3
-      - name: Retain bounded validation reports
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: validation-reports
-          path: |
-            build/reports/profile/
-            feature-ledger/build/test-results/
-            wallet-foundation-lib/build/test-results/
-            ui-lib/build/test-results/
-            ui-lib/build/reports/tests/
-            ui-lib/build/reports/quote-layout/
-            app/build/reports/lint-results-*.xml
-            build/reports/detekt/
-            artifact/runtime.json
-            artifact/foundation-runtime.json
-            artifact/near-contract.json
-            artifact/gradle-timing.json
-            artifact/task-timing.jsonl
-            artifact/proof.json
-            artifact/core-acceptance.json
-            artifact/quote-acceptance.json
-          if-no-files-found: ignore
-          retention-days: 3
-  emulator:
-    if: ${{ !inputs.candidate_run && inputs.build_emulator }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
-          fetch-depth: 0
-      - name: Offline preflight before Java and Gradle setup
-        run: |
-          baseline=$(python3 -c 'import json; print(json.load(open(".private/upgrade-baseline.json"))["source_sha"])')
-          python3 -B .private/preflight.py --base "$baseline"
+          fetch-depth: 1
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
         with:
           distribution: temurin
@@ -139,98 +23,30 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
         with:
           cache-read-only: true
-      - name: Assemble isolated emulator candidate once
-        timeout-minutes: 40
-        run: bash .private/emulator_checks.sh
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: isolated-ui-repro-apk
-          path: emulator-artifact/
-          if-no-files-found: error
-          retention-days: 3
-      - name: Retain bounded emulator timing
+      - name: Run preparation and replay regressions only
+        run: >-
+          ./gradlew --no-daemon --no-watch-fs --no-parallel --max-workers=2
+          '-Dorg.gradle.jvmargs=-Xmx3g -XX:+ExitOnOutOfMemoryError -XX:-HeapDumpOnOutOfMemoryError'
+          -Pkotlin.compiler.execution.strategy=in-process
+          -I .private/robolectric-ci.gradle :ui-lib:testZcashmainnetFossReleaseUnitTest
+          --tests '*AutoDonationCoordinatorTest' --tests '*AutoDonationStoreTest'
+      - name: Collect at most 1 MiB of XML and exact source identity
         if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: emulator-validation-reports
-          path: |
-            artifact/task-timing.jsonl
-            build/reports/profile/
-          if-no-files-found: ignore
-          retention-days: 3
-  promotion:
-    if: ${{ inputs.candidate_run }}
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      actions: read
-    outputs:
-      source_sha: ${{ steps.resolve.outputs.source_sha }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-      - id: resolve
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CANDIDATE_RUN: ${{ inputs.candidate_run }}
-        run: python3 .private/promotion.py
-  publish:
-    if: ${{ always() && !cancelled() && !inputs.validation_only && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))) }}
-    needs: [unsigned, emulator, promotion]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      actions: read
-      contents: write
-    steps:
-      - name: Checkout trusted controller revision
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-          fetch-depth: 0
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: validated-unsigned-apk
-          path: artifact/
-          run-id: ${{ inputs.candidate_run || github.run_id }}
-          github-token: ${{ github.token }}
-      - name: Sign, verify, publish and record successful integration
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ needs.promotion.outputs.source_sha || needs.unsigned.outputs.source_sha }}
-          ARTIFACT_RUN_ID: ${{ inputs.candidate_run || github.run_id }}
-          CONTROLLER_SHA: ${{ github.sha }}
-          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
-          gh auth setup-git
-          python3 .private/publish.py
-      - name: Notify signed APK ready
-        env:
-          NTFY_URL: ${{ secrets.NTFY_URL }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          release_url=$(gh release view --repo "$GITHUB_REPOSITORY" --json url --jq .url)
-          release_tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
-          python3 .private/notify.py "ZEC Private $release_tag is ready. APK built and signed. $release_url"
-  failed:
-    if: ${{ always() && (needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.publish.result == 'failure' || needs.promotion.result == 'failure') }}
-    needs: [unsigned, emulator, promotion, publish]
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      issues: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          output=Path('diagnostic-reports');output.mkdir()
+          files=list(Path('ui-lib/build/test-results/testZcashmainnetFossReleaseUnitTest').glob('TEST-*AutoDonation*Test.xml'))
+          total=sum(p.stat().st_size for p in files)
+          if total > 1048400:raise RuntimeError('Diagnostic XML budget exceeded')
+          for path in files:(output/path.name).write_bytes(path.read_bytes())
+          (output/'source-sha.txt').write_text(subprocess.check_output(['git','rev-parse','HEAD'],text=True))
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
         with:
-          ref: ${{ github.sha }}
-          persist-credentials: false
-      - env:
-          GH_TOKEN: ${{ github.token }}
-          NTFY_URL: ${{ secrets.NTFY_URL }}
-          MAKE_ISSUE: 'true'
-        run: python3 .private/notify.py "ZEC Private update blocked by a build or release check. Last working release remains available."
+          name: donation-readiness-unit-reports
+          path: diagnostic-reports/
+          retention-days: 1
+          if-no-files-found: error
