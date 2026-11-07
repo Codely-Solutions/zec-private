@@ -1,6 +1,23 @@
 # Maintenance and releases
 
-This fork tracks stable [Zodl Android](https://github.com/zodl-inc/zodl-android) releases. See `upstream.json` for the integrated identity, `STATUS.md` for current evidence, and `excluded-features.json` for exclusions and compatibility exceptions.
+This fork tracks stable [Zodl Android](https://github.com/zodl-inc/zodl-android) releases. See [upstream.json](upstream.json) for the integrated identity, [STATUS.md](STATUS.md) for last-published evidence, and [excluded-features.json](excluded-features.json) for exclusions and compatibility exceptions.
+
+## Find the procedure
+
+Use this entry for the checkout; local task state lives in the surrounding workspace's `RESUME.md` when present. The source files and executable gates govern behavior; a completed report does not override them.
+
+| Task | Maintained entry | Readiness and scope |
+|---|---|---|
+| Inspect UI / capture screenshots | [UI-REVIEW.md](UI-REVIEW.md) | Established capture/control components; artifact/state orchestration must match the current task. |
+| Select quick checks and release checks | Build section below; [core coverage](core-coverage.md) | Coverage records identify their executed revision; current evidence must match inputs. |
+| Run real wallet acceptance | [core coverage](core-coverage.md), [core_testnet_driver.py](core_testnet_driver.py), [acceptance_policy.py](acceptance_policy.py) | Requires a current prepared job, baseline and artifact bindings; not a screenshot prerequisite. |
+| Overlap independent emulator checks | [emulator-batch.md](emulator-batch.md) | Prepared jobs only; one shared guard and separate workers. |
+| Integrate upstream / refresh patch | Upstream integration below; [sync.py](sync.py), [refresh_source.py](refresh_source.py) | Discovery stays enabled; disposable integration and current acceptance remain gates. |
+| Promote/sign/publish | Signing below; [promotion.py](promotion.py), [publish.py](publish.py) | Requires explicit publication scope and accepted exact artifacts. |
+| Clean Actions storage | [Actions artifact cleanup](actions_artifact_cleanup.py) (`--help`) | Inspect complete artifact references first; preserve required fixtures/evidence. |
+| Locate prior local orchestration | Surrounding workspace's `records/INDEX.md` and `tools/extract-records.py` | Local private archives; recover selected files for inspection, not blind execution. |
+
+`docs/Setup.md`, `docs/CI.md`, `docs/Deployment.md` and the upstream testing notes are inherited references, not this fork's release procedures. Parser-sensitive changelogs and attribution remain source inputs. [prepare_core_acceptance.py](prepare_core_acceptance.py) is a legacy preparer with a revision-6 baseline; the current baseline comes from [upgrade-baseline.json](upgrade-baseline.json) and [maintenance-assets.json](maintenance-assets.json). Single-worker admission helpers still expect root-level job files. Adapt those assumptions within an authorized task before use; their presence is not a claim that an old job remains runnable.
 
 ## Build and validation
 
@@ -12,7 +29,7 @@ python3 .private/test_controls.py
 ./gradlew --no-daemon --no-watch-fs --max-workers=2 :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease
 ```
 
-Use the applicable resource guard and project acceptance policy. Build each required variant once per candidate and promote its validated unsigned artifact after acceptance. Production APKs are ARM64-only; x86_64 is reserved for isolated emulator debug acceptance. Release debuggability and debug-key signing are disabled.
+Use the applicable resource guard and project acceptance policy. Offline preflight also checks local links in the maintained documentation entry points. After reorganizing procedures, verify task-table destinations, script bindings and any archive-recovery examples; historical/generated links are outside that narrow automated check. Build each required variant once per candidate and promote its validated unsigned artifact after acceptance. Production APKs are ARM64-only; x86_64 is reserved for isolated emulator debug acceptance. Release debuggability and debug-key signing are disabled.
 
 [Swap amount rules](SWAP-AMOUNTS.md) explain amount provenance and fee accounting for maintainers.
 
@@ -20,7 +37,7 @@ Full evidence binds the source, workflow run, artifact digests and applicable wa
 
 ## Upstream integration
 
-`sync-upstream.yml` discovers official stable releases every six hours and supports manual dispatch. Drafts and prereleases are excluded. `fork.patch` carries the reviewed source delta; `.private/` and trusted workflows are overlaid separately. Read `sync.py` and `excluded-features.json` before regenerating the patch: separately sanitized provider content and removed project trees must stay out of it.
+`sync-upstream.yml` discovers official stable releases every six hours and supports manual dispatch. Drafts and prereleases are excluded. `fork.patch` carries the reviewed source delta; `.private/` and trusted workflows are overlaid separately. Read [sync.py](sync.py) and [excluded-features.json](excluded-features.json) before regenerating the patch: separately sanitized provider content and removed project trees must stay out of it.
 
 The controller resolves the exact upstream commit, checks critical differences, checks patch applicability and prepares an update branch. Relevant wallet, recovery, signing, swap, privacy and build-trust changes require review. Conflicts and failed acceptance preserve the last release. A reusable workflow explicitly chains build, validation, signing and publication.
 
@@ -34,7 +51,7 @@ Unsigned builds receive no signing secrets. The signing job uses the trusted con
 
 Tags use `v<upstream-version>-private.<revision>`, with the revision in `release-revision.json`. Android versionCode must exceed published versions even if an upstream build counter resets. Published tags and assets are immutable. Publication precedes a normal fast-forward integration-state push; concurrent changes cause that push to fail.
 
-Wallet releases contain the signed APK and its checksum. Detailed validation JSON is retained under `release-evidence/<tag>.json` in the integration-state commit. Seedless test APK baselines belong to the authenticated `maintenance-fixtures` draft, with exact asset IDs, sizes and SHA-256 digests in `maintenance-assets.json`. They are not user downloads. Preserve original bytes and verify the replacement before removing a maintenance asset from a wallet release. Never replace a published APK or checksum. Historical validation records remain immutable even when the next baseline changes.
+Wallet releases contain the signed APK and its checksum. Detailed validation JSON is retained under `release-evidence/<tag>.json` in the integration-state commit. Seedless test APK baselines belong to the authenticated `maintenance-fixtures` draft, with exact asset IDs, sizes and SHA-256 digests in [maintenance-assets.json](maintenance-assets.json). They are not user downloads. Preserve original bytes and verify the replacement before removing a maintenance asset from a wallet release. Never replace a published APK or checksum. Historical validation records remain immutable even when the next baseline changes.
 
 For a new revision of the same upstream version, increase `private_revision` and `ZCASH_VERSION_CODE`, refresh patch/source-state metadata, and run the release workflow. Preserve the existing signing key. Rebuilding a published version refuses replacement. Normal stable upstream integration uses the discovery workflow.
 
@@ -56,4 +73,4 @@ Gradle 8.14.6 is the current maintenance choice. Gradle 9.9.0 exceeds the fully 
 
 ## Donation UI review
 
-`.private/donation-review/include.gradle` explicitly adds a debug-only activity for inspecting the production Home and donation components with synthetic activity. It uses the real local reminder policy but cannot submit a payment. Ordinary builds omit this activity. Emulator screenshots establish presentation and reminder interactions; they do not establish wallet transaction or release acceptance.
+`.private/donation-review/include.gradle` explicitly adds a debug-only activity for inspecting the production Home and donation components with synthetic activity. It uses the real local reminder policy but cannot submit a payment. This experimental host compiled locally but crashed before usable rendered review; see [UI-REVIEW.md](UI-REVIEW.md) before reuse. Ordinary builds omit this activity. Emulator screenshots establish presentation and reminder interactions; they do not establish wallet transaction or release acceptance.

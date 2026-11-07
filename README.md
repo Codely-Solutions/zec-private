@@ -18,6 +18,6 @@ Read the [wallet guide](docs/WALLET-GUIDE.md) for payments, swaps and recovery, 
 
 ## Development
 
-[Build and maintain the fork](.private/MAINTENANCE.md) · [Release validation](.private/STATUS.md)
+[Build and maintain the fork](.private/MAINTENANCE.md) · [Last published validation](.private/STATUS.md)
 
 This fork tracks stable [Zodl Android](https://github.com/zodl-inc/zodl-android) releases. Upstream copyright and the [MIT license](LICENSE) are preserved. The [original README](docs/UPSTREAM-README.md) is retained for reference.

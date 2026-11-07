@@ -1,3 +1,5 @@
+> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../docs/FOUNDATION.md) for the fork architecture.
+
 # Signing
 To create a release build, signing must be configured.  The following Gradle properties must be set:
 1. `ZCASH_RELEASE_KEYSTORE_PATH`

@@ -1,3 +1,5 @@
+> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../docs/FOUNDATION.md) for the fork architecture.
+
 # Continuous Integration
 Continuous integration is set up with GitHub Actions.  The workflows are defined in this repo under [/.github/workflows](../.github/workflows).
 

@@ -1,3 +1,5 @@
+> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../../docs/FOUNDATION.md) for the fork architecture.
+
 # Testing
 This documentation outlines our approach to testing. By running tests against our app consistently, we verify the app's correctness, functional behavior, and usability before releasing it publicly.
 

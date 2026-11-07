@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: signed revision 13 independently verified on 2026-11-07. Exact current evidence is in core-acceptance.json and core-validation-summary.json.
+Status: signed revision 13 independently verified on 2026-11-07. The revision-specific evidence is in core-acceptance.json and core-validation-summary.json. It does not validate later working-tree changes.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|

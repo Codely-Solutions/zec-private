@@ -4,6 +4,7 @@ import json
 import re
 import subprocess
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from check import check
 from sync import source_state
@@ -13,6 +14,34 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def git(root, *args):
     return subprocess.check_output(['git', *args], cwd=root, text=True, timeout=30)
+
+
+# Only current, maintained entry points: inherited/generated/history links have other semantics.
+ACTIVE_DOCS = ('README.md', '.private/MAINTENANCE.md', '.private/UI-REVIEW.md',
+               '.private/core-coverage.md', '.private/emulator-batch.md',
+               'docs/DONATIONS.md', 'docs/WALLET-GUIDE.md', 'docs/FOUNDATION.md',
+               'docs/PRIVACY.md', 'docs/USE.md', '.private/SWAP-AMOUNTS.md')
+
+
+def documentation_links(root, documents=ACTIVE_DOCS):
+    errors = []
+    for name in documents:
+        path = root / name
+        if not path.is_file():
+            errors.append(f'{name}: maintained document missing')
+            continue
+        text = path.read_text(encoding='utf-8')
+        text = re.sub(r'```.*?```', '', text, flags=re.DOTALL)
+        for target in re.findall(r'!?\[[^\]\n]*\]\(([^)]+)\)', text):
+            target = target.strip().strip('<>')
+            url = urlsplit(target)
+            if url.scheme or url.netloc or not url.path:
+                continue
+            local = unquote(url.path)
+            destination = root / local.lstrip('/') if local.startswith('/') else path.parent / local
+            if not destination.exists():
+                errors.append(f'{name}: missing local documentation target {local}')
+    return errors
 
 
 def controller_checks(root):
@@ -71,6 +100,7 @@ def changed_kotlin(root, base):
 
 def run(root=ROOT, base='HEAD'):
     errors = controller_checks(root)
+    errors.extend(documentation_links(root))
     if git(root, 'rev-parse', '--is-shallow-repository').strip() != 'false':
         errors.append('Checkout is shallow; use fetch-depth: 0 before acceptance selection')
     git(root, 'rev-parse', '--verify', base + '^{commit}')

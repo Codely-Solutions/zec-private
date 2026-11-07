@@ -186,6 +186,20 @@ index ebbd24d3c..edac136cd 100644
 +++ b/build.gradle.kts
 @@ -112 +111,0 @@ tasks {
 -            "ZCASH_FLEXA_KEY" to "",
+diff --git a/docs/Architecture.md b/docs/Architecture.md
+index 66cc3760c..5935d66eb 100644
+--- a/docs/Architecture.md
++++ b/docs/Architecture.md
+@@ -0,0 +1,2 @@
++> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../docs/FOUNDATION.md) for the fork architecture.
++
+diff --git a/docs/CI.md b/docs/CI.md
+index 98f902023..7bd1ee8c0 100644
+--- a/docs/CI.md
++++ b/docs/CI.md
+@@ -0,0 +1,2 @@
++> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../docs/FOUNDATION.md) for the fork architecture.
++
 diff --git a/docs/DONATIONS.md b/docs/DONATIONS.md
 new file mode 100644
 index 000000000..ab8f147d4
@@ -219,6 +233,13 @@ index 000000000..ab8f147d4
 +```
 +
 +![Monero donation address](donations/xmr-address.png)
+diff --git a/docs/Deployment.md b/docs/Deployment.md
+index d1e6c2ce9..ae216eb8e 100644
+--- a/docs/Deployment.md
++++ b/docs/Deployment.md
+@@ -0,0 +1,2 @@
++> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../docs/FOUNDATION.md) for the fork architecture.
++
 diff --git a/docs/FOUNDATION.md b/docs/FOUNDATION.md
 new file mode 100644
 index 000000000..7c8c641cb
@@ -287,6 +308,19 @@ index 000000000..502cf6bfa
 +## Sharing diagnostics
 +
 +Exports may contain wallet history, addresses, amounts, notes and device details. Inspect them before sharing. Never include a recovery phrase, viewing key or gift secret. Exports are not sent automatically to Zodl or a support service.
+diff --git a/docs/Setup.md b/docs/Setup.md
+index d1c645ca4..b5087f5af 100644
+--- a/docs/Setup.md
++++ b/docs/Setup.md
+@@ -0,0 +1,2 @@
++> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../docs/FOUNDATION.md) for the fork architecture.
++
+@@ -58 +60 @@ Start by making sure the command line with Gradle works first, because **all the
+-        1. Shortly after opening the project, Android Studio may prompt about updating the Android Gradle Plugin.  DO NOT DO THIS.  If you do so, the build will fail because the project also has dependency locking enabled as a security feature.  To learn more, see [Build integrity.md](Build%20Integrity.md)
++        1. Shortly after opening the project, Android Studio may prompt about updating the Android Gradle Plugin.  DO NOT DO THIS.  If you do so, the build will fail because the project also has dependency locking enabled as a security feature.  To learn more, see [Build integrity.md](Build%20integrity.md)
+@@ -90 +92 @@ A few notes on running instrumentation tests on the `ui-screenshot-test` module:
+- - Screenshots are generated automatically and copied to [/ui-screenshot-test/build/output](../ui-screenshot-test/build/outputs)
++ - Screenshots are generated automatically and copied to `ui-screenshot-test/build/outputs` (generated output, when that upstream test module is used)
 diff --git a/docs/USE.md b/docs/USE.md
 new file mode 100644
 index 000000000..cdadb0a3b
@@ -405,6 +439,20 @@ P00000NkvXXu0mjfJT|n<
 literal 0
 HcmV?d00001
 
+diff --git a/docs/integrations/Flexa.md b/docs/integrations/Flexa.md
+index 51ba3e27e..d6e7b93f9 100644
+--- a/docs/integrations/Flexa.md
++++ b/docs/integrations/Flexa.md
+@@ -0,0 +1,2 @@
++> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../../docs/FOUNDATION.md) for the fork architecture.
++
+diff --git a/docs/testing/Testing.md b/docs/testing/Testing.md
+index e7df245c3..a69006d0a 100644
+--- a/docs/testing/Testing.md
++++ b/docs/testing/Testing.md
+@@ -0,0 +1,2 @@
++> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../../docs/FOUNDATION.md) for the fork architecture.
++
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt
 index 683867b58..7b15fe7f7 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt
