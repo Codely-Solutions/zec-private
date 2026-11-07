@@ -1,9 +1,9 @@
 {
-  "status": "signed-and-independently-verified",
-  "scope": "swap accuracy and clarity",
-  "source_sha": "170eb24caaa90969849c3f8dcfcb77f4016196ab",
-  "candidate_run": 42326943115,
-  "baseline": "v3.19.0-private.10",
+  "status": "validated-awaiting-signing",
+  "scope": "toolchain and release maintenance",
+  "source_sha": "4e4bff9cf1b52d9322000ef181a7c8be5577a802",
+  "candidate_run": 42355250478,
+  "baseline": "v3.19.0-private.11",
   "tests": {
     "tests": 1705,
     "failures": 0,
@@ -11,19 +11,19 @@
     "skipped": 0
   },
   "runtime_components": 334,
-  "production_gradle_seconds": 846,
-  "core_seconds": 745.8055187999998,
+  "production_gradle_seconds": 905,
+  "core_seconds": 715.8807285000075,
   "core_transaction_evidence": {
-    "fundingTxId": "cd68a195e531714ec4a6ca2a6b46edfc5826dc9e7de0116549bac1808d2ff2c6",
+    "fundingTxId": "d75289774307e79e1fda400debe3721a646d640c4d4d8b1f4c4d711328b6c9d9",
     "fundingProvider": "jinolabs-testnet",
     "fundedBalance": 10000000,
     "balanceBeforeSend": 10000000,
     "feeZatoshi": 10000,
     "senderConfirmedBalance": 8990000,
-    "restoreMinedHeight": 4592855,
+    "restoreMinedHeight": 4593785,
     "restoreTransactionState": "Pending",
     "candidateTxIds": [
-      "42b7de2d866c2c5238c189d3b4874e37e7254b1ad5d61da3895932fb1ec4eaa5"
+      "359ae9a0cde5de3127cfbab5d7c51cd53883eb2fd699dad0c1c7ae2e72171e3b"
     ],
     "initialSubmitType": "Success"
   },
@@ -31,29 +31,29 @@
     "schema": 1,
     "evidence_class": "real-app-production-quotes",
     "passed": true,
-    "build_source_sha": "170eb24caaa90969849c3f8dcfcb77f4016196ab",
-    "input_fingerprint": "4d137f9f83a21a012fe1936c3a0055a1d4ea015d9b5ef4d9df44ec5f1530548c",
-    "executed_apk_sha256": "5e33fba6d5317df4c2bc95fb9447587e78e79e69bb7d8ce40cabdaf5a0f290e5",
-    "original_apk_sha256": "08c93e6caca89ee565f780cbeac3ca1c20fd2bad29b1ac01415f635353b260b2",
+    "build_source_sha": "4e4bff9cf1b52d9322000ef181a7c8be5577a802",
+    "input_fingerprint": "e148e7cfe41b5a8fba7c506a09dbaecdf0c4da94c03ab5c8aa5883c8648ea943",
+    "executed_apk_sha256": "6370b30b3a756c040f2b1b13c629a6e8d8c2008b49e004c4af7583932e2ab457",
+    "original_apk_sha256": "4004908d658cde3f948f384f402e9cc742d176542a13285a0fc9f6d363e7f0aa",
     "quote_requests": 3,
     "quote_reviews": 3,
     "dismissals": 3,
     "tor_enabled": true,
     "funds_transferred": false,
     "personal_wallet_access": false,
-    "artifact_id": 13555787713,
-    "workflow_run_id": 42326943115,
-    "archive_sha256": "389f9b7deb979adc72df556cfd10b45ea3e23d101555b9f4d3bcf0b34a1d71a5",
+    "artifact_id": 13567442220,
+    "workflow_run_id": 42355250478,
+    "archive_sha256": "f790f1eb30d6a19e918962256706bec12f82c7b0744aeffee7b3eff821696889",
     "apk_preparation": {
-      "originalSha256": "08c93e6caca89ee565f780cbeac3ca1c20fd2bad29b1ac01415f635353b260b2",
-      "testedSha256": "5e33fba6d5317df4c2bc95fb9447587e78e79e69bb7d8ce40cabdaf5a0f290e5",
+      "originalSha256": "4004908d658cde3f948f384f402e9cc742d176542a13285a0fc9f6d363e7f0aa",
+      "testedSha256": "6370b30b3a756c040f2b1b13c629a6e8d8c2008b49e004c4af7583932e2ab457",
       "preservedExecutionEntries": 33,
-      "executionEntriesDigest": "d46b953b2baa0be50d85aeaeb4ce286666c798c392ecb8f443673766f11a4b05",
+      "executionEntriesDigest": "1d86b87919587f976d7250fa94503d49ec882eb9ffa6886520542cb7dc802702",
       "executionEntriesUnchanged": true,
       "abi": "x86_64",
       "signing": "ephemeral test key; not release key"
     },
-    "guard_job": "c52f335ec22e4891842a841133e44130",
+    "guard_job": "4a590ee5235d41998de06e5a14b38a14",
     "provider_timeouts": [],
     "presentation": {
       "passed": true,
@@ -62,18 +62,12 @@
       "placeholder_wallet_fee_absent": true
     }
   },
-  "amount_reporting": "Provider output is explicitly separate from quoted output and wallet credit; raw-only status output is converted by asset decimals",
-  "cost_presentation": "No placeholder incoming wallet fee or aggregate fee claim; actual outgoing wallet fee retained; current NEAR platform percentage included in quote",
-  "upstream": "Discovery remains enabled; actual disposable integration and protected-change gates passed",
+  "gradle": "8.14.6",
+  "upstream": "Stable discovery enabled; actual disposable integration preserves trusted update configuration",
   "limitations": [
-    "Production ARM64 inspected, not executed; isolated x86_64 debug/testnet binaries executed",
-    "Funded production swap settlement, physical signer and biometric approval UI were not executed",
-    "Provider-reported output can retain a conservative bridge network-fee allowance; wallet receipt is a separate measurement",
-    "Personal investigation identifiers, raw replies and screenshots are excluded from this public repository"
-  ],
-  "release_url": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.11",
-  "release_apk_sha256": "0f8801e9732cded3e685df5c44543edace46dc886e5f04dd11745960f511dfe6",
-  "release_apk_bytes": 67812047,
-  "signing_controller_sha": "3b986e58dc57195b100badfe7e934fd8ce604aaf",
-  "production_arm_executed": false
+    "Production ARM64 inspected, not executed; isolated x86_64 emulator binaries executed",
+    "Funded production settlement, physical signer and biometric approval UI were not executed",
+    "Patch/minor updates are automated proposals with read-only configuration checks; merging and signing remain gated",
+    "Gradle 9 migration and a Java bytecode target change are deferred pending demonstrated compatibility and benefit"
+  ]
 }
