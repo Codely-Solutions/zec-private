@@ -139,6 +139,10 @@ def validate_core(receipt, expected_inputs):
     send=stages['send']
     if not all(send.get(key) is True for key in ('ui_review','ui_cancel_no_submission','ui_approval')):
         raise ValueError('Actual review/cancellation/approval UI evidence required')
+    if (not all(send.get(key) is True for key in ('shielded_donation', 'multi_recipient_sdk_accepted',
+                                                 'multi_recipient_wallet_rejected')) or
+            send.get('identifying_memo') is not False or send.get('multi_recipient_submitted') is not False):
+        raise ValueError('Real shielded donation and fail-closed multi-recipient review evidence required')
     if send.get('ui_approval_actions') != 1:
         raise ValueError('Exactly one real UI approval action required')
     if stages['fund'].get('app_transaction_state') != 'Confirmed':

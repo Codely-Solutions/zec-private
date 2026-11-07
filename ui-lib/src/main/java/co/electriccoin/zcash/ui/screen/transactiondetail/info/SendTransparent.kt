@@ -87,7 +87,7 @@ fun SendTransparent(
                         modifier = Modifier.fillMaxWidth(),
                         state =
                             TransactionDetailInfoRowState(
-                                title = stringRes(R.string.transactionDetail_feeSummary),
+                                title = stringRes(R.string.private_wallet_transaction_fee),
                                 message = state.fee.withStyle(),
                             )
                     )

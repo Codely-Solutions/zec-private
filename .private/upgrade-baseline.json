@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "release": "v3.19.0-private.11",
-  "source_sha": "170eb24caaa90969849c3f8dcfcb77f4016196ab",
-  "version_code": 3234011,
+  "release": "v3.19.0-private.12",
+  "source_sha": "4e4bff9cf1b52d9322000ef181a7c8be5577a802",
+  "version_code": 3234012,
   "package": "com.personal.zecprivate.testnet.foss.debug",
   "artifact": {
-    "release_asset_id": 720071778,
-    "size_in_bytes": 65406039,
-    "digest": "sha256:6001c9203fce965ef12017944840483daa9c548c0035def567be40cb13a17b9a"
+    "release_asset_id": 720196012,
+    "size_in_bytes": 65405900,
+    "digest": "sha256:051e57e6334a8156bef53892d2d1fb04510a716b6a35f9e32d966757718118a8"
   },
-  "next_use": "Revision 11 to 12 installed update; authenticated seedless maintenance draft fixture, immutable digest"
+  "next_use": "Revision 12 to donation candidate installed update; authenticated seedless immutable fixture"
 }

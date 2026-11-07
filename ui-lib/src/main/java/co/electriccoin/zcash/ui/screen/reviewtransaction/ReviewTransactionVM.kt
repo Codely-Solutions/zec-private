@@ -165,7 +165,7 @@ class ReviewTransactionVM(
         items =
             listOfNotNull(
                 AmountState(
-                    title = stringRes(R.string.send_amountSummary),
+                    title = stringRes(R.string.private_total_zec_to_spend),
                     amount = transactionProposal.amount + transactionProposal.proposal.totalFeeRequired(),
                     exchangeRate = exchangeRateState,
                 ),
@@ -184,7 +184,7 @@ class ReviewTransactionVM(
                     amount = transactionProposal.amount
                 ),
                 FinancialInfoState(
-                    title = stringRes(R.string.send_feeSummary),
+                    title = stringRes(R.string.private_wallet_transaction_fee),
                     amount = transactionProposal.proposal.totalFeeRequired()
                 ),
                 transactionProposal.memo
@@ -271,7 +271,7 @@ class ReviewTransactionVM(
                     )
                 },
                 FinancialInfoState(
-                    title = stringRes(R.string.send_feeSummary),
+                    title = stringRes(R.string.private_wallet_transaction_fee),
                     amount = transactionProposal.proposal.totalFeeRequired()
                 ),
                 orchardPrivacyWarningState(transactionProposal.proposal.usesOrchardInputs()),

@@ -23,4 +23,5 @@ data class SwapDetailState(
     val infoFooter: StringResource?,
     val primaryButton: ButtonState?,
     val onBack: () -> Unit,
+    val donationBasisZec: String? = null,
 )

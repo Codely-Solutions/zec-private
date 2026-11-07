@@ -6,5 +6,10 @@
   "v3.19.0-private.11": [
     "Correct swap amount precision, minimums and recovery top-ups.",
     "Clarify quoted output and transaction fees in swap details."
+  ],
+  "v3.19.0-private.13": [
+    "Add optional shielded donations with a zero-default saved suggestion and explicit approval for every payment.",
+    "Reject unsupported multi-recipient payment requests and clarify Zcash network-fee labels.",
+    "[Support development](https://github.com/Sammy-Lastre/zec-private/blob/main/docs/DONATIONS.md)."
   ]
 }

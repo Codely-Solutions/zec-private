@@ -96,6 +96,9 @@ class SwapDetailVM(
                             .takeIf { swapData.status?.status == PENDING },
                     primaryButton = createPrimaryButtonState(swapData, swapData.error),
                     onBack = ::onBack,
+                    donationBasisZec = swapData.status?.takeIf {
+                        it.status == SUCCESS && it.destinationAsset.tokenTicker == "ZEC"
+                    }?.executedAmountOut?.takeIf { it.signum() > 0 }?.toPlainString(),
                 )
             }.stateIn(
                 scope = viewModelScope,

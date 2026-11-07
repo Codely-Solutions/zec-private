@@ -1,9 +1,25 @@
 <resources>
-    <string name="private_wallet_transaction_fee" translatable="false">Wallet transaction fee</string>
+    <string name="private_wallet_transaction_fee" translatable="false">Zcash network fee</string>
     <string name="private_provider_costs" translatable="false">NEAR platform fee</string>
     <string name="private_provider_costs_included" translatable="false">0.25%% included in quote</string>
     <string name="private_quoted_output" translatable="false">Quoted output</string>
     <string name="private_minimum_received" translatable="false">Minimum received: %1$s</string>
     <string name="private_provider_output" translatable="false">Provider output</string>
     <string name="private_estimated_output" translatable="false">Quoted output (execution unavailable)</string>
+    <string name="private_total_zec_to_spend" translatable="false">Total ZEC to spend</string>
+    <string name="private_support_title">Support development</string>
+    <string name="private_support_description">Optional donations help maintain ZEC Private and its tests. The wallet works the same without donating.</string>
+    <string name="private_support_privacy">Donations use shielded Zcash inputs and outputs. The project receives the payment; timing and amount can still reveal information.</string>
+    <string name="private_support_addresses">Project addresses and external Monero donations</string>
+    <string name="private_support_suggestion">Saved suggestion only. Initially 0%; every donation needs your approval.</string>
+    <string name="private_support_custom_percent">Custom suggestion (%)</string>
+    <string name="private_support_basis">Based on %1$s ZEC executed in this swap, excluding network fees and refunds.</string>
+    <string name="private_support_amount">One-time donation (ZEC)</string>
+    <string name="private_support_fee">Review the actual Zcash network fee and total before approving. You can cancel if a small donation is uneconomic.</string>
+    <string name="private_support_failed">Cannot prepare donation. Check shielded funds, synchronization and connection. Nothing was submitted.</string>
+    <string name="private_support_software_only">In-app donations currently require a software wallet. Hardware and view-only accounts can use the published address in a compatible wallet.</string>
+    <string name="private_support_review">Review donation</string>
+    <string name="private_support_invitation">Swap completed. Would you like to support development?</string>
+    <string name="private_support_not_now">Not now</string>
+    <string name="private_support_never">Don’t ask again</string>
 </resources>

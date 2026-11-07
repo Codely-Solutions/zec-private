@@ -357,7 +357,7 @@ private fun SuccessPreview() =
                                 subtitle = null
                             ),
                             SwapQuoteInfoItem(
-                                description = stringRes("ZEC transaction fee"),
+                                description = stringRes(R.string.private_wallet_transaction_fee),
                                 title = stringRes(Zatoshi(1231234)).withStyle(),
                                 subtitle = null
                             ),

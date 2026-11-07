@@ -73,8 +73,14 @@ class CancelProposalFlowUseCase(
             }
 
             else -> {
-                if (clearSendForm) observeClearSend.requestClear()
-                navigationRouter.backTo(Send::class)
+                if (proposal is co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal &&
+                    proposal.isDonation
+                ) {
+                    navigationRouter.backTo(co.electriccoin.zcash.ui.screen.donation.DonationArgs::class)
+                } else {
+                    if (clearSendForm) observeClearSend.requestClear()
+                    navigationRouter.backTo(Send::class)
+                }
             }
         }
     }

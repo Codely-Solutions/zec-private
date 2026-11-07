@@ -60,6 +60,11 @@ class MoreVM(
                         onClick = ::onWhatsNewClick
                     ),
                     ListItemState(
+                        title = stringRes(R.string.private_support_title),
+                        bigIcon = imageRes(R.drawable.ic_settings_info),
+                        onClick = { navigationRouter.forward(co.electriccoin.zcash.ui.screen.donation.DonationArgs()) }
+                    ),
+                    ListItemState(
                         title = stringRes(R.string.settings_about),
                         bigIcon = imageRes(R.drawable.ic_settings_info),
                         onClick = ::onAboutUsClick

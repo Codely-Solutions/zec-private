@@ -455,7 +455,7 @@
 
     <!-- ===== insufficient_funds ===== -->
     <string name="sheet_insufficientBalance_title">Insufficient Funds</string>
-    <string name="sheet_insufficientBalance_msg">We couldn\'t create this transaction for you. Your wallet doesn\'t have enough balance to cover both the transaction amount and transaction fees. Please lower the transaction amount to account for the fees.</string>
+    <string name="sheet_insufficientBalance_msg">Your balance cannot cover both the amount and the Zcash network fee. Lower the amount and try again.</string>
 
     <!-- ===== integrations ===== -->
     <string name="torSetup_option3_title">Integrations</string>
@@ -494,7 +494,7 @@
     <!-- ===== pay ===== -->
     <string name="crosspay_help_payWith">CrossPay with</string>
     <string name="pay_info_subtitle">Make cross-chain payments in any NEAR-supported coin or token.\n\nIf slippage or network conditions result in your recipient receiving less than the promised amount, your payment will be refunded minus network fees.\n\nRefunds only apply to payments of $300 or more. Payments under $300 aren\'t eligible for a refund. Please double-check all details before continuing.</string>
-    <string name="swapAndPay_slippageWarn">Any unused portion of the slippage fee will be refunded if the swap executes with lower slippage than expected.</string>
+    <string name="swapAndPay_slippageWarn">Slippage is a price-movement allowance, not a fixed fee. Any unused allowance is refunded.</string>
 
     <!-- ===== payment_request ===== -->
     <string name="send_requestPayment_title">Payment Request</string>
@@ -855,7 +855,7 @@
     <string name="swap_slippage_low_warning">Slippage %1$s increases the chance your swap will be unsuccessful and refunded. Consider using %2$s, especially for larger amounts.</string>
     <string name="swap_slippage_low_warning_1">under %s%%</string>
     <string name="swap_slippage_low_warning_2">%s%% or higher</string>
-    <string name="pay_slippage_info">You may pay up to %s more, in addition to transaction fees.</string>
+    <string name="pay_slippage_info">You may pay up to %s more if the price changes. Zcash network fees are additional.</string>
     <string name="swapAndPay_from">From</string>
     <string name="send_error_insufficientFunds">Insufficient funds</string>
     <string name="balance_availableTitle">Spendable: </string>

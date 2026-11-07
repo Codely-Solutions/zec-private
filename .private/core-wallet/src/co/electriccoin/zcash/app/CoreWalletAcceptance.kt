@@ -149,14 +149,42 @@ class CoreWalletAcceptance {
                     val proposals = dependency<ZashiProposalRepository>()
                     check(proposals.submitState.value == null)
                     var reviewAttempt = 0
-                    openPrefilledForm(destination)
+                    awaitReviewSync()
+                    val sdk = dependency<SynchronizerProvider>().getSynchronizer()
+                    val account = dependency<AccountDataSource>().getZashiAccount()
+                    val multiUri = "zcash:$destination?amount=0.001&address.1=" +
+                        state.getString("senderAddress") + "&amount.1=0.001"
+                    val multiProposal = sdk.proposeFulfillingPaymentUri(account.sdkAccount, multiUri)
+                    val multiDecoded = cash.z.wallet.sdk.internal.ffi.ProposalOuterClass.Proposal
+                        .parseFrom(multiProposal.toByteArray())
+                    val requested = multiDecoded.stepsList.sumOf { step ->
+                        val parsed = org.zecdev.zip321.ZIP321.request(
+                            uriString = step.transactionRequest,
+                            context = org.zecdev.zip321.parser.ParserContext.TESTNET,
+                            validatingRecipients = null
+                        ) as org.zecdev.zip321.ZIP321.ParserResult.Request
+                        parsed.paymentRequest.payments.size
+                    }
+                    check(requested == 2)
+                    val rejected = runCatching {
+                        dependency<co.electriccoin.zcash.ui.common.datasource.ProposalDataSource>()
+                            .createZip321Proposal(account, multiUri)
+                    }.exceptionOrNull()
+                    check(rejected is co.electriccoin.zcash.ui.common.datasource.UnsupportedZip321PaymentCountException)
+                    check(proposals.transactionProposal.value == null && proposals.submitState.value == null)
+                    save(state.put("multiRecipientSdkAccepted", true).put("multiRecipientRejectedByWallet", true)
+                        .put("multiRecipientPayments", requested).put("multiRecipientSubmitted", false))
+                    co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy.setIsolatedTestnetRecipient(destination)
+                    co.electriccoin.zcash.ui.screen.donation.DonationPreferences(context).percent = "0.5".toBigDecimal()
+                    dependency<NavigationRouter>().forward(co.electriccoin.zcash.ui.screen.donation.DonationArgs("2"))
+                    scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_review))
                     suspend fun openReview() {
                         reviewAttempt++
                         awaitReviewSync()
                         val logBoundary = "CORE_REVIEW_BEGIN_" + reviewAttempt
                         android.util.Log.i("CoreReview", logBoundary)
                         try {
-                            clickUi(context.getString(co.electriccoin.zcash.ui.design.R.string.send_review), "form_review")
+                            clickUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_review), "form_review")
                         } catch (error: Exception) {
                             proposalFailureDiagnostic(logBoundary, reviewAttempt)
                             throw error
@@ -199,18 +227,22 @@ class CoreWalletAcceptance {
                             "review_title"
                         )
                         waitUi("0.01", "review_amount", exact = false)
-                        waitReviewMemo()
+                        co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy.requireShielded(
+                            proposal.proposal,
+                            ZecSend(proposal.destination, proposal.amount, proposal.memo, null)
+                        )
+                        check(proposal.isDonation)
                         check(proposal.amount.value == 1_000_000L)
                         check(proposal.destination.address == destination)
-                        check(proposal.memo.value == "core-testnet-acceptance")
+                        check(proposal.memo.value.isEmpty())
                     }
                     openReview()
                     check(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
                     withTimeout(15_000) { proposals.transactionProposal.first { it == null } }
                     check(proposals.submitState.value == null)
                     check(balance() == before)
-                    waitUi(destination, "cancel_retained_recipient")
-                    // Cancellation retains Send; do not push a duplicate route or prefill consumer.
+                    waitUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_review), "cancel_retained_donation")
+                    // Cancellation retains Support development; do not push another route.
                     openReview()
                     state.put("sendAttempted", true).put("balanceBeforeSend", before)
                         .put("uiReview", true).put("uiCancelNoSubmission", true)
@@ -263,7 +295,7 @@ class CoreWalletAcceptance {
                             .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight!=null }
                     }
                     check(transaction.amount.value == 1_000_000L)
-                    check("core-testnet-acceptance" in dependency<TransactionRepository>().getMemos(transaction))
+                    check(dependency<TransactionRepository>().getMemos(transaction).all { it.isEmpty() })
                     awaitBalance(1_000_000)
                     check(balance() == 1_000_000L)
                     save(state.put("restoreMinedHeight",checkNotNull(transaction.overview.minedHeight).value)
@@ -410,7 +442,11 @@ class CoreWalletAcceptance {
             .put("ui_approval_actions",approvalActions)
             .put("ui_review_sync_checks",reviewReadyChecks)
             .put("ui_review_sync_wait_millis",reviewReadyWaitMillis)
-            .put("setup","production prefill bus; actual form Review and approval clicks")
+            .put("setup","production support screen; actual donation review/cancel and approval clicks")
+            .put("shielded_donation",true).put("identifying_memo",false)
+            .put("multi_recipient_sdk_accepted",fixture().getBoolean("multiRecipientSdkAccepted"))
+            .put("multi_recipient_wallet_rejected",fixture().getBoolean("multiRecipientRejectedByWallet"))
+            .put("multi_recipient_submitted",false)
             .put("biometric_prompt_executed",false)
         if (stage=="restore") receipt.put("mined_height",fixture().getLong("restoreMinedHeight"))
             .put("amount_zatoshi",1_000_000L).put("app_transaction_state",fixture().getString("restoreTransactionState"))
@@ -857,10 +893,9 @@ class CoreWalletAcceptance {
     }
 
     @Suppress("DEPRECATION")
-    private suspend fun waitReviewMemo() {
-        // The review body scrolls independently of the fixed approval footer.
+    private suspend fun scrollToText(text: String) {
         repeat(4) {
-            if (hasUiText("core-testnet-acceptance")) return
+            if (hasUiText(text)) return
             val root = instrumentation.uiAutomation.rootInActiveWindow ?: return@repeat
             val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
             pending.add(root)
@@ -885,7 +920,7 @@ class CoreWalletAcceptance {
             }
             delay(300)
         }
-        waitUi("core-testnet-acceptance", "review_memo")
+        waitUi(text, "scroll_target")
     }
 
     private fun uiDiagnostic(label: String, outcome: String, probe: UiProbe) {

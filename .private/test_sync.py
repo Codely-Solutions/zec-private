@@ -28,7 +28,7 @@ class SyncTests(unittest.TestCase):
     def test_sensitive_wallet_screens_require_review(self):
         base='ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/'
         for screen in ('walletbackup','restore','onboarding','authentication','about','theme','tor','send',
-                       'swap','reviewtransaction','signkeystonetransaction','receive','ironwood'):
+                       'donation','swap','reviewtransaction','signkeystonetransaction','receive','ironwood'):
             with self.subTest(screen=screen):
                 self.assertTrue(sync.critical(base+screen+'/Screen.kt'))
         self.assertFalse(sync.critical(base+'colorpicker/Screen.kt'))

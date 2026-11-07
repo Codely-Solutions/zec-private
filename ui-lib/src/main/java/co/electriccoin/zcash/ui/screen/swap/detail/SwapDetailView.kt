@@ -144,6 +144,9 @@ fun SwapDetailView(
                     modifier = Modifier.scaffoldPadding(paddingValues, top = 24.dp),
                 ) {
                     ZashiSwapQuoteHeader(state.quoteHeader)
+                    if (state.status.status == SwapStatus.SUCCESS && state.donationBasisZec != null) {
+                        co.electriccoin.zcash.ui.screen.donation.DonationInvitation(state.donationBasisZec)
+                    }
                     Spacer(20.dp)
                     TransactionDetailRowHeader(
                         title = stringRes(R.string.swapToZec_swapDetails),

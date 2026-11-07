@@ -179,6 +179,41 @@ index ebbd24d3c..edac136cd 100644
 +++ b/build.gradle.kts
 @@ -112 +111,0 @@ tasks {
 -            "ZCASH_FLEXA_KEY" to "",
+diff --git a/docs/DONATIONS.md b/docs/DONATIONS.md
+new file mode 100644
+index 000000000..681b55ecc
+--- /dev/null
++++ b/docs/DONATIONS.md
+@@ -0,0 +1,29 @@
++# Support ZEC Private
++
++Donations support the ZEC Private project. Use the matching asset and mainnet network, then check the complete destination address in your sending wallet before confirming.
++
++## Zcash (ZEC)
++
++Send ZEC to this project-controlled Unified Address using a wallet that supports Orchard:
++
++```text
++u16hcm5ln6c9yvj7snd3k2m9s5zlg2hntnqupzpl7r7xxqf23pf9dze7ja6782kjc454pu2kamk0xawul5zv9arugr797xfse385cgjmar
++```
++
++![Zcash mainnet donation address](donations/zec-address.png)
++
++This Unified Address contains one Orchard receiver and no transparent receiver. Its mainnet encoding and Bech32m checksum were checked after decoding F4Jumble according to [ZIP 316](https://zips.z.cash/zip-0316).
++
++## Monero (XMR)
++
++Send XMR from an external Monero wallet to this mainnet subaddress:
++
++```text
++83Jji8QKKhRdeLZ6nALJaQhACiAMZ1MNZiFCwkTToD7KWEN3cCg8ePDbBRR6j7LM23gFttMQmSH9zUpbkn6N5pFxA6r9KtA
++```
++
++![Monero mainnet donation subaddress](donations/xmr-address.png)
++
++The Monero network prefix and Keccak checksum were checked against the [Monero address format](https://github.com/monero-project/monero/blob/master/src/cryptonote_config.h). Listing this destination does not add Monero custody to ZEC Private.
++
++Both QR codes contain only the exact address printed above, with no amount or payment identifier. They were generated locally and decoded with a separate QR implementation to verify an exact match. Address-format checks do not establish recipient ownership or guarantee transaction privacy. Any conversion through a swap provider has its own fees, availability and privacy considerations; these addresses do not establish that a conversion has completed.
 diff --git a/docs/FOUNDATION.md b/docs/FOUNDATION.md
 new file mode 100644
 index 000000000..7c8c641cb
@@ -279,10 +314,10 @@ index 000000000..8ca8e572c
 +The app can export diagnostics using Android sharing. Choose the recipient yourself and inspect sensitive content first. No staffed support inbox is configured. Do not post secret-bearing exports to GitHub. GitHub release and documentation links require repository access.
 diff --git a/docs/WALLET-GUIDE.md b/docs/WALLET-GUIDE.md
 new file mode 100644
-index 000000000..493bdcaf7
+index 000000000..ecd395477
 --- /dev/null
 +++ b/docs/WALLET-GUIDE.md
-@@ -0,0 +1,58 @@
+@@ -0,0 +1,60 @@
 +# Wallet guide
 +
 +## Installation and updates
@@ -301,7 +336,9 @@ index 000000000..493bdcaf7
 +
 +Quote requests use `appFees: []`, omit the upstream referral, and carry no partner JWT or personal API key. ZEC Private requests a 0% app/affiliate fee. Provider, bridge, execution and network costs, together with exchange pricing or spread, can affect the amount received.
 +
-+NEAR's published anonymous API platform rate is 0.25% for non-`ANY_INPUT` quotes. Its authenticated 0.20% schedule is an alternative rate. NEAR also lists a 0.0001% protocol fee per transaction. An `ANY_INPUT` platform-fee exemption still leaves other costs. Consult the [fee schedule](https://docs.near-intents.org/resources/fees) and [authentication rules](https://docs.near-intents.org/integration/distribution-channels/1click-api/authentication) for current terms, and review the quoted received amount and wallet transaction fee before confirming.
++NEAR's published anonymous API platform rate is 0.25% for non-`ANY_INPUT` quotes. Its authenticated 0.20% schedule is an alternative rate. NEAR also lists a 0.0001% protocol fee per transaction. An `ANY_INPUT` platform-fee exemption still leaves other costs. Consult the [fee schedule](https://docs.near-intents.org/resources/fees) and [authentication rules](https://docs.near-intents.org/integration/distribution-channels/1click-api/authentication) for current terms, and review the quoted received amount and Zcash network fee before confirming.
++
++A Zcash network fee pays for the transaction that sends ZEC from your wallet, including a CrossPay deposit. It is separate from the provider costs included in the quote. “Total ZEC to spend” includes that network fee; ZEC Private adds no app fee. An incoming swap funded from an external wallet has no Zcash sending fee charged by this wallet.
 +
 +## Privacy boundaries
 +
@@ -341,6 +378,60 @@ index 000000000..493bdcaf7
 +## Guidance provenance
 +
 +The migration and payment guidance was reviewed against the upstream [migration guide](https://support.zodl.com/article/42-moving-your-funds-to-ironwood), [CrossPay guide](https://support.zodl.com/article/24-using-crosspay-to-spend-zec) and [swap guide](https://support.zodl.com/article/26-swapping-into-zec) on 2026-11-06. Those pages describe upstream; this guide describes the retained fork flow and does not promise settlement timing or support services.
+diff --git a/docs/donations/xmr-address.png b/docs/donations/xmr-address.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..a18099b8db48af03767d771414810a48c3bd0bcd
+GIT binary patch
+literal 908
+zcmV;719SX|P)<h;3K|Lk000e1NJLTq00D>q00D>r00000b2v(i000A1Nkl<Zc%1E9
+z>(1LS2nDqFf8{g50lWKtOvx%`l$uIy6M-6h%GFpQH_7e_$dR~Cc7vC6B(9U);3XZ2
+z>tr{0Nk`(-*XozQDZfK2m?%Vf86S$`Xsd@!!b1WFT~NTGa4;ZHe#PSGsfUfiLo`-A
+zErLM!9XAcW2|3#8VG|`3s^U<%yVAIR0pfG?m?D9&3y6ke(!}I{Kh-z-E9?))g0Uk^
+zL+P#rz4fpm5(1!>8h?3h=AL@kB>TY6yWy$wu4Z)at%psL(1;b0*)r+P1h>kL@LZZ<
+zrLi7UBp~jyJgM4|gp2R>pu++WBM(2-7sqpDa^)7X3d30csMA;Bj;Ef=zFY$7oe+V;
+z$$b}y1`9+~;@eq|&zDeIM67z0;t7jW_N|D7#+|l$*dz%h93Ir!NX+g@a74>QBgPzm
+z^{{=&f`-<TRpBZR(ffZjt)Hlj*vxj9gUXakvkK{{hfR{u2<Sv3DiPun4ve*-uq=G^
+zslIvtLp^`u-qUJhWfV^@hH`E_^{`PA$^x8~1~c5qvpnP7DV7|6^;mr_^jT>NEI9~8
+zxG+(tcYfm*nS6VGrEyg|<@gcgcjntw4;wYlfZ8A5F(mDz5?|5Yde|fhWEvG^N9{i`
+z&tfMfQ?L_1p7B>&Ywq;ts88|e3hIsjS5qXws2!%@#bEUgIn7YbD`jkHtj8D$Y;Tn_
+z3@rZwrZ5kzUER)ljG0eFwyv^wRml}WVjmu9D?RnFQ4*-Z#Om!v9QPO=MIplpo_?zD
+zoo7%sOe&YEPDx?2(CVv)4Uy0_MH00KtH0e`tggG(_H9=^Y?6eoo$|eFn+>ao<`G1Y
+z4VA`vOpyRBfNiTtY_szoxvy^yV%H~)^%x_e9B$upp@Gk8xH}|z&KuYRc<AeFB2V7r
+z9M+B^3@Aw6&i|`n=c6PK7_5UI>llurxgIw1d=zT9Cq4p`oKKYCIQiAH=c6P+SevtD
+zF7nQA*pax42PqROUgXYHjgm@Dyr0#*PWG+@vW2ymKPMSv%_tr`u9N+%1Txq4oHu8u
+z>)gjO4IKM;Dt;(07&@{s!lJx3rgR+!Iri~b{c(xx8rusUiR)xHcu7a%I@t|g(vi4M
+ic7vC6B(77>wfYUxjgt%;V@rMj0000<MNUMnLSTZxkg&Y~
+
+literal 0
+HcmV?d00001
+
+diff --git a/docs/donations/zec-address.png b/docs/donations/zec-address.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..97e70d1113cadecae6979ffb28285c266ad86cc5
+GIT binary patch
+literal 889
+zcmV-<1BU#GP)<h;3K|Lk000e1NJLTq00D>q00D>r00000b2v(i0009(Nkl<Zc%1EA
+z(T?LV2n4kM|I4gk0B7HltK_4^+}_GgjaowRz?d#8JrsGWKu6=g$b+?zqj6v4!CJ`C
+zxG(ZxE#zo?`@Q<HUyN};39HZ52kNil3Rd*ALniry+!G8}*x3HFs`(^d)L7Bg4jJVS
+z!fj__kBSVG@Qu$o<EN(`GE{?ENtxjb8`y~d_osSYe1yby<&om^HEeE&%<_lU1>dp!
+z2XWzHa$V8W4jJVSuDKe97+`por8Z9ZXl;iK(cmjz;vo_EeTfqN0y|`g1|zjiw8)Yp
+ze1W|RH3*&jigszR!$deHvtA}uyX;w(dgA-Zdpr?&tp;bIhtdx)VOx}MTs}$kP^|4~
+zhfK?NIpV{-5Qy#`!G1;yXnNWq!!%UMHYmUAa0%kVYeT=tfik`An8IJNIV8Cf3kP>a
+z>|c@W^0rSU@77=k@(2WAI*>d_Mjxu9duuxeXmHdTSI)4?!AN}rRuo{;(+(M;!4(qg
+zi~|#^%=5xZ!n)calkh{c5WgNwMNlk)R}X${iw}y5Bg*o0P*J{I%x}}@N``4@&?4>`
+z`-g1zau}tSbG5f)goY+dl4pX*s+=jY#EaE`Z~jzo*5JVKr~#uE0kkCI>p8F8m+w-b
+z1}?@J7+-BC^pEc$N8@?FkLCdA0RRV4l56?oyPNPs(YO$<h^_{loMWg?r+o4rk3?Rp
+zL7+iA5Mo2h{K~vgL-LnxaZfvBhz3VLNirh=A~E+}Yn>T3wnHXq@S+s64Dq=$iMAkP
+zWb3DTwT7b6$_kCba+|;@Ca3<8t^Gb)r|64cwCV$>PQ@$sey*nQyBeKVbyA+(d$I0(
+z`b%h^1_x_`B&(8J@K$kv$REDPeUaB{{N%vzcAeHL$oFiJvjrzUWP5+2MuPiyc%^=+
+z>2oDRH2Bh-Tl{WuSqbcjmcu9RJCCAjzABP;6@l4})%dxRiQkVhSv_#55)0imwzi&j
+z$jI;GkT=35%j?P3iWxfm?sk7r90{(h7r?>6{kDCsWFmghI+O|kU-&_JGS$-#nfU!E
+zP8RFZAQ#ZVl^XZ7LxyPZ`Fk>7?m;;kw?*zR4LKV3MINk$9F6<Z^IrV|jaZZo4B1G`
+P00000NkvXXu0mjfJT|n<
+
+literal 0
+HcmV?d00001
+
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt
 index 683867b58..7b15fe7f7 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepository.kt
@@ -526,12 +617,12 @@ index 96a911cd4..799c7d501 100644
 -    <string name="view_only_remove_message">Removing this account clears its data from Zodl on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 +    <string name="view_only_remove_message">Removing this account clears its data from ZEC Private on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..ad110aeff 100644
+index ec56161b5..59e122dfe 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
 -ZCASH_VERSION_CODE=1
-+ZCASH_VERSION_CODE=3234012
++ZCASH_VERSION_CODE=3234013
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
 -ZCASH_RELEASE_APP_NAME=Zodl
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash
@@ -2053,7 +2144,7 @@ index 042c8652c..23aa98f43 100644
 +<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#123A46" android:pathData="M0,0h108v108h-108z"/><path android:fillColor="#B9F3DC" android:pathData="M32,30h44v10L46,68h30v10H32V68l30,-28H32z"/></vector>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..9b97d4897 100644
+index 7b9af8bf7..8e1325d04 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -73 +73 @@
@@ -2194,6 +2285,9 @@ index 7b9af8bf7..9b97d4897 100644
 @@ -424 +414 @@
 -    <string name="balances_infoSyncing">Zodl está escaneando la blockchain para asegurar que tus balances se muestren correctamente.</string>
 +    <string name="balances_infoSyncing">ZEC Private está escaneando la blockchain para asegurar que tus balances se muestren correctamente.</string>
+@@ -433 +423 @@
+-    <string name="sheet_insufficientBalance_msg">No pudimos crear esta transacción. Tu billetera no tiene suficiente saldo para cubrir tanto el monto de la transacción como las comisiones. Por favor, reduce el monto para considerar las comisiones.</string>
++    <string name="sheet_insufficientBalance_msg">Tu saldo no cubre el monto y la comisión de red de Zcash. Reduce el monto e inténtalo de nuevo.</string>
 @@ -437,4 +427,2 @@
 -    <string name="integrations_coinbase">Compra <xliff:g id="currency" example="ZEC">%1$s</xliff:g> con Coinbase</string>
 -    <string name="integrations_coinbase_subtitle">Una manera fácil de comprar <xliff:g id="currency" example="ZEC">%1$s</xliff:g> y recibirlo directamente en tu wallet Zodl.</string>
@@ -2224,6 +2318,9 @@ index 7b9af8bf7..9b97d4897 100644
 @@ -463 +446 @@
 -    <string name="keepZodlOpenInstructionsResyncing">Zodl está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en resincronizarse. Sigue estos pasos para evitar interrupciones:</string>
 +    <string name="keepZodlOpenInstructionsResyncing">ZEC Private está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en resincronizarse. Sigue estos pasos para evitar interrupciones:</string>
+@@ -479 +462 @@
+-    <string name="swapAndPay_slippageWarn">Cualquier parte no utilizada de la comisión por deslizamiento será reembolsada si el intercambio se ejecuta con un deslizamiento menor al esperado.</string>
++    <string name="swapAndPay_slippageWarn">El deslizamiento es un margen para cambios de precio, no una comisión fija. El margen no utilizado se reembolsa.</string>
 @@ -487 +469,0 @@
 -    <string name="partners_flexa_transactionFailedTitle">Transacción Fallida</string>
 @@ -490 +472 @@
@@ -2284,6 +2381,9 @@ index 7b9af8bf7..9b97d4897 100644
 @@ -810 +792 @@
 -    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de Zodl.</string>
 +    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de ZEC Private.</string>
+@@ -816 +798 @@
+-    <string name="pay_slippage_info">Podrías pagar hasta %s más, además de las comisiones de transacción.</string>
++    <string name="pay_slippage_info">Podrías pagar hasta %s más si cambia el precio. Las comisiones de red de Zcash son adicionales.</string>
 @@ -854 +836 @@
 -    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en Zodl</string>
 +    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en ZEC Private</string>
@@ -2377,7 +2477,7 @@ index 7b9af8bf7..9b97d4897 100644
 +    <string name="migrationTipUnavailable_title">ZEC Private sigue sincronizando</string>
 +    <string name="migrationTipUnavailable_message">ZEC Private debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..1c70421cb 100644
+index f41234151..a0ce9dd18 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -2527,6 +2627,9 @@ index f41234151..1c70421cb 100644
 @@ -460 +449 @@
 -    <string name="balances_infoSyncing">Zodl is scanning the blockchain to make sure your balances are displayed correctly.</string>
 +    <string name="balances_infoSyncing">ZEC Private is scanning the blockchain to make sure your balances are displayed correctly.</string>
+@@ -469 +458 @@
+-    <string name="sheet_insufficientBalance_msg">We couldn\'t create this transaction for you. Your wallet doesn\'t have enough balance to cover both the transaction amount and transaction fees. Please lower the transaction amount to account for the fees.</string>
++    <string name="sheet_insufficientBalance_msg">Your balance cannot cover both the amount and the Zcash network fee. Lower the amount and try again.</string>
 @@ -473,4 +462,2 @@
 -    <string name="integrations_coinbase">Buy <xliff:g id="currency" example="ZEC">%1$s</xliff:g> with Coinbase</string>
 -    <string name="integrations_coinbase_subtitle">A hassle-free way to buy <xliff:g id="currency" example="ZEC">%1$s</xliff:g> and get it directly into your Zodl wallet.</string>
@@ -2557,6 +2660,9 @@ index f41234151..1c70421cb 100644
 @@ -499 +481 @@
 -    <string name="keepZodlOpenInstructionsResyncing">Zodl is scanning the blockchain to retrieve your transactions. Older wallets can take hours to resync. Follow these steps to prevent interruption:</string>
 +    <string name="keepZodlOpenInstructionsResyncing">ZEC Private is scanning the blockchain to retrieve your transactions. Older wallets can take hours to resync. Follow these steps to prevent interruption:</string>
+@@ -515 +497 @@
+-    <string name="swapAndPay_slippageWarn">Any unused portion of the slippage fee will be refunded if the swap executes with lower slippage than expected.</string>
++    <string name="swapAndPay_slippageWarn">Slippage is a price-movement allowance, not a fixed fee. Any unused allowance is refunded.</string>
 @@ -523 +504,0 @@
 -    <string name="partners_flexa_transactionFailedTitle">Transaction Failed</string>
 @@ -526 +507 @@
@@ -2633,6 +2739,9 @@ index f41234151..1c70421cb 100644
 @@ -880 +852 @@
 -    <string name="swapAndPay_slippageDesc">This setting determines the maximum allowable difference between the expected price of a swap and the actual price you pay, which is outside of Zodl\'s control.</string>
 +    <string name="swapAndPay_slippageDesc">This setting determines the maximum allowable difference between the expected price of a swap and the actual price you pay, which is outside of ZEC Private\'s control.</string>
+@@ -886 +858 @@
+-    <string name="pay_slippage_info">You may pay up to %s more, in addition to transaction fees.</string>
++    <string name="pay_slippage_info">You may pay up to %s more if the price changes. Zcash network fees are additional.</string>
 @@ -924 +896 @@
 -    <string name="swap_to_zec_share_text">Deposit address for %1$s %2$s on %3$s swap to %4$s in Zodl</string>
 +    <string name="swap_to_zec_share_text">Deposit address for %1$s %2$s on %3$s swap to %4$s in ZEC Private</string>
@@ -3384,7 +3493,7 @@ index a93926c57..06dcb276d 100644
 @@ -68 +64,0 @@ fun RootNavGraph(
 -                flexaViewModel = flexaViewModel,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/WalletNavGraph.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/WalletNavGraph.kt
-index 4b540bea1..1bdb76b93 100644
+index 4b540bea1..5aebebbf5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/WalletNavGraph.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/WalletNavGraph.kt
 @@ -96,2 +95,0 @@ import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailScreen
@@ -3394,8 +3503,11 @@ index 4b540bea1..1bdb76b93 100644
 -import co.electriccoin.zcash.ui.screen.whatsnew.WrapWhatsNew
 @@ -269 +265,0 @@ fun NavGraphBuilder.walletNavGraph(
 -        composable<FeedbackArgs> { FeedbackScreen() }
-@@ -272 +267,0 @@ fun NavGraphBuilder.walletNavGraph(
+@@ -272 +268,3 @@ fun NavGraphBuilder.walletNavGraph(
 -        composable(NavigationTargets.WHATS_NEW) { WrapWhatsNew() }
++        composable<co.electriccoin.zcash.ui.screen.donation.DonationArgs> {
++            co.electriccoin.zcash.ui.screen.donation.DonationScreen(it.toRoute())
++        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVM.kt
 index 6450a970f..25bf0652c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVM.kt
@@ -3470,16 +3582,53 @@ index a5bcffdcd..30135e743 100644
 -const val AFFILIATE_FEE_BPS = 67
 -const val AFFILIATE_ADDRESS = "d78abd5477432c9d9c5e32c4a1a0056cd7b8be6580d3c49e1f97185b786592db"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
-index bf147a8b5..649d872e5 100644
+index bf147a8b5..a9ed04d98 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
-@@ -26,0 +27,2 @@ import co.electriccoin.zcash.ui.common.model.requireSpendable
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.datasource
++import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
+@@ -26,0 +28,2 @@ import co.electriccoin.zcash.ui.common.model.requireSpendable
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
-@@ -30,0 +33 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -30,0 +34 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import java.math.BigDecimal
-@@ -35 +37,0 @@ import org.zecdev.zip321.parser.ParserContext
+@@ -35 +38,0 @@ import org.zecdev.zip321.parser.ParserContext
 -import java.math.BigDecimal
+@@ -93,0 +97,2 @@ class TexUnsupportedOnKSException : Exception("TEX addresses are unsupported on
++class UnsupportedZip321PaymentCountException : Exception("ZIP321 requests must contain exactly one payment")
++
+@@ -114 +119,5 @@ class ProposalDataSourceImpl(
+-                    proposal = synchronizer.proposeSend(account = account.sdkAccount, send = send),
++                    proposal = synchronizer.proposeSend(account = account.sdkAccount, send = send).also { proposal ->
++                        if (send.destination.address == DonationPolicy.recipient()) {
++                            DonationPolicy.requireShielded(proposal, send)
++                        }
++                    },
+@@ -137 +146,7 @@ class ProposalDataSourceImpl(
+-                        is ZIP321.ParserResult.Request -> request.paymentRequest.payments[0]
++                        is ZIP321.ParserResult.Request -> {
++                            // Review shows one payment; the SDK fulfills the entire URI.
++                            if (request.paymentRequest.payments.size != 1) {
++                                throw UnsupportedZip321PaymentCountException()
++                            }
++                            request.paymentRequest.payments.single()
++                        }
+@@ -162 +177,7 @@ class ProposalDataSourceImpl(
+-                )
++                ).also { reviewed ->
++                    if (reviewed.destination.address == DonationPolicy.recipient()) {
++                        DonationPolicy.requireShielded(
++                            reviewed.proposal, ZecSend(reviewed.destination, reviewed.amount, reviewed.memo, null)
++                        )
++                    }
++                }
+@@ -347,0 +369,2 @@ class ProposalDataSourceImpl(
++        } catch (e: UnsupportedZip321PaymentCountException) {
++            throw e
+@@ -481 +504,2 @@ data class RegularTransactionProposal(
+-    override val proposal: Proposal
++    override val proposal: Proposal,
++    val isDonation: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
 index 13e9d0788..d1112a657 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
@@ -3712,6 +3861,99 @@ index d8016e519..37dcf12b4 100644
 +import kotlinx.serialization.EncodeDefault
 @@ -52,0 +54 @@ data class QuoteRequest(
 +    @EncodeDefault(EncodeDefault.Mode.NEVER)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
+new file mode 100644
+index 000000000..8b30dde65
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
+@@ -0,0 +1,87 @@
++package co.electriccoin.zcash.ui.common.model.zcash
++
++import cash.z.ecc.android.sdk.model.Proposal
++import cash.z.ecc.android.sdk.model.ZecSend
++import cash.z.wallet.sdk.internal.ffi.ProposalOuterClass
++import co.electriccoin.zcash.ui.BuildConfig
++import co.electriccoin.zcash.ui.common.model.NetworkDimension
++import co.electriccoin.zcash.ui.common.model.VersionInfo
++import java.math.BigDecimal
++import java.math.RoundingMode
++import org.zecdev.zip321.ZIP321
++import org.zecdev.zip321.parser.ParserContext
++
++/** Public receiving address supplied by the project owner; no spending key is stored here. */
++@Suppress("MagicNumber")
++object DonationPolicy {
++    const val RECIPIENT =
++        "u16hcm5ln6c9yvj7snd3k2m9s5zlg2hntnqupzpl7r7xxqf23pf9dze7ja6782kjc454pu2kamk0xawul5zv9arugr797xfse385cgjmar"
++    const val DOCUMENT = "https://github.com/Sammy-Lastre/zec-private/blob/main/docs/DONATIONS.md"
++    const val COOLDOWN_MILLIS = 90L * 24 * 60 * 60 * 1000
++
++    @Volatile private var isolatedTestnetRecipient: String? = null
++
++    fun recipient(): String? =
++        if (VersionInfo.NETWORK_DIMENSION == NetworkDimension.MAINNET) RECIPIENT else isolatedTestnetRecipient
++
++    /** Only the isolated testnet debug harness can configure a valueless test recipient. */
++    fun setIsolatedTestnetRecipient(address: String) {
++        check(BuildConfig.DEBUG && VersionInfo.NETWORK_DIMENSION == NetworkDimension.TESTNET)
++        isolatedTestnetRecipient = address
++    }
++
++    fun suggestedZatoshi(basisZec: BigDecimal, percent: BigDecimal): Long {
++        require(basisZec.signum() >= 0 && percent >= BigDecimal.ZERO && percent <= BigDecimal(100))
++        return basisZec.multiply(percent).movePointRight(6).setScale(0, RoundingMode.DOWN).longValueExact()
++    }
++
++    /** Inspect the SDK's actual proposal, not a balance estimate or the address prefix. */
++    @Suppress("CyclomaticComplexMethod", "ComplexCondition")
++    fun requireShielded(proposal: Proposal, send: ZecSend) {
++        val decoded = ProposalOuterClass.Proposal.parseFrom(proposal.toByteArray())
++        require(decoded.stepsCount == 1) { "Unsupported donation transaction shape" }
++        val step = decoded.stepsList.single()
++        val parsed = ZIP321.request(
++            uriString = step.transactionRequest,
++            context = when (VersionInfo.NETWORK_DIMENSION) {
++                NetworkDimension.MAINNET -> ParserContext.MAINNET
++                NetworkDimension.TESTNET -> ParserContext.TESTNET
++            },
++            validatingRecipients = null
++        )
++        require(parsed is ZIP321.ParserResult.Request && parsed.paymentRequest.payments.size == 1) {
++            "Donation requires one reviewed payment"
++        }
++        val payment = parsed.paymentRequest.payments.single()
++        require(payment.recipientAddress.value == send.destination.address &&
++            payment.nonNegativeAmount?.toZecValueString()?.toBigDecimal()?.movePointRight(8)?.longValueExact() ==
++            send.amount.value && isEmptyMemo(payment.memo?.data)) { "Donation payment differs from review" }
++        require(!step.isShielding && step.inputsCount > 0) { "Donation requires shielded funds" }
++        require(step.inputsList.all { it.hasReceivedOutput() && isShielded(it.receivedOutput.valuePool) }) {
++            "Donation requires shielded inputs"
++        }
++        require(step.paymentOutputPoolsCount == 1 && step.paymentOutputPoolsList.single().paymentIndex == 0 &&
++            isShielded(step.paymentOutputPoolsList.single().valuePool)) {
++            "Donation requires a shielded recipient"
++        }
++        require(step.balance.proposedChangeList.all { !it.isEphemeral && isShielded(it.valuePool) }) {
++            "Donation requires shielded change"
++        }
++        val spent = step.inputsList.fold(0L) { total, input -> Math.addExact(total, input.receivedOutput.value) }
++        val change = step.balance.proposedChangeList.fold(0L) { total, output -> Math.addExact(total, output.value) }
++        require(Math.subtractExact(Math.subtractExact(spent, change), step.balance.feeRequired) == send.amount.value) {
++            "Donation amount differs from proposal"
++        }
++        require(send.memo.value.isEmpty()) { "Donations do not include identifying memos" }
++    }
++
++    // ZIP321 may preserve the protocol's empty-memo marker and its zero padding.
++    private fun isEmptyMemo(data: ByteArray?): Boolean =
++        data == null || (data.size <= 512 &&
++            (data.all { it == 0.toByte() } ||
++                (data.firstOrNull() == 0xf6.toByte() && data.drop(1).all { it == 0.toByte() })))
++
++    private fun isShielded(pool: ProposalOuterClass.ValuePool): Boolean =
++        pool == ProposalOuterClass.ValuePool.Sapling ||
++            pool == ProposalOuterClass.ValuePool.Orchard || pool == ProposalOuterClass.ValuePool.Ironwood
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/ZcashSwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/ZcashSwapQuote.kt
 new file mode 100644
 index 000000000..1ebd4391a
@@ -4362,21 +4604,63 @@ index 36d947b49..4bef6c4cf 100644
 +            quote.value = null
 +        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
-index 0a5bfe73c..647e7f6c7 100644
+index 0a5bfe73c..4188c0849 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
-@@ -14,0 +15 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.repository
++import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
+@@ -14,0 +16 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 +import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
-@@ -19,0 +21 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
+@@ -19,0 +22 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
 +import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
-@@ -139,0 +142,4 @@ class ZashiProposalRepositoryImpl(
+@@ -37,0 +41,2 @@ interface ZashiProposalRepository {
++    suspend fun createDonationProposal(zecSend: ZecSend): RegularTransactionProposal
++
+@@ -83,0 +89,8 @@ class ZashiProposalRepositoryImpl(
++    override suspend fun createDonationProposal(zecSend: ZecSend): RegularTransactionProposal =
++        createProposalInternal {
++            val account = accountDataSource.getSelectedAccount()
++            require(account is co.electriccoin.zcash.ui.common.model.ZodlAccount)
++            require(zecSend.destination.address == DonationPolicy.recipient())
++            proposalDataSource.createProposal(account, zecSend).copy(isDonation = true)
++        }
++
+@@ -139,0 +153,17 @@ class ZashiProposalRepositoryImpl(
 +                        val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
++                        if (transactionProposal is RegularTransactionProposal && transactionProposal.isDonation) {
++                            require(transactionProposal.destination.address ==
++                                DonationPolicy.recipient())
++                            DonationPolicy.requireShielded(
++                                transactionProposal.proposal,
++                                ZecSend(
++                                    transactionProposal.destination,
++                                    transactionProposal.amount,
++                                    transactionProposal.memo,
++                                    null
++                                )
++                            )
++                        }
 +                        if (transactionProposal is SwapTransactionProposal) {
 +                            ZecSwapComposition.validate(transactionProposal.quote)
 +                        }
-@@ -143 +149 @@ class ZashiProposalRepositoryImpl(
+@@ -143 +173 @@ class ZashiProposalRepositoryImpl(
 -                                usk = zashiSpendingKeyDataSource.getZashiSpendingKey()
 +                                usk = spendingKey
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCase.kt
+index 1d3fdf0e2..f1f74ce28 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCase.kt
+@@ -76,2 +76,8 @@ class CancelProposalFlowUseCase(
+-                if (clearSendForm) observeClearSend.requestClear()
+-                navigationRouter.backTo(Send::class)
++                if (proposal is co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal &&
++                    proposal.isDonation
++                ) {
++                    navigationRouter.backTo(co.electriccoin.zcash.ui.screen.donation.DonationArgs::class)
++                } else {
++                    if (clearSendForm) observeClearSend.requestClear()
++                    navigationRouter.backTo(Send::class)
++                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateFlexaTransactionUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateFlexaTransactionUseCase.kt
 deleted file mode 100644
 index 572bbb6b4..000000000
@@ -4556,6 +4840,17 @@ index 84d9fd0c0..000000000
 -    ENABLED,
 -    DISABLED
 -}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
+index eab9cf9da..0c491fdc7 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
+@@ -7,0 +8 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedE
++import co.electriccoin.zcash.ui.common.datasource.UnsupportedZip321PaymentCountException
+@@ -38,0 +40,4 @@ class OnZip321ScannedUseCase(
++        if (zip321.payment.payments.size != 1) {
++            navigateToErrorUseCase(ErrorArgs.General(UnsupportedZip321PaymentCountException()))
++            return
++        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 index 76c590a49..4ed8f617b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
@@ -4698,6 +4993,17 @@ index b63a9a929..000000000
 -        )
 -    }
 -}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt
+index 3e12c9c99..bd85a60d3 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt
+@@ -47 +47,5 @@ class Zip321ParseUriValidationUseCase(
+-                Zip321ParseUriValidation.Valid(zip321Uri, paymentRequest.paymentRequest)
++                if (paymentRequest.paymentRequest.payments.size == 1) {
++                    Zip321ParseUriValidation.Valid(zip321Uri, paymentRequest.paymentRequest)
++                } else {
++                    Zip321ParseUriValidation.Invalid
++                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/configuration/ConfigurationEntries.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/configuration/ConfigurationEntries.kt
 deleted file mode 100644
 index 5144be535..000000000
@@ -4921,6 +5227,242 @@ index eb47e1885..a415a0918 100644
 -    private val flexaRepository: FlexaRepository,
 @@ -46 +43,0 @@ class ResetZashiUseCase(
 -            flexaRepository.disconnect()
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt
+new file mode 100644
+index 000000000..271ffcd64
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt
+@@ -0,0 +1,29 @@
++package co.electriccoin.zcash.ui.screen.donation
++
++import android.content.Context
++import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
++import java.math.BigDecimal
++
++/** Local suggestions and prompt suppression only. These preferences never authorize a payment. */
++@Suppress("MagicNumber")
++class DonationPreferences(context: Context) {
++    private val preferences = context.getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE)
++
++    var percent: BigDecimal
++        get() = preferences.getString("percent", "0")?.toBigDecimalOrNull()
++            ?.takeIf { it >= BigDecimal.ZERO && it <= BigDecimal(100) } ?: BigDecimal.ZERO
++        set(value) {
++            require(value >= BigDecimal.ZERO && value <= BigDecimal(100))
++            preferences.edit().putString("percent", value.toPlainString()).apply()
++        }
++
++    fun mayInvite(now: Long): Boolean {
++        val last = preferences.getLong("last_invitation", 0)
++        return !preferences.getBoolean("never_ask", false) &&
++            (last == 0L || (now >= last && now - last >= DonationPolicy.COOLDOWN_MILLIS))
++    }
++
++    fun postpone(now: Long) = preferences.edit().putLong("last_invitation", now).apply()
++
++    fun declinePermanently() = preferences.edit().putBoolean("never_ask", true).apply()
++}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt
+new file mode 100644
+index 000000000..1c43371ce
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt
+@@ -0,0 +1,195 @@
++package co.electriccoin.zcash.ui.screen.donation
++
++import androidx.activity.compose.BackHandler
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.verticalScroll
++import androidx.compose.material3.Button
++import androidx.compose.material3.OutlinedTextField
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.saveable.rememberSaveable
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.res.stringResource
++import androidx.compose.ui.unit.dp
++import cash.z.ecc.android.sdk.model.Memo
++import cash.z.ecc.android.sdk.model.WalletAddress
++import cash.z.ecc.android.sdk.model.Zatoshi
++import cash.z.ecc.android.sdk.model.ZecSend
++import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.model.ZodlAccount
++import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
++import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
++import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
++import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
++import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarBackNavigation
++import co.electriccoin.zcash.ui.screen.ExternalUrl
++import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionArgs
++import java.math.BigDecimal
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.launch
++import kotlinx.serialization.Serializable
++import org.koin.compose.koinInject
++
++@Serializable
++data class DonationArgs(val basisZec: String? = null)
++
++@Suppress("MagicNumber", "CyclomaticComplexMethod", "TooGenericExceptionCaught")
++@Composable
++fun DonationScreen(args: DonationArgs) {
++    val router = koinInject<NavigationRouter>()
++    val accounts = koinInject<AccountDataSource>()
++    val proposals = koinInject<ZashiProposalRepository>()
++    val context = LocalContext.current
++    val preferences = remember(context) { DonationPreferences(context) }
++    val scope = rememberCoroutineScope()
++    val basis = args.basisZec?.toBigDecimalOrNull()?.takeIf { it.signum() > 0 }
++    var percentage by rememberSaveable { mutableStateOf(preferences.percent.toPlainString()) }
++    var amount by rememberSaveable {
++        mutableStateOf(
++            basis?.let { BigDecimal.valueOf(DonationPolicy.suggestedZatoshi(it, preferences.percent), 8) }
++                ?.takeIf { it.signum() > 0 }?.toPlainString().orEmpty()
++        )
++    }
++    var busy by remember { mutableStateOf(false) }
++    var failed by rememberSaveable { mutableStateOf(false) }
++    var unsupported by rememberSaveable { mutableStateOf(false) }
++    val parsedPercent = percentage.toBigDecimalOrNull()?.takeIf { it >= BigDecimal.ZERO && it <= BigDecimal(100) }
++    val zatoshi = amount.toBigDecimalOrNull()?.let { value ->
++        runCatching { value.movePointRight(8).longValueExact() }.getOrNull()?.takeIf { it > 0 }
++    }
++    BackHandler(enabled = !busy) { router.back() }
++    BlankBgScaffold(
++        topBar = {
++            ZashiSmallTopAppBar(
++                title = stringResource(R.string.private_support_title),
++                navigationAction = { ZashiTopAppBarBackNavigation(onBack = { if (!busy) router.back() }) }
++            )
++        }
++    ) { padding ->
++        Column(Modifier.padding(padding).padding(24.dp).verticalScroll(rememberScrollState())) {
++            Text(stringResource(R.string.private_support_description))
++            Text(stringResource(R.string.private_support_privacy), Modifier.padding(vertical = 12.dp))
++            TextButton(onClick = { router.forward(ExternalUrl(DonationPolicy.DOCUMENT)) }) {
++                Text(stringResource(R.string.private_support_addresses))
++            }
++            Text(stringResource(R.string.private_support_suggestion))
++            // Each choice remains a suggestion; changing it cannot create a proposal or transfer.
++            Row {
++                listOf("0", "0.25", "0.5", "1").forEach { choice ->
++                    TextButton(enabled = !busy, onClick = {
++                        percentage = choice
++                        preferences.percent = choice.toBigDecimal()
++                        amount = basis?.let {
++                            BigDecimal.valueOf(DonationPolicy.suggestedZatoshi(it, choice.toBigDecimal()), 8)
++                                .takeIf { value -> value.signum() > 0 }?.toPlainString()
++                        }.orEmpty()
++                    }) { Text("$choice%") }
++                }
++            }
++            OutlinedTextField(
++                value = percentage,
++                enabled = !busy,
++                onValueChange = { value ->
++                    percentage = value
++                    value.toBigDecimalOrNull()?.takeIf { it >= BigDecimal.ZERO && it <= BigDecimal(100) }?.let {
++                        preferences.percent = it
++                        amount = basis?.let { basisValue ->
++                            BigDecimal.valueOf(DonationPolicy.suggestedZatoshi(basisValue, it), 8)
++                                .takeIf { value -> value.signum() > 0 }?.toPlainString()
++                        }.orEmpty()
++                    }
++                },
++                label = { Text(stringResource(R.string.private_support_custom_percent)) },
++                isError = parsedPercent == null,
++                singleLine = true,
++                modifier = Modifier.fillMaxWidth()
++            )
++            basis?.let { Text(stringResource(R.string.private_support_basis, it.toPlainString())) }
++            OutlinedTextField(
++                value = amount,
++                enabled = !busy,
++                onValueChange = { amount = it; failed = false },
++                label = { Text(stringResource(R.string.private_support_amount)) },
++                isError = amount.isNotEmpty() && zatoshi == null,
++                singleLine = true,
++                modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
++            )
++            Text(stringResource(R.string.private_support_fee), Modifier.padding(vertical = 12.dp))
++            if (failed) Text(stringResource(R.string.private_support_failed))
++            if (unsupported) Text(stringResource(R.string.private_support_software_only))
++            Button(
++                enabled = !busy && zatoshi != null && parsedPercent != null &&
++                    DonationPolicy.recipient() != null,
++                onClick = {
++                    if (!busy) {
++                        busy = true
++                        failed = false
++                        unsupported = false
++                        scope.launch {
++                            try {
++                                val account = accounts.getSelectedAccount()
++                                if (account !is ZodlAccount) {
++                                    unsupported = true
++                                } else {
++                                    val send = ZecSend(
++                                        WalletAddress.Unified.new(requireNotNull(DonationPolicy.recipient())),
++                                        Zatoshi(requireNotNull(zatoshi)), Memo(""), null
++                                    )
++                                    // Suppress further prompts even if review is cancelled or outcome is uncertain.
++                                    preferences.postpone(System.currentTimeMillis())
++                                    proposals.createDonationProposal(send)
++                                    router.forward(ReviewTransactionArgs)
++                                }
++                            } catch (e: CancellationException) {
++                                throw e
++                            } catch (_: Exception) {
++                                proposals.clear()
++                                failed = true
++                            } finally {
++                                busy = false
++                            }
++                        }
++                    }
++                }
++            ) { Text(stringResource(R.string.private_support_review)) }
++        }
++    }
++}
++
++@Suppress("MagicNumber")
++@Composable
++fun DonationInvitation(basisZec: String?) {
++    val context = LocalContext.current
++    val router = koinInject<NavigationRouter>()
++    val preferences = remember(context) { DonationPreferences(context) }
++    var visible by remember { mutableStateOf(preferences.mayInvite(System.currentTimeMillis())) }
++    if (visible) {
++        Column(Modifier.padding(vertical = 12.dp)) {
++            Text(stringResource(R.string.private_support_invitation))
++            TextButton(onClick = {
++                preferences.postpone(System.currentTimeMillis())
++                visible = false
++                router.forward(DonationArgs(basisZec))
++            }) { Text(stringResource(R.string.private_support_title)) }
++            TextButton(onClick = { preferences.postpone(System.currentTimeMillis()); visible = false }) {
++                Text(stringResource(R.string.private_support_not_now))
++            }
++            TextButton(onClick = { preferences.declinePermanently(); visible = false }) {
++                Text(stringResource(R.string.private_support_never))
++            }
++        }
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt
 index d03354a1e..59f3a7516 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt
@@ -5498,7 +6040,7 @@ index c54f279c6..53d7491da 100644
 +private const val GUIDE_URL =
 +    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#ironwood-migration"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt
-index 607e89dcb..2b3d5f352 100644
+index 607e89dcb..fd6f24ef2 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt
 @@ -6 +5,0 @@ import co.electriccoin.zcash.ui.NavigationRouter
@@ -5519,17 +6061,24 @@ index 607e89dcb..2b3d5f352 100644
 -                        bigIcon = imageRes(R.drawable.ic_settings_voting),
 -                        onClick = ::onVotingClick
 -                    ).takeIf { votingSettingsEntry.isEnabled },
-@@ -77,5 +66,0 @@ class MoreVM(
--                    ListItemState(
+@@ -73 +63 @@ class MoreVM(
+-                        title = stringRes(R.string.settings_about),
++                        title = stringRes(R.string.private_support_title),
+@@ -75 +65 @@ class MoreVM(
+-                        onClick = ::onAboutUsClick
++                        onClick = { navigationRouter.forward(co.electriccoin.zcash.ui.screen.donation.DonationArgs()) }
+@@ -78,3 +68,3 @@ class MoreVM(
 -                        title = stringRes(R.string.settings_feedback),
 -                        bigIcon = imageRes(R.drawable.ic_settings_feedback),
 -                        onClick = ::onSendUsFeedbackClick
--                    ),
-@@ -95 +79,0 @@ class MoreVM(
++                        title = stringRes(R.string.settings_about),
++                        bigIcon = imageRes(R.drawable.ic_settings_info),
++                        onClick = ::onAboutUsClick
+@@ -95 +84,0 @@ class MoreVM(
 -    private fun onVotingClick() = viewModelScope.launch { navigateToVoting() }
-@@ -103 +86,0 @@ class MoreVM(
+@@ -103 +91,0 @@ class MoreVM(
 -    private fun onSendUsFeedbackClick() = navigationRouter.forward(FeedbackArgs)
-@@ -107 +90,2 @@ class MoreVM(
+@@ -107 +95,2 @@ class MoreVM(
 -    private fun onWhatsNewClick() = navigationRouter.forward(WHATS_NEW)
 +    private fun onWhatsNewClick() =
 +        navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/releases"))
@@ -5582,13 +6131,29 @@ index 3a2e4768c..ef94b82dc 100644
 @@ -329 +329 @@ sealed interface RedeemGiftState {
 -                walletName = stringRes("Zodl"),
 +                walletName = stringRes("ZEC Private"),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVM.kt
+index 7f73faf20..91bbbc0fe 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVM.kt
+@@ -168 +168 @@ class ReviewTransactionVM(
+-                    title = stringRes(R.string.send_amountSummary),
++                    title = stringRes(R.string.private_total_zec_to_spend),
+@@ -187 +187 @@ class ReviewTransactionVM(
+-                    title = stringRes(R.string.send_feeSummary),
++                    title = stringRes(R.string.private_wallet_transaction_fee),
+@@ -274 +274 @@ class ReviewTransactionVM(
+-                    title = stringRes(R.string.send_feeSummary),
++                    title = stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionView.kt
-index 7db73b703..f33664273 100644
+index 7db73b703..2698a3260 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionView.kt
 @@ -562 +562 @@ private fun ColoredSenderPreview() =
 -                                name = stringRes("Zodl"),
 +                                name = stringRes("ZEC Private"),
+@@ -691 +691 @@ private fun Zip321Preview() =
+-                                title = stringRes(co.electriccoin.zcash.ui.R.string.send_feeSummary),
++                                title = stringRes(co.electriccoin.zcash.ui.R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
 index 79f574053..d0207084f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
@@ -5634,8 +6199,14 @@ index 79f574053..d0207084f 100644
 -                        CurrencyType.FIAT -> CurrencyType.TOKEN
 -                    }
 +                currencyType = if (isTokenInput) CurrencyType.TOKEN else CurrencyType.FIAT
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
+index 22fac8c3b..b743984bf 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
+@@ -25,0 +26 @@ data class SwapDetailState(
++    val donationBasisZec: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
-index a874453ef..68553b869 100644
+index a874453ef..259f06f92 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 @@ -16 +15,0 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
@@ -5643,13 +6214,17 @@ index a874453ef..68553b869 100644
 @@ -77 +76 @@ class SwapDetailVM(
 -                    totalFees = createTotalFeesState(swapData),
 +                    totalFees = createQuotedOutputState(swapData),
-@@ -111 +110 @@ class SwapDetailVM(
+@@ -99,0 +99,3 @@ class SwapDetailVM(
++                    donationBasisZec = swapData.status?.takeIf {
++                        it.status == SUCCESS && it.destinationAsset.tokenTicker == "ZEC"
++                    }?.executedAmountOut?.takeIf { it.signum() > 0 }?.toPlainString(),
+@@ -111 +113 @@ class SwapDetailVM(
 -    private fun createTotalFeesState(swapData: SwapData): TransactionDetailInfoRowState =
 +    private fun createQuotedOutputState(swapData: SwapData): TransactionDetailInfoRowState =
-@@ -113 +112 @@ class SwapDetailVM(
+@@ -113 +115 @@ class SwapDetailVM(
 -            title = stringRes(R.string.swapAndPay_totalFees),
 +            title = stringRes(R.string.private_quoted_output),
-@@ -115,13 +114,5 @@ class SwapDetailVM(
+@@ -115,13 +117,5 @@ class SwapDetailVM(
 -                if (swapData.status != null) {
 -                    val text =
 -                        stringResByCurrencyNumber(
@@ -5668,7 +6243,7 @@ index a874453ef..68553b869 100644
 +                        amount = it.quotedAmountOut,
 +                        ticker = it.destinationAsset.tokenTicker
 +                    )
-@@ -199 +190,8 @@ class SwapDetailVM(
+@@ -199 +193,8 @@ class SwapDetailVM(
 -                    SUCCESS -> stringRes(R.string.swapStatus_swapped)
 +                    SUCCESS ->
 +                        stringRes(
@@ -5678,6 +6253,14 @@ index a874453ef..68553b869 100644
 +                                R.string.private_estimated_output
 +                            }
 +                        )
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
+index 48d3039d5..d8e42b87f 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
+@@ -146,0 +147,3 @@ fun SwapDetailView(
++                    if (state.status.status == SwapStatus.SUCCESS && state.donationBasisZec != null) {
++                        co.electriccoin.zcash.ui.screen.donation.DonationInvitation(state.donationBasisZec)
++                    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
 index cd7555ecc..5b692645f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
@@ -5686,6 +6269,16 @@ index cd7555ecc..5b692645f 100644
 -private const val LEARN_MORE_URL = "https://support.zodl.com/article/26-swapping-into-zec"
 +private const val LEARN_MORE_URL =
 +    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#incoming-swaps"
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockVM.kt
+index a434f2e43..e9ef86b77 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockVM.kt
+@@ -54 +54 @@ internal class EphemeralLockVM(
+-                                description = stringRes(R.string.send_feeSummary),
++                                description = stringRes(R.string.private_wallet_transaction_fee),
+@@ -60 +60 @@ internal class EphemeralLockVM(
+-                            description = stringRes(R.string.send_amountSummary),
++                            description = stringRes(R.string.private_total_zec_to_spend),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockView.kt
 index 3341e70f0..649f37619 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockView.kt
@@ -5754,7 +6347,7 @@ index 9f37c1d93..61457e85a 100644
 @@ -177 +189,0 @@ internal data class SwapQuoteInternalState(
 -    val totalFees = quote.affiliateFee
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..99b496ecf 100644
+index 717411935..adb4cfdeb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 @@ -14,0 +15 @@ import co.electriccoin.zcash.ui.design.util.stringResByAddress
@@ -5788,19 +6381,26 @@ index 717411935..99b496ecf 100644
 +                title = stringRes(R.string.private_provider_costs_included).withStyle(),
 +                subtitle = null,
 +                layout = SwapQuoteInfoLayout.STACKED
-@@ -137 +144 @@ internal class SwapQuoteVMMapper {
+@@ -136,2 +143,7 @@ internal class SwapQuoteVMMapper {
+-            description = stringRes(R.string.swapAndPay_totalAmount),
 -            title = stringResByDynamicCurrencyNumber(total, quote.originAsset.tokenTicker).withStyle(),
++            description =
++                if (quote.destinationAsset.isZCashAsset) {
++                    stringRes(R.string.swapAndPay_totalAmount)
++                } else {
++                    stringRes(R.string.private_total_zec_to_spend)
++                },
 +            title = stringResByCurrencyNumber(total, quote.originAsset.tokenTicker, minDecimals = 0).withStyle(),
-@@ -145 +152 @@ internal class SwapQuoteVMMapper {
+@@ -145 +157 @@ internal class SwapQuoteVMMapper {
 -            amount = stringResByDynamicNumber(quote.amountInFormatted),
 +            amount = stringResByNumber(quote.amountInFormatted, minDecimals = 0),
-@@ -156 +163 @@ internal class SwapQuoteVMMapper {
+@@ -156 +168 @@ internal class SwapQuoteVMMapper {
 -                stringResByDynamicNumber(
 +                stringResByNumber(
-@@ -157,0 +165 @@ internal class SwapQuoteVMMapper {
+@@ -157,0 +170 @@ internal class SwapQuoteVMMapper {
 +                    minDecimals = 0,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
-index 1fa0df8d6..187ee7e7f 100644
+index 1fa0df8d6..11d189a4b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 @@ -243,0 +244,4 @@ fun SwapQuoteInfo(
@@ -5852,6 +6452,9 @@ index 1fa0df8d6..187ee7e7f 100644
 @@ -307 +351 @@ private fun SuccessPreview() =
 -                                title = stringRes("Zodl").withStyle(),
 +                                title = stringRes("ZEC Private").withStyle(),
+@@ -316 +360 @@ private fun SuccessPreview() =
+-                                description = stringRes("ZEC transaction fee"),
++                                description = stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
 index c9e6612fa..63eee36c5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
@@ -5868,20 +6471,61 @@ index c9e6612fa..63eee36c5 100644
 +                                }
 +                            )
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-index 00fe60557..f7dbc6170 100644
+index 00fe60557..329abe3a2 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 @@ -191,2 +191 @@ class TransactionDetailVM(
 -                                transaction.metadata.swapMetadata
 -                                    ?.totalFees
 +                                transaction.transaction.fee
+@@ -227,0 +227,9 @@ class TransactionDetailVM(
++                            donationBasisZec = transaction.transaction.fee?.let { fee ->
++                                (transaction.transaction.amount - fee).value.toBigDecimal().movePointLeft(8)
++                                    .subtract(transaction.swap.status?.refundedFormatted ?: java.math.BigDecimal.ZERO)
++                                    .takeIf {
++                                        !isPending(transaction) && it.signum() > 0 &&
++                                            transaction.swap.status?.status ==
++                                            co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
++                                    }?.toPlainString()
++                            },
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt
+index 13b042bd7..60b0df221 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt
+@@ -93 +93 @@ fun SendShielded(
+-                                    stringRes(R.string.transactionDetail_feeSummary),
++                                    stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
-index ad8bc8549..028003b5c 100644
+index ad8bc8549..e8a1475b1 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
-@@ -123 +123 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+@@ -49,0 +50,3 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
++        if (state.status == SwapStatus.SUCCESS && !state.isPending && state.donationBasisZec != null) {
++            co.electriccoin.zcash.ui.screen.donation.DonationInvitation(state.donationBasisZec)
++        }
+@@ -123 +126 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
 -                                title = stringRes(R.string.swapAndPay_totalFees),
 +                                title = stringRes(R.string.private_wallet_transaction_fee),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt
+index 4dc191b75..c21b7c20a 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt
+@@ -90 +90 @@ fun SendTransparent(
+-                                title = stringRes(R.string.transactionDetail_feeSummary),
++                                title = stringRes(R.string.private_wallet_transaction_fee),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/Shielding.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/Shielding.kt
+index bf4730e36..791e10475 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/Shielding.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/Shielding.kt
+@@ -60 +60 @@ fun Shielding(
+-                        title = stringRes(R.string.transactionDetail_feeSummary),
++                        title = stringRes(R.string.private_wallet_transaction_fee),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/TransactionDetailInfoState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/TransactionDetailInfoState.kt
+index 553c98db2..52c82ce4f 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/TransactionDetailInfoState.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/TransactionDetailInfoState.kt
+@@ -40,0 +41 @@ data class SendSwapState(
++    val donationBasisZec: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/whatsnew/AndroidWhatsNew.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/whatsnew/AndroidWhatsNew.kt
 deleted file mode 100644
 index 33610ecb3..000000000
@@ -10424,18 +11068,34 @@ index 423d6742d..a8aeb88ba 100644
 +    <string name="ironwood_announcement_primary_button">Go to ZEC Private</string>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
-index 000000000..3af6c3588
+index 000000000..32cc44cdf
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
-@@ -0,0 +1,9 @@
+@@ -0,0 +1,25 @@
 +<resources>
-+    <string name="private_wallet_transaction_fee" translatable="false">Wallet transaction fee</string>
++    <string name="private_wallet_transaction_fee" translatable="false">Zcash network fee</string>
 +    <string name="private_provider_costs" translatable="false">NEAR platform fee</string>
 +    <string name="private_provider_costs_included" translatable="false">0.25%% included in quote</string>
 +    <string name="private_quoted_output" translatable="false">Quoted output</string>
 +    <string name="private_minimum_received" translatable="false">Minimum received: %1$s</string>
 +    <string name="private_provider_output" translatable="false">Provider output</string>
 +    <string name="private_estimated_output" translatable="false">Quoted output (execution unavailable)</string>
++    <string name="private_total_zec_to_spend" translatable="false">Total ZEC to spend</string>
++    <string name="private_support_title">Support development</string>
++    <string name="private_support_description">Optional donations help maintain ZEC Private and its tests. The wallet works the same without donating.</string>
++    <string name="private_support_privacy">Donations use shielded Zcash inputs and outputs. The project receives the payment; timing and amount can still reveal information.</string>
++    <string name="private_support_addresses">Project addresses and external Monero donations</string>
++    <string name="private_support_suggestion">Saved suggestion only. Initially 0%; every donation needs your approval.</string>
++    <string name="private_support_custom_percent">Custom suggestion (%)</string>
++    <string name="private_support_basis">Based on %1$s ZEC executed in this swap, excluding network fees and refunds.</string>
++    <string name="private_support_amount">One-time donation (ZEC)</string>
++    <string name="private_support_fee">Review the actual Zcash network fee and total before approving. You can cancel if a small donation is uneconomic.</string>
++    <string name="private_support_failed">Cannot prepare donation. Check shielded funds, synchronization and connection. Nothing was submitted.</string>
++    <string name="private_support_software_only">In-app donations currently require a software wallet. Hardware and view-only accounts can use the published address in a compatible wallet.</string>
++    <string name="private_support_review">Review donation</string>
++    <string name="private_support_invitation">Swap completed. Would you like to support development?</string>
++    <string name="private_support_not_now">Not now</string>
++    <string name="private_support_never">Don’t ask again</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/strings.xml
 index 813f56457..972dcc8f8 100644
@@ -10696,6 +11356,53 @@ index c0be20563..1bea03a8f 100644
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt
+index 4c13e2085..452406324 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt
+@@ -10,0 +11 @@ import cash.z.ecc.android.sdk.model.ZecSend
++import cash.z.ecc.android.sdk.type.AddressType
+@@ -12,0 +14 @@ import io.mockk.coEvery
++import io.mockk.coVerify
+@@ -16,0 +19 @@ import org.junit.Test
++import kotlin.test.assertEquals
+@@ -32,0 +36,34 @@ class ProposalDataSourceTest {
++    @Test
++    fun multipleZip321PaymentsAreRejectedBeforeSdkProposal() =
++        runBlocking {
++            val synchronizer = mockk<Synchronizer>()
++            val uri = "zcash:$ZIP321_RECIPIENT?amount=0.001&address.1=$ZIP321_RECIPIENT&amount.1=0.002"
++
++            val thrown =
++                assertFailsWith<UnsupportedZip321PaymentCountException> {
++                    dataSource(synchronizer).createZip321Proposal(account, uri)
++                }
++
++            assertEquals("ZIP321 requests must contain exactly one payment", thrown.message)
++            coVerify(exactly = 0) { synchronizer.validateAddress(any()) }
++            coVerify(exactly = 0) { synchronizer.proposeFulfillingPaymentUri(any(), any()) }
++        }
++
++    @Test
++    fun singleZip321PaymentReachesSdkWithTheOriginalUri() =
++        runBlocking {
++            val synchronizer = mockk<Synchronizer>()
++            val uri = "zcash:$ZIP321_RECIPIENT?amount=0.001"
++            val sdkException = IllegalStateException("proposal sentinel")
++            coEvery { synchronizer.validateAddress(ZIP321_RECIPIENT) } returns AddressType.Transparent
++            coEvery { synchronizer.proposeFulfillingPaymentUri(any(), uri) } throws sdkException
++
++            val thrown =
++                assertFailsWith<TransactionProposalNotCreatedException> {
++                    dataSource(synchronizer).createZip321Proposal(account, uri)
++                }
++
++            assertSame(sdkException, thrown.cause)
++            coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, uri) }
++        }
++
+@@ -150,0 +188 @@ class ProposalDataSourceTest {
++        const val ZIP321_RECIPIENT = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt
 new file mode 100644
 index 000000000..508f860ac
@@ -11507,6 +12214,59 @@ index 000000000..c88bca3b4
 +        refundAddress = "synthetic-refund"
 +    )
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCaseTest.kt
+index 3cd0d3f1e..832d4b456 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCaseTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCaseTest.kt
+@@ -18,0 +19 @@ import co.electriccoin.zcash.ui.common.model.LedgerAccount
++import co.electriccoin.zcash.ui.common.model.ZodlAccount
+@@ -21,0 +23 @@ import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
++import co.electriccoin.zcash.ui.screen.donation.DonationArgs
+@@ -35,0 +38,44 @@ class CancelProposalFlowUseCaseTest {
++    @Test
++    fun donationCancellationClearsProposalsAndRetainsDonationFormWithoutClearingSend() =
++        runTest {
++            val proposal =
++                RegularTransactionProposal(
++                    destination = WalletAddress.Unified.new("recipient"),
++                    amount = Zatoshi(1234L),
++                    memo = Memo(""),
++                    proposal = mockk<Proposal>(),
++                    isDonation = true
++                )
++            val zashiRepository =
++                mockk<ZashiProposalRepository>(relaxed = true) {
++                    coEvery { getTransactionProposal() } returns proposal
++                }
++            val keystoneRepository = mockk<KeystoneProposalRepository>(relaxed = true)
++            val ledgerPipeline = mockk<LedgerProposalPipeline>(relaxed = true)
++            val clearSend = mockk<ObserveClearSendUseCase>(relaxed = true)
++            val router = FakeNavigationRouter()
++            val useCase =
++                CancelProposalFlowUseCase(
++                    zashiProposalRepository = zashiRepository,
++                    keystoneProposalRepository = keystoneRepository,
++                    ledgerProposalPipeline = ledgerPipeline,
++                    navigationRouter = router,
++                    observeClearSend = clearSend,
++                    accountDataSource =
++                        mockk<AccountDataSource> {
++                            coEvery { getSelectedAccount() } returns mockk<ZodlAccount>(relaxed = true)
++                        },
++                    swapRepository = mockk<SwapRepository>(relaxed = true),
++                    migrationNavigator = FakeMigrationNavigator(),
++                )
++
++            useCase()
++
++            coVerify(exactly = 1) { zashiRepository.clear() }
++            coVerify(exactly = 1) { keystoneRepository.clear() }
++            coVerify(exactly = 1) { ledgerPipeline.clear() }
++            coVerify(exactly = 0) { clearSend.requestClear() }
++            assertEquals(listOf(DonationArgs::class), router.backToCalls)
++            assertEquals(0, router.backCalls)
++        }
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateFlexaTransactionUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateFlexaTransactionUseCaseTest.kt
 deleted file mode 100644
 index 0a57ab991..000000000
@@ -11860,6 +12620,55 @@ index 1d445dd11..b96c50409 100644
 @@ -75 +75 @@ class ViewOnlySpendGuardTest {
 -            coEvery { requestNextShieldedAddress() } returns "u"
 +            coEvery { requestNextShieldedAddress(requireFresh = true) } returns "u"
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321PaymentCountTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321PaymentCountTest.kt
+new file mode 100644
+index 000000000..2d16b9978
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321PaymentCountTest.kt
+@@ -0,0 +1,43 @@
++package co.electriccoin.zcash.ui.common.usecase
++
++import cash.z.ecc.android.sdk.Synchronizer
++import cash.z.ecc.android.sdk.type.AddressType
++import co.electriccoin.zcash.ui.common.usecase.Zip321ParseUriValidationUseCase.Zip321ParseUriValidation
++import io.mockk.coEvery
++import io.mockk.mockk
++import kotlinx.coroutines.runBlocking
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import kotlin.test.assertIs
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class Zip321PaymentCountTest {
++    @Test
++    fun multiplePaymentsAreInvalidForEveryScanFlow() =
++        runBlocking {
++            assertIs<Zip321ParseUriValidation.Invalid>(
++                validator()("zcash:$RECIPIENT?amount=0.001&address.1=$RECIPIENT&amount.1=0.002")
++            )
++        }
++
++    @Test
++    fun onePaymentRemainsValid() =
++        runBlocking {
++            assertIs<Zip321ParseUriValidation.Valid>(validator()("zcash:$RECIPIENT?amount=0.001"))
++        }
++
++    private fun validator(): Zip321ParseUriValidationUseCase {
++        val synchronizer = mockk<Synchronizer>()
++        coEvery { synchronizer.validateAddress(any()) } returns AddressType.Transparent
++        return Zip321ParseUriValidationUseCase(
++            mockk { coEvery { getSynchronizer() } returns synchronizer }
++        )
++    }
++
++    private companion object {
++        const val RECIPIENT = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU"
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/configuration/ConfigurationEntriesTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/configuration/ConfigurationEntriesTest.kt
 deleted file mode 100644
 index ab0e2ee1d..000000000
@@ -11944,6 +12753,240 @@ index 708658383..b6cff1756 100644
 -
 @@ -500 +454,0 @@ class AccountListVMTest {
 -            assertNull(state.keystonePromo)
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt
+new file mode 100644
+index 000000000..a77b5fcb1
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt
+@@ -0,0 +1,158 @@
++package co.electriccoin.zcash.ui.screen.donation
++
++import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
++import cash.z.ecc.android.sdk.model.Memo
++import cash.z.ecc.android.sdk.model.Proposal
++import cash.z.ecc.android.sdk.model.WalletAddress
++import cash.z.ecc.android.sdk.model.Zatoshi
++import cash.z.ecc.android.sdk.model.ZecSend
++import cash.z.wallet.sdk.internal.ffi.ProposalOuterClass
++import cash.z.wallet.sdk.internal.ffi.ProposalOuterClass.ValuePool
++import io.mockk.every
++import io.mockk.mockk
++import org.junit.Test
++import java.math.BigDecimal
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++
++class DonationPolicyTest {
++    @Test
++    fun exactPercentageUsesZatoshiAndRoundsDown() {
++        assertEquals(1_234_567L, DonationPolicy.suggestedZatoshi(BigDecimal("1.23456789"), BigDecimal("1")))
++        assertEquals(0L, DonationPolicy.suggestedZatoshi(BigDecimal("0.00000001"), BigDecimal("99")))
++        assertEquals(100_000_000L, DonationPolicy.suggestedZatoshi(BigDecimal.ONE, BigDecimal("100")))
++        assertEquals(0L, DonationPolicy.suggestedZatoshi(BigDecimal.ONE, BigDecimal.ZERO))
++    }
++
++    @Test
++    fun invalidPercentAndBasisAreRejected() {
++        for (percent in listOf("-0.01", "100.01")) {
++            assertFailsWith<IllegalArgumentException> {
++                DonationPolicy.suggestedZatoshi(BigDecimal.ONE, BigDecimal(percent))
++            }
++        }
++        assertFailsWith<IllegalArgumentException> {
++            DonationPolicy.suggestedZatoshi(BigDecimal("-1"), BigDecimal.ONE)
++        }
++    }
++
++    @Test
++    fun shieldedInputOutputAndChangeAreAccepted() {
++        for (pool in listOf(ValuePool.Sapling, ValuePool.Orchard, ValuePool.Ironwood)) {
++            DonationPolicy.requireShielded(proposal(step(pool)), send())
++        }
++    }
++
++    @Test
++    fun transparentAndUnknownInputsAreRejected() {
++        for (pool in listOf(ValuePool.Transparent, ValuePool.PoolNotSpecified)) {
++            reject(step().clearInputs().addInputs(input(pool)))
++        }
++        reject(step().clearInputs().addInputs(
++            ProposalOuterClass.ProposedInput.newBuilder().setReceivedOutput(
++                ProposalOuterClass.ReceivedOutput.newBuilder().setValuePoolValue(999).setValue(150_000)
++            )
++        ))
++    }
++
++    @Test
++    fun priorStepInputsAndMissingInputsAreRejected() {
++        reject(step().clearInputs())
++        reject(step().clearInputs().addInputs(
++            ProposalOuterClass.ProposedInput.newBuilder().setPriorStepOutput(
++                ProposalOuterClass.PriorStepOutput.newBuilder().setStepIndex(0).setPaymentIndex(0)
++            )
++        ))
++    }
++
++    @Test
++    fun transparentOrUnknownPaymentPoolIsRejected() {
++        for (pool in listOf(ValuePool.Transparent, ValuePool.PoolNotSpecified)) {
++            reject(step().clearPaymentOutputPools().addPaymentOutputPools(paymentPool(pool)))
++        }
++        reject(step().clearPaymentOutputPools().addPaymentOutputPools(
++            ProposalOuterClass.PaymentOutputPool.newBuilder().setValuePoolValue(999)
++        ))
++        reject(step().clearPaymentOutputPools())
++        reject(step().addPaymentOutputPools(paymentPool(ValuePool.Orchard)))
++    }
++
++    @Test
++    fun transparentUnknownAndEphemeralChangeAreRejected() {
++        for (pool in listOf(ValuePool.Transparent, ValuePool.PoolNotSpecified)) {
++            reject(step().setBalance(balance(pool)))
++        }
++        reject(step().setBalance(balance().clearProposedChange().addProposedChange(
++            ProposalOuterClass.ChangeValue.newBuilder().setValuePoolValue(999).setValue(40_000)
++        )))
++        reject(step().setBalance(balance().clearProposedChange().addProposedChange(
++            ProposalOuterClass.ChangeValue.newBuilder().setValuePool(ValuePool.Orchard)
++                .setValue(40_000).setIsEphemeral(true)
++        )))
++    }
++
++    @Test
++    fun shieldingMultipleStepsAndMissingStepsAreRejected() {
++        reject(step().setIsShielding(true))
++        assertFailsWith<IllegalArgumentException> { DonationPolicy.requireShielded(proposal(step(), step()), send()) }
++        assertFailsWith<IllegalArgumentException> { DonationPolicy.requireShielded(proposal(), send()) }
++    }
++
++    @Test
++    fun amountMismatchAndIdentifyingMemoAreRejected() {
++        reject(step().setBalance(balance().setFeeRequired(10_001)))
++        assertFailsWith<IllegalArgumentException> {
++            DonationPolicy.requireShielded(proposal(step()), send(amount = 99_999))
++        }
++        assertFailsWith<IllegalArgumentException> {
++            DonationPolicy.requireShielded(proposal(step()), send(memo = "identity"))
++        }
++    }
++
++    @Test
++    fun serializedPaymentMustMatchReviewWithoutMemoOrExtraRecipients() {
++        reject(step().setTransactionRequest("zcash:${DonationPolicy.RECIPIENT}?amount=0.002"))
++        reject(step().setTransactionRequest("zcash:t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU?amount=0.001"))
++        reject(step().setTransactionRequest("zcash:${DonationPolicy.RECIPIENT}?amount=0.001&memo=aWRlbnRpdHk"))
++        reject(step().setTransactionRequest(
++            "zcash:${DonationPolicy.RECIPIENT}?amount=0.001&address.1=${DonationPolicy.RECIPIENT}&amount.1=0.001"
++        ))
++        reject(step().setTransactionRequest("not a payment request"))
++        reject(step().clearPaymentOutputPools().addPaymentOutputPools(
++            paymentPool(ValuePool.Orchard).setPaymentIndex(1)
++        ))
++    }
++
++    private fun reject(step: ProposalOuterClass.ProposalStep.Builder) {
++        assertFailsWith<IllegalArgumentException> { DonationPolicy.requireShielded(proposal(step), send()) }
++    }
++
++    private fun proposal(vararg steps: ProposalOuterClass.ProposalStep.Builder): Proposal {
++        val bytes = ProposalOuterClass.Proposal.newBuilder()
++            .setFeeRule(ProposalOuterClass.FeeRule.Zip317)
++            .addAllSteps(steps.map { it.build() }).build().toByteArray()
++        return mockk { every { toByteArray() } returns bytes }
++    }
++
++    private fun step(pool: ValuePool = ValuePool.Orchard) = ProposalOuterClass.ProposalStep.newBuilder()
++        .setTransactionRequest("zcash:${DonationPolicy.RECIPIENT}?amount=0.001")
++        .addInputs(input(pool)).addPaymentOutputPools(paymentPool(pool)).setBalance(balance(pool))
++
++    private fun input(pool: ValuePool) = ProposalOuterClass.ProposedInput.newBuilder().setReceivedOutput(
++        ProposalOuterClass.ReceivedOutput.newBuilder().setValuePool(pool).setValue(150_000)
++    )
++
++    private fun paymentPool(pool: ValuePool) = ProposalOuterClass.PaymentOutputPool.newBuilder().setValuePool(pool)
++
++    private fun balance(pool: ValuePool = ValuePool.Orchard) = ProposalOuterClass.TransactionBalance.newBuilder()
++        .setFeeRequired(10_000).addProposedChange(
++            ProposalOuterClass.ChangeValue.newBuilder().setValuePool(pool).setValue(40_000)
++        )
++
++    private fun send(amount: Long = 100_000, memo: String = "") = ZecSend(
++        destination = mockk<WalletAddress.Unified> { every { address } returns DonationPolicy.RECIPIENT },
++        amount = Zatoshi(amount),
++        memo = Memo(memo),
++        proposal = null
++    )
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt
+new file mode 100644
+index 000000000..efb84a40e
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt
+@@ -0,0 +1,64 @@
++package co.electriccoin.zcash.ui.screen.donation
++
++import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
++import android.content.Context
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import java.math.BigDecimal
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class DonationPreferencesTest {
++    private val context: Context get() = RuntimeEnvironment.getApplication()
++
++    @Before
++    fun reset() {
++        context.getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE).edit().clear().commit()
++    }
++
++    @Test
++    fun suggestionsDefaultToZeroAndPersistExactPercent() {
++        assertEquals(BigDecimal.ZERO, DonationPreferences(context).percent)
++        DonationPreferences(context).percent = BigDecimal("1.23456789")
++        assertEquals(BigDecimal("1.23456789"), DonationPreferences(context).percent)
++    }
++
++    @Test
++    fun invalidStoredPercentDefaultsToZeroAndInvalidWritesAreRejected() {
++        val storage = context.getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE)
++        for (value in listOf("invalid", "-1", "101")) {
++            storage.edit().putString("percent", value).commit()
++            assertEquals(BigDecimal.ZERO, DonationPreferences(context).percent)
++        }
++        for (value in listOf("-0.01", "100.01")) {
++            assertFailsWith<IllegalArgumentException> { DonationPreferences(context).percent = BigDecimal(value) }
++        }
++    }
++
++    @Test
++    fun postponementPersistsAndExpiresAtCooldownBoundary() {
++        val now = 1_000_000L
++        assertTrue(DonationPreferences(context).mayInvite(now))
++        DonationPreferences(context).postpone(now)
++        val restored = DonationPreferences(context)
++        assertFalse(restored.mayInvite(now))
++        assertFalse(restored.mayInvite(now - 1))
++        assertFalse(restored.mayInvite(now + DonationPolicy.COOLDOWN_MILLIS - 1))
++        assertTrue(restored.mayInvite(now + DonationPolicy.COOLDOWN_MILLIS))
++    }
++
++    @Test
++    fun permanentDeclineSurvivesRecreationAndLaterPostponement() {
++        DonationPreferences(context).declinePermanently()
++        DonationPreferences(context).postpone(1_000_000)
++        assertFalse(DonationPreferences(context).mayInvite(1_000_000 + 10 * DonationPolicy.COOLDOWN_MILLIS))
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt
 index acc8741c2..430fc754d 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt
