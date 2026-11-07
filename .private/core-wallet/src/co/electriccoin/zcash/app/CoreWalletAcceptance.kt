@@ -64,6 +64,11 @@ import org.json.JSONArray
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 import java.io.File
+import co.electriccoin.zcash.ui.common.model.*
+import co.electriccoin.zcash.ui.screen.donation.*
+import co.electriccoin.zcash.ui.common.donation.*
+import java.math.BigDecimal
+import kotlinx.coroutines.sync.withLock
 import java.lang.reflect.Proxy
 
 /** Exercises the installed app graph. No mocks, SDK-only wallet, or mainnet spending. */
@@ -177,6 +182,24 @@ class CoreWalletAcceptance {
                     co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy.setIsolatedTestnetRecipient(destination)
                     co.electriccoin.zcash.ui.screen.donation.DonationPreferences(context).percent = "0.5".toBigDecimal()
                     dependency<NavigationRouter>().forward(co.electriccoin.zcash.ui.screen.donation.DonationArgs("2"))
+                    // Fresh production UI consent, distinct from the legacy saved suggestion.
+                    val automatic = dependency<AutoDonationStore>()
+                    check(automatic.consent() == null)
+                    scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_on))
+                    clickUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_on), "auto_on")
+                    scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_percent))
+                    setDonationPercent("100")
+                    scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_save))
+                    clickUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_save), "auto_authorize_once")
+                    val consent = withTimeout(15_000) {
+                        while (automatic.consent()?.percent?.compareTo(BigDecimal(100)) != 0) delay(100)
+                        checkNotNull(automatic.consent())
+                    }
+                    check(consent.accountUuid == account.sdkAccount.accountUuid.toString())
+                    save(state.put("autoEnabledUiConsent", true))
+                    // A quote created after authorization is required by production enrollment policy.
+                    while (System.currentTimeMillis() / 1000L <= consent.authorizedAtSeconds) delay(100)
+                    val automaticQuote = isolatedOutgoingQuote(destination, account.unifiedAddress)
                     scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_review))
                     suspend fun openReview() {
                         reviewAttempt++
@@ -279,7 +302,12 @@ class CoreWalletAcceptance {
                         "Submission did not establish one accepted or SDK-pending transaction"
                     }
                     state.put("txId", result.txIds.single()); save(state)
+                    dependency<AutoDonationCoordinator>().enroll(automaticQuote, result.txIds)
                     checkSent()
+                    // Follow the real completion action; do not clear production proposal state by hand.
+                    clickUi(context.getString(co.electriccoin.zcash.ui.R.string.send_viewTransaction), "manual_view_transaction")
+                    withTimeout(15_000) { proposals.transactionProposal.first { it == null } }
+                    acceptAutomaticDonation(automaticQuote)
                 }
                 "restore" -> {
                     val state = fixture()
@@ -448,6 +476,17 @@ class CoreWalletAcceptance {
             .put("multi_recipient_wallet_rejected",fixture().getBoolean("multiRecipientRejectedByWallet"))
             .put("multi_recipient_submitted",false)
             .put("biometric_prompt_executed",false)
+        if (stage=="send") receipt
+            .put("auto_enabled_ui_consent", fixture().getBoolean("autoEnabledUiConsent"))
+            .put("auto_payment_approval_actions", fixture().getInt("autoUiApprovalActions"))
+            .put("auto_exactly_once", fixture().getBoolean("autoExactlyOnce"))
+            .put("auto_native_confirmed", fixture().getBoolean("autoNativeConfirmed"))
+            .put("auto_consent_disabled", fixture().getBoolean("autoConsentDisabled"))
+            .put("auto_provider_evidence", fixture().getString("autoProviderEvidence"))
+            .put("auto_amount_zatoshi", fixture().getLong("autoAmountZatoshi"))
+            .put("auto_fee_zatoshi", fixture().getLong("autoFeeZatoshi"))
+            .put("auto_tx_id", fixture().getString("autoTxId"))
+        if (stage=="restart") receipt.put("auto_restart_confirmed", fixture().getBoolean("autoRestartConfirmed"))
         if (stage=="restore") receipt.put("mined_height",fixture().getLong("restoreMinedHeight"))
             .put("amount_zatoshi",1_000_000L).put("app_transaction_state",fixture().getString("restoreTransactionState"))
 
@@ -894,7 +933,7 @@ class CoreWalletAcceptance {
 
     @Suppress("DEPRECATION")
     private suspend fun scrollToText(text: String) {
-        repeat(4) {
+        repeat(8) { attempt ->
             if (hasUiText(text)) return
             val root = instrumentation.uiAutomation.rootInActiveWindow ?: return@repeat
             val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
@@ -906,7 +945,9 @@ class CoreWalletAcceptance {
                     val node = pending.removeFirst()
                     try {
                         if (node.isVisibleToUser && node.isScrollable) {
-                            scrolled = node.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+                            val direction = if (attempt < 4) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD
+                                else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+                            scrolled = node.performAction(direction)
                         }
                         if (!scrolled) {
                             for (index in 0 until node.childCount) node.getChild(index)?.let { pending.add(it) }
@@ -1102,11 +1143,157 @@ class CoreWalletAcceptance {
         while (balance() < minimum) delay(2_000)
     }
 
+    /** Only the provider result is synthetic; keys, proposals, Tor broadcast and confirmations are real. */
+    private fun isolatedOutgoingQuote(destination: String, refund: String): SwapQuote {
+        fun asset(token: String, chain: String, precision: Int): SwapAsset {
+            val simple = dependency<co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider>().get(token, chain)
+            return object : SwapAsset {
+                override val tokenTicker = simple.tokenTicker
+                override val tokenName = simple.tokenName
+                override val tokenIcon = simple.tokenIcon
+                override val blockchain = simple.blockchain
+                override val usdPrice: BigDecimal? = null
+                override val assetId = "isolated-$token-$chain"
+                override val decimals = precision
+            }
+        }
+        return object : SwapQuote {
+            override val originAsset = asset("ZEC", "zec", 8)
+            override val destinationAsset = asset("USDC", "eth", 6)
+            override val depositAddress = ZcashShieldedSwapAddress(destination)
+            override val destinationAddress = DynamicSwapAddress("isolated-synthetic-provider-destination")
+            override val refundAddress = ZcashShieldedSwapAddress(refund)
+            override val provider = "isolated-synthetic-provider"
+            override val mode = SwapMode.EXACT_INPUT
+            override val amountIn = BigDecimal(1_000_000)
+            override val amountInFormatted = BigDecimal("0.01")
+            override val amountInUsd = BigDecimal.ZERO
+            override val amountOut = BigDecimal(1_000_000)
+            override val amountOutFormatted = BigDecimal.ONE
+            override val amountOutUsd = BigDecimal.ZERO
+            override val affiliateFee = BigDecimal.ZERO
+            override val affiliateFeeUsd = BigDecimal.ZERO
+            override val slippage = BigDecimal.ZERO
+            override val timestamp = kotlin.time.Clock.System.now()
+            override val deadline = timestamp + kotlin.time.Duration.parse("15m")
+        }
+    }
+
+    private fun successfulIsolatedSwap(quote: SwapQuote): SwapQuoteStatus = object : SwapQuoteStatus {
+        override val originAsset = quote.originAsset
+        override val destinationAsset = quote.destinationAsset
+        override val depositAddress = quote.depositAddress
+        override val destinationAddress = quote.destinationAddress
+        override val timestamp = java.time.Instant.ofEpochSecond(quote.timestamp.epochSeconds)
+        override val deadline = quote.deadline
+        override val status = SwapStatus.SUCCESS
+        override val isSlippageRealized = true
+        override val maxSlippage = BigDecimal.ZERO
+        override val mode = quote.mode
+        override val amountInFormatted = quote.amountInFormatted
+        override val amountInUsd = BigDecimal.ZERO
+        override val amountOutFormatted = BigDecimal.ONE
+        override val amountOutUsd = BigDecimal.ZERO
+        override val executedAmountIn = quote.amountInFormatted
+        override val executedAmountOut = BigDecimal.ONE
+        override val depositedAmountFormatted = quote.amountInFormatted
+        override val refundedFormatted = BigDecimal.ZERO
+    }
+
+    @Suppress("DEPRECATION")
+    private suspend fun setDonationPercent(value: String) = withTimeout(15_000) {
+        val label = context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_percent)
+        while (true) {
+            val root = instrumentation.uiAutomation.rootInActiveWindow
+            val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
+            root?.let(pending::add)
+            var changed = false
+            var count = 0
+            try {
+                while (pending.isNotEmpty() && count++ < 500) {
+                    val node = pending.removeFirst()
+                    try {
+                        if (node.contentDescription?.toString() == label && node.isVisibleToUser && node.isEnabled &&
+                            node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_SET_TEXT }) {
+                            var parent = node.parent
+                            var enabled = true
+                            try {
+                                while (parent != null) {
+                                    val current = parent
+                                    if (!current.isEnabled) enabled = false
+                                    parent = current.parent
+                                    current.recycle()
+                                }
+                            } finally { parent?.recycle() }
+                            check(enabled)
+                            val args = android.os.Bundle().apply {
+                                putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, value)
+                            }
+                            check(node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args))
+                            changed = true
+                            break
+                        }
+                        for (index in 0 until node.childCount) node.getChild(index)?.let(pending::add)
+                    } finally { node.recycle() }
+                }
+            } finally { while (pending.isNotEmpty()) pending.removeFirst().recycle() }
+            if (changed) break
+            delay(150)
+        }
+    }
+
+    private suspend fun acceptAutomaticDonation(quote: SwapQuote) {
+        val coordinator = dependency<AutoDonationCoordinator>()
+        val status = successfulIsolatedSwap(quote)
+        val sync = dependency<SynchronizerProvider>().getSynchronizer()
+        val account = dependency<AccountDataSource>().getZashiAccount()
+        val before = sync.getTransactions(account.sdkAccount.accountUuid).first().map { it.txId.txIdString() }.toSet()
+        val approvalsBefore = approvalActions
+        val balanceBefore = balance()
+        coordinator.onStatus(status)
+        val transaction = withTimeout(600_000) {
+            sync.getTransactions(account.sdkAccount.accountUuid).first { history ->
+                history.any { it.isSentTransaction && it.txId.txIdString() !in before &&
+                    it.transactionState == cash.z.ecc.android.sdk.model.TransactionState.Confirmed }
+            }.single { it.isSentTransaction && it.txId.txIdString() !in before }
+        }
+        val fee = checkNotNull(transaction.feePaid).value
+        check(fee > 0 && fee < 1_000_000L)
+        check(transaction.netValue.value == 1_000_000L + fee)
+        val displayed = dependency<TransactionRepository>().observeTransaction(transaction.txId.txIdString())
+            .filterNotNull().first { it is SendTransaction.Success }
+        check(displayed.recipient == fixture().getString("recipientAddress"))
+        check(dependency<TransactionRepository>().getMemos(displayed).all { it.isEmpty() })
+        withTimeout(120_000) { while (balance() != balanceBefore - 1_000_000L - fee) delay(1_000) }
+        coordinator.onStatus(status)
+        delay(10_000)
+        val after = sync.getTransactions(account.sdkAccount.accountUuid).first()
+        check(after.count { it.isSentTransaction && it.txId.txIdString() !in before } == 1)
+        check(approvalActions == approvalsBefore)
+        AutoDonationSpendingGate.mutex.withLock { dependency<AutoDonationStore>().disable() }
+        check(dependency<AutoDonationStore>().consent() == null)
+        save(fixture().put("autoTxId", transaction.txId.txIdString()).put("autoAmountZatoshi", 1_000_000L)
+            .put("autoFeeZatoshi", fee).put("autoUiApprovalActions", 0).put("autoExactlyOnce", true)
+            .put("autoNativeConfirmed", true).put("autoConsentDisabled", true)
+            .put("autoProviderEvidence", "synthetic-success; real native shielded transaction")
+            .put("senderConfirmedBalance", balance()))
+    }
+
     private suspend fun checkSent() {
         val state = fixture()
         val transaction = withTimeout(600_000) {
             dependency<TransactionRepository>().observeTransaction(state.getString("txId"))
                 .filterNotNull().first { it is SendTransaction.Success }
+        }
+        if (state.has("autoTxId")) {
+            val automatic = withTimeout(120_000) {
+                dependency<TransactionRepository>().observeTransaction(state.getString("autoTxId"))
+                    .filterNotNull().first { it is SendTransaction.Success }
+            }
+            check(automatic.amount.value == state.getLong("autoAmountZatoshi") + state.getLong("autoFeeZatoshi"))
+            check(automatic.recipient == state.getString("recipientAddress"))
+            check(dependency<AutoDonationStore>().consent() == null)
+            save(state.put("autoRestartConfirmed", true))
         }
         val fee = checkNotNull(transaction.fee).value
         // SDK netValue is abs(accountBalanceDelta), including the fee. The
@@ -1120,7 +1307,8 @@ class CoreWalletAcceptance {
         check(recipientMatches)
         check(fee > 0)
         withTimeout(120_000) {
-            while (balance() != state.getLong("balanceBeforeSend") - 1_000_000L - fee) delay(2_000)
+            while (balance() != state.getLong("balanceBeforeSend") - 1_000_000L - fee -
+                state.optLong("autoAmountZatoshi", 0L) - state.optLong("autoFeeZatoshi", 0L)) delay(2_000)
         }
         save(state.put("feeZatoshi", fee).put("senderConfirmedBalance", balance()))
     }

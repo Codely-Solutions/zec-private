@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui.common.repository
 
 import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
+import co.electriccoin.zcash.ui.common.donation.AutoDonationSpendingGate
+import kotlinx.coroutines.sync.withLock
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
@@ -138,45 +140,47 @@ class ZashiProposalRepositoryImpl(
         transactionProposal.update { MigrationSweepTransactionProposal(amount, proposal) }
     }
 
-    @Suppress("TooGenericExceptionCaught", "UseCheckOrError")
+    @Suppress("TooGenericExceptionCaught", "UseCheckOrError", "NestedBlockDepth")
     override suspend fun submit(): SubmitResult =
         scope
             .async {
-                val transactionProposal = transactionProposal.value
-                if (transactionProposal == null) {
-                    val cause = IllegalStateException("Transaction proposal is null")
-                    submitState.update { SubmitProposalState.Result(SubmitResult.Error(cause)) }
-                    throw cause
-                } else {
-                    submitState.update { SubmitProposalState.Submitting }
-                    try {
-                        val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
-                        if (transactionProposal is RegularTransactionProposal && transactionProposal.isDonation) {
-                            require(transactionProposal.destination.address ==
-                                DonationPolicy.recipient())
-                            DonationPolicy.requireShielded(
-                                transactionProposal.proposal,
-                                ZecSend(
-                                    transactionProposal.destination,
-                                    transactionProposal.amount,
-                                    transactionProposal.memo,
-                                    null
+                AutoDonationSpendingGate.mutex.withLock {
+                    val transactionProposal = transactionProposal.value
+                    if (transactionProposal == null) {
+                        val cause = IllegalStateException("Transaction proposal is null")
+                        submitState.update { SubmitProposalState.Result(SubmitResult.Error(cause)) }
+                        throw cause
+                    } else {
+                        submitState.update { SubmitProposalState.Submitting }
+                        try {
+                            val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
+                            if (transactionProposal is RegularTransactionProposal && transactionProposal.isDonation) {
+                                require(transactionProposal.destination.address ==
+                                    DonationPolicy.recipient())
+                                DonationPolicy.requireShielded(
+                                    transactionProposal.proposal,
+                                    ZecSend(
+                                        transactionProposal.destination,
+                                        transactionProposal.amount,
+                                        transactionProposal.memo,
+                                        null
+                                    )
                                 )
-                            )
+                            }
+                            if (transactionProposal is SwapTransactionProposal) {
+                                ZecSwapComposition.validate(transactionProposal.quote)
+                            }
+                            val result =
+                                proposalDataSource.submitTransaction(
+                                    proposal = transactionProposal.proposal,
+                                    usk = spendingKey
+                                )
+                            submitState.update { SubmitProposalState.Result(result) }
+                            result
+                        } catch (e: Exception) {
+                            submitState.update { SubmitProposalState.Result(SubmitResult.Error(e)) }
+                            throw e
                         }
-                        if (transactionProposal is SwapTransactionProposal) {
-                            ZecSwapComposition.validate(transactionProposal.quote)
-                        }
-                        val result =
-                            proposalDataSource.submitTransaction(
-                                proposal = transactionProposal.proposal,
-                                usk = spendingKey
-                            )
-                        submitState.update { SubmitProposalState.Result(result) }
-                        result
-                    } catch (e: Exception) {
-                        submitState.update { SubmitProposalState.Result(SubmitResult.Error(e)) }
-                        throw e
                     }
                 }
             }.await()
@@ -188,20 +192,22 @@ class ZashiProposalRepositoryImpl(
         submitState.update { null }
     }
 
-    private inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
-        val proposal =
-            try {
-                block()
-            } catch (e: TransactionProposalNotCreatedException) {
-                Twig.error(e) { "Unable to create proposal" }
-                transactionProposal.update { null }
-                throw e
-            } catch (e: InsufficientFundsException) {
-                Twig.error(e) { "Insufficient funds" }
-                transactionProposal.update { null }
-                throw e
-            }
-        transactionProposal.update { proposal }
-        return proposal
-    }
+    private suspend fun <T : TransactionProposal> createProposalInternal(block: suspend () -> T): T =
+        AutoDonationSpendingGate.mutex.withLock {
+            val proposal =
+                try {
+                    block()
+                } catch (e: TransactionProposalNotCreatedException) {
+                    Twig.error(e) { "Unable to create proposal" }
+                    transactionProposal.update { null }
+                    throw e
+                } catch (e: InsufficientFundsException) {
+                    Twig.error(e) { "Insufficient funds" }
+                    transactionProposal.update { null }
+                    throw e
+                }
+            submitState.update { null }
+            transactionProposal.update { proposal }
+            proposal
+        }
 }

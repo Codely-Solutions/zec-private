@@ -11,5 +11,9 @@
     "Add optional shielded donations with a zero-default saved suggestion and explicit approval for every payment.",
     "Reject unsupported multi-recipient payment requests and clarify Zcash network-fee labels.",
     "[Support development](https://github.com/Sammy-Lastre/zec-private/blob/main/docs/DONATIONS.md)."
+  ],
+  "v3.19.0-private.14": [
+    "Redesign donation settings with clear one-time and optional automatic support.",
+    "Add opt-in shielded donations after successful swaps; skip donations when the extra network fee is too high."
   ]
 }

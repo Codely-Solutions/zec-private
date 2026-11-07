@@ -168,6 +168,10 @@ import org.koin.dsl.module
 
 val useCaseModule =
     module {
+        single { co.electriccoin.zcash.ui.common.donation.AutoDonationStore(get()) }
+        single {
+            co.electriccoin.zcash.ui.common.donation.AutoDonationCoordinator(get(), get(), get(), get(), get(), get())
+        }
         factoryOf(::ObserveFastestServersUseCase)
         factoryOf(::GetSelectedEndpointUseCase)
         factoryOf(::RefreshFastestServersUseCase)

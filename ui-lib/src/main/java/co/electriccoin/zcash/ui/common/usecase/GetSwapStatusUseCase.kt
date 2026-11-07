@@ -16,6 +16,7 @@ import kotlin.time.Duration.Companion.seconds
 class GetSwapStatusUseCase(
     private val metadataRepository: MetadataRepository,
     private val swapRepository: SwapRepository,
+    private val autoDonations: co.electriccoin.zcash.ui.common.donation.AutoDonationCoordinator? = null,
 ) {
     suspend operator fun invoke(depositAddress: String) = observe(depositAddress).first { !it.isLoading }
 
@@ -59,6 +60,7 @@ class GetSwapStatusUseCase(
                                 error = null
                             )
                         }
+                        autoDonations?.onStatus(result)
                         if (result.status.isTerminal) {
                             break
                         }
