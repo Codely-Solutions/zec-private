@@ -3346,7 +3346,7 @@ index 000000000..c15f95a55
 +        }
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/RepositoryModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/RepositoryModule.kt
-index 1c2a8787c..baba05669 100644
+index 1c2a8787c..bae9379dc 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/RepositoryModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/RepositoryModule.kt
 @@ -18,2 +17,0 @@ import co.electriccoin.zcash.ui.common.repository.FiatCurrencyRepositoryImpl
@@ -3354,8 +3354,11 @@ index 1c2a8787c..baba05669 100644
 -import co.electriccoin.zcash.ui.common.repository.FlexaRepositoryImpl
 @@ -53 +50,0 @@ val repositoryModule =
 -        singleOf(::FlexaRepositoryImpl) bind FlexaRepository::class
+@@ -56 +53 @@ val repositoryModule =
+-        singleOf(::TransactionRepositoryImpl) bind TransactionRepository::class
++        single<TransactionRepository> { TransactionRepositoryImpl(get(), get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
-index c9262f680..ff439e9e7 100644
+index c9262f680..4f994ad64 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 @@ -12 +11,0 @@ import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
@@ -3370,6 +3373,9 @@ index c9262f680..ff439e9e7 100644
 -        factoryOf(::CreateFlexaTransactionUseCase)
 @@ -261 +255,0 @@ val useCaseModule =
 -        factoryOf(::GetFlexaStatusUseCase)
+@@ -325 +319 @@ val useCaseModule =
+-        factoryOf(::GetSwapStatusUseCase)
++        factory { GetSwapStatusUseCase(get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt
 index 50bcc0da8..904bf2920 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt
@@ -3497,6 +3503,18 @@ index 6450a970f..25bf0652c 100644
 @@ -132 +129 @@ class ZashiTopAppBarVM(
 -                if (!isFlexaAvailable && isHWWalletConnected) {
 +                if (isHWWalletConnected) {
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarWithAccountSelection.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarWithAccountSelection.kt
+index 5ec410de8..87abe5b0e 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarWithAccountSelection.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarWithAccountSelection.kt
+@@ -51 +51,2 @@ fun ZashiTopAppBarWithAccountSelection(
+-    showHideBalances: Boolean = true
++    showHideBalances: Boolean = true,
++    supportAction: @Composable () -> Unit = {},
+@@ -58,0 +60 @@ fun ZashiTopAppBarWithAccountSelection(
++                supportAction()
+@@ -158,0 +161 @@ private fun AccountNameWithSubtitle(
++@Suppress("MatchingDeclarationName")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 index 4d388e80f..701e1d9d0 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
@@ -4632,6 +4650,41 @@ index 36d947b49..4bef6c4cf 100644
 +            requestQuoteJob = null
 +            quote.value = null
 +        }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt
+index 26bf877f4..db3df438d 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/TransactionRepository.kt
+@@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.repository
++import android.content.Context
++import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
++import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
+@@ -66,0 +70,2 @@ class TransactionRepositoryImpl(
++    context: Context? = null,
++    private val metadataRepository: MetadataRepository? = null,
+@@ -67,0 +73 @@ class TransactionRepositoryImpl(
++    private val donationPreferences = context?.let(::DonationPreferences)
+@@ -183 +189,20 @@ class TransactionRepositoryImpl(
+-                                                createTransaction(transaction, details)
++                                                createTransaction(transaction, details).also { mapped ->
++                                                    val recipient = mapped.recipient
++                                                    if (mapped is SendTransaction.Success && recipient != null) {
++                                                        if (recipient == DonationPolicy.recipient()) {
++                                                            mapped.timestamp?.toEpochMilli()?.let {
++                                                                donationPreferences?.recordDonationCompleted(it)
++                                                            }
++                                                        } else {
++                                                            val accountMetadata = metadataRepository?.metadata?.value
++                                                                ?.get(uuid)?.accountMetadata
++                                                            if (accountMetadata != null &&
++                                                                accountMetadata.swaps.swapIds.none {
++                                                                    it.depositAddress == recipient
++                                                                }
++                                                            ) {
++                                                                donationPreferences?.recordSuccessfulTransaction()
++                                                            }
++                                                        }
++                                                    }
++                                                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
 index 0a5bfe73c..4188c0849 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
@@ -4869,6 +4922,22 @@ index 84d9fd0c0..000000000
 -    ENABLED,
 -    DISABLED
 -}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
+index a33c847ad..f15858eba 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
+@@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.usecase
++import android.content.Context
++import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
++import co.electriccoin.zcash.ui.common.model.SwapStatus
+@@ -18,0 +22 @@ class GetSwapStatusUseCase(
++    context: Context? = null,
+@@ -19,0 +24 @@ class GetSwapStatusUseCase(
++    private val donationPreferences = context?.let(::DonationPreferences)
+@@ -54,0 +60,3 @@ class GetSwapStatusUseCase(
++                        if (result.status == SwapStatus.SUCCESS) {
++                            donationPreferences?.recordSuccessfulTransaction()
++                        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
 index eab9cf9da..0c491fdc7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
@@ -5270,19 +5339,23 @@ index 000000000..14a4deb26
 +data class DonationArgs(val basisZec: String? = null)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt
 new file mode 100644
-index 000000000..579c201e8
+index 000000000..858521c25
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,57 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import android.content.Context
 +import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 +
-+/** Local suppression settings for the optional donation invitation. */
-+@Suppress("MagicNumber")
++/** Local discovery and suppression settings for manual donations. */
++@Suppress("MagicNumber", "TooManyFunctions")
 +class DonationPreferences(context: Context) {
 +    private val preferences = context.getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE)
++
++    /** Capture this once on home entry, before observing newly completed activity. */
++    fun mayInviteOnHomeEntry(now: Long): Boolean =
++        preferences.getBoolean("successful_activity", false) && mayInvite(now)
 +
 +    fun mayInvite(now: Long): Boolean {
 +        val last = preferences.getLong("last_invitation", 0)
@@ -5290,21 +5363,51 @@ index 000000000..579c201e8
 +            (last == 0L || (now >= last && now - last >= DonationPolicy.COOLDOWN_MILLIS))
 +    }
 +
++    /** Claim only when the introduction can actually be displayed. */
++    fun claimAutomaticIntroduction(now: Long = System.currentTimeMillis()): Boolean = synchronized(LOCK) {
++        if (!mayInvite(now) || preferences.getBoolean("introduction_shown", false)) {
++            false
++        } else {
++            preferences.edit().putBoolean("introduction_shown", true).commit()
++        }
++    }
++
++    /** Call only for a confirmed ordinary send or a completed swap, excluding donations. */
++    fun recordSuccessfulTransaction() {
++        if (!preferences.getBoolean("successful_activity", false)) {
++            preferences.edit().putBoolean("successful_activity", true).apply()
++        }
++    }
++
++    fun recordInvitationDisplayed(now: Long) = postpone(now)
++
 +    fun postpone(now: Long) = preferences.edit().putLong("last_invitation", now).apply()
 +
++    /** Use the confirmed completion time, so re-observing history cannot restart the cooldown. */
++    fun recordDonationCompleted(completedAt: Long) = synchronized(LOCK) {
++        val lastCompletion = preferences.getLong("last_donation_completion", 0)
++        if (completedAt > lastCompletion) {
++            preferences.edit()
++                .putLong("last_donation_completion", completedAt)
++                .putLong("last_invitation", maxOf(completedAt, preferences.getLong("last_invitation", 0)))
++                .apply()
++        }
++    }
++
 +    fun declinePermanently() = preferences.edit().putBoolean("never_ask", true).apply()
++
++    private companion object {
++        val LOCK = Any()
++    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt
 new file mode 100644
-index 000000000..fca069669
+index 000000000..de0e8508d
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt
-@@ -0,0 +1,128 @@
+@@ -0,0 +1,87 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
-+import androidx.compose.foundation.layout.Column
-+import androidx.compose.foundation.layout.padding
-+import androidx.compose.material3.Text
 +import androidx.compose.runtime.collectAsState
 +import androidx.compose.runtime.Composable
 +import androidx.compose.runtime.getValue
@@ -5313,10 +5416,7 @@ index 000000000..fca069669
 +import androidx.compose.runtime.rememberCoroutineScope
 +import androidx.compose.runtime.saveable.rememberSaveable
 +import androidx.compose.runtime.setValue
-+import androidx.compose.ui.Modifier
 +import androidx.compose.ui.platform.LocalContext
-+import androidx.compose.ui.res.stringResource
-+import androidx.compose.ui.unit.dp
 +import cash.z.ecc.android.sdk.model.Memo
 +import cash.z.ecc.android.sdk.model.WalletAddress
 +import cash.z.ecc.android.sdk.model.Zatoshi
@@ -5325,9 +5425,6 @@ index 000000000..fca069669
 +import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 +import co.electriccoin.zcash.ui.common.model.ZodlAccount
 +import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
-+import co.electriccoin.zcash.ui.design.component.ZashiTextButton
-+import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
-+import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.screen.ExternalUrl
@@ -5395,38 +5492,6 @@ index 000000000..fca069669
 +        onExternalAddresses = { router.forward(ExternalUrl(DonationPolicy.DOCUMENT)) },
 +        onBack = { if (!busy) router.back() }
 +    )
-+}
-+
-+@Suppress("MagicNumber")
-+@Composable
-+fun DonationInvitation(basisZec: String?) {
-+    val context = LocalContext.current
-+    val router = koinInject<NavigationRouter>()
-+    val preferences = remember(context) { DonationPreferences(context) }
-+    var visible by remember {
-+        mutableStateOf(
-+            preferences.mayInvite(System.currentTimeMillis())
-+        )
-+    }
-+    if (visible) {
-+        Column(Modifier.padding(vertical = 12.dp)) {
-+            Text(
-+                stringResource(R.string.private_support_invitation),
-+                style = ZashiTypography.textMd, color = ZashiColors.Text.textPrimary
-+            )
-+            ZashiTextButton(onClick = {
-+                preferences.postpone(System.currentTimeMillis())
-+                visible = false
-+                router.forward(DonationArgs(basisZec))
-+            }) { Text(stringResource(R.string.private_support_title)) }
-+            ZashiTextButton(onClick = { preferences.postpone(System.currentTimeMillis()); visible = false }) {
-+                Text(stringResource(R.string.private_support_not_now))
-+            }
-+            ZashiTextButton(onClick = { preferences.declinePermanently(); visible = false }) {
-+                Text(stringResource(R.string.private_support_never))
-+            }
-+        }
-+    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
 new file mode 100644
@@ -5603,6 +5668,182 @@ index 000000000..999cff62d
 +    val unsupported: Boolean = false,
 +    val canReview: Boolean = false,
 +)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt
+new file mode 100644
+index 000000000..1ef4aee42
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt
+@@ -0,0 +1,154 @@
++package co.electriccoin.zcash.ui.screen.donation
++
++import androidx.compose.foundation.background
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.padding
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.Icon
++import androidx.compose.material3.PlainTooltip
++import androidx.compose.material3.Text
++import androidx.compose.material3.rememberTooltipState
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalContext
++import androidx.compose.ui.res.painterResource
++import androidx.compose.ui.res.stringResource
++import androidx.compose.ui.unit.dp
++import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.compose.ZashiTooltipBox
++import co.electriccoin.zcash.ui.design.component.IconButtonState
++import co.electriccoin.zcash.ui.design.component.ZashiButton
++import co.electriccoin.zcash.ui.design.component.ZashiIconButton
++import co.electriccoin.zcash.ui.design.component.ZashiTextButton
++import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
++import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
++import co.electriccoin.zcash.ui.design.util.stringRes
++import kotlinx.coroutines.withTimeoutOrNull
++import org.koin.compose.koinInject
++
++
++@Composable
++internal fun rememberHomeDonationSupport(blocked: Boolean): HomeDonationSupportState {
++    val context = LocalContext.current
++    val router = koinInject<NavigationRouter>()
++    val preferences = remember(context) { DonationPreferences(context) }
++    // Snapshot at entry: newly observed success waits until the next home visit.
++    val eligibleAtEntry = remember { preferences.mayInviteOnHomeEntry(System.currentTimeMillis()) }
++    var dismissed by remember { mutableStateOf(false) }
++    var introduction by remember { mutableStateOf(false) }
++    val showInvitation = eligibleAtEntry && !dismissed && !blocked
++    LaunchedEffect(showInvitation, blocked) {
++        if (showInvitation) {
++            if (preferences.mayInvite(System.currentTimeMillis())) {
++                preferences.recordInvitationDisplayed(System.currentTimeMillis())
++            } else {
++                dismissed = true
++            }
++        } else if (!blocked && !eligibleAtEntry && !dismissed) {
++            introduction = preferences.claimAutomaticIntroduction()
++        }
++        if (blocked) introduction = false
++    }
++    return HomeDonationSupportState(
++        showInvitation = showInvitation,
++        showIntroduction = introduction && !blocked && !showInvitation,
++        onDonate = {
++            dismissed = true
++            introduction = false
++            preferences.postpone(System.currentTimeMillis())
++            router.forward(DonationArgs())
++        },
++        onLater = {
++            preferences.postpone(System.currentTimeMillis())
++            dismissed = true
++            introduction = false
++        },
++        onNever = {
++            preferences.declinePermanently()
++            dismissed = true
++            introduction = false
++        },
++    )
++}
++
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++internal fun DonationShortcut(state: HomeDonationSupportState) {
++    val tooltip = rememberTooltipState(isPersistent = true)
++    LaunchedEffect(state.showIntroduction) {
++        if (state.showIntroduction) {
++            try {
++                withTimeoutOrNull(INTRODUCTION_MILLIS) { tooltip.show() }
++            } finally {
++                tooltip.dismiss()
++            }
++        }
++    }
++    ZashiTooltipBox(
++        state = tooltip,
++        focusable = false,
++        tooltip = {
++            PlainTooltip {
++                Text(stringResource(R.string.private_support_title), style = ZashiTypography.textSm)
++            }
++        },
++        anchor = {
++            ZashiIconButton(
++                state = IconButtonState(
++                    icon = R.drawable.ic_support_hand_heart,
++                    contentDescription = stringRes(R.string.private_support_title),
++                    onClick = { tooltip.dismiss(); state.onDonate() },
++                ),
++                modifier = Modifier.size(40.dp),
++            )
++        },
++    )
++}
++
++@Composable
++internal fun HomeDonationInvitation(state: HomeDonationSupportState) {
++    Column(
++        modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 20.dp)
++            .fillMaxWidth().background(ZashiColors.Surfaces.bgSecondary, RoundedCornerShape(16.dp)).padding(16.dp),
++        verticalArrangement = Arrangement.spacedBy(8.dp),
++    ) {
++        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
++            Icon(
++                painter = painterResource(R.drawable.ic_support_hand_heart),
++                contentDescription = null,
++                tint = ZashiColors.Text.textPrimary,
++                modifier = Modifier.size(24.dp),
++            )
++            Text(
++                stringResource(R.string.private_support_home_title),
++                modifier = Modifier.weight(1f),
++                style = ZashiTypography.textMd,
++                color = ZashiColors.Text.textPrimary,
++            )
++            ZashiButton(text = stringResource(R.string.private_support_donate), onClick = state.onDonate)
++        }
++        Text(
++            stringResource(R.string.private_support_home_message),
++            style = ZashiTypography.textSm,
++            color = ZashiColors.Text.textSecondary,
++        )
++        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
++            ZashiTextButton(onClick = state.onLater) { Text(stringResource(R.string.private_support_later)) }
++            ZashiTextButton(onClick = state.onNever) { Text(stringResource(R.string.private_support_never)) }
++        }
++    }
++}
++
++private const val INTRODUCTION_MILLIS = 6_000L
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupportState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupportState.kt
+new file mode 100644
+index 000000000..52d5c7f2c
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupportState.kt
+@@ -0,0 +1,10 @@
++package co.electriccoin.zcash.ui.screen.donation
++
++internal data class HomeDonationSupportState(
++    val showInvitation: Boolean = false,
++    val showIntroduction: Boolean = false,
++    val onDonate: () -> Unit = {},
++    val onLater: () -> Unit = {},
++    val onNever: () -> Unit = {},
++)
++
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt
 index d03354a1e..59f3a7516 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt
@@ -6105,6 +6346,45 @@ index c7a9b6193..000000000
 -            createFlexaTransaction(transaction)
 -        }
 -}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt
+index 627591300..af3fdf78d 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/AndroidHome.kt
+@@ -4,0 +5,3 @@ package co.electriccoin.zcash.ui.screen.home
++import co.electriccoin.zcash.ui.screen.donation.rememberHomeDonationSupport
++import co.electriccoin.zcash.ui.screen.donation.DonationShortcut
++import co.electriccoin.zcash.ui.screen.donation.HomeDonationInvitation
+@@ -39,0 +43,3 @@ internal fun AndroidHome() {
++        val support = rememberHomeDonationSupport(
++            blocked = it.message != null || !it.isSyncComplete || appBarState == null
++        )
+@@ -44 +50,3 @@ internal fun AndroidHome() {
+-            transactionWidgetState = transactionWidgetState
++            transactionWidgetState = transactionWidgetState,
++            supportAction = { DonationShortcut(support) },
++            supportInvitation = if (support.showInvitation) ({ HomeDonationInvitation(support) }) else null,
+@@ -49,0 +58 @@ internal fun AndroidHome() {
++@Suppress("MatchingDeclarationName")
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeView.kt
+index 34fb7e33b..a772c9ecb 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeView.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeView.kt
+@@ -50 +50,3 @@ internal fun HomeView(
+-    state: HomeState
++    state: HomeState,
++    supportAction: @Composable () -> Unit = {},
++    supportInvitation: (@Composable () -> Unit)? = null,
+@@ -53 +55 @@ internal fun HomeView(
+-        topBar = { ZashiTopAppBarWithAccountSelection(appBarState) }
++        topBar = { ZashiTopAppBarWithAccountSelection(appBarState, supportAction = supportAction) }
+@@ -60 +62,2 @@ internal fun HomeView(
+-            state = state
++            state = state,
++            supportInvitation = supportInvitation,
+@@ -71,0 +75 @@ private fun Content(
++    supportInvitation: (@Composable () -> Unit)? = null,
+@@ -130,0 +135 @@ private fun Content(
++                    supportInvitation?.let { invitation -> item { invitation() } }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVM.kt
 index 6575cd179..ca5bcfe7f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVM.kt
@@ -6400,14 +6680,6 @@ index a874453ef..259f06f92 100644
 +                                R.string.private_estimated_output
 +                            }
 +                        )
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
-index 48d3039d5..d8e42b87f 100644
---- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
-@@ -146,0 +147,3 @@ fun SwapDetailView(
-+                    if (state.status.status == SwapStatus.SUCCESS && state.donationBasisZec != null) {
-+                        co.electriccoin.zcash.ui.screen.donation.DonationInvitation(state.donationBasisZec)
-+                    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
 index cd7555ecc..5b692645f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
@@ -6647,14 +6919,10 @@ index 13b042bd7..60b0df221 100644
 -                                    stringRes(R.string.transactionDetail_feeSummary),
 +                                    stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
-index ad8bc8549..e8a1475b1 100644
+index ad8bc8549..028003b5c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
-@@ -49,0 +50,3 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
-+        if (state.status == SwapStatus.SUCCESS && !state.isPending && state.donationBasisZec != null) {
-+            co.electriccoin.zcash.ui.screen.donation.DonationInvitation(state.donationBasisZec)
-+        }
-@@ -123 +126 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+@@ -123 +123 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
 -                                title = stringRes(R.string.swapAndPay_totalFees),
 +                                title = stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt
@@ -11217,12 +11485,22 @@ index 423d6742d..a8aeb88ba 100644
 @@ -9 +9 @@
 -    <string name="ironwood_announcement_primary_button">Go to Zodl</string>
 +    <string name="ironwood_announcement_primary_button">Go to ZEC Private</string>
+diff --git a/ui-lib/src/main/res/ui/non_translatable/drawable/ic_support_hand_heart.xml b/ui-lib/src/main/res/ui/non_translatable/drawable/ic_support_hand_heart.xml
+new file mode 100644
+index 000000000..c1e6f124b
+--- /dev/null
++++ b/ui-lib/src/main/res/ui/non_translatable/drawable/ic_support_hand_heart.xml
+@@ -0,0 +1,3 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
++    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFFFF" android:strokeWidth="1.7" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M12,9.4 L8.8,6.3 C6.1,3.6 10.1,0.8 12,3.5 C13.9,0.8 17.9,3.6 15.2,6.3 Z M3,13 L6,13 L6,21 L3,21 Z M6,14 L9,12 L12,12 C14,12 14,15 12,15 L10,15 M12,15 L18,12.5 C20,11.8 21.3,13.7 19.7,15.1 L14,20 L6,19" />
++</vector>
+\ No newline at end of file
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
-index 000000000..39275bb8b
+index 000000000..52d15f3f9
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
-@@ -0,0 +1,21 @@
+@@ -0,0 +1,25 @@
 +<resources>
 +    <string name="private_wallet_transaction_fee" translatable="false">Zcash network fee</string>
 +    <string name="private_provider_costs" translatable="false">NEAR platform fee</string>
@@ -11243,6 +11521,10 @@ index 000000000..39275bb8b
 +    <string name="private_support_never">Don’t ask again</string>
 +    <string name="private_support_once">Donate once</string>
 +    <string name="private_support_description">Choose an amount to support ZEC Private development. Your donation uses a shielded address. Review the amount and network fee before sending.</string>
++    <string name="private_support_home_title">Support ZEC Private</string>
++    <string name="private_support_home_message">Help fund continued development and maintenance.</string>
++    <string name="private_support_donate">Donate</string>
++    <string name="private_support_later">Remind me later</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/strings.xml
 index 813f56457..972dcc8f8 100644
@@ -13061,10 +13343,10 @@ index 000000000..dbd1be1d4
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt
 new file mode 100644
-index 000000000..d34212350
+index 000000000..d5ad9e327
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,101 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import android.content.Context
@@ -13105,6 +13387,65 @@ index 000000000..d34212350
 +        DonationPreferences(context).declinePermanently()
 +        DonationPreferences(context).postpone(1_000_000)
 +        assertFalse(DonationPreferences(context).mayInvite(1_000_000 + 10 * DonationPolicy.COOLDOWN_MILLIS))
++    }
++
++    @Test
++    fun introductionCanBeClaimedOnlyOnceAcrossRecreation() {
++        assertTrue(DonationPreferences(context).claimAutomaticIntroduction())
++        assertFalse(DonationPreferences(context).claimAutomaticIntroduction())
++    }
++
++    @Test
++    fun permanentDeclineAlsoSuppressesAutomaticIntroduction() {
++        DonationPreferences(context).declinePermanently()
++        assertFalse(DonationPreferences(context).claimAutomaticIntroduction())
++    }
++
++    @Test
++    fun homeEntrySnapshotWaitsForSuccessfulActivityOnALaterVisit() {
++        val preferences = DonationPreferences(context)
++        val entryEligibility = preferences.mayInviteOnHomeEntry(1_000_000)
++        preferences.recordSuccessfulTransaction()
++        assertFalse(entryEligibility)
++        assertTrue(DonationPreferences(context).mayInviteOnHomeEntry(1_000_000))
++    }
++
++    @Test
++    fun displayingInvitationStartsCooldownWithoutRequiringDismissal() {
++        val preferences = DonationPreferences(context)
++        preferences.recordSuccessfulTransaction()
++        preferences.recordInvitationDisplayed(1_000_000)
++        assertFalse(DonationPreferences(context).mayInviteOnHomeEntry(1_000_000))
++        assertTrue(preferences.mayInviteOnHomeEntry(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
++    }
++
++    @Test
++    fun replayedDonationHistoryDoesNotExtendCooldownOrQualifyActivity() {
++        val preferences = DonationPreferences(context)
++        val completedAt = 1_000_000L
++        preferences.recordDonationCompleted(completedAt)
++        preferences.recordDonationCompleted(completedAt - 1)
++        preferences.recordDonationCompleted(completedAt)
++        assertFalse(preferences.mayInvite(completedAt + DonationPolicy.COOLDOWN_MILLIS - 1))
++        assertTrue(preferences.mayInvite(completedAt + DonationPolicy.COOLDOWN_MILLIS))
++        assertFalse(preferences.mayInviteOnHomeEntry(completedAt + DonationPolicy.COOLDOWN_MILLIS))
++    }
++
++    @Test
++    fun historicalDonationCannotShortenRecentInvitationCooldown() {
++        val preferences = DonationPreferences(context)
++        preferences.recordInvitationDisplayed(2_000_000)
++        preferences.recordDonationCompleted(1_000_000)
++        assertFalse(preferences.mayInvite(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
++    }
++
++    @Test
++    fun donationCooldownDefersIntroductionWithoutConsumingIt() {
++        val preferences = DonationPreferences(context)
++        preferences.recordDonationCompleted(1_000_000)
++        assertFalse(preferences.claimAutomaticIntroduction(1_000_000))
++        assertTrue(preferences.claimAutomaticIntroduction(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
++        assertFalse(DonationPreferences(context).claimAutomaticIntroduction(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt

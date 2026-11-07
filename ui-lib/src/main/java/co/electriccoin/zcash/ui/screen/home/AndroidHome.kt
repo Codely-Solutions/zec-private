@@ -2,6 +2,9 @@
 
 package co.electriccoin.zcash.ui.screen.home
 
+import co.electriccoin.zcash.ui.screen.donation.rememberHomeDonationSupport
+import co.electriccoin.zcash.ui.screen.donation.DonationShortcut
+import co.electriccoin.zcash.ui.screen.donation.HomeDonationInvitation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -37,14 +40,20 @@ internal fun AndroidHome() {
     val transactionWidgetState by activityWidgetVM.state.collectAsStateWithLifecycle()
 
     state?.let {
+        val support = rememberHomeDonationSupport(
+            blocked = it.message != null || !it.isSyncComplete || appBarState == null
+        )
         HomeView(
             appBarState = appBarState,
             balanceWidgetState = balanceState,
             state = it,
-            transactionWidgetState = transactionWidgetState
+            transactionWidgetState = transactionWidgetState,
+            supportAction = { DonationShortcut(support) },
+            supportInvitation = if (support.showInvitation) ({ HomeDonationInvitation(support) }) else null,
         )
     }
 }
 
 @Serializable
+@Suppress("MatchingDeclarationName")
 object HomeArgs

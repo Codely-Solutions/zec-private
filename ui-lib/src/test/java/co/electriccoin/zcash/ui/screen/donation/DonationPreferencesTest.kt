@@ -39,4 +39,63 @@ class DonationPreferencesTest {
         DonationPreferences(context).postpone(1_000_000)
         assertFalse(DonationPreferences(context).mayInvite(1_000_000 + 10 * DonationPolicy.COOLDOWN_MILLIS))
     }
+
+    @Test
+    fun introductionCanBeClaimedOnlyOnceAcrossRecreation() {
+        assertTrue(DonationPreferences(context).claimAutomaticIntroduction())
+        assertFalse(DonationPreferences(context).claimAutomaticIntroduction())
+    }
+
+    @Test
+    fun permanentDeclineAlsoSuppressesAutomaticIntroduction() {
+        DonationPreferences(context).declinePermanently()
+        assertFalse(DonationPreferences(context).claimAutomaticIntroduction())
+    }
+
+    @Test
+    fun homeEntrySnapshotWaitsForSuccessfulActivityOnALaterVisit() {
+        val preferences = DonationPreferences(context)
+        val entryEligibility = preferences.mayInviteOnHomeEntry(1_000_000)
+        preferences.recordSuccessfulTransaction()
+        assertFalse(entryEligibility)
+        assertTrue(DonationPreferences(context).mayInviteOnHomeEntry(1_000_000))
+    }
+
+    @Test
+    fun displayingInvitationStartsCooldownWithoutRequiringDismissal() {
+        val preferences = DonationPreferences(context)
+        preferences.recordSuccessfulTransaction()
+        preferences.recordInvitationDisplayed(1_000_000)
+        assertFalse(DonationPreferences(context).mayInviteOnHomeEntry(1_000_000))
+        assertTrue(preferences.mayInviteOnHomeEntry(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
+    }
+
+    @Test
+    fun replayedDonationHistoryDoesNotExtendCooldownOrQualifyActivity() {
+        val preferences = DonationPreferences(context)
+        val completedAt = 1_000_000L
+        preferences.recordDonationCompleted(completedAt)
+        preferences.recordDonationCompleted(completedAt - 1)
+        preferences.recordDonationCompleted(completedAt)
+        assertFalse(preferences.mayInvite(completedAt + DonationPolicy.COOLDOWN_MILLIS - 1))
+        assertTrue(preferences.mayInvite(completedAt + DonationPolicy.COOLDOWN_MILLIS))
+        assertFalse(preferences.mayInviteOnHomeEntry(completedAt + DonationPolicy.COOLDOWN_MILLIS))
+    }
+
+    @Test
+    fun historicalDonationCannotShortenRecentInvitationCooldown() {
+        val preferences = DonationPreferences(context)
+        preferences.recordInvitationDisplayed(2_000_000)
+        preferences.recordDonationCompleted(1_000_000)
+        assertFalse(preferences.mayInvite(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
+    }
+
+    @Test
+    fun donationCooldownDefersIntroductionWithoutConsumingIt() {
+        val preferences = DonationPreferences(context)
+        preferences.recordDonationCompleted(1_000_000)
+        assertFalse(preferences.claimAutomaticIntroduction(1_000_000))
+        assertTrue(preferences.claimAutomaticIntroduction(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
+        assertFalse(DonationPreferences(context).claimAutomaticIntroduction(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
+    }
 }
