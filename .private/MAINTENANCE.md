@@ -53,3 +53,7 @@ Dependabot checks Gradle Wrapper and GitHub Actions weekly, allowing patch/minor
 `toolchain-review.yml` runs without signing secrets or write permissions. Its bounded configuration smoke test exposes plugin/deprecation failures early; it does not establish release acceptance. Update `fork.patch` and `source-state.json` for wrapper changes before integration, then run the candidate's required deterministic and real acceptance. Merging and publication remain gated. Same-major updates can still break builds, alter transactions through plugins, or carry security regressions; a version label alone is insufficient approval.
 
 Gradle 8.14.6 is the current maintenance choice. Gradle 9.9.0 exceeds the fully supported range of the retained Kotlin plugin, and production reports deprecated Gradle APIs. Java/Kotlin bytecode target 8 remains intentional compatibility policy while the build runtime is JDK 21. Do not suppress these warnings or switch targets just to clear a summary. Review primary release/compatibility/security notes when changing the toolchain; preserve detailed deprecation logs in the normal candidate build.
+
+## Donation UI review
+
+`.private/donation-review/include.gradle` explicitly adds a debug-only activity for inspecting the production Home and donation components with synthetic activity. It uses the real local reminder policy but cannot submit a payment. Ordinary builds omit this activity. Emulator screenshots establish presentation and reminder interactions; they do not establish wallet transaction or release acceptance.
