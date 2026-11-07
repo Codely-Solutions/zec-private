@@ -12138,7 +12138,7 @@ index 4c13e2085..1a88b2241 100644
 +        const val ZIP321_RECIPIENT = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt
 new file mode 100644
-index 000000000..f1c676607
+index 000000000..94712daf8
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt
 @@ -0,0 +1,404 @@
@@ -12460,7 +12460,7 @@ index 000000000..f1c676607
 +            coEvery { getTransactions(accountUuid) } returns flowOf(listOf(transaction))
 +        }
 +        private val synchronizers = mockk<SynchronizerProvider> {
-+            coEvery { getSynchronizer() } returns synchronizer
++            coEvery { getSynchronizer() } returns this@Fixture.synchronizer
 +        }
 +        private val zec = mockk<SwapAsset> {
 +            every { tokenTicker } returns "zec"

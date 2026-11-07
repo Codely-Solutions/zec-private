@@ -316,7 +316,7 @@ class AutoDonationCoordinatorTest {
             coEvery { getTransactions(accountUuid) } returns flowOf(listOf(transaction))
         }
         private val synchronizers = mockk<SynchronizerProvider> {
-            coEvery { getSynchronizer() } returns synchronizer
+            coEvery { getSynchronizer() } returns this@Fixture.synchronizer
         }
         private val zec = mockk<SwapAsset> {
             every { tokenTicker } returns "zec"
