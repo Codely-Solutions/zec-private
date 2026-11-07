@@ -1,11 +1,15 @@
-# Privacy and network behavior
+# Privacy
 
-ZEC Private is an independent fork. It does not send diagnostics to Zodl support or enable Firebase collection in its FOSS release. Diagnostic exports are initiated by you; inspect them before sharing. They may expose wallet history, amounts, addresses, notes and device details. Never share a seed, viewing key or gift secret.
+Wallet keys and databases are stored on your device. Keep your recovery information secure. The FOSS release does not enable Firebase collection.
 
-Wallet secrets and wallet databases are stored on the device. Back up your recovery information securely. Android sharing and browser actions hand data to another application you choose; that application has its own policies. The repository and release pages require GitHub access, and this private repository requires an authorized account.
+## Network connections
 
-When Tor is enabled, sensitive wallet metadata, transaction and swap-provider requests use Tor and must fail without a direct fallback. Upstream public compact-block downloads and their normal DNS use direct connections. This is not an all-traffic tunnel. Servers can observe connections and timing; Tor and shielded transactions do not eliminate every privacy risk.
+When Tor is enabled, sensitive wallet metadata, transaction and swap-provider requests use Tor and fail if it is unavailable. Public compact-block downloads and normal DNS use direct connections; Tor is not a device-wide tunnel.
 
-The current product uses Zcash wallet infrastructure, NEAR 1Click for swaps/status, and CoinMarketCap for fiat conversion where configured. Gift redemption accepts compatible legacy Zodl and Vizor links. These are functional compatibility boundaries, not endorsements. Provider fees and exchange spreads may apply; a zero fork affiliate fee does not mean a free swap. Review the received amount and current provider conditions.
+NEAR receives swap assets, amounts, recipient/refund addresses and timing. Public-chain transactions and amounts can be correlated. Incoming swaps use fresh shielded recipients, and outgoing swaps use fresh shielded refund addresses. Tor and fresh addresses reduce exposure but cannot erase provider records or guarantee anonymity.
 
-No automatic export of personal wallet data is authorized by this document. Required upstream and dependency copyright/license notices remain in the source and dependency notices.
+Fiat conversion uses CoinMarketCap where enabled. Opening a browser or sharing data hands it to the application you select, under that application's policies.
+
+## Sharing diagnostics
+
+Exports may contain wallet history, addresses, amounts, notes and device details. Inspect them before sharing. Never include a recovery phrase, viewing key or gift secret. Exports are not sent automatically to Zodl or a support service.

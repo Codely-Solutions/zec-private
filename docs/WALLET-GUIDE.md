@@ -2,59 +2,42 @@
 
 ## Installation and updates
 
-Use the APK and `SHA256SUMS` from this repository's [Releases](https://github.com/Sammy-Lastre/zec-private/releases). Production releases support ARM64. Updates require the same signing key and a higher Android versionCode. Preserve your recovery material before troubleshooting an installation, and avoid uninstalling an existing wallet.
+Download the APK and `SHA256SUMS` from [Releases](https://github.com/Sammy-Lastre/zec-private/releases). Releases support ARM64 Android devices. Install updates over the existing app; avoid uninstalling or clearing its data without securing your recovery phrase and birthday.
 
-The release signing certificate SHA-256 is:
+Check the APK against `SHA256SUMS`. To verify the signer, run Android SDK `apksigner verify --print-certs` and compare its certificate SHA-256 with:
 
 ```text
 41:01:74:E0:D6:80:63:8D:19:64:7F:46:E0:E4:B4:1E:A6:25:3C:23:51:AD:FA:84:C5:D9:B1:78:8D:2D:A1:68
 ```
 
-Check the APK checksum against `SHA256SUMS` and its certificate with Android SDK `apksigner verify --print-certs`. A checksum establishes agreement with the downloaded checksum file; verify the expected certificate as well. Automatic phone installation is not configured.
+The package is `com.personal.zecprivate.foss`, so it can coexist with the official wallet.
 
-## Swap costs
+## Swaps and CrossPay
 
-Quote requests use `appFees: []`, omit the upstream referral, and carry no partner JWT or personal API key. ZEC Private requests a 0% app/affiliate fee. Provider, bridge, execution and network costs, together with exchange pricing or spread, can affect the amount received.
+For an incoming swap, choose the source asset/network, amount and refund address. Review the quote and minimum received. Dismissing the quote sends nothing. After accepting, follow its exact deposit instructions from your external wallet. Keep the swap record until settlement or refund completes.
 
-NEAR's published anonymous API platform rate is 0.25% for non-`ANY_INPUT` quotes. Its authenticated 0.20% schedule is an alternative rate. NEAR also lists a 0.0001% protocol fee per transaction. An `ANY_INPUT` platform-fee exemption still leaves other costs. Consult the [fee schedule](https://docs.near-intents.org/resources/fees) and [authentication rules](https://docs.near-intents.org/integration/distribution-channels/1click-api/authentication) for current terms, and review the quoted received amount and Zcash network fee before confirming.
+For CrossPay, choose the recipient asset/network, destination and target amount. Check any required memo or tag, then review the ZEC total before approving. Follow progress in Activity. If a response is delayed, check the existing transaction and swap status before sending again.
 
-A Zcash network fee pays for the transaction that sends ZEC from your wallet, including a CrossPay deposit. It is separate from the provider costs included in the quote. “Total ZEC to spend” includes that network fee; ZEC Private adds no app fee. An incoming swap funded from an external wallet has no Zcash sending fee charged by this wallet.
+ZEC Private adds no app or affiliate fee. Provider costs are included in the quote; the NEAR platform percentage is only part of those costs. See [NEAR's fee schedule](https://docs.near-intents.org/resources/fees) for its current terms.
 
-## Privacy boundaries
+The **Zcash network fee** pays for sending ZEC from your wallet. **Total ZEC to spend** includes it. For incoming swaps funded from another wallet, that sending wallet may charge its own network fee.
 
-NEAR sees quote assets, quantities, recipient, refund address, deposit address and timing. It may correlate requests and public settlement records. Public-chain counterparties and network observers may correlate amounts and timing across chains.
+Quoted output is an estimate; execution can differ. Completed swap details show the provider's executed amount when available. Your wallet transaction shows the ZEC actually received.
 
-Incoming swaps request a fresh shielded recipient. Outgoing swaps request a fresh shielded refund address and use the provider's quote-specific deposit address. Address-generation failure cannot fall back to an existing wallet address. New quotes requiring a TEX deposit are rejected because SDK TEX sends can introduce a wallet-owned transparent intermediate. Existing status and refund recovery remain supported.
+## Recovery and migration
 
-Tor protects sensitive wallet metadata, transaction and provider requests when enabled, without a direct fallback for those requests. Bulk compact-block downloads and their normal DNS remain direct. Normal DNS is permitted. Release HTTP body logging is disabled; the fork adds no analytics or quote proxy. Fresh addresses and Tor do not erase provider records or establish anonymity. See the upstream threat model linked in [the original README](UPSTREAM-README.md).
+Keep your recovery phrase and wallet birthday secure. Never enter a hardware-wallet recovery phrase into this app or share it with anyone.
 
-## Validation and support
+For Ironwood migration, review the plan, fees and privacy warnings before approving. Transfers between pools can reveal amounts and timing. Scheduled transfers need connectivity and Android background access; reopen the app to check pending work. If a migration stalls, inspect its status before resetting anything.
 
-[STATUS](../.private/STATUS.md) records current release evidence. Release validation distinguishes inspected ARM64 production packaging from x86_64 emulator execution. Testnet acceptance covers wallet operations, installed updates, restart, seed recovery and scoped Tor interruption. Unfunded production quote acceptance is separate from funded swap settlement. ARM hardware and biometric approval UI have separate acceptance limits.
+Hardware firmware may call its companion app “Zodl”; that label is used in pairing instructions.
 
-Diagnostics open Android's share chooser. Choose the recipient yourself; exporting does not contact a staffed support team or automatically escalate a provider issue. Upstream's support mailbox is removed from this fork.
+## Gifts
 
+Gift links contain spending secrets. Scan or paste them only in the redemption flow, and keep unfinished redemption state until completion. Never put gift links in diagnostics or public issue reports.
 
-## Incoming swaps
+## Donations and diagnostics
 
-Choose the source asset and network, amount and a valid refund address. Review the received amount, costs and expiry. Dismissing a quote does not fund it. After accepting, follow that swap's exact deposit instructions from your external wallet. Verify its network and amount before sending. Keep the swap record and monitor status; do not assume an accepted quote means settlement. This fork requests no affiliate fee, but provider, network and exchange costs remain possible.
+[Support development](DONATIONS.md) is optional. Saved percentage suggestions start at 0%; every payment needs approval. Review the network fee and skip a donation if the fee makes it uneconomic. In-app donations currently require a software wallet.
 
-## CrossPay
-
-Choose the recipient asset/network, destination and target amount. Review the ZEC cost and destination before approving the wallet transaction. Check any required memo or tag; unsupported instructions must not be improvised. Follow progress in Activity. Never repeat a payment merely because a network response is delayed; inspect the existing transaction and swap status first. Provider terms apply.
-
-## Ironwood migration
-
-Keep the recovery phrase and birthday safe. Review the app's migration prompt, plan and privacy warnings before approving. Moving funds between pools can reveal amounts and timing; splitting transfers reduces some correlation risks. Immediate migration trades that scheduling for speed. The app shows required fees and signing steps, including hardware approval where applicable.
-
-Scheduled Android transfers depend on connectivity and background execution. Follow the app's notification/battery guidance and reopen it to check pending work. Enabling Tor protects sensitive broadcasts; if Tor fails, resolve that connection before continuing. Public bulk block downloads remain direct. Do not reset wallet data to resolve an incomplete migration; inspect its status and recovery guidance.
-
-Hardware firmware may call its compatible companion app “Zodl”; that device label is retained in pairing instructions. Never share the hardware recovery phrase.
-
-## Gift redemption and recovery
-
-Gift links contain spending secrets. Scan or paste them only into the intended redemption flow. Do not share them with support or put them in notes, diagnostics or public issue reports. External links require an in-app scan for safety. Keep unfinished redemption state until the app confirms completion; legacy gift formats remain supported.
-
-## Guidance provenance
-
-The migration and payment guidance was reviewed against the upstream [migration guide](https://support.zodl.com/article/42-moving-your-funds-to-ironwood), [CrossPay guide](https://support.zodl.com/article/24-using-crosspay-to-spend-zec) and [swap guide](https://support.zodl.com/article/26-swapping-into-zec) on 2026-11-06. Those pages describe upstream; this guide describes the retained fork flow and does not promise settlement timing or support services.
+Diagnostics open Android's share chooser. Inspect the export and choose its recipient yourself; no staffed support inbox is configured. See [privacy](PRIVACY.md) before sharing wallet information.
