@@ -26,13 +26,20 @@
         "digest": "sha256:41feebd5b0f1e46b1e719c8428eb20a075d76ab0709c0cd7c794f40471e0acba",
         "original_asset_id": 718880932,
         "source_release": "v3.19.0-private.10"
-      },
+      }
+    },
+    "v3.19.0-private.12": {
       "TESTNET_UPGRADE_FIXTURE.zip": {
-        "release_asset_id": 720072607,
-        "size_in_bytes": 65403381,
-        "digest": "sha256:6178059217f53624dacecb104f01d553325cc14928849e4b7e9bb758cd39a72b",
-        "original_asset_id": 718880931,
-        "source_release": "v3.19.0-private.10"
+        "release_asset_id": 720196012,
+        "size_in_bytes": 65405900,
+        "digest": "sha256:051e57e6334a8156bef53892d2d1fb04510a716b6a35f9e32d966757718118a8",
+        "source_release": "v3.19.0-private.12"
+      },
+      "TESTNET_UPGRADE_FIXTURE.json": {
+        "release_asset_id": 720196013,
+        "size_in_bytes": 2109,
+        "digest": "sha256:9ded49ad69beff6979b577ccac36cb95ba832680c4eac394031d1869f8601656",
+        "source_release": "v3.19.0-private.12"
       }
     }
   },
@@ -68,31 +75,58 @@
       "path": ".private/release-evidence/v3.19.0-private.9-phase3-cleanup-receipt.json",
       "digest": "sha256:c8197b2ff30fa34594e5a47ce420cd116026f71e3cf47e714619b3b7ebdc7d15",
       "source_release": "v3.19.0-private.9",
-      "name": "phase3-cleanup-receipt.json"
+      "name": "phase3-cleanup-receipt.json",
+      "original_byte_archive_asset_id": 720102385,
+      "git_normalized_digest": "sha256:189e9fe9244f0b58d0bfc82a645fa937e388790639eb3ff2f5f02b890d9a2ba6"
     },
     "717438308": {
       "path": ".private/release-evidence/v3.19.0-private.9-phase3-validation-summary.json",
       "digest": "sha256:041e5ead81dcf2472dcd14db5b27be706cfb316db18552f73a37a698b989417d",
       "source_release": "v3.19.0-private.9",
-      "name": "phase3-validation-summary.json"
+      "name": "phase3-validation-summary.json",
+      "original_byte_archive_asset_id": 720102553,
+      "git_normalized_digest": "sha256:7df4a14a9d9fdd201396a9a48350fc788d761a26c7cd45c6227aa7a35909f920"
     },
     "716963494": {
       "path": ".private/release-evidence/v3.19.0-private.8-phase2-cleanup-receipt.json",
       "digest": "sha256:622e36f7d0d9fca8dfc5efbd02a3537b720e58cd6777cf9db7c938ac5e53c2f9",
       "source_release": "v3.19.0-private.8",
-      "name": "phase2-cleanup-receipt.json"
+      "name": "phase2-cleanup-receipt.json",
+      "original_byte_archive_asset_id": 720102851,
+      "git_normalized_digest": "sha256:1d934983ceb301b4635451e59ce7b66bfd0eab56094a9b1d1988b19e2bf9f286"
     },
     "716959540": {
       "path": ".private/release-evidence/v3.19.0-private.8-phase2-validation-summary.json",
       "digest": "sha256:2d0a97d25f3fdc101c76b3996b7fac0309c2387cb0c99f7e8afd396abd44d79c",
       "source_release": "v3.19.0-private.8",
-      "name": "phase2-validation-summary.json"
+      "name": "phase2-validation-summary.json",
+      "original_byte_archive_asset_id": 720102996,
+      "git_normalized_digest": "sha256:4b1701dd353b4cfbf9dad92ab9ebbbaa75ee897fc2e3aaf97befe350e26de291"
     },
     "715451389": {
       "path": ".private/release-evidence/v3.19.0-private.7-core-validation-summary.json",
       "digest": "sha256:db0c751057d75d8beb515c2dc4162ccad889bf9bc7a9f0512c3e6301787a02d4",
       "source_release": "v3.19.0-private.7",
-      "name": "core-validation-summary.json"
+      "name": "core-validation-summary.json",
+      "original_byte_archive_asset_id": 720103244,
+      "git_normalized_digest": "sha256:e027e97d2d72056a611c42e9db33d9f9d2b0558a66dc9a7a8334bc01754a6caf"
+    }
+  },
+  "ui_bridge": {
+    "release_asset_id": 720196447,
+    "size_in_bytes": 8519,
+    "digest": "sha256:b00fff3a0cc0380570ef542c837776a0bd3457324da4cd492476fd9d3369d681",
+    "original_actions_artifact_id": 13489787536,
+    "purpose": "Reusable API35 read-only acceptance bridge; no app data or seeds"
+  },
+  "retired_fixtures": {
+    "v3.19.0-private.10": {
+      "release_asset_id": 720072607,
+      "size_in_bytes": 65403381,
+      "digest": "sha256:6178059217f53624dacecb104f01d553325cc14928849e4b7e9bb758cd39a72b",
+      "original_asset_id": 718880931,
+      "source_release": "v3.19.0-private.10",
+      "reason": "No active baseline uses revision10; revision11 is the current tested baseline and revision12 is preserved for the next update check"
     }
   }
 }
