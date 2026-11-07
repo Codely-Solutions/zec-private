@@ -16,7 +16,9 @@ Check the APK checksum against `SHA256SUMS` and its certificate with Android SDK
 
 Quote requests use `appFees: []`, omit the upstream referral, and carry no partner JWT or personal API key. ZEC Private requests a 0% app/affiliate fee. Provider, bridge, execution and network costs, together with exchange pricing or spread, can affect the amount received.
 
-NEAR's published anonymous API platform rate is 0.25% for non-`ANY_INPUT` quotes. Its authenticated 0.20% schedule is an alternative rate. NEAR also lists a 0.0001% protocol fee per transaction. An `ANY_INPUT` platform-fee exemption still leaves other costs. Consult the [fee schedule](https://docs.near-intents.org/resources/fees) and [authentication rules](https://docs.near-intents.org/integration/distribution-channels/1click-api/authentication) for current terms, and review the quoted received amount and wallet transaction fee before confirming.
+NEAR's published anonymous API platform rate is 0.25% for non-`ANY_INPUT` quotes. Its authenticated 0.20% schedule is an alternative rate. NEAR also lists a 0.0001% protocol fee per transaction. An `ANY_INPUT` platform-fee exemption still leaves other costs. Consult the [fee schedule](https://docs.near-intents.org/resources/fees) and [authentication rules](https://docs.near-intents.org/integration/distribution-channels/1click-api/authentication) for current terms, and review the quoted received amount and Zcash network fee before confirming.
+
+A Zcash network fee pays for the transaction that sends ZEC from your wallet, including a CrossPay deposit. It is separate from the provider costs included in the quote. “Total ZEC to spend” includes that network fee; ZEC Private adds no app fee. An incoming swap funded from an external wallet has no Zcash sending fee charged by this wallet.
 
 ## Privacy boundaries
 

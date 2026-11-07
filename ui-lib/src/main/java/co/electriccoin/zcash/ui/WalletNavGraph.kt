@@ -265,6 +265,9 @@ fun NavGraphBuilder.walletNavGraph(
         composable<WalletBackup> { AndroidWalletBackup(it.toRoute()) }
         composable<ResetZashiArgs> { ResetZashiScreen() }
         composable<AboutArgs> { AboutScreen() }
+        composable<co.electriccoin.zcash.ui.screen.donation.DonationArgs> {
+            co.electriccoin.zcash.ui.screen.donation.DonationScreen(it.toRoute())
+        }
         dialogComposable<IntegrationsArgs> { IntegrationsScreen() }
         composable<ExchangeRateSettingsArgs> { ExchangeRateSettingsScreen() }
         composable(NavigationTargets.CRASH_REPORTING_OPT_IN) { AndroidCrashReportingOptIn() }

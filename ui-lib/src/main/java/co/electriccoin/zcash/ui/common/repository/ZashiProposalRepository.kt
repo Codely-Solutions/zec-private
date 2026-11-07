@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.repository
 
+import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
@@ -36,6 +37,8 @@ interface ZashiProposalRepository {
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
     suspend fun createProposal(zecSend: ZecSend): RegularTransactionProposal
+
+    suspend fun createDonationProposal(zecSend: ZecSend): RegularTransactionProposal
 
     @Throws(TransactionProposalNotCreatedException::class, InsufficientFundsException::class)
     suspend fun createZip321Proposal(zip321Uri: String): Zip321TransactionProposal
@@ -81,6 +84,14 @@ class ZashiProposalRepositoryImpl(
                 account = accountDataSource.getSelectedAccount(),
                 send = zecSend
             )
+        }
+
+    override suspend fun createDonationProposal(zecSend: ZecSend): RegularTransactionProposal =
+        createProposalInternal {
+            val account = accountDataSource.getSelectedAccount()
+            require(account is co.electriccoin.zcash.ui.common.model.ZodlAccount)
+            require(zecSend.destination.address == DonationPolicy.recipient())
+            proposalDataSource.createProposal(account, zecSend).copy(isDonation = true)
         }
 
     override suspend fun createZip321Proposal(zip321Uri: String): Zip321TransactionProposal =
@@ -140,6 +151,19 @@ class ZashiProposalRepositoryImpl(
                     submitState.update { SubmitProposalState.Submitting }
                     try {
                         val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
+                        if (transactionProposal is RegularTransactionProposal && transactionProposal.isDonation) {
+                            require(transactionProposal.destination.address ==
+                                DonationPolicy.recipient())
+                            DonationPolicy.requireShielded(
+                                transactionProposal.proposal,
+                                ZecSend(
+                                    transactionProposal.destination,
+                                    transactionProposal.amount,
+                                    transactionProposal.memo,
+                                    null
+                                )
+                            )
+                        }
                         if (transactionProposal is SwapTransactionProposal) {
                             ZecSwapComposition.validate(transactionProposal.quote)
                         }

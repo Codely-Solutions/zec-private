@@ -51,13 +51,13 @@ internal class EphemeralLockVM(
                                 title = stringRes(it.amount).withStyle(),
                             ),
                             SwapQuoteInfoItem(
-                                description = stringRes(R.string.send_feeSummary),
+                                description = stringRes(R.string.private_wallet_transaction_fee),
                                 title = stringRes(it.proposal.totalFeeRequired()).withStyle(),
                             ),
                         ),
                     amount =
                         SwapQuoteInfoItem(
-                            description = stringRes(R.string.send_amountSummary),
+                            description = stringRes(R.string.private_total_zec_to_spend),
                             title = stringRes(it.amount + it.proposal.totalFeeRequired()).withStyle(),
                         ),
                     secondaryButton =

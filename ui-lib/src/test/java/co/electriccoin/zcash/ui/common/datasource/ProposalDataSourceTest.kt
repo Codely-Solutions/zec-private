@@ -8,12 +8,15 @@ import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
+import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -28,6 +31,40 @@ class ProposalDataSourceTest {
         mockk<ZodlAccount> {
             every { sdkAccount } returns mockk(relaxed = true)
             every { isSpendable } returns true
+        }
+
+    @Test
+    fun multipleZip321PaymentsAreRejectedBeforeSdkProposal() =
+        runBlocking {
+            val synchronizer = mockk<Synchronizer>()
+            val uri = "zcash:$ZIP321_RECIPIENT?amount=0.001&address.1=$ZIP321_RECIPIENT&amount.1=0.002"
+
+            val thrown =
+                assertFailsWith<UnsupportedZip321PaymentCountException> {
+                    dataSource(synchronizer).createZip321Proposal(account, uri)
+                }
+
+            assertEquals("ZIP321 requests must contain exactly one payment", thrown.message)
+            coVerify(exactly = 0) { synchronizer.validateAddress(any()) }
+            coVerify(exactly = 0) { synchronizer.proposeFulfillingPaymentUri(any(), any()) }
+        }
+
+    @Test
+    fun singleZip321PaymentReachesSdkWithTheOriginalUri() =
+        runBlocking {
+            val synchronizer = mockk<Synchronizer>()
+            val uri = "zcash:$ZIP321_RECIPIENT?amount=0.001"
+            val sdkException = IllegalStateException("proposal sentinel")
+            coEvery { synchronizer.validateAddress(ZIP321_RECIPIENT) } returns AddressType.Transparent
+            coEvery { synchronizer.proposeFulfillingPaymentUri(any(), uri) } throws sdkException
+
+            val thrown =
+                assertFailsWith<TransactionProposalNotCreatedException> {
+                    dataSource(synchronizer).createZip321Proposal(account, uri)
+                }
+
+            assertSame(sdkException, thrown.cause)
+            coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, uri) }
         }
 
     @Test
@@ -148,6 +185,7 @@ class ProposalDataSourceTest {
         )
 
     private companion object {
+        const val ZIP321_RECIPIENT = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU"
         const val RECIPIENT = "recipient"
         const val AMOUNT = 100_000L
     }

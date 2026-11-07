@@ -24,3 +24,5 @@ Read the [wallet guide](docs/WALLET-GUIDE.md) for fees, privacy boundaries and s
 ## Development and attribution
 
 See [maintenance and builds](.private/MAINTENANCE.md) for upstream updates, release controls and signing. This fork tracks stable [Zodl Android](https://github.com/zodl-inc/zodl-android) releases. Upstream copyright and the [MIT license](LICENSE) are preserved; the original documentation is in [docs](docs/UPSTREAM-README.md).
+
+[Support development](docs/DONATIONS.md) with an optional shielded ZEC or external XMR donation.

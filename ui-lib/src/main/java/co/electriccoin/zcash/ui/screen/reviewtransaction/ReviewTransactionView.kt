@@ -688,7 +688,7 @@ private fun Zip321Preview() =
                                 message = stringRes("Message"),
                             ),
                             FinancialInfoState(
-                                title = stringRes(co.electriccoin.zcash.ui.R.string.send_feeSummary),
+                                title = stringRes(co.electriccoin.zcash.ui.R.string.private_wallet_transaction_fee),
                                 amount = ZatoshiFixture.new()
                             )
                         ),

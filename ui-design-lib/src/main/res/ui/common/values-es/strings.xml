@@ -420,7 +420,7 @@
 
     <!-- ===== insufficient_funds ===== -->
     <string name="sheet_insufficientBalance_title">Fondos insuficientes</string>
-    <string name="sheet_insufficientBalance_msg">No pudimos crear esta transacción. Tu billetera no tiene suficiente saldo para cubrir tanto el monto de la transacción como las comisiones. Por favor, reduce el monto para considerar las comisiones.</string>
+    <string name="sheet_insufficientBalance_msg">Tu saldo no cubre el monto y la comisión de red de Zcash. Reduce el monto e inténtalo de nuevo.</string>
 
     <!-- ===== integrations ===== -->
     <string name="torSetup_option3_title">Integraciones</string>
@@ -459,7 +459,7 @@
     <!-- ===== pay ===== -->
     <string name="crosspay_help_payWith">CrossPay con</string>
     <string name="pay_info_subtitle">Haz pagos entre cadenas en cualquier moneda o token compatible con NEAR.\n\nSi el deslizamiento o las condiciones de la red resultan en que tu destinatario reciba menos de la cantidad prometida, tu pago será reembolsado menos las comisiones de red.\n\nLos reembolsos solo se aplican a pagos de $300 o más. Los pagos de menos de $300 no son elegibles para reembolso. Verifica todos los detalles antes de continuar.</string>
-    <string name="swapAndPay_slippageWarn">Cualquier parte no utilizada de la comisión por deslizamiento será reembolsada si el intercambio se ejecuta con un deslizamiento menor al esperado.</string>
+    <string name="swapAndPay_slippageWarn">El deslizamiento es un margen para cambios de precio, no una comisión fija. El margen no utilizado se reembolsa.</string>
 
     <!-- ===== payment_request ===== -->
     <string name="send_requestPayment_title">Solicitud de Pago</string>
@@ -795,7 +795,7 @@
     <string name="swap_slippage_low_warning">El slippage %1$s aumenta la probabilidad de que tu swap no se complete y sea reembolsado. Considera usar %2$s, especialmente para montos mayores.</string>
     <string name="swap_slippage_low_warning_1">menor al %s%%</string>
     <string name="swap_slippage_low_warning_2">%s%% o más</string>
-    <string name="pay_slippage_info">Podrías pagar hasta %s más, además de las comisiones de transacción.</string>
+    <string name="pay_slippage_info">Podrías pagar hasta %s más si cambia el precio. Las comisiones de red de Zcash son adicionales.</string>
     <string name="swapAndPay_from">De</string>
     <string name="send_error_insufficientFunds">Fondos insuficientes</string>
     <string name="balance_availableTitle">Disponible: </string>

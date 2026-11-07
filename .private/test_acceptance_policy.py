@@ -86,7 +86,9 @@ class AcceptancePolicyTest(unittest.TestCase):
         receipt['funding_setup']=dict(tor_exit_verified=False,tor_transport_verified=True,
                                      proxy_unavailable_failed_closed=True,persistent_tor_connection=True,txid='c'*64)
         receipt['sync_preflight']=dict(passed=True,mode='advancing-scan',scanned_height=12340,network_height=12345)
-        receipt['stages']['send'].update(fee_zatoshi=10000,ui_review=True,ui_cancel_no_submission=True,ui_approval=True,ui_approval_actions=1)
+        receipt['stages']['send'].update(fee_zatoshi=10000,ui_review=True,ui_cancel_no_submission=True,ui_approval=True,ui_approval_actions=1,
+            shielded_donation=True,multi_recipient_sdk_accepted=True,multi_recipient_wallet_rejected=True,
+            identifying_memo=False,multi_recipient_submitted=False)
         receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000,app_transaction_state='Confirmed')
         return receipt
 

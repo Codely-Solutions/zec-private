@@ -16,9 +16,11 @@ import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.migration.MigrationNavigator
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
+import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
+import co.electriccoin.zcash.ui.screen.donation.DonationArgs
 import co.electriccoin.zcash.ui.screen.send.Send
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -33,6 +35,50 @@ import kotlin.test.assertEquals
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class CancelProposalFlowUseCaseTest {
+    @Test
+    fun donationCancellationClearsProposalsAndRetainsDonationFormWithoutClearingSend() =
+        runTest {
+            val proposal =
+                RegularTransactionProposal(
+                    destination = WalletAddress.Unified.new("recipient"),
+                    amount = Zatoshi(1234L),
+                    memo = Memo(""),
+                    proposal = mockk<Proposal>(),
+                    isDonation = true
+                )
+            val zashiRepository =
+                mockk<ZashiProposalRepository>(relaxed = true) {
+                    coEvery { getTransactionProposal() } returns proposal
+                }
+            val keystoneRepository = mockk<KeystoneProposalRepository>(relaxed = true)
+            val ledgerPipeline = mockk<LedgerProposalPipeline>(relaxed = true)
+            val clearSend = mockk<ObserveClearSendUseCase>(relaxed = true)
+            val router = FakeNavigationRouter()
+            val useCase =
+                CancelProposalFlowUseCase(
+                    zashiProposalRepository = zashiRepository,
+                    keystoneProposalRepository = keystoneRepository,
+                    ledgerProposalPipeline = ledgerPipeline,
+                    navigationRouter = router,
+                    observeClearSend = clearSend,
+                    accountDataSource =
+                        mockk<AccountDataSource> {
+                            coEvery { getSelectedAccount() } returns mockk<ZodlAccount>(relaxed = true)
+                        },
+                    swapRepository = mockk<SwapRepository>(relaxed = true),
+                    migrationNavigator = FakeMigrationNavigator(),
+                )
+
+            useCase()
+
+            coVerify(exactly = 1) { zashiRepository.clear() }
+            coVerify(exactly = 1) { keystoneRepository.clear() }
+            coVerify(exactly = 1) { ledgerPipeline.clear() }
+            coVerify(exactly = 0) { clearSend.requestClear() }
+            assertEquals(listOf(DonationArgs::class), router.backToCalls)
+            assertEquals(0, router.backCalls)
+        }
+
     @Test
     fun migrationSweepProposalNavigatesBackToMigrationReviewInsteadOfSend() =
         runTest {

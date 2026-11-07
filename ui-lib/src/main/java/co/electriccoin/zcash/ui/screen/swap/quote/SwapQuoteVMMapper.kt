@@ -140,7 +140,12 @@ internal class SwapQuoteVMMapper {
 
     private fun SwapQuoteInternalState.createTotalAmountState(): SwapQuoteInfoItem =
         SwapQuoteInfoItem(
-            description = stringRes(R.string.swapAndPay_totalAmount),
+            description =
+                if (quote.destinationAsset.isZCashAsset) {
+                    stringRes(R.string.swapAndPay_totalAmount)
+                } else {
+                    stringRes(R.string.private_total_zec_to_spend)
+                },
             title = stringResByCurrencyNumber(total, quote.originAsset.tokenTicker, minDecimals = 0).withStyle(),
             subtitle = stringResByDynamicCurrencyNumber(totalUsd, FiatCurrency.USD.symbol).withStyle()
         )

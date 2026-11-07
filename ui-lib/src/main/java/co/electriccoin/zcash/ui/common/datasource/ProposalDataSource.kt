@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.datasource
 
+import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 import cash.z.ecc.android.sdk.SdkSynchronizer
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.exception.PcztException
@@ -93,6 +94,8 @@ class InsufficientFundsException(
 
 class TexUnsupportedOnKSException : Exception("TEX addresses are unsupported on Keystone")
 
+class UnsupportedZip321PaymentCountException : Exception("ZIP321 requests must contain exactly one payment")
+
 /**
  * Every proposal it creates is for an account that can spend: a view-only account is refused with
  * [co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException] before the SDK is
@@ -113,7 +116,11 @@ class ProposalDataSourceImpl(
                     destination = send.destination,
                     amount = send.amount,
                     memo = send.memo,
-                    proposal = synchronizer.proposeSend(account = account.sdkAccount, send = send),
+                    proposal = synchronizer.proposeSend(account = account.sdkAccount, send = send).also { proposal ->
+                        if (send.destination.address == DonationPolicy.recipient()) {
+                            DonationPolicy.requireShielded(proposal, send)
+                        }
+                    },
                 )
             }
         }
@@ -136,7 +143,13 @@ class ProposalDataSourceImpl(
                                     validatingRecipients = null
                                 )
                     ) {
-                        is ZIP321.ParserResult.Request -> request.paymentRequest.payments[0]
+                        is ZIP321.ParserResult.Request -> {
+                            // Review shows one payment; the SDK fulfills the entire URI.
+                            if (request.paymentRequest.payments.size != 1) {
+                                throw UnsupportedZip321PaymentCountException()
+                            }
+                            request.paymentRequest.payments.single()
+                        }
 
                         else -> throw TransactionProposalNotCreatedException(
                             IllegalArgumentException("Invalid ZIP321 URI"),
@@ -161,7 +174,13 @@ class ProposalDataSourceImpl(
                             .convertZecToZatoshi(),
                     memo = Memo(payment.memo?.data?.decodeToString() ?: ""),
                     proposal = synchronizer.proposeFulfillingPaymentUri(account = account.sdkAccount, uri = zip321Uri),
-                )
+                ).also { reviewed ->
+                    if (reviewed.destination.address == DonationPolicy.recipient()) {
+                        DonationPolicy.requireShielded(
+                            reviewed.proposal, ZecSend(reviewed.destination, reviewed.amount, reviewed.memo, null)
+                        )
+                    }
+                }
             }
         }
 
@@ -347,6 +366,8 @@ class ProposalDataSourceImpl(
             throw InsufficientFundsException(e)
         } catch (e: TransactionProposalNotCreatedException) {
             throw e
+        } catch (e: UnsupportedZip321PaymentCountException) {
+            throw e
         } catch (e: Exception) {
             throw TransactionProposalNotCreatedException(e)
         }
@@ -480,7 +501,8 @@ data class RegularTransactionProposal(
     override val destination: WalletAddress,
     override val amount: Zatoshi,
     override val memo: Memo,
-    override val proposal: Proposal
+    override val proposal: Proposal,
+    val isDonation: Boolean = false,
 ) : SendTransactionProposal
 
 data class Zip321TransactionProposal(

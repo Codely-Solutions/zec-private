@@ -5,6 +5,7 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
+import co.electriccoin.zcash.ui.common.datasource.UnsupportedZip321PaymentCountException
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -36,6 +37,10 @@ class OnZip321ScannedUseCase(
     private val navigateToErrorUseCase: NavigateToErrorUseCase
 ) {
     suspend operator fun invoke(zip321: Zip321ParseUriValidation.Valid, scanArgs: ScanArgs) {
+        if (zip321.payment.payments.size != 1) {
+            navigateToErrorUseCase(ErrorArgs.General(UnsupportedZip321PaymentCountException()))
+            return
+        }
         when (scanArgs.flow) {
             ADDRESS_BOOK -> {
                 addressBookFlow(zip321)

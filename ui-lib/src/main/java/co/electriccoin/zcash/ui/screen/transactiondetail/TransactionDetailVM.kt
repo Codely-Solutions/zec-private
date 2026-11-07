@@ -224,6 +224,15 @@ class TransactionDetailVM(
                             isSlippageRealized = transaction.swap.status?.isSlippageRealized == true,
                             isPending = isPending(transaction),
                             completedTimestamp = createTimestampStringRes(transaction),
+                            donationBasisZec = transaction.transaction.fee?.let { fee ->
+                                (transaction.transaction.amount - fee).value.toBigDecimal().movePointLeft(8)
+                                    .subtract(transaction.swap.status?.refundedFormatted ?: java.math.BigDecimal.ZERO)
+                                    .takeIf {
+                                        !isPending(transaction) && it.signum() > 0 &&
+                                            transaction.swap.status?.status ==
+                                            co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
+                                    }?.toPlainString()
+                            },
                         )
                     }
 
