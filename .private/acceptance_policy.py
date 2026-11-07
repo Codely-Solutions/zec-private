@@ -151,7 +151,9 @@ def validate_core(receipt, expected_inputs):
             not 0 < send.get('auto_fee_zatoshi', 0) < send.get('auto_amount_zatoshi', 0) or
             not re.fullmatch('[0-9a-f]{64}', str(send.get('auto_tx_id', ''))) or
             send.get('auto_tx_id') == send.get('txId') or
-            stages['restart'].get('auto_restart_confirmed') is not True):
+            stages['restart'].get('auto_restart_confirmed') is not True or
+            stages['restore'].get('auto_received_zatoshi') != send.get('auto_amount_zatoshi') or
+            stages['restore'].get('auto_mined_height', 0) <= 0):
         raise ValueError('Fresh UI authorization, one real automatic payment without approval and restart evidence required')
     if send.get('ui_approval_actions') != 1:
         raise ValueError('Exactly one real UI approval action required')

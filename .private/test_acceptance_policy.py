@@ -94,7 +94,8 @@ class AcceptancePolicyTest(unittest.TestCase):
             auto_provider_evidence='synthetic-success; real native shielded transaction',
             auto_amount_zatoshi=1000000, auto_fee_zatoshi=10000, auto_tx_id='f'*64)
         receipt['stages']['restart']['auto_restart_confirmed'] = True
-        receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000,app_transaction_state='Confirmed')
+        receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000,app_transaction_state='Confirmed',
+            auto_received_zatoshi=1000000, auto_mined_height=12347)
         return receipt
 
     def test_required_real_evidence(self):
@@ -118,7 +119,9 @@ class AcceptancePolicyTest(unittest.TestCase):
                                   ('send', 'auto_consent_disabled', False),
                                   ('send', 'auto_provider_evidence', 'real provider swap'),
                                   ('send', 'auto_fee_zatoshi', 1000000),
-                                  ('restart', 'auto_restart_confirmed', False)]:
+                                  ('restart', 'auto_restart_confirmed', False),
+                                  ('restore', 'auto_received_zatoshi', 0),
+                                  ('restore', 'auto_mined_height', 0)]:
             bad = self.receipt(); bad['stages'][stage][key] = value
             with self.subTest(automatic=key), self.assertRaises(ValueError): validate_core(bad, 'inputs')
         for name in CORE_STAGES:

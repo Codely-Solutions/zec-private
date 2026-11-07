@@ -385,7 +385,7 @@ def run(adb, root, apks, manifest):
             private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15,check=False).stdout)
             allowed_fields=('claimId','fundingTxId','fundingProvider','fundedBalance','balanceBeforeSend','feeZatoshi','senderConfirmedBalance','restoreMinedHeight','restoreTransactionState','candidateTxIds','initialSubmitType','autoTxId','autoAmountZatoshi','autoFeeZatoshi',
                             'autoEnabledUiConsent','autoUiApprovalActions','autoExactlyOnce','autoNativeConfirmed',
-                            'autoConsentDisabled','autoProviderEvidence','autoRestartConfirmed')
+                            'autoConsentDisabled','autoProviderEvidence','autoRestoreAmountZatoshi','autoRestoreMinedHeight','autoRestartConfirmed')
             report['transaction_evidence']={key:private[key] for key in allowed_fields if key in private}
         except (ValueError,subprocess.SubprocessError):pass
         (root/'core-testnet-result.json').write_text(json.dumps(report,indent=2)+'\n')
