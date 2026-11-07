@@ -5,6 +5,7 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.datasource.QuoteLowAmountException
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
@@ -19,6 +20,7 @@ import co.electriccoin.zcash.ui.common.usecase.CancelSwapUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
+import co.electriccoin.zcash.ui.design.util.getString
 import io.mockk.verify
 import io.mockk.every
 import io.mockk.mockk
@@ -35,12 +37,16 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import java.math.BigDecimal
+import java.util.Locale
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 /**
  * The ViewModel-level counterpart of [SwapQuoteVMMapperTest]: the "Swap from" / "Pay from" row of a
@@ -109,6 +115,27 @@ class SwapQuoteVMTest {
             verify(exactly = 1) { cancelQuote() }
         }
 
+    @Test
+    fun lowAmountErrorKeepsExactProviderThreshold() =
+        runTest {
+            val vm = vm(
+                account = zashi(),
+                quoteData = SwapQuoteData.Error(
+                    mode = SwapMode.FLEX_INPUT,
+                    exception = QuoteLowAmountException(
+                        asset = SwapAssetTestFixture.zecAsset(),
+                        amount = BigDecimal("12283949"),
+                        amountFormatted = BigDecimal("0.12283949"),
+                    ),
+                ),
+            )
+            collect(vm)
+
+            val state = assertNotNull(vm.state.value) as SwapQuoteState.Error
+            val subtitle = state.subtitle.getString(RuntimeEnvironment.getApplication(), Locale.US)
+            assertTrue(subtitle.contains("0.12283949 zec"), subtitle)
+        }
+
     private fun fromRowTitle(vm: SwapQuoteVM): Int {
         val state = assertNotNull(vm.state.value) as SwapQuoteState.Success
         return state.items
@@ -120,6 +147,9 @@ class SwapQuoteVMTest {
     private fun vm(
         account: WalletAccount,
         cancelQuote: CancelSwapQuoteUseCase = mockk(relaxed = true),
+        quoteData: SwapQuoteData = SwapQuoteData.Success(
+            quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
+        ),
     ) =
         SwapQuoteVM(
             observeProposal =
@@ -137,11 +167,7 @@ class SwapQuoteVMTest {
             swapRepository =
                 mockk<SwapRepository>(relaxed = true) {
                     every { quote } returns
-                        MutableStateFlow(
-                            SwapQuoteData.Success(
-                                quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
-                            )
-                        )
+                        MutableStateFlow(quoteData)
                 },
             cancelSwapQuote = cancelQuote,
             cancelSwap = mockk<CancelSwapUseCase>(relaxed = true),

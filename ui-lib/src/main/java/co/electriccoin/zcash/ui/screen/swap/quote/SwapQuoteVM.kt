@@ -31,7 +31,7 @@ import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
-import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
+import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationArgs
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -112,9 +112,10 @@ internal class SwapQuoteVM(
                 is QuoteLowAmountException if quote.exception.amountFormatted != null -> {
                     stringRes(
                         R.string.swap_quote_error_too_low_try_at_least,
-                        stringResByDynamicCurrencyNumber(
+                        stringResByCurrencyNumber(
                             amount = quote.exception.amountFormatted,
-                            ticker = quote.exception.asset.tokenTicker
+                            ticker = quote.exception.asset.tokenTicker,
+                            minDecimals = 0,
                         )
                     )
                 }
@@ -186,7 +187,6 @@ internal data class SwapQuoteInternalState(
 ) {
     val total: BigDecimal = quote.getTotal(proposal?.proposal)
     val totalUsd: BigDecimal = quote.getTotalUsd(proposal?.proposal)
-    val totalFees = quote.affiliateFee
     val totalFeesZatoshi: Zatoshi = quote.getTotalFeesZatoshi(proposal?.proposal)
     val totalFeesUsd: BigDecimal = quote.getTotalFeesUsd(proposal?.proposal)
 }

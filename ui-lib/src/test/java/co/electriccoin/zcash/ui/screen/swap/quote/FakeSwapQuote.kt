@@ -29,6 +29,7 @@ internal data class FakeSwapQuote(
     override val amountOut: BigDecimal = BigDecimal("99"),
     override val amountOutUsd: BigDecimal = BigDecimal("99"),
     override val amountOutFormatted: BigDecimal = BigDecimal("99"),
+    override val minimumAmountOut: BigDecimal? = null,
     override val affiliateFee: BigDecimal = BigDecimal.ZERO,
     override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO,
     override val timestamp: Instant = Clock.System.now(),
