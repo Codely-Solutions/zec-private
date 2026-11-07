@@ -74,16 +74,19 @@ class AutoDonationCoordinator(
         val key = status.depositAddress.address
         val enrollment = runCatching { store.reserve(key) }.getOrNull() ?: return
         scope.launch {
+            val diagnostic = AttemptDiagnostic(store)
             try {
                 // Leave margin for the SDK's ten-confirmation receipt policy.
                 val reason = withTimeoutOrNull(30 * 60 * 1000L) {
-                    donate(status, enrollment)
+                    donate(status, enrollment, diagnostic)
                 } ?: "Automatic donation outcome uncertain. Check Activity."
                 store.outcome(key, reason)
             } catch (e: CancellationException) {
+                diagnostic.failure(e)
                 store.outcome(key, "Automatic donation outcome uncertain. Check Activity.")
                 throw e
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                diagnostic.failure(e)
                 store.outcome(key, "Automatic donation outcome uncertain. Check Activity.")
             }
         }
@@ -118,7 +121,10 @@ class AutoDonationCoordinator(
         }
     }
 
-    private suspend fun donate(status: SwapQuoteStatus, enrollment: JSONObject): String {
+    private suspend fun donate(
+        status: SwapQuoteStatus, enrollment: JSONObject, diagnostic: AttemptDiagnostic
+    ): String {
+        diagnostic.stage = "native_evidence"
         val incoming = enrollment.getBoolean("incoming")
         val txids = if (incoming) status.destinationTransactionIds.map(store::hash) else {
             val values = enrollment.getJSONArray("txids")
@@ -152,6 +158,7 @@ class AutoDonationCoordinator(
             }
             delay(5_000)
         }
+        diagnostic.stage = "spending_gate"
         return AutoDonationSpendingGate.mutex.withLock {
             if (hasActiveUiSpend()) return@withLock "Skipped: another transaction is under review"
             val consent = store.consent() ?: return@withLock "Skipped: authorization unavailable"
@@ -162,8 +169,11 @@ class AutoDonationCoordinator(
             if ((account.spendableShieldedBalance?.value ?: 0L) <= amount) {
                 return@withLock "Skipped: insufficient shielded funds"
             }
+            diagnostic.stage = "recipient"
             val send = ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(amount), Memo(""), null)
+            diagnostic.stage = "proposal"
             val proposal = proposals.createProposal(account, send)
+            diagnostic.stage = "shielded_validation"
             DonationPolicy.requireShielded(proposal.proposal, send)
             val fee = proposal.proposal.totalFeeRequired().value
             if (fee >= amount) return@withLock "Skipped: network fee is at least the donation"
@@ -172,10 +182,14 @@ class AutoDonationCoordinator(
             }
             if (hasActiveUiSpend()) return@withLock "Skipped: another transaction is under review"
             if (account(enrollment) == null) return@withLock "Skipped: authorization unavailable"
+            diagnostic.stage = "spending_key"
             val key = keys.getZashiSpendingKey()
             if (account(enrollment) == null || hasActiveUiSpend()) return@withLock "Skipped: authorization changed"
             DonationPolicy.requireShielded(proposal.proposal, send)
+            diagnostic.stage = "submission"
             val result = proposals.submitTransaction(proposal.proposal, key)
+            diagnostic.submission(result)
+            diagnostic.stage = "record_transaction"
             store.recordTransactionIds(status.depositAddress.address, result.txIds)
             if (result is SubmitResult.Success) {
                 val displayAmount = BigDecimal.valueOf(amount, 8).stripTrailingZeros().toPlainString()
@@ -185,4 +199,24 @@ class AutoDonationCoordinator(
             }
         }
     }
+
+    /** Fixed stages and classes only; never exception messages or transaction/provider contents. */
+    private class AttemptDiagnostic(private val store: AutoDonationStore) {
+        var stage = "reserved"
+        fun failure(error: Exception) = store.diagnostic(JSONObject().put("stage", stage)
+            .put("result", "exception").put("exception_class", error.javaClass.simpleName)
+            .put("cause_classes", JSONArray(generateSequence(error as Throwable) { it.cause }
+                .take(4).map { it.javaClass.simpleName }.toList())))
+        fun submission(result: SubmitResult) {
+            val value = JSONObject().put("stage", stage).put("result", result.javaClass.simpleName)
+            when (result) {
+                is SubmitResult.Failure -> value.put("sdk_code", result.code)
+                is SubmitResult.Error -> value.put("exception_class", result.cause.javaClass.simpleName)
+                is SubmitResult.GrpcFailure -> value.put("reason", result.reason?.name)
+                else -> Unit
+            }
+            store.diagnostic(value)
+        }
+    }
+
 }

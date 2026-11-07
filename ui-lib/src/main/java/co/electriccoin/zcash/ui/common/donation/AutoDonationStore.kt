@@ -46,6 +46,12 @@ class AutoDonationStore(context: Context) {
     @Synchronized fun disable() { check(prefs.edit().remove("consent").commit()) }
     fun latestOutcome(): String? = prefs.getString("outcome", null)
 
+    val latestDiagnostic: String? get() = prefs.getString("diagnostic", null)
+
+    @Synchronized internal fun diagnostic(value: JSONObject) {
+        check(prefs.edit().putString("diagnostic", value.toString()).commit())
+    }
+
     internal fun hash(value: String): String = MessageDigest.getInstance("SHA-256")
         .digest(value.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 

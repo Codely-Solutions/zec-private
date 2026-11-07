@@ -235,6 +235,13 @@ class AutoDonationCoordinatorTest {
         assertTrue(assertNotNull(f.store.latestOutcome()).contains("uncertain"))
         coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
         f.verifyNoSigning()
+        val diagnostic = org.json.JSONObject(assertNotNull(f.store.latestDiagnostic))
+        assertTrue(diagnostic.getString("stage") == "shielded_validation")
+        assertTrue(diagnostic.getString("exception_class") == "IllegalArgumentException")
+        assertTrue(!diagnostic.toString().contains("deposit"))
+        f.engine.onStatus(f.status)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
     }
 
     @Test fun revocationQueuedBeforeCommitGateWins() = runTest {
