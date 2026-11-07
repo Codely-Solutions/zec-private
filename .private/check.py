@@ -10,6 +10,9 @@ def check(root=ROOT):
     errors=check_exclusions(root)
     def need(ok, message):
         if not ok: errors.append(message)
+    for path in (root/'ui-lib/src/main/java').rglob('*.kt'):
+        need('AutoDonation' not in path.read_text(),
+             'Automatic donation wiring reintroduced: '+str(path.relative_to(root)))
     source=(root/COMMON/'datasource/NearSwapDataSource.kt').read_text()
     need('appFees = emptyList()' in source, 'Affiliate-free quote construction changed')
     need('AppFee(' not in source and 'affiliateAddress' not in source, 'Affiliate recipient reintroduced')

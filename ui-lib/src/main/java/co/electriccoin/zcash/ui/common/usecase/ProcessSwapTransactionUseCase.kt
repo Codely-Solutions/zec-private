@@ -11,12 +11,10 @@ import kotlinx.coroutines.yield
 class ProcessSwapTransactionUseCase(
     private val metadataRepository: MetadataRepository,
     private val swapRepository: SwapRepository,
-    private val autoDonations: co.electriccoin.zcash.ui.common.donation.AutoDonationCoordinator? = null,
     // private val ephemeralAddressRepository: EphemeralAddressRepository,
 ) {
     suspend operator fun invoke(transactionProposal: SwapTransactionProposal, result: SubmitResult) {
         saveSwapToMetadata(transactionProposal)
-        autoDonations?.enroll(transactionProposal.quote, result.txIds.filter { it.isNotEmpty() })
         // invalidateEphemeralAddress(result)
         submitDepositTransactions(transactionProposal, result)
     }

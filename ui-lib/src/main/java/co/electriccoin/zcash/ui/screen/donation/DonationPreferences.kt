@@ -2,20 +2,11 @@ package co.electriccoin.zcash.ui.screen.donation
 
 import android.content.Context
 import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
-import java.math.BigDecimal
 
-/** Local suggestions and prompt suppression only. These preferences never authorize a payment. */
+/** Local suppression settings for the optional donation invitation. */
 @Suppress("MagicNumber")
 class DonationPreferences(context: Context) {
     private val preferences = context.getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE)
-
-    var percent: BigDecimal
-        get() = preferences.getString("percent", "0")?.toBigDecimalOrNull()
-            ?.takeIf { it >= BigDecimal.ZERO && it <= BigDecimal(100) } ?: BigDecimal.ZERO
-        set(value) {
-            require(value >= BigDecimal.ZERO && value <= BigDecimal(100))
-            preferences.edit().putString("percent", value.toPlainString()).apply()
-        }
 
     fun mayInvite(now: Long): Boolean {
         val last = preferences.getLong("last_invitation", 0)

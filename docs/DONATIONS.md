@@ -2,7 +2,7 @@
 
 Donations help fund development and maintenance. They are optional.
 
-Open **Settings → More → Support development** to donate shielded ZEC. Choose **Donate once** to review a payment, or enable **Automatic swap donations** to authorize a percentage of future successful swaps. Automatic support starts off and skips a donation when its extra network fee is at least the donation amount.
+Open **Settings → More → Support development** to donate shielded ZEC. Enter an amount and review the payment before sending.
 
 You can also donate using the addresses below. Check the asset, network and destination before sending.
 

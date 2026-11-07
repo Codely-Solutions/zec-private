@@ -17,13 +17,5 @@
     <string name="private_support_not_now">Not now</string>
     <string name="private_support_never">Don’t ask again</string>
     <string name="private_support_once">Donate once</string>
-    <string name="private_support_auto_title">Automatic swap donations</string>
-    <string name="private_support_auto_off">Off</string>
-    <string name="private_support_auto_on">On</string>
-    <string name="private_support_auto_description">Donate your chosen percentage after each successful swap. Skip when the donation network fee is equal to or greater than the donation.</string>
-    <string name="private_support_auto_percent">Percentage of ZEC swapped</string>
-    <string name="private_support_auto_save">Save automatic donations</string>
-    <string name="private_support_auto_authorize">Enable automatic donations of %1$s%% after successful swaps</string>
-    <string name="private_support_auto_saved">Saved: %1$s%% after successful swaps</string>
-    <string name="private_support_auto_save_failed">Automatic donations were not saved. Try again.</string>
+    <string name="private_support_description">Choose an amount to support ZEC Private development. Your donation uses a shielded address. Review the amount and network fee before sending.</string>
 </resources>

@@ -38,6 +38,6 @@ Gift links contain spending secrets. Scan or paste them only in the redemption f
 
 ## Donations and diagnostics
 
-[Support development](DONATIONS.md) is optional. Automatic swap donations start off. Enabling them authorizes the chosen percentage for future successful swaps, without another donation prompt. Payments whose network fee is at least the donation amount are skipped. One-time donations retain their payment review. In-app donations require a software wallet.
+[Support development](DONATIONS.md) is optional. Choose an amount and review each payment before sending. In-app donations require a software wallet.
 
 Diagnostics open Android's share chooser. Inspect the export and choose its recipient yourself; no staffed support inbox is configured. See [privacy](PRIVACY.md) before sharing wallet information.
