@@ -117,7 +117,9 @@ class DonationPolicyTest {
         reject(step().setTransactionRequest(
             "zcash:${DonationPolicy.RECIPIENT}?amount=0.001&address.1=${DonationPolicy.RECIPIENT}&amount.1=0.001"
         ))
-        reject(step().setTransactionRequest("not a payment request"))
+        assertFailsWith<org.zecdev.zip321.ZIP321.Errors.InvalidURI> {
+            DonationPolicy.requireShielded(proposal(step().setTransactionRequest("not a payment request")), send())
+        }
         reject(step().clearPaymentOutputPools().addPaymentOutputPools(
             paymentPool(ValuePool.Orchard).setPaymentIndex(1)
         ))
