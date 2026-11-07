@@ -1,4 +1,5 @@
 {
+  ".gitattributes": "cf5333dd3a6465966c3a385185440eab1942b6e4fb38d351072b68f2092f4f0a",
   ".gitignore": "74b5068a2b14b802dba76347166332fb62bfc59da186ea6ce856f92e4ee07f05",
   ".idea/.gitignore": "a8df54bc0601450ad47f6ca44417937b61518e3bc7fa4bb38e27cccf84adc484",
   ".idea/.name": "87207dd969bfadc26a0562de091c6a1153d87da2620beca9f8a641c88e0ab2db",
@@ -2717,7 +2718,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt": "cfd0afef042f66c2d6889f95a79d7d794c52f6e6212e733847a8d4e19524e99a",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ServerSelectionPolicyTest.kt": "a6bc6380c28a3d8162108946f1a23a5b0890b23c1b4410423765d46ae6c8e3e7",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SubmitResultMixedFailureMappingTest.kt": "3c266495241afdcf89b4130ff3f288309d67a216c1a739db969abb1acc9aab26",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt": "3bfd3cab300846ff6bd67f11ad1711d3b9fcb910ddbbf7ed7dee38df47d0af86",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt": "51f7477cd713ba9f06335add2e880bdc214f97e09035283555d4743269ec5877",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationStoreTest.kt": "e603627a4edd0014bf7c033db4cf150dbc74eab40078318bf924b5c4243f9974",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt": "e25ffb6bdc0819283553d2d78cdddd68821cfc42186f9473745adbd1b234e268",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/AccountIdOffsetTest.kt": "6168c188a68c41119809541cb3c09af83b5557acfdf7980c1ded749a2a18a5b9",

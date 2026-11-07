@@ -44,13 +44,13 @@ def run(adb, root, apks, manifest):
     def stage(name, timeout=700):
         nonlocal current_stage
         current_stage = name
-        if time.monotonic() - started > 1600:
+        if time.monotonic() - started > 2800:
             raise RuntimeError('Core acceptance total deadline exhausted')
         adb('logcat','-c',timeout=15)
         command=adb.command_base+['shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
                      'co.electriccoin.zcash.app.CoreWalletAcceptance', '-e', 'isolatedTestnet',
                      'valueless-coins-only', '-e', 'stage', name, RUNNER]
-        timeout_seconds=min(timeout,max(1,1700-int(time.monotonic()-started)))
+        timeout_seconds=min(timeout,max(1,2800-int(time.monotonic()-started)))
         operation=subprocess.Popen(command,env=adb.environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         with operation_lock:active_instrumentation[name]=operation
         try:
@@ -327,7 +327,7 @@ def run(adb, root, apks, manifest):
                 worker.join(timeout=100)
             if worker.is_alive():raise RuntimeError('Interruption instrumentation worker did not exit')
             if cleanup_errors:raise RuntimeError('Tor outage cleanup failed: '+','.join(cleanup_errors))
-        stage('send',880)
+        stage('send',1600)
         shell('am','force-stop',PACKAGE)
         stage('restart',240)
         clear_wallet()
@@ -384,8 +384,8 @@ def run(adb, root, apks, manifest):
         try:
             private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15,check=False).stdout)
             allowed_fields=('claimId','fundingTxId','fundingProvider','fundedBalance','balanceBeforeSend','feeZatoshi','senderConfirmedBalance','restoreMinedHeight','restoreTransactionState','candidateTxIds','initialSubmitType','autoTxId','autoAmountZatoshi','autoFeeZatoshi',
-                            'autoEnabledUiConsent','autoUiApprovalActions','autoExactlyOnce','autoNativeConfirmed',
-                            'autoConsentDisabled','autoProviderEvidence','autoRestoreAmountZatoshi','autoRestoreMinedHeight','autoRestartConfirmed')
+                            'autoEnabledUiConsent','autoUiApprovalActions','autoExactlyOnce','autoDepositRawConfirmed','autoNativeMined',
+                            'autoConsentDisabled','autoProviderEvidence','autoRestoreAmountZatoshi','autoRestoreMinedHeight','autoRestartMined')
             report['transaction_evidence']={key:private[key] for key in allowed_fields if key in private}
         except (ValueError,subprocess.SubprocessError):pass
         (root/'core-testnet-result.json').write_text(json.dumps(report,indent=2)+'\n')

@@ -144,14 +144,14 @@ def validate_core(receipt, expected_inputs):
             send.get('identifying_memo') is not False or send.get('multi_recipient_submitted') is not False):
         raise ValueError('Real shielded donation and fail-closed multi-recipient review evidence required')
     if (not all(send.get(key) is True for key in ('auto_enabled_ui_consent', 'auto_exactly_once',
-                                                'auto_native_confirmed', 'auto_consent_disabled')) or
+                                                'auto_deposit_raw_confirmed', 'auto_native_mined', 'auto_consent_disabled')) or
             send.get('auto_payment_approval_actions') != 0 or
             send.get('auto_provider_evidence') != 'synthetic-success; real native shielded transaction' or
             send.get('auto_amount_zatoshi') != 1000000 or
             not 0 < send.get('auto_fee_zatoshi', 0) < send.get('auto_amount_zatoshi', 0) or
             not re.fullmatch('[0-9a-f]{64}', str(send.get('auto_tx_id', ''))) or
             send.get('auto_tx_id') == send.get('txId') or
-            stages['restart'].get('auto_restart_confirmed') is not True or
+            stages['restart'].get('auto_restart_mined') is not True or
             stages['restore'].get('auto_received_zatoshi') != send.get('auto_amount_zatoshi') or
             stages['restore'].get('auto_mined_height', 0) <= 0):
         raise ValueError('Fresh UI authorization, one real automatic payment without approval and restart evidence required')

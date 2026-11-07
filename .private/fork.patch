@@ -1,3 +1,10 @@
+diff --git a/.gitattributes b/.gitattributes
+new file mode 100644
+index 000000000..26b9ea8f1
+--- /dev/null
++++ b/.gitattributes
+@@ -0,0 +1 @@
++.private/fork.patch text eol=lf
 diff --git a/.gitignore b/.gitignore
 index 31940f5da..0e8dbc645 100644
 --- a/.gitignore
@@ -12138,10 +12145,10 @@ index 4c13e2085..1a88b2241 100644
 +        const val ZIP321_RECIPIENT = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt
 new file mode 100644
-index 000000000..94712daf8
+index 000000000..5fd6754b8
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinatorTest.kt
-@@ -0,0 +1,404 @@
+@@ -0,0 +1,393 @@
 +package co.electriccoin.zcash.ui.common.donation
 +
 +import android.content.Context
@@ -12164,13 +12171,11 @@ index 000000000..94712daf8
 +import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 +import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 +import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
-+import co.electriccoin.zcash.ui.common.model.NetworkDimension
 +import co.electriccoin.zcash.ui.common.model.SubmitResult
 +import co.electriccoin.zcash.ui.common.model.SwapAsset
 +import co.electriccoin.zcash.ui.common.model.SwapQuote
 +import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 +import co.electriccoin.zcash.ui.common.model.SwapStatus
-+import co.electriccoin.zcash.ui.common.model.VersionInfo
 +import co.electriccoin.zcash.ui.common.model.ZodlAccount
 +import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 +import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -12180,8 +12185,6 @@ index 000000000..94712daf8
 +import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
-+import io.mockk.mockkObject
-+import io.mockk.unmockkObject
 +import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.MutableStateFlow
@@ -12192,7 +12195,6 @@ index 000000000..94712daf8
 +import kotlinx.coroutines.test.advanceUntilIdle
 +import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.runTest
-+import org.junit.After
 +import org.junit.Before
 +import org.junit.Test
 +import org.junit.runner.RunWith
@@ -12216,12 +12218,6 @@ index 000000000..94712daf8
 +    @Before fun reset() {
 +        context.getSharedPreferences("private_auto_donation_v1", Context.MODE_PRIVATE).edit().clear().commit()
 +        context.getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE).edit().clear().commit()
-+        mockkObject(VersionInfo.Companion)
-+        every { VersionInfo.NETWORK_DIMENSION } returns NetworkDimension.MAINNET
-+    }
-+
-+    @After fun releaseMocks() {
-+        unmockkObject(VersionInfo.Companion)
 +    }
 +
 +    @Test fun savedSuggestionAndUnenrolledSuccessCannotSpend() = runTest {

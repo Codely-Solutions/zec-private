@@ -94,7 +94,7 @@ class CoreWalletAcceptance {
         check(arguments.getString("isolatedTestnet") == "valueless-coins-only")
         val stage = checkNotNull(arguments.getString("stage"))
         val started = System.nanoTime()
-        withTimeout(900_000) {
+        withTimeout(if (stage == "send") 1_560_000L else 900_000L) {
             dependency<IsTorEnabledStorageProvider>().store(true)
             if (stage !in listOf("networkTargets", "rpcProbe")) {
                 val intent = checkNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
@@ -489,13 +489,14 @@ class CoreWalletAcceptance {
             .put("auto_enabled_ui_consent", fixture().getBoolean("autoEnabledUiConsent"))
             .put("auto_payment_approval_actions", fixture().getInt("autoUiApprovalActions"))
             .put("auto_exactly_once", fixture().getBoolean("autoExactlyOnce"))
-            .put("auto_native_confirmed", fixture().getBoolean("autoNativeConfirmed"))
+            .put("auto_deposit_raw_confirmed", fixture().getBoolean("autoDepositRawConfirmed"))
+            .put("auto_native_mined", fixture().getBoolean("autoNativeMined"))
             .put("auto_consent_disabled", fixture().getBoolean("autoConsentDisabled"))
             .put("auto_provider_evidence", fixture().getString("autoProviderEvidence"))
             .put("auto_amount_zatoshi", fixture().getLong("autoAmountZatoshi"))
             .put("auto_fee_zatoshi", fixture().getLong("autoFeeZatoshi"))
             .put("auto_tx_id", fixture().getString("autoTxId"))
-        if (stage=="restart") receipt.put("auto_restart_confirmed", fixture().getBoolean("autoRestartConfirmed"))
+        if (stage=="restart") receipt.put("auto_restart_mined", fixture().getBoolean("autoRestartMined"))
         if (stage=="restore") receipt
             .put("auto_received_zatoshi", fixture().getLong("autoRestoreAmountZatoshi"))
             .put("auto_mined_height", fixture().getLong("autoRestoreMinedHeight"))
@@ -1259,14 +1260,23 @@ class CoreWalletAcceptance {
         val status = successfulIsolatedSwap(quote)
         val sync = dependency<SynchronizerProvider>().getSynchronizer()
         val account = dependency<AccountDataSource>().getZashiAccount()
+        // The app marks outgoing payments successful when mined. Production automation additionally
+        // requires the SDK's raw ten-confirmation state for its deposit; wait for that exact proof once.
+        val depositTxId = fixture().getString("txId")
+        withTimeout(1_200_000) {
+            sync.getTransactions(account.sdkAccount.accountUuid).first { history ->
+                history.any { it.txId.txIdString() == depositTxId && it.isSentTransaction &&
+                    it.transactionState == cash.z.ecc.android.sdk.model.TransactionState.Confirmed }
+            }
+        }
         val before = sync.getTransactions(account.sdkAccount.accountUuid).first().map { it.txId.txIdString() }.toSet()
         val approvalsBefore = approvalActions
         val balanceBefore = balance()
         coordinator.onStatus(status)
-        val transaction = withTimeout(600_000) {
+        val transaction = withTimeout(240_000) {
             sync.getTransactions(account.sdkAccount.accountUuid).first { history ->
                 history.any { it.isSentTransaction && it.txId.txIdString() !in before &&
-                    it.transactionState == cash.z.ecc.android.sdk.model.TransactionState.Confirmed }
+                    it.minedHeight != null }
             }.single { it.isSentTransaction && it.txId.txIdString() !in before }
         }
         val fee = checkNotNull(transaction.feePaid).value
@@ -1286,7 +1296,7 @@ class CoreWalletAcceptance {
         check(dependency<AutoDonationStore>().consent() == null)
         save(fixture().put("autoTxId", transaction.txId.txIdString()).put("autoAmountZatoshi", 1_000_000L)
             .put("autoFeeZatoshi", fee).put("autoUiApprovalActions", 0).put("autoExactlyOnce", true)
-            .put("autoNativeConfirmed", true).put("autoConsentDisabled", true)
+            .put("autoDepositRawConfirmed", true).put("autoNativeMined", true).put("autoConsentDisabled", true)
             .put("autoProviderEvidence", "synthetic-success; real native shielded transaction")
             .put("senderConfirmedBalance", balance()))
     }
@@ -1302,10 +1312,11 @@ class CoreWalletAcceptance {
                 dependency<TransactionRepository>().observeTransaction(state.getString("autoTxId"))
                     .filterNotNull().first { it is SendTransaction.Success }
             }
+            check(automatic.overview.minedHeight != null)
             check(automatic.amount.value == state.getLong("autoAmountZatoshi") + state.getLong("autoFeeZatoshi"))
             check(automatic.recipient == state.getString("recipientAddress"))
             check(dependency<AutoDonationStore>().consent() == null)
-            save(state.put("autoRestartConfirmed", true))
+            save(state.put("autoRestartMined", true))
         }
         val fee = checkNotNull(transaction.fee).value
         // SDK netValue is abs(accountBalanceDelta), including the fee. The

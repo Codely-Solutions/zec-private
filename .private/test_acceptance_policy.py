@@ -90,10 +90,10 @@ class AcceptancePolicyTest(unittest.TestCase):
             shielded_donation=True,multi_recipient_sdk_accepted=True,multi_recipient_wallet_rejected=True,
             identifying_memo=False,multi_recipient_submitted=False)
         receipt['stages']['send'].update(auto_enabled_ui_consent=True, auto_exactly_once=True,
-            auto_native_confirmed=True, auto_consent_disabled=True, auto_payment_approval_actions=0,
+            auto_deposit_raw_confirmed=True, auto_native_mined=True, auto_consent_disabled=True, auto_payment_approval_actions=0,
             auto_provider_evidence='synthetic-success; real native shielded transaction',
             auto_amount_zatoshi=1000000, auto_fee_zatoshi=10000, auto_tx_id='f'*64)
-        receipt['stages']['restart']['auto_restart_confirmed'] = True
+        receipt['stages']['restart']['auto_restart_mined'] = True
         receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000,app_transaction_state='Confirmed',
             auto_received_zatoshi=1000000, auto_mined_height=12347)
         return receipt
@@ -115,11 +115,12 @@ class AcceptancePolicyTest(unittest.TestCase):
         for stage, key, value in [('send', 'auto_enabled_ui_consent', False),
                                   ('send', 'auto_payment_approval_actions', 1),
                                   ('send', 'auto_exactly_once', False),
-                                  ('send', 'auto_native_confirmed', False),
+                                  ('send', 'auto_deposit_raw_confirmed', False),
+                                  ('send', 'auto_native_mined', False),
                                   ('send', 'auto_consent_disabled', False),
                                   ('send', 'auto_provider_evidence', 'real provider swap'),
                                   ('send', 'auto_fee_zatoshi', 1000000),
-                                  ('restart', 'auto_restart_confirmed', False),
+                                  ('restart', 'auto_restart_mined', False),
                                   ('restore', 'auto_received_zatoshi', 0),
                                   ('restore', 'auto_mined_height', 0)]:
             bad = self.receipt(); bad['stages'][stage][key] = value
