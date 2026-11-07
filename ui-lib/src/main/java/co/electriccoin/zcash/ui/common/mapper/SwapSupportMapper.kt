@@ -10,8 +10,8 @@ import co.electriccoin.zcash.ui.design.component.ZashiMessageState
 import co.electriccoin.zcash.ui.design.util.StringResourceColor
 import co.electriccoin.zcash.ui.design.util.StyledStringStyle
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByDateTime
-import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.styledStringResource
 import co.electriccoin.zcash.ui.design.util.withStyle
 import java.math.BigDecimal
@@ -116,7 +116,7 @@ class SwapSupportMapper {
             styledStringResource(
                 R.string.transaction_detail_info_incomplete_deposit_message,
                 StyledStringStyle(StringResourceColor.WARNING),
-                stringResByDynamicCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker)
+                stringResByCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker, minDecimals = 0)
                     .withStyle(style),
                 stringResByDateTime(deadline, true).withStyle(style),
             ),

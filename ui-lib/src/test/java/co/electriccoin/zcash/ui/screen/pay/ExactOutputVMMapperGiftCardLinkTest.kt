@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.repository.GiftCardSecretFixture
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -21,6 +22,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
@@ -88,6 +90,44 @@ class ExactOutputVMMapperGiftCardLinkTest {
 
             assertFalse(state.primaryButton?.isEnabled ?: true, name)
         }
+    }
+
+    @Test
+    fun computedTokenInputMatchesRequestedAtomicAmount() {
+        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 8)
+        val fiat = NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499"))
+        val computed = mapper.createAmountInnerState(fiat, NumberTextFieldInnerState(), asset)
+        val expected = BigDecimal("0.12283949")
+        assertEquals(expected, computed.amount)
+        assertEquals(
+            stringResByNumber(expected, minDecimals = 0, includeGroupingSeparator = false),
+            computed.innerTextFieldState.value
+        )
+
+        var requested: BigDecimal? = null
+        val state = mapper.createState(
+            internalState("ordinary-address").copy(asset = asset, amount = computed, fiatAmount = fiat),
+            callbacks.copy(onRequestSwapQuoteClick = { amount, _, _ -> requested = amount })
+        )
+        assertNotNull(state.primaryButton).onClick()
+        assertEquals(expected, requested)
+    }
+
+    @Test
+    fun fiatEditUsesExactAtomicTokenAmount() {
+        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 6)
+        var updated: NumberTextFieldInnerState? = null
+        val state = mapper.createState(
+            internalState("ordinary-address").copy(asset = asset),
+            callbacks.copy(onTextFieldChange = { amount, _ -> updated = amount })
+        )
+        state.amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499")))
+        val expected = BigDecimal("0.122839")
+        assertEquals(expected, assertNotNull(updated).amount)
+        assertEquals(
+            stringResByNumber(expected, minDecimals = 0, includeGroupingSeparator = false),
+            assertNotNull(updated).innerTextFieldState.value
+        )
     }
 
     private fun internalState(
