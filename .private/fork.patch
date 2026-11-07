@@ -5230,6 +5230,18 @@ index eb47e1885..a415a0918 100644
 -    private val flexaRepository: FlexaRepository,
 @@ -46 +43,0 @@ class ResetZashiUseCase(
 -            flexaRepository.disconnect()
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationArgs.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationArgs.kt
+new file mode 100644
+index 000000000..14a4deb26
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationArgs.kt
+@@ -0,0 +1,6 @@
++package co.electriccoin.zcash.ui.screen.donation
++
++import kotlinx.serialization.Serializable
++
++@Serializable
++data class DonationArgs(val basisZec: String? = null)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt
 new file mode 100644
 index 000000000..271ffcd64
@@ -5267,10 +5279,10 @@ index 000000000..271ffcd64
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt
 new file mode 100644
-index 000000000..1c43371ce
+index 000000000..7f8b36711
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt
-@@ -0,0 +1,195 @@
+@@ -0,0 +1,194 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.activity.compose.BackHandler
@@ -5280,7 +5292,6 @@ index 000000000..1c43371ce
 +import androidx.compose.foundation.layout.padding
 +import androidx.compose.foundation.rememberScrollState
 +import androidx.compose.foundation.verticalScroll
-+import androidx.compose.material3.Button
 +import androidx.compose.material3.OutlinedTextField
 +import androidx.compose.material3.Text
 +import androidx.compose.material3.TextButton
@@ -5305,6 +5316,7 @@ index 000000000..1c43371ce
 +import co.electriccoin.zcash.ui.common.model.ZodlAccount
 +import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 +import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
++import co.electriccoin.zcash.ui.design.component.ZashiButton
 +import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
 +import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
 +import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarBackNavigation
@@ -5313,11 +5325,7 @@ index 000000000..1c43371ce
 +import java.math.BigDecimal
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.launch
-+import kotlinx.serialization.Serializable
 +import org.koin.compose.koinInject
-+
-+@Serializable
-+data class DonationArgs(val basisZec: String? = null)
 +
 +@Suppress("MagicNumber", "CyclomaticComplexMethod", "TooGenericExceptionCaught")
 +@Composable
@@ -5403,7 +5411,10 @@ index 000000000..1c43371ce
 +            Text(stringResource(R.string.private_support_fee), Modifier.padding(vertical = 12.dp))
 +            if (failed) Text(stringResource(R.string.private_support_failed))
 +            if (unsupported) Text(stringResource(R.string.private_support_software_only))
-+            Button(
++            ZashiButton(
++                text = stringResource(R.string.private_support_review),
++                isLoading = busy,
++                modifier = Modifier.fillMaxWidth(),
 +                enabled = !busy && zatoshi != null && parsedPercent != null &&
 +                    DonationPolicy.recipient() != null,
 +                onClick = {
@@ -5437,7 +5448,7 @@ index 000000000..1c43371ce
 +                        }
 +                    }
 +                }
-+            ) { Text(stringResource(R.string.private_support_review)) }
++            )
 +        }
 +    }
 +}
@@ -6134,6 +6145,13 @@ index 3a2e4768c..ef94b82dc 100644
 @@ -329 +329 @@ sealed interface RedeemGiftState {
 -                walletName = stringRes("Zodl"),
 +                walletName = stringRes("ZEC Private"),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/AndroidReviewTransaction.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/AndroidReviewTransaction.kt
+index 227797764..667728a05 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/AndroidReviewTransaction.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/AndroidReviewTransaction.kt
+@@ -13 +13 @@ fun AndroidReviewTransaction() {
+-    BackHandler { state?.onBack?.invoke() }
++    BackHandler(enabled = state != null) { state?.onBack?.invoke() }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVM.kt
 index 7f73faf20..91bbbc0fe 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/reviewtransaction/ReviewTransactionVM.kt
@@ -6474,16 +6492,17 @@ index c9e6612fa..63eee36c5 100644
 +                                }
 +                            )
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-index 00fe60557..329abe3a2 100644
+index 00fe60557..f054c40ed 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 @@ -191,2 +191 @@ class TransactionDetailVM(
 -                                transaction.metadata.swapMetadata
 -                                    ?.totalFees
 +                                transaction.transaction.fee
-@@ -227,0 +227,9 @@ class TransactionDetailVM(
+@@ -227,0 +227,10 @@ class TransactionDetailVM(
 +                            donationBasisZec = transaction.transaction.fee?.let { fee ->
-+                                (transaction.transaction.amount - fee).value.toBigDecimal().movePointLeft(8)
++                                (transaction.transaction.amount - fee).value
++                                    .toBigDecimal().movePointLeft(ZEC_DECIMAL_PLACES)
 +                                    .subtract(transaction.swap.status?.refundedFormatted ?: java.math.BigDecimal.ZERO)
 +                                    .takeIf {
 +                                        !isPending(transaction) && it.signum() > 0 &&
@@ -6491,6 +6510,9 @@ index 00fe60557..329abe3a2 100644
 +                                            co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
 +                                    }?.toPlainString()
 +                            },
+@@ -630,0 +640,2 @@ class TransactionDetailVM(
++
++private const val ZEC_DECIMAL_PLACES = 8
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt
 index 13b042bd7..60b0df221 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt
@@ -12218,14 +12240,14 @@ index 000000000..c88bca3b4
 +    )
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCaseTest.kt
-index 3cd0d3f1e..832d4b456 100644
+index 3cd0d3f1e..8743375c2 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CancelProposalFlowUseCaseTest.kt
 @@ -18,0 +19 @@ import co.electriccoin.zcash.ui.common.model.LedgerAccount
 +import co.electriccoin.zcash.ui.common.model.ZodlAccount
 @@ -21,0 +23 @@ import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 +import co.electriccoin.zcash.ui.screen.donation.DonationArgs
-@@ -35,0 +38,44 @@ class CancelProposalFlowUseCaseTest {
+@@ -35,0 +38,45 @@ class CancelProposalFlowUseCaseTest {
 +    @Test
 +    fun donationCancellationClearsProposalsAndRetainsDonationFormWithoutClearingSend() =
 +        runTest {
@@ -12266,7 +12288,8 @@ index 3cd0d3f1e..832d4b456 100644
 +            coVerify(exactly = 1) { keystoneRepository.clear() }
 +            coVerify(exactly = 1) { ledgerPipeline.clear() }
 +            coVerify(exactly = 0) { clearSend.requestClear() }
-+            assertEquals(listOf(DonationArgs::class), router.backToCalls)
++            assertEquals(1, router.backToCalls.size)
++            assertEquals(DonationArgs::class, router.backToCalls.single())
 +            assertEquals(0, router.backCalls)
 +        }
 +

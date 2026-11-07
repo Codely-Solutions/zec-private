@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,6 +31,7 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
+import co.electriccoin.zcash.ui.design.component.ZashiButton
 import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
 import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
 import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarBackNavigation
@@ -40,11 +40,7 @@ import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionArgs
 import java.math.BigDecimal
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
 import org.koin.compose.koinInject
-
-@Serializable
-data class DonationArgs(val basisZec: String? = null)
 
 @Suppress("MagicNumber", "CyclomaticComplexMethod", "TooGenericExceptionCaught")
 @Composable
@@ -130,7 +126,10 @@ fun DonationScreen(args: DonationArgs) {
             Text(stringResource(R.string.private_support_fee), Modifier.padding(vertical = 12.dp))
             if (failed) Text(stringResource(R.string.private_support_failed))
             if (unsupported) Text(stringResource(R.string.private_support_software_only))
-            Button(
+            ZashiButton(
+                text = stringResource(R.string.private_support_review),
+                isLoading = busy,
+                modifier = Modifier.fillMaxWidth(),
                 enabled = !busy && zatoshi != null && parsedPercent != null &&
                     DonationPolicy.recipient() != null,
                 onClick = {
@@ -164,7 +163,7 @@ fun DonationScreen(args: DonationArgs) {
                         }
                     }
                 }
-            ) { Text(stringResource(R.string.private_support_review)) }
+            )
         }
     }
 }

@@ -10,6 +10,6 @@ import org.koin.androidx.compose.koinViewModel
 fun AndroidReviewTransaction() {
     val vm = koinViewModel<ReviewTransactionVM>()
     val state by vm.state.collectAsStateWithLifecycle()
-    BackHandler { state?.onBack?.invoke() }
+    BackHandler(enabled = state != null) { state?.onBack?.invoke() }
     state?.let { ReviewTransactionView(it) }
 }
