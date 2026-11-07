@@ -20,13 +20,11 @@ import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
-import co.electriccoin.zcash.ui.common.model.NetworkDimension
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
-import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -36,8 +34,6 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkObject
-import io.mockk.unmockkObject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,7 +44,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -72,12 +67,6 @@ class AutoDonationCoordinatorTest {
     @Before fun reset() {
         context.getSharedPreferences("private_auto_donation_v1", Context.MODE_PRIVATE).edit().clear().commit()
         context.getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE).edit().clear().commit()
-        mockkObject(VersionInfo.Companion)
-        every { VersionInfo.NETWORK_DIMENSION } returns NetworkDimension.MAINNET
-    }
-
-    @After fun releaseMocks() {
-        unmockkObject(VersionInfo.Companion)
     }
 
     @Test fun savedSuggestionAndUnenrolledSuccessCannotSpend() = runTest {
