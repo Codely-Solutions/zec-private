@@ -45,7 +45,7 @@ internal fun AndroidHome() {
 
     state?.let {
         val support = rememberHomeDonationSupport(
-            blocked = it.message != null || !it.isSyncComplete || appBarState == null,
+            blocked = it.message != null || !it.isSyncComplete,
             onDonate = { donationRouter.forward(DonationArgs()) },
         )
         HomeView(

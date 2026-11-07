@@ -13,6 +13,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberTooltipState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +46,13 @@ internal fun rememberHomeDonationSupport(blocked: Boolean, onDonate: () -> Unit)
     val eligibleAtEntry = remember { preferences.mayInviteOnHomeEntry(System.currentTimeMillis()) }
     var dismissed by remember { mutableStateOf(false) }
     var introduction by remember { mutableStateOf(false) }
+    DisposableEffect(preferences) {
+        val release = preferences.observeSuppression {
+            dismissed = true
+            introduction = false
+        }
+        onDispose { release() }
+    }
     val showInvitation = eligibleAtEntry && !dismissed && !blocked
     LaunchedEffect(showInvitation, blocked) {
         if (showInvitation) {
