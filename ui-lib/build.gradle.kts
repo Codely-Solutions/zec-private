@@ -203,6 +203,8 @@ dependencies {
     "fossImplementation"(libs.zxingcpp)
     api(libs.zcash.sdk)
     implementation(libs.zcash.sdk.backend)
+    // Expose the pinned SDK's existing runtime for proposal privacy validation; no new runtime component.
+    implementation("com.google.protobuf:protobuf-javalite:4.34.0")
     implementation(libs.zcash.sdk.incubator)
     implementation(libs.zcash.bip39)
     implementation(libs.tink)

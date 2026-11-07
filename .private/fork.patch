@@ -3012,7 +3012,7 @@ index f41234151..a0ce9dd18 100644
 +    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open ZEC Private manually at each scheduled time to send.</string>
 diff --git a/ui-lib/build.gradle.kts b/ui-lib/build.gradle.kts
-index 717b3f997..88ea2fafa 100644
+index 717b3f997..ea5f35eb0 100644
 --- a/ui-lib/build.gradle.kts
 +++ b/ui-lib/build.gradle.kts
 @@ -155,8 +154,0 @@ androidComponents {
@@ -3030,10 +3030,13 @@ index 717b3f997..88ea2fafa 100644
 +            because("Preserve the released wallet SDK runtime after removing Flexa's transitive constraints")
 +        }
 +    }
-@@ -214,2 +210,0 @@ dependencies {
+@@ -208,0 +206,2 @@ dependencies {
++    // Expose the pinned SDK's existing runtime for proposal privacy validation; no new runtime component.
++    implementation("com.google.protobuf:protobuf-javalite:4.34.0")
+@@ -214,2 +212,0 @@ dependencies {
 -    api(libs.flexa.core)
 -    api(libs.flexa.spend)
-@@ -216,0 +212 @@ dependencies {
+@@ -216,0 +214 @@ dependencies {
 +    api(projects.walletFoundationLib)
 diff --git a/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/support/util/EmailUtilTest.kt b/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/support/util/EmailUtilTest.kt
 deleted file mode 100644
