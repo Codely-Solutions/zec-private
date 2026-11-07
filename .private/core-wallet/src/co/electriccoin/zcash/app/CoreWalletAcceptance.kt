@@ -29,6 +29,11 @@ import cash.z.ecc.android.sdk.type.ServerValidation
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.internal.Backend
 import cash.z.ecc.android.sdk.internal.model.TorClient
+import cash.z.ecc.android.sdk.internal.model.LazyTorClient
+import cash.z.ecc.android.sdk.util.WalletClientFactory
+import co.electriccoin.lightwallet.client.CombinedWalletClient
+import co.electriccoin.lightwallet.client.ServiceMode
+import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import cash.z.ecc.android.sdk.internal.model.TorHttp
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -557,8 +562,72 @@ class CoreWalletAcceptance {
     }
 
     private fun rejectionCode(description: String): Int? =
-        Regex("Failed to submit transaction \\((-?\\d+)\\):").find(description)
+        Regex("""Failed to submit transaction \((-?\d+)\):""").find(description)
             ?.groupValues?.get(1)?.toIntOrNull()
+
+    /** Only these fixed diagnostic categories can leave captured native exception text. */
+    private fun safeRpcReasons(text: String?): List<String> {
+        val lowered = text.orEmpty().lowercase()
+        return listOf("timeout", "timed out", "tor", "uninitialized", "disposed", "connection refused",
+            "connection reset", "tls", "certificate", "handshake", "dns", "network unreachable",
+            "circuit", "bootstrap", "unavailable", "transport", "invalid argument", "deserialize")
+            .filter { if (it == "tor") Regex("""\btor\b""").containsMatchIn(lowered) else lowered.contains(it) }.take(12)
+    }
+
+    /** Reproduces production's cached Group Tor client, without constructing a wallet or transaction. */
+    private suspend fun groupedNativeRpcProbe(tor: TorClient): JSONObject {
+        val result = JSONObject().put("wallet_access", false).put("valid_transaction_submissions", 0)
+            .put("service_mode", "Tor Group").put("malformed_submit_calls", 0)
+        val holder = LazyTorClient { tor.isolatedTorClient() }
+        var ownedClient: CombinedWalletClient? = null
+        var stage = "combined_client_create"
+        val started = System.nanoTime()
+        try {
+            val client = WalletClientFactory(context, holder).create(
+                LightWalletEndpoint(host = "testnet.zec.rocks", port = 443, isSecure = true)
+            )
+            ownedClient = client
+            // The same deterministic, non-wallet group name is reused for height and malformed submit.
+            val group = ServiceMode.Group("submit-" + "0".repeat(64))
+            stage = "group_latest_height"
+            val height = withTimeout(30_000) { client.getLatestBlockHeight(serviceMode = group) }
+            result.put("height_response_class", height.javaClass.simpleName)
+            when (height) {
+                is Response.Success -> { check(height.result.value > 0); result.put("height", height.result.value) }
+                is Response.Failure -> {
+                    result.put("sdk_code", height.code).put("cause_class", height.cause.javaClass.simpleName)
+                        .put("reason_tokens", JSONArray(safeRpcReasons(height.description)))
+                    error("Unfunded grouped Tor latest-height failed")
+                }
+            }
+            stage = "group_malformed_submit"
+            result.put("malformed_submit_calls", 1)
+            val rejected = withTimeout(30_000) { client.submitTransaction(tx = byteArrayOf(0), serviceMode = group) }
+            result.put("submit_response_class", rejected.javaClass.simpleName)
+            val code = when (rejected) {
+                is Response.Success -> rejected.result.code
+                is Response.Failure -> {
+                    result.put("sdk_code", rejected.code).put("cause_class", rejected.cause.javaClass.simpleName)
+                        .put("reason_tokens", JSONArray(safeRpcReasons(rejected.description)))
+                    rejectionCode(rejected.description.orEmpty())
+                }
+            }
+            result.put("native_rejection_code", code ?: JSONObject.NULL)
+            check(code == -22) { "Grouped Tor malformed transaction must reach node deserialization rejection" }
+            return result.put("passed", true)
+        } catch (error: Exception) {
+            result.put("probe_stage", stage).put("exception_class", error.javaClass.simpleName)
+                .put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
+            if (!result.has("reason_tokens")) result.put("reason_tokens", JSONArray(safeRpcReasons(error.message)))
+            println("CORE_NATIVE_ERROR $result")
+            throw error
+        } finally {
+            result.put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
+            withContext(NonCancellable) {
+                try { ownedClient?.dispose() } finally { holder.dispose() }
+            }
+        }
+    }
 
     private suspend fun nativeRpcProbe(tor: TorClient, lookupTxId: String?): JSONObject {
         val result = JSONObject().put("wallet_access", false).put("valid_transaction_submissions", 0)
@@ -610,6 +679,7 @@ class CoreWalletAcceptance {
                     println("CORE_NATIVE_ERROR " + result.put("probe_stage", "malformed_submit"))
                     error("Native Tor malformed-transaction RPC did not establish server rejection")
                 }
+                result.put("grouped_submit_probe", groupedNativeRpcProbe(tor))
                 return result
             } finally {
                 withContext(NonCancellable) { client.dispose() }
@@ -646,12 +716,20 @@ class CoreWalletAcceptance {
                     "FAILURE! submit transaction failed with gRPC response"
                 ))
                 result.put("raw_submit_results_logged", logs.contains("Internal transaction submit results:"))
-                val relevant = logs.lineSequence().filter { it.contains("Failed to submit transaction (") }.take(3)
-                val tokens = relevant.flatMap { line ->
-                    Regex("\\b(?:[a-z][a-z0-9]+-){1,8}[a-z0-9]+\\b").findAll(line)
-                        .map { it.value.take(80) }
-                }.distinct().take(12).toList()
-                result.put("rejection_reason_tokens", JSONArray(tokens))
+                val internal = logs.lineSequence()
+                    .filter { it.contains("Internal transaction submit results:") }.take(3).joinToString("\n")
+                val codes = Regex("""\bcode\s*[=:]\s*(-?\d{1,8})\b""").findAll(internal)
+                    .mapNotNull { it.groupValues[1].toIntOrNull() }.distinct().take(8).toList()
+                result.put("internal_sdk_codes", JSONArray(codes))
+                result.put("internal_reason_tokens", JSONArray(safeRpcReasons(internal)))
+                result.put("internal_failure_classes", JSONArray(listOf("OverTor", "Connection",
+                    "DeadlineExceeded", "Unavailable", "UninitializedTorClientException", "IllegalStateException",
+                    "TimeoutCancellationException").filter { internal.contains(it) }))
+                result.put("internal_tor_failure", internal.contains("isTorFailure=true") ||
+                    internal.contains("isTorFailure: true"))
+                val rejectionLines = logs.lineSequence().filter { it.contains("Failed to submit transaction (") }
+                    .take(3).joinToString("\n")
+                result.put("rejection_reason_tokens", JSONArray(safeRpcReasons(rejectionLines)))
             }
         } catch (error: Exception) {
             result.put("capture_failure_class", error.javaClass.simpleName)
