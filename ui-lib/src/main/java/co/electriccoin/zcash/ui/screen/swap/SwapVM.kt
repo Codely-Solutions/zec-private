@@ -52,6 +52,8 @@ import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlin.time.Duration.Companion.milliseconds
 
+private const val ZEC_DECIMALS = 8
+
 @Suppress("TooManyFunctions")
 internal class SwapVM(
     private val getCuratedSwapAssetsUseCase: GetCuratedSwapAssetsUseCase,
@@ -331,7 +333,7 @@ internal class SwapVM(
     private fun onSwapCurrencyTypeClick(newTextFieldAmount: BigDecimal?) {
         internalState.update {
             val isTokenInput = it.currencyType == CurrencyType.FIAT
-            val decimals = if (it.swapDirection == SWAP_FROM_ZEC) 8 else it.swapAsset?.decimals
+            val decimals = if (it.swapDirection == SWAP_FROM_ZEC) ZEC_DECIMALS else it.swapAsset?.decimals
             val amount =
                 if (isTokenInput && decimals != null) {
                     newTextFieldAmount?.setScale(decimals, RoundingMode.DOWN)?.stripTrailingZeros()
