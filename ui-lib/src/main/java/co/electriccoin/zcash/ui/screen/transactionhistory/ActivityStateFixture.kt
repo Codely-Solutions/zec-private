@@ -19,7 +19,11 @@ object ActivityStateFixture {
             subtitle = stringRes("Transaction subtitle"),
             isShielded = true,
             value =
-                stringRes(R.string.transaction_history_plus, stringRes(Zatoshi(10000000), HIDDEN))
+                stringRes(
+                    R.string.transaction_history_plus,
+                    stringRes(Zatoshi(10000000), HIDDEN),
+                    stringRes("ZEC"),
+                )
                     .withStyle(
                         StyledStringStyle(
                             color = StringResourceColor.POSITIVE

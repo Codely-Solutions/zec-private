@@ -7037,6 +7037,17 @@ index 553c98db2..52c82ce4f 100644
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/TransactionDetailInfoState.kt
 @@ -40,0 +41 @@ data class SendSwapState(
 +    val donationBasisZec: String? = null,
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityStateFixture.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityStateFixture.kt
+index b1f6403cd..30ee1cd5d 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityStateFixture.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityStateFixture.kt
+@@ -22 +22,5 @@ object ActivityStateFixture {
+-                stringRes(R.string.transaction_history_plus, stringRes(Zatoshi(10000000), HIDDEN))
++                stringRes(
++                    R.string.transaction_history_plus,
++                    stringRes(Zatoshi(10000000), HIDDEN),
++                    stringRes("ZEC"),
++                )
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/whatsnew/AndroidWhatsNew.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/whatsnew/AndroidWhatsNew.kt
 deleted file mode 100644
 index 33610ecb3..000000000
