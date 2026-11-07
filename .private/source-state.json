@@ -1864,7 +1864,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferences.kt": "825b14763604eeacbcd6a9636f7f5667fea1d150466881aa5e8ef865fab4ceae",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt": "57ba88b6343eaab04789ee7bb3a396184d94d14aa8462a4a1db792d838db2d80",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt": "614eac760dc14805a201b0a4e3d8e4e98993768e09dd9875be5d2a5bb560a333",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt": "cf5750e46e61dfc7faa2d235977528b9edf2bec6c317feb1fd3133be2244f48a",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt": "d0763c18dc2b614c46895741f0fc5c19037ad68dac1f6edd7cdd06c5f9f44fc7",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountArgs.kt": "90d84d7a80a129b5aef59e04ee63e8af95bead6ca62063b31f9cb3dde1135598",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountScreen.kt": "71ae306dfab3b3dd6fa67d43682bb6202da69cd2a04b79d137c9428aa4687d1f",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt": "a4fd305d65b233fe8114656298c6f60bdcb1f9652d55e6e9d0d44a55c9aa8428",

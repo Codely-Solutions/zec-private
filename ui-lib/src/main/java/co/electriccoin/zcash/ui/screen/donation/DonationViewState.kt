@@ -12,4 +12,3 @@ internal data class DonationViewState(
     val automationSaved: Boolean = false,
     val autoOutcome: String? = null,
 )
-
