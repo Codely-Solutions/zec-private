@@ -81,7 +81,8 @@ internal fun rememberHomeDonationSupport(blocked: Boolean, onDonate: () -> Unit)
             } else {
                 dismissed = true
             }
-        } else if (resumed && !blocked && !eligibleAtEntry && !dismissed) {
+        } else if (resumed && !blocked && !eligibleAtEntry && !dismissed && !introduction) {
+            // Keep a successful claim when lifecycle setup restarts this effect.
             introduction = preferences.claimAutomaticIntroduction()
         }
         if (blocked || !resumed) introduction = false

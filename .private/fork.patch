@@ -5727,10 +5727,10 @@ index 000000000..999cff62d
 +)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt
 new file mode 100644
-index 000000000..b3d6a1e6f
+index 000000000..c94eaf663
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt
-@@ -0,0 +1,184 @@
+@@ -0,0 +1,185 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.compose.foundation.background
@@ -5814,7 +5814,8 @@ index 000000000..b3d6a1e6f
 +            } else {
 +                dismissed = true
 +            }
-+        } else if (resumed && !blocked && !eligibleAtEntry && !dismissed) {
++        } else if (resumed && !blocked && !eligibleAtEntry && !dismissed && !introduction) {
++            // Keep a successful claim when lifecycle setup restarts this effect.
 +            introduction = preferences.claimAutomaticIntroduction()
 +        }
 +        if (blocked || !resumed) introduction = false
