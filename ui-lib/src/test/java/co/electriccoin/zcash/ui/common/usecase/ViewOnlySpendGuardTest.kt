@@ -123,7 +123,9 @@ class ViewOnlySpendGuardTest {
                     navigateToErrorUseCase = navigateToError,
                 )
 
-            useCase(Zip321ParseUriValidation.Valid("zcash:t1", mockk(relaxed = true)), ScanArgs(ScanFlow.HOMEPAGE))
+            useCase(Zip321ParseUriValidation.Valid(
+                "zcash:t1", mockk { every { payments } returns listOf(mockk()) }
+            ), ScanArgs(ScanFlow.HOMEPAGE))
 
             verifyViewOnlyErrorShown()
             assertNoProposalCreated()
@@ -143,7 +145,9 @@ class ViewOnlySpendGuardTest {
                     navigateToErrorUseCase = navigateToError,
                 )
 
-            useCase(Zip321ParseUriValidation.Valid("zcash:t1", mockk(relaxed = true)), ScanArgs(ScanFlow.SEND))
+            useCase(Zip321ParseUriValidation.Valid(
+                "zcash:t1", mockk { every { payments } returns listOf(mockk()) }
+            ), ScanArgs(ScanFlow.SEND))
 
             verify(exactly = 1) { navigateToError(match { it.isViewOnlyError() }, any()) }
             assertNoProposalCreated()

@@ -55,8 +55,9 @@ class ProposalDataSourceTest {
             val synchronizer = mockk<Synchronizer>()
             val uri = "zcash:$ZIP321_RECIPIENT?amount=0.001"
             val sdkException = IllegalStateException("proposal sentinel")
+            val sdkAccount = account.sdkAccount
             coEvery { synchronizer.validateAddress(ZIP321_RECIPIENT) } returns AddressType.Transparent
-            coEvery { synchronizer.proposeFulfillingPaymentUri(any(), uri) } throws sdkException
+            coEvery { synchronizer.proposeFulfillingPaymentUri(sdkAccount, uri) } throws sdkException
 
             val thrown =
                 assertFailsWith<TransactionProposalNotCreatedException> {
@@ -64,7 +65,7 @@ class ProposalDataSourceTest {
                 }
 
             assertSame(sdkException, thrown.cause)
-            coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, uri) }
+            coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(sdkAccount, uri) }
         }
 
     @Test

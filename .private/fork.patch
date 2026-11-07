@@ -11382,7 +11382,7 @@ index c0be20563..1bea03a8f 100644
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt
-index 4c13e2085..452406324 100644
+index 4c13e2085..1a88b2241 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt
 @@ -10,0 +11 @@ import cash.z.ecc.android.sdk.model.ZecSend
@@ -11391,7 +11391,7 @@ index 4c13e2085..452406324 100644
 +import io.mockk.coVerify
 @@ -16,0 +19 @@ import org.junit.Test
 +import kotlin.test.assertEquals
-@@ -32,0 +36,34 @@ class ProposalDataSourceTest {
+@@ -32,0 +36,35 @@ class ProposalDataSourceTest {
 +    @Test
 +    fun multipleZip321PaymentsAreRejectedBeforeSdkProposal() =
 +        runBlocking {
@@ -11414,8 +11414,9 @@ index 4c13e2085..452406324 100644
 +            val synchronizer = mockk<Synchronizer>()
 +            val uri = "zcash:$ZIP321_RECIPIENT?amount=0.001"
 +            val sdkException = IllegalStateException("proposal sentinel")
++            val sdkAccount = account.sdkAccount
 +            coEvery { synchronizer.validateAddress(ZIP321_RECIPIENT) } returns AddressType.Transparent
-+            coEvery { synchronizer.proposeFulfillingPaymentUri(any(), uri) } throws sdkException
++            coEvery { synchronizer.proposeFulfillingPaymentUri(sdkAccount, uri) } throws sdkException
 +
 +            val thrown =
 +                assertFailsWith<TransactionProposalNotCreatedException> {
@@ -11423,10 +11424,10 @@ index 4c13e2085..452406324 100644
 +                }
 +
 +            assertSame(sdkException, thrown.cause)
-+            coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, uri) }
++            coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(sdkAccount, uri) }
 +        }
 +
-@@ -150,0 +188 @@ class ProposalDataSourceTest {
+@@ -150,0 +189 @@ class ProposalDataSourceTest {
 +        const val ZIP321_RECIPIENT = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt
 new file mode 100644
@@ -12640,18 +12641,28 @@ index c01988b65..8d44dda7f 100644
 -        coEvery { accountDataSource.requestNextShieldedAddress() } returns shieldedAddress
 +        coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returns shieldedAddress
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
-index 1d445dd11..b96c50409 100644
+index 1d445dd11..fa9d7d5aa 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
 @@ -75 +75 @@ class ViewOnlySpendGuardTest {
 -            coEvery { requestNextShieldedAddress() } returns "u"
 +            coEvery { requestNextShieldedAddress(requireFresh = true) } returns "u"
+@@ -126 +126,3 @@ class ViewOnlySpendGuardTest {
+-            useCase(Zip321ParseUriValidation.Valid("zcash:t1", mockk(relaxed = true)), ScanArgs(ScanFlow.HOMEPAGE))
++            useCase(Zip321ParseUriValidation.Valid(
++                "zcash:t1", mockk { every { payments } returns listOf(mockk()) }
++            ), ScanArgs(ScanFlow.HOMEPAGE))
+@@ -146 +148,3 @@ class ViewOnlySpendGuardTest {
+-            useCase(Zip321ParseUriValidation.Valid("zcash:t1", mockk(relaxed = true)), ScanArgs(ScanFlow.SEND))
++            useCase(Zip321ParseUriValidation.Valid(
++                "zcash:t1", mockk { every { payments } returns listOf(mockk()) }
++            ), ScanArgs(ScanFlow.SEND))
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321PaymentCountTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321PaymentCountTest.kt
 new file mode 100644
-index 000000000..2d16b9978
+index 000000000..75b1a6427
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321PaymentCountTest.kt
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,45 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -12675,12 +12686,14 @@ index 000000000..2d16b9978
 +            assertIs<Zip321ParseUriValidation.Invalid>(
 +                validator()("zcash:$RECIPIENT?amount=0.001&address.1=$RECIPIENT&amount.1=0.002")
 +            )
++            Unit
 +        }
 +
 +    @Test
 +    fun onePaymentRemainsValid() =
 +        runBlocking {
 +            assertIs<Zip321ParseUriValidation.Valid>(validator()("zcash:$RECIPIENT?amount=0.001"))
++            Unit
 +        }
 +
 +    private fun validator(): Zip321ParseUriValidationUseCase {
@@ -12781,10 +12794,10 @@ index 708658383..b6cff1756 100644
 -            assertNull(state.keystonePromo)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt
 new file mode 100644
-index 000000000..a77b5fcb1
+index 000000000..577b1aa68
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,160 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
@@ -12904,7 +12917,9 @@ index 000000000..a77b5fcb1
 +        reject(step().setTransactionRequest(
 +            "zcash:${DonationPolicy.RECIPIENT}?amount=0.001&address.1=${DonationPolicy.RECIPIENT}&amount.1=0.001"
 +        ))
-+        reject(step().setTransactionRequest("not a payment request"))
++        assertFailsWith<org.zecdev.zip321.ZIP321.Errors.InvalidURI> {
++            DonationPolicy.requireShielded(proposal(step().setTransactionRequest("not a payment request")), send())
++        }
 +        reject(step().clearPaymentOutputPools().addPaymentOutputPools(
 +            paymentPool(ValuePool.Orchard).setPaymentIndex(1)
 +        ))

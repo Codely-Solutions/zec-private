@@ -21,12 +21,14 @@ class Zip321PaymentCountTest {
             assertIs<Zip321ParseUriValidation.Invalid>(
                 validator()("zcash:$RECIPIENT?amount=0.001&address.1=$RECIPIENT&amount.1=0.002")
             )
+            Unit
         }
 
     @Test
     fun onePaymentRemainsValid() =
         runBlocking {
             assertIs<Zip321ParseUriValidation.Valid>(validator()("zcash:$RECIPIENT?amount=0.001"))
+            Unit
         }
 
     private fun validator(): Zip321ParseUriValidationUseCase {
