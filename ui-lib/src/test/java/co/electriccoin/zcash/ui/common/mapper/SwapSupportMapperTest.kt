@@ -7,12 +7,17 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
 import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 import io.mockk.every
 import io.mockk.mockk
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.time.Instant
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class SwapSupportMapperTest {
     @Test
     fun incompleteDepositKeepsExactRequiredTokenAmount() {

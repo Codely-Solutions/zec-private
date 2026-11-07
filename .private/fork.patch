@@ -5544,21 +5544,24 @@ index 7db73b703..f33664273 100644
 -                                name = stringRes("Zodl"),
 +                                name = stringRes("ZEC Private"),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
-index 79f574053..ddb3b4e79 100644
+index 79f574053..d0207084f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
 @@ -38,0 +39 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
 +import co.electriccoin.zcash.ui.design.util.stringResByNumber
 @@ -50,0 +52 @@ import java.math.BigDecimal
 +import java.math.RoundingMode
-@@ -330,4 +331,0 @@ internal class SwapVM(
+@@ -52,0 +55,2 @@ import kotlin.time.Duration.Companion.milliseconds
++private const val ZEC_DECIMALS = 8
++
+@@ -330,4 +333,0 @@ internal class SwapVM(
 -        val value =
 -            newTextFieldAmount
 -                ?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) }
 -                ?: stringRes("")
-@@ -334,0 +333,16 @@ internal class SwapVM(
+@@ -334,0 +335,16 @@ internal class SwapVM(
 +            val isTokenInput = it.currencyType == CurrencyType.FIAT
-+            val decimals = if (it.swapDirection == SWAP_FROM_ZEC) 8 else it.swapAsset?.decimals
++            val decimals = if (it.swapDirection == SWAP_FROM_ZEC) ZEC_DECIMALS else it.swapAsset?.decimals
 +            val amount =
 +                if (isTokenInput && decimals != null) {
 +                    newTextFieldAmount?.setScale(decimals, RoundingMode.DOWN)?.stripTrailingZeros()
@@ -5573,12 +5576,12 @@ index 79f574053..ddb3b4e79 100644
 +                        stringResByDynamicNumber(number, includeGroupingSeparator = false)
 +                    }
 +                } ?: stringRes("")
-@@ -339,2 +353,2 @@ internal class SwapVM(
+@@ -339,2 +355,2 @@ internal class SwapVM(
 -                        amount = newTextFieldAmount,
 -                        lastValidAmount = newTextFieldAmount
 +                        amount = amount,
 +                        lastValidAmount = amount
-@@ -342,5 +356 @@ internal class SwapVM(
+@@ -342,5 +358 @@ internal class SwapVM(
 -                currencyType =
 -                    when (it.currencyType) {
 -                        CurrencyType.TOKEN -> CurrencyType.FIAT
@@ -10649,10 +10652,10 @@ index c0be20563..1bea03a8f 100644
 +                    slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt
 new file mode 100644
-index 000000000..91be3aea3
+index 000000000..508f860ac
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt
-@@ -0,0 +1,34 @@
+@@ -0,0 +1,39 @@
 +package co.electriccoin.zcash.ui.common.mapper
 +
 +import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
@@ -10662,12 +10665,17 @@ index 000000000..91be3aea3
 +import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 +import io.mockk.every
 +import io.mockk.mockk
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
 +import java.math.BigDecimal
 +import kotlin.test.Test
 +import kotlin.test.assertEquals
 +import kotlin.test.assertNotNull
 +import kotlin.time.Instant
 +
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
 +class SwapSupportMapperTest {
 +    @Test
 +    fun incompleteDepositKeepsExactRequiredTokenAmount() {
