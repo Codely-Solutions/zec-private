@@ -31,6 +31,19 @@ def controller_checks(root):
     return errors
 
 
+def declaration_name_errors(path, name):
+    """Catch the recurring single-class/view filename mistake; Detekt remains authoritative."""
+    text = path.read_text()
+    if '"MatchingDeclarationName"' in text:
+        return []
+    names = re.findall(
+        r'^(?:(?:internal|private|public|protected|data|sealed|open|abstract|enum|annotation|value|expect|actual)\s+)*'
+        r'(?:class|interface|object)\s+(\w+)', text, re.MULTILINE)
+    if len(names) == 1 and path.stem != names[0]:
+        return [f'{name}: single top-level declaration {names[0]} requires a matching filename']
+    return []
+
+
 def changed_kotlin(root, base):
     """Catch the long changed declarations that previously cost a CI iteration."""
     errors = []
@@ -41,6 +54,7 @@ def changed_kotlin(root, base):
         path = root / name
         if not path.is_file():
             continue
+        errors.extend(declaration_name_errors(path, name))
         diff = git(root, 'diff', '--unified=0', base, '--', name)
         line = 0
         for value in diff.splitlines():

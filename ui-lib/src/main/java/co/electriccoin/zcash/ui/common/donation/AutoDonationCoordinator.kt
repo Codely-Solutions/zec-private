@@ -98,6 +98,14 @@ class AutoDonationCoordinator(
         return accounts.getZashiAccount().takeIf { it.sdkAccount.accountUuid.toString() == consent.accountUuid }
     }
 
+    private fun settledInput(status: SwapQuoteStatus, deposited: Long): Long? {
+        val settled = status.executedAmountIn?.movePointRight(8)?.longValueExact() ?: return null
+        if (settled <= 0 || settled > deposited) return null
+        val refund = status.refundedFormatted?.movePointRight(8)?.longValueExact()
+        if (refund != null && (refund < 0 || refund > deposited || deposited - refund != settled)) return null
+        return settled
+    }
+
     private suspend fun donate(status: SwapQuoteStatus, enrollment: JSONObject): String {
         val incoming = enrollment.getBoolean("incoming")
         val txids = if (incoming) status.destinationTransactionIds.map(store::hash) else {
@@ -131,17 +139,7 @@ class AutoDonationCoordinator(
                     ?: return "Skipped: missing executed amount evidence"
                 if (basis != actual || basis <= 0L) return "Skipped: received or spent amount differs"
                 if (!incoming) {
-                    val settled = status.executedAmountIn?.movePointRight(8)?.longValueExact()
-                        ?: return "Skipped: missing settled input evidence"
-                    if (settled <= 0 || settled > basis) return "Skipped: invalid settled input evidence"
-                    status.refundedFormatted?.let { refund ->
-                        val refundZatoshi = refund.movePointRight(8).longValueExact()
-                        if (refundZatoshi < 0 || refundZatoshi > basis || basis - refundZatoshi != settled) {
-                            return "Skipped: inconsistent refund evidence"
-                        }
-                    }
-                    // The provider's settled input is authoritative when its optional refund is absent.
-                    basis = settled
+                    basis = settledInput(status, basis) ?: return "Skipped: inconsistent settled input or refund"
                 }
                 break
             }
