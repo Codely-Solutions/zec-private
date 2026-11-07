@@ -324,8 +324,17 @@ class CoreWalletAcceptance {
                     }
                     check(transaction.amount.value == 1_000_000L)
                     check(dependency<TransactionRepository>().getMemos(transaction).all { it.isEmpty() })
-                    awaitBalance(1_000_000)
-                    check(balance() == 1_000_000L)
+                    val automatic = withTimeout(600_000) {
+                        dependency<TransactionRepository>().observeTransaction(state.getString("autoTxId"))
+                            .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight != null }
+                    }
+                    check(automatic.amount.value == state.getLong("autoAmountZatoshi"))
+                    check(dependency<TransactionRepository>().getMemos(automatic).all { it.isEmpty() })
+                    val totalReceived = 1_000_000L + automatic.amount.value
+                    awaitBalance(totalReceived)
+                    check(balance() == totalReceived)
+                    state.put("autoRestoreAmountZatoshi", automatic.amount.value)
+                        .put("autoRestoreMinedHeight", checkNotNull(automatic.overview.minedHeight).value)
                     save(state.put("restoreMinedHeight",checkNotNull(transaction.overview.minedHeight).value)
                         .put("restoreTransactionState",transaction.overview.transactionState.toString()))
                 }
@@ -487,7 +496,10 @@ class CoreWalletAcceptance {
             .put("auto_fee_zatoshi", fixture().getLong("autoFeeZatoshi"))
             .put("auto_tx_id", fixture().getString("autoTxId"))
         if (stage=="restart") receipt.put("auto_restart_confirmed", fixture().getBoolean("autoRestartConfirmed"))
-        if (stage=="restore") receipt.put("mined_height",fixture().getLong("restoreMinedHeight"))
+        if (stage=="restore") receipt
+            .put("auto_received_zatoshi", fixture().getLong("autoRestoreAmountZatoshi"))
+            .put("auto_mined_height", fixture().getLong("autoRestoreMinedHeight"))
+            .put("mined_height",fixture().getLong("restoreMinedHeight"))
             .put("amount_zatoshi",1_000_000L).put("app_transaction_state",fixture().getString("restoreTransactionState"))
 
         // No exception messages, seeds, addresses, HTTP bodies or private fixture are printed.
