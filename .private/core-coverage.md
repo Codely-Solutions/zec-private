@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: candidate revision 11 validated on 2026-11-07; signing and independent delivery inspection follow. Exact current evidence is in core-acceptance.json and core-validation-summary.json.
+Status: signed revision 11 independently verified on 2026-11-07. Exact current evidence is in core-acceptance.json and core-validation-summary.json.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|

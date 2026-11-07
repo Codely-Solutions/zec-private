@@ -1,5 +1,5 @@
 {
-  "status": "validated-awaiting-signing",
+  "status": "signed-and-independently-verified",
   "scope": "swap accuracy and clarity",
   "source_sha": "170eb24caaa90969849c3f8dcfcb77f4016196ab",
   "candidate_run": 42326943115,
@@ -70,5 +70,10 @@
     "Funded production swap settlement, physical signer and biometric approval UI were not executed",
     "Provider-reported output can retain a conservative bridge network-fee allowance; wallet receipt is a separate measurement",
     "Personal investigation identifiers, raw replies and screenshots are excluded from this public repository"
-  ]
+  ],
+  "release_url": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.11",
+  "release_apk_sha256": "0f8801e9732cded3e685df5c44543edace46dc886e5f04dd11745960f511dfe6",
+  "release_apk_bytes": 67812047,
+  "signing_controller_sha": "3b986e58dc57195b100badfe7e934fd8ce604aaf",
+  "production_arm_executed": false
 }
