@@ -50,7 +50,7 @@ val repositoryModule =
         singleOf(::FiatCurrencyRepositoryImpl) bind FiatCurrencyRepository::class
         singleOf(::BiometricRepositoryImpl) bind BiometricRepository::class
         singleOf(::KeystoneProposalRepositoryImpl) bind KeystoneProposalRepository::class
-        singleOf(::TransactionRepositoryImpl) bind TransactionRepository::class
+        single<TransactionRepository> { TransactionRepositoryImpl(get(), get(), get(), get()) }
         singleOf(::TransactionFilterRepositoryImpl) bind TransactionFilterRepository::class
         singleOf(::ZashiProposalRepositoryImpl) bind ZashiProposalRepository::class
         singleOf(::HomeMessageCacheRepositoryImpl) bind HomeMessageCacheRepository::class

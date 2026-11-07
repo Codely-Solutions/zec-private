@@ -48,7 +48,8 @@ import com.valentinilk.shimmer.shimmer
 @Composable
 fun ZashiTopAppBarWithAccountSelection(
     state: ZashiMainTopAppBarState?,
-    showHideBalances: Boolean = true
+    showHideBalances: Boolean = true,
+    supportAction: @Composable () -> Unit = {},
 ) {
     if (state == null) return
 
@@ -56,6 +57,7 @@ fun ZashiTopAppBarWithAccountSelection(
         ZashiSmallTopAppBar(
             windowInsets = WindowInsets.systemBars.only(WindowInsetsSides.Top),
             hamburgerMenuActions = {
+                supportAction()
                 if (showHideBalances) {
                     ZashiIconButton(state.balanceVisibilityButton, modifier = Modifier.size(40.dp))
                     Spacer(Modifier.width(4.dp))
@@ -156,6 +158,7 @@ private fun AccountNameWithSubtitle(
     }
 }
 
+@Suppress("MatchingDeclarationName")
 object ZashiTopAppBarWithAccountSelectionTag {
     const val MORE = "HOME_MORE"
 }

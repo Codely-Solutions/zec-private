@@ -1,5 +1,8 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import android.content.Context
+import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
+import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
@@ -16,7 +19,9 @@ import kotlin.time.Duration.Companion.seconds
 class GetSwapStatusUseCase(
     private val metadataRepository: MetadataRepository,
     private val swapRepository: SwapRepository,
+    context: Context? = null,
 ) {
+    private val donationPreferences = context?.let(::DonationPreferences)
     suspend operator fun invoke(depositAddress: String) = observe(depositAddress).first { !it.isLoading }
 
     @Suppress("TooGenericExceptionCaught", "LoopWithTooManyJumpStatements")
@@ -52,6 +57,9 @@ class GetSwapStatusUseCase(
                             origin = result.originAsset,
                             destination = result.destinationAsset
                         )
+                        if (result.status == SwapStatus.SUCCESS) {
+                            donationPreferences?.recordSuccessfulTransaction()
+                        }
                         data.update {
                             it.copy(
                                 status = result,

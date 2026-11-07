@@ -1,8 +1,5 @@
 package co.electriccoin.zcash.ui.screen.donation
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -11,10 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
@@ -23,9 +17,6 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
-import co.electriccoin.zcash.ui.design.component.ZashiTextButton
-import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
-import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.screen.ExternalUrl
@@ -93,36 +84,4 @@ fun DonationScreen(@Suppress("UNUSED_PARAMETER") args: DonationArgs) {
         onExternalAddresses = { router.forward(ExternalUrl(DonationPolicy.DOCUMENT)) },
         onBack = { if (!busy) router.back() }
     )
-}
-
-@Suppress("MagicNumber")
-@Composable
-fun DonationInvitation(basisZec: String?) {
-    val context = LocalContext.current
-    val router = koinInject<NavigationRouter>()
-    val preferences = remember(context) { DonationPreferences(context) }
-    var visible by remember {
-        mutableStateOf(
-            preferences.mayInvite(System.currentTimeMillis())
-        )
-    }
-    if (visible) {
-        Column(Modifier.padding(vertical = 12.dp)) {
-            Text(
-                stringResource(R.string.private_support_invitation),
-                style = ZashiTypography.textMd, color = ZashiColors.Text.textPrimary
-            )
-            ZashiTextButton(onClick = {
-                preferences.postpone(System.currentTimeMillis())
-                visible = false
-                router.forward(DonationArgs(basisZec))
-            }) { Text(stringResource(R.string.private_support_title)) }
-            ZashiTextButton(onClick = { preferences.postpone(System.currentTimeMillis()); visible = false }) {
-                Text(stringResource(R.string.private_support_not_now))
-            }
-            ZashiTextButton(onClick = { preferences.declinePermanently(); visible = false }) {
-                Text(stringResource(R.string.private_support_never))
-            }
-        }
-    }
 }

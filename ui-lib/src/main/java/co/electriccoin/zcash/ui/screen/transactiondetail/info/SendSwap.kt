@@ -47,9 +47,6 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
         ZashiSwapQuoteHeader(
             state = state.quoteHeader
         )
-        if (state.status == SwapStatus.SUCCESS && !state.isPending && state.donationBasisZec != null) {
-            co.electriccoin.zcash.ui.screen.donation.DonationInvitation(state.donationBasisZec)
-        }
         Spacer(20.dp)
         TransactionDetailRowHeader(
             title = stringRes(R.string.transactionHistory_details),

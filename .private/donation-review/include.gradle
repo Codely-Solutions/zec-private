@@ -1,0 +1,9 @@
+// Explicit opt-in debug sources only; this activity is absent from ordinary and production builds.
+allprojects { p ->
+    p.plugins.withId('com.android.library') {
+        if (p.path == ':ui-lib') {
+            p.android.sourceSets.getByName('debug').java.srcDir(new File(p.rootProject.projectDir, '.private/donation-review/src'))
+            p.android.sourceSets.getByName('debug').manifest.srcFile(new File(p.rootProject.projectDir, '.private/donation-review/AndroidManifest.xml'))
+        }
+    }
+}

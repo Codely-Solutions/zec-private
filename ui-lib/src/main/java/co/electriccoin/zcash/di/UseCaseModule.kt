@@ -316,7 +316,7 @@ val useCaseModule =
         singleOf(::RecoverFromSeedMismatchUseCase)
         factoryOf(::ObserveSeedMismatchUseCase)
         factoryOf(::ObserveKeepScreenOnSyncSessionUseCase)
-        factoryOf(::GetSwapStatusUseCase)
+        factory { GetSwapStatusUseCase(get(), get(), get()) }
         factoryOf(::ExecuteDebugDBQueryUseCase)
         factoryOf(::SimulateSeedNotRelevantUseCase)
         factoryOf(::SwapSupportMapper)

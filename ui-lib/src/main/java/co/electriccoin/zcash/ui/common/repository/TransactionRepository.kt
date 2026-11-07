@@ -1,5 +1,8 @@
 package co.electriccoin.zcash.ui.common.repository
 
+import android.content.Context
+import co.electriccoin.zcash.ui.screen.donation.DonationPreferences
+import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.BlockHeight
@@ -64,7 +67,10 @@ interface TransactionRepository {
 class TransactionRepositoryImpl(
     accountDataSource: AccountDataSource,
     private val synchronizerProvider: SynchronizerProvider,
+    context: Context? = null,
+    private val metadataRepository: MetadataRepository? = null,
 ) : TransactionRepository {
+    private val donationPreferences = context?.let(::DonationPreferences)
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
     /**
@@ -180,7 +186,26 @@ class TransactionRepositoryImpl(
                                                     freshDetails[key]
                                                         ?: enhancedTxCache[key]
                                                         ?: TxDetails(outputs = emptyList(), recipient = null)
-                                                createTransaction(transaction, details)
+                                                createTransaction(transaction, details).also { mapped ->
+                                                    val recipient = mapped.recipient
+                                                    if (mapped is SendTransaction.Success && recipient != null) {
+                                                        if (recipient == DonationPolicy.recipient()) {
+                                                            mapped.timestamp?.toEpochMilli()?.let {
+                                                                donationPreferences?.recordDonationCompleted(it)
+                                                            }
+                                                        } else {
+                                                            val accountMetadata = metadataRepository?.metadata?.value
+                                                                ?.get(uuid)?.accountMetadata
+                                                            if (accountMetadata != null &&
+                                                                accountMetadata.swaps.swapIds.none {
+                                                                    it.depositAddress == recipient
+                                                                }
+                                                            ) {
+                                                                donationPreferences?.recordSuccessfulTransaction()
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }.sortedByDescending { transaction ->
                                                 transaction.timestamp ?: now
                                             }

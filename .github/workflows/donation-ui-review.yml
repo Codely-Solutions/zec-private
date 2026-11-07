@@ -1,0 +1,42 @@
+name: Donation UI review only
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  debug-ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+        with:
+          cache-read-only: true
+      - name: Compile isolated debug UI and run focused donation checks
+        run: |
+          chmod +x gradlew
+          ./gradlew -I .private/tor-ui-abi.gradle -I .private/donation-review/include.gradle -I .private/robolectric-ci.gradle --no-daemon --no-watch-fs --no-parallel --max-workers=2 '-Dorg.gradle.jvmargs=-Xmx3g -XX:+ExitOnOutOfMemoryError -XX:-HeapDumpOnOutOfMemoryError' -Pkotlin.compiler.execution.strategy=in-process :app:assembleZcashmainnetFossDebug :ui-lib:testZcashmainnetFossDebugUnitTest --tests '*DonationPreferencesTest' --tests '*DonationPolicyTest' --tests '*GetSwapStatusUseCaseTest' --tests '*ProcessSwapTransactionUseCaseTest' --tests '*ZashiProposalRepositoryTest'
+      - name: Bind UI-only artifact
+        run: |
+          mkdir ui-review
+          cp app/build/outputs/apk/zcashmainnetFoss/debug/*.apk ui-review/
+          git rev-parse HEAD > ui-review/source-sha.txt
+          sha256sum ui-review/*.apk > ui-review/SHA256SUMS
+          python3 - <<'PY'
+          import xml.etree.ElementTree as E
+          from pathlib import Path
+          for p in Path('ui-lib/build/test-results/testZcashmainnetFossDebugUnitTest').glob('TEST-*.xml'):
+              print(E.parse(p).getroot().attrib)
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: donation-ui-review-debug
+          path: ui-review/
+          retention-days: 1
