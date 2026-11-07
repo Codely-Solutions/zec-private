@@ -1288,7 +1288,7 @@
   "ui-integration-test/src/main/java/co/electriccoin/zcash/ui/integration/test/screen/scan/view/ScanViewTest.kt": "e70646853cdb99d69a5d0c4f1fe81ee5b628a21d4111ca382484d4f867a9fa75",
   "ui-integration-test/src/main/java/co/electriccoin/zcash/ui/integration/test/screen/scan/view/ScanViewTestSetup.kt": "04825e45af51bb8b21954b691bb3d39aa94623c13a89d2309cc361d074098604",
   "ui-integration-test/src/main/res/ui/common/values/strings.xml": "cf3be5741aa484420871b4dfcbaf0ca95bf38fc5176669b843421477e42cf055",
-  "ui-lib/build.gradle.kts": "3b9b7523a70e8161da694e0982d870e1c33ba8031841391f92c674972e16c290",
+  "ui-lib/build.gradle.kts": "3a7ccdf0413e1ab708ac434265f07220f59d9a03c07f5a6567bafc2579c56a1c",
   "ui-lib/proguard-consumer.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "ui-lib/src/androidTest/AndroidManifest.xml": "29c05132005ba3e4b71d96ff02bd142b485872ddbdeb814276a9d3ac274ae660",
   "ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/MainActivityCompanionTest.kt": "5f74b00f20fc72a5104ef4350fa37d14251d4055acbd45f26e0582fbf192c1fa",
