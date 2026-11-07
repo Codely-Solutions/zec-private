@@ -14,6 +14,9 @@ import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,28 +46,45 @@ internal fun rememberHomeDonationSupport(blocked: Boolean, onDonate: () -> Unit)
     val context = LocalContext.current
     val preferences = remember(context) { DonationPreferences(context) }
     // Snapshot at entry: newly observed success waits until the next home visit.
-    val eligibleAtEntry = remember { preferences.mayInviteOnHomeEntry(System.currentTimeMillis()) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    var eligibleAtEntry by remember { mutableStateOf(false) }
+    var resumed by remember { mutableStateOf(false) }
     var dismissed by remember { mutableStateOf(false) }
     var introduction by remember { mutableStateOf(false) }
-    DisposableEffect(preferences) {
+    DisposableEffect(preferences, lifecycle) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    eligibleAtEntry = preferences.mayInviteOnHomeEntry(System.currentTimeMillis())
+                    dismissed = false
+                    resumed = true
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    resumed = false
+                    introduction = false
+                }
+                else -> Unit
+            }
+        }
+        lifecycle.addObserver(observer)
         val release = preferences.observeSuppression {
             dismissed = true
             introduction = false
         }
-        onDispose { release() }
+        onDispose { release(); lifecycle.removeObserver(observer) }
     }
-    val showInvitation = eligibleAtEntry && !dismissed && !blocked
-    LaunchedEffect(showInvitation, blocked) {
+    val showInvitation = resumed && eligibleAtEntry && !dismissed && !blocked
+    LaunchedEffect(showInvitation, blocked, resumed) {
         if (showInvitation) {
             if (preferences.mayInvite(System.currentTimeMillis())) {
                 preferences.recordInvitationDisplayed(System.currentTimeMillis())
             } else {
                 dismissed = true
             }
-        } else if (!blocked && !eligibleAtEntry && !dismissed) {
+        } else if (resumed && !blocked && !eligibleAtEntry && !dismissed) {
             introduction = preferences.claimAutomaticIntroduction()
         }
-        if (blocked) introduction = false
+        if (blocked || !resumed) introduction = false
     }
     return HomeDonationSupportState(
         showInvitation = showInvitation,
@@ -150,8 +170,8 @@ internal fun HomeDonationInvitation(state: HomeDonationSupportState) {
             color = ZashiColors.Text.textSecondary,
         )
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            ZashiTextButton(onClick = state.onLater) { Text(stringResource(R.string.private_support_later)) }
-            ZashiTextButton(onClick = state.onNever) { Text(stringResource(R.string.private_support_never)) }
+            ZashiTextButton(onClick = state.onLater, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.private_support_later)) }
+            ZashiTextButton(onClick = state.onNever, modifier = Modifier.weight(1f)) { Text(stringResource(R.string.private_support_never)) }
         }
     }
 }

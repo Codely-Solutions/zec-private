@@ -26,6 +26,8 @@ class DonationReviewActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         check(co.electriccoin.zcash.ui.BuildConfig.DEBUG)
+        val lifecyclePrefs = getSharedPreferences("donation_ui_review_lifecycle", MODE_PRIVATE)
+        lifecyclePrefs.edit().putInt("creations", lifecyclePrefs.getInt("creations", 0) + 1).commit()
         val dark = intent.getBooleanExtra("dark", true)
         val requested = intent.getStringExtra("screen") ?: "home"
         val preferences = DonationPreferences(this)
