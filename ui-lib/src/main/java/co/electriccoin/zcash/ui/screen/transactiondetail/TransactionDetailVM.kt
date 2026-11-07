@@ -225,7 +225,8 @@ class TransactionDetailVM(
                             isPending = isPending(transaction),
                             completedTimestamp = createTimestampStringRes(transaction),
                             donationBasisZec = transaction.transaction.fee?.let { fee ->
-                                (transaction.transaction.amount - fee).value.toBigDecimal().movePointLeft(8)
+                                (transaction.transaction.amount - fee).value
+                                    .toBigDecimal().movePointLeft(ZEC_DECIMAL_PLACES)
                                     .subtract(transaction.swap.status?.refundedFormatted ?: java.math.BigDecimal.ZERO)
                                     .takeIf {
                                         !isPending(transaction) && it.signum() > 0 &&
@@ -636,3 +637,5 @@ class TransactionDetailVM(
             flipTransactionBookmark(transactionDetailArgs.transactionId)
         }
 }
+
+private const val ZEC_DECIMAL_PLACES = 8

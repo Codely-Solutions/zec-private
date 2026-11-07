@@ -75,7 +75,8 @@ class CancelProposalFlowUseCaseTest {
             coVerify(exactly = 1) { keystoneRepository.clear() }
             coVerify(exactly = 1) { ledgerPipeline.clear() }
             coVerify(exactly = 0) { clearSend.requestClear() }
-            assertEquals(listOf(DonationArgs::class), router.backToCalls)
+            assertEquals(1, router.backToCalls.size)
+            assertEquals(DonationArgs::class, router.backToCalls.single())
             assertEquals(0, router.backCalls)
         }
 
