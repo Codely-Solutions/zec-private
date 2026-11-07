@@ -1320,7 +1320,7 @@ class CoreWalletAcceptance {
                         check(enabledWithAncestors(percentage))
                         if (!revealRequested || !percentage.isVisibleToUser) {
                             revealRequested = true
-                            val shown = percentage.performAction(AccessibilityNodeInfo.ACTION_SHOW_ON_SCREEN)
+                            val shown = percentage.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id)
                             donationUiMarker("percent_reveal", if (shown) "show_requested" else "scroll_required", fields.size)
                             if (!shown) scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_auto_save))
                         } else {
