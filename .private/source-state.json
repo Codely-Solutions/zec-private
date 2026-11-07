@@ -1383,7 +1383,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt": "4bef72301603a945ec4ebb15ba108bfe0f87410f3e74a9f29edbe25e40fa59d7",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/WalletSnapshotDataSource.kt": "154e17e061cf16ad51a26a76b1926df62fda89c12d09d894507f6cac90cfe395",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ZashiSpendingKeyDataSource.kt": "2732d37afaf69ef4fdcfda2d038b13677271e4d86dadbcf22a031e402c82f64d",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinator.kt": "e0cdaacbda546afce85e48d3a864e2d0e91fbcf7827b7ab83bcfae5d3f8bc387",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationCoordinator.kt": "2e93d7a5af832020ad4233cbf88bbe176cbc7766cb27be279f5fad9e36e16f23",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationSpendingGate.kt": "4253b59c5b4936fbf2f76a20e5a6f994accd17b4b713c19718806c312da35060",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/donation/AutoDonationStore.kt": "a9566b1ee64016bca8dd9825750113b930a23ae3608a6d216c4992c7438790b5",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/extension/ComponentActivityExt.kt": "3dc93bc8cd22ec4aec0c3e6f578422dcd46dd4df59c9442d57076cecb40c2213",
