@@ -74,9 +74,9 @@ class DonationPreferencesTest {
     fun replayedDonationHistoryDoesNotExtendCooldownOrQualifyActivity() {
         val preferences = DonationPreferences(context)
         val completedAt = 1_000_000L
-        preferences.recordDonationCompleted(completedAt)
-        preferences.recordDonationCompleted(completedAt - 1)
-        preferences.recordDonationCompleted(completedAt)
+        preferences.recordDonationCompleted(completedAt, now = completedAt)
+        preferences.recordDonationCompleted(completedAt - 1, now = completedAt - 1)
+        preferences.recordDonationCompleted(completedAt, now = completedAt)
         assertFalse(preferences.mayInvite(completedAt + DonationPolicy.COOLDOWN_MILLIS - 1))
         assertTrue(preferences.mayInvite(completedAt + DonationPolicy.COOLDOWN_MILLIS))
         assertFalse(preferences.mayInviteOnHomeEntry(completedAt + DonationPolicy.COOLDOWN_MILLIS))
@@ -86,16 +86,26 @@ class DonationPreferencesTest {
     fun historicalDonationCannotShortenRecentInvitationCooldown() {
         val preferences = DonationPreferences(context)
         preferences.recordInvitationDisplayed(2_000_000)
-        preferences.recordDonationCompleted(1_000_000)
+        preferences.recordDonationCompleted(1_000_000, now = 1_000_000)
         assertFalse(preferences.mayInvite(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
     }
 
     @Test
     fun donationCooldownDefersIntroductionWithoutConsumingIt() {
         val preferences = DonationPreferences(context)
-        preferences.recordDonationCompleted(1_000_000)
+        preferences.recordDonationCompleted(1_000_000, now = 1_000_000)
         assertFalse(preferences.claimAutomaticIntroduction(1_000_000))
         assertTrue(preferences.claimAutomaticIntroduction(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
         assertFalse(DonationPreferences(context).claimAutomaticIntroduction(1_000_000 + DonationPolicy.COOLDOWN_MILLIS))
     }
+    @Test
+    fun confirmedDonationGetsFullCooldownFromObservationRatherThanMinedTime() {
+        val preferences = DonationPreferences(context)
+        preferences.recordDonationCompleted(1_000_000, now = 2_000_000)
+        assertFalse(preferences.mayInvite(2_000_000 + DonationPolicy.COOLDOWN_MILLIS - 1))
+        assertTrue(preferences.mayInvite(2_000_000 + DonationPolicy.COOLDOWN_MILLIS))
+        preferences.recordDonationCompleted(1_000_000, now = 3_000_000)
+        assertTrue(preferences.mayInvite(2_000_000 + DonationPolicy.COOLDOWN_MILLIS))
+    }
+
 }

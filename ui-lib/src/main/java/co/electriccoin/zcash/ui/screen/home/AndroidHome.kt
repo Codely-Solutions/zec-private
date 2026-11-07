@@ -5,6 +5,9 @@ package co.electriccoin.zcash.ui.screen.home
 import co.electriccoin.zcash.ui.screen.donation.rememberHomeDonationSupport
 import co.electriccoin.zcash.ui.screen.donation.DonationShortcut
 import co.electriccoin.zcash.ui.screen.donation.HomeDonationInvitation
+import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.screen.donation.DonationArgs
+import org.koin.compose.koinInject
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -19,6 +22,7 @@ import org.koin.core.parameter.parametersOf
 
 @Composable
 internal fun AndroidHome() {
+    val donationRouter = koinInject<NavigationRouter>()
     val topAppBarVM = koinActivityViewModel<ZashiTopAppBarVM>()
     val balanceWidgetVM =
         koinViewModel<BalanceWidgetVM> {
@@ -41,7 +45,8 @@ internal fun AndroidHome() {
 
     state?.let {
         val support = rememberHomeDonationSupport(
-            blocked = it.message != null || !it.isSyncComplete || appBarState == null
+            blocked = it.message != null || !it.isSyncComplete || appBarState == null,
+            onDonate = { donationRouter.forward(DonationArgs()) },
         )
         HomeView(
             appBarState = appBarState,
