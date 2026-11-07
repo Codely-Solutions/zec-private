@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.donation
 
+import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.TransactionOverview
 import cash.z.ecc.android.sdk.model.TransactionState
@@ -7,6 +8,7 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
 import co.electriccoin.zcash.ui.common.model.SwapQuote
@@ -158,46 +160,89 @@ class AutoDonationCoordinator(
             }
             delay(5_000)
         }
-        diagnostic.stage = "spending_gate"
-        return AutoDonationSpendingGate.mutex.withLock {
-            if (hasActiveUiSpend()) return@withLock "Skipped: another transaction is under review"
-            val consent = store.consent() ?: return@withLock "Skipped: authorization unavailable"
-            val amount = DonationPolicy.suggestedZatoshi(BigDecimal.valueOf(basis, 8), consent.percent)
-            if (amount <= 0) return@withLock "Skipped: donation rounds to zero"
-            val recipient = DonationPolicy.recipient() ?: return@withLock "Skipped: recipient unavailable"
-            val account = account(enrollment) ?: return@withLock "Skipped: authorization unavailable"
-            if ((account.spendableShieldedBalance?.value ?: 0L) <= amount) {
-                return@withLock "Skipped: insufficient shielded funds"
+        var failedPreparation: ReadySnapshot? = null
+        var attempts = 0
+        while (true) {
+            diagnostic.stage = "preparation_readiness"
+            val ready = withTimeoutOrNull(120_000L) {
+                while (true) {
+                    if (account(enrollment) == null) return@withTimeoutOrNull null
+                    if (hasActiveUiSpend()) return@withTimeoutOrNull null
+                    val current = readiness()
+                    val failed = failedPreparation
+                    if (current != null && (failed == null || current.synchronizer !== failed.synchronizer ||
+                            current.scanned > failed.scanned)) return@withTimeoutOrNull current
+                    delay(500)
+                }
+                @Suppress("UNREACHABLE_CODE")
+                null
+            } ?: return if (account(enrollment) == null) "Skipped: authorization unavailable"
+                else if (hasActiveUiSpend()) "Skipped: another transaction is under review"
+                else "Skipped: proposal preparation did not become ready"
+            diagnostic.stage = "spending_gate"
+            val outcome = AutoDonationSpendingGate.mutex.withLock {
+                // Readiness can change while a manual spend holds the gate.
+                val current = readiness()
+                if (current == null || current.synchronizer !== ready.synchronizer ||
+                    current.scanned != ready.scanned) return@withLock null
+                if (hasActiveUiSpend()) return@withLock "Skipped: another transaction is under review"
+                val consent = store.consent() ?: return@withLock "Skipped: authorization unavailable"
+                val amount = DonationPolicy.suggestedZatoshi(BigDecimal.valueOf(basis, 8), consent.percent)
+                if (amount <= 0) return@withLock "Skipped: donation rounds to zero"
+                val recipient = DonationPolicy.recipient() ?: return@withLock "Skipped: recipient unavailable"
+                val account = account(enrollment) ?: return@withLock "Skipped: authorization unavailable"
+                if ((account.spendableShieldedBalance?.value ?: 0L) <= amount) {
+                    return@withLock "Skipped: insufficient shielded funds"
+                }
+                diagnostic.stage = "recipient"
+                val send = ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(amount), Memo(""), null)
+                diagnostic.stage = "proposal"
+                attempts++
+                val proposal = try {
+                    proposals.createProposal(account, send)
+                } catch (e: InsufficientFundsException) {
+                    diagnostic.failure(e)
+                    failedPreparation = ready
+                    if (attempts >= 3) return@withLock "Skipped: insufficient funds during proposal preparation"
+                    return@withLock null
+                }
+                diagnostic.stage = "shielded_validation"
+                DonationPolicy.requireShielded(proposal.proposal, send)
+                val fee = proposal.proposal.totalFeeRequired().value
+                if (fee >= amount) return@withLock "Skipped: network fee is at least the donation"
+                if ((account(enrollment)?.spendableShieldedBalance?.value ?: 0L) < Math.addExact(amount, fee)) {
+                    return@withLock "Skipped: insufficient shielded funds"
+                }
+                if (hasActiveUiSpend()) return@withLock "Skipped: another transaction is under review"
+                if (account(enrollment) == null) return@withLock "Skipped: authorization unavailable"
+                diagnostic.stage = "spending_key"
+                val key = keys.getZashiSpendingKey()
+                if (account(enrollment) == null || hasActiveUiSpend()) return@withLock "Skipped: authorization changed"
+                DonationPolicy.requireShielded(proposal.proposal, send)
+                diagnostic.stage = "submission"
+                val result = proposals.submitTransaction(proposal.proposal, key)
+                diagnostic.submission(result)
+                diagnostic.stage = "record_transaction"
+                store.recordTransactionIds(status.depositAddress.address, result.txIds)
+                if (result is SubmitResult.Success) {
+                    val displayAmount = BigDecimal.valueOf(amount, 8).stripTrailingZeros().toPlainString()
+                    "Automatic donation of $displayAmount ZEC submitted."
+                } else {
+                    "Automatic donation outcome uncertain. Check Activity."
+                }
             }
-            diagnostic.stage = "recipient"
-            val send = ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(amount), Memo(""), null)
-            diagnostic.stage = "proposal"
-            val proposal = proposals.createProposal(account, send)
-            diagnostic.stage = "shielded_validation"
-            DonationPolicy.requireShielded(proposal.proposal, send)
-            val fee = proposal.proposal.totalFeeRequired().value
-            if (fee >= amount) return@withLock "Skipped: network fee is at least the donation"
-            if ((account(enrollment)?.spendableShieldedBalance?.value ?: 0L) < Math.addExact(amount, fee)) {
-                return@withLock "Skipped: insufficient shielded funds"
-            }
-            if (hasActiveUiSpend()) return@withLock "Skipped: another transaction is under review"
-            if (account(enrollment) == null) return@withLock "Skipped: authorization unavailable"
-            diagnostic.stage = "spending_key"
-            val key = keys.getZashiSpendingKey()
-            if (account(enrollment) == null || hasActiveUiSpend()) return@withLock "Skipped: authorization changed"
-            DonationPolicy.requireShielded(proposal.proposal, send)
-            diagnostic.stage = "submission"
-            val result = proposals.submitTransaction(proposal.proposal, key)
-            diagnostic.submission(result)
-            diagnostic.stage = "record_transaction"
-            store.recordTransactionIds(status.depositAddress.address, result.txIds)
-            if (result is SubmitResult.Success) {
-                val displayAmount = BigDecimal.valueOf(amount, 8).stripTrailingZeros().toPlainString()
-                "Automatic donation of $displayAmount ZEC submitted."
-            } else {
-                "Automatic donation outcome uncertain. Check Activity."
-            }
+            if (outcome != null) return outcome
         }
+    }
+
+    private data class ReadySnapshot(val synchronizer: Synchronizer, val scanned: Long)
+
+    private suspend fun readiness(): ReadySnapshot? {
+        val current = synchronizers.getSynchronizer()
+        val scanned = current.fullyScannedHeight.value?.value ?: return null
+        val network = current.networkHeight.value?.value ?: return null
+        if (current.status.value != Synchronizer.Status.SYNCED || scanned < network) return null
+        return ReadySnapshot(current, scanned)
     }
 
     /** Fixed stages and classes only; never exception messages or transaction/provider contents. */
