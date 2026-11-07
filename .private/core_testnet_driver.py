@@ -327,7 +327,7 @@ def run(adb, root, apks, manifest):
                 worker.join(timeout=100)
             if worker.is_alive():raise RuntimeError('Interruption instrumentation worker did not exit')
             if cleanup_errors:raise RuntimeError('Tor outage cleanup failed: '+','.join(cleanup_errors))
-        stage('send')
+        stage('send',880)
         shell('am','force-stop',PACKAGE)
         stage('restart',240)
         clear_wallet()
@@ -383,7 +383,9 @@ def run(adb, root, apks, manifest):
             report['blocked_connection_diagnostics']=[line[:350] for line in kernel.splitlines() if 'CORE_EGRESS:' in line][-30:]
         try:
             private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15,check=False).stdout)
-            allowed_fields=('claimId','fundingTxId','fundingProvider','fundedBalance','balanceBeforeSend','feeZatoshi','senderConfirmedBalance','restoreMinedHeight','restoreTransactionState','candidateTxIds','initialSubmitType')
+            allowed_fields=('claimId','fundingTxId','fundingProvider','fundedBalance','balanceBeforeSend','feeZatoshi','senderConfirmedBalance','restoreMinedHeight','restoreTransactionState','candidateTxIds','initialSubmitType','autoTxId','autoAmountZatoshi','autoFeeZatoshi',
+                            'autoEnabledUiConsent','autoUiApprovalActions','autoExactlyOnce','autoNativeConfirmed',
+                            'autoConsentDisabled','autoProviderEvidence','autoRestartConfirmed')
             report['transaction_evidence']={key:private[key] for key in allowed_fields if key in private}
         except (ValueError,subprocess.SubprocessError):pass
         (root/'core-testnet-result.json').write_text(json.dumps(report,indent=2)+'\n')

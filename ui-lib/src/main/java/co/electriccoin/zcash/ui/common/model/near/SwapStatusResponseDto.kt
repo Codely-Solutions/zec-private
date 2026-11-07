@@ -24,14 +24,9 @@ data class SwapStatusResponseDto(
     val swapDetails: SwapDetails? = null
 )
 
-// @JsonIgnoreUnknownKeys
-// @Serializable
-// data class TransactionChainHash(
-//     @SerialName("hash")
-//     val hash: String,
-//     @SerialName("explorerUrl")
-//     val explorerUrl: String
-// )
+@JsonIgnoreUnknownKeys
+@Serializable
+data class TransactionChainHash(val hash: String)
 
 @JsonIgnoreUnknownKeys
 @Serializable
@@ -62,8 +57,8 @@ data class SwapDetails(
     val slippage: Int? = null,
     // @SerialName("originChainTxHashes")
     // val originChainTxHashes: List<TransactionChainHash>,
-    // @SerialName("destinationChainTxHashes")
-    // val destinationChainTxHashes: List<TransactionChainHash>,
+    @SerialName("destinationChainTxHashes")
+    val destinationChainTxHashes: List<TransactionChainHash>? = null,
     @SerialName("refundedAmount")
     @Serializable(NullableBigDecimalSerializer::class)
     val refundedAmount: BigDecimal? = null,

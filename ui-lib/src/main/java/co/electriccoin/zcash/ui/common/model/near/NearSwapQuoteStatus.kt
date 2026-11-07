@@ -36,6 +36,32 @@ data class NearSwapQuoteStatus(
             require(details.amountInFormatted == null || details.amountInFormatted.signum() > 0) {
                 "Swap status has non-positive amountInFormatted=${details.amountInFormatted}"
             }
+            require(details.refundedAmount == null || details.refundedAmount.signum() >= 0) {
+                "Swap status has negative refund"
+            }
+            require(details.refundedAmountFormatted == null || details.refundedAmountFormatted.signum() >= 0) {
+                "Swap status has negative formatted refund"
+            }
+            require(details.depositedAmount == null || details.depositedAmount.signum() >= 0) {
+                "Swap status has negative deposit"
+            }
+            require(details.depositedAmountFormatted == null || details.depositedAmountFormatted.signum() >= 0) {
+                "Swap status has negative formatted deposit"
+            }
+            requireConsistent(
+                name = "depositedAmount",
+                type = SwapQuoteMismatchType.INPUT_AMOUNT,
+                raw = details.depositedAmount,
+                formatted = details.depositedAmountFormatted,
+                decimals = origin.decimals
+            )
+            requireConsistent(
+                name = "refundedAmount",
+                type = SwapQuoteMismatchType.INPUT_AMOUNT,
+                raw = details.refundedAmount,
+                formatted = details.refundedAmountFormatted,
+                decimals = origin.decimals
+            )
             requireConsistent(
                 name = "amountIn",
                 type = SwapQuoteMismatchType.INPUT_AMOUNT,
@@ -108,15 +134,23 @@ data class NearSwapQuoteStatus(
 
     override val quotedAmountOut: BigDecimal = quote.amountOutFormatted
 
+    override val executedAmountIn: BigDecimal? =
+        response.swapDetails?.amountInFormatted ?: response.swapDetails?.amountIn?.movePointLeft(origin.decimals)
+
     override val executedAmountOut: BigDecimal? =
         response.swapDetails?.amountOutFormatted
             ?: response.swapDetails?.amountOut?.movePointLeft(destination.decimals)
+
+    override val destinationTransactionIds: List<String> =
+        response.swapDetails?.destinationChainTxHashes?.map { it.hash }.orEmpty()
 
     override val amountOutFormatted: BigDecimal = executedAmountOut ?: quotedAmountOut
 
     override val amountOutUsd: BigDecimal = response.swapDetails?.amountOutUsd ?: quote.amountOutUsd
 
     override val depositedAmountFormatted: BigDecimal? = response.swapDetails?.depositedAmountFormatted
+        ?: response.swapDetails?.depositedAmount?.movePointLeft(origin.decimals)
 
     override val refundedFormatted: BigDecimal? = response.swapDetails?.refundedAmountFormatted
+        ?: response.swapDetails?.refundedAmount?.movePointLeft(origin.decimals)
 }
