@@ -6156,10 +6156,10 @@ index 000000000..9249f3d42
 \ No newline at end of file
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt
 new file mode 100644
-index 000000000..9fcc355b3
+index 000000000..5b5ce67d0
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,14 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +internal data class DonationViewState(
@@ -6174,7 +6174,6 @@ index 000000000..9fcc355b3
 +    val automationSaved: Boolean = false,
 +    val autoOutcome: String? = null,
 +)
-+
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt
 index d03354a1e..59f3a7516 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountState.kt
