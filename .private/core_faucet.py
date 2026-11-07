@@ -9,6 +9,7 @@ verified 2026-11-05; its tor 0.4.9.15 trails source-only stable 0.4.9.16.
 import hashlib
 import http.client
 import json
+import os
 import re
 import shutil
 import socket
@@ -19,7 +20,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-BUNDLE='https://dist.torproject.org/torbrowser/16.0/tor-expert-bundle-windows-x86_64-16.0.tar.gz'
+BUNDLE='https://archive.torproject.org/tor-package-archive/torbrowser/16.0/tor-expert-bundle-windows-x86_64-16.0.tar.gz'
 BUNDLE_SHA256='2ee123e9167318a3742778ff704e75f01d4780f05a14522d451fe011011077c4'
 FAUCET='zcashfaucet.jinolabs.xyz'
 
@@ -91,20 +92,45 @@ def verify_unavailable_proxy():
     raise RuntimeError('Unavailable Tor proxy did not fail closed')
 
 
+def bundle_archive(root, supplied=None):
+    """Verify public cache bytes; supplied archives remain owned by the caller."""
+    provided=supplied is not None
+    archive=Path(supplied) if provided else Path(root)/'faucet-tor.tar.gz'
+    if provided and (not archive.is_file() or archive.is_symlink()):raise ValueError('Supplied Tor bundle must be a regular file')
+    digest=hashlib.sha256();total=0
+    try:
+        source=archive.open('rb') if provided else urllib.request.urlopen(BUNDLE,timeout=30)
+        deadline=time.monotonic()+180
+        with source:
+            target=None if provided else archive.open('wb')
+            try:
+                while True:
+                    if time.monotonic()>=deadline:raise TimeoutError('Tor bundle time budget exhausted')
+                    # read1 returns available bytes, allowing deadline checks between network reads.
+                    chunk=(source.read1 if hasattr(source,'read1') else source.read)(65536)
+                    if time.monotonic()>=deadline:raise TimeoutError('Tor bundle time budget exhausted')
+                    if not chunk:break
+                    total+=len(chunk)
+                    if total>128*1024*1024:raise ValueError('Tor archive exceeds budget')
+                    digest.update(chunk)
+                    if target is not None:target.write(chunk)
+            finally:
+                if target is not None:target.close()
+        if digest.hexdigest()!=BUNDLE_SHA256:raise ValueError('Official Tor bundle digest mismatch')
+        return archive,0 if provided else total
+    except BaseException:
+        if not provided:archive.unlink(missing_ok=True)
+        raise
+
+
 def fund(address,root):
     if not re.fullmatch('utest1[a-z0-9]{40,505}',address):
         raise ValueError('Only a testnet unified address may be funded')
     proxy_unavailable_failed_closed=verify_unavailable_proxy()
     root=Path(root)
     setup_started=time.monotonic()
-    archive=root/'faucet-tor.tar.gz'
-    digest=hashlib.sha256();total=0
-    with urllib.request.urlopen(BUNDLE,timeout=30) as source,archive.open('wb') as target:
-        while chunk:=source.read(1024*1024):
-            total+=len(chunk)
-            if total>128*1024*1024:raise ValueError('Tor archive exceeds budget')
-            digest.update(chunk);target.write(chunk)
-    if digest.hexdigest()!=BUNDLE_SHA256:raise ValueError('Official Tor bundle digest mismatch')
+    supplied_bundle=os.environ.get('CORE_FAUCET_TOR_BUNDLE')
+    archive,total=bundle_archive(root,supplied_bundle)
     folder=root/'faucet-tor';folder.mkdir()
     expanded=0
     with tarfile.open(archive,'r:gz') as bundle:
@@ -122,7 +148,7 @@ def fund(address,root):
             if expanded>128*1024*1024:raise ValueError('Tor executable expansion exceeds budget')
             target.parent.mkdir(exist_ok=True)
             with bundle.extractfile(member) as source,target.open('wb') as output:shutil.copyfileobj(source,output,1024*1024)
-    archive.unlink()
+    if supplied_bundle is None:archive.unlink()
     tor=folder/'tor/tor.exe'
     version=subprocess.check_output([str(tor),'--version'],text=True,timeout=10,creationflags=0x08000000).splitlines()[0]
     if 'Tor version 0.4.9.15' not in version:raise ValueError('Unexpected stable Tor binary version')
@@ -179,7 +205,8 @@ def fund(address,root):
                 raise RuntimeError('Faucet did not establish a successful testnet payment; no retry')
             return dict(**route,txid=claim['txid'],provider='jinolabs-testnet',
                         persistent_tor_connection=True,bundle_sha256=BUNDLE_SHA256,
-                        download_bytes=total,expanded_bytes=expanded,setup_seconds=setup_seconds,
+                        download_bytes=total,bundle_cache_hit=supplied_bundle is not None,
+                        expanded_bytes=expanded,setup_seconds=setup_seconds,
                         bootstrap_seconds=bootstrap_seconds,proof_compute_seconds=proof_seconds,
                         claim_seconds=time.monotonic()-claim_started,
                         tor_binary_sha256=hashlib.sha256(tor.read_bytes()).hexdigest(),tor_version=version,
