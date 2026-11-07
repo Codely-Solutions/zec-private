@@ -15,6 +15,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.wallet.sdk.internal.ffi.ProposalOuterClass
 import cash.z.wallet.sdk.internal.ffi.ProposalOuterClass.ValuePool
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
@@ -42,6 +43,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -278,6 +280,116 @@ class AutoDonationCoordinatorTest {
         f.verifyNoSpending()
     }
 
+    @Test fun proposalWaitsForSyncedScannedNetworkReadiness() = runTest {
+        val f = Fixture(this)
+        f.enroll()
+        f.syncStatus.value = Synchronizer.Status.SYNCING
+        f.engine.onStatus(f.status)
+        runCurrent()
+        f.verifyNoSpending()
+        f.syncStatus.value = Synchronizer.Status.SYNCED
+        f.network.value = null
+        advanceTimeBy(500); runCurrent()
+        f.verifyNoSpending()
+        f.network.value = BlockHeight.new(101)
+        advanceTimeBy(500); runCurrent()
+        f.verifyNoSpending()
+        f.scanned.value = BlockHeight.new(101)
+        advanceUntilIdle()
+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("submitted"))
+        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
+    }
+
+    @Test fun insufficientProposalWaitsForNewScanAndExhaustsWithoutSigning() = runTest {
+        val f = Fixture(this)
+        f.enroll()
+        coEvery { f.proposals.createProposal(any(), any()) } throws InsufficientFundsException()
+        f.engine.onStatus(f.status)
+        runCurrent()
+        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
+        f.verifyNoSigning()
+        advanceTimeBy(5_000); runCurrent()
+        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
+        // Status changes without new scanned evidence cannot repeat preparation.
+        f.syncStatus.value = Synchronizer.Status.SYNCING
+        advanceTimeBy(500); runCurrent()
+        f.syncStatus.value = Synchronizer.Status.SYNCED
+        advanceTimeBy(500); runCurrent()
+        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
+        f.scanned.value = BlockHeight.new(101)
+        advanceTimeBy(500); runCurrent()
+        coVerify(exactly = 2) { f.proposals.createProposal(any(), any()) }
+        f.scanned.value = BlockHeight.new(102)
+        advanceUntilIdle()
+        coVerify(exactly = 3) { f.proposals.createProposal(any(), any()) }
+        f.verifyNoSigning()
+        assertTrue(assertNotNull(f.store.latestOutcome()).startsWith("Skipped: insufficient funds"))
+        f.engine.onStatus(f.status)
+        advanceUntilIdle()
+        coVerify(exactly = 3) { f.proposals.createProposal(any(), any()) }
+    }
+
+    @Test fun newScannedHeightAllowsOneSuccessfulPreparationRetry() = runTest {
+        val f = Fixture(this)
+        f.enroll()
+        var attempts = 0
+        val nativeProposal = proposal(10_000, false)
+        coEvery { f.proposals.createProposal(any(), any()) } answers {
+            if (++attempts == 1) throw InsufficientFundsException()
+            val send = secondArg<cash.z.ecc.android.sdk.model.ZecSend>()
+            RegularTransactionProposal(send.destination, send.amount, send.memo, nativeProposal)
+        }
+        f.engine.onStatus(f.status)
+        runCurrent()
+        f.verifyNoSigning()
+        f.scanned.value = BlockHeight.new(101)
+        advanceUntilIdle()
+        coVerify(exactly = 2) { f.proposals.createProposal(any(), any()) }
+        coVerify(exactly = 1) { f.proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("submitted"))
+    }
+
+    @Test fun revocationWhileWaitingForPreparationReleasesGateAndPreventsRetry() = runTest {
+        val f = Fixture(this)
+        f.enroll()
+        coEvery { f.proposals.createProposal(any(), any()) } throws InsufficientFundsException()
+        f.engine.onStatus(f.status)
+        runCurrent()
+        assertTrue(AutoDonationSpendingGate.mutex.tryLock())
+        try { f.store.disable() } finally { AutoDonationSpendingGate.mutex.unlock() }
+        f.scanned.value = BlockHeight.new(101)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
+        f.verifyNoSigning()
+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("authorization unavailable"))
+    }
+
+    @Test fun unchangedScanPreparationExpiresWithoutSigningOrUncertainBroadcast() = runTest {
+        val f = Fixture(this)
+        f.enroll()
+        coEvery { f.proposals.createProposal(any(), any()) } throws InsufficientFundsException()
+        f.engine.onStatus(f.status)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
+        f.verifyNoSigning()
+        assertTrue(assertNotNull(f.store.latestOutcome()).startsWith("Skipped:"))
+    }
+
+    @Test fun submissionInsufficientFundsIsUncertainAndNeverRetriesPreparation() = runTest {
+        val f = Fixture(this)
+        f.enroll()
+        coEvery { f.proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) } throws
+            InsufficientFundsException()
+        f.engine.onStatus(f.status)
+        advanceUntilIdle()
+        f.scanned.value = BlockHeight.new(101)
+        f.engine.onStatus(f.status)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { f.proposals.createProposal(any(), any()) }
+        coVerify(exactly = 1) { f.proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
+        assertTrue(assertNotNull(f.store.latestOutcome()).contains("uncertain"))
+    }
+
     private inner class Fixture(scope: CoroutineScope, fee: Long = 10_000, malformedProposal: Boolean = false) {
         val store = AutoDonationStore(context)
         val accountUuid = AccountUuid.new(ByteArray(16) { it.toByte() })
@@ -309,8 +421,14 @@ class AutoDonationCoordinatorTest {
             every { netValue } returns Zatoshi(10_010_000)
             every { feePaid } returns Zatoshi(10_000)
         }
+        val syncStatus = MutableStateFlow(Synchronizer.Status.SYNCED)
+        val scanned = MutableStateFlow<BlockHeight?>(BlockHeight.new(100))
+        val network = MutableStateFlow<BlockHeight?>(BlockHeight.new(100))
         private val synchronizer = mockk<Synchronizer> {
             coEvery { getTransactions(accountUuid) } returns flowOf(listOf(transaction))
+            every { status } returns syncStatus
+            every { fullyScannedHeight } returns scanned
+            every { networkHeight } returns network
         }
         private val synchronizers = mockk<SynchronizerProvider> {
             coEvery { getSynchronizer() } returns this@Fixture.synchronizer
@@ -343,7 +461,6 @@ class AutoDonationCoordinatorTest {
         fun prepareIncoming(minedHeight: Long) {
             quote.originAsset = other
             quote.destinationAsset = zec
-            every { synchronizer.fullyScannedHeight } returns MutableStateFlow(BlockHeight.new(100))
             status.destinationTransactionIds = listOf(depositId)
             status.executedAmountOut = BigDecimal("0.1")
             every { transaction.isSentTransaction } returns false
