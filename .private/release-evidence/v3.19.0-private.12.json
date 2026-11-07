@@ -1,0 +1,529 @@
+{
+  "source_sha": "4e4bff9cf1b52d9322000ef181a7c8be5577a802",
+  "controller_sha": "59ef2dd094aad3c186d86a48c488d42d1cc142d4",
+  "artifact_run_id": "42355250478",
+  "apk_sha256": "b528bd3ccfb2c197d4fa9f2e88fd8d705144ba5ad23be72d45cb3ef1daff0ceb",
+  "core": {
+    "schema": 1,
+    "passed": true,
+    "evidence_class": "real-app-testnet",
+    "network": "zcash-testnet",
+    "clearnet_fallback": false,
+    "direct_bulk_downloads": true,
+    "personal_wallet_access": false,
+    "real_funds_used": false,
+    "stages": {
+      "fund": {
+        "stage": "fund",
+        "passed": true,
+        "network": "zcash-testnet",
+        "transport": "Tor sensitive RPCs; upstream direct bulk",
+        "seconds": 319.7205214,
+        "native_rpc_probe": {
+          "wallet_access": false,
+          "valid_transaction_submissions": 0,
+          "height_response_class": "Success",
+          "height": 4593763,
+          "malformed_submit_calls": 1,
+          "submit_response_class": "OverTor",
+          "sdk_code": 3200,
+          "native_rejection_code": -22,
+          "seconds": 4.7855612
+        },
+        "funding_txid": "d75289774307e79e1fda400debe3721a646d640c4d4d8b1f4c4d711328b6c9d9",
+        "balance_zatoshi": 10000000,
+        "app_transaction_state": "Confirmed",
+        "public_relay_directory_transport": "direct HTTPS before wallet firewall; no wallet data",
+        "public_relay_fetch_millis": 2561,
+        "database_input": {
+          "database_count": 1,
+          "accounts": [
+            1
+          ],
+          "ironwood_note_counts": [
+            1,
+            10000000,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null,
+            null
+          ],
+          "checkpoint_counts_and_maxima": [
+            76,
+            4593776,
+            76,
+            4593776,
+            76,
+            4593776
+          ],
+          "ironwood_shard_counts": [
+            1,
+            0,
+            0
+          ],
+          "note_height_ranges": [
+            4593768,
+            4593768,
+            4593768,
+            4593768,
+            null,
+            null
+          ],
+          "legacy_tip_and_anchor": [
+            4593779,
+            4593776,
+            4593776,
+            4593776,
+            0
+          ]
+        }
+      },
+      "upgrade": {
+        "stage": "upgrade",
+        "passed": true,
+        "network": "zcash-testnet",
+        "transport": "Tor sensitive RPCs; upstream direct bulk",
+        "seconds": 4.2103357,
+        "database_input": {
+          "database_count": 1,
+          "accounts": [
+            1
+          ],
+          "ironwood_note_counts": [
+            1,
+            10000000,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null,
+            null
+          ],
+          "checkpoint_counts_and_maxima": [
+            76,
+            4593776,
+            76,
+            4593776,
+            76,
+            4593776
+          ],
+          "ironwood_shard_counts": [
+            1,
+            0,
+            0
+          ],
+          "note_height_ranges": [
+            4593768,
+            4593768,
+            4593768,
+            4593768,
+            null,
+            null
+          ],
+          "legacy_tip_and_anchor": [
+            4593779,
+            4593776,
+            4593776,
+            4593776,
+            0
+          ]
+        }
+      },
+      "interruption": {
+        "passed": true,
+        "metadata_blocked": true,
+        "direct_bulk_reachable": true,
+        "metadata_recovered": true,
+        "blocked_packets": 142,
+        "seconds": 72.64670909999404,
+        "sync_restarted": true,
+        "synced": true,
+        "balance_preserved": true,
+        "history_preserved": true,
+        "scanned_height": 4593780
+      },
+      "send": {
+        "stage": "send",
+        "passed": true,
+        "network": "zcash-testnet",
+        "transport": "Tor sensitive RPCs; upstream direct bulk",
+        "seconds": 99.1415852,
+        "txId": "359ae9a0cde5de3127cfbab5d7c51cd53883eb2fd699dad0c1c7ae2e72171e3b",
+        "fee_zatoshi": 10000,
+        "initial_submit_type": "Success",
+        "manual_resubmissions": 0,
+        "ui_review": true,
+        "ui_cancel_no_submission": true,
+        "ui_approval": true,
+        "ui_approval_actions": 1,
+        "ui_review_sync_checks": 2,
+        "ui_review_sync_wait_millis": 6986,
+        "setup": "production prefill bus; actual form Review and approval clicks",
+        "biometric_prompt_executed": false
+      },
+      "restart": {
+        "stage": "restart",
+        "passed": true,
+        "network": "zcash-testnet",
+        "transport": "Tor sensitive RPCs; upstream direct bulk",
+        "seconds": 4.6472386,
+        "txId": "359ae9a0cde5de3127cfbab5d7c51cd53883eb2fd699dad0c1c7ae2e72171e3b"
+      },
+      "restore": {
+        "stage": "restore",
+        "passed": true,
+        "network": "zcash-testnet",
+        "transport": "Tor sensitive RPCs; upstream direct bulk",
+        "seconds": 39.4157076,
+        "txId": "359ae9a0cde5de3127cfbab5d7c51cd53883eb2fd699dad0c1c7ae2e72171e3b",
+        "mined_height": 4593785,
+        "amount_zatoshi": 1000000,
+        "app_transaction_state": "Pending"
+      }
+    },
+    "input_fingerprint": "e04973120e498dd470544537c6332f61792ebe03fe204ec1965a715a081ec86c",
+    "runtime_input_fingerprint": "cf6ea4d45881dd157ec8ce3525daf5bc7f49f4d70187a862b11b4842a2ed5a74",
+    "build_input_fingerprint": "02ec7eb1a14af8da3eda6b1e02774145044d937bf5444da72aeda2b0a9288697",
+    "build_source_sha": "4e4bff9cf1b52d9322000ef181a7c8be5577a802",
+    "baseline_source_sha": "170eb24caaa90969849c3f8dcfcb77f4016196ab",
+    "baseline_version_code": 3234011,
+    "candidate_version_code": 3234012,
+    "candidate_apk_sha256": "9d65043158e1b49a57b9c9d558cdf7cc8e0ad246487eaeabed60a28cf04091b6",
+    "baseline_apk_sha256": "5c4b3857491890b9b721a3b3f34b28bd5b385136b7bf1bc160fcfd4dcceceacc",
+    "instrumentation_apk_sha256": "cca9f105263bbf37fb37db44efd2e1c36b318a2d78e7707d97608251e1d56218",
+    "harness_sha256": "8a3cfe50860a59e5cdd61f7152eba3251c289d28b33555452a9a4bd5abb7c8a7",
+    "connection_tracing": true,
+    "bootstrap_policy_sha256": "c9c82d336a50ef5c8f4ce7223b462250a2bf78fe62b704e1835fa35c53aa434c",
+    "sync_preflight": {
+      "stage": "sender",
+      "passed": true,
+      "network": "zcash-testnet",
+      "transport": "Tor sensitive RPCs; upstream direct bulk",
+      "seconds": 52.1054503,
+      "scanned_height": 4593765,
+      "network_height": 4593765,
+      "mode": "caught-up"
+    },
+    "funding_setup": {
+      "tor_transport_verified": true,
+      "proxy_unavailable_failed_closed": true,
+      "tor_exit_verified": false,
+      "route_evidence": "Pinned owned Tor SOCKS; unavailable-proxy negative; validated faucet TLS",
+      "txid": "d75289774307e79e1fda400debe3721a646d640c4d4d8b1f4c4d711328b6c9d9",
+      "provider": "jinolabs-testnet",
+      "persistent_tor_connection": true,
+      "bundle_sha256": "2ee123e9167318a3742778ff704e75f01d4780f05a14522d451fe011011077c4",
+      "download_bytes": 23537200,
+      "expanded_bytes": 16453120,
+      "setup_seconds": 1.7714034999953583,
+      "bootstrap_seconds": 7.079367099999217,
+      "proof_compute_seconds": 0.18320610000228044,
+      "claim_seconds": 12.085724600008689,
+      "tor_binary_sha256": "1607d98f5d13859077b1b349c55beba76b09acc788f0431fd824d11966fb1074",
+      "tor_version": "Tor version 0.4.9.15 (git-4d8efff53a86670b).",
+      "seconds": 32.64344220000203
+    },
+    "iptables_denials": [
+      "       0        0 REJECT     17   --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable",
+      "       0        0 REJECT     all  --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable",
+      "       0        0 REJECT     all  --  *      *       0.0.0.0/0            172.235.26.235       reject-with icmp-port-unreachable"
+    ],
+    "ip6tables_denials": [
+      "       0        0 REJECT     17   --  *      *       ::/0                 ::/0                 reject-with icmp6-port-unreachable",
+      "       0        0 REJECT     all  --  *      *       ::/0                 ::/0                 reject-with icmp6-port-unreachable"
+    ],
+    "network_enforcement": {
+      "passed": true,
+      "mode": "direct public bulk endpoint TCP443 plus Tor relay allowlist; sensitive provider direct egress denied; metadata outage assertion",
+      "allowed_relay_peers": 10170,
+      "embedded_bootstrap_pairs": 300,
+      "sensitive_targets": 1,
+      "direct_bulk_targets": [
+        "2a09:8280:1::32:da2a:0",
+        "66.241.124.102"
+      ],
+      "metadata_no_direct_fallback_observed": true,
+      "metadata_rpc_scope": [
+        "getServerInfo",
+        "getLatestBlockHeight"
+      ],
+      "sdk_transport_policy": "published SDK6.0.0 source inspected; bulk direct, sensitive calls Tor"
+    },
+    "seconds": 715.8807285000075,
+    "last_stage": "restore",
+    "connection_trace_header": "# tracer: nop\r\n#\r\n# entries-in-buffer/entries-written: 495/495   #P:2\r\n#\r\n#                                          _-----=> irqs-off/BH-disabled\r\n#                                         / _----=> need-resched\r\n#                                        | / _---=> hardirq/softirq\r\n#                                        || / _--=> preempt-depth\r\n#                                        ||| / _-=> migrate-disable\r\n#                                        |||| /     delay\r\n#           TASK-PID  ",
+    "connection_trace_sample": [
+      "   TlsVerify_100-1932    (    350) [000] .....    46.142071: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=0 dport=853 saddr=0.0.0.0 daddr=0.0.0.0 saddrv6=fec0::2f97:5ef4:aabd:2a78 daddrv6=fec0::3 oldstate=TCP_CLOSE newstate=TCP_SYN_SENT",
+      "        Thread-4-1894    (    996) [001] .....    46.251634: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=0 dport=443 saddr=10.0.2.16 daddr=142.251.152.119 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.152.119 oldstate=TCP_CLOSE newstate=TCP_SYN_SENT",
+      "        Thread-5-1895    (    996) [001] .....    46.295228: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=0 dport=80 saddr=10.0.2.16 daddr=142.251.150.120 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.150.120 oldstate=TCP_CLOSE newstate=TCP_SYN_SENT",
+      "            netd-374     (    350) [000] b..1.    46.802672: inet_sock_set_state: family=AF_INET protocol=IPPROTO_TCP sport=55622 dport=853 saddr=10.0.2.16 daddr=10.0.2.3 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:10.0.2.3 oldstate=TCP_SYN_SENT newstate=TCP_CLOSE",
+      "            netd-374     (    350) [000] b..1.    46.802983: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=60882 dport=443 saddr=10.0.2.16 daddr=142.251.152.119 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.152.119 oldstate=TCP_SYN_SENT newstate=TCP_CLOSE",
+      "            netd-374     (    350) [000] b..1.    46.802993: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=44006 dport=80 saddr=10.0.2.16 daddr=142.251.150.120 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.150.120 oldstate=TCP_SYN_SENT newstate=TCP_CLOSE",
+      "            netd-374     (    350) [000] bN.1.    46.804758: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=56412 dport=853 saddr=0.0.0.0 daddr=0.0.0.0 saddrv6=fec0::2f97:5ef4:aabd:2a78 daddrv6=fec0::3 oldstate=TCP_SYN_SENT newstate=TCP_CLOSE",
+      "   TlsVerify_101-2162    (    350) [000] .....    49.289975: inet_sock_set_state: family=AF_INET protocol=IPPROTO_TCP sport=0 dport=853 saddr=10.0.2.16 daddr=10.0.2.3 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:10.0.2.3 oldstate=TCP_CLOSE newstate=TCP_SYN_SENT"
+    ],
+    "application_pids": [
+      1951,
+      2410,
+      2535,
+      2658,
+      2939,
+      3034,
+      3361,
+      3495,
+      3619
+    ],
+    "connection_destinations": [
+      {
+        "address": "109.104.153.187",
+        "port": 443
+      },
+      {
+        "address": "109.70.100.248",
+        "port": 80
+      },
+      {
+        "address": "124.198.131.29",
+        "port": 9000
+      },
+      {
+        "address": "130.61.22.245",
+        "port": 443
+      },
+      {
+        "address": "130.89.149.57",
+        "port": 9001
+      },
+      {
+        "address": "142.251.150.120",
+        "port": 80
+      },
+      {
+        "address": "152.32.236.131",
+        "port": 9002
+      },
+      {
+        "address": "159.195.94.250",
+        "port": 9201
+      },
+      {
+        "address": "192.42.113.102",
+        "port": 9001
+      },
+      {
+        "address": "192.42.116.176",
+        "port": 443
+      },
+      {
+        "address": "193.142.146.239",
+        "port": 9001
+      },
+      {
+        "address": "194.26.192.177",
+        "port": 143
+      },
+      {
+        "address": "194.32.76.38",
+        "port": 443
+      },
+      {
+        "address": "195.201.170.253",
+        "port": 9001
+      },
+      {
+        "address": "2001:1600:13:101::22e6",
+        "port": 443
+      },
+      {
+        "address": "2001:610:510:113:192:42:113:102",
+        "port": 9001
+      },
+      {
+        "address": "2001:67c:2564:a120::57",
+        "port": 9001
+      },
+      {
+        "address": "2001:67c:e60:c0c:192:42:116:176",
+        "port": 443
+      },
+      {
+        "address": "204.8.99.156",
+        "port": 443
+      },
+      {
+        "address": "213.108.108.85",
+        "port": 5353
+      },
+      {
+        "address": "2602:f6f6:2:2634::1",
+        "port": 9003
+      },
+      {
+        "address": "2603:c020:8015:3900::24",
+        "port": 443
+      },
+      {
+        "address": "2a01:4f9:3051:3f43::2",
+        "port": 9001
+      },
+      {
+        "address": "2a03:4000:45:16::1",
+        "port": 9001
+      },
+      {
+        "address": "2a03:4000:69:e5b:a4ec:edff:fed8:ed74",
+        "port": 9001
+      },
+      {
+        "address": "2a03:e600:100:c3::8",
+        "port": 80
+      },
+      {
+        "address": "2a09:8280:1::32:da2a:0",
+        "port": 443
+      },
+      {
+        "address": "2a0a:4cc0:120:48e:e4d9:f0ff:fe2c:8afc",
+        "port": 9201
+      },
+      {
+        "address": "2a12:a800:1:1:194:26:192:177",
+        "port": 143
+      },
+      {
+        "address": "38.135.24.31",
+        "port": 9003
+      },
+      {
+        "address": "45.9.60.140",
+        "port": 9001
+      },
+      {
+        "address": "47.156.98.56",
+        "port": 9001
+      },
+      {
+        "address": "51.255.170.195",
+        "port": 10443
+      },
+      {
+        "address": "62.238.237.242",
+        "port": 65533
+      },
+      {
+        "address": "64.65.0.111",
+        "port": 443
+      },
+      {
+        "address": "64.65.0.133",
+        "port": 443
+      },
+      {
+        "address": "64.65.0.70",
+        "port": 443
+      },
+      {
+        "address": "64.65.1.111",
+        "port": 443
+      },
+      {
+        "address": "64.65.62.12",
+        "port": 443
+      },
+      {
+        "address": "64.65.62.157",
+        "port": 443
+      },
+      {
+        "address": "65.109.113.43",
+        "port": 9001
+      },
+      {
+        "address": "66.241.124.102",
+        "port": 443
+      },
+      {
+        "address": "89.147.110.118",
+        "port": 9001
+      },
+      {
+        "address": "89.58.53.213",
+        "port": 9001
+      },
+      {
+        "address": "91.214.191.143",
+        "port": 443
+      }
+    ],
+    "connection_destinations_truncated": false,
+    "iptables_counters": [
+      "       0        0 REJECT     17   --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable",
+      "       0        0 REJECT     all  --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable",
+      "       0        0 REJECT     all  --  *      *       0.0.0.0/0            172.235.26.235       reject-with icmp-port-unreachable"
+    ],
+    "ip6tables_counters": [
+      "       0        0 REJECT     17   --  *      *       ::/0                 ::/0                 reject-with icmp6-port-unreachable",
+      "       0        0 REJECT     all  --  *      *       ::/0                 ::/0                 reject-with icmp6-port-unreachable"
+    ],
+    "blocked_connection_diagnostics": [],
+    "transaction_evidence": {
+      "fundingTxId": "d75289774307e79e1fda400debe3721a646d640c4d4d8b1f4c4d711328b6c9d9",
+      "fundingProvider": "jinolabs-testnet",
+      "fundedBalance": 10000000,
+      "balanceBeforeSend": 10000000,
+      "feeZatoshi": 10000,
+      "senderConfirmedBalance": 8990000,
+      "restoreMinedHeight": 4593785,
+      "restoreTransactionState": "Pending",
+      "candidateTxIds": [
+        "359ae9a0cde5de3127cfbab5d7c51cd53883eb2fd699dad0c1c7ae2e72171e3b"
+      ],
+      "initialSubmitType": "Success"
+    }
+  },
+  "production_quotes": {
+    "schema": 1,
+    "evidence_class": "real-app-production-quotes",
+    "passed": true,
+    "build_source_sha": "4e4bff9cf1b52d9322000ef181a7c8be5577a802",
+    "input_fingerprint": "e148e7cfe41b5a8fba7c506a09dbaecdf0c4da94c03ab5c8aa5883c8648ea943",
+    "executed_apk_sha256": "6370b30b3a756c040f2b1b13c629a6e8d8c2008b49e004c4af7583932e2ab457",
+    "original_apk_sha256": "4004908d658cde3f948f384f402e9cc742d176542a13285a0fc9f6d363e7f0aa",
+    "quote_requests": 3,
+    "quote_reviews": 3,
+    "dismissals": 3,
+    "tor_enabled": true,
+    "funds_transferred": false,
+    "personal_wallet_access": false,
+    "artifact_id": 13567442220,
+    "workflow_run_id": 42355250478,
+    "archive_sha256": "f790f1eb30d6a19e918962256706bec12f82c7b0744aeffee7b3eff821696889",
+    "apk_preparation": {
+      "originalSha256": "4004908d658cde3f948f384f402e9cc742d176542a13285a0fc9f6d363e7f0aa",
+      "testedSha256": "6370b30b3a756c040f2b1b13c629a6e8d8c2008b49e004c4af7583932e2ab457",
+      "preservedExecutionEntries": 33,
+      "executionEntriesDigest": "1d86b87919587f976d7250fa94503d49ec882eb9ffa6886520542cb7dc802702",
+      "executionEntriesUnchanged": true,
+      "abi": "x86_64",
+      "signing": "ephemeral test key; not release key"
+    },
+    "guard_job": "4a590ee5235d41998de06e5a14b38a14",
+    "provider_timeouts": [],
+    "presentation": {
+      "passed": true,
+      "platform_fee_included": true,
+      "minimum_received_visible": true,
+      "placeholder_wallet_fee_absent": true
+    }
+  },
+  "production_arm_executed": false,
+  "real_funds_used": false
+}
