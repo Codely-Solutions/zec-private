@@ -73,4 +73,4 @@ Gradle 8.14.6 is the current maintenance choice. Gradle 9.9.0 exceeds the fully 
 
 ## Donation UI review
 
-`.private/donation-review/include.gradle` explicitly adds a debug-only activity for inspecting the production Home and donation components with synthetic activity. It uses the real local reminder policy but cannot submit a payment. This experimental host compiled locally but crashed before usable rendered review; see [UI-REVIEW.md](UI-REVIEW.md) before reuse. Ordinary builds omit this activity. Emulator screenshots establish presentation and reminder interactions; they do not establish wallet transaction or release acceptance.
+`.private/donation-review/include.gradle` explicitly adds a debug-only activity for inspecting the production Home and donation components with synthetic activity. It uses the real local reminder policy but cannot submit a payment. Follow [UI-REVIEW.md](UI-REVIEW.md) for artifact-bound capture and inspection. Ordinary builds omit this activity. Emulator screenshots establish presentation and reminder interactions; they do not establish wallet transaction or release acceptance.
