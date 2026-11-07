@@ -23,6 +23,7 @@ import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapQuote
+import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
@@ -82,7 +83,7 @@ class AutoDonationCoordinatorTest {
     @Test fun historicalQuoteCannotEnrollAfterAuthorization() = runTest {
         val f = Fixture(this)
         f.authorize()
-        every { f.quote.timestamp } returns Clock.System.now() - 60.seconds
+        f.quote.timestamp = Clock.System.now() - 60.seconds
         f.engine.enroll(f.quote, listOf(f.depositId))
         assertNull(f.store.reserve("deposit"))
         f.verifyNoSpending()
@@ -179,7 +180,7 @@ class AutoDonationCoordinatorTest {
     @Test fun unknownExecutedAmountCannotFallBackToQuote() = runTest {
         val f = Fixture(this)
         f.enroll()
-        every { f.status.executedAmountIn } returns null
+        f.status.executedAmountIn = null
         f.engine.onStatus(f.status)
         advanceUntilIdle()
         assertTrue(assertNotNull(f.store.latestOutcome()).contains("settled input"))
@@ -189,7 +190,7 @@ class AutoDonationCoordinatorTest {
     @Test fun negativeRefundCannotIncreaseDonationBasis() = runTest {
         val f = Fixture(this)
         f.enroll()
-        every { f.status.refundedFormatted } returns BigDecimal("-1")
+        f.status.refundedFormatted = BigDecimal("-1")
         f.engine.onStatus(f.status)
         advanceUntilIdle()
         assertTrue(assertNotNull(f.store.latestOutcome()).contains("refund"))
@@ -219,7 +220,7 @@ class AutoDonationCoordinatorTest {
     @Test fun providerAmountMustEqualConfirmedNativeDeposit() = runTest {
         val f = Fixture(this)
         f.enroll()
-        every { f.status.depositedAmountFormatted } returns BigDecimal("0.2")
+        f.status.depositedAmountFormatted = BigDecimal("0.2")
         f.engine.onStatus(f.status)
         advanceUntilIdle()
         assertTrue(assertNotNull(f.store.latestOutcome()).contains("amount differs"))
@@ -315,21 +316,8 @@ class AutoDonationCoordinatorTest {
             every { tokenTicker } returns "btc"
             every { chainTicker } returns "btc"
         }
-        val quote = mockk<SwapQuote> {
-            every { timestamp } returns Clock.System.now() + 5.seconds
-            every { originAsset } returns zec
-            every { destinationAsset } returns other
-            every { depositAddress } returns DynamicSwapAddress("deposit")
-            every { destinationAddress } returns DynamicSwapAddress("destination")
-        }
-        val status = mockk<SwapQuoteStatus> {
-            every { status } returns SwapStatus.SUCCESS
-            every { depositAddress } returns DynamicSwapAddress("deposit")
-            every { destinationAddress } returns DynamicSwapAddress("destination")
-            every { depositedAmountFormatted } returns BigDecimal("0.1")
-            every { executedAmountIn } returns BigDecimal("0.1")
-            every { refundedFormatted } returns BigDecimal.ZERO
-        }
+        val quote = TestQuote(zec, other)
+        val status = TestStatus(quote)
         private val proposal = proposal(fee, malformedProposal)
         val proposals = mockk<ProposalDataSource> {
             coEvery { createProposal(any(), any()) } answers {
@@ -346,11 +334,11 @@ class AutoDonationCoordinatorTest {
         )
 
         fun prepareIncoming(minedHeight: Long) {
-            every { quote.originAsset } returns other
-            every { quote.destinationAsset } returns zec
+            quote.originAsset = other
+            quote.destinationAsset = zec
             every { synchronizer.fullyScannedHeight } returns MutableStateFlow(BlockHeight.new(100))
-            every { status.destinationTransactionIds } returns listOf(depositId)
-            every { status.executedAmountOut } returns BigDecimal("0.1")
+            status.destinationTransactionIds = listOf(depositId)
+            status.executedAmountOut = BigDecimal("0.1")
             every { transaction.isSentTransaction } returns false
             every { transaction.netValue } returns Zatoshi(10_000_000)
             every { transaction.minedHeight } returns BlockHeight.new(minedHeight)
@@ -372,6 +360,51 @@ class AutoDonationCoordinatorTest {
             coVerify(exactly = 0) { proposals.createProposal(any(), any()) }
             verifyNoSigning()
         }
+    }
+
+    /** Concrete address-bearing values avoid MockK reflection through inline SwapAddress getters. */
+    private class TestQuote(
+        override var originAsset: SwapAsset,
+        override var destinationAsset: SwapAsset,
+    ) : SwapQuote {
+        override val depositAddress = DynamicSwapAddress("deposit")
+        override val destinationAddress = DynamicSwapAddress("destination")
+        override val refundAddress = DynamicSwapAddress("refund")
+        override val provider = "test-provider"
+        override val mode = SwapMode.EXACT_INPUT
+        override val amountIn = BigDecimal(10_000_000)
+        override val amountInFormatted = BigDecimal("0.1")
+        override val amountInUsd = BigDecimal.ZERO
+        override val amountOut = BigDecimal(10_000_000)
+        override val amountOutFormatted = BigDecimal("0.1")
+        override val amountOutUsd = BigDecimal.ZERO
+        override val affiliateFee = BigDecimal.ZERO
+        override val affiliateFeeUsd = BigDecimal.ZERO
+        override val slippage = BigDecimal.ZERO
+        override var timestamp = Clock.System.now() + 5.seconds
+        override val deadline get() = timestamp + 60.seconds
+    }
+
+    private class TestStatus(private val quote: TestQuote) : SwapQuoteStatus {
+        override val originAsset get() = quote.originAsset
+        override val destinationAsset get() = quote.destinationAsset
+        override val depositAddress get() = quote.depositAddress
+        override val destinationAddress get() = quote.destinationAddress
+        override val timestamp get() = java.time.Instant.ofEpochSecond(quote.timestamp.epochSeconds)
+        override val deadline get() = quote.deadline
+        override val status = SwapStatus.SUCCESS
+        override val mode get() = quote.mode
+        override val isSlippageRealized = true
+        override val maxSlippage = BigDecimal.ZERO
+        override val amountInFormatted get() = quote.amountInFormatted
+        override val amountInUsd get() = quote.amountInUsd
+        override val amountOutFormatted get() = quote.amountOutFormatted
+        override val amountOutUsd get() = quote.amountOutUsd
+        override var depositedAmountFormatted: BigDecimal? = BigDecimal("0.1")
+        override var executedAmountIn: BigDecimal? = BigDecimal("0.1")
+        override var executedAmountOut: BigDecimal? = null
+        override var refundedFormatted: BigDecimal? = BigDecimal.ZERO
+        override var destinationTransactionIds: List<String> = emptyList()
     }
 
     private fun proposal(fee: Long, malformed: Boolean): Proposal {

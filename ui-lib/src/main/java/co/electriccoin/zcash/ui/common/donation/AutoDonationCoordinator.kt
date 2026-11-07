@@ -75,7 +75,8 @@ class AutoDonationCoordinator(
         val enrollment = runCatching { store.reserve(key) }.getOrNull() ?: return
         scope.launch {
             try {
-                val reason = withTimeoutOrNull(15 * 60 * 1000L) {
+                // Leave margin for the SDK's ten-confirmation receipt policy.
+                val reason = withTimeoutOrNull(30 * 60 * 1000L) {
                     donate(status, enrollment)
                 } ?: "Automatic donation outcome uncertain. Check Activity."
                 store.outcome(key, reason)
