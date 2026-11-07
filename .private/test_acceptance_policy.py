@@ -168,6 +168,9 @@ class AcceptancePolicyTest(unittest.TestCase):
                 '.private/core-wallet/Flow.kt':'unknown test source',
                 CORE_TEST_SOURCE:'dedicated instrumentation',
                 '.private/upgrade-baseline.json':'baseline identity',
+                '.private/emulator_session.py':'session lifecycle',
+                '.private/emulator_batch.py':'batch scheduler',
+                '.private/admit_emulator_batch.py':'batch admission',
                 'README.md':'documentation',
                 'ui-lib/src/test/java/Test.kt':'test-only',
             }
@@ -184,7 +187,9 @@ class AcceptancePolicyTest(unittest.TestCase):
                     for profile in original:
                         expected=(name not in ('README.md','ui-lib/src/test/java/Test.kt','gradle.properties')
                                   and not (profile=='production-quotes' and name.startswith('.private/'))
-                                  and not (profile=='core-build' and name=='.private/upgrade-baseline.json')
+                                  and not (profile=='core-build' and name in ('.private/upgrade-baseline.json',
+                                      '.private/emulator_session.py', '.private/emulator_batch.py',
+                                      '.private/admit_emulator_batch.py'))
                                   and not (profile=='core-runtime' and name==CORE_TEST_SOURCE))
                         with self.subTest(path=name,profile=profile):
                             self.assertEqual(expected,input_fingerprint(tree,root=root,profile=profile)!=original[profile])

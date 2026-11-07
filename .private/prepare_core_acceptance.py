@@ -46,9 +46,9 @@ manifest.update(probeKind='core-testnet',package='com.personal.zecprivate.testne
 
 old=json.loads((PARENT/'tor-emulator-job.json').read_text())
 old.update(owner='zec-private-core-validation',purpose='Real installed-app testnet receive/send, update, persistence, restoration and Tor interruption',
-           seconds=1800,reserveBytes=8450000000,
+           seconds=3000,reserveBytes=8450000000,
            cleanup='Stop exact blank emulator/private ADB Job and destroy isolated test-wallet seeds, userdata and transient output')
-names=('run_tor_emulator.py','strip_emulator_apk.py','tor_differential_driver.py',
+names=('run_tor_emulator.py','emulator_session.py','strip_emulator_apk.py','tor_differential_driver.py',
        'core_testnet_driver.py','core_faucet.py','core-network-policy.json','acceptance_policy.py',
        'core-wallet/src/co/electriccoin/zcash/app/CoreWalletAcceptance.kt','core-wallet/include.gradle')
 old['sources']=[str(ROOT/'.private'/name) for name in names]+[str(PARENT/'tor-probe-artifact.json')]+[
