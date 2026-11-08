@@ -1,11 +1,9 @@
-# Last published release — revision 13
+# Revision 14 — validated candidate
 
-This record describes the published artifact below. It is not validation of the current working branch; consult the local checkpoint for paused development.
+Candidate `d7471a007f131a808986a9e66f70638750c305ea`, run `42429934172`, passed 1,731 unit tests, lint, Detekt, live Tor API contracts and disposable upstream integration. Production is ARM64-only; signing is pending and will reuse the validated unsigned APK.
 
-Candidate 42367044863 at `d12dea751a4dbab29671acab394777a7c613774c` passed all 1,724 tests and required release checks. Optional shielded donations use normal review/authentication, default to a zero saved suggestion and never spend automatically. Unsupported multi-recipient payment requests are rejected before signing. Actual network costs remain visible.
+Donations are manual, shielded and explicitly reviewed. Home discovery has a persistent shortcut, one automatic introduction and shared invitation suppression/cooldown. Automatic spending and percentage settings are absent.
 
-The isolated lifecycle executed a real shielded testnet donation, cancellation/review, installed revision-12 update, restart, recipient recovery and scoped Tor interruption/recovery. Core and UI APKs were reused from `686a9f10b80fd44b9467c092ace4cdcd80767b1a` after exact relevant-input equality established that later corrections changed tests only. Each receipt retains its actual executed source and APK digest. Production quotes remain unfunded.
+Current bound receipts establish real testnet receive/confirmation, revision-13 installed update, Tor interruption/recovery, manual donation review/cancel/approve, restart and clean seed recovery. Three unfunded BTC→ZEC quote/dismiss cycles passed with Tor. The quote scenario needed a sheet-readiness correction; its task-owned adapter and exact bytes are recorded in the guarded execution evidence.
 
-Upstream discovery, package identity, ARM64-only production, x86_64 emulator support and build/signing separation remain. The validated unsigned artifact was promoted without rebuilding. Production ARM execution, physical signing/biometric UI and funded production settlement are outside this evidence. XMR/THORChain implementation remains unplanned.
-
-Signed [revision 13](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.13) preserves the permanent certificate and every validated unsigned payload entry. APK: 67844815 bytes; SHA-256 `c8a1852e622ab861f598480cb6ad811c845ebbea870295fb200e72ee804eb4b8`. Production remains ARM64-only. Compared with revision 12, the signed APK grew 32,768 bytes and the resolved runtime graph remains 334 components. The next seedless revision 13 fixture was independently downloaded and verified in authenticated maintenance storage; revision 12 remains the completed lifecycle baseline.
+Production ARM64 execution, physical signing/biometric UI and funded production settlement remain untested. See [the validation summary](core-validation-summary.json) and [coverage](core-coverage.md) for boundaries. Detailed historical signed evidence remains immutable under `release-evidence/`.

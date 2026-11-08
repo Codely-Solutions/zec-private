@@ -1,109 +1,48 @@
 {
-  "status": "signed-and-independently-verified",
-  "scope": "optional shielded donations and payment-review safety",
-  "source_sha": "d12dea751a4dbab29671acab394777a7c613774c",
-  "candidate_run": 42367044863,
-  "baseline": "v3.19.0-private.12",
+  "status": "validated-candidate-awaiting-signing",
+  "scope": "Manual shielded donations and home discovery",
+  "source_sha": "d7471a007f131a808986a9e66f70638750c305ea",
+  "candidate_run": 42429934172,
+  "baseline": "v3.19.0-private.13",
   "tests": {
-    "tests": 1724,
+    "tests": 1731,
     "failures": 0,
     "errors": 0,
     "skipped": 0
   },
-  "added_tests": 19,
   "runtime_components": 334,
-  "production_gradle_seconds": 892,
-  "baseline_production_gradle_seconds": 905,
-  "timing_comparison": "Cache-influenced; no causal speedup claim",
-  "core_seconds": 802.467095400003,
+  "production_gradle_seconds": 682,
+  "core_seconds": 746.8009905000217,
   "core_transaction_evidence": {
-    "fundingTxId": "faabf19a108836eee9877664a75cecf8df07fa7ea7086e4a91fea52d0bc1daad",
+    "fundingTxId": "998d4453902d02bec44a5490e7540379e8ddba3d047c641f64ed98ac9aa57719",
     "fundingProvider": "jinolabs-testnet",
     "fundedBalance": 10000000,
     "balanceBeforeSend": 10000000,
     "feeZatoshi": 10000,
     "senderConfirmedBalance": 8990000,
-    "restoreMinedHeight": 4594185,
+    "restoreMinedHeight": 4596104,
     "restoreTransactionState": "Pending",
     "candidateTxIds": [
-      "27b423d38d54a5db8eb294f1dccb57782921782e1427be15ae0d0565e2647052"
+      "15123eff4ed0cf4af7003106e34ca4e13fc71b18de99c7ee27b3fdc2011479f0"
     ],
     "initialSubmitType": "Success"
   },
-  "core_build_source": "686a9f10b80fd44b9467c092ace4cdcd80767b1a",
-  "production_quote_receipt": {
-    "schema": 1,
-    "evidence_class": "real-app-production-quotes",
-    "passed": true,
-    "build_source_sha": "686a9f10b80fd44b9467c092ace4cdcd80767b1a",
-    "input_fingerprint": "1fa300439d6f280ec7653da5e0057f761f91b2ee09420b263575d7ad67867f52",
-    "executed_apk_sha256": "5e3dff508d8a462e9d5584d4fe712778f4e9ba658c561e36f43dfcc3e3b4226a",
-    "original_apk_sha256": "27b6bce19d65775ed36d4867461372f8b9dea66223af49a0e408b22997333212",
-    "quote_requests": 3,
-    "quote_reviews": 3,
-    "dismissals": 3,
-    "tor_enabled": true,
-    "funds_transferred": false,
-    "personal_wallet_access": false,
-    "artifact_id": 13571648465,
-    "workflow_run_id": 42365660179,
-    "archive_sha256": "2965a79e63180ddd373fdd013ae34ebb7b5311aed5fc8cb25370656f337225de",
-    "apk_preparation": {
-      "originalSha256": "27b6bce19d65775ed36d4867461372f8b9dea66223af49a0e408b22997333212",
-      "testedSha256": "5e3dff508d8a462e9d5584d4fe712778f4e9ba658c561e36f43dfcc3e3b4226a",
-      "preservedExecutionEntries": 33,
-      "executionEntriesDigest": "205f4df25a3eefd2c5a541546893240ab723b86833660d03b5371e546c364d94",
-      "executionEntriesUnchanged": true,
-      "abi": "x86_64",
-      "signing": "ephemeral test key; not release key"
-    },
-    "guard_job": "65a615e62c0946368960b983bf7d0197",
-    "provider_timeouts": [],
-    "presentation": {
-      "passed": true,
-      "platform_fee_included": true,
-      "minimum_received_visible": true,
-      "placeholder_wallet_fee_absent": true
-    },
-    "donation_ui": {
-      "passed": true,
-      "settings_entry": true,
-      "zero_default": true,
-      "percentage_choice": true,
-      "explicit_review": true,
-      "unfunded_proposal_refused": true,
-      "approval_actions": 0,
-      "funds_transferred": false
-    }
+  "quote_cycles": {
+    "requests": 3,
+    "reviews": 3,
+    "dismissals": 3
   },
-  "settings": {
-    "default_percent": "0",
-    "suggestions": [
-      "0",
-      "0.25",
-      "0.5",
-      "1",
-      "Custom"
-    ],
-    "confirmation_every_payment": true,
-    "automatic_spending": false,
-    "cooldown_days": 90,
-    "hardware_view_only": "In-app payment refused; manual external support remains available"
-  },
-  "payment_review": "Pinned SDK accepted a two-payment proposal; the app rejects unsupported payment counts before signing. No unreviewed multi-payment transaction was signed.",
-  "limits": [
-    "Production ARM64 inspected, not executed; x86_64 emulator/testnet execution is separate",
-    "No funded production donation or swap settlement, physical signer or biometric UI was executed",
-    "Completed-swap invitations use successful provider execution data; no fundraising effectiveness claim",
-    "External XMR address publication adds no Monero engine",
-    "Donation proposals require one all-shielded SDK step; unsupported shapes fail closed"
+  "donation_behavior": "Manual review only; no automatic spending or percentage settings; one introduction and shared 90-day reminder suppression",
+  "regressions": "Compose introduction lifecycle and invitation persistence; 1731 current unit tests passed",
+  "acceptance_scenario": "Task-owned copy waits for Confirm before reading sheet bounds; same assertions and immutable APK; adapter and scenario hashes retained by guard",
+  "diagnosed_failures": [
+    "One transient quote-unavailable outcome remained unclassified; subsequent three-cycle acceptance passed",
+    "UI scenario raced sheet rendering; explicit Confirm readiness fixed the test"
   ],
-  "upstream": "Stable discovery retained; actual disposable integration and sensitive donation/common-path review gates passed",
-  "release": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.13",
-  "signed_apk": {
-    "apk_bytes": 67844815,
-    "apk_sha256": "c8a1852e622ab861f598480cb6ad811c845ebbea870295fb200e72ee804eb4b8",
-    "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
-    "signedPayloadMatchesValidatedUnsigned": true
-  }
+  "upstream": "Discovery retained; CI disposable integration and fork safeguards passed",
+  "limits": [
+    "ARM64 production packaging inspected, not physically executed",
+    "No real funds, personal wallet, funded production settlement or physical biometric/signer execution",
+    "Restored recipient transaction mined; recipient spendability confirmation wait not repeated"
+  ]
 }
