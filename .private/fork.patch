@@ -18937,10 +18937,10 @@ index 3027e6cda..60dbff0cc 100644
 +            cancelSwapQuote = cancelQuote,
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
 new file mode 100644
-index 000000000..2fa4801b4
+index 000000000..520c04a02
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,244 @@
 +package co.electriccoin.zcash.ui.screen.updates
 +
 +import android.content.Context
@@ -18949,18 +18949,34 @@ index 000000000..2fa4801b4
 +import android.content.pm.PackageInfo
 +import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
 +import io.ktor.client.HttpClient
++import io.ktor.client.engine.HttpClientEngine
++import io.ktor.client.engine.HttpClientEngineBase
++import io.ktor.client.engine.HttpClientEngineConfig
++import io.ktor.client.engine.HttpClientEngineFactory
 +import io.ktor.client.engine.mock.MockEngine
 +import io.ktor.client.engine.mock.respond
++import io.ktor.client.request.HttpRequestData
++import io.ktor.client.request.HttpResponseData
 +import io.ktor.http.HttpHeaders
 +import io.ktor.http.HttpStatusCode
 +import io.ktor.http.headersOf
 +import java.io.IOException
++import java.util.concurrent.CountDownLatch
++import java.util.concurrent.Executors
++import java.util.concurrent.TimeUnit
++import java.util.concurrent.atomic.AtomicBoolean
++import java.util.concurrent.locks.ReentrantLock
++import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.asCoroutineDispatcher
 +import kotlinx.coroutines.awaitCancellation
++import kotlinx.coroutines.cancel
 +import kotlinx.coroutines.cancelAndJoin
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.runBlocking
 +import kotlinx.coroutines.withTimeout
++import kotlin.concurrent.withLock
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertIs
@@ -18989,6 +19005,76 @@ index 000000000..2fa4801b4
 +    fun reset() {
 +        preferences.edit().clear().commit()
 +        installVersion(100)
++    }
++
++    @Test
++    fun cancelledManagedEngineCloseKeepsUiDispatcherResponsive(): Unit = runBlocking {
++        val uiExecutor = Executors.newSingleThreadExecutor { runnable ->
++            Thread(runnable, "update-test-ui")
++        }
++        val uiDispatcher = uiExecutor.asCoroutineDispatcher()
++        val scope = CoroutineScope(SupervisorJob() + uiDispatcher)
++        val nativeEntered = CountDownLatch(1)
++        val nativeRelease = CountDownLatch(1)
++        val nativeFinished = CountDownLatch(1)
++        val closeEntered = CountDownLatch(1)
++        val nativeLock = ReentrantLock()
++        val factory = object : HttpClientEngineFactory<HttpClientEngineConfig> {
++            override fun create(block: HttpClientEngineConfig.() -> Unit): HttpClientEngine =
++                object : HttpClientEngineBase("blocking-native-close-test") {
++                    override val config = HttpClientEngineConfig().apply(block)
++                    private val closed = AtomicBoolean(false)
++
++                    override suspend fun execute(data: HttpRequestData): HttpResponseData {
++                        try {
++                            nativeLock.withLock {
++                                nativeEntered.countDown()
++                                check(nativeRelease.await(10, TimeUnit.SECONDS)) { "Native fixture release deadline" }
++                            }
++                        } finally {
++                            nativeFinished.countDown()
++                        }
++                        throw IOException("Synthetic native request ended")
++                    }
++
++                    override fun close() {
++                        if (!closed.compareAndSet(false, true)) return
++                        closeEntered.countDown()
++                        // SDK TorHttpEngine.close uses runBlocking disposal, which waits
++                        // for the same mutex held across a non-interruptible JNI request.
++                        nativeLock.withLock { }
++                        super.close()
++                    }
++                }
++        }
++        val provider = object : HttpClientProvider {
++            // The factory overload is essential: externally supplied engines are unmanaged.
++            override suspend fun create(): HttpClient = HttpClient(factory)
++            override suspend fun createTor(): HttpClient = error("Unexpected client selection")
++        }
++        val request = scope.launch { AppUpdateRepository(context, provider).readLatestRelease() }
++        var responsiveWhileNativeHeld = false
++        try {
++            assertTrue(nativeEntered.await(3, TimeUnit.SECONDS), "Native fixture did not start")
++            request.cancel()
++            assertTrue(closeEntered.await(3, TimeUnit.SECONDS), "Managed engine close was not exercised")
++            val heartbeat = CountDownLatch(1)
++            uiExecutor.execute { heartbeat.countDown() }
++            responsiveWhileNativeHeld = heartbeat.await(1, TimeUnit.SECONDS)
++        } finally {
++            // The control thread always releases native work, including on the expected red failure.
++            request.cancel()
++            nativeRelease.countDown()
++            try {
++                withTimeout(5_000) { request.join() }
++                assertTrue(nativeFinished.await(3, TimeUnit.SECONDS), "Native fixture survived cleanup")
++            } finally {
++                scope.cancel()
++                uiDispatcher.close()
++                assertTrue(uiExecutor.awaitTermination(3, TimeUnit.SECONDS), "UI test executor survived cleanup")
++            }
++        }
++        assertTrue(responsiveWhileNativeHeld, "Cancelling an update must not block UI while native disposal waits")
 +    }
 +
 +    @Test
