@@ -47,7 +47,7 @@ pluginManagement {
         id("com.android.application") version (androidGradlePluginVersion) apply false
         id("com.android.library") version (androidGradlePluginVersion) apply false
         id("com.android.test") version (androidGradlePluginVersion) apply false
-        id("com.github.ben-manes.versions") version (extra["GRADLE_VERSIONS_PLUGIN_VERSION"].toString()) apply false
+        id("io.github.ben-manes.versions") version (extra["GRADLE_VERSIONS_PLUGIN_VERSION"].toString()) apply false
         id("com.osacky.fulladle") version (extra["FULLADLE_VERSION"].toString()) apply false
         id("org.jetbrains.kotlinx.kover") version (extra["KOVER_VERSION"].toString()) apply false
         id("org.jetbrains.kotlin.plugin.compose") version (kotlinVersion) apply (false)

@@ -4,8 +4,8 @@ allprojects { app ->
         if (app.path == ':app') {
             app.android.sourceSets.getByName('androidTest').kotlin.directories.add(new File(app.rootProject.projectDir, '.private/core-wallet/src').path)
             app.android.sourceSets.getByName('androidTest').java.directories.add(new File(app.rootProject.projectDir, '.private/core-wallet/src').path)
-            app.dependencies.add('androidTestImplementation', app.rootProject.project(':ui-lib'))
-            app.dependencies.add('androidTestImplementation', app.rootProject.project(':sdk-ext-lib'))
+            app.dependencies.add('androidTestImplementation', app.dependencies.project(path: ':ui-lib'))
+            app.dependencies.add('androidTestImplementation', app.dependencies.project(path: ':sdk-ext-lib'))
             def libs=app.extensions.getByType(org.gradle.api.artifacts.VersionCatalogsExtension).named('libs')
             app.dependencies.add('androidTestImplementation',libs.findLibrary('zcash-sdk-backend').get())
             app.dependencies.add('androidTestImplementation','com.google.protobuf:protobuf-javalite:4.34.0')

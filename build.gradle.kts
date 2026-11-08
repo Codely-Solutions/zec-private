@@ -55,7 +55,7 @@ buildscript {
 }
 
 plugins {
-    id("com.github.ben-manes.versions")
+    id("io.github.ben-manes.versions")
     id("com.osacky.fulladle")
     id("secant.detekt-conventions")
     id("secant.ktlint-conventions")

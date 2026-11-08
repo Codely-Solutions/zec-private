@@ -780,6 +780,28 @@ index ae2db55a5..1b5c57e5e 100644
 @@ -8 +8 @@ dependencies {
 -    ktlint("com.pinterest.ktlint:ktlint-cli:${project.property("KTLINT_VERSION")}") {
 +    add(ktlint.name, "com.pinterest.ktlint:ktlint-cli:${project.property("KTLINT_VERSION")}") {
+diff --git a/build-info-lib/build.gradle.kts b/build-info-lib/build.gradle.kts
+index f5d03c1b9..eec498017 100644
+--- a/build-info-lib/build.gradle.kts
++++ b/build-info-lib/build.gradle.kts
+@@ -1 +0,0 @@
+-import co.electriccoin.zcash.Git
+@@ -29,7 +28,8 @@ val generateBuildConfigTask = tasks.register("buildConfig") {
+-    val gitInfo = Git.newInfo(
+-        Git.HEAD,
+-        rootDir
+-    )
+-
+-    inputs.property(gitShaKey, gitInfo.sha)
+-    inputs.property(gitCommitCountKey, gitInfo.commitCount)
++    inputs.property(gitShaKey, providers.exec {
++        workingDir(rootDir)
++        commandLine("git", "rev-parse", "HEAD")
++    }.standardOutput.asText.map { it.trim() })
++    inputs.property(gitCommitCountKey, providers.exec {
++        workingDir(rootDir)
++        commandLine("git", "rev-list", "--count", "HEAD")
++    }.standardOutput.asText.map { it.trim().toInt() })
 diff --git a/build-info-lib/gradle.lockfile b/build-info-lib/gradle.lockfile
 index 665cb8c34..94dd6872b 100644
 --- a/build-info-lib/gradle.lockfile
@@ -833,9 +855,12 @@ index 665cb8c34..94dd6872b 100644
 -org.jetbrains.kotlin:kotlin-tooling-core:2.3.10=kotlinBuildToolsApiClasspath
 +org.jetbrains.kotlin:kotlin-tooling-core:2.4.21=kotlinBuildToolsApiClasspath
 diff --git a/build.gradle.kts b/build.gradle.kts
-index ebbd24d3c..81af15cd4 100644
+index ebbd24d3c..52d716f8e 100644
 --- a/build.gradle.kts
 +++ b/build.gradle.kts
+@@ -58 +58 @@ plugins {
+-    id("com.github.ben-manes.versions")
++    id("io.github.ben-manes.versions")
 @@ -112 +111,0 @@ tasks {
 -            "ZCASH_FLEXA_KEY" to "",
 @@ -118 +117 @@ tasks {
@@ -3762,9 +3787,12 @@ index d94c54a63..cc03febb0 100644
 +    api(platform(libs.okhttp.bom))
 +    api(libs.okhttp)
 diff --git a/settings.gradle.kts b/settings.gradle.kts
-index 5831568a4..ba92dbe61 100644
+index 5831568a4..1a6adcb71 100644
 --- a/settings.gradle.kts
 +++ b/settings.gradle.kts
+@@ -50 +50 @@ pluginManagement {
+-        id("com.github.ben-manes.versions") version (extra["GRADLE_VERSIONS_PLUGIN_VERSION"].toString()) apply false
++        id("io.github.ben-manes.versions") version (extra["GRADLE_VERSIONS_PLUGIN_VERSION"].toString()) apply false
 @@ -54 +53,0 @@ pluginManagement {
 -        kotlin("android") version (kotlinVersion) apply false
 @@ -145 +143,0 @@ dependencyResolutionManagement {
