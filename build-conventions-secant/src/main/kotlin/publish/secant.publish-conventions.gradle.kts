@@ -409,7 +409,7 @@ tasks {
         googlePlayPublisherApiKey,
         deployTrack.toGooglePlayIdentifier(),
         deployStatus.toGooglePlayIdentifier()
-    ) {
+    ).configure {
         dependsOn(":app:assembleZcashmainnetStoreDebug")
         dependsOn(":app:bundleZcashmainnetStoreRelease")
         dependsOn(":app:packageZcashmainnetStoreReleaseUniversalApk")
