@@ -21,9 +21,11 @@ class FoundationArchitectureTest(unittest.TestCase):
 
     def test_resolved_graph_rejects_engine_and_product_dependencies(self):
         evidence=dict(configuration='runtimeClasspath', components=[
-            'project :wallet-foundation-lib','org.jetbrains.kotlin:kotlin-stdlib:2.3.10'])
+            'org.jetbrains.kotlin:kotlin-stdlib:2.3.10','org.jetbrains:annotations:13.0'])
         check_graph(evidence)
-        for forbidden in ('com.zodl.android:zcash-android-sdk:6.0.0','project :ui-lib', 'io.ktor:ktor-client-core:3.1.3'):
+        for forbidden in ('com.zodl.android:zcash-android-sdk:6.0.0','project :ui-lib',
+                          "project ':ui-lib'", "project ':wallet-foundation-lib'",
+                          'io.ktor:ktor-client-core:3.1.3'):
             with self.assertRaises(ValueError):
                 check_graph(dict(evidence,components=evidence['components']+[forbidden]))
 

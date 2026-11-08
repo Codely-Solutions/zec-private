@@ -1,4 +1,3 @@
-import co.electriccoin.zcash.Git
 import com.android.build.api.variant.BuildConfigField
 import com.android.build.api.variant.ResValue
 import model.BuildType
@@ -255,8 +254,14 @@ androidComponents {
             val defaultVersionName = project.property("ZCASH_VERSION_NAME").toString()
             output.versionName.set(defaultVersionName)
             val versionCodeOverride = project.property("ZCASH_VERSION_CODE").toString().toInt()
-            val gitInfo = Git.newInfo(Git.HEAD, rootDir)
-            output.versionCode.set(if (versionCodeOverride == 1) gitInfo.commitCount else versionCodeOverride)
+            if (versionCodeOverride == 1) {
+                output.versionCode.set(providers.exec {
+                    workingDir(rootDir)
+                    commandLine("git", "rev-list", "--count", "HEAD")
+                }.standardOutput.asText.map { it.trim().toInt() })
+            } else {
+                output.versionCode.set(versionCodeOverride)
+            }
         }
 
         variant.packaging.resources.excludes.addAll(listOf(

@@ -15,15 +15,17 @@ index 31940f5da..0e8dbc645 100644
 +.private/**/__pycache__/
 +.private/**/*.pyc
 diff --git a/app/build.gradle.kts b/app/build.gradle.kts
-index d2b4df262..47e8f58ef 100644
+index d2b4df262..3affabac3 100644
 --- a/app/build.gradle.kts
 +++ b/app/build.gradle.kts
-@@ -11 +10,0 @@ plugins {
+@@ -1 +0,0 @@
+-import co.electriccoin.zcash.Git
+@@ -11 +9,0 @@ plugins {
 -    kotlin("android")
-@@ -148 +147 @@ android {
+@@ -148 +146 @@ android {
 -                abiFilters.addAll(setOf("arm64-v8a", "armeabi-v7a"))
 +                abiFilters.add("arm64-v8a")
-@@ -171,44 +169,0 @@ android {
+@@ -171,44 +168,0 @@ android {
 -    // Resolve final app name
 -    // Format: [BuildDistributionNetwork] - D=Debug/R=Release, S=Store/F=FOSS/I=Internal, M=Mainnet/T=Testnet
 -    applicationVariants.all {
@@ -68,9 +70,9 @@ index d2b4df262..47e8f58ef 100644
 -        }
 -    }
 -
-@@ -247 +201,0 @@ dependencies {
+@@ -247 +200,0 @@ dependencies {
 -    implementation(projects.featureVoting)
-@@ -267,0 +222,16 @@ androidComponents {
+@@ -267,0 +221,16 @@ androidComponents {
 +        val defaultAppName = project.property("ZCASH_RELEASE_APP_NAME").toString()
 +        val appName = mapOf(
 +            "zcashtestnetStoreDebug" to "$defaultAppName [DST]",
@@ -87,13 +89,24 @@ index d2b4df262..47e8f58ef 100644
 +            "zcashtestnetInternalDebug" to "$defaultAppName [DIT]"
 +        ).getValue(variant.name)
 +        variant.resValues.put(variant.makeResValueKey("string", "app_name"), ResValue(appName))
-@@ -333 +303 @@ fladle {
+@@ -288,2 +257,8 @@ androidComponents {
+-            val gitInfo = Git.newInfo(Git.HEAD, rootDir)
+-            output.versionCode.set(if (versionCodeOverride == 1) gitInfo.commitCount else versionCodeOverride)
++            if (versionCodeOverride == 1) {
++                output.versionCode.set(providers.exec {
++                    workingDir(rootDir)
++                    commandLine("git", "rev-list", "--count", "HEAD")
++                }.standardOutput.asText.map { it.trim().toInt() })
++            } else {
++                output.versionCode.set(versionCodeOverride)
++            }
+@@ -333 +308 @@ fladle {
 -        val buildMinSdk = project.properties["ANDROID_MIN_SDK_VERSION"].toString().toInt()
 +        val buildMinSdk = project.property("ANDROID_MIN_SDK_VERSION").toString().toInt()
-@@ -337 +307 @@ fladle {
+@@ -337 +312 @@ fladle {
 -        val buildTargetSdk = project.properties["ANDROID_TARGET_SDK_VERSION"].toString().toInt()
 +        val buildTargetSdk = project.property("ANDROID_TARGET_SDK_VERSION").toString().toInt()
-@@ -341,2 +311,2 @@ fladle {
+@@ -341,2 +316,2 @@ fladle {
 -    val firebaseTestLabKeyPath = project.properties["ZCASH_FIREBASE_TEST_LAB_API_KEY_PATH"].toString()
 -    val firebaseProject = project.properties["ZCASH_FIREBASE_TEST_LAB_PROJECT"].toString()
 +    val firebaseTestLabKeyPath = project.property("ZCASH_FIREBASE_TEST_LAB_API_KEY_PATH").toString()

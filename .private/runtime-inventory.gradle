@@ -3,6 +3,9 @@ import groovy.json.JsonOutput
 def writeInventory = { owner, name, output ->
     def configuration = owner.configurations.getByName(name)
     def result = configuration.incoming.resolutionResult
+    // The resolution owner is not a dependency. Display names changed in Gradle 9,
+    // so compare identifiers and keep project dependency names canonical for policy checks.
+    def rootId = result.rootComponent.get().id
     def unresolved = result.allDependencies.findAll {
         it instanceof org.gradle.api.artifacts.result.UnresolvedDependencyResult
     }
@@ -10,7 +13,11 @@ def writeInventory = { owner, name, output ->
     def sha = ['git', 'rev-parse', 'HEAD'].execute(null, owner.rootProject.projectDir).text.trim()
     output.parentFile.mkdirs()
     output.text = JsonOutput.prettyPrint(JsonOutput.toJson([
-        source_sha: sha, configuration: name, components: result.allComponents.collect { it.id.displayName }.sort()
+        source_sha: sha, configuration: name,
+        components: result.allComponents.findAll { it.id != rootId }.collect {
+            it.id instanceof org.gradle.api.artifacts.component.ProjectComponentIdentifier
+                ? 'project ' + it.id.projectPath : it.id.displayName
+        }.sort()
     ])) + '\n'
 }
 
