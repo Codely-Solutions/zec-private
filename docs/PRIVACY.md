@@ -1,6 +1,6 @@
-# Privacy
+# ZEC Private privacy: shielded Zcash and Tor
 
-Wallet keys and databases are stored on your device. Keep your recovery information secure. The FOSS release does not enable Firebase collection.
+Software-wallet keys and databases are stored on your device. Keep your recovery information secure. The FOSS release does not enable Firebase collection.
 
 ## Network connections
 
