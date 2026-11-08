@@ -10,6 +10,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.screen.ExternalUrl
+import co.electriccoin.zcash.ui.screen.about.AboutArgs
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -61,7 +62,7 @@ internal fun AndroidAppUpdateNotice(release: AppUpdateRelease) {
     val scope = rememberCoroutineScope()
     AppUpdateNotice(
         tag = release.tag,
-        onOpen = { router.forward(ExternalUrl(release.releasePage)) },
+        onOpen = { router.forward(AboutArgs) },
         onDismiss = { scope.launch { repository.dismiss(release.versionCode) } },
     )
 }

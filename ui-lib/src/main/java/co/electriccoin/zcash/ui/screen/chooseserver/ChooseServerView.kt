@@ -6,7 +6,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -52,7 +51,6 @@ import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.component.EndpointTextFieldState
 import co.electriccoin.zcash.ui.common.component.ZashiEndpointTextField
-import co.electriccoin.zcash.ui.design.R.drawable
 import co.electriccoin.zcash.ui.design.component.AlertDialogState
 import co.electriccoin.zcash.ui.design.component.AppAlertDialog
 import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
@@ -390,24 +388,6 @@ private fun LazyListScope.serverListItems(state: ServerListState) {
                                     Modifier
                                 }
                             ),
-                    checkedContent = {
-                        if (item.badge == null) {
-                            RadioButtonCheckedContent(item.radioButtonState)
-                        } else {
-                            Image(
-                                painter =
-                                    painterResource(
-                                        id =
-                                            if (isSystemInDarkTheme()) {
-                                                drawable.ic_radio_button_checked_variant_dark
-                                            } else {
-                                                drawable.ic_radio_button_checked_variant
-                                            }
-                                    ),
-                                contentDescription = item.radioButtonState.text.getValue(),
-                            )
-                        }
-                    },
                     trailingContent = {
                         if (item.badge != null) {
                             ZashiBadge(
@@ -498,24 +478,6 @@ private fun CustomServerRadioButton(
             state = state.radioButtonState,
             modifier = Modifier.fillMaxWidth(),
             isRippleEnabled = false,
-            checkedContent = {
-                if (state.badge == null) {
-                    RadioButtonCheckedContent(state.radioButtonState)
-                } else {
-                    Image(
-                        painter =
-                            painterResource(
-                                id =
-                                    if (isSystemInDarkTheme()) {
-                                        drawable.ic_radio_button_checked_variant_dark
-                                    } else {
-                                        drawable.ic_radio_button_checked_variant
-                                    }
-                            ),
-                        contentDescription = state.radioButtonState.text.getValue(),
-                    )
-                }
-            },
             trailingContent = {
                 if (state.badge != null) {
                     ZashiBadge(

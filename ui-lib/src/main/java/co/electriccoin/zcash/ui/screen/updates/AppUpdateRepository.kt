@@ -63,6 +63,9 @@ class AppUpdateRepository(context: Context, private val httpClientProvider: Http
                 preferences.edit().putString("release", encodeCache(release)).apply()
                 mutableState.value = cachedAvailability() ?: AppUpdateState.Current
             } catch (cancelled: CancellationException) {
+                val editor = preferences.edit()
+                if (last == null) editor.remove("last_check") else editor.putLong("last_check", last)
+                editor.apply()
                 mutableState.value = previous ?: AppUpdateState.Idle
                 throw cancelled
             } catch (_: Exception) {

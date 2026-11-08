@@ -1211,26 +1211,38 @@ index f055665c9..913b7cf27 100644
 -        get() = RoundedCornerShape(12.dp)
 +        @Composable get() = ButtonDefaults.shape
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiCheckbox.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiCheckbox.kt
-index c1524f2de..ca586b877 100644
+index c1524f2de..581efb189 100644
 --- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiCheckbox.kt
 +++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiCheckbox.kt
 @@ -8 +7,0 @@ import androidx.compose.animation.scaleOut
 -import androidx.compose.foundation.Image
-@@ -26 +24,0 @@ import androidx.compose.ui.draw.clip
+@@ -24,0 +24,5 @@ import androidx.compose.ui.Modifier
++import androidx.compose.ui.semantics.Role
++import androidx.compose.ui.semantics.role
++import androidx.compose.ui.semantics.semantics
++import androidx.compose.ui.semantics.toggleableState
++import androidx.compose.ui.state.ToggleableState
+@@ -26 +29,0 @@ import androidx.compose.ui.draw.clip
 -import androidx.compose.ui.res.painterResource
-@@ -31 +28,0 @@ import androidx.compose.ui.unit.dp
+@@ -31 +33,0 @@ import androidx.compose.ui.unit.dp
 -import co.electriccoin.zcash.ui.design.R
-@@ -110 +107 @@ fun ZashiCheckbox(
+@@ -87 +89,4 @@ fun ZashiCheckbox(
+-                ).padding(contentPadding)
++                ).semantics {
++                    role = Role.Checkbox
++                    toggleableState = if (state.isChecked) ToggleableState.On else ToggleableState.Off
++                }.padding(contentPadding)
+@@ -110 +115 @@ fun ZashiCheckbox(
 -fun ZashiCheckboxIndicator(isChecked: Boolean) {
 +fun ZashiCheckboxIndicator(isChecked: Boolean, isEnabled: Boolean = true) {
-@@ -112,5 +109 @@ fun ZashiCheckboxIndicator(isChecked: Boolean) {
+@@ -112,5 +117 @@ fun ZashiCheckboxIndicator(isChecked: Boolean) {
 -        Image(
 -            painter = painterResource(R.drawable.ic_zashi_checkbox),
 -            contentDescription = null
 -        )
 -
 +        ZashiSelectionIndicator(isChecked = false, isEnabled = isEnabled)
-@@ -119,14 +112,2 @@ fun ZashiCheckboxIndicator(isChecked: Boolean) {
+@@ -119,14 +120,2 @@ fun ZashiCheckboxIndicator(isChecked: Boolean) {
 -            enter =
 -                scaleIn(
 -                    spring(
@@ -1247,29 +1259,38 @@ index c1524f2de..ca586b877 100644
 -                )
 +            enter = scaleIn(spring(stiffness = Spring.StiffnessMedium, dampingRatio = Spring.DampingRatioMediumBouncy)),
 +            exit = scaleOut(spring(stiffness = Spring.StiffnessHigh, dampingRatio = Spring.DampingRatioMediumBouncy))
-@@ -134,4 +115 @@ fun ZashiCheckboxIndicator(isChecked: Boolean) {
+@@ -134,4 +123 @@ fun ZashiCheckboxIndicator(isChecked: Boolean) {
 -            Image(
 -                painter = painterResource(R.drawable.ic_zashi_checkbox_checked),
 -                contentDescription = null
 -            )
 +            ZashiSelectionIndicator(isChecked = true, isEnabled = isEnabled)
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt
-index 2d38073f4..8b73255e8 100644
+index 2d38073f4..3dea5aa4d 100644
 --- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt
 +++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt
 @@ -8 +7,0 @@ import androidx.compose.animation.scaleOut
 -import androidx.compose.foundation.Image
 @@ -34 +32,0 @@ import androidx.compose.ui.platform.testTag
 -import androidx.compose.ui.res.painterResource
-@@ -37 +34,0 @@ import androidx.compose.ui.unit.dp
+@@ -35,0 +34,2 @@ import androidx.compose.ui.semantics.Role
++import androidx.compose.ui.semantics.selected
++import androidx.compose.ui.semantics.semantics
+@@ -37 +36,0 @@ import androidx.compose.ui.unit.dp
 -import co.electriccoin.zcash.ui.design.R
-@@ -150,4 +147 @@ fun RadioButtonUncheckedContent(state: RadioButtonState) {
+@@ -81,2 +80,3 @@ fun ZashiRadioButton(
+-                    role = Role.Button,
+-                ).padding(horizontal = 20.dp)
++                    role = Role.RadioButton,
++                ).semantics { selected = state.isChecked }
++                .padding(horizontal = 20.dp)
+@@ -150,4 +150 @@ fun RadioButtonUncheckedContent(state: RadioButtonState) {
 -    Image(
 -        painter = painterResource(id = R.drawable.ic_radio_button_unchecked),
 -        contentDescription = state.text.getValue(),
 -    )
 +    ZashiSelectionIndicator(isChecked = false, isEnabled = state.isEnabled, circular = true)
-@@ -158,4 +152 @@ fun RadioButtonCheckedContent(state: RadioButtonState) {
+@@ -158,4 +155 @@ fun RadioButtonCheckedContent(state: RadioButtonState) {
 -    Image(
 -        painter = painterResource(id = R.drawable.ic_radio_button_checked),
 -        contentDescription = state.text.getValue(),
@@ -4739,6 +4760,53 @@ index 000000000..23aa98f43
 @@ -0,0 +1 @@
 +<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#123A46" android:pathData="M0,0h108v108h-108z"/><path android:fillColor="#B9F3DC" android:pathData="M32,30h44v10L46,68h30v10H32V68l30,-28H32z"/></vector>
 \ No newline at end of file
+diff --git a/ui-design-lib/src/main/res/ui/common/drawable-night/ic_zashi_checkbox.xml b/ui-design-lib/src/main/res/ui/common/drawable-night/ic_zashi_checkbox.xml
+deleted file mode 100644
+index 015297bb0..000000000
+--- a/ui-design-lib/src/main/res/ui/common/drawable-night/ic_zashi_checkbox.xml
++++ /dev/null
+@@ -1,14 +0,0 @@
+-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:width="16dp"
+-    android:height="16dp"
+-    android:viewportWidth="16"
+-    android:viewportHeight="16">
+-  <path
+-      android:pathData="M4,0.5L12,0.5A3.5,3.5 0,0 1,15.5 4L15.5,12A3.5,3.5 0,0 1,12 15.5L4,15.5A3.5,3.5 0,0 1,0.5 12L0.5,4A3.5,3.5 0,0 1,4 0.5z"
+-      android:fillColor="#343031"/>
+-  <path
+-      android:strokeWidth="1"
+-      android:pathData="M4,0.5L12,0.5A3.5,3.5 0,0 1,15.5 4L15.5,12A3.5,3.5 0,0 1,12 15.5L4,15.5A3.5,3.5 0,0 1,0.5 12L0.5,4A3.5,3.5 0,0 1,4 0.5z"
+-      android:fillColor="#00000000"
+-      android:strokeColor="#939091"/>
+-</vector>
+diff --git a/ui-design-lib/src/main/res/ui/common/drawable-night/ic_zashi_checkbox_checked.xml b/ui-design-lib/src/main/res/ui/common/drawable-night/ic_zashi_checkbox_checked.xml
+deleted file mode 100644
+index 686ab6893..000000000
+--- a/ui-design-lib/src/main/res/ui/common/drawable-night/ic_zashi_checkbox_checked.xml
++++ /dev/null
+@@ -1,21 +0,0 @@
+-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:width="16dp"
+-    android:height="16dp"
+-    android:viewportWidth="16"
+-    android:viewportHeight="16">
+-  <path
+-      android:pathData="M4,0.5L12,0.5A3.5,3.5 0,0 1,15.5 4L15.5,12A3.5,3.5 0,0 1,12 15.5L4,15.5A3.5,3.5 0,0 1,0.5 12L0.5,4A3.5,3.5 0,0 1,4 0.5z"
+-      android:fillColor="#E8E8E8"/>
+-  <path
+-      android:strokeWidth="1"
+-      android:pathData="M4,0.5L12,0.5A3.5,3.5 0,0 1,15.5 4L15.5,12A3.5,3.5 0,0 1,12 15.5L4,15.5A3.5,3.5 0,0 1,0.5 12L0.5,4A3.5,3.5 0,0 1,4 0.5z"
+-      android:fillColor="#00000000"
+-      android:strokeColor="#E8E8E8"/>
+-  <path
+-      android:pathData="M12,5L6.5,10.5L4,8"
+-      android:strokeLineJoin="round"
+-      android:strokeWidth="1.6666"
+-      android:fillColor="#00000000"
+-      android:strokeColor="#343031"
+-      android:strokeLineCap="round"/>
+-</vector>
 diff --git a/ui-design-lib/src/main/res/ui/common/drawable/app_logo.png b/ui-design-lib/src/main/res/ui/common/drawable/app_logo.png
 deleted file mode 100644
 index 5cbc9ee47d98c1be0fd2e1fa920b91c7fe36cc8c..0000000000000000000000000000000000000000
@@ -5240,6 +5308,124 @@ index 1f30eac06..a8125487e 100644
 -  </group>
 -</vector>
 +<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#FFFFFF" android:pathData="M32,30h44v10L46,68h30v10H32V68l30,-28H32z"/></vector>
+diff --git a/ui-design-lib/src/main/res/ui/common/drawable/ic_radio_button_checked_variant.xml b/ui-design-lib/src/main/res/ui/common/drawable/ic_radio_button_checked_variant.xml
+deleted file mode 100644
+index 25c7a0a9d..000000000
+--- a/ui-design-lib/src/main/res/ui/common/drawable/ic_radio_button_checked_variant.xml
++++ /dev/null
+@@ -1,21 +0,0 @@
+-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:width="20dp"
+-    android:height="20dp"
+-    android:viewportWidth="20"
+-    android:viewportHeight="20">
+-  <path
+-      android:pathData="M10,0.5L10,0.5A9.5,9.5 0,0 1,19.5 10L19.5,10A9.5,9.5 0,0 1,10 19.5L10,19.5A9.5,9.5 0,0 1,0.5 10L0.5,10A9.5,9.5 0,0 1,10 0.5z"
+-      android:fillColor="#292927"/>
+-  <path
+-      android:strokeWidth="1"
+-      android:pathData="M10,0.5L10,0.5A9.5,9.5 0,0 1,19.5 10L19.5,10A9.5,9.5 0,0 1,10 19.5L10,19.5A9.5,9.5 0,0 1,0.5 10L0.5,10A9.5,9.5 0,0 1,10 0.5z"
+-      android:fillColor="#00000000"
+-      android:strokeColor="#292927"/>
+-  <path
+-      android:pathData="M14.667,6.5L8.25,12.917L5.333,10"
+-      android:strokeLineJoin="round"
+-      android:strokeWidth="2"
+-      android:fillColor="#00000000"
+-      android:strokeColor="#ffffff"
+-      android:strokeLineCap="round"/>
+-</vector>
+diff --git a/ui-design-lib/src/main/res/ui/common/drawable/ic_radio_button_checked_variant_dark.xml b/ui-design-lib/src/main/res/ui/common/drawable/ic_radio_button_checked_variant_dark.xml
+deleted file mode 100644
+index f36ff8d99..000000000
+--- a/ui-design-lib/src/main/res/ui/common/drawable/ic_radio_button_checked_variant_dark.xml
++++ /dev/null
+@@ -1,21 +0,0 @@
+-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:width="20dp"
+-    android:height="20dp"
+-    android:viewportWidth="20"
+-    android:viewportHeight="20">
+-  <path
+-      android:pathData="M10,0.5L10,0.5A9.5,9.5 0,0 1,19.5 10L19.5,10A9.5,9.5 0,0 1,10 19.5L10,19.5A9.5,9.5 0,0 1,0.5 10L0.5,10A9.5,9.5 0,0 1,10 0.5z"
+-      android:fillColor="#ffffff"/>
+-  <path
+-      android:strokeWidth="1"
+-      android:pathData="M10,0.5L10,0.5A9.5,9.5 0,0 1,19.5 10L19.5,10A9.5,9.5 0,0 1,10 19.5L10,19.5A9.5,9.5 0,0 1,0.5 10L0.5,10A9.5,9.5 0,0 1,10 0.5z"
+-      android:fillColor="#00000000"
+-      android:strokeColor="#ffffff"/>
+-  <path
+-      android:pathData="M14.667,6.5L8.25,12.917L5.333,10"
+-      android:strokeLineJoin="round"
+-      android:strokeWidth="2"
+-      android:fillColor="#00000000"
+-      android:strokeColor="#292927"
+-      android:strokeLineCap="round"/>
+-</vector>
+diff --git a/ui-design-lib/src/main/res/ui/common/drawable/ic_radio_button_unchecked.xml b/ui-design-lib/src/main/res/ui/common/drawable/ic_radio_button_unchecked.xml
+deleted file mode 100644
+index b77a8af32..000000000
+--- a/ui-design-lib/src/main/res/ui/common/drawable/ic_radio_button_unchecked.xml
++++ /dev/null
+@@ -1,11 +0,0 @@
+-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:width="20dp"
+-    android:height="20dp"
+-    android:viewportWidth="20"
+-    android:viewportHeight="20">
+-  <path
+-      android:strokeWidth="1"
+-      android:pathData="M10,0.5L10,0.5A9.5,9.5 0,0 1,19.5 10L19.5,10A9.5,9.5 0,0 1,10 19.5L10,19.5A9.5,9.5 0,0 1,0.5 10L0.5,10A9.5,9.5 0,0 1,10 0.5z"
+-      android:fillColor="#00000000"
+-      android:strokeColor="#D9D8CF"/>
+-</vector>
+diff --git a/ui-design-lib/src/main/res/ui/common/drawable/ic_zashi_checkbox.xml b/ui-design-lib/src/main/res/ui/common/drawable/ic_zashi_checkbox.xml
+deleted file mode 100644
+index bf5418819..000000000
+--- a/ui-design-lib/src/main/res/ui/common/drawable/ic_zashi_checkbox.xml
++++ /dev/null
+@@ -1,14 +0,0 @@
+-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:width="16dp"
+-    android:height="16dp"
+-    android:viewportWidth="16"
+-    android:viewportHeight="16">
+-  <path
+-      android:pathData="M4,0.5L12,0.5A3.5,3.5 0,0 1,15.5 4L15.5,12A3.5,3.5 0,0 1,12 15.5L4,15.5A3.5,3.5 0,0 1,0.5 12L0.5,4A3.5,3.5 0,0 1,4 0.5z"
+-      android:fillColor="#ffffff"/>
+-  <path
+-      android:strokeWidth="1"
+-      android:pathData="M4,0.5L12,0.5A3.5,3.5 0,0 1,15.5 4L15.5,12A3.5,3.5 0,0 1,12 15.5L4,15.5A3.5,3.5 0,0 1,0.5 12L0.5,4A3.5,3.5 0,0 1,4 0.5z"
+-      android:fillColor="#00000000"
+-      android:strokeColor="#C0BFB1"/>
+-</vector>
+diff --git a/ui-design-lib/src/main/res/ui/common/drawable/ic_zashi_checkbox_checked.xml b/ui-design-lib/src/main/res/ui/common/drawable/ic_zashi_checkbox_checked.xml
+deleted file mode 100644
+index 3819befdc..000000000
+--- a/ui-design-lib/src/main/res/ui/common/drawable/ic_zashi_checkbox_checked.xml
++++ /dev/null
+@@ -1,21 +0,0 @@
+-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+-    android:width="16dp"
+-    android:height="16dp"
+-    android:viewportWidth="16"
+-    android:viewportHeight="16">
+-  <path
+-      android:pathData="M4,0.5L12,0.5A3.5,3.5 0,0 1,15.5 4L15.5,12A3.5,3.5 0,0 1,12 15.5L4,15.5A3.5,3.5 0,0 1,0.5 12L0.5,4A3.5,3.5 0,0 1,4 0.5z"
+-      android:fillColor="#231F20"/>
+-  <path
+-      android:strokeWidth="1"
+-      android:pathData="M4,0.5L12,0.5A3.5,3.5 0,0 1,15.5 4L15.5,12A3.5,3.5 0,0 1,12 15.5L4,15.5A3.5,3.5 0,0 1,0.5 12L0.5,4A3.5,3.5 0,0 1,4 0.5z"
+-      android:fillColor="#00000000"
+-      android:strokeColor="#231F20"/>
+-  <path
+-      android:pathData="M12,5L6.5,10.5L4,8"
+-      android:strokeLineJoin="round"
+-      android:strokeWidth="1.6666"
+-      android:fillColor="#00000000"
+-      android:strokeColor="#ffffff"
+-      android:strokeLineCap="round"/>
+-</vector>
 diff --git a/ui-design-lib/src/main/res/ui/common/drawable/logo_with_hi.png b/ui-design-lib/src/main/res/ui/common/drawable/logo_with_hi.png
 deleted file mode 100644
 index c0eb001224d071b447db4fa58faabdb3a8563a08..0000000000000000000000000000000000000000
@@ -8966,6 +9152,52 @@ index 9f381262b..6d970b7ba 100644
 -private val PromoMessage = Color(0xFFC0BFB1)
 -
 -private const val PROMO_FADE_START = 0.49f
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt
+index cc829b5e8..ae4e149f8 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt
+@@ -9 +8,0 @@ import androidx.compose.foundation.background
+-import androidx.compose.foundation.isSystemInDarkTheme
+@@ -55 +53,0 @@ import co.electriccoin.zcash.ui.common.component.ZashiEndpointTextField
+-import co.electriccoin.zcash.ui.design.R.drawable
+@@ -393,18 +390,0 @@ private fun LazyListScope.serverListItems(state: ServerListState) {
+-                    checkedContent = {
+-                        if (item.badge == null) {
+-                            RadioButtonCheckedContent(item.radioButtonState)
+-                        } else {
+-                            Image(
+-                                painter =
+-                                    painterResource(
+-                                        id =
+-                                            if (isSystemInDarkTheme()) {
+-                                                drawable.ic_radio_button_checked_variant_dark
+-                                            } else {
+-                                                drawable.ic_radio_button_checked_variant
+-                                            }
+-                                    ),
+-                                contentDescription = item.radioButtonState.text.getValue(),
+-                            )
+-                        }
+-                    },
+@@ -501,18 +480,0 @@ private fun CustomServerRadioButton(
+-            checkedContent = {
+-                if (state.badge == null) {
+-                    RadioButtonCheckedContent(state.radioButtonState)
+-                } else {
+-                    Image(
+-                        painter =
+-                            painterResource(
+-                                id =
+-                                    if (isSystemInDarkTheme()) {
+-                                        drawable.ic_radio_button_checked_variant_dark
+-                                    } else {
+-                                        drawable.ic_radio_button_checked_variant
+-                                    }
+-                            ),
+-                        contentDescription = state.radioButtonState.text.getValue(),
+-                    )
+-                }
+-            },
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
 index eb47e1885..a415a0918 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
@@ -10827,10 +11059,10 @@ index b1f6403cd..30ee1cd5d 100644
 +                )
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AndroidAppUpdates.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AndroidAppUpdates.kt
 new file mode 100644
-index 000000000..4c9c963f0
+index 000000000..34a779c79
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AndroidAppUpdates.kt
-@@ -0,0 +1,70 @@
+@@ -0,0 +1,71 @@
 +package co.electriccoin.zcash.ui.screen.updates
 +
 +import androidx.compose.runtime.Composable
@@ -10843,6 +11075,7 @@ index 000000000..4c9c963f0
 +import androidx.lifecycle.repeatOnLifecycle
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.screen.ExternalUrl
++import co.electriccoin.zcash.ui.screen.about.AboutArgs
 +import kotlinx.coroutines.awaitCancellation
 +import kotlinx.coroutines.launch
 +import org.koin.compose.koinInject
@@ -10894,7 +11127,7 @@ index 000000000..4c9c963f0
 +    val scope = rememberCoroutineScope()
 +    AppUpdateNotice(
 +        tag = release.tag,
-+        onOpen = { router.forward(ExternalUrl(release.releasePage)) },
++        onOpen = { router.forward(AboutArgs) },
 +        onDismiss = { scope.launch { repository.dismiss(release.versionCode) } },
 +    )
 +}
@@ -10977,10 +11210,10 @@ index 000000000..f44f1d117
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt
 new file mode 100644
-index 000000000..0727c443d
+index 000000000..b77c4fa89
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt
-@@ -0,0 +1,133 @@
+@@ -0,0 +1,136 @@
 +package co.electriccoin.zcash.ui.screen.updates
 +
 +import android.content.Context
@@ -11046,6 +11279,9 @@ index 000000000..0727c443d
 +                preferences.edit().putString("release", encodeCache(release)).apply()
 +                mutableState.value = cachedAvailability() ?: AppUpdateState.Current
 +            } catch (cancelled: CancellationException) {
++                val editor = preferences.edit()
++                if (last == null) editor.remove("last_check") else editor.putLong("last_check", last)
++                editor.apply()
 +                mutableState.value = previous ?: AppUpdateState.Idle
 +                throw cancelled
 +            } catch (_: Exception) {
@@ -18697,6 +18933,170 @@ index 3027e6cda..60dbff0cc 100644
 @@ -128 +172 @@ class SwapQuoteVMTest {
 -            cancelSwapQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true),
 +            cancelSwapQuote = cancelQuote,
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
+new file mode 100644
+index 000000000..34baad434
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
+@@ -0,0 +1,158 @@
++package co.electriccoin.zcash.ui.screen.updates
++
++import android.content.Context
++import android.content.ContextWrapper
++import android.content.pm.ApplicationInfo
++import android.content.pm.PackageInfo
++import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
++import io.ktor.client.HttpClient
++import io.ktor.client.engine.mock.MockEngine
++import io.ktor.client.engine.mock.respond
++import io.ktor.http.HttpHeaders
++import io.ktor.http.HttpStatusCode
++import io.ktor.http.headersOf
++import java.io.IOException
++import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.awaitCancellation
++import kotlinx.coroutines.cancelAndJoin
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.runBlocking
++import kotlinx.coroutines.withTimeout
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertIs
++import kotlin.test.assertNull
++import kotlin.test.assertTrue
++import org.junit.Before
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.Shadows.shadowOf
++import org.robolectric.annotation.Config
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class AppUpdateRepositoryTest {
++    private val context: Context
++        get() = object : ContextWrapper(RuntimeEnvironment.getApplication()) {
++            override fun getApplicationContext(): Context = this
++            override fun getPackageName(): String = PRODUCTION_PACKAGE
++        }
++    private val preferences
++        get() = context.getSharedPreferences("app_update_discovery", Context.MODE_PRIVATE)
++
++    @Before
++    fun reset() {
++        preferences.edit().clear().commit()
++        installVersion(100)
++    }
++
++    @Test
++    fun cancellationRestoresAbsentOrPreviousTimestampAndAllowsRetry() = runBlocking {
++        for (previous in listOf<Long?>(null, 123L)) {
++            preferences.edit().clear().apply()
++            previous?.let { preferences.edit().putLong("last_check", it).apply() }
++            val entered = CompletableDeferred<Unit>()
++            val provider = UpdateTestClientProvider {
++                entered.complete(Unit)
++                awaitCancellation()
++            }
++            val repository = AppUpdateRepository(context, provider)
++            assertTrue(repository.enabled, "Run this test against the mainnet release variant")
++            val checking = launch { repository.check() }
++            withTimeout(10_000) { entered.await() }
++            assertIs<AppUpdateState.Checking>(repository.state.value)
++            checking.cancelAndJoin()
++
++            assertEquals(previous != null, preferences.contains("last_check"))
++            previous?.let { assertEquals(it, preferences.getLong("last_check", 0)) }
++            assertIs<AppUpdateState.Idle>(repository.state.value)
++            provider.reply = { releaseMetadata(200) }
++            repository.check()
++            assertEquals(2, provider.requests)
++            assertEquals(200, assertIs<AppUpdateState.Available>(repository.state.value).release.versionCode)
++        }
++    }
++
++    @Test
++    fun completedFailureKeepsCooldownAcrossRecreationWhileManualCheckRetries() = runBlocking {
++        val provider = UpdateTestClientProvider { throw IOException("Synthetic outage") }
++        val repository = AppUpdateRepository(context, provider)
++        assertTrue(repository.enabled)
++        repository.check()
++        assertIs<AppUpdateState.Failed>(repository.state.value)
++        val lastCheck = preferences.getLong("last_check", 0)
++        assertTrue(lastCheck > 0)
++
++        val recreated = AppUpdateRepository(context, provider)
++        recreated.check()
++        assertEquals(1, provider.requests)
++        assertEquals(lastCheck, preferences.getLong("last_check", 0))
++        provider.reply = { releaseMetadata(200) }
++        recreated.check(manual = true)
++        assertEquals(2, provider.requests)
++        assertIs<AppUpdateState.Available>(recreated.state.value)
++    }
++
++    @Test
++    fun dismissalSurvivesRecreationManualCheckFindsNewerAndUpgradeRetiresNotice() = runBlocking {
++        val provider = UpdateTestClientProvider { releaseMetadata(200) }
++        val repository = AppUpdateRepository(context, provider)
++        assertTrue(repository.enabled)
++        repository.check()
++        assertEquals(200, repository.cachedNotice()?.versionCode)
++        repository.dismiss(200)
++        assertTrue(assertIs<AppUpdateState.Available>(repository.state.value).dismissed)
++        assertNull(repository.cachedNotice())
++
++        val recreated = AppUpdateRepository(context, provider)
++        assertTrue(assertIs<AppUpdateState.Available>(recreated.state.value).dismissed)
++        recreated.check(manual = true)
++        assertTrue(assertIs<AppUpdateState.Available>(recreated.state.value).dismissed)
++        provider.reply = { releaseMetadata(201) }
++        recreated.check(manual = true)
++        assertFalse(assertIs<AppUpdateState.Available>(recreated.state.value).dismissed)
++        assertEquals(201, recreated.cachedNotice()?.versionCode)
++
++        installVersion(201)
++        val upgraded = AppUpdateRepository(context, provider)
++        assertNull(upgraded.cachedNotice())
++        assertIs<AppUpdateState.Idle>(upgraded.state.value)
++        provider.reply = { releaseMetadata(200) }
++        upgraded.check(manual = true)
++        assertIs<AppUpdateState.Current>(upgraded.state.value)
++        assertNull(upgraded.cachedNotice())
++    }
++
++    private fun installVersion(code: Long) {
++        val info = PackageInfo().apply {
++            packageName = PRODUCTION_PACKAGE
++            setLongVersionCode(code)
++            applicationInfo = ApplicationInfo().apply { packageName = PRODUCTION_PACKAGE }
++        }
++        shadowOf(context.packageManager).installPackage(info)
++    }
++}
++
++private class UpdateTestClientProvider(var reply: suspend () -> String) : HttpClientProvider {
++    var requests = 0
++        private set
++
++    override suspend fun create(): HttpClient = HttpClient(MockEngine { request ->
++        requests++
++        assertEquals("https://api.github.com/repos/Sammy-Lastre/zec-private/releases/latest", request.url.toString())
++        respond(reply(), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
++    })
++
++    override suspend fun createTor(): HttpClient = error("The repository must use the preference-aware client")
++}
++
++private fun releaseMetadata(code: Int): String =
++    """
++    {"draft":false,"prerelease":false,"tag_name":"v3.19.0-private.20","body":"Android versionCode: $code",
++    "assets":[{"name":"zec-private-latest.apk","size":1024,
++    "browser_download_url":"$REPOSITORY_URL/releases/download/v3.19.0-private.20/$APK_NAME"}]}
++    """.trimIndent()
++
++private const val PRODUCTION_PACKAGE = "com.personal.zecprivate.foss"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/UpdatePolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/UpdatePolicyTest.kt
 new file mode 100644
 index 000000000..bb9824800

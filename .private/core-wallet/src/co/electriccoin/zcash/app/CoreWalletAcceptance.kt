@@ -102,7 +102,11 @@ class CoreWalletAcceptance {
             }
             when (stage) {
                 "recipient" -> createWallet("recipient")
-                "sender" -> createWallet("sender")
+                "sender" -> {
+                    createWallet("sender")
+                    check(dependency<AppUpdateRepository>().readLatestRelease().versionCode > 0)
+                    save(fixture().put("updateMetadataPreflight", true))
+                }
                 "fund" -> {
                     val state = fixture()
                     check(state.getBoolean("claimAttempted"))
@@ -455,6 +459,7 @@ class CoreWalletAcceptance {
         if (stage=="sender") receipt.put("scanned_height",fixture().getLong("preflightScannedHeight"))
             .put("network_height",fixture().getLong("preflightNetworkHeight"))
             .put("mode",fixture().getString("preflightMode"))
+            .put("update_metadata_preflight",fixture().getBoolean("updateMetadataPreflight"))
         if (stage in listOf("fund", "upgrade")) receipt.put("database_input", databaseInputDiagnostic())
         if (stage=="send") receipt.put("fee_zatoshi",fixture().getLong("feeZatoshi"))
             .put("initial_submit_type",fixture().getString("initialSubmitType")).put("manual_resubmissions",0)
