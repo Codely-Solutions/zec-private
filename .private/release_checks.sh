@@ -3,7 +3,7 @@
 set -euo pipefail
 PYTHONPATH=.private python3 -B -m unittest test_emulator_session test_emulator_batch
 chmod +x gradlew
-tasks=(detektAll :wallet-foundation-lib:test :feature-ledger:testZcashmainnetFossReleaseUnitTest :app:privateRuntimeInventory :ui-lib:testZcashmainnetFossReleaseUnitTest :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease)
+tasks=(detektAll :wallet-foundation-lib:test :ui-design-lib:testDebugUnitTest --tests '*MaterialThemeRolesTest' :feature-ledger:testZcashmainnetFossReleaseUnitTest :app:privateRuntimeInventory :ui-lib:testZcashmainnetFossReleaseUnitTest :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease)
 init=(-I .private/runtime-inventory.gradle -I .private/robolectric-ci.gradle -I .private/release-analysis.gradle -I .private/task-timing.gradle)
 start=$(date +%s)
 mkdir -p artifact

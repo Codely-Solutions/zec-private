@@ -936,12 +936,12 @@ index 96a911cd4..799c7d501 100644
 -    <string name="view_only_remove_message">Removing this account clears its data from Zodl on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 +    <string name="view_only_remove_message">Removing this account clears its data from ZEC Private on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..08a174074 100644
+index ec56161b5..79081aabb 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
 -ZCASH_VERSION_CODE=1
-+ZCASH_VERSION_CODE=3234015
++ZCASH_VERSION_CODE=3234016
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
 -ZCASH_RELEASE_APP_NAME=Zodl
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash
@@ -2501,7 +2501,7 @@ index f15fc4a02..cd86c6b46 100644
 +val LightZashiColorsInternal = materialZashiColors(LightColorPalette, dark = false)
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/MaterialZashiColors.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/MaterialZashiColors.kt
 new file mode 100644
-index 000000000..b8095cf26
+index 000000000..989c96ed0
 --- /dev/null
 +++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/MaterialZashiColors.kt
 @@ -0,0 +1,479 @@
@@ -2685,7 +2685,7 @@ index 000000000..b8095cf26
 +                text = s.onSurface,
 +                textAside = s.onSurfaceVariant,
 +                textMain = s.onSurface,
-+                hint = s.onSurfaceVariant,
++                hint = s.error,
 +                icon = s.error,
 +                iconMain = s.error,
 +                stroke = s.error,
@@ -2699,7 +2699,7 @@ index 000000000..b8095cf26
 +                text = s.onSurface,
 +                textAside = s.onSurfaceVariant,
 +                textMain = s.onSurface,
-+                hint = s.onSurfaceVariant,
++                hint = s.error,
 +                icon = s.error,
 +                iconMain = s.error,
 +                stroke = s.error,
@@ -2712,7 +2712,7 @@ index 000000000..b8095cf26
 +                label = s.error,
 +                text = s.onSurface,
 +                textAside = s.onSurfaceVariant,
-+                hint = s.onSurfaceVariant,
++                hint = s.error,
 +                icon = s.error,
 +                iconMain = s.error,
 +                stroke = s.error,
@@ -2725,7 +2725,7 @@ index 000000000..b8095cf26
 +                label = s.error,
 +                text = s.onSurface,
 +                textAside = s.onSurfaceVariant,
-+                hint = s.onSurfaceVariant,
++                hint = s.error,
 +                icon = s.error,
 +                iconMain = s.error,
 +                stroke = s.error,
@@ -6170,10 +6170,10 @@ index f41234151..8461421f0 100644
 +    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open ZEC Private manually at each scheduled time to send.</string>
 diff --git a/ui-design-lib/src/test/java/co/electriccoin/zcash/ui/design/theme/MaterialThemeRolesTest.kt b/ui-design-lib/src/test/java/co/electriccoin/zcash/ui/design/theme/MaterialThemeRolesTest.kt
 new file mode 100644
-index 000000000..36f153231
+index 000000000..6fd8809b9
 --- /dev/null
 +++ b/ui-design-lib/src/test/java/co/electriccoin/zcash/ui/design/theme/MaterialThemeRolesTest.kt
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,61 @@
 +package co.electriccoin.zcash.ui.design.theme
 +
 +import androidx.compose.material3.darkColorScheme
@@ -6186,6 +6186,24 @@ index 000000000..36f153231
 +import kotlin.test.assertTrue
 +
 +class MaterialThemeRolesTest {
++    @Test
++    fun inputErrorsUseTheErrorRoleWithoutRecoloringEnteredTextOrOrdinaryHints() {
++        listOf(lightColorScheme(), darkColorScheme(), darkColorScheme().withOledBackground(true))
++            .forEachIndexed { index, scheme ->
++                val inputs = materialZashiColors(scheme, index != 0).Inputs
++                listOf(
++                    inputs.ErrorDefault.hint, inputs.ErrorHover.hint, inputs.ErrorFilled.hint, inputs.ErrorFocused.hint
++                )
++                    .forEach { assertEquals(scheme.error, it) }
++                listOf(
++                    inputs.ErrorDefault.text, inputs.ErrorHover.text, inputs.ErrorFilled.text, inputs.ErrorFocused.text
++                )
++                    .forEach { assertEquals(scheme.onSurface, it) }
++                listOf(inputs.Default.hint, inputs.Hover.hint, inputs.Filled.hint, inputs.Focused.hint)
++                    .forEach { assertEquals(scheme.onSurfaceVariant, it) }
++            }
++    }
++
 +    @Test
 +    fun oledChangesThePageWithoutFlatteningInteractiveSurfaces() {
 +        val dark = darkColorScheme()
