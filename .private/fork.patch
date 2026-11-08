@@ -1448,13 +1448,13 @@ index 98f902023..7bd1ee8c0 100644
 +
 diff --git a/docs/DONATIONS.md b/docs/DONATIONS.md
 new file mode 100644
-index 000000000..509eb0d79
+index 000000000..c632613ab
 --- /dev/null
 +++ b/docs/DONATIONS.md
 @@ -0,0 +1,27 @@
 +# Support ZEC Private
 +
-+Donations help fund development and maintenance. They are optional.
++Donations help fund development and maintenance.
 +
 +Tap the hand-and-heart icon on Home, or open **Settings → More → Support development** to donate shielded ZEC. Enter an amount, optionally add a message, and review the payment before sending.
 +
@@ -1584,7 +1584,7 @@ index 000000000..cdadb0a3b
 +See the [wallet guide](WALLET-GUIDE.md) for instructions and [privacy](PRIVACY.md) before sharing diagnostics.
 diff --git a/docs/WALLET-GUIDE.md b/docs/WALLET-GUIDE.md
 new file mode 100644
-index 000000000..9a8044156
+index 000000000..0f35da6d6
 --- /dev/null
 +++ b/docs/WALLET-GUIDE.md
 @@ -0,0 +1,49 @@
@@ -1634,7 +1634,7 @@ index 000000000..9a8044156
 +
 +## Donations and diagnostics
 +
-+[Support development](DONATIONS.md) is optional. Choose an amount and review each payment before sending. In-app donations require a software wallet.
++To [support development](DONATIONS.md), choose an amount and review the payment before sending. In-app donations require a software wallet.
 +
 +Diagnostics open Android's share chooser. Inspect the export and choose its recipient yourself; no staffed support inbox is configured. See [privacy](PRIVACY.md) before sharing wallet information.
 diff --git a/docs/donations/xmr-address.png b/docs/donations/xmr-address.png

@@ -1,6 +1,6 @@
 # Support ZEC Private
 
-Donations help fund development and maintenance. They are optional.
+Donations help fund development and maintenance.
 
 Tap the hand-and-heart icon on Home, or open **Settings → More → Support development** to donate shielded ZEC. Enter an amount, optionally add a message, and review the payment before sending.
 

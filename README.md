@@ -16,7 +16,7 @@ Install updates over the existing app. Keep your recovery phrase and birthday sa
 - ZEC Private adds no app or affiliate fee. Network and provider costs still apply; review the amounts before confirming.
 - Tor protects sensitive wallet and provider requests when enabled. Public block downloads remain direct. See [privacy](docs/PRIVACY.md) for what providers can see.
 
-Read the [wallet guide](docs/WALLET-GUIDE.md) for payments, swaps and recovery, or [support development](docs/DONATIONS.md) with an optional donation.
+Read the [wallet guide](docs/WALLET-GUIDE.md) for payments, swaps and recovery, or [support development](docs/DONATIONS.md).
 
 ## Development
 
