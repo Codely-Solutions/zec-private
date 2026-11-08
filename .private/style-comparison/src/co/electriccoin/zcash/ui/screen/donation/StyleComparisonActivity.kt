@@ -25,7 +25,7 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.design.component.BigIconButtonState
 import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
-import co.electriccoin.zcash.ui.design.theme.StyleComparisonScope
+
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.util.StringResourceColor
 import co.electriccoin.zcash.ui.design.util.StyledStringStyle
@@ -55,18 +55,17 @@ class StyleComparisonActivity : ComponentActivity() {
         check(BuildConfig.DEBUG)
         val requested = intent.getStringExtra("screen") ?: "home"
         val dark = intent.getBooleanExtra("dark", false)
-        val standard = intent.getBooleanExtra("standard", false)
+        val mode = intent.getStringExtra("theme") ?: if (dark) "dark" else "light"
         setContent {
-            StyleComparisonScope(standard) {
+            require(mode in setOf("light", "dark", "oled"))
                 ZcashTheme(
-                    appearanceMode = if (dark) AppearanceMode.DARK else AppearanceMode.LIGHT,
-                    isOledEnabled = dark,
+                    appearanceMode = if (mode == "light") AppearanceMode.LIGHT else AppearanceMode.DARK,
+                    isOledEnabled = mode == "oled",
                 ) {
                     Box(Modifier.fillMaxSize().semantics { testTagsAsResourceId = true }) {
                         ComparisonScreens(requested)
                     }
                 }
-            }
         }
     }
 }
@@ -112,6 +111,7 @@ private fun ComparisonScreens(requested: String) {
     var memoExpanded by remember { mutableStateOf(requested == "donation-message") }
     var invitationDismissed by remember { mutableStateOf(false) }
 
+    if (AdditionalReviewScene(screen, { screen = "home" }, appBar)) return
     when (screen) {
         "send" -> Send(
             balanceWidgetState = balanceState,
