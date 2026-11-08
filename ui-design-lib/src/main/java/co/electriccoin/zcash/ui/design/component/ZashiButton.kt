@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.LocalContentColor
@@ -243,7 +242,7 @@ object ZashiButtonDefaults {
         get() = PaddingValues(horizontal = 10.dp)
 
     val shape: Shape
-        get() = RoundedCornerShape(12.dp)
+        @Composable get() = ButtonDefaults.shape
 
     const val IS_LIGHT_THRESHOLD = 0.5f
 

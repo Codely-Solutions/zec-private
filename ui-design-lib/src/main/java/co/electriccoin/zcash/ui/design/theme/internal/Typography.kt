@@ -7,50 +7,14 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
-import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.sp
-import co.electriccoin.zcash.ui.design.R
 
-private val provider =
-    GoogleFont.Provider(
-        providerAuthority = "com.google.android.gms.fonts",
-        providerPackage = "com.google.android.gms",
-        certificates = R.array.com_google_android_gms_fonts_certs
-    )
+// Legacy wallet text roles retain their sizes; ordinary Material controls use the default scale.
+private val InterFontFamily = FontFamily.Default
+private val ArchivoFontFamily = FontFamily.Default
 
-// We use bestEffort here to be able to get the closest font weight, if accidentally use
-// an unspecified font weight and not the default one.
-private val InterFont = GoogleFont(name = "Inter", bestEffort = true)
-private val ArchivoFont = GoogleFont(name = "Archivo", bestEffort = true)
-
-private val InterFontFamily =
-    FontFamily(
-        // W400
-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.Normal),
-        // W500
-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.Medium),
-        // W600
-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.SemiBold),
-        // W700
-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.Bold)
-    )
-private val ArchivoFontFamily =
-    FontFamily(
-        // W400
-        Font(googleFont = ArchivoFont, fontProvider = provider, weight = FontWeight.Normal),
-        // W500
-        Font(googleFont = ArchivoFont, fontProvider = provider, weight = FontWeight.Medium),
-        // W600
-        Font(googleFont = ArchivoFont, fontProvider = provider, weight = FontWeight.SemiBold),
-        // W700
-        Font(googleFont = ArchivoFont, fontProvider = provider, weight = FontWeight.Bold)
-    )
-
-// If you change this definition of our Typography, don't forget to check if you use only
-// the defined font weights above, otherwise the closest one will be used.
 internal val PrimaryTypography =
     Typography(
         headlineLarge =
