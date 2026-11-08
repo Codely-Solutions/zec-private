@@ -18937,10 +18937,10 @@ index 3027e6cda..60dbff0cc 100644
 +            cancelSwapQuote = cancelQuote,
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
 new file mode 100644
-index 000000000..520c04a02
+index 000000000..2c5a64c06
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
-@@ -0,0 +1,244 @@
+@@ -0,0 +1,245 @@
 +package co.electriccoin.zcash.ui.screen.updates
 +
 +import android.content.Context
@@ -19025,6 +19025,7 @@ index 000000000..520c04a02
 +                    override val config = HttpClientEngineConfig().apply(block)
 +                    private val closed = AtomicBoolean(false)
 +
++                    @OptIn(io.ktor.utils.io.InternalAPI::class)
 +                    override suspend fun execute(data: HttpRequestData): HttpResponseData {
 +                        try {
 +                            nativeLock.withLock {

@@ -2908,7 +2908,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/SwapAssetIconTest.kt": "3e142f45aa1587a2b35792ab1494aead31a41a8018eb49e475a6ad59cdd8413a",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionnote/viewmodel/TransactionNoteViewModelTest.kt": "b2efe4d91ba24dbca29a5b514d9723fedc5ee92412eb63bd34331c1e045844df",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressPendingDescriptionTest.kt": "b39bf8cc849477e0e728a3fb4c64d20f818a4d5dfbbfc0eb14d98fe698cfc994",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt": "2bb658f091646e49cd1d4466337f74a9aa765deb8f58025bb88c125ad8e46e62",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt": "d404ca24846bcd489a68c605aa2cef6df7168a6410ae7d4e85ad327c65a50ba8",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/UpdatePolicyTest.kt": "4a521057ee5c755255b2b3e5a0b460462beaacfcbbdaab2f001797574bf7a083",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/walletbackup/RecoveryCopyGuardTest.kt": "c4c2f496919c8a49fd85f4a0286fd0435411da46f8c8bdf987dfcf6fac191d76",
   "ui-screenshot-test/build.gradle.kts": "eae57fe63c64d3d48fae64fc6f6f73260c26eac825b7482d89b606fcef9254be",
