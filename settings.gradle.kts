@@ -256,7 +256,7 @@ dependencyResolutionManagement {
             library("koin-compose", "io.insert-koin:koin-androidx-compose:$koinVersion")
             library("keystone", "com.github.KeystoneHQ:keystone-sdk-android:$keystoneVersion")
             library("compose-shimmer", "com.valentinilk.shimmer:compose-shimmer:$shimmerVersion")
-            library("haze", "dev.chrisbanes.haze:haze:$hazeVersion")
+            library("haze", "dev.chrisbanes.haze:haze-blur:$hazeVersion")
             library("ktor-bom", "io.ktor:ktor-bom:$ktorVersion")
             library("ktor-core", "io.ktor" ,"ktor-client-core").withoutVersion()
             library("okhttp-bom", "com.squareup.okhttp3:okhttp-bom:${extra["OKHTTP_VERSION"]}")
