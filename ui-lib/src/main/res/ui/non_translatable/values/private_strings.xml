@@ -33,5 +33,4 @@
     <string name="private_updates_current">You’re up to date</string>
     <string name="private_updates_failed">Couldn’t check for updates. Try again.</string>
     <string name="private_updates_obtainium">Automatic updates with Obtainium</string>
-    <string name="private_updates_external">Update links open another app, which uses its own connection settings.</string>
 </resources>

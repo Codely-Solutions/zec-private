@@ -45,11 +45,6 @@ internal fun AppUpdateContent(
         ZashiTextButton(onClick = onObtainium) {
             Text(stringResource(R.string.private_updates_obtainium))
         }
-        Text(
-            stringResource(R.string.private_updates_external),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

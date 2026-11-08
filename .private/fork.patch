@@ -14099,10 +14099,10 @@ index 000000000..34a779c79
 +    "https://github.com/Sammy-Lastre/zec-private/blob/main/docs/WALLET-GUIDE.md#automatic-updates"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateContent.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateContent.kt
 new file mode 100644
-index 000000000..f44f1d117
+index 000000000..fca45c2b2
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateContent.kt
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,63 @@
 +package co.electriccoin.zcash.ui.screen.updates
 +
 +import androidx.compose.foundation.layout.Arrangement
@@ -14150,11 +14150,6 @@ index 000000000..f44f1d117
 +        ZashiTextButton(onClick = onObtainium) {
 +            Text(stringResource(R.string.private_updates_obtainium))
 +        }
-+        Text(
-+            stringResource(R.string.private_updates_external),
-+            style = MaterialTheme.typography.bodySmall,
-+            color = MaterialTheme.colorScheme.onSurfaceVariant,
-+        )
 +    }
 +}
 +
@@ -19072,10 +19067,10 @@ index 000000000..bdaf3e5ab
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
-index 000000000..70cdcd2db
+index 000000000..975ecdc5f
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,36 @@
 +<resources>
 +    <string name="private_wallet_transaction_fee" translatable="false">Zcash network fee</string>
 +    <string name="private_provider_costs" translatable="false">NEAR platform fee</string>
@@ -19111,7 +19106,6 @@ index 000000000..70cdcd2db
 +    <string name="private_updates_current">You’re up to date</string>
 +    <string name="private_updates_failed">Couldn’t check for updates. Try again.</string>
 +    <string name="private_updates_obtainium">Automatic updates with Obtainium</string>
-+    <string name="private_updates_external">Update links open another app, which uses its own connection settings.</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/strings.xml
 index 813f56457..972dcc8f8 100644
