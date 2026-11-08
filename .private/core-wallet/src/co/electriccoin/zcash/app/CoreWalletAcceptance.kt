@@ -51,6 +51,7 @@ import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
 import io.ktor.client.request.get
 import io.ktor.client.HttpClient
 import io.ktor.client.statement.bodyAsText
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -328,66 +329,7 @@ class CoreWalletAcceptance {
                     save(state.put("restoreMinedHeight",checkNotNull(transaction.overview.minedHeight).value)
                         .put("restoreTransactionState",transaction.overview.transactionState.toString()))
                 }
-                "transport" -> {
-                    val provider=dependency<SynchronizerProvider>()
-                    val original=provider.getSynchronizer()
-                    withTimeout(120_000) { original.status.first { it==Synchronizer.Status.SYNCED } }
-                    val height=original.fullyScannedHeight.filterNotNull().first()
-                    val beforeBalance=balance()
-                    val fundingId=fixture().getString("fundingTxId")
-                    val endpoint=dependency<PersistableWalletProvider>().requirePersistableWallet().endpoint
-                    requireEndpointReady(original, "before_outage")
-                    val updates = dependency<AppUpdateRepository>()
-                    val updateBefore = updates.readLatestRelease()
-                    val ready=File(context.filesDir,"core-sync-ready.json")
-                    ready.writeText(JSONObject().put("ready",true).put("height",height.value).toString())
-                    withTimeout(60_000) {
-                        while (!File(context.filesDir,"core-sync-drop").exists()) delay(100)
-                    }
-                    val metadataDuringOutage=withTimeoutOrNull(8_000) { original.validateServerEndpoint(context,endpoint) }
-                    check(metadataDuringOutage != ServerValidation.Valid) { "Sensitive metadata succeeded while Tor was blocked" }
-                    val updateDuringOutage = try {
-                        withTimeoutOrNull(8_000) { updates.readLatestRelease() }
-                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
-                        throw cancelled
-                    } catch (_: Exception) {
-                        null
-                    }
-                    check(updateDuringOutage == null) { "Update request succeeded while Tor was blocked" }
-                    // A plain TLS handshake proves the authorized direct bulk path
-                    // is reachable; no wallet RPC or wallet data is sent here.
-                    withTimeout(8_000) {
-                        java.net.Socket().use { plain ->
-                            plain.connect(java.net.InetSocketAddress(endpoint.host,endpoint.port),6_000)
-                            plain.soTimeout=6_000
-                            val factory=javax.net.ssl.SSLSocketFactory.getDefault() as javax.net.ssl.SSLSocketFactory
-                            (factory.createSocket(plain,endpoint.host,endpoint.port,true) as javax.net.ssl.SSLSocket).use {
-                                it.soTimeout=6_000
-                                val parameters=it.sslParameters
-                                parameters.endpointIdentificationAlgorithm="HTTPS"
-                                it.sslParameters=parameters
-                                it.startHandshake()
-                            }
-                        }
-                    }
-                    File(context.filesDir,"core-sync-requested.json").writeText("{\"requested\":true,\"metadata_blocked\":true,\"update_blocked\":true,\"direct_bulk_reachable\":true}")
-                    dependency<ConfirmResyncUseCase>()(BlockHeight.new(height.value-1))
-                    val recovered=withTimeout(180_000) { provider.synchronizer.filterNotNull().first { it!==original } }
-                    withTimeout(180_000) {
-                        recovered.status.first { it==Synchronizer.Status.SYNCED }
-                        recovered.fullyScannedHeight.filterNotNull().first { it.value>=height.value }
-                        while (balance()!=beforeBalance) delay(500)
-                        dependency<TransactionRepository>().observeTransaction(fundingId).filterNotNull().first { it is ReceiveTransaction.Success }
-                        requireEndpointReady(recovered, "after_outage")
-                    }
-                    val updateAfter = updates.readLatestRelease()
-                    File(context.filesDir,"core-sync-result.json").writeText(JSONObject()
-                        .put("sync_restarted",true).put("synced",true).put("balance_preserved",true)
-                        .put("update_metadata_valid_before", updateBefore.versionCode > 0)
-                        .put("update_metadata_valid_after", updateAfter.versionCode > 0)
-                        .put("update_blocked_during_outage", true)
-                        .put("history_preserved",true).put("scanned_height",recovered.fullyScannedHeight.value?.value).toString())
-                }
+                "transport", "transportProbe" -> runTransport(probeOnly = stage == "transportProbe")
                 "rpcProbe" -> {
                     check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
                     val tor = createPublicProbeTor()
@@ -467,6 +409,7 @@ class CoreWalletAcceptance {
         if (stage in listOf("rpcProbe", "networkTargets", "fund")) {
             receipt.put("native_rpc_probe", fixture().getJSONObject("nativeRpcProbe"))
         }
+        if (stage=="transportProbe") receipt.put("probe_only", true)
         if (stage=="fund") receipt.put("funding_txid",fixture().getString("fundingTxId")).put("balance_zatoshi",fixture().getLong("fundedBalance"))
             .put("app_transaction_state",fixture().getString("fundConfirmedState"))
             .put("public_relay_directory_transport", "direct HTTPS before wallet firewall; no wallet data")
@@ -501,6 +444,150 @@ class CoreWalletAcceptance {
         println("CORE_RESULT $receipt")
     }
 
+    /** Test-only: the host restores DROP independently after receiving requested.json. */
+    private suspend fun runTransport(probeOnly: Boolean) = kotlinx.coroutines.coroutineScope {
+        val started = System.nanoTime()
+        fun elapsed() = (System.nanoTime() - started) / 1_000_000
+        fun mark(phase: String) {
+            println("CORE_SYNC_DIAGNOSTIC " + JSONObject().put("phase", phase)
+                .put("elapsed_ms", elapsed()).put("probe_only", probeOnly))
+        }
+        mark("transport_start")
+        val provider = dependency<SynchronizerProvider>()
+        val original = provider.getSynchronizer()
+        withTimeout(120_000) { original.status.first { it == Synchronizer.Status.SYNCED } }
+        val height = original.fullyScannedHeight.filterNotNull().first()
+        val beforeBalance = balance()
+        val fundingId = if (probeOnly) {
+            check(beforeBalance == 0L && !fixture().has("fundingTxId")) { "Probe requires an unfunded fixture" }
+            null
+        } else fixture().getString("fundingTxId")
+        val endpoint = dependency<PersistableWalletProvider>().requirePersistableWallet().endpoint
+        requireEndpointReady(original, "before_outage")
+        val updates = dependency<AppUpdateRepository>()
+        val updateBefore = updates.readLatestRelease()
+        // Resolve public endpoint DNS before the host starts its 35-second DROP window.
+        val bulkAddress = withContext(kotlinx.coroutines.Dispatchers.IO) {
+            java.net.InetSocketAddress(endpoint.host, endpoint.port).also { check(!it.isUnresolved) }
+        }
+        File(context.filesDir, "core-sync-ready.json").writeText(
+            JSONObject().put("ready", true).put("height", height.value).put("probe_only", probeOnly).toString())
+        mark("ready_waiting_for_drop")
+        withTimeout(60_000) { while (!File(context.filesDir, "core-sync-drop").exists()) delay(100) }
+        val dropMs = elapsed()
+        mark("drop_observed")
+        val metadataStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val updateStarted = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val metadataSucceeded = java.util.concurrent.atomic.AtomicBoolean(false)
+        val updateSucceeded = java.util.concurrent.atomic.AtomicBoolean(false)
+        val metadataFinishedMs = java.util.concurrent.atomic.AtomicLong(-1)
+        val updateFinishedMs = java.util.concurrent.atomic.AtomicLong(-1)
+        val metadataJob = launch(kotlinx.coroutines.Dispatchers.IO) {
+            mark("metadata_start")
+            metadataStarted.complete(Unit)
+            try {
+                metadataSucceeded.set(original.validateServerEndpoint(context, endpoint) == ServerValidation.Valid)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // A failed read is fail-closed; never retain endpoint or response data.
+            } finally {
+                metadataFinishedMs.set(elapsed())
+                mark("metadata_finished")
+            }
+        }
+        val updateJob = launch(kotlinx.coroutines.Dispatchers.IO) {
+            mark("update_start")
+            updateStarted.complete(Unit)
+            try {
+                updates.readLatestRelease()
+                updateSucceeded.set(true)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // A failed read is fail-closed; pending native reads are checked below.
+            } finally {
+                updateFinishedMs.set(elapsed())
+                mark("update_finished")
+            }
+        }
+        metadataStarted.await()
+        updateStarted.await()
+        // Observe failure or pending native work without cancelling and waiting on JNI.
+        delay(8_000)
+        mark("outage_observation_complete")
+        check(!metadataSucceeded.get()) { "Sensitive metadata succeeded during DROP" }
+        check(!updateSucceeded.get()) { "Update request succeeded during DROP" }
+        mark("direct_tls_start")
+        withContext(kotlinx.coroutines.Dispatchers.IO) {
+            java.net.Socket().use { plain ->
+                // Socket read timeouts alone are per-read, not a whole handshake deadline.
+                // Closing the owned socket also bounds a peer that trickles handshake data.
+                val deadline = launch(kotlinx.coroutines.Dispatchers.Default) {
+                    delay(12_000)
+                    plain.close()
+                }
+                try {
+                    plain.connect(bulkAddress, 6_000)
+                    plain.soTimeout = 6_000
+                    val factory = javax.net.ssl.SSLSocketFactory.getDefault() as javax.net.ssl.SSLSocketFactory
+                    (factory.createSocket(plain, endpoint.host, endpoint.port, true) as javax.net.ssl.SSLSocket).use {
+                        it.soTimeout = 6_000
+                        val parameters = it.sslParameters
+                        parameters.endpointIdentificationAlgorithm = "HTTPS"
+                        it.sslParameters = parameters
+                        it.startHandshake()
+                    }
+                } finally {
+                    deadline.cancel()
+                    deadline.join()
+                }
+            }
+        }
+        mark("direct_tls_finished")
+        check(!metadataSucceeded.get() && !updateSucceeded.get()) { "Sensitive read succeeded before DROP release marker" }
+        val requestedMs = elapsed()
+        File(context.filesDir, "core-sync-requested.json").writeText(JSONObject()
+            .put("requested", true).put("metadata_blocked", true).put("update_blocked", true)
+            .put("direct_bulk_reachable", true).put("probe_only", probeOnly)
+            .put("outage_observed_ms", requestedMs - dropMs)
+            .put("metadata_completed_during_outage", metadataJob.isCompleted)
+            .put("update_completed_during_outage", updateJob.isCompleted).toString())
+        mark("requested_marker_written")
+        // Only now may cancellation wait for native completion: the host has its marker,
+        // holds DROP for its existing 10 seconds, counts blocked packets and restores it.
+        // No timeout wrapper is claimed to interrupt JNI. These are structured children.
+        metadataJob.cancel()
+        updateJob.cancel()
+        metadataJob.join()
+        updateJob.join()
+        mark("outage_children_joined")
+        dependency<ConfirmResyncUseCase>()(BlockHeight.new(height.value - 1))
+        val recovered = withTimeout(180_000) { provider.synchronizer.filterNotNull().first { it !== original } }
+        withTimeout(180_000) {
+            recovered.status.first { it == Synchronizer.Status.SYNCED }
+            recovered.fullyScannedHeight.filterNotNull().first { it.value >= height.value }
+            while (balance() != beforeBalance) delay(500)
+            if (!probeOnly) {
+                dependency<TransactionRepository>().observeTransaction(checkNotNull(fundingId))
+                    .filterNotNull().first { it is ReceiveTransaction.Success }
+            }
+            requireEndpointReady(recovered, "after_outage")
+        }
+        mark("wallet_recovered")
+        val updateAfter = updates.readLatestRelease()
+        mark("update_after_valid")
+        val result = JSONObject().put("sync_restarted", true).put("synced", true).put("balance_preserved", true)
+            .put("update_metadata_valid_before", updateBefore.versionCode > 0)
+            .put("update_metadata_valid_after", updateAfter.versionCode > 0).put("update_blocked_during_outage", true)
+            .put("probe_only", probeOnly).put("scanned_height", recovered.fullyScannedHeight.value?.value)
+            .put("outage_marker_ms", requestedMs).put("outage_observed_ms", requestedMs - dropMs)
+            .put("metadata_finished_ms", metadataFinishedMs.get())
+            .put("update_finished_ms", updateFinishedMs.get()).put("total_ms", elapsed())
+        if (!probeOnly) result.put("history_preserved", true)
+        File(context.filesDir, "core-sync-result.json").writeText(result.toString())
+        mark("transport_finished")
+    }
     private suspend fun createPublicProbeTor(): TorClient {
         val backend = Proxy.newProxyInstance(Backend::class.java.classLoader, arrayOf(Backend::class.java)) { _, _, _ ->
             error("Wallet access forbidden during unfunded native RPC diagnostic")
