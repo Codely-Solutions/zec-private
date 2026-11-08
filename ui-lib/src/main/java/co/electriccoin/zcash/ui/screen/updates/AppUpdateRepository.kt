@@ -48,9 +48,8 @@ class AppUpdateRepository(context: Context, private val httpClientProvider: Http
         UpdatePolicy.notice(cachedRelease(), installedCode, preferences.getInt("dismissed", 0))
 
     suspend fun check(manual: Boolean = false) {
-        if (!enabled) return
         // Drop overlapping checks rather than queueing repeated manual requests.
-        if (!mutex.tryLock()) return
+        if (!enabled || !mutex.tryLock()) return
         try {
             val now = System.currentTimeMillis()
             val last = if (preferences.contains("last_check")) preferences.getLong("last_check", 0) else null

@@ -1298,10 +1298,10 @@ index 2d38073f4..3dea5aa4d 100644
 +    ZashiSelectionIndicator(isChecked = true, isEnabled = state.isEnabled, circular = true)
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSelectionIndicator.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSelectionIndicator.kt
 new file mode 100644
-index 000000000..5ae513a1e
+index 000000000..44a181099
 --- /dev/null
 +++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSelectionIndicator.kt
-@@ -0,0 +1,82 @@
+@@ -0,0 +1,85 @@
 +package co.electriccoin.zcash.ui.design.component
 +
 +import androidx.compose.foundation.Canvas
@@ -1312,6 +1312,7 @@ index 000000000..5ae513a1e
 +import androidx.compose.ui.geometry.Offset
 +import androidx.compose.ui.geometry.Size
 +import androidx.compose.ui.graphics.Path
++import androidx.compose.ui.graphics.Color
 +import androidx.compose.ui.graphics.StrokeCap
 +import androidx.compose.ui.graphics.StrokeJoin
 +import androidx.compose.ui.graphics.drawscope.Stroke
@@ -1327,22 +1328,7 @@ index 000000000..5ae513a1e
 +    circular: Boolean = false,
 +    useDot: Boolean = false,
 +) {
-+    val colors = ZashiColors.Checkboxes
-+    val background =
-+        when {
-+            !isEnabled && isChecked -> colors.boxOnDisabledBg
-+            !isEnabled -> colors.boxOffDisabledBg
-+            isChecked -> colors.boxOnBg
-+            else -> colors.boxOffBg
-+        }
-+    val border =
-+        when {
-+            !isEnabled && isChecked -> colors.boxOnDisabledStroke
-+            !isEnabled -> colors.boxOffDisabledStroke
-+            isChecked -> colors.boxOnBg
-+            else -> colors.boxOffStroke
-+        }
-+    val foreground = if (isEnabled) colors.boxOnFg else colors.boxOnDisabledFg
++    val (background, border, foreground) = selectionIndicatorColors(isChecked, isEnabled)
 +    Canvas(Modifier.size(if (circular) 20.dp else 16.dp)) {
 +        val unit = size.width / if (circular) 20f else 16f
 +        val inset = unit / 2f
@@ -1382,6 +1368,23 @@ index 000000000..5ae513a1e
 +                )
 +            }
 +        }
++    }
++}
++
++private data class SelectionIndicatorColors(val background: Color, val border: Color, val foreground: Color)
++
++@Composable
++private fun selectionIndicatorColors(isChecked: Boolean, isEnabled: Boolean): SelectionIndicatorColors {
++    val colors = ZashiColors.Checkboxes
++    return when {
++        !isEnabled && isChecked -> SelectionIndicatorColors(
++            colors.boxOnDisabledBg, colors.boxOnDisabledStroke, colors.boxOnDisabledFg,
++        )
++        !isEnabled -> SelectionIndicatorColors(
++            colors.boxOffDisabledBg, colors.boxOffDisabledStroke, colors.boxOnDisabledFg,
++        )
++        isChecked -> SelectionIndicatorColors(colors.boxOnBg, colors.boxOnBg, colors.boxOnFg)
++        else -> SelectionIndicatorColors(colors.boxOffBg, colors.boxOffStroke, colors.boxOnFg)
 +    }
 +}
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteHeader.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteHeader.kt
@@ -11210,10 +11213,10 @@ index 000000000..f44f1d117
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt
 new file mode 100644
-index 000000000..b77c4fa89
+index 000000000..03717dd52
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt
-@@ -0,0 +1,136 @@
+@@ -0,0 +1,135 @@
 +package co.electriccoin.zcash.ui.screen.updates
 +
 +import android.content.Context
@@ -11264,9 +11267,8 @@ index 000000000..b77c4fa89
 +        UpdatePolicy.notice(cachedRelease(), installedCode, preferences.getInt("dismissed", 0))
 +
 +    suspend fun check(manual: Boolean = false) {
-+        if (!enabled) return
 +        // Drop overlapping checks rather than queueing repeated manual requests.
-+        if (!mutex.tryLock()) return
++        if (!enabled || !mutex.tryLock()) return
 +        try {
 +            val now = System.currentTimeMillis()
 +            val last = if (preferences.contains("last_check")) preferences.getLong("last_check", 0) else null
