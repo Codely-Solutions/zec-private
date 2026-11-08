@@ -39,7 +39,10 @@ class DonationReviewActivity : ComponentActivity() {
             if (requested == "home") preferences.claimAutomaticIntroduction()
         }
         setContent {
-            ZcashTheme(appearanceMode = if (dark) AppearanceMode.DARK else AppearanceMode.LIGHT, isOledEnabled = dark) {
+            ZcashTheme(
+                appearanceMode = if (dark) AppearanceMode.DARK else AppearanceMode.LIGHT,
+                isOledEnabled = dark,
+            ) {
                 var screen by remember { mutableStateOf(if (requested == "revisit") "home" else requested) }
                 var amount by remember { mutableStateOf("") }
                 if (screen == "donation") {
@@ -73,10 +76,18 @@ class DonationReviewActivity : ComponentActivity() {
                         ),
                     )
                     val home = HomeState.preview.copy(
-                        firstButton = BigIconButtonState(stringRes("Receive"), R.drawable.ic_home_receive, onClick = {}),
-                        secondButton = BigIconButtonState(stringRes("Send"), R.drawable.ic_home_send, onClick = {}),
-                        thirdButton = BigIconButtonState(stringRes("Pay"), R.drawable.ic_home_pay, onClick = {}),
-                        fourthButton = BigIconButtonState(stringRes("Swap"), R.drawable.ic_home_swap, onClick = {}),
+                        firstButton = BigIconButtonState(
+                            stringRes("Receive"), R.drawable.ic_home_receive, onClick = {},
+                        ),
+                        secondButton = BigIconButtonState(
+                            stringRes("Send"), R.drawable.ic_home_send, onClick = {},
+                        ),
+                        thirdButton = BigIconButtonState(
+                            stringRes("Pay"), R.drawable.ic_home_pay, onClick = {},
+                        ),
+                        fourthButton = BigIconButtonState(
+                            stringRes("Swap"), R.drawable.ic_home_swap, onClick = {},
+                        ),
                         message = if (screen == "backup") WalletBackupMessageState({}, {}) else null,
                     )
                     HomeView(
