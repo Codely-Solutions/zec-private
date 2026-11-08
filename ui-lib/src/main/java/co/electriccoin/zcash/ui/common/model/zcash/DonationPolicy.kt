@@ -71,8 +71,8 @@ object DonationPolicy {
     private fun memoMatchesReview(data: ByteArray?, reviewed: String): Boolean {
         if (reviewed.isEmpty()) return isEmptyMemo(data)
         val expected = reviewed.toByteArray(Charsets.UTF_8)
-        if (data == null || data.size > 512 || data.size < expected.size) return false
-        return data.take(expected.size).toByteArray().contentEquals(expected) &&
+        return data != null && data.size <= 512 && data.size >= expected.size &&
+            data.take(expected.size).toByteArray().contentEquals(expected) &&
             data.drop(expected.size).all { it == 0.toByte() }
     }
 

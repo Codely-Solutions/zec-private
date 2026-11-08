@@ -4060,7 +4060,7 @@ index f0ef84ad1..c81390205 100644
 +    val destinationChainTxHashes: List<TransactionChainHash>? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
 new file mode 100644
-index 000000000..d85a5fdd8
+index 000000000..e44eb23d6
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
 @@ -0,0 +1,88 @@
@@ -4137,8 +4137,8 @@ index 000000000..d85a5fdd8
 +    private fun memoMatchesReview(data: ByteArray?, reviewed: String): Boolean {
 +        if (reviewed.isEmpty()) return isEmptyMemo(data)
 +        val expected = reviewed.toByteArray(Charsets.UTF_8)
-+        if (data == null || data.size > 512 || data.size < expected.size) return false
-+        return data.take(expected.size).toByteArray().contentEquals(expected) &&
++        return data != null && data.size <= 512 && data.size >= expected.size &&
++            data.take(expected.size).toByteArray().contentEquals(expected) &&
 +            data.drop(expected.size).all { it == 0.toByte() }
 +    }
 +
