@@ -300,16 +300,16 @@ fladle {
     val FIREBASE_TEST_LAB_MAX_SDK = 33
 
     val minSdkVersion = run {
-        val buildMinSdk = project.properties["ANDROID_MIN_SDK_VERSION"].toString().toInt()
+        val buildMinSdk = project.property("ANDROID_MIN_SDK_VERSION").toString().toInt()
         buildMinSdk.coerceAtLeast(FIREBASE_TEST_LAB_MIN_SDK).toString()
     }
     val targetSdkVersion = run {
-        val buildTargetSdk = project.properties["ANDROID_TARGET_SDK_VERSION"].toString().toInt()
+        val buildTargetSdk = project.property("ANDROID_TARGET_SDK_VERSION").toString().toInt()
         buildTargetSdk.coerceAtMost(FIREBASE_TEST_LAB_MAX_SDK).toString()
     }
 
-    val firebaseTestLabKeyPath = project.properties["ZCASH_FIREBASE_TEST_LAB_API_KEY_PATH"].toString()
-    val firebaseProject = project.properties["ZCASH_FIREBASE_TEST_LAB_PROJECT"].toString()
+    val firebaseTestLabKeyPath = project.property("ZCASH_FIREBASE_TEST_LAB_API_KEY_PATH").toString()
+    val firebaseProject = project.property("ZCASH_FIREBASE_TEST_LAB_PROJECT").toString()
 
     if (firebaseTestLabKeyPath.isNotEmpty()) {
         serviceAccountCredentials.set(File(firebaseTestLabKeyPath))

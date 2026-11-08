@@ -124,10 +124,10 @@ fun com.android.build.api.dsl.CommonExtension.configureBaseExtension() {
             val MANAGED_DEVICES_MIN_SDK = 27
 
             val testDeviceMinSdkVersion = run {
-                val buildMinSdk = project.properties["ANDROID_MIN_SDK_VERSION"].toString().toInt()
+                val buildMinSdk = project.property("ANDROID_MIN_SDK_VERSION").toString().toInt()
                 buildMinSdk.coerceAtLeast(MANAGED_DEVICES_MIN_SDK)
             }
-            val testDeviceMaxSdkVersion = project.properties["ANDROID_TARGET_SDK_VERSION"].toString().toInt()
+            val testDeviceMaxSdkVersion = project.property("ANDROID_TARGET_SDK_VERSION").toString().toInt()
 
             allDevices {
                 create<ManagedVirtualDevice>("pixel2Min") {
