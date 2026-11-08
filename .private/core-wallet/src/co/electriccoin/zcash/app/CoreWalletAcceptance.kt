@@ -2,6 +2,7 @@ package co.electriccoin.zcash.app
 
 import androidx.test.platform.app.InstrumentationRegistry
 import android.content.Intent
+import android.os.Build
 import android.view.accessibility.AccessibilityNodeInfo
 import android.accessibilityservice.AccessibilityService
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -945,15 +946,21 @@ class CoreWalletAcceptance {
                             for (index in 0 until node.childCount) node.getChild(index)?.let { pending.add(it) }
                         }
                     } finally {
-                        node.recycle()
+                        releaseUiNode(node)
                     }
                 }
             } finally {
-                while (pending.isNotEmpty()) pending.removeFirst().recycle()
+                while (pending.isNotEmpty()) releaseUiNode(pending.removeFirst())
             }
             delay(300)
         }
         waitUi(text, "scroll_target")
+    }
+
+    // Pooling ended in API 33; retain cleanup only for older Android runtimes.
+    @Suppress("DEPRECATION")
+    private fun releaseUiNode(node: AccessibilityNodeInfo) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) node.recycle()
     }
 
     private fun uiDiagnostic(label: String, outcome: String, probe: UiProbe) {
