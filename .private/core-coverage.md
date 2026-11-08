@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision 16 candidate passed real acceptance and awaits isolated signing. Root receipts bind its executed source and artifacts; revision 15 remains the published rollback.
+Status: revision 16 is signed and independently verified. Exact immutable publication evidence is in `release-evidence/v3.19.0-private.16.json`; root receipts bind its executed artifacts. Revision 15 remains the rollback.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
