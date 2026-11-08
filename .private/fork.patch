@@ -1008,7 +1008,7 @@ index 35fdf9ac6..24aee1350 100644
 -org.slf4j:slf4j-api:2.0.17=buildScriptClasspath,compileClasspath
 +org.slf4j:slf4j-api:2.0.18=buildScriptClasspath,compileClasspath
 diff --git a/buildscript-gradle.lockfile b/buildscript-gradle.lockfile
-index b1cd82313..0cb935c54 100644
+index b1cd82313..01b3f5ce2 100644
 --- a/buildscript-gradle.lockfile
 +++ b/buildscript-gradle.lockfile
 @@ -4,7 +4,7 @@
@@ -1026,7 +1026,7 @@ index b1cd82313..0cb935c54 100644
 +com.android.tools.analytics-library:protos:32.5.1=classpath
 +com.android.tools.analytics-library:shared:32.5.1=classpath
 +com.android.tools.analytics-library:tracker:32.5.1=classpath
-@@ -13,36 +13,27 @@ com.android.tools.build.jetifier:jetifier-processor:1.0.0-beta10=classpath
+@@ -13,36 +13,26 @@ com.android.tools.build.jetifier:jetifier-processor:1.0.0-beta10=classpath
 -com.android.tools.build:aapt2-proto:8.13.2-14304508=classpath
 -com.android.tools.build:aaptcompiler:8.13.2=classpath
 -com.android.tools.build:apksig:8.13.2=classpath
@@ -1089,8 +1089,7 @@ index b1cd82313..0cb935c54 100644
 +com.android.tools:sdklib:32.5.1=classpath
 +com.android:signflinger:9.5.1=classpath
 +com.android:zipflinger:9.5.1=classpath
-+com.github.ben-manes.versions:com.github.ben-manes.versions.gradle.plugin:0.67.0=classpath
-@@ -50,6 +41,5 @@ com.google.android.gms:strict-version-matcher-plugin:1.2.4=classpath
+@@ -50,6 +40,5 @@ com.google.android.gms:strict-version-matcher-plugin:1.2.4=classpath
 -com.google.android:annotations:4.1.1.4=classpath
 -com.google.api-client:google-api-client:2.7.2=classpath
 -com.google.api.grpc:proto-google-common-protos:2.48.0=classpath
@@ -1102,18 +1101,18 @@ index b1cd82313..0cb935c54 100644
 +com.google.apis:google-api-services-androidpublisher:v3-rev20261026-2.9.2=classpath
 +com.google.auth:google-auth-library-credentials:1.57.0=classpath
 +com.google.auth:google-auth-library-oauth2-http:1.57.0=classpath
-@@ -58 +48 @@ com.google.code.findbugs:jsr305:3.0.2=classpath
+@@ -58 +47 @@ com.google.code.findbugs:jsr305:3.0.2=classpath
 -com.google.code.gson:gson:2.11.0=classpath
 +com.google.code.gson:gson:2.14.0=classpath
-@@ -61 +51 @@ com.google.dagger:dagger:2.28.3=classpath
+@@ -61 +50 @@ com.google.dagger:dagger:2.28.3=classpath
 -com.google.errorprone:error_prone_annotations:2.36.0=classpath
 +com.google.errorprone:error_prone_annotations:2.50.0=classpath
-@@ -66,2 +56,2 @@ com.google.gms:google-services:4.4.4=classpath
+@@ -66,2 +55,2 @@ com.google.gms:google-services:4.4.4=classpath
 -com.google.guava:failureaccess:1.0.2=classpath
 -com.google.guava:guava:33.3.1-jre=classpath
 +com.google.guava:failureaccess:1.0.3=classpath
 +com.google.guava:guava:33.6.0-jre=classpath
-@@ -69,4 +59,4 @@ com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava=clas
+@@ -69,4 +58,4 @@ com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava=clas
 -com.google.http-client:google-http-client-apache-v2:1.45.2=classpath
 -com.google.http-client:google-http-client-gson:1.45.2=classpath
 -com.google.http-client:google-http-client:1.45.2=classpath
@@ -1122,9 +1121,9 @@ index b1cd82313..0cb935c54 100644
 +com.google.http-client:google-http-client-gson:2.2.0=classpath
 +com.google.http-client:google-http-client:2.2.0=classpath
 +com.google.j2objc:j2objc-annotations:3.1=classpath
-@@ -77 +66,0 @@ com.google.protobuf:protobuf-java:3.25.5=classpath
+@@ -77 +65,0 @@ com.google.protobuf:protobuf-java:3.25.5=classpath
 -com.google.testing.platform:core-proto:0.0.9-alpha03=classpath
-@@ -79,8 +68,7 @@ com.googlecode.juniversalchardet:juniversalchardet:1.0.3=classpath
+@@ -79,8 +67,7 @@ com.googlecode.juniversalchardet:juniversalchardet:1.0.3=classpath
 -com.osacky.flank.gradle:fladle:0.19.0=classpath
 -com.osacky.fulladle:com.osacky.fulladle.gradle.plugin:0.19.0=classpath
 -com.squareup.moshi:moshi-kotlin:1.12.0=classpath
@@ -1140,9 +1139,10 @@ index b1cd82313..0cb935c54 100644
 +com.squareup.okio:okio-jvm:3.7.0=classpath
 +com.squareup.okio:okio:3.7.0=classpath
 +com.squareup:javapoet:1.13.0=classpath
-@@ -88 +75,0 @@ com.squareup:javawriter:2.5.0=classpath
+@@ -88 +74,0 @@ com.squareup:javawriter:2.5.0=classpath
 -com.sun.activation:javax.activation:1.2.0=classpath
-@@ -93,0 +81 @@ commons-logging:commons-logging:1.2=classpath
+@@ -93,0 +80,2 @@ commons-logging:commons-logging:1.2=classpath
++io.github.ben-manes.versions:io.github.ben-manes.versions.gradle.plugin:0.67.0=classpath
 +io.github.ben-manes:gradle-versions-plugin:0.67.0=classpath
 @@ -95,20 +83,2 @@ io.gitlab.arturbosch.detekt:detekt-gradle-plugin:1.23.8=classpath
 -io.grpc:grpc-api:1.69.1=classpath
