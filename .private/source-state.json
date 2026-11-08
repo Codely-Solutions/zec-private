@@ -973,7 +973,7 @@
   "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSlider.kt": "299ed8a97dc12f7a4ecef56c52433d99a538eb84f105c6ae6f408ca81b864fc6",
   "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSpacer.kt": "6c6e55177a7b09825aa55ca0579db976f9d87bf3bd264b955c9e607cbd330b2a",
   "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteAmount.kt": "bf8a91541b1e728e845328db3b3a09cf4fef0e0346ab1c312ede1971ba31e275",
-  "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteHeader.kt": "593a32bcbb92e49c817bf7102357b0e5cd130f8c5f19ef6609d8178776bbfbb0",
+  "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteHeader.kt": "c7dc0c65451331a6d0bd01bfebeead86113161673cd30094ae4d3baa5c72a79e",
   "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiTextButton.kt": "76720b0443460032accc6f4b2301c183bf090313a0610ccd9d7ca04cfeaa814e",
   "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiTextField.kt": "5321b62c04e67bab54cd757395390bbc1bf35cb3eaf022b9a79bc7945f8e8b48",
   "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiTextMeasurer.kt": "f09c46fe14a2810f828dc268ae11a0cc16d02bf768d0a076a6cac2b972a09250",

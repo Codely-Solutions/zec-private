@@ -56,6 +56,8 @@ The controller resolves the exact upstream commit, checks critical differences, 
 
 Refresh `fork.patch` and normalized `source-state.json` together and validate an actual disposable integration candidate. Preserve excluded features through upstream updates. Review resolved dependencies after removals because transitive constraints can change retained library versions.
 
+The NEAR provider is excluded from patch hunks to avoid retaining the upstream credential. Preparation verifies the exact upstream provider, then installs the credential-free fork provider bound by `source-state.json`. Keep that reviewed implementation authoritative; credential stripping alone would lose its Tor and quote fixes. An upstream provider change requires review before replacement.
+
 After reviewing changes and staging any newly added source files, run `python3 -B .private/refresh_source.py`. It regenerates metadata idempotently; it does not approve or commit the changes. Run offline preflight and candidate validation afterward.
 
 ## Signing and publication

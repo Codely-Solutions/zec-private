@@ -1191,6 +1191,19 @@ index f055665c9..913b7cf27 100644
 @@ -246 +245 @@ object ZashiButtonDefaults {
 -        get() = RoundedCornerShape(12.dp)
 +        @Composable get() = ButtonDefaults.shape
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteHeader.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteHeader.kt
+index 65d07deda..aa80314a8 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteHeader.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteHeader.kt
+@@ -12,0 +13 @@ import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.ColorFilter
+@@ -47 +48 @@ fun ZashiSwapQuoteHeader(
+-                color = ZashiColors.Btns.Secondary.btnSecondaryBg
++                color = Color.Transparent
+@@ -54 +55,2 @@ fun ZashiSwapQuoteHeader(
+-                        contentDescription = null
++                        contentDescription = null,
++                        colorFilter = ColorFilter.tint(ZashiColors.Text.textTertiary)
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiTextButton.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiTextButton.kt
 index 0a1ee696f..e3bcdaf3c 100644
 --- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiTextButton.kt
