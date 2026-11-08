@@ -28,6 +28,7 @@
   "v3.19.0-private.17": [
     "Add quiet update notices and Obtainium setup.",
     "Keep settings icons and selection controls consistent with the app theme.",
-    "Simplify donation wording."
+    "Simplify donation wording.",
+    "Direct HTTPS on unpatched systems retains an existing certificate-blocklist gap; see [security status](https://github.com/Sammy-Lastre/zec-private/blob/v3.19.0-private.17/.github/SECURITY.md)."
   ]
 }
