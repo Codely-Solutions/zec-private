@@ -15,6 +15,32 @@ CORE_TEST_SOURCE = '.private/core-wallet/src/co/electriccoin/zcash/app/CoreWalle
 PROFILES = {'core-testnet', 'core-build', 'production-quotes', 'core-runtime'}
 CORE_BINDING = 'core-runtime-v1'
 CORE_STAGES = {'fund', 'upgrade', 'send', 'restart', 'restore', 'interruption'}
+BASELINE_INSTRUMENTATION_STAGES = {'networkTargets', 'recipient', 'sender', 'fund'}
+CANDIDATE_INSTRUMENTATION_STAGES = {'upgrade', 'transport', 'send', 'restart', 'restore'}
+
+
+def validate_instrumentation_pairing(receipt, baseline):
+    expected_baseline = baseline['instrumentation']['apk_sha256']
+    if receipt.get('baseline_instrumentation_apk_sha256') != expected_baseline:
+        raise ValueError('Instrumentation differs from selected upgrade baseline')
+    pairing = receipt.get('instrumentation_pairing', {})
+    for role, original, source, version in (
+            ('baseline', expected_baseline, baseline['source_sha'], baseline['version_code']),
+            ('candidate', receipt['instrumentation_apk_sha256'], receipt['build_source_sha'],
+             receipt['candidate_version_code'])):
+        value = pairing.get(role, {})
+        if (value.get('original_sha256') != original or value.get('source_sha') != source or
+                value.get('app_version_code') != version or
+                not re.fullmatch('[0-9a-f]{64}', str(value.get('executed_sha256', '')))):
+            raise ValueError('Missing exact original/executed instrumentation identity: ' + role)
+    stages = pairing.get('stages', {})
+    if set(stages) != BASELINE_INSTRUMENTATION_STAGES | CANDIDATE_INSTRUMENTATION_STAGES:
+        raise ValueError('Missing version-paired instrumentation stages')
+    for stage, value in stages.items():
+        role = 'baseline' if stage in BASELINE_INSTRUMENTATION_STAGES else 'candidate'
+        if (value.get('role') != role or value.get('installed_hash_verified') is not True or
+                any(value.get(key) != expected for key, expected in pairing[role].items())):
+            raise ValueError('Wrong app/instrumentation pair for stage: ' + stage)
 
 
 def git(*args, root=ROOT):
@@ -171,6 +197,7 @@ def validate_core(receipt, expected_inputs):
     if (receipt.get('baseline_source_sha') != baseline['source_sha'] or
             receipt.get('baseline_version_code') != baseline['version_code']):
         raise ValueError('Unexpected migration baseline')
+    validate_instrumentation_pairing(receipt, baseline)
     if receipt.get('candidate_version_code', 0) <= receipt.get('baseline_version_code', 0):
         raise ValueError('Update did not increase versionCode')
     txids = {stages[name].get('txId') for name in ('send', 'restart', 'restore')}

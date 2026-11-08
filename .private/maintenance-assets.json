@@ -89,6 +89,18 @@
         "size_in_bytes": 652,
         "digest": "sha256:6edbdded619f163ae9e57070b534d9e69fb8019b2f9895b54560513c589e72c4",
         "source_release": "v3.19.0-private.16"
+      },
+      "TESTNET_INSTRUMENTATION_FIXTURE.zip": {
+        "release_asset_id": 725051806,
+        "size_in_bytes": 4357357,
+        "digest": "sha256:06093bdcad2a44ea36d046f262fd41b7567ae5ee38999084751c98f2854e8f13",
+        "source_release": "v3.19.0-private.16"
+      },
+      "TESTNET_INSTRUMENTATION_FIXTURE.json": {
+        "release_asset_id": 725051804,
+        "size_in_bytes": 1001,
+        "digest": "sha256:e49d42f404944a706201cb77beb5503dd0829b1d28c2b348fcc8e90bf559c637",
+        "source_release": "v3.19.0-private.16"
       }
     }
   },
