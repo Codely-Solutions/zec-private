@@ -89,10 +89,17 @@ def sanitize_provider(root):
         raise RuntimeError('Upstream NEAR provider changed; credential removal needs review')
     if text.count('header(HttpHeaders.Authorization, AUTH_TOKEN)')!=3:
         raise RuntimeError('Unexpected upstream authentication structure')
-    text=re.sub(r'\nprivate const val AUTH_TOKEN =[\s\S]*','\n',text)
-    text=text.replace('import io.ktor.client.request.header\n','').replace('import io.ktor.http.HttpHeaders\n','')
-    text=text.replace('                header(HttpHeaders.Authorization, AUTH_TOKEN)\n','')
-    path.write_text(text.rstrip()+'\n')
+    # This file is excluded from fork.patch to keep the upstream credential out
+    # of deleted hunks. Install the reviewed, credential-free fork implementation
+    # after verifying the exact upstream input, preserving its Tor/requote fixes.
+    relative=path.relative_to(root).as_posix()
+    reviewed=(ROOT/relative).read_text().replace('\r\n','\n')
+    recorded=json.loads((ROOT/'.private/source-state.json').read_text())[relative]
+    if hashlib.sha256(reviewed.encode()).hexdigest()!=recorded:
+        raise RuntimeError('Reviewed NEAR provider differs from source-state')
+    if re.search(r'AUTH_TOKEN|Authorization|Bearer |X-API-Key|eyJhbGci',reviewed):
+        raise RuntimeError('Reviewed NEAR provider contains partner authentication')
+    path.write_text(reviewed)
 
 def main():
     expected=json.loads((ROOT/'.private/source-state.json').read_text())
