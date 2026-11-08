@@ -92,7 +92,7 @@ The pinned toolchain includes the Gradle security fixes for [GHSA-mvvg-497x-hmj8
 
 Retain the existing Biometric 1.4.0-alpha05 implementation pending authentication runtime coverage for a stable-base replacement. Unused biometric-ktx wiring is removed. The used APIs exist in stable 1.1.0, but static API compatibility does not establish equivalent prompt, credential-fallback and cancellation behavior. Reassess this existing preview exception when stable replacements or the required device coverage become available.
 
-Keep deprecation diagnostics visible. Remaining Detekt, Kover and JGit integration warnings and optional Google Play publishing API deprecations need upstream fixes or reviewed API migrations; do not suppress them to make validation appear clean. Preserve detailed warnings in the normal candidate build and recheck them when updating the affected tools.
+Keep deprecation diagnostics visible. Current builds retain Detekt/Kover Gradle API deprecations and JVM test-tooling warnings from Byte Buddy/Conscrypt. Recheck before Gradle 10/11 or a JDK that enforces the announced removals. Optional Play-publishing API deprecations also remain. Preserve detailed diagnostics; these warnings alone do not establish a shipping-wallet security defect.
 
 App update discovery uses the existing HTTP provider and a fixed public GitHub endpoint. It announces releases; it does not authenticate or install APKs. Native SDK 6.0.0 returns a whole JNI response byte array, so a Ktor channel does not provide bounded-memory Tor APK streaming. Installation remains with Obtainium/Android or the release download flow. Revisit an in-app installer when a supported bounded streaming transport is available; do not add another native Tor stack solely for this feature.
 
