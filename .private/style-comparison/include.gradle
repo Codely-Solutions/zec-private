@@ -1,0 +1,18 @@
+// Review-only source overlays: same production screen trees, selectable original/standard style.
+allprojects { p ->
+    p.plugins.withId('com.android.library') {
+        if (p.path == ':ui-design-lib') {
+            def generated = p.layout.buildDirectory.dir('style-comparison').get().asFile
+            def result = new ProcessBuilder(System.getenv('STYLE_PREVIEW_PYTHON') ?: 'python3',
+                new File(p.rootProject.projectDir, '.private/style-comparison/generate.py').absolutePath,
+                p.rootProject.projectDir.absolutePath, generated.absolutePath).inheritIO().start().waitFor()
+            if (result != 0) throw new GradleException('Style comparison source preparation failed')
+            p.android.sourceSets.main.java.exclude('**/ZcashTheme.kt', '**/ZashiTypographyInternal.kt', '**/ZashiBigIconButton.kt', '**/ZashiButton.kt')
+            p.android.sourceSets.main.java.srcDir(generated)
+        }
+        if (p.path == ':ui-lib') {
+            p.android.sourceSets.debug.java.srcDir(new File(p.rootProject.projectDir, '.private/style-comparison/src'))
+            p.android.sourceSets.debug.manifest.srcFile(new File(p.rootProject.projectDir, '.private/style-comparison/AndroidManifest.xml'))
+        }
+    }
+}
