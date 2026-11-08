@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision14 is the latest signed evidence, preserved in `release-evidence/v3.19.0-private.14.json`. The root acceptance receipts describe the working candidate and remain pending until its exact inputs pass fresh real execution.
+Status: revision 15 candidate acceptance passed; signing is pending. Revision 14 signed evidence remains immutable in `release-evidence/v3.19.0-private.14.json`. The root receipts bind the executed revision 15 candidate.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
@@ -48,8 +48,14 @@ The bounded sandbox review is recorded in `core-provider-review.json`. Tidepool 
 
 Production Detekt retains its rules and existing baseline. Its release-only init excludes the procedural private instrumentation source, which is outside the shipped source sets and separately compiled by the core producer. That harness is checked through exact source/APK bindings, review and real execution. This does not exempt production Kotlin or the ordinary unit tests from analysis.
 
-## Current release evidence
+## Current candidate evidence
 
-Revision 14 passed 1,731 unit tests and the real testnet lifecycle from revision 13. The manual shielded donation used review, cancellation and one explicit approval. Sender accounting, restart and clean recipient restoration reuse that transaction; the recipient amount and empty memo match. The test also rejects the SDK’s unreviewed two-recipient proposal before signing.
+Revision 15 passed 1,749 unit tests and the real testnet lifecycle from revision 14. One manual shielded donation verified review, cancellation, one approval and exact nonempty message; restart and clean recipient restoration reused it. A fake clipboard entry verified sensitive metadata and preservation of newer content across expiry. Clipboard process-death cleanup and physical authentication UI remain outside that execution.
 
-Three unfunded Tor quote/dismiss cycles passed. The task-owned scenario waits for Confirm before reading sheet bounds, correcting a rendering race without changing the APK or assertions. Historical phase results are retained in `release-evidence/`; they do not establish current acceptance. Home introduction/reminder lifecycle has focused Compose and preference coverage plus rendered UI evidence; no donation-conversion effectiveness is claimed.
+Three unfunded Tor quote/dismiss cycles passed without timeout. Actual light/dark synthetic donation/recovery captures were inspected; these layout scenes cannot spend and do not establish authentication. Prior signed evidence remains immutable under `release-evidence/`.
+
+## Retained dependency-security work
+
+The unchanged SDK 6.0.0 pinned source lock has known Rustls, h2, constant-time arithmetic, Tokio and compression advisory matches. Tor/transparent-input source features reach some affected dependencies; actual published AAR feature union and exploitable call paths remain unresolved. Review supported SDK fixes and native build provenance before claiming these risks resolved; registry presence alone establishes neither an exploit nor immunity. Relevant examples: [Rustls protocol defect](https://rustsec.org/advisories/RUSTSEC-2026-0285.html), [constant-time arithmetic](https://rustsec.org/advisories/RUSTSEC-2026-0387.html). No newer supported Maven SDK was found during this review.
+
+The exact Maven graph query covered 317 coordinates with no match; it does not clear native dependencies or the separately documented OkHttp CA limitation in [maintenance guidance](MAINTENANCE.md).

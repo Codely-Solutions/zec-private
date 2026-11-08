@@ -1,63 +1,49 @@
 {
-  "status": "signed-and-independently-verified",
-  "scope": "Manual shielded donations and home discovery",
-  "source_sha": "d7471a007f131a808986a9e66f70638750c305ea",
-  "candidate_run": 42429934172,
-  "baseline": "v3.19.0-private.13",
+  "status": "accepted-awaiting-signature",
+  "scope": "Recovery copy, manual donation amount/message, compatible security and toolchain maintenance",
+  "source_sha": "b286524d2d76c8c9a8d83454886a0cc993d935ee",
+  "candidate_run": 42439820603,
+  "baseline": "v3.19.0-private.14",
   "tests": {
-    "tests": 1731,
+    "tests": 1749,
     "failures": 0,
     "errors": 0,
     "skipped": 0
   },
   "runtime_components": 334,
-  "production_gradle_seconds": 682,
-  "core_seconds": 746.8009905000217,
+  "production_gradle_seconds": 749,
+  "core_seconds": 627.5685254000127,
   "core_transaction_evidence": {
-    "fundingTxId": "998d4453902d02bec44a5490e7540379e8ddba3d047c641f64ed98ac9aa57719",
+    "fundingTxId": "3e8dbdc1da85abca87060d9fc52cd0693dff0ca83c30f5b7783b2799c460e84a",
     "fundingProvider": "jinolabs-testnet",
     "fundedBalance": 10000000,
     "balanceBeforeSend": 10000000,
     "feeZatoshi": 10000,
     "senderConfirmedBalance": 8990000,
-    "restoreMinedHeight": 4596104,
+    "restoreMinedHeight": 4596384,
     "restoreTransactionState": "Pending",
     "candidateTxIds": [
-      "15123eff4ed0cf4af7003106e34ca4e13fc71b18de99c7ee27b3fdc2011479f0"
+      "e7be9b4a6c38974e08dcdef6ccbd804e97ec5b8dfff40e90830e517e1675dcf0"
     ],
     "initialSubmitType": "Success"
   },
-  "quote_cycles": {
-    "requests": 3,
-    "reviews": 3,
-    "dismissals": 3
+  "quote_cycles": 3,
+  "production_arm_executed": false,
+  "physical_biometric_ui_executed": false,
+  "clipboard_process_death_cleanup_guaranteed": false,
+  "costs": {
+    "revision14_gradle_seconds": 682,
+    "revision15_gradle_seconds": 749,
+    "controlled_performance_benchmark": false
   },
-  "donation_behavior": "Manual review only; no automatic spending or percentage settings; one introduction and shared 90-day reminder suppression",
-  "regressions": "Compose introduction lifecycle and invitation persistence; 1731 current unit tests passed",
-  "acceptance_scenario": "Task-owned copy waits for Confirm before reading sheet bounds; same assertions and immutable APK; adapter and scenario hashes retained by guard",
-  "diagnosed_failures": [
-    "One transient quote-unavailable outcome remained unclassified; subsequent three-cycle acceptance passed",
-    "UI scenario raced sheet rendering; explicit Confirm readiness fixed the test"
-  ],
-  "upstream": "Discovery retained; CI disposable integration and fork safeguards passed",
-  "limits": [
-    "ARM64 production packaging inspected, not physically executed",
-    "No real funds, personal wallet, funded production settlement or physical biometric/signer execution",
-    "Restored recipient transaction mined; recipient spendability confirmation wait not repeated"
-  ],
-  "release": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.14",
-  "signed_apk": {
-    "passed": true,
-    "apk_bytes": 67828487,
-    "apk_sha256": "af636ba827f4936ef25dd56734a17c053b1cf9dd1293ca49eccc2573271a097a",
-    "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
-    "version_code": 3234014,
-    "package": "com.personal.zecprivate.foss",
-    "abis": [
-      "arm64-v8a"
-    ],
-    "signed_payload_matches_validated_unsigned": true,
-    "production_arm_executed": false,
-    "release": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.14"
+  "security_review": {
+    "maven_coordinates_queried": 317,
+    "maven_registry_matches": 0,
+    "native_source_registry_versions_queried": 735,
+    "native_source_matched_packages": 11,
+    "native_sdk_version": "6.0.0",
+    "native_sdk_changed": false,
+    "native_binary_feature_union_verified": false,
+    "remaining": "Known source-lock advisories require SDK feature/call-path and published AAR provenance review; OkHttp CA mitigation needs a compatible SDK37 toolchain. No native security-clearance claim."
   }
 }
