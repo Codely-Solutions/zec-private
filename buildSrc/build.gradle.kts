@@ -1,4 +1,4 @@
-import org.jetbrains.kotlin.konan.properties.loadProperties
+import java.util.Properties
 
 plugins {
     `kotlin-dsl-base`
@@ -47,5 +47,7 @@ dependencies {
     implementation("org.eclipse.jgit:org.eclipse.jgit:${rootProperties.getProperty("JGIT_VERSION")}")
 }
 
-// A slightly gross way to use the root gradle.properties as the single source of truth for version numbers
-fun getRootProperties() = loadProperties(File(project.projectDir.parentFile, "gradle.properties").path)
+// Share the root version pins with this included build.
+fun getRootProperties(): Properties = Properties().apply {
+    File(project.projectDir.parentFile, "gradle.properties").inputStream().use { load(it) }
+}
