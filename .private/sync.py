@@ -79,6 +79,18 @@ def remove_excluded_projects(candidate):
                 raise RuntimeError('Excluded project escaped the candidate workspace')
             shutil.rmtree(target)
 
+def overlay_github(candidate):
+    # The controller owns all GitHub automation and repository metadata, including
+    # funding, templates, local actions and scripts. Remove upstream-only files.
+    target=candidate/'.github'
+    if target.is_symlink() or getattr(target,'is_junction',lambda:False)():
+        raise RuntimeError('Candidate GitHub metadata is a link; review required')
+    if target.exists():
+        if not target.is_dir() or target.resolve().parent!=candidate.resolve():
+            raise RuntimeError('GitHub metadata escaped the candidate workspace')
+        shutil.rmtree(target)
+    shutil.copytree(ROOT/'.github',target,ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
+
 def sanitize_provider(root):
     # Keep the shared upstream JWT out of the maintained patch. The exact original
     # provider is verified by digest before deleting the credential and its uses.
@@ -134,16 +146,7 @@ def main():
         run('git','apply','--unidiff-zero',str(ROOT/'.private/fork.patch'),cwd=candidate)
         sanitize_provider(candidate)
         remove_excluded_projects(candidate)
-        shutil.rmtree(candidate/'.github/workflows')
-        (candidate/'.github/dependabot.yml').unlink(missing_ok=True)
-        shutil.copy2(ROOT/'.github/dependabot.yml',candidate/'.github/dependabot.yml')
-        shutil.copytree(ROOT/'.github/workflows',candidate/'.github/workflows')
-        templates=candidate/'.github/ISSUE_TEMPLATE'
-        if templates.exists():shutil.rmtree(templates)
-        shutil.copytree(ROOT/'.github/ISSUE_TEMPLATE',templates)
-        security=candidate/'.github/SECURITY.md'
-        security.unlink(missing_ok=True)
-        shutil.copy2(ROOT/'.github/SECURITY.md',security)
+        overlay_github(candidate)
         shutil.copytree(ROOT/'.private',candidate/'.private',ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
         shutil.copy2(ROOT/'README.md',candidate/'README.md')
         for path in ('docs/UPSTREAM-README.md','docs/UPSTREAM-dependabot.yml'):
