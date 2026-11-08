@@ -14,28 +14,80 @@ import threading
 import time
 from pathlib import Path
 from core_faucet import fund as fund_testnet
+from acceptance_policy import BASELINE_INSTRUMENTATION_STAGES, CANDIDATE_INSTRUMENTATION_STAGES
 
 PACKAGE = 'com.personal.zecprivate.testnet.foss.debug'
 RUNNER = PACKAGE + '.test/co.electriccoin.zcash.test.ZcashUiTestRunner'
 
 
+def instrumentation_role(stage):
+    if stage in BASELINE_INSTRUMENTATION_STAGES:
+        return 'baseline'
+    if stage in CANDIDATE_INSTRUMENTATION_STAGES or stage == 'transportProbe':
+        return 'candidate'
+    raise ValueError('Unknown version-paired instrumentation stage: ' + stage)
+
+
+def select_apk_roles(apks):
+    named = {p.name: p for p in apks}
+    if len(named) != 4 or len(apks) != 4:
+        raise ValueError('Exactly four distinct version-paired APKs required')
+    baseline = named['baseline-ui.apk']
+    baseline_test = named['baseline-androidTest.apk']
+    tests = [p for p in apks if 'androidTest' in p.name and p != baseline_test]
+    candidates = [p for p in apks if p not in (baseline, baseline_test) and 'androidTest' not in p.name]
+    if len(tests) != 1 or len(candidates) != 1:
+        raise ValueError('Unambiguous candidate app/instrumentation roles required')
+    return baseline, baseline_test, candidates[0], tests[0]
+
+
+def verify_instrumentation_pair(adb, expected_version, expected_hash):
+    """Verify the installed app/test pair before a core stage or unfunded transport probe."""
+    def shell(*args):
+        return adb('shell', *args, timeout=20).stdout.decode(errors='replace')
+    match = re.search(r'versionCode=(\d+)', shell('dumpsys', 'package', PACKAGE))
+    if not match or int(match[1]) != expected_version:
+        raise RuntimeError('Wrong app version for instrumentation dispatch')
+    installed = shell('pm', 'path', PACKAGE + '.test').strip()
+    managed_test_path = (r'package:/data/app/[A-Za-z0-9_~+=-]+/' + re.escape(PACKAGE + '.test') +
+                         r'-[A-Za-z0-9_~+=-]+/base\.apk')
+    if not re.fullmatch(managed_test_path, installed):
+        raise RuntimeError('Expected exactly one installed instrumentation APK')
+    installed_hash = shell('sha256sum', installed.removeprefix('package:')).split()[0]
+    if installed_hash != expected_hash:
+        raise RuntimeError('Wrong instrumentation APK for dispatch')
+    if RUNNER + ' (target=' + PACKAGE + ')' not in shell('pm', 'list', 'instrumentation', PACKAGE):
+        raise RuntimeError('Unexpected instrumentation runner/target')
+    return dict(app_version_code=expected_version, executed_sha256=installed_hash, installed_hash_verified=True)
+
+
 def run(adb, root, apks, manifest):
     started = time.monotonic()
-    baseline = next(p for p in apks if p.name == 'baseline-ui.apk')
-    test = next(p for p in apks if 'androidTest' in p.name)
-    candidate = next(p for p in apks if p not in (baseline, test))
+    baseline, baseline_test, candidate, test = select_apk_roles(apks)
+    descriptor = manifest['upgradeBaselineInstrumentation']
+    if (descriptor['source_sha'] != manifest['baseline_source_sha'] or
+            descriptor['apk_sha256'] != manifest['baseline_instrumentation_apk_sha256']):
+        raise ValueError('Baseline instrumentation descriptor/source mismatch')
+    pairing = dict(stages={})
+    for role, path, original, source, version_code in (
+            ('baseline', baseline_test, manifest['baseline_instrumentation_apk_sha256'],
+             manifest['baseline_source_sha'], manifest['baseline_version_code']),
+            ('candidate', test, manifest['instrumentation_apk_sha256'],
+             manifest['build_source_sha'], manifest['candidate_version_code'])):
+        pairing[role] = dict(original_sha256=original, executed_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                             source_sha=source, app_version_code=version_code)
     stages = {}
     application_pids=set()
     report = dict(schema=1, passed=False, evidence_class='real-app-testnet', network='zcash-testnet',
                   clearnet_fallback=False, direct_bulk_downloads=True,personal_wallet_access=False, real_funds_used=False,
-                  stages=stages, input_fingerprint=manifest['input_fingerprint'],
+                  stages=stages, instrumentation_pairing=pairing, input_fingerprint=manifest['input_fingerprint'],
                   runtime_input_fingerprint=manifest['runtime_input_fingerprint'],
                   build_input_fingerprint=manifest['build_input_fingerprint'],
                   build_source_sha=manifest['build_source_sha'],
                   baseline_source_sha=manifest['baseline_source_sha'],
                   baseline_version_code=manifest['baseline_version_code'], candidate_version_code=manifest['candidate_version_code'],
                   **{name: manifest[name] for name in ('candidate_apk_sha256', 'baseline_apk_sha256',
-                     'instrumentation_apk_sha256')},
+                     'instrumentation_apk_sha256', 'baseline_instrumentation_apk_sha256')},
                   harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
     current_stage = 'install'
     active_instrumentation={}
@@ -46,6 +98,10 @@ def run(adb, root, apks, manifest):
         current_stage = name
         if time.monotonic() - started > 1600:
             raise RuntimeError('Core acceptance total deadline exhausted')
+        role = instrumentation_role(name)
+        expected = pairing[role]
+        verify_instrumentation_pair(adb, expected['app_version_code'], expected['executed_sha256'])
+        pairing['stages'][name] = dict(role=role, **expected, installed_hash_verified=True)
         adb('logcat','-c',timeout=15)
         command=adb.command_base+['shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
                      'co.electriccoin.zcash.app.CoreWalletAcceptance', '-e', 'isolatedTestnet',
@@ -156,7 +212,7 @@ def run(adb, root, apks, manifest):
         if shell('id').find('uid=0') < 0:
             raise RuntimeError('Blank AOSP guest root required for network enforcement')
         adb('install', '-r', str(baseline), timeout=90)
-        adb('install', '-r', '-t', str(test), timeout=90)
+        adb('install', '-r', '-t', str(baseline_test), timeout=90)
         if version() != manifest['baseline_version_code']:
             raise RuntimeError('Wrong baseline version')
         uid()
@@ -263,6 +319,7 @@ def run(adb, root, apks, manifest):
         stage('fund',950)
         shell('am','force-stop',PACKAGE)
         adb('install','-r',str(candidate),timeout=90)
+        adb('install','-r','-t',str(test),timeout=90)
         if uid()!=app_uid or version()!=manifest['candidate_version_code']:
             raise RuntimeError('Installed update identity/version mismatch')
         stage('upgrade',240)

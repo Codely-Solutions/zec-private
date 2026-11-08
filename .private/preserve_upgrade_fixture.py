@@ -1,4 +1,4 @@
-"""Preserve the signed release's executed seedless test APK; run inside the resource guard."""
+"""Preserve the signed release's executed seedless app/instrumentation pair; run inside the resource guard."""
 import argparse
 import hashlib
 import json
@@ -25,6 +25,25 @@ def digest(path):
     return 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def fixture_apks(archive,core):
+    sources=[n for n in archive.namelist() if n.endswith('source-sha.txt')]
+    if len(sources)!=1 or archive.read(sources[0]).decode().strip()!=core['build_source_sha']:
+        raise ValueError('Embedded source mismatch')
+    payloads={}
+    for instrumentation,field in ((False,'candidate_apk_sha256'),(True,'instrumentation_apk_sha256')):
+        names=[n for n in archive.namelist() if n.endswith('.apk') and ('androidTest' in n)==instrumentation]
+        if len(names)!=1:
+            raise ValueError('Exactly one app and one version-matched instrumentation APK required')
+        name=Path(names[0]).name
+        data=archive.read(names[0])
+        if hashlib.sha256(data).hexdigest()!=core[field]:
+            raise ValueError('Original executed APK mismatch: '+field)
+        if name in payloads:
+            raise ValueError('Fixture APK basenames collide')
+        payloads[name]=data
+    return payloads
+
+
 def preserve(tag):
     if not re.fullmatch(r'v\d+\.\d+\.\d+-private\.\d+', tag):
         raise ValueError('Exact private release tag required')
@@ -46,25 +65,20 @@ def preserve(tag):
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         if sum(x.file_size for x in archive.infolist()) > 300 * 1024**2:
             raise ValueError('Artifact expansion exceeds budget')
-        source = next(n for n in archive.namelist() if n.endswith('source-sha.txt'))
-        if archive.read(source).decode().strip() != core['build_source_sha']:
-            raise ValueError('Embedded source mismatch')
-        names = [n for n in archive.namelist() if n.endswith('.apk') and 'androidTest' not in n]
-        if len(names) != 1:
-            raise ValueError('Exactly one build APK required')
-        apk = archive.read(names[0])
-    if hashlib.sha256(apk).hexdigest() != core['candidate_apk_sha256']:
-        raise ValueError('Original executed APK mismatch')
+        payloads=fixture_apks(archive,core)
     fixture = out / (tag + '-TESTNET_UPGRADE_FIXTURE.zip')
     with zipfile.ZipFile(fixture, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(Path(names[0]).name, apk)
+        for name,data in payloads.items():
+            archive.writestr(name,data)
         archive.writestr('source-sha.txt', core['build_source_sha'] + '\n')
-        archive.writestr('SHA256SUMS', core['candidate_apk_sha256'] + '  ' + Path(names[0]).name + '\n')
+        archive.writestr('SHA256SUMS',''.join(hashlib.sha256(data).hexdigest()+'  '+name+'\n'
+                                           for name,data in payloads.items()))
     provenance = dict(release=tag, production_source=evidence['source_sha'], build_source=core['build_source_sha'],
         version_code=core['candidate_version_code'], package='com.personal.zecprivate.testnet.foss.debug',
         original_artifact_id=core['artifact_id'], workflow_run_id=core['workflow_run_id'],
-        original_apk_sha256=core['candidate_apk_sha256'], fixture_digest=digest(fixture), fixture_bytes=fixture.stat().st_size,
-        purpose='Next installed-update baseline; original build APK only, no wallet data or keys')
+        original_apk_sha256=core['candidate_apk_sha256'],
+        original_instrumentation_apk_sha256=core['instrumentation_apk_sha256'], fixture_digest=digest(fixture), fixture_bytes=fixture.stat().st_size,
+        purpose='Next installed-update baseline; version-matched original app and instrumentation APKs, no wallet data or keys')
     metadata = out / (tag + '-TESTNET_UPGRADE_FIXTURE.json')
     metadata.write_text(json.dumps(provenance, indent=2) + '\n')
     policy = json.loads((ROOT / '.private/maintenance-assets.json').read_text())

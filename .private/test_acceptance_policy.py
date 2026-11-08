@@ -9,7 +9,7 @@ import tempfile
 from contextlib import ExitStack
 from pathlib import Path
 import unittest
-from acceptance_policy import input_fingerprint, requirements, validate_core, validate_quotes, validate_binding, verify_promotion_revision, CORE_STAGES, CORE_TEST_SOURCE, CORE_BINDING, validate_core_sources
+from acceptance_policy import input_fingerprint, requirements, validate_core, validate_quotes, validate_binding, verify_promotion_revision, CORE_STAGES, CORE_TEST_SOURCE, CORE_BINDING, validate_core_sources, BASELINE_INSTRUMENTATION_STAGES, CANDIDATE_INSTRUMENTATION_STAGES
 
 
 class AcceptancePolicyTest(unittest.TestCase):
@@ -67,7 +67,7 @@ class AcceptancePolicyTest(unittest.TestCase):
             changed=commit()
             with self.assertRaises(ValueError):verify_promotion_revision(candidate,changed,root=root)
 
-    def receipt(self):
+    def receipt(self, **identities):
         baseline = json.loads(Path(__file__).with_name('upgrade-baseline.json').read_text())
         receipt = dict(schema=1, input_fingerprint='inputs', passed=True,
                        evidence_class='real-app-testnet', network='zcash-testnet',
@@ -77,8 +77,20 @@ class AcceptancePolicyTest(unittest.TestCase):
                        baseline_source_sha=baseline['source_sha'],
                        build_input_fingerprint='d'*64,runtime_input_fingerprint='e'*64,
                        baseline_version_code=baseline['version_code'], candidate_version_code=baseline['version_code']+1)
+        receipt.update(identities)
         for key in ('candidate_apk_sha256', 'baseline_apk_sha256', 'instrumentation_apk_sha256', 'harness_sha256'):
             receipt[key] = 'b'*64
+        receipt['baseline_instrumentation_apk_sha256'] = baseline['instrumentation']['apk_sha256']
+        pairing = dict(stages={})
+        for role, original, source, version in (
+                ('baseline', baseline['instrumentation']['apk_sha256'], baseline['source_sha'], baseline['version_code']),
+                ('candidate', receipt['instrumentation_apk_sha256'], receipt['build_source_sha'], receipt['candidate_version_code'])):
+            pairing[role] = dict(original_sha256=original, executed_sha256=('1' if role=='baseline' else '2')*64,
+                                 source_sha=source, app_version_code=version)
+        for stage in BASELINE_INSTRUMENTATION_STAGES | CANDIDATE_INSTRUMENTATION_STAGES:
+            role = 'baseline' if stage in BASELINE_INSTRUMENTATION_STAGES else 'candidate'
+            pairing['stages'][stage] = dict(role=role, **pairing[role], installed_hash_verified=True)
+        receipt['instrumentation_pairing'] = pairing
         receipt['stages']['interruption'].update(sync_restarted=True,synced=True,balance_preserved=True,
                                                history_preserved=True,metadata_blocked=True,direct_bulk_reachable=True,
                                                metadata_recovered=True,blocked_packets=1,scanned_height=12345)
@@ -103,6 +115,7 @@ class AcceptancePolicyTest(unittest.TestCase):
             bad = self.receipt(); bad[key] = value
             with self.subTest(key=key), self.assertRaises(ValueError):
                 validate_core(bad, 'inputs')
+
         for stage,key,value in [('send','ui_approval',False),('send','ui_cancel_no_submission',False),
                                 ('send','ui_review',False),('send','ui_approval_actions',2),('fund','app_transaction_state','Pending'),
                                 ('send','automatic_identifying_memo',True),('send','reviewed_memo_verified',False),
@@ -126,6 +139,19 @@ class AcceptancePolicyTest(unittest.TestCase):
         bad=self.receipt()
         bad['funding_setup']=dict(tor_exit_verified=True,persistent_tor_connection=True,txid='c'*64)
         with self.assertRaises(ValueError):validate_core(bad,'inputs')
+
+    def test_rejects_wrong_baseline_instrumentation_hash_and_stage_pair(self):
+        bad = self.receipt(); bad['baseline_instrumentation_apk_sha256'] = 'f'*64
+        with self.assertRaises(ValueError): validate_core(bad, 'inputs')
+        for stage, role in (('sender', 'candidate'), ('fund', 'candidate'), ('upgrade', 'baseline'), ('send', 'baseline')):
+            bad = self.receipt()
+            pairing = bad['instrumentation_pairing']
+            pairing['stages'][stage] = dict(role=role, **pairing[role], installed_hash_verified=True)
+            with self.subTest(stage=stage), self.assertRaises(ValueError): validate_core(bad, 'inputs')
+        bad = self.receipt(); bad['instrumentation_pairing']['stages']['sender']['executed_sha256'] = 'f'*64
+        with self.assertRaises(ValueError): validate_core(bad, 'inputs')
+        bad = self.receipt(); bad['instrumentation_pairing']['stages']['upgrade']['installed_hash_verified'] = False
+        with self.assertRaises(ValueError): validate_core(bad, 'inputs')
 
     def test_conservative_triggers(self):
         self.assertEqual([], requirements(['README.md', '.private/STATUS.md'])['profiles'])
@@ -202,7 +228,7 @@ class AcceptancePolicyTest(unittest.TestCase):
             try:
                 candidate=commit();harness.write_text('test now waits for enabled control');accepted=commit()
                 self.assertTrue(verify_promotion_revision(candidate,accepted,root=root))
-                receipt=self.receipt();receipt.update(build_source_sha=accepted,
+                receipt=self.receipt(build_source_sha=accepted);receipt.update(
                     input_fingerprint=input_fingerprint(accepted,root=root),
                     build_input_fingerprint=input_fingerprint(accepted,root=root,profile='core-build'),
                     runtime_input_fingerprint=input_fingerprint(candidate,root=root,profile='core-runtime'))
@@ -214,7 +240,7 @@ class AcceptancePolicyTest(unittest.TestCase):
                         validate_core_sources(bad,candidate,accepted,root=root)
                 # A controller-prepared upstream child owns its changed app inputs.
                 (root/'app.kt').write_text('reviewed upstream product change');child=commit()
-                child_receipt=dict(receipt,build_source_sha=child,
+                child_receipt=self.receipt(build_source_sha=child);child_receipt.update(
                     input_fingerprint=input_fingerprint(child,root=root),
                     build_input_fingerprint=input_fingerprint(child,root=root,profile='core-build'),
                     runtime_input_fingerprint=input_fingerprint(child,root=root,profile='core-runtime'))
@@ -251,8 +277,8 @@ class AcceptancePolicyTest(unittest.TestCase):
                 git('add','-A');git('-c','user.name=Fixture','-c','user.email=test@example.invalid','commit','-qm','Fixture')
                 return git('rev-parse','HEAD')
             def receipt_for(revision,producer):
-                receipt=self.receipt()
-                receipt.update(build_source_sha=producer,
+                receipt=self.receipt(build_source_sha=producer)
+                receipt.update(
                     input_fingerprint=input_fingerprint(revision,root=root),
                     runtime_input_fingerprint=input_fingerprint(revision,root=root,profile='core-runtime'),
                     build_input_fingerprint=input_fingerprint(producer,root=root,profile='core-build'))

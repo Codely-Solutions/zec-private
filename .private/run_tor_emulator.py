@@ -49,6 +49,13 @@ if manifest.get('upgradeBaseline'):
     apk_paths.append(fetch_baseline(ROOT,manifest['upgradeBaseline'],'baseline-ui.apk'))
     if manifest.get('probeKind')=='core-testnet':
         manifest['baseline_apk_sha256']=hashlib.sha256(apk_paths[-1].read_bytes()).hexdigest()
+        baseline_instrumentation=manifest.get('upgradeBaselineInstrumentation')
+        if not baseline_instrumentation or baseline_instrumentation.get('source_sha')!=manifest['baseline_source_sha']:
+            raise ValueError('Version-matched baseline instrumentation binding required')
+        baseline_test=fetch_baseline(ROOT,baseline_instrumentation,'baseline-androidTest.apk',
+            instrumentation=True,expected_apk_sha256=baseline_instrumentation.get('apk_sha256'))
+        apk_paths.append(baseline_test)
+        manifest['baseline_instrumentation_apk_sha256']=hashlib.sha256(baseline_test.read_bytes()).hexdigest()
 from strip_emulator_apk import prepare
 apk_preparation=prepare(apk_paths,ROOT,SDK)
 print('Verified x86_64-only emulator APK copies ready; execution bytes unchanged.',flush=True)
