@@ -6742,6 +6742,16 @@ index 5ec410de8..87abe5b0e 100644
 +                supportAction()
 @@ -158,0 +161 @@ private fun AccountNameWithSubtitle(
 +@Suppress("MatchingDeclarationName")
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt
+index a6896cfd7..61a711eb6 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/compose/ZashiTooltip.kt
+@@ -59 +59 @@ fun TooltipScope.ZashiTooltip(
+-                    color = ZashiColors.Text.textLight,
++                    color = ZashiColors.HintTooltips.defaultFg,
+@@ -65 +65 @@ fun TooltipScope.ZashiTooltip(
+-                    color = ZashiColors.Text.textLightSupport,
++                    color = ZashiColors.HintTooltips.defaultFg,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 index 4d388e80f..701e1d9d0 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
@@ -10106,6 +10116,19 @@ index fd16f97b7..4177cec48 100644
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt
 @@ -7,0 +8 @@ object SendTag {
 +    const val SEND_MEMO_FIELD = "SEND_MEMO_FIELD"
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendAddressBookHint.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendAddressBookHint.kt
+index 402412266..52ee2604b 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendAddressBookHint.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendAddressBookHint.kt
+@@ -35 +35 @@ fun SendAddressBookHint(modifier: Modifier = Modifier) {
+-                contentColor = ZashiColors.Text.textLight
++                contentColor = ZashiColors.HintTooltips.defaultFg
+@@ -44 +44 @@ fun SendAddressBookHint(modifier: Modifier = Modifier) {
+-                colorFilter = ColorFilter.tint(ZashiColors.Text.textLightSupport),
++                colorFilter = ColorFilter.tint(ZashiColors.HintTooltips.defaultFg),
+@@ -52 +52 @@ fun SendAddressBookHint(modifier: Modifier = Modifier) {
+-                color = ZashiColors.Text.textLight
++                color = ZashiColors.HintTooltips.defaultFg
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt
 index 4e17a4f74..3e24df8b9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt
