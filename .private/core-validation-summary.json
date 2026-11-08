@@ -1,5 +1,5 @@
 {
-  "status": "accepted-awaiting-signing",
+  "status": "signed-and-independently-verified",
   "scope": "Material migration",
   "source_sha": "a6ea7cf81986f6f74db1847a513dd14b0bb4d649",
   "candidate_run": 42473584723,
@@ -114,5 +114,22 @@
       1731
     ],
     "passed": true
-  }
+  },
+  "signed_release": {
+    "passed": true,
+    "release": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.16",
+    "apk_bytes": 67828595,
+    "apk_sha256": "9112aeab6def23ffab8d0c8eedd042f672fada79815734482c9c39811de721de",
+    "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
+    "version_code": 3234016,
+    "package": "com.personal.zecprivate.foss",
+    "abis": [
+      "arm64-v8a"
+    ],
+    "signed_payload_matches_validated_unsigned": true,
+    "source_sha": "a6ea7cf81986f6f74db1847a513dd14b0bb4d649",
+    "candidate_run": 42473584723,
+    "production_arm_executed": false
+  },
+  "fixture_preserved": true
 }
