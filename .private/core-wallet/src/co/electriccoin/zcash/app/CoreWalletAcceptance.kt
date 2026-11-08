@@ -36,6 +36,7 @@ import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -104,7 +105,21 @@ class CoreWalletAcceptance {
                 "recipient" -> createWallet("recipient")
                 "sender" -> {
                     createWallet("sender")
-                    check(dependency<AppUpdateRepository>().readLatestRelease().versionCode > 0)
+                    // The sender runs on revision16, before AppUpdateRepository exists.
+                    // This proves public metadata connectivity only; the post-upgrade
+                    // transport stage exercises the candidate's actual updater policy.
+                    withTimeout(30_000) {
+                        dependency<HttpClientProvider>().create().use { client ->
+                            val response = client.get("https://api.github.com/repos/Sammy-Lastre/zec-private/releases/latest") {
+                                headers.append("Accept", "application/vnd.github+json")
+                                headers.append("User-Agent", "ZEC-Private-Core-Preflight")
+                            }
+                            check(response.status.value == 200)
+                            val metadata = JSONObject(response.bodyAsText())
+                            check(!metadata.getBoolean("draft") && !metadata.getBoolean("prerelease"))
+                            check(metadata.getString("tag_name").matches(Regex("v[0-9]+\\.[0-9]+\\.[0-9]+-private\\.[0-9]+")))
+                        }
+                    }
                     save(fixture().put("updateMetadataPreflight", true))
                 }
                 "fund" -> {
