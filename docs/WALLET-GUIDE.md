@@ -44,6 +44,6 @@ Gift links contain spending secrets. Scan or paste them only in the redemption f
 
 ## Donations and diagnostics
 
-[Support development](DONATIONS.md) is optional. Choose an amount and review each payment before sending. In-app donations require a software wallet.
+To [support development](DONATIONS.md), choose an amount and review the payment before sending. In-app donations require a software wallet.
 
 Diagnostics open Android's share chooser. Inspect the export and choose its recipient yourself; no staffed support inbox is configured. See [privacy](PRIVACY.md) before sharing wallet information.
