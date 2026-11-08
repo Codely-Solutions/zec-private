@@ -9,6 +9,11 @@ allprojects { p ->
             if (result != 0) throw new GradleException('Style comparison source preparation failed')
             p.android.sourceSets.main.java.exclude('**/ZcashTheme.kt', '**/ZashiTypographyInternal.kt', '**/ZashiBigIconButton.kt', '**/ZashiButton.kt')
             p.android.sourceSets.main.java.srcDir(generated)
+            p.tasks.configureEach { task ->
+                if (task.name.startsWith('compile') && task.name.endsWith('Kotlin')) {
+                    task.exclude('**/ZcashTheme.kt', '**/ZashiTypographyInternal.kt', '**/ZashiBigIconButton.kt', '**/ZashiButton.kt')
+                }
+            }
         }
         if (p.path == ':ui-lib') {
             p.android.sourceSets.debug.java.srcDir(new File(p.rootProject.projectDir, '.private/style-comparison/src'))
