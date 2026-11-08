@@ -112,6 +112,12 @@ class SyncTests(unittest.TestCase):
                 self.assertFalse(any(name.startswith('feature-voting/') for name in tree))
                 self.assertFalse(any('/ui/screen/flexa/' in name for name in tree))
                 self.assertIn('wallet-foundation-lib/build.gradle.kts', tree)
+                templates={name for name in tree if name.startswith('.github/ISSUE_TEMPLATE/')}
+                expected={'.github/ISSUE_TEMPLATE/'+p.name for p in (sync.ROOT/'.github/ISSUE_TEMPLATE').iterdir()}
+                self.assertEqual(expected,templates)
+                for name in sorted(expected | {'.github/SECURITY.md'}):
+                    self.assertEqual(original('git','show',output.call_args.kwargs['source_sha']+':'+name),
+                                     (sync.ROOT/name).read_text().strip())
                 self.assertIn('app/src/main/java/co/electriccoin/zcash/app/ZecPrivateProductModule.kt', tree)
             self.assertFalse((Path(temp)/'candidate').exists())
         self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())

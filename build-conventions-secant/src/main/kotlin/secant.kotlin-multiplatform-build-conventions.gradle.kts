@@ -18,3 +18,10 @@ pluginManager.withPlugin("org.jetbrains.kotlin.multiplatform") {
 tasks.withType<JavaCompile>().configureEach {
     options.release.set(project.property("KOTLIN_JVM_TARGET").toString().toInt())
 }
+
+// Match the Java output policy for every JVM compilation, including KMP tests.
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEach {
+    compilerOptions.jvmTarget.set(
+        org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(project.property("KOTLIN_JVM_TARGET").toString())
+    )
+}

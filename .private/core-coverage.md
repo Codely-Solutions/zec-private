@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision-14 candidate `d7471a007` passed real acceptance on 2026-11-08; signing is pending. Current exact-input evidence is in core-acceptance.json and core-validation-summary.json. Historical releases retain their own immutable evidence.
+Status: revision-14 candidate `d7471a007` passed real acceptance and independent signed-artifact verification on 2026-11-08. Current exact-input evidence is in core-acceptance.json and core-validation-summary.json. Historical releases retain their own immutable evidence.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
@@ -48,36 +48,8 @@ The bounded sandbox review is recorded in `core-provider-review.json`. Tidepool 
 
 Production Detekt retains its rules and existing baseline. Its release-only init excludes the procedural private instrumentation source, which is outside the shipped source sets and separately compiled by the core producer. That harness is checked through exact source/APK bindings, review and real execution. This does not exempt production Kotlin or the ordinary unit tests from analysis.
 
-## Phase 2 revision 8 evidence
+## Current release evidence
 
-The current receipts supersede revision 7 evidence: testnet producer 42191766043, candidate 42207306770. Real transfer 3a660d0a3c8ef75f9301efd26fa29ed6b42794726703d7106d6e3badc0ce6765 mined at 4588498. Installed v6-to-v8 update, restart, recovery and scoped Tor outage passed. Three fresh unfunded production quote/dismiss cycles passed on the candidate x86_64 build. Production ARM execution and physical hardware execution remain outside this evidence. See core-validation-summary.json for costs and limitations.
+Revision 14 passed 1,731 unit tests and the real testnet lifecycle from revision 13. The manual shielded donation used review, cancellation and one explicit approval. Sender accounting, restart and clean recipient restoration reuse that transaction; the recipient amount and empty memo match. The test also rejects the SDK’s unreviewed two-recipient proposal before signing.
 
-## Foundation validation
-
-The engine-independent JVM module compiles and tests exact precision/network identity, explicit fee knowledge, incompatible deposit capabilities, stale/cross-owner request rejection and an alternative memo-bearing composition with a 12-decimal asset and opaque recovery ID. This is structural reuse, not Monero or THORChain settlement evidence.
-
-Current-product regressions cover view-only rejection before quote interpretation, cancellation navigation, legacy V2/V3 metadata migration/round trips, unknown provider rejection before network access, Zcash fee calculations and expiry immediately before software/Ledger submission. Keystone's equivalent final gate is inspected; physical hardware signing is outside automated acceptance.
-
-The signing controller validates the source/digest-bound resolved foundation graph and rejects unexpected engine/product dependencies. Full candidate deterministic checks precede fresh real release acceptance. Superseded Phase 3 sessions remain separately identified and are not relabeled as final-candidate evidence.
-
-## Workflow reliability revision 10
-
-The native scenario uses the actual prefilled send form, Review, review cancellation and one final Send approval. It handles the conditional Orchard warning when the SDK proposal requires it; warning display is not separately attested. It checks rendered values and both amount parsers before faucet funding. Cancellation leaves submission state and balance unchanged; repeating the form produces a fresh proposal. One approved transfer supplies mined history, accounting, restart and clean seed recovery evidence. The unsecured isolated guest exercises the app's normal unsecured approval policy; it does not execute an OS biometric prompt.
-
-The saved-reference refund polling test uses virtual time to establish resumption and terminal-stop behavior. It does not claim actual process death or production refund settlement. Existing serialization and provider-routing tests cover the adjacent boundaries. The two provider transport negative tests exercise tokens, quote, status and deposit submission with a direct-engine trap.
-
-Fingerprint mutation tests reject stale receipts, unknown profiles, relevant source/host/workflow/build changes, deletion and file-mode changes. Committed-tree cases also prove fresh host-only acceptance can reuse matching compiled inputs while rejecting the old production candidate and any changed app, build, instrumentation or producer workflow. The controlled exception for one private instrumentation file preserves separate full-test, compiled-test and runtime fingerprints. Production quote inputs retain conservative selection. No overlapping live asset matrix or broadcast-outage retry scenario was added.
-
-## Swap accuracy and clarity
-
-Synthetic regressions cover raw-only execution, missing execution, fee omission, received-amount search, exact minimum/top-up amounts and computed token inputs at origin precision. Six normal/large-text quote layouts were visually reviewed. Live isolated Tor acceptance checks the included platform fee and minimum-output text. These checks do not establish funded production settlement or decrypt personal shielded notes. Isolated test seeds exist in the disposable guest and briefly in guarded-driver memory during recovery orchestration; no seeds are retained or published.
-
-## Donation revision 13 acceptance
-
-Production source `d12dea751a4dbab29671acab394777a7c613774c` passed 1,724 tests. The executed emulator/testnet build source was `686a9f10b80fd44b9467c092ace4cdcd80767b1a`; exact compiled-input fingerprints match because the later diff changes ordinary test fixtures only. Production Gradle took 892 seconds in one invocation; revision 12 took 905 seconds, with cache effects preventing a causal speed comparison.
-
-The existing real transfer is now a shielded donation through Support development and the normal review/authentication path. Cancellation leaves no submission, then one explicit approval creates the observed transfer. The same transaction verifies sender accounting, installed-update preservation, restart, clean recipient recovery and empty identifying memo. Saved suggestion and cooldown persistence are checked after the real restart. The pinned SDK's two-payment proposal is constructed without signing; unsupported counts are then rejected by the wallet. Legacy incomplete review is established from source plus SDK acceptance; no hidden-output transaction is signed.
-
-Three unfunded production quote/dismiss cycles and the zero-balance Support UI run separately over enabled Tor. Provider-success invitation gating is inspected and covered by retained status behavior; this work does not establish funded production provider settlement or donation conversion effectiveness. Production ARM64 is inspected, while x86_64 emulator binaries execute. No personal wallet, accepted swap or real funds are used.
-
-Signed revision 13 preserves the validated unsigned payload, permanent certificate and package. No rebuild occurred during promotion. Exact seedless revision 13 fixture provenance is in the maintenance index; it retains the executed build source, distinct from the production source.
+Three unfunded Tor quote/dismiss cycles passed. The task-owned scenario waits for Confirm before reading sheet bounds, correcting a rendering race without changing the APK or assertions. Historical phase results are retained in `release-evidence/`; they do not establish current acceptance. Home introduction/reminder lifecycle has focused Compose and preference coverage plus rendered UI evidence; no donation-conversion effectiveness is claimed.

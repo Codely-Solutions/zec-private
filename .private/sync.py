@@ -131,6 +131,12 @@ def main():
         (candidate/'.github/dependabot.yml').unlink(missing_ok=True)
         shutil.copy2(ROOT/'.github/dependabot.yml',candidate/'.github/dependabot.yml')
         shutil.copytree(ROOT/'.github/workflows',candidate/'.github/workflows')
+        templates=candidate/'.github/ISSUE_TEMPLATE'
+        if templates.exists():shutil.rmtree(templates)
+        shutil.copytree(ROOT/'.github/ISSUE_TEMPLATE',templates)
+        security=candidate/'.github/SECURITY.md'
+        security.unlink(missing_ok=True)
+        shutil.copy2(ROOT/'.github/SECURITY.md',security)
         shutil.copytree(ROOT/'.private',candidate/'.private',ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
         shutil.copy2(ROOT/'README.md',candidate/'README.md')
         for path in ('docs/UPSTREAM-README.md','docs/UPSTREAM-dependabot.yml'):

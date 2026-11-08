@@ -1,34 +1,35 @@
 import groovy.json.JsonOutput
 
+def writeInventory = { owner, name, output ->
+    def configuration = owner.configurations.getByName(name)
+    def result = configuration.incoming.resolutionResult
+    def unresolved = result.allDependencies.findAll {
+        it instanceof org.gradle.api.artifacts.result.UnresolvedDependencyResult
+    }
+    if (!unresolved.isEmpty()) throw new GradleException('Unresolved runtime dependencies: ' + unresolved)
+    def sha = ['git', 'rev-parse', 'HEAD'].execute(null, owner.rootProject.projectDir).text.trim()
+    output.parentFile.mkdirs()
+    output.text = JsonOutput.prettyPrint(JsonOutput.toJson([
+        source_sha: sha, configuration: name, components: result.allComponents.collect { it.id.displayName }.sort()
+    ])) + '\n'
+}
+
 gradle.projectsEvaluated {
     def app = rootProject.findProject(':app')
     if (app == null) return
-    app.tasks.register('privateRuntimeInventory') {
+    def destination = System.getenv('PRIVATE_RUNTIME_OUTPUT') ?: 'artifact/runtime.json'
+    def output = new File(destination)
+    if (!output.isAbsolute()) output = new File(rootProject.projectDir, destination)
+    def foundation = rootProject.project(':wallet-foundation-lib')
+    def sharedTask = foundation.tasks.register('privateRuntimeInventory') {
         doLast {
-            def name = 'zcashmainnetFossReleaseRuntimeClasspath'
-            def configuration = app.configurations.getByName(name)
-            def unresolved = configuration.incoming.resolutionResult.allDependencies.findAll {
-                it instanceof org.gradle.api.artifacts.result.UnresolvedDependencyResult
-            }
-            if (!unresolved.isEmpty()) throw new GradleException('Release graph contains unresolved dependencies: ' + unresolved)
-            def components = configuration.incoming.resolutionResult.allComponents.collect {
-                it.id.displayName
-            }.sort()
-            def destination = System.getenv('PRIVATE_RUNTIME_OUTPUT') ?: 'artifact/runtime.json'
-            def output = new File(destination)
-            if (!output.isAbsolute()) output = new File(rootProject.projectDir, destination)
-            output.parentFile.mkdirs()
-            def sha = ['git', 'rev-parse', 'HEAD'].execute(null, rootProject.projectDir).text.trim()
-            output.text = JsonOutput.prettyPrint(JsonOutput.toJson([source_sha: sha, configuration: name, components: components])) + '\n'
-            def foundation = rootProject.project(':wallet-foundation-lib')
-            def shared = foundation.configurations.getByName('runtimeClasspath')
-            def sharedComponents = shared.incoming.resolutionResult.allComponents.collect {
-                it.id.displayName
-            }.sort()
-            def sharedOutput = new File(output.parentFile, 'foundation-runtime.json')
-            sharedOutput.text = JsonOutput.prettyPrint(JsonOutput.toJson([
-                source_sha: sha, configuration: 'runtimeClasspath', components: sharedComponents
-            ])) + '\n'
+            writeInventory(foundation, 'runtimeClasspath', new File(output.parentFile, 'foundation-runtime.json'))
+        }
+    }
+    app.tasks.register('privateRuntimeInventory') {
+        dependsOn(sharedTask)
+        doLast {
+            writeInventory(app, 'zcashmainnetFossReleaseRuntimeClasspath', output)
         }
     }
 }
