@@ -43,16 +43,24 @@ class PreflightTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp, patch.object(preflight, 'git', return_value='Gone.kt\0'):
             self.assertEqual(preflight.changed_kotlin(Path(temp), 'HEAD'), [])
 
-    def test_view_state_must_have_its_own_matching_file(self):
+    def test_standalone_state_requires_matching_file_but_named_compose_pair_is_allowed(self):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / 'DonationView.kt'
+            path.write_text('internal data class DonationViewState(val enabled: Boolean)\n')
+            self.assertTrue(preflight.declaration_name_errors(path, path.name))
             path.write_text('internal data class DonationViewState(val enabled: Boolean)\n'
                             '@Composable\nfun DonationView() {}\n')
-            self.assertTrue(preflight.declaration_name_errors(path, path.name))
+            self.assertEqual(preflight.declaration_name_errors(path, path.name), [])
             state = Path(temp) / 'DonationViewState.kt'
             state.write_text('internal data class DonationViewState(val enabled: Boolean)\n')
             self.assertEqual(preflight.declaration_name_errors(state, state.name), [])
             path.write_text('@Composable\nfun DonationView() {}\n')
+            self.assertEqual(preflight.declaration_name_errors(path, path.name), [])
+
+    def test_named_compose_control_can_share_its_defaults(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'ExampleControl.kt'
+            path.write_text('@Composable\nfun ExampleControl() {}\nobject ExampleControlDefaults {}\n')
             self.assertEqual(preflight.declaration_name_errors(path, path.name), [])
 
 
