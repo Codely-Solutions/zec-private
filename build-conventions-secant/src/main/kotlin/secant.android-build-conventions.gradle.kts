@@ -186,6 +186,13 @@ fun com.android.build.api.dsl.CommonExtension.configureBaseExtension() {
     }
 
     dependencies {
+        // Built-in Kotlin does not apply the old Android plugin's JUnit variant selection.
+        // Keep Kotlin test annotations backed by the existing JUnit 4 test framework.
+        if (!pluginManager.hasPlugin("com.android.test")) {
+            val kotlinTestJunit = "org.jetbrains.kotlin:kotlin-test-junit:${project.property("KOTLIN_VERSION")}"
+            add("testImplementation", kotlinTestJunit)
+            add("androidTestImplementation", kotlinTestJunit)
+        }
         add(
             "coreLibraryDesugaring",
             "com.android.tools:desugar_jdk_libs:${project.property("CORE_LIBRARY_DESUGARING_VERSION")}"
