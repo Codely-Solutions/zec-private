@@ -77,7 +77,7 @@ private fun ComparisonScreens(requested: String) {
     val exchangeRate = remember {
         ObserveFiatCurrencyResultFixture.new(isLoading = false, isStale = false, isRefreshEnabled = true)
     }
-    val balance = remember { Zatoshi(12_500_000) }
+    val balance = remember { Zatoshi(if (requested == "home-long") 123_456_789_012_345 else 12_500_000) }
     val account = remember {
         val zero = WalletBalance(Zatoshi(0), Zatoshi(0), Zatoshi(0), Zatoshi(0))
         ZodlAccount(
@@ -105,15 +105,22 @@ private fun ComparisonScreens(requested: String) {
             settingsButton = IconButtonState(R.drawable.ic_home_more, onClick = {}),
         )
     }
-    var amount by remember { mutableStateOf(AmountState.newFromZec("0.01", "", false, exchangeRate)) }
+    var amount by remember { mutableStateOf(AmountState.newFromZec(if (requested == "send-error") "0.01234567" else "0.01", "", false, exchangeRate)) }
     var memo by remember { mutableStateOf(MemoState.new("")) }
-    var recipient by remember { mutableStateOf(RecipientAddressState.new("")) }
+    var recipient by remember {
+        mutableStateOf(
+            if (requested == "send-error") RecipientAddressState.new(
+                "synthetic-invalid-recipient-".repeat(5),
+                AddressType.Invalid("Synthetic address is invalid. Check the complete recipient address."),
+            ) else RecipientAddressState.new("")
+        )
+    }
     var memoExpanded by remember { mutableStateOf(requested == "donation-message") }
     var invitationDismissed by remember { mutableStateOf(false) }
 
     if (AdditionalReviewScene(screen, { screen = "home" }, appBar)) return
     when (screen) {
-        "send" -> Send(
+        "send", "send-error" -> Send(
             balanceWidgetState = balanceState,
             sendStage = SendStage.Form,
             onCreateZecSend = {},
