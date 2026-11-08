@@ -293,7 +293,7 @@ def run(adb, root, apks, manifest):
                 active_drops.append(binary)
             shell('run-as',PACKAGE,'touch','files/core-sync-drop')
             outage=wait_marker('core-sync-requested.json',35)
-            if not all(outage.get(key) is True for key in ('requested','metadata_blocked','direct_bulk_reachable')):
+            if not all(outage.get(key) is True for key in ('requested','metadata_blocked','update_blocked','direct_bulk_reachable')):
                 raise RuntimeError('Sensitive Tor failure with reachable direct bulk path not established')
             time.sleep(10)
             blocked = 0
@@ -308,7 +308,9 @@ def run(adb, root, apks, manifest):
             if worker.is_alive() or not outcome.get('passed') or blocked==0:
                 raise RuntimeError('Tor interruption/recovery not established')
             recovery=json.loads(shell('run-as',PACKAGE,'cat','files/core-sync-result.json'))
-            if not all(recovery.get(key) is True for key in ('sync_restarted','synced','balance_preserved','history_preserved')):
+            if not all(recovery.get(key) is True for key in ('sync_restarted','synced','balance_preserved','history_preserved',
+                                                          'update_metadata_valid_before','update_metadata_valid_after',
+                                                          'update_blocked_during_outage')):
                 raise RuntimeError('Wallet synchronization recovery not established')
             stages['interruption']=dict(passed=True,metadata_blocked=True,direct_bulk_reachable=True,metadata_recovered=True,blocked_packets=blocked,seconds=time.monotonic()-before,**recovery)
         finally:

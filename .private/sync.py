@@ -33,7 +33,7 @@ def critical(path):
     sensitive_screen=re.match(
         r'^ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/'
         r'(authentication|walletbackup|restore|onboarding|about|theme|exportvk|exportdata|deletewallet|tor|'
-        r'chooseserver|donation|send|pay|swap|reviewtransaction|transactionprogress|receive|request|qrcode|'
+        r'chooseserver|donation|updates|send|pay|swap|reviewtransaction|transactionprogress|receive|request|qrcode|'
         r'scan|signkeystonetransaction|connecthw|connectkeystone|scankeystone|selectkeystoneaccount|'
         r'choosehwwallet|ironwood|advancedsettings)/',path)
     return (bool(sensitive_screen) or path.startswith(('build-conventions','buildSrc/','gradle/','feature-','sdk-',

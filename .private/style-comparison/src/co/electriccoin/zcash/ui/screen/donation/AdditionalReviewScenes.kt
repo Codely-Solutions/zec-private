@@ -31,6 +31,40 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
     }
     var selectedOled by remember(screen) { mutableStateOf(screen == "dark-look-oled") }
     when (screen) {
+        "about", "about-update", "about-update-error" -> co.electriccoin.zcash.ui.screen.about.view.About(
+            onBack = onBack,
+            configInfo = co.electriccoin.zcash.ui.fixture.ConfigInfoFixture.new(),
+            versionInfo = co.electriccoin.zcash.ui.fixture.VersionInfoFixture.new(),
+            onPrivacyPolicy = {},
+            onTermsOfUse = {},
+            updates = {
+                co.electriccoin.zcash.ui.screen.updates.AppUpdateContent(
+                    checking = false, current = screen == "about",
+                    failed = screen == "about-update-error",
+                    availableTag = if (screen == "about-update") "v3.19.0-private.17" else null,
+                    onCheck = {}, onOpenRelease = {}, onObtainium = {},
+                )
+            },
+        )
+        "selection-indicators" -> BlankSurface {
+            androidx.compose.foundation.layout.Column {
+                listOf(true, false).forEach { enabled ->
+                    listOf(false, true).forEach { checked ->
+                        androidx.compose.material3.Text("Enabled: $enabled, selected: $checked")
+                        ZashiCheckboxIndicator(isChecked = checked, isEnabled = enabled)
+                        ZashiRadioButton(
+                            RadioButtonState(
+                                text = stringRes("Selection"), isChecked = checked,
+                                isEnabled = enabled, onClick = {},
+                            )
+                        )
+                        ZashiSelectionIndicator(
+                            isChecked = checked, isEnabled = enabled, circular = true, useDot = true,
+                        )
+                    }
+                }
+            }
+        }
         "theme-settings", "theme-settings-system", "theme-settings-light", "theme-settings-dark" -> ThemeSettingsView(
             ThemeSettingsState(
                 options = listOf(AppearanceMode.SYSTEM, AppearanceMode.LIGHT, AppearanceMode.DARK).map { mode ->

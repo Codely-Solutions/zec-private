@@ -50,6 +50,7 @@ internal fun HomeView(
     state: HomeState,
     supportAction: @Composable () -> Unit = {},
     supportInvitation: (@Composable () -> Unit)? = null,
+    updateNotice: (@Composable () -> Unit)? = null,
 ) {
     BlankBgScaffold(
         topBar = { ZashiTopAppBarWithAccountSelection(appBarState, supportAction = supportAction) }
@@ -61,6 +62,7 @@ internal fun HomeView(
             balanceWidgetState = balanceWidgetState,
             state = state,
             supportInvitation = supportInvitation,
+            updateNotice = updateNotice,
         )
     }
 }
@@ -73,6 +75,7 @@ private fun Content(
     state: HomeState,
     modifier: Modifier = Modifier,
     supportInvitation: (@Composable () -> Unit)? = null,
+    updateNotice: (@Composable () -> Unit)? = null,
 ) {
     Box(
         modifier = modifier,
@@ -132,7 +135,8 @@ private fun Content(
                             .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
                     contentPadding = PaddingValues(top = 24.dp)
                 ) {
-                    supportInvitation?.let { invitation -> item { invitation() } }
+                    updateNotice?.let { notice -> item { notice() } }
+                    if (updateNotice == null) supportInvitation?.let { invitation -> item { invitation() } }
                     createActivityWidgets(
                         state = activityWidgetState
                     )

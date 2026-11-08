@@ -41,9 +41,11 @@ import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepositoryImpl
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.bind
 import org.koin.dsl.module
+import co.electriccoin.zcash.ui.screen.updates.AppUpdateRepository
 
 val repositoryModule =
     module {
+        single { AppUpdateRepository(get(), get()) }
         singleOf(::WalletRepositoryImpl) bind WalletRepository::class
         singleOf(::ConfigurationRepositoryImpl) bind ConfigurationRepository::class
         singleOf(::ExchangeRateRepositoryImpl) bind ExchangeRateRepository::class

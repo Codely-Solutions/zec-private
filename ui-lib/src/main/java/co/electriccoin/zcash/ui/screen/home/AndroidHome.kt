@@ -19,6 +19,8 @@ import co.electriccoin.zcash.ui.screen.transactionhistory.widget.ActivityWidgetV
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
+import co.electriccoin.zcash.ui.screen.updates.AndroidAppUpdateNotice
+import co.electriccoin.zcash.ui.screen.updates.rememberAppUpdateNotice
 
 @Composable
 internal fun AndroidHome() {
@@ -44,8 +46,9 @@ internal fun AndroidHome() {
     val transactionWidgetState by activityWidgetVM.state.collectAsStateWithLifecycle()
 
     state?.let {
+        val update = rememberAppUpdateNotice(blocked = it.message != null || !it.isSyncComplete)
         val support = rememberHomeDonationSupport(
-            blocked = it.message != null || !it.isSyncComplete,
+            blocked = it.message != null || !it.isSyncComplete || update != null,
             onDonate = { donationRouter.forward(DonationArgs()) },
         )
         HomeView(
@@ -55,6 +58,7 @@ internal fun AndroidHome() {
             transactionWidgetState = transactionWidgetState,
             supportAction = { DonationShortcut(support) },
             supportInvitation = if (support.showInvitation) ({ HomeDonationInvitation(support) }) else null,
+            updateNotice = update?.let { release -> { AndroidAppUpdateNotice(release) } },
         )
     }
 }

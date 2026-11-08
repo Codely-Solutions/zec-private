@@ -1,6 +1,5 @@
 package co.electriccoin.zcash.ui.screen.about.view
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -9,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -64,6 +61,7 @@ fun About(
     onPrivacyPolicy: () -> Unit,
     onTermsOfUse: () -> Unit,
     versionInfo: VersionInfo,
+    updates: @Composable () -> Unit = {},
 ) {
     val hazeState = rememberZashiFrostState()
     BlankBgScaffold(
@@ -87,6 +85,7 @@ fun About(
         ) {
             AboutMainContent(
                 versionInfo = versionInfo,
+                updates = updates,
                 onPrivacyPolicy = onPrivacyPolicy,
                 onTermsOfUse = onTermsOfUse,
                 modifier =
@@ -170,7 +169,8 @@ fun AboutMainContent(
     onPrivacyPolicy: () -> Unit,
     onTermsOfUse: () -> Unit,
     versionInfo: VersionInfo,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    updates: @Composable () -> Unit = {},
 ) {
     Column(modifier) {
         Text(
@@ -220,13 +220,15 @@ fun AboutMainContent(
                     onClick = onTermsOfUse
                 ),
             leading = { modifier ->
-                Image(
-                    modifier = modifier.size(40.dp),
-                    painter = painterResource(R.drawable.ic_terms_of_use),
+                SettingsListItemLeadingIcon(
+                    modifier = modifier,
+                    drawableRes = R.drawable.ic_terms_of_use,
                     contentDescription = stringResource(R.string.about_termsOfUse)
                 )
             }
         )
+
+        updates()
 
         Spacer(Modifier.weight(1f))
 

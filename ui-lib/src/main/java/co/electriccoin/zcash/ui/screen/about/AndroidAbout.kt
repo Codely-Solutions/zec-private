@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.screen.about.view.About
 import co.electriccoin.zcash.ui.screen.support.model.ConfigInfo
 import kotlinx.serialization.Serializable
 import org.koin.compose.koinInject
+import co.electriccoin.zcash.ui.screen.updates.AndroidAppUpdates
 
 @Composable
 internal fun AboutScreen() {
@@ -28,6 +29,7 @@ internal fun AboutScreen() {
         onBack = { navigationRouter.back() },
         configInfo = configInfo,
         versionInfo = versionInfo,
+        updates = { AndroidAppUpdates() },
         onPrivacyPolicy = {
             navigationRouter.forward(
                 ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/PRIVACY.md")
@@ -42,4 +44,5 @@ internal fun AboutScreen() {
 }
 
 @Serializable
+@Suppress("MatchingDeclarationName")
 data object AboutArgs
