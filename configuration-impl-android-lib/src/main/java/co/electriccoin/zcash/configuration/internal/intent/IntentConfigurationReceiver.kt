@@ -20,7 +20,7 @@ class IntentConfigurationReceiver : BroadcastReceiver() {
                 val existingConfiguration = IntentConfigurationProvider.peekConfiguration().configurationMapping
                 val newConfiguration =
                     if (null == value) {
-                        existingConfiguration.remove(key)
+                        existingConfiguration.removing(key)
                     } else {
                         existingConfiguration + (key to value)
                     }
