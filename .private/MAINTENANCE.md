@@ -38,6 +38,16 @@ Use the applicable resource guard and project acceptance policy. Offline preflig
 
 Full evidence binds the source, workflow run, artifact digests and applicable wallet/quote acceptance. Static checks and a successful build alone do not authorize signing. Manifest, certificate, provider authority, license, architecture and 16 KiB ZIP alignment are inspected separately; ZIP alignment alone does not establish native runtime compatibility.
 
+## Prepare and verify acceptance evidence
+
+Bind each prepared emulator job to its exact artifact ID/digest, successful producer job, source SHA, package/version, baseline and applicable fingerprints from `acceptance_policy.py`. The containing workflow may still be finishing independent jobs; publication requires its final successful result. Use the verified seedless baseline selected in `upgrade-baseline.json`, not a copied historical job. Read `core_testnet_driver.py` and the current UI scenario for their required manifest fields.
+
+After a batch closes, require its accepted receipt, completed cleanup and zero owned survivors. Before assembling late attestations, hash each retained evidence file against `guestCleanup.retainedEvidence` in that receipt. Preserve original execution fields, APK/source identities and the producer run; validate current core/quote bindings through `acceptance_policy.py`. A historical JSON receipt is evidence of its original execution, not a template for a new pass.
+
+Independently verify a publication inside the resource guard: download the exact tag's APK/checksum and compare asset sizes/digests, checksum and `release-evidence/<tag>.json`. Resolve the original unsigned artifact from that evidence's producer run and verify its source/digest and embedded proof. Compare all signed/unsigned ZIP-entry contents except signing metadata. Run `apksigner verify --print-certs`, check the permanent certificate defined in `publish.py`, and inspect package/version, debuggability, ARM64-only contents and 16 KiB ZIP alignment. Remove the downloads after retaining compact results; preserve the executed update fixture with the maintained tool above.
+
+Synthetic layout capture is a separate claim from quote or transaction acceptance. A capture failure must retain its own diagnostic without relabeling a valid financial result. Keep only safe status/exception-class diagnostics when provider tracing is necessary; raw wallet/provider bodies are not public release evidence.
+
 ## Upstream integration
 
 `sync-upstream.yml` discovers official stable releases every six hours and supports manual dispatch. Drafts and prereleases are excluded. `fork.patch` carries the reviewed source delta; `.private/` and trusted workflows are overlaid separately. Read [sync.py](sync.py) and [excluded-features.json](excluded-features.json) before regenerating the patch: separately sanitized provider content and removed project trees must stay out of it.
