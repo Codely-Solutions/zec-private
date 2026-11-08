@@ -1,6 +1,8 @@
 import contextlib, importlib.util, json, os, tempfile, unittest
 from pathlib import Path
 import shutil
+import re
+from urllib.parse import parse_qs, unquote, urlsplit
 
 spec=importlib.util.spec_from_file_location('forkcheck',Path(__file__).with_name('check.py'))
 checks=importlib.util.module_from_spec(spec);spec.loader.exec_module(checks)
@@ -17,6 +19,25 @@ def fixture_directory():
             yield temp
 
 class ControlsTest(unittest.TestCase):
+    def test_obtainium_import_is_valid_and_selects_only_production_apk(self):
+        config=json.loads((checks.ROOT/'docs/obtainium.json').read_text())
+        settings=json.loads(config['additionalSettings'])
+        self.assertEqual('com.personal.zecprivate.foss',config['id'])
+        self.assertEqual('https://github.com/Sammy-Lastre/zec-private',config['url'])
+        for key in ('includePrereleases','includeDrafts','fallbackToOlderReleases','trackOnly'):
+            self.assertIs(settings[key],False)
+        pattern=re.compile(settings['apkFilterRegEx'])
+        self.assertIsNotNone(pattern.fullmatch('zec-private-latest.apk'))
+        for name in ('TESTNET_UPGRADE_FIXTURE.zip','app-x86_64.apk','latest.apk',
+                     'zec-private-latestXapk','zec-private-latest.apk.bak'):
+            self.assertIsNone(pattern.fullmatch(name))
+        guide=(checks.ROOT/'docs/WALLET-GUIDE.md').read_text()
+        link=re.search(r'\[Add ZEC Private to Obtainium\]\((https://[^)]+)\)',guide).group(1)
+        uri=parse_qs(urlsplit(link).query)['r'][0]
+        prefix='obtainium://app/'
+        self.assertTrue(uri.startswith(prefix))
+        self.assertEqual(config,json.loads(unquote(uri[len(prefix):])))
+
     def test_current_source(self):
         self.assertEqual([],checks.check())
 
