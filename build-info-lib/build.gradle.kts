@@ -1,4 +1,3 @@
-import co.electriccoin.zcash.Git
 import publish.ChangelogParser
 import publish.LanguageTag
 import java.text.SimpleDateFormat
@@ -26,13 +25,14 @@ private val releaseNotesEsPath = "${project.rootDir}/docs/whatsNew/WHATS_NEW_ES.
 val generateBuildConfigTask = tasks.register("buildConfig") {
     val generatedDir = layout.buildDirectory.dir("generated").get().asFile
 
-    val gitInfo = Git.newInfo(
-        Git.HEAD,
-        rootDir
-    )
-
-    inputs.property(gitShaKey, gitInfo.sha)
-    inputs.property(gitCommitCountKey, gitInfo.commitCount)
+    inputs.property(gitShaKey, providers.exec {
+        workingDir(rootDir)
+        commandLine("git", "rev-parse", "HEAD")
+    }.standardOutput.asText.map { it.trim() })
+    inputs.property(gitCommitCountKey, providers.exec {
+        workingDir(rootDir)
+        commandLine("git", "rev-list", "--count", "HEAD")
+    }.standardOutput.asText.map { it.trim().toInt() })
 
     //val buildTimestamp = newIso8601Timestamp()
     //inputs.property("buildTimestamp", buildTimestamp)
