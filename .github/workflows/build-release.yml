@@ -101,6 +101,7 @@ jobs:
             build/reports/profile/
             feature-ledger/build/test-results/
             wallet-foundation-lib/build/test-results/
+            ui-design-lib/build/test-results/testReleaseUnitTest/TEST-*.xml
             ui-lib/build/test-results/
             ui-lib/build/reports/tests/
             ui-lib/build/reports/quote-layout/
