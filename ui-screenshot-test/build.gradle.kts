@@ -62,9 +62,6 @@ android {
         compose = true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.androidx.compose.compiler.get().versionConstraint.displayName
-    }
 }
 
 dependencies {
