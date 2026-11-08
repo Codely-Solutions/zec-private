@@ -2,7 +2,6 @@ package co.electriccoin.zcash.ui.screen.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -10,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -26,8 +26,6 @@ import co.electriccoin.zcash.ui.design.component.LocalZashiCircularProgressIndic
 import co.electriccoin.zcash.ui.design.component.VerticalSpacer
 import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
 import co.electriccoin.zcash.ui.design.component.ZashiCircularProgressIndicatorDefaults
-import co.electriccoin.zcash.ui.design.theme.colors.ZashiDarkColors
-import co.electriccoin.zcash.ui.design.theme.colors.ZashiLightColors
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 
 @Suppress("ModifierNaming", "ModifierWithoutDefault", "LongParameterList")
@@ -42,12 +40,12 @@ fun HomeMessageWrapper(
     end: (@Composable () -> Unit)?,
     backgroundBrush: Brush =
         Brush.verticalGradient(
-            0f to ZashiLightColors.Utility.Purple.utilityPurple500,
-            1f to ZashiLightColors.Utility.Purple.utilityPurple900,
+            0f to MaterialTheme.colorScheme.tertiaryContainer,
+            1f to MaterialTheme.colorScheme.tertiaryContainer,
         ),
-    contentColor: Color = ZashiLightColors.Utility.Purple.utilityPurple50,
-    subtitleColor: Color = ZashiLightColors.Utility.Purple.utilityPurple200,
-    progressTrackColor: Color = ZashiLightColors.Utility.Purple.utilityPurple400,
+    contentColor: Color = MaterialTheme.colorScheme.onTertiaryContainer,
+    subtitleColor: Color = MaterialTheme.colorScheme.onTertiaryContainer,
+    progressTrackColor: Color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.24f),
     contentHorizontalPadding: Dp = 16.dp,
     contentVerticalPadding: Dp = 18.dp,
 ) {
@@ -97,7 +95,8 @@ fun HomeMessageWrapper(
             CompositionLocalProvider(
                 LocalZashiButtonColors provides
                     ZashiButtonDefaults.primaryColors(
-                        if (isSystemInDarkTheme()) ZashiLightColors else ZashiDarkColors
+                        containerColor = MaterialTheme.colorScheme.tertiary,
+                        contentColor = MaterialTheme.colorScheme.onTertiary
                     )
             ) {
                 end()

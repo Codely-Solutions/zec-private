@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.design.theme
 
 import android.graphics.Color
+import android.os.Build
 import android.view.ContextThemeWrapper
 import android.view.Window
 import androidx.activity.ComponentActivity
@@ -8,12 +9,15 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.LocalActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material.ripple.RippleAlpha
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RippleConfiguration
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -22,6 +26,7 @@ import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import co.electriccoin.zcash.ui.design.LocalKeyboardManager
@@ -29,22 +34,14 @@ import co.electriccoin.zcash.ui.design.component.ConfigurationOverride
 import co.electriccoin.zcash.ui.design.component.UiMode
 import co.electriccoin.zcash.ui.design.rememberKeyboardManager
 import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
-import co.electriccoin.zcash.ui.design.theme.colors.DarkZashiColorsInternal
-import co.electriccoin.zcash.ui.design.theme.colors.LightZashiColorsInternal
 import co.electriccoin.zcash.ui.design.theme.colors.LocalZashiColors
-import co.electriccoin.zcash.ui.design.theme.colors.OledZashiColorsInternal
-import co.electriccoin.zcash.ui.design.theme.internal.DarkColorPalette
-import co.electriccoin.zcash.ui.design.theme.internal.DarkExtendedColorPalette
+import co.electriccoin.zcash.ui.design.theme.colors.materialZashiColors
 import co.electriccoin.zcash.ui.design.theme.internal.ExtendedTypography
-import co.electriccoin.zcash.ui.design.theme.internal.LightColorPalette
-import co.electriccoin.zcash.ui.design.theme.internal.LightExtendedColorPalette
 import co.electriccoin.zcash.ui.design.theme.internal.LocalExtendedColors
 import co.electriccoin.zcash.ui.design.theme.internal.LocalExtendedTypography
 import co.electriccoin.zcash.ui.design.theme.internal.LocalTypographies
-import co.electriccoin.zcash.ui.design.theme.internal.OledColorPalette
-import co.electriccoin.zcash.ui.design.theme.internal.OledExtendedColorPalette
-import co.electriccoin.zcash.ui.design.theme.internal.PrimaryTypography
 import co.electriccoin.zcash.ui.design.theme.internal.Typography
+import co.electriccoin.zcash.ui.design.theme.internal.materialExtendedColors
 import co.electriccoin.zcash.ui.design.theme.typography.LocalZashiTypography
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypographyInternal
 import java.util.WeakHashMap
@@ -71,10 +68,19 @@ fun ZcashTheme(
         appearanceMode == AppearanceMode.DARK ||
             (appearanceMode == AppearanceMode.SYSTEM && isSystemInDarkTheme())
     val useOledDark = useDarkMode && isOledEnabled
-    val (baseColors, extendedColors, zashiColors) = themePalettes(useDarkMode, useOledDark)
+    val context = LocalContext.current
+    val colors = when {
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useDarkMode -> dynamicDarkColorScheme(context)
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> dynamicLightColorScheme(context)
+        useDarkMode -> darkColorScheme()
+        else -> lightColorScheme()
+    }
+    val baseColors = colors.withOledBackground(useOledDark)
+    val extendedColors = materialExtendedColors(baseColors, useDarkMode)
+    val zashiColors = materialZashiColors(baseColors, useDarkMode)
 
     val systemBarOwner = remember { SystemBarOwner() }
-    ZcashSystemBarTheme(systemBarOwner, useDarkMode, useOledDark)
+    ZcashSystemBarTheme(systemBarOwner, useDarkMode, baseColors.background.toArgb())
 
     CompositionLocalProvider(
         LocalSystemBarOwner provides systemBarOwner,
@@ -90,7 +96,7 @@ fun ZcashTheme(
         ProvideDimens {
             MaterialTheme(
                 colorScheme = baseColors,
-                typography = PrimaryTypography,
+                typography = androidx.compose.material3.Typography(),
             ) {
                 ResolvedConfiguration(useDarkMode) {
                     content()
@@ -99,6 +105,12 @@ fun ZcashTheme(
         }
     }
 }
+
+internal fun androidx.compose.material3.ColorScheme.withOledBackground(enabled: Boolean) =
+    if (enabled) copy(
+        background = androidx.compose.ui.graphics.Color.Black,
+        surface = androidx.compose.ui.graphics.Color.Black,
+    ) else this
 
 /**
  * Provides [content] with a [android.content.res.Configuration] whose `uiMode` matches the resolved theme.
@@ -158,24 +170,10 @@ private fun ResolvedConfiguration(
     }
 }
 
-/**
- * Resolves the three parallel palette families (Material color scheme, extended colors, Zashi
- * colors) for the light / dark / pure-black-OLED variants in one place, so the selections can
- * never drift apart.
- */
-private fun themePalettes(
-    useDarkMode: Boolean,
-    useOledDark: Boolean,
-) = when {
-    useOledDark -> Triple(OledColorPalette, OledExtendedColorPalette, OledZashiColorsInternal)
-    useDarkMode -> Triple(DarkColorPalette, DarkExtendedColorPalette, DarkZashiColorsInternal)
-    else -> Triple(LightColorPalette, LightExtendedColorPalette, LightZashiColorsInternal)
-}
-
 /** What a [ZcashTheme] asked the system bars to look like. */
 private data class SystemBarAppearance(
     val useDarkMode: Boolean,
-    val useOledDark: Boolean
+    val background: Int
 )
 
 /**
@@ -231,18 +229,18 @@ private object SystemBarOwnership {
 private fun ZcashSystemBarTheme(
     owner: SystemBarOwner,
     useDarkMode: Boolean,
-    useOledDark: Boolean
+    background: Int
 ) {
     val activity = LocalActivity.current
     val enclosing by rememberUpdatedState(LocalSystemBarOwner.current)
-    DisposableEffect(activity, useDarkMode, useOledDark) {
-        val appearance = SystemBarAppearance(useDarkMode, useOledDark)
+    DisposableEffect(activity, useDarkMode, background) {
+        val appearance = SystemBarAppearance(useDarkMode, background)
         owner.appearance = appearance
         owner.parent = enclosing
         owner.isActive = true
         if (activity is ComponentActivity) {
             SystemBarOwnership[activity.window] = owner
-            activity.applySystemBars(useDarkMode, useOledDark)
+            activity.applySystemBars(useDarkMode, background)
         }
         onDispose {
             owner.isActive = false
@@ -252,7 +250,7 @@ private fun ZcashSystemBarTheme(
                 SystemBarOwnership[activity.window] = restored
                 val restoredAppearance = restored?.appearance
                 if (restoredAppearance != null && restoredAppearance != appearance) {
-                    activity.applySystemBars(restoredAppearance.useDarkMode, restoredAppearance.useOledDark)
+                    activity.applySystemBars(restoredAppearance.useDarkMode, restoredAppearance.background)
                 }
             }
         }
@@ -261,18 +259,18 @@ private fun ZcashSystemBarTheme(
 
 private fun ComponentActivity.applySystemBars(
     useDarkMode: Boolean,
-    useOledDark: Boolean
+    background: Int
 ) {
     if (useDarkMode) {
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
             navigationBarStyle =
-                SystemBarStyle.dark(if (useOledDark) DefaultOledScrim else DefaultDarkScrim)
+                SystemBarStyle.dark(background)
         )
     } else {
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.light(DefaultLightScrim, DefaultDarkScrim)
+            navigationBarStyle = SystemBarStyle.light(background, background)
         )
     }
 }
@@ -301,25 +299,7 @@ object ZcashTheme {
 @OptIn(ExperimentalMaterial3Api::class)
 private val MaterialRippleConfig: RippleConfiguration
     @Composable
-    get() = RippleConfiguration(color = LocalContentColor.current, rippleAlpha = SubtleRippleAlpha)
-
-@Suppress("MagicNumber")
-private val SubtleRippleAlpha =
-    RippleAlpha(
-        draggedAlpha = 0.08f,
-        focusedAlpha = 0.05f,
-        hoveredAlpha = 0.04f,
-        pressedAlpha = 0.05f
-    )
-
-@Suppress("MagicNumber")
-private val DefaultLightScrim = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
-
-@Suppress("MagicNumber")
-private val DefaultDarkScrim = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
-
-@Suppress("MagicNumber")
-private val DefaultOledScrim = Color.argb(0x80, 0x00, 0x00, 0x00)
+    get() = RippleConfiguration(color = LocalContentColor.current)
 
 @Suppress("CompositionLocalAllowlist")
 val LocalAppearanceMode = staticCompositionLocalOf { AppearanceMode.SYSTEM }

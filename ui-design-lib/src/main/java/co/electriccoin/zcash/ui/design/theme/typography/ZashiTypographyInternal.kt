@@ -3,10 +3,7 @@ package co.electriccoin.zcash.ui.design.theme.typography
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.googlefonts.Font
-import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.sp
-import co.electriccoin.zcash.ui.design.R
 
 object ZashiTypographyInternal {
     val header1: TextStyle =
@@ -95,32 +92,6 @@ object ZashiTypographyInternal {
         )
 }
 
-private val provider =
-    GoogleFont.Provider(
-        providerAuthority = "com.google.android.gms.fonts",
-        providerPackage = "com.google.android.gms",
-        certificates = R.array.com_google_android_gms_fonts_certs
-    )
-
-private val InterFont = GoogleFont(name = "Inter", bestEffort = true)
-private val RobotoMonoFont = GoogleFont(name = "Roboto Mono", bestEffort = true)
-
-val InterFontFamily =
-    FontFamily(
-        // W400
-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.Normal),
-        // W500
-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.Medium),
-        // W600
-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.SemiBold),
-        // W700
-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.Bold)
-    )
-
-val RobotoMonoFontFamily =
-    FontFamily(
-        // W400
-        Font(googleFont = RobotoMonoFont, fontProvider = provider, weight = FontWeight.Normal),
-        // W500
-        Font(googleFont = RobotoMonoFont, fontProvider = provider, weight = FontWeight.Medium),
-    )
+// Keep the existing typography API while using platform fonts without a provider dependency.
+val InterFontFamily = FontFamily.Default
+val RobotoMonoFontFamily = FontFamily.Monospace

@@ -1036,17 +1036,23 @@ index 1c946b382..f9204071f 100644
 -org.jetbrains.kotlin:kotlin-tooling-core:2.3.10=kotlinBuildToolsApiClasspath
 +org.jetbrains.kotlin:kotlin-tooling-core:2.3.21=kotlinBuildToolsApiClasspath
 diff --git a/settings.gradle.kts b/settings.gradle.kts
-index 5831568a4..8a9b07649 100644
+index 5831568a4..00bbe0401 100644
 --- a/settings.gradle.kts
 +++ b/settings.gradle.kts
 @@ -189 +188,0 @@ dependencyResolutionManagement {
 -            val flexaVersion = extra["FLEXA_VERSION"].toString()
-@@ -260,2 +258,0 @@ dependencyResolutionManagement {
+@@ -216 +214,0 @@ dependencyResolutionManagement {
+-            library("androidx-compose-ui-fonts", "androidx.compose.ui:ui-text-google-fonts:$androidxComposeVersion")
+@@ -260,2 +257,0 @@ dependencyResolutionManagement {
 -            library("flexa-core", "co.flexa:core:$flexaVersion")
 -            library("flexa-spend", "co.flexa:spend:$flexaVersion")
-@@ -361 +357,0 @@ include("feature-viewing-key")
+@@ -311,2 +307 @@ dependencyResolutionManagement {
+-                    "androidx-compose-ui",
+-                    "androidx-compose-ui-fonts"
++                    "androidx-compose-ui"
+@@ -361 +355,0 @@ include("feature-viewing-key")
 -include("feature-voting")
-@@ -371,0 +368 @@ include("ui-lib")
+@@ -371,0 +366 @@ include("ui-lib")
 +include("wallet-foundation-lib")
 diff --git a/spackle-lib/gradle.lockfile b/spackle-lib/gradle.lockfile
 index b53a4cdae..994cc0469 100644
@@ -1113,6 +1119,2647 @@ index 3d17eec6d..5457e9bae 100644
 -    private fun newFile() = File(File("build"), "atomic_file_test-${UUID.randomUUID()}")
 +    // Use the configured temporary root; Gradle build outputs may be relocated.
 +    private fun newFile() = File(System.getProperty("java.io.tmpdir"), "atomic_file_test-${UUID.randomUUID()}")
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiBigIconButton.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiBigIconButton.kt
+index 8427cce2e..dfb9eee52 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiBigIconButton.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiBigIconButton.kt
+@@ -4,2 +3,0 @@ import androidx.annotation.DrawableRes
+-import androidx.compose.animation.core.animateDpAsState
+-import androidx.compose.foundation.BorderStroke
+@@ -7 +4,0 @@ import androidx.compose.foundation.Image
+-import androidx.compose.foundation.background
+@@ -9 +5,0 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
+-import androidx.compose.foundation.interaction.collectIsPressedAsState
+@@ -15 +11 @@ import androidx.compose.foundation.layout.padding
+-import androidx.compose.foundation.shape.RoundedCornerShape
++import androidx.compose.material3.MaterialTheme
+@@ -19 +14,0 @@ import androidx.compose.runtime.Composable
+-import androidx.compose.runtime.getValue
+@@ -23 +18 @@ import androidx.compose.ui.Modifier
+-import androidx.compose.ui.graphics.Brush
++import androidx.compose.ui.graphics.ColorFilter
+@@ -31 +25,0 @@ import co.electriccoin.zcash.ui.design.theme.ZcashTheme
+-import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
+@@ -35 +28,0 @@ import co.electriccoin.zcash.ui.design.util.getValue
+-import co.electriccoin.zcash.ui.design.util.orDark
+@@ -46,20 +38,0 @@ fun ZashiBigIconButton(
+-    val isPressed by interactionSource.collectIsPressedAsState()
+-    val shadowElevation by animateDpAsState(if (isPressed) 0.dp else (2.dp orDark 4.dp))
+-
+-    val darkBgGradient =
+-        Brush.verticalGradient(
+-            0f to ZashiColors.Surfaces.strokeSecondary,
+-            .66f to ZashiColors.Surfaces.strokeSecondary.copy(alpha = 0.5f),
+-            1f to ZashiColors.Surfaces.strokeSecondary.copy(alpha = 0.25f),
+-        )
+-
+-    val darkBorderGradient =
+-        Brush.verticalGradient(
+-            0f to ZashiColors.Surfaces.strokePrimary,
+-            1f to ZashiColors.Surfaces.strokePrimary.copy(alpha = 0f),
+-        )
+-
+-    val backgroundModifier =
+-        Modifier.background(ZashiColors.Surfaces.bgPrimary) orDark
+-            Modifier.background(darkBgGradient)
+-
+@@ -69,6 +42,3 @@ fun ZashiBigIconButton(
+-        color = ZashiColors.Surfaces.bgPrimary,
+-        shape = RoundedCornerShape(22.dp),
+-        border =
+-            BorderStroke(.5.dp, ZashiColors.Utility.Gray.utilityGray100) orDark
+-                BorderStroke(.5.dp, darkBorderGradient),
+-        shadowElevation = shadowElevation,
++        color = MaterialTheme.colorScheme.secondaryContainer,
++        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
++        shape = MaterialTheme.shapes.large,
+@@ -78 +47,0 @@ fun ZashiBigIconButton(
+-            modifier = backgroundModifier,
+@@ -85 +54,2 @@ fun ZashiBigIconButton(
+-                contentDescription = state.text.getValue()
++                contentDescription = state.text.getValue(),
++                colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onSecondaryContainer)
+@@ -93 +63 @@ fun ZashiBigIconButton(
+-                color = ZashiColors.Text.textPrimary,
++                color = MaterialTheme.colorScheme.onSecondaryContainer,
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiButton.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiButton.kt
+index f055665c9..913b7cf27 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiButton.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiButton.kt
+@@ -15 +14,0 @@ import androidx.compose.foundation.layout.wrapContentWidth
+-import androidx.compose.foundation.shape.RoundedCornerShape
+@@ -246 +245 @@ object ZashiButtonDefaults {
+-        get() = RoundedCornerShape(12.dp)
++        @Composable get() = ButtonDefaults.shape
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiTextButton.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiTextButton.kt
+index 0a1ee696f..e3bcdaf3c 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiTextButton.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiTextButton.kt
+@@ -5 +4,0 @@ import androidx.compose.foundation.layout.RowScope
+-import androidx.compose.foundation.shape.RoundedCornerShape
+@@ -13 +11,0 @@ import androidx.compose.ui.graphics.Color
+-import androidx.compose.ui.unit.dp
+@@ -31 +29 @@ fun ZashiTextButton(
+-        shape = RoundedCornerShape(12.dp),
++        shape = ButtonDefaults.shape,
+@@ -42 +40 @@ object ZashiTextButtonDefaults {
+-        contentColor: Color = ZashiColors.Text.textPrimary,
++        contentColor: Color = ZashiColors.Text.textLink,
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/ZcashTheme.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/ZcashTheme.kt
+index b05018cdf..9bc0098cd 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/ZcashTheme.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/ZcashTheme.kt
+@@ -3,0 +4 @@ import android.graphics.Color
++import android.os.Build
+@@ -11 +11,0 @@ import androidx.compose.foundation.isSystemInDarkTheme
+-import androidx.compose.material.ripple.RippleAlpha
+@@ -16,0 +17,4 @@ import androidx.compose.material3.RippleConfiguration
++import androidx.compose.material3.darkColorScheme
++import androidx.compose.material3.dynamicDarkColorScheme
++import androidx.compose.material3.dynamicLightColorScheme
++import androidx.compose.material3.lightColorScheme
+@@ -24,0 +29 @@ import androidx.compose.runtime.staticCompositionLocalOf
++import androidx.compose.ui.graphics.toArgb
+@@ -32,2 +36,0 @@ import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
+-import co.electriccoin.zcash.ui.design.theme.colors.DarkZashiColorsInternal
+-import co.electriccoin.zcash.ui.design.theme.colors.LightZashiColorsInternal
+@@ -35,3 +38 @@ import co.electriccoin.zcash.ui.design.theme.colors.LocalZashiColors
+-import co.electriccoin.zcash.ui.design.theme.colors.OledZashiColorsInternal
+-import co.electriccoin.zcash.ui.design.theme.internal.DarkColorPalette
+-import co.electriccoin.zcash.ui.design.theme.internal.DarkExtendedColorPalette
++import co.electriccoin.zcash.ui.design.theme.colors.materialZashiColors
+@@ -39,2 +39,0 @@ import co.electriccoin.zcash.ui.design.theme.internal.ExtendedTypography
+-import co.electriccoin.zcash.ui.design.theme.internal.LightColorPalette
+-import co.electriccoin.zcash.ui.design.theme.internal.LightExtendedColorPalette
+@@ -44,3 +42,0 @@ import co.electriccoin.zcash.ui.design.theme.internal.LocalTypographies
+-import co.electriccoin.zcash.ui.design.theme.internal.OledColorPalette
+-import co.electriccoin.zcash.ui.design.theme.internal.OledExtendedColorPalette
+-import co.electriccoin.zcash.ui.design.theme.internal.PrimaryTypography
+@@ -47,0 +44 @@ import co.electriccoin.zcash.ui.design.theme.internal.Typography
++import co.electriccoin.zcash.ui.design.theme.internal.materialExtendedColors
+@@ -74 +71,10 @@ fun ZcashTheme(
+-    val (baseColors, extendedColors, zashiColors) = themePalettes(useDarkMode, useOledDark)
++    val context = LocalContext.current
++    val colors = when {
++        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useDarkMode -> dynamicDarkColorScheme(context)
++        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> dynamicLightColorScheme(context)
++        useDarkMode -> darkColorScheme()
++        else -> lightColorScheme()
++    }
++    val baseColors = colors.withOledBackground(useOledDark)
++    val extendedColors = materialExtendedColors(baseColors, useDarkMode)
++    val zashiColors = materialZashiColors(baseColors, useDarkMode)
+@@ -77 +83 @@ fun ZcashTheme(
+-    ZcashSystemBarTheme(systemBarOwner, useDarkMode, useOledDark)
++    ZcashSystemBarTheme(systemBarOwner, useDarkMode, baseColors.background.toArgb())
+@@ -93 +99 @@ fun ZcashTheme(
+-                typography = PrimaryTypography,
++                typography = androidx.compose.material3.Typography(),
+@@ -102,0 +109,6 @@ fun ZcashTheme(
++internal fun androidx.compose.material3.ColorScheme.withOledBackground(enabled: Boolean) =
++    if (enabled) copy(
++        background = androidx.compose.ui.graphics.Color.Black,
++        surface = androidx.compose.ui.graphics.Color.Black,
++    ) else this
++
+@@ -161,14 +172,0 @@ private fun ResolvedConfiguration(
+-/**
+- * Resolves the three parallel palette families (Material color scheme, extended colors, Zashi
+- * colors) for the light / dark / pure-black-OLED variants in one place, so the selections can
+- * never drift apart.
+- */
+-private fun themePalettes(
+-    useDarkMode: Boolean,
+-    useOledDark: Boolean,
+-) = when {
+-    useOledDark -> Triple(OledColorPalette, OledExtendedColorPalette, OledZashiColorsInternal)
+-    useDarkMode -> Triple(DarkColorPalette, DarkExtendedColorPalette, DarkZashiColorsInternal)
+-    else -> Triple(LightColorPalette, LightExtendedColorPalette, LightZashiColorsInternal)
+-}
+-
+@@ -178 +176 @@ private data class SystemBarAppearance(
+-    val useOledDark: Boolean
++    val background: Int
+@@ -234 +232 @@ private fun ZcashSystemBarTheme(
+-    useOledDark: Boolean
++    background: Int
+@@ -238,2 +236,2 @@ private fun ZcashSystemBarTheme(
+-    DisposableEffect(activity, useDarkMode, useOledDark) {
+-        val appearance = SystemBarAppearance(useDarkMode, useOledDark)
++    DisposableEffect(activity, useDarkMode, background) {
++        val appearance = SystemBarAppearance(useDarkMode, background)
+@@ -245 +243 @@ private fun ZcashSystemBarTheme(
+-            activity.applySystemBars(useDarkMode, useOledDark)
++            activity.applySystemBars(useDarkMode, background)
+@@ -255 +253 @@ private fun ZcashSystemBarTheme(
+-                    activity.applySystemBars(restoredAppearance.useDarkMode, restoredAppearance.useOledDark)
++                    activity.applySystemBars(restoredAppearance.useDarkMode, restoredAppearance.background)
+@@ -264 +262 @@ private fun ComponentActivity.applySystemBars(
+-    useOledDark: Boolean
++    background: Int
+@@ -270 +268 @@ private fun ComponentActivity.applySystemBars(
+-                SystemBarStyle.dark(if (useOledDark) DefaultOledScrim else DefaultDarkScrim)
++                SystemBarStyle.dark(background)
+@@ -275 +273 @@ private fun ComponentActivity.applySystemBars(
+-            navigationBarStyle = SystemBarStyle.light(DefaultLightScrim, DefaultDarkScrim)
++            navigationBarStyle = SystemBarStyle.light(background, background)
+@@ -304,19 +302 @@ private val MaterialRippleConfig: RippleConfiguration
+-    get() = RippleConfiguration(color = LocalContentColor.current, rippleAlpha = SubtleRippleAlpha)
+-
+-@Suppress("MagicNumber")
+-private val SubtleRippleAlpha =
+-    RippleAlpha(
+-        draggedAlpha = 0.08f,
+-        focusedAlpha = 0.05f,
+-        hoveredAlpha = 0.04f,
+-        pressedAlpha = 0.05f
+-    )
+-
+-@Suppress("MagicNumber")
+-private val DefaultLightScrim = Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
+-
+-@Suppress("MagicNumber")
+-private val DefaultDarkScrim = Color.argb(0x80, 0x1b, 0x1b, 0x1b)
+-
+-@Suppress("MagicNumber")
+-private val DefaultOledScrim = Color.argb(0x80, 0x00, 0x00, 0x00)
++    get() = RippleConfiguration(color = LocalContentColor.current)
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/DarkZashiColors.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/DarkZashiColors.kt
+index 954ee8e84..a238c422b 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/DarkZashiColors.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/DarkZashiColors.kt
+@@ -3,573 +3,3 @@ package co.electriccoin.zcash.ui.design.theme.colors
+-val DarkZashiColorsInternal =
+-    ZashiColorsInternal(
+-        Surfaces =
+-            Surfaces(
+-                bgPrimary = Base.Obsidian,
+-                bgAdjust = Shark.`900`,
+-                bgSecondary = SharkShades.`06dp`,
+-                bgTertiary = Shark.`800`,
+-                bgQuaternary = Shark.`700`,
+-                strokePrimary = Shark.`700`,
+-                strokeSecondary = Shark.`800`,
+-                bgAlt = Base.Bone,
+-                bgHide = Base.Obsidian,
+-                brandBg = Base.Brand,
+-                brandFg = Base.Obsidian,
+-                divider = Shark.`900`
+-            ),
+-        Text =
+-            Text(
+-                textPrimary = Shark.`50`,
+-                textSecondary = Shark.`200`,
+-                textTertiary = Shark.`200`,
+-                textQuaternary = Shark.`300`,
+-                textSupport = Shark.`400`,
+-                textDisabled = Shark.`600`,
+-                textError = ErrorRed.`300`,
+-                textLink = HyperBlue.`300`,
+-                textLight = Shark.`50`,
+-                textLightSupport = Shark.`200`
+-            ),
+-        Btns =
+-            Btns(
+-                Brand =
+-                    BtnBrand(
+-                        btnBrandBg = Brand.`400`,
+-                        btnBrandBgHover = Brand.`300`,
+-                        btnBrandFg = Base.Obsidian,
+-                        btnBrandFgHover = Base.Obsidian,
+-                        btnBrandBgDisabled = Shark.`900`,
+-                        btnBrandFgDisabled = Shark.`500`
+-                    ),
+-                Secondary =
+-                    BtnSecondary(
+-                        btnSecondaryBg = Base.Obsidian,
+-                        btnSecondaryBgHover = Shark.`950`,
+-                        btnSecondaryFg = Shark.`50`,
+-                        btnSecondaryFgHover = Shark.`50`,
+-                        btnSecondaryBorder = Shark.`700`,
+-                        btnSecondaryBorderHover = Shark.`600`,
+-                        btnSecondaryBgDisabled = Shark.`900`,
+-                        btnSecondaryFgDisabled = Shark.`500`
+-                    ),
+-                Tertiary =
+-                    BtnTertiary(
+-                        btnTertiaryBg = Shark.`900`,
+-                        btnTertiaryBgHover = Shark.`800`,
+-                        btnTertiaryFg = Shark.`100`,
+-                        btnTertiaryFgHover = Shark.`100`,
+-                        btnTertiaryBgDisabled = Shark.`900`,
+-                        btnTertiaryFgDisabled = Shark.`500`
+-                    ),
+-                Quaternary =
+-                    BtnQuaternary(
+-                        btnQuartBg = Shark.`700`,
+-                        btnQuartBgHover = Shark.`600`,
+-                        btnQuartFg = Shark.`50`,
+-                        btnQuartFgHover = Shark.`50`,
+-                        btnQuartBgDisabled = Shark.`900`,
+-                        btnQuartFgDisabled = Shark.`500`
+-                    ),
+-                Destructive1 =
+-                    BtnDestructive1(
+-                        btnDestroy1Bg = ErrorRed.`950`,
+-                        btnDestroy1BgHover = ErrorRed.`900`,
+-                        btnDestroy1Fg = ErrorRed.`100`,
+-                        btnDestroy1FgHover = ErrorRed.`50`,
+-                        btnDestroy1Border = ErrorRed.`800`,
+-                        btnDestroy1BorderHover = ErrorRed.`700`,
+-                        btnDestroy1BgDisabled = Shark.`900`,
+-                        btnDestroy1FgDisabled = Shark.`500`
+-                    ),
+-                Destructive2 =
+-                    BtnDestructive2(
+-                        btnDestroy2Bg = ErrorRed.`600`,
+-                        btnDestroy2BgHover = ErrorRed.`700`,
+-                        btnDestroy2Fg = ErrorRed.`50`,
+-                        btnDestroy2BgDisabled = Shark.`900`,
+-                        btnDestroy2FgDisabled = Shark.`500`
+-                    ),
+-                Primary =
+-                    BtnPrimary(
+-                        btnPrimaryBg = Base.Bone,
+-                        btnPrimaryBgHover = Gray.`100`,
+-                        btnPrimaryFg = Base.Obsidian,
+-                        btnPrimaryBgDisabled = Shark.`900`,
+-                        btnBoldFgDisabled = Shark.`500`
+-                    ),
+-                Ghost =
+-                    BtnGhost(
+-                        btnGhostBg = Base.Obsidian,
+-                        btnGhostBgHover = Gray.`900`,
+-                        btnGhostFg = Shark.`50`,
+-                        btnGhostBgDisabled = Shark.`900`,
+-                        btnGhostFgDisabled = Shark.`500`
+-                    )
+-            ),
+-        Avatars =
+-            Avatars(
+-                avatarProfileBorder = Base.Obsidian,
+-                avatarBg = Shark.`600`,
+-                avatarBgSecondary = Shark.`500`,
+-                avatarStatus = SuccessGreen.`400`,
+-                avatarTextFg = Shark.`100`,
+-                avatarBadgeBg = HyperBlue.`400`,
+-                avatarBadgeFg = Base.Obsidian
+-            ),
+-        Sliders =
+-            Sliders(
+-                sliderHandleBorder = Shark.`500`,
+-                sliderHandleBg = Base.Obsidian
+-            ),
+-        Inputs =
+-            Inputs(
+-                Default =
+-                    InputDefault(
+-                        bg = Shark.`900`,
+-                        bgAlt = Shark.`950`,
+-                        label = Shark.`50`,
+-                        text = Shark.`400`,
+-                        hint = Shark.`300`,
+-                        required = ErrorRed.`400`,
+-                        icon = Shark.`400`,
+-                        stroke = Shark.`800`
+-                    ),
+-                Hover =
+-                    InputHover(
+-                        bg = Shark.`800`,
+-                        bgAlt = Shark.`950`,
+-                        asideBg = Shark.`900`,
+-                        stroke = Shark.`700`,
+-                        label = Shark.`50`,
+-                        text = Shark.`300`,
+-                        hint = Shark.`300`,
+-                        icon = Shark.`400`,
+-                        required = ErrorRed.`400`
+-                    ),
+-                Filled =
+-                    InputFilled(
+-                        bg = Shark.`900`,
+-                        bgAlt = Shark.`950`,
+-                        asideBg = Shark.`900`,
+-                        stroke = Shark.`700`,
+-                        label = Shark.`50`,
+-                        text = Shark.`100`,
+-                        hint = Shark.`300`,
+-                        icon = Shark.`400`,
+-                        iconMain = Shark.`500`,
+-                        required = ErrorRed.`400`
+-                    ),
+-                Focused =
+-                    InputFocused(
+-                        bg = Shark.`950`,
+-                        asideBg = Shark.`900`,
+-                        stroke = Shark.`100`,
+-                        stroke2 = Shark.`700`,
+-                        label = Shark.`50`,
+-                        text = Shark.`100`,
+-                        hint = Shark.`300`,
+-                        icon = Shark.`400`,
+-                        iconMain = Shark.`500`,
+-                        defaultRequired = ErrorRed.`400`
+-                    ),
+-                Disabled =
+-                    InputDisabled(
+-                        bg = Shark.`900`,
+-                        stroke = Shark.`700`,
+-                        label = Shark.`50`,
+-                        text = Shark.`300`,
+-                        hint = Shark.`300`,
+-                        icon = Shark.`600`,
+-                        iconMain = Shark.`500`,
+-                        required = ErrorRed.`400`
+-                    ),
+-                ErrorDefault =
+-                    InputErrorDefault(
+-                        bg = Shark.`950`,
+-                        bgAlt = Shark.`900`,
+-                        label = Shark.`50`,
+-                        text = Shark.`400`,
+-                        textAside = Shark.`400`,
+-                        textMain = Shark.`100`,
+-                        hint = ErrorRed.`400`,
+-                        icon = ErrorRed.`400`,
+-                        iconMain = Shark.`500`,
+-                        stroke = ErrorRed.`400`,
+-                        strokeAlt = Shark.`700`,
+-                        dropdown = Shark.`600`
+-                    ),
+-                ErrorHover =
+-                    InputErrorHover(
+-                        bg = Shark.`950`,
+-                        bgAlt = Shark.`900`,
+-                        label = Shark.`50`,
+-                        text = Shark.`300`,
+-                        textAside = Shark.`400`,
+-                        textMain = Shark.`100`,
+-                        hint = ErrorRed.`400`,
+-                        icon = ErrorRed.`400`,
+-                        iconMain = Shark.`500`,
+-                        stroke = ErrorRed.`500`,
+-                        strokeAlt = Shark.`700`,
+-                        dropdown = Shark.`600`
+-                    ),
+-                ErrorFilled =
+-                    InputErrorFilled(
+-                        bg = Shark.`950`,
+-                        bgAlt = Shark.`900`,
+-                        label = Shark.`50`,
+-                        text = Shark.`100`,
+-                        textAside = Shark.`400`,
+-                        hint = ErrorRed.`400`,
+-                        icon = ErrorRed.`400`,
+-                        iconMain = Shark.`500`,
+-                        stroke = ErrorRed.`500`,
+-                        strokeAlt = Shark.`700`,
+-                        dropdown = Shark.`600`
+-                    ),
+-                ErrorFocused =
+-                    InputErrorFocused(
+-                        bg = Shark.`950`,
+-                        bgAlt = Shark.`900`,
+-                        label = Shark.`50`,
+-                        text = Shark.`100`,
+-                        textAside = Shark.`400`,
+-                        hint = ErrorRed.`400`,
+-                        icon = ErrorRed.`400`,
+-                        iconMain = Shark.`500`,
+-                        stroke = ErrorRed.`500`,
+-                        strokeAlt = Shark.`700`,
+-                        dropdown = Shark.`600`
+-                    )
+-            ),
+-        Accordion =
+-            Accordion(
+-                xBtnDefaultFg = Shark.`200`,
+-                xBtnHoverBg = Shark.`800`,
+-                xBtnOnHoverBg = Shark.`800`,
+-                xBtnHoverFg = Shark.`200`,
+-                xBtnFocusBg = Shark.`700`,
+-                xBtnFocusFg = Shark.`200`,
+-                xBtnFocusStroke = Shark.`500`,
+-                xBtnDisabledBg = Shark.`900`,
+-                xBtnDisabledFg = Shark.`600`,
+-                defaultBg = Base.Obsidian,
+-                defaultStroke = Shark.`900`,
+-                defaultIcon = Shark.`500`,
+-                focusStroke = Shark.`400`,
+-                expandedBg = Shark.`900`,
+-                expandedHoverBg = Shark.`800`,
+-                expandedStroke = Shark.`700`,
+-                dividers = Shark.`700`,
+-                expandedFocusStroke = Shark.`400`
+-            ),
+-        Switcher =
+-            Switcher(
+-                defaultText = Shark.`200`,
+-                defaultTagBg = Shark.`700`,
+-                defaultIcon = Shark.`500`,
+-                hoverBg = Shark.`700`,
+-                hoverTagBg = Shark.`600`,
+-                hoverIcon = Shark.`500`,
+-                hoverText = Shark.`200`,
+-                hoverTagText = Shark.`200`,
+-                selectedBg = Shark.`50`,
+-                selectedIcon = Shark.`600`,
+-                selectedText = Shark.`900`,
+-                selectedTagBg = Shark.`100`,
+-                selectedStroke = Shark.`200`,
+-                disabledText = Shark.`500`,
+-                disabledIcon = Shark.`600`,
+-                disabledTagBg = Shark.`800`,
+-                surfacePrimary = Shark.`900`
+-            ),
+-        Toggles =
+-            Toggles(
+-                tgDefaultBg = Shark.`600`,
+-                tgDefaultFg = Shark.`400`,
+-                tgActiveBg = Shark.`50`,
+-                tgActiveFg = Shark.`900`,
+-                tgDefaultHoverBg = Shark.`500`,
+-                tgDefaultHoverFg = Shark.`400`,
+-                tgActiveHoverBg = Shark.`300`,
+-                tgActiveHoverFg = Shark.`900`,
+-                tgDefaultDisabledBg = Shark.`700`,
+-                tgDefaultDisabledFg = Shark.`500`,
+-                tgActiveDisabledBg = Shark.`700`,
+-                tgActiveDisabledFg = Shark.`500`
+-            ),
+-        Tags =
+-            Tags(
+-                tcDefaultFg = Shark.`500`,
+-                tcHoverBg = Shark.`800`,
+-                tcHoverFg = Shark.`200`,
+-                tcCountBg = Shark.`700`,
+-                tcCountFg = Shark.`300`,
+-                statusIndicator = SuccessGreen.`500`,
+-                surfacePrimary = Base.Obsidian,
+-                surfaceStroke = Shark.`700`
+-            ),
+-        Dropdowns =
+-            Dropdowns(
+-                Default =
+-                    DropdownDefault(
+-                        bg = Shark.`900`,
+-                        label = Shark.`50`,
+-                        text = Shark.`400`,
+-                        hint = Shark.`300`,
+-                        required = ErrorRed.`400`,
+-                        icon = Shark.`400`,
+-                        dropdown = Shark.`500`,
+-                        active = SuccessGreen.`400`
+-                    ),
+-                Filled =
+-                    DropdownFilled(
+-                        bg = Shark.`900`,
+-                        label = Shark.`50`,
+-                        textMain = Shark.`100`,
+-                        textSupport = Shark.`300`,
+-                        hint = Shark.`300`,
+-                        required = ErrorRed.`400`,
+-                        icon = Shark.`400`,
+-                        dropdown = Shark.`500`,
+-                        active = SuccessGreen.`400`
+-                    ),
+-                Focused =
+-                    DropdownFocused(
+-                        bg = Shark.`950`,
+-                        stroke = Shark.`100`,
+-                        label = Shark.`50`,
+-                        textMain = Shark.`100`,
+-                        textSupport = Shark.`300`,
+-                        hint = Shark.`300`,
+-                        defaultRequired = ErrorRed.`400`,
+-                        icon = Shark.`400`,
+-                        dropdown = Shark.`500`,
+-                        active = SuccessGreen.`400`
+-                    ),
+-                Disabled =
+-                    DropdownDisabled(
+-                        bg = Shark.`900`,
+-                        stroke = Shark.`700`,
+-                        label = Shark.`50`,
+-                        textMain = Shark.`100`,
+-                        textSupport = Shark.`300`,
+-                        hint = Shark.`300`,
+-                        required = ErrorRed.`400`,
+-                        icon = Shark.`400`,
+-                        dropdown = Shark.`500`,
+-                        active = SuccessGreen.`400`
+-                    ),
+-                Parts =
+-                    DropdownParts(
+-                        scrollBar = Shark.`700`,
+-                        divider = Shark.`700`,
+-                        lhText = Shark.`300`,
+-                        lhBorder = Shark.`700`,
+-                        liTextPrimary = Shark.`100`,
+-                        liTextSecondary = Shark.`400`,
+-                        liTextTertiary = Shark.`500`,
+-                        liFgDisabled = Shark.`500`,
+-                        liIconDisabled = Shark.`500`,
+-                        liBgHover = Shark.`800`,
+-                        statusActive = SuccessGreen.`400`,
+-                        statusMain = SuccessGreen.`500`,
+-                        statusDisabled = Shark.`600`,
+-                        bgDisabled = Shark.`900`
+-                    )
+-            ),
+-        Tabs =
+-            Tabs(
+-                defaultText = Shark.`300`,
+-                defaultIcon = Shark.`500`,
+-                defaultTagBg = Shark.`900`,
+-                hoverText = Shark.`200`,
+-                hoverTagText = Shark.`200`,
+-                hoverIcon = Shark.`500`,
+-                hoverTagBg = Shark.`600`,
+-                hoverBorder = Shark.`500`,
+-                selectedText = Shark.`50`,
+-                selectedIcon = Shark.`200`,
+-                selectedTagBg = Shark.`500`,
+-                selectedBorder = Shark.`50`,
+-                disabledText = Shark.`500`,
+-                disabledIcon = Shark.`500`,
+-                disabledTagBg = Shark.`900`,
+-                disabledTagText = Shark.`500`
+-            ),
+-        Checkboxes =
+-            Checkboxes(
+-                boxOffBg = Shark.`900`,
+-                boxOffStroke = Shark.`400`,
+-                boxOffHoverBg = Shark.`500`,
+-                boxOffHoverStroke = Shark.`400`,
+-                boxOffDisabledBg = Shark.`700`,
+-                boxOffDisabledStroke = Shark.`600`,
+-                boxOnBg = Shark.`50`,
+-                boxOnFg = Shark.`900`,
+-                boxOnHoverBg = Shark.`300`,
+-                boxOnDisabledBg = Shark.`700`,
+-                boxOnDisabledStroke = Shark.`600`,
+-                boxOnDisabledFg = Shark.`400`
+-            ),
+-        Loading =
+-            Loading(
+-                loadingBgPrimary = Base.Obsidian,
+-                loadingBgSecondary = Shark.`800`,
+-                loadingFgPrimary = Base.Bone
+-            ),
+-        Modals =
+-            Modals(
+-                defaultBg = Base.Obsidian,
+-                defaultFg = Shark.`200`,
+-                hoverBg = Shark.`800`,
+-                hoverFg = Shark.`200`,
+-                focusedBg = Shark.`700`,
+-                focusedStroke = Shark.`500`,
+-                disabledBg = Shark.`900`,
+-                disabledFg = Shark.`600`,
+-                surfacePrimary = Base.Obsidian,
+-                surfaceStroke = Shark.`800`
+-            ),
+-        HintTooltips =
+-            HintTooltips(
+-                surfacePrimary = Shark.`800`,
+-                defaultBg = Shark.`800`,
+-                defaultFg = Shark.`200`,
+-                hoverBg = Shark.`700`,
+-                hoverFg = Shark.`200`,
+-                focusedBg = Shark.`700`,
+-                focusedStroke = Shark.`500`,
+-                disabledBg = Shark.`800`,
+-                disabledFg = Shark.`600`
+-            ),
+-        TwoFA =
+-            TwoFA(
+-                defaultBg = Shark.`800`,
+-                defaultStroke = Shark.`800`,
+-                defaultText = Shark.`800`,
+-                focusedBg = Shark.`600`,
+-                focusedStroke = Shark.`500`,
+-                focusedText = Shark.`200`,
+-                filledBg = Shark.`700`,
+-                filledStroke = Shark.`700`,
+-                filledText = Shark.`200`,
+-                disabledBg = Shark.`900`,
+-                disabledText = Shark.`700`,
+-                separatorDash = Shark.`600`
+-            ),
+-        Utility =
+-            Utility(
+-                Gray =
+-                    UtilityGray(
+-                        utilityGray700 = Shark.`200`,
+-                        utilityGray600 = Shark.`300`,
+-                        utilityGray500 = Shark.`400`,
+-                        utilityGray200 = Shark.`700`,
+-                        utilityGray50 = Shark.`900`,
+-                        utilityGray100 = Shark.`800`,
+-                        utilityGray400 = Shark.`500`,
+-                        utilityGray300 = Shark.`600`,
+-                        utilityGray900 = Shark.`50`,
+-                        utilityGray800 = Shark.`100`,
+-                        utilityGray950 = Shark.`25`
+-                    ),
+-                SuccessGreen =
+-                    UtilitySuccessGreen(
+-                        utilitySuccess600 = SuccessGreen.`400`,
+-                        utilitySuccess700 = SuccessGreen.`300`,
+-                        utilitySuccess500 = SuccessGreen.`500`,
+-                        utilitySuccess200 = SuccessGreen.`800`,
+-                        utilitySuccess800 = SuccessGreen.`200`,
+-                        utilitySuccess50 = SuccessGreen.`950`,
+-                        utilitySuccess100 = SuccessGreen.`900`,
+-                        utilitySuccess400 = SuccessGreen.`600`,
+-                        utilitySuccess300 = SuccessGreen.`700`
+-                    ),
+-                ErrorRed =
+-                    UtilityErrorRed(
+-                        utilityError600 = ErrorRed.`400`,
+-                        utilityError700 = ErrorRed.`300`,
+-                        utilityError500 = ErrorRed.`500`,
+-                        utilityError200 = ErrorRed.`800`,
+-                        utilityError800 = ErrorRed.`200`,
+-                        utilityError50 = ErrorRed.`950`,
+-                        utilityError100 = ErrorRed.`900`,
+-                        utilityError400 = ErrorRed.`600`,
+-                        utilityError300 = ErrorRed.`700`
+-                    ),
+-                WarningYellow =
+-                    UtilityWarningYellow(
+-                        utilityOrange600 = WarningYellow.`400`,
+-                        utilityOrange700 = WarningYellow.`300`,
+-                        utilityOrange500 = WarningYellow.`500`,
+-                        utilityOrange200 = WarningYellow.`800`,
+-                        utilityOrange800 = WarningYellow.`200`,
+-                        utilityOrange900 = WarningYellow.`100`,
+-                        utilityOrange50 = WarningYellow.`950`,
+-                        utilityOrange100 = WarningYellow.`900`,
+-                        utilityOrange400 = WarningYellow.`600`,
+-                        utilityOrange300 = WarningYellow.`700`
+-                    ),
+-                HyperBlue =
+-                    UtilityHyperBlue(
+-                        utilityBlueDark600 = HyperBlue.`400`,
+-                        utilityBlueDark700 = HyperBlue.`300`,
+-                        utilityBlueDark500 = HyperBlue.`500`,
+-                        utilityBlueDark200 = HyperBlue.`800`,
+-                        utilityBlueDark800 = HyperBlue.`200`,
+-                        utilityBlueDark50 = HyperBlue.`950`,
+-                        utilityBlueDark100 = HyperBlue.`900`,
+-                        utilityBlueDark400 = HyperBlue.`600`,
+-                        utilityBlueDark300 = HyperBlue.`700`
+-                    ),
+-                Indigo =
+-                    UtilityIndigo(
+-                        utilityIndigo600 = Indigo.`400`,
+-                        utilityIndigo700 = Indigo.`300`,
+-                        utilityIndigo500 = Indigo.`500`,
+-                        utilityIndigo200 = Indigo.`800`,
+-                        utilityIndigo800 = Indigo.`200`,
+-                        utilityIndigo50 = Indigo.`950`,
+-                        utilityIndigo100 = Indigo.`900`,
+-                        utilityIndigo400 = Indigo.`600`,
+-                        utilityIndigo300 = Indigo.`700`
+-                    ),
+-                Purple =
+-                    UtilityPurple(
+-                        utilityPurple600 = Purple.`400`,
+-                        utilityPurple700 = Purple.`300`,
+-                        utilityPurple500 = Purple.`500`,
+-                        utilityPurple200 = Purple.`800`,
+-                        utilityPurple800 = Purple.`200`,
+-                        utilityPurple50 = Purple.`950`,
+-                        utilityPurple100 = Purple.`900`,
+-                        utilityPurple400 = Purple.`600`,
+-                        utilityPurple300 = Purple.`700`,
+-                        utilityPurple900 = Purple.`50`
+-                    ),
+-                Espresso =
+-                    UtilityEspresso(
+-                        utilityEspresso700 = Espresso.`200`,
+-                        utilityEspresso600 = Espresso.`300`,
+-                        utilityEspresso500 = Espresso.`400`,
+-                        utilityEspresso200 = Espresso.`700`,
+-                        utilityEspresso50 = Espresso.`950`,
+-                        utilityEspresso100 = Espresso.`900`,
+-                        utilityEspresso400 = Espresso.`500`,
+-                        utilityEspresso300 = Espresso.`600`,
+-                        utilityEspresso800 = Espresso.`100`,
+-                        utilityEspresso900 = Espresso.`50`,
+-                        utilityEspresso950 = Espresso.`25`
+-                    )
+-            ),
+-        Accents =
+-            Accents(
+-                green = Accent.Green
+-            ),
+-        Transparent =
+-            Transparent(
+-                bgPrimary = TransparentColorPalette.Dark
+-            ),
+-        NoTheme = NoTheme(welcomeText = Shark.`50`)
+-    )
++import co.electriccoin.zcash.ui.design.theme.internal.DarkColorPalette
++
++val DarkZashiColorsInternal = materialZashiColors(DarkColorPalette, dark = true)
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/LightZashiColors.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/LightZashiColors.kt
+index f15fc4a02..cd86c6b46 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/LightZashiColors.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/LightZashiColors.kt
+@@ -3,573 +3,3 @@ package co.electriccoin.zcash.ui.design.theme.colors
+-val LightZashiColorsInternal =
+-    ZashiColorsInternal(
+-        Surfaces =
+-            Surfaces(
+-                bgPrimary = Base.Bone,
+-                bgAdjust = Base.Bone,
+-                bgSecondary = Base.Concrete,
+-                bgTertiary = Gray.`100`,
+-                bgQuaternary = Gray.`200`,
+-                strokePrimary = Gray.`200`,
+-                strokeSecondary = Gray.`100`,
+-                bgAlt = Base.Obsidian,
+-                bgHide = Base.Obsidian,
+-                brandBg = Base.Brand,
+-                brandFg = Base.Obsidian,
+-                divider = Gray.`50`
+-            ),
+-        Text =
+-            Text(
+-                textPrimary = Base.Obsidian,
+-                textSecondary = Gray.`800`,
+-                textTertiary = Gray.`700`,
+-                textQuaternary = Gray.`600`,
+-                textSupport = Gray.`500`,
+-                textDisabled = Gray.`300`,
+-                textError = ErrorRed.`500`,
+-                textLink = HyperBlue.`500`,
+-                textLight = Gray.`25`,
+-                textLightSupport = Gray.`200`
+-            ),
+-        Btns =
+-            Btns(
+-                Brand =
+-                    BtnBrand(
+-                        btnBrandBg = Brand.`400`,
+-                        btnBrandBgHover = Brand.`300`,
+-                        btnBrandFg = Base.Obsidian,
+-                        btnBrandFgHover = Base.Obsidian,
+-                        btnBrandBgDisabled = Gray.`100`,
+-                        btnBrandFgDisabled = Gray.`500`
+-                    ),
+-                Secondary =
+-                    BtnSecondary(
+-                        btnSecondaryBg = Base.Bone,
+-                        btnSecondaryBgHover = Gray.`50`,
+-                        btnSecondaryFg = Base.Obsidian,
+-                        btnSecondaryFgHover = Base.Obsidian,
+-                        btnSecondaryBorder = Gray.`200`,
+-                        btnSecondaryBorderHover = Gray.`200`,
+-                        btnSecondaryBgDisabled = Gray.`100`,
+-                        btnSecondaryFgDisabled = Gray.`500`
+-                    ),
+-                Tertiary =
+-                    BtnTertiary(
+-                        btnTertiaryBg = Gray.`100`,
+-                        btnTertiaryBgHover = Gray.`200`,
+-                        btnTertiaryFg = Gray.`900`,
+-                        btnTertiaryFgHover = Gray.`900`,
+-                        btnTertiaryBgDisabled = Gray.`100`,
+-                        btnTertiaryFgDisabled = Gray.`500`
+-                    ),
+-                Quaternary =
+-                    BtnQuaternary(
+-                        btnQuartBg = Gray.`200`,
+-                        btnQuartBgHover = Gray.`300`,
+-                        btnQuartFg = Gray.`900`,
+-                        btnQuartFgHover = Gray.`900`,
+-                        btnQuartBgDisabled = Gray.`200`,
+-                        btnQuartFgDisabled = Gray.`500`
+-                    ),
+-                Destructive1 =
+-                    BtnDestructive1(
+-                        btnDestroy1Bg = Base.Bone,
+-                        btnDestroy1BgHover = ErrorRed.`50`,
+-                        btnDestroy1Fg = ErrorRed.`600`,
+-                        btnDestroy1FgHover = ErrorRed.`700`,
+-                        btnDestroy1Border = ErrorRed.`300`,
+-                        btnDestroy1BorderHover = ErrorRed.`300`,
+-                        btnDestroy1BgDisabled = Gray.`100`,
+-                        btnDestroy1FgDisabled = Gray.`500`
+-                    ),
+-                Destructive2 =
+-                    BtnDestructive2(
+-                        btnDestroy2Bg = ErrorRed.`600`,
+-                        btnDestroy2BgHover = ErrorRed.`700`,
+-                        btnDestroy2Fg = Base.Bone,
+-                        btnDestroy2BgDisabled = Gray.`100`,
+-                        btnDestroy2FgDisabled = Gray.`500`
+-                    ),
+-                Primary =
+-                    BtnPrimary(
+-                        btnPrimaryBg = Base.Obsidian,
+-                        btnPrimaryBgHover = Gray.`900`,
+-                        btnPrimaryFg = Base.Bone,
+-                        btnPrimaryBgDisabled = Gray.`100`,
+-                        btnBoldFgDisabled = Gray.`500`
+-                    ),
+-                Ghost =
+-                    BtnGhost(
+-                        btnGhostBg = Base.Bone,
+-                        btnGhostBgHover = Gray.`50`,
+-                        btnGhostFg = Base.Obsidian,
+-                        btnGhostBgDisabled = Gray.`100`,
+-                        btnGhostFgDisabled = Gray.`500`
+-                    )
+-            ),
+-        Avatars =
+-            Avatars(
+-                avatarProfileBorder = Base.Bone,
+-                avatarBg = Gray.`600`,
+-                avatarBgSecondary = Gray.`500`,
+-                avatarStatus = SuccessGreen.`500`,
+-                avatarTextFg = Base.Bone,
+-                avatarBadgeBg = HyperBlue.`400`,
+-                avatarBadgeFg = Base.Bone
+-            ),
+-        Sliders =
+-            Sliders(
+-                sliderHandleBorder = Gray.`200`,
+-                sliderHandleBg = Base.Bone
+-            ),
+-        Inputs =
+-            Inputs(
+-                Default =
+-                    InputDefault(
+-                        bg = Gray.`50`,
+-                        bgAlt = Base.Bone,
+-                        label = Base.Obsidian,
+-                        text = Gray.`600`,
+-                        hint = Gray.`700`,
+-                        required = ErrorRed.`600`,
+-                        icon = Gray.`400`,
+-                        stroke = Gray.`200`
+-                    ),
+-                Hover =
+-                    InputHover(
+-                        bg = Gray.`100`,
+-                        bgAlt = Base.Bone,
+-                        asideBg = Gray.`50`,
+-                        stroke = Gray.`300`,
+-                        label = Base.Obsidian,
+-                        text = Gray.`700`,
+-                        hint = Gray.`700`,
+-                        icon = Gray.`400`,
+-                        required = ErrorRed.`600`
+-                    ),
+-                Filled =
+-                    InputFilled(
+-                        bg = Gray.`50`,
+-                        bgAlt = Base.Bone,
+-                        asideBg = Gray.`50`,
+-                        stroke = Gray.`300`,
+-                        label = Base.Obsidian,
+-                        text = Gray.`900`,
+-                        hint = Gray.`700`,
+-                        icon = Gray.`400`,
+-                        iconMain = Gray.`500`,
+-                        required = ErrorRed.`600`
+-                    ),
+-                Focused =
+-                    InputFocused(
+-                        bg = Base.Bone,
+-                        asideBg = Gray.`50`,
+-                        stroke = Gray.`900`,
+-                        stroke2 = Gray.`300`,
+-                        label = Base.Obsidian,
+-                        text = Gray.`900`,
+-                        hint = Gray.`700`,
+-                        icon = Gray.`400`,
+-                        iconMain = Gray.`500`,
+-                        defaultRequired = ErrorRed.`600`
+-                    ),
+-                Disabled =
+-                    InputDisabled(
+-                        bg = Gray.`50`,
+-                        stroke = Gray.`300`,
+-                        label = Base.Obsidian,
+-                        text = Gray.`500`,
+-                        hint = Gray.`700`,
+-                        icon = Gray.`400`,
+-                        iconMain = Gray.`500`,
+-                        required = ErrorRed.`600`
+-                    ),
+-                ErrorDefault =
+-                    InputErrorDefault(
+-                        bg = Base.Bone,
+-                        bgAlt = Gray.`50`,
+-                        label = Base.Obsidian,
+-                        text = Gray.`600`,
+-                        textAside = Gray.`600`,
+-                        textMain = Gray.`900`,
+-                        hint = ErrorRed.`600`,
+-                        icon = ErrorRed.`500`,
+-                        iconMain = Gray.`500`,
+-                        stroke = ErrorRed.`300`,
+-                        strokeAlt = Gray.`300`,
+-                        dropdown = Gray.`400`
+-                    ),
+-                ErrorHover =
+-                    InputErrorHover(
+-                        bg = Base.Bone,
+-                        bgAlt = Gray.`50`,
+-                        label = Base.Obsidian,
+-                        text = Gray.`700`,
+-                        textAside = Gray.`600`,
+-                        textMain = Gray.`900`,
+-                        hint = ErrorRed.`600`,
+-                        icon = ErrorRed.`500`,
+-                        iconMain = Gray.`500`,
+-                        stroke = ErrorRed.`400`,
+-                        strokeAlt = Gray.`300`,
+-                        dropdown = Gray.`400`
+-                    ),
+-                ErrorFilled =
+-                    InputErrorFilled(
+-                        bg = Base.Bone,
+-                        bgAlt = Gray.`50`,
+-                        label = Base.Obsidian,
+-                        text = Gray.`900`,
+-                        textAside = Gray.`600`,
+-                        hint = ErrorRed.`600`,
+-                        icon = ErrorRed.`500`,
+-                        iconMain = Gray.`500`,
+-                        stroke = ErrorRed.`400`,
+-                        strokeAlt = Gray.`300`,
+-                        dropdown = Gray.`400`,
+-                    ),
+-                ErrorFocused =
+-                    InputErrorFocused(
+-                        bg = Base.Bone,
+-                        bgAlt = Gray.`50`,
+-                        label = Base.Obsidian,
+-                        text = Gray.`900`,
+-                        textAside = Gray.`600`,
+-                        hint = ErrorRed.`600`,
+-                        icon = ErrorRed.`500`,
+-                        iconMain = Gray.`500`,
+-                        stroke = ErrorRed.`500`,
+-                        strokeAlt = Gray.`300`,
+-                        dropdown = Gray.`400`
+-                    )
+-            ),
+-        Accordion =
+-            Accordion(
+-                xBtnDefaultFg = Gray.`600`,
+-                xBtnHoverBg = Gray.`50`,
+-                xBtnOnHoverBg = Gray.`100`,
+-                xBtnHoverFg = Gray.`600`,
+-                xBtnFocusBg = Gray.`100`,
+-                xBtnFocusFg = Gray.`600`,
+-                xBtnFocusStroke = Gray.`600`,
+-                xBtnDisabledBg = Gray.`50`,
+-                xBtnDisabledFg = Gray.`300`,
+-                defaultBg = Base.Bone,
+-                defaultStroke = Gray.`200`,
+-                defaultIcon = Gray.`600`,
+-                focusStroke = Gray.`900`,
+-                expandedBg = Gray.`50`,
+-                expandedHoverBg = Gray.`100`,
+-                expandedStroke = Gray.`200`,
+-                dividers = Gray.`200`,
+-                expandedFocusStroke = Gray.`900`
+-            ),
+-        Switcher =
+-            Switcher(
+-                defaultText = Gray.`800`,
+-                defaultTagBg = Gray.`200`,
+-                defaultIcon = Gray.`600`,
+-                hoverBg = Gray.`200`,
+-                hoverTagBg = Gray.`300`,
+-                hoverIcon = Gray.`600`,
+-                hoverText = Gray.`900`,
+-                hoverTagText = Gray.`900`,
+-                selectedBg = Base.Bone,
+-                selectedIcon = Gray.`600`,
+-                selectedText = Gray.`900`,
+-                selectedTagBg = Gray.`50`,
+-                selectedStroke = Gray.`200`,
+-                disabledText = Gray.`400`,
+-                disabledIcon = Gray.`400`,
+-                disabledTagBg = Gray.`200`,
+-                surfacePrimary = Gray.`100`
+-            ),
+-        Toggles =
+-            Toggles(
+-                tgDefaultBg = Gray.`100`,
+-                tgDefaultFg = Base.Bone,
+-                tgActiveBg = Base.Obsidian,
+-                tgActiveFg = Base.Bone,
+-                tgDefaultHoverBg = Gray.`200`,
+-                tgDefaultHoverFg = Base.Bone,
+-                tgActiveHoverBg = Gray.`800`,
+-                tgActiveHoverFg = Base.Bone,
+-                tgDefaultDisabledBg = Gray.`200`,
+-                tgDefaultDisabledFg = Gray.`100`,
+-                tgActiveDisabledBg = Gray.`200`,
+-                tgActiveDisabledFg = Gray.`100`
+-            ),
+-        Tags =
+-            Tags(
+-                tcDefaultFg = Gray.`400`,
+-                tcHoverBg = Gray.`50`,
+-                tcHoverFg = Gray.`600`,
+-                tcCountBg = Gray.`50`,
+-                tcCountFg = Gray.`700`,
+-                statusIndicator = SuccessGreen.`600`,
+-                surfacePrimary = Base.Bone,
+-                surfaceStroke = Gray.`300`
+-            ),
+-        Dropdowns =
+-            Dropdowns(
+-                Default =
+-                    DropdownDefault(
+-                        bg = Gray.`50`,
+-                        label = Base.Obsidian,
+-                        text = Gray.`600`,
+-                        hint = Gray.`700`,
+-                        required = ErrorRed.`600`,
+-                        icon = Gray.`400`,
+-                        dropdown = Gray.`500`,
+-                        active = SuccessGreen.`500`
+-                    ),
+-                Filled =
+-                    DropdownFilled(
+-                        bg = Gray.`50`,
+-                        label = Base.Obsidian,
+-                        textMain = Gray.`900`,
+-                        textSupport = Gray.`700`,
+-                        hint = Gray.`700`,
+-                        required = ErrorRed.`600`,
+-                        icon = Gray.`400`,
+-                        dropdown = Gray.`500`,
+-                        active = SuccessGreen.`500`
+-                    ),
+-                Focused =
+-                    DropdownFocused(
+-                        bg = Base.Bone,
+-                        stroke = Gray.`900`,
+-                        label = Base.Obsidian,
+-                        textMain = Gray.`900`,
+-                        textSupport = Gray.`700`,
+-                        hint = Gray.`700`,
+-                        defaultRequired = ErrorRed.`600`,
+-                        icon = Gray.`400`,
+-                        dropdown = Gray.`500`,
+-                        active = SuccessGreen.`500`
+-                    ),
+-                Disabled =
+-                    DropdownDisabled(
+-                        bg = Gray.`50`,
+-                        stroke = Gray.`300`,
+-                        label = Base.Obsidian,
+-                        textMain = Gray.`900`,
+-                        textSupport = Gray.`700`,
+-                        hint = Gray.`700`,
+-                        required = ErrorRed.`600`,
+-                        icon = Gray.`400`,
+-                        dropdown = Gray.`500`,
+-                        active = SuccessGreen.`500`
+-                    ),
+-                Parts =
+-                    DropdownParts(
+-                        scrollBar = Gray.`200`,
+-                        divider = Gray.`200`,
+-                        lhText = Gray.`700`,
+-                        lhBorder = Gray.`200`,
+-                        liTextPrimary = Gray.`900`,
+-                        liTextSecondary = Gray.`600`,
+-                        liTextTertiary = Gray.`500`,
+-                        liFgDisabled = Gray.`500`,
+-                        liIconDisabled = Gray.`500`,
+-                        liBgHover = Gray.`50`,
+-                        statusActive = SuccessGreen.`500`,
+-                        statusMain = SuccessGreen.`600`,
+-                        statusDisabled = Gray.`300`,
+-                        bgDisabled = Base.Concrete
+-                    )
+-            ),
+-        Tabs =
+-            Tabs(
+-                defaultText = Gray.`600`,
+-                defaultIcon = Gray.`500`,
+-                defaultTagBg = Gray.`100`,
+-                hoverText = Gray.`900`,
+-                hoverTagText = Gray.`600`,
+-                hoverIcon = Gray.`500`,
+-                hoverTagBg = Gray.`100`,
+-                hoverBorder = Gray.`200`,
+-                selectedText = Gray.`900`,
+-                selectedIcon = Gray.`500`,
+-                selectedTagBg = Gray.`100`,
+-                selectedBorder = Gray.`900`,
+-                disabledText = Gray.`400`,
+-                disabledIcon = Gray.`500`,
+-                disabledTagBg = Gray.`50`,
+-                disabledTagText = Gray.`400`
+-            ),
+-        Checkboxes =
+-            Checkboxes(
+-                boxOffBg = Base.Bone,
+-                boxOffStroke = Gray.`300`,
+-                boxOffHoverBg = Base.Bone,
+-                boxOffHoverStroke = Gray.`400`,
+-                boxOffDisabledBg = Gray.`100`,
+-                boxOffDisabledStroke = Gray.`300`,
+-                boxOnBg = Base.Obsidian,
+-                boxOnFg = Base.Bone,
+-                boxOnHoverBg = Gray.`800`,
+-                boxOnDisabledBg = Gray.`100`,
+-                boxOnDisabledStroke = Gray.`300`,
+-                boxOnDisabledFg = Gray.`300`
+-            ),
+-        Loading =
+-            Loading(
+-                loadingBgPrimary = Base.Bone,
+-                loadingBgSecondary = Gray.`100`,
+-                loadingFgPrimary = Gray.`900`
+-            ),
+-        Modals =
+-            Modals(
+-                defaultBg = Base.Bone,
+-                defaultFg = Gray.`600`,
+-                hoverBg = Gray.`100`,
+-                hoverFg = Gray.`600`,
+-                focusedBg = Gray.`100`,
+-                focusedStroke = Gray.`600`,
+-                disabledBg = Base.Concrete,
+-                disabledFg = Gray.`400`,
+-                surfacePrimary = Base.Bone,
+-                surfaceStroke = Gray.`200`
+-            ),
+-        HintTooltips =
+-            HintTooltips(
+-                surfacePrimary = Gray.`950`,
+-                defaultBg = Gray.`950`,
+-                defaultFg = Gray.`200`,
+-                hoverBg = Gray.`900`,
+-                hoverFg = Gray.`200`,
+-                focusedBg = Gray.`900`,
+-                focusedStroke = Gray.`500`,
+-                disabledBg = Gray.`900`,
+-                disabledFg = Gray.`400`
+-            ),
+-        TwoFA =
+-            TwoFA(
+-                defaultBg = Gray.`50`,
+-                defaultStroke = Gray.`50`,
+-                defaultText = Gray.`50`,
+-                focusedBg = Base.Bone,
+-                focusedStroke = Gray.`300`,
+-                focusedText = Gray.`600`,
+-                filledBg = Gray.`100`,
+-                filledStroke = Gray.`100`,
+-                filledText = Gray.`700`,
+-                disabledBg = Gray.`100`,
+-                disabledText = Gray.`300`,
+-                separatorDash = Gray.`200`
+-            ),
+-        Utility =
+-            Utility(
+-                Gray =
+-                    UtilityGray(
+-                        utilityGray700 = Gray.`700`,
+-                        utilityGray600 = Gray.`600`,
+-                        utilityGray500 = Gray.`500`,
+-                        utilityGray200 = Gray.`200`,
+-                        utilityGray50 = Gray.`50`,
+-                        utilityGray100 = Gray.`100`,
+-                        utilityGray400 = Gray.`400`,
+-                        utilityGray300 = Gray.`300`,
+-                        utilityGray900 = Gray.`900`,
+-                        utilityGray800 = Gray.`800`,
+-                        utilityGray950 = Gray.`950`
+-                    ),
+-                SuccessGreen =
+-                    UtilitySuccessGreen(
+-                        utilitySuccess600 = SuccessGreen.`600`,
+-                        utilitySuccess700 = SuccessGreen.`700`,
+-                        utilitySuccess500 = SuccessGreen.`500`,
+-                        utilitySuccess200 = SuccessGreen.`200`,
+-                        utilitySuccess800 = SuccessGreen.`800`,
+-                        utilitySuccess50 = SuccessGreen.`50`,
+-                        utilitySuccess100 = SuccessGreen.`100`,
+-                        utilitySuccess400 = SuccessGreen.`400`,
+-                        utilitySuccess300 = SuccessGreen.`300`
+-                    ),
+-                ErrorRed =
+-                    UtilityErrorRed(
+-                        utilityError600 = ErrorRed.`600`,
+-                        utilityError700 = ErrorRed.`700`,
+-                        utilityError500 = ErrorRed.`500`,
+-                        utilityError200 = ErrorRed.`200`,
+-                        utilityError800 = ErrorRed.`800`,
+-                        utilityError50 = ErrorRed.`50`,
+-                        utilityError100 = ErrorRed.`100`,
+-                        utilityError400 = ErrorRed.`400`,
+-                        utilityError300 = ErrorRed.`300`
+-                    ),
+-                WarningYellow =
+-                    UtilityWarningYellow(
+-                        utilityOrange600 = WarningYellow.`600`,
+-                        utilityOrange700 = WarningYellow.`700`,
+-                        utilityOrange500 = WarningYellow.`500`,
+-                        utilityOrange200 = WarningYellow.`200`,
+-                        utilityOrange800 = WarningYellow.`800`,
+-                        utilityOrange900 = WarningYellow.`900`,
+-                        utilityOrange50 = WarningYellow.`50`,
+-                        utilityOrange100 = WarningYellow.`100`,
+-                        utilityOrange400 = WarningYellow.`400`,
+-                        utilityOrange300 = WarningYellow.`300`
+-                    ),
+-                HyperBlue =
+-                    UtilityHyperBlue(
+-                        utilityBlueDark600 = HyperBlue.`600`,
+-                        utilityBlueDark700 = HyperBlue.`700`,
+-                        utilityBlueDark500 = HyperBlue.`500`,
+-                        utilityBlueDark200 = HyperBlue.`200`,
+-                        utilityBlueDark800 = HyperBlue.`800`,
+-                        utilityBlueDark50 = HyperBlue.`50`,
+-                        utilityBlueDark100 = HyperBlue.`100`,
+-                        utilityBlueDark400 = HyperBlue.`400`,
+-                        utilityBlueDark300 = HyperBlue.`300`
+-                    ),
+-                Indigo =
+-                    UtilityIndigo(
+-                        utilityIndigo600 = Indigo.`600`,
+-                        utilityIndigo700 = Indigo.`700`,
+-                        utilityIndigo500 = Indigo.`500`,
+-                        utilityIndigo200 = Indigo.`200`,
+-                        utilityIndigo800 = Indigo.`800`,
+-                        utilityIndigo50 = Indigo.`50`,
+-                        utilityIndigo100 = Indigo.`100`,
+-                        utilityIndigo400 = Indigo.`400`,
+-                        utilityIndigo300 = Indigo.`300`
+-                    ),
+-                Purple =
+-                    UtilityPurple(
+-                        utilityPurple600 = Purple.`600`,
+-                        utilityPurple700 = Purple.`700`,
+-                        utilityPurple500 = Purple.`500`,
+-                        utilityPurple200 = Purple.`200`,
+-                        utilityPurple800 = Purple.`800`,
+-                        utilityPurple50 = Purple.`50`,
+-                        utilityPurple100 = Purple.`100`,
+-                        utilityPurple400 = Purple.`400`,
+-                        utilityPurple300 = Purple.`300`,
+-                        utilityPurple900 = Purple.`900`
+-                    ),
+-                Espresso =
+-                    UtilityEspresso(
+-                        utilityEspresso700 = Espresso.`700`,
+-                        utilityEspresso600 = Espresso.`600`,
+-                        utilityEspresso500 = Espresso.`500`,
+-                        utilityEspresso200 = Espresso.`200`,
+-                        utilityEspresso50 = Espresso.`50`,
+-                        utilityEspresso100 = Espresso.`100`,
+-                        utilityEspresso400 = Espresso.`400`,
+-                        utilityEspresso300 = Espresso.`300`,
+-                        utilityEspresso900 = Espresso.`900`,
+-                        utilityEspresso800 = Espresso.`800`,
+-                        utilityEspresso950 = Espresso.`950`
+-                    )
+-            ),
+-        Accents =
+-            Accents(
+-                green = Accent.Green
+-            ),
+-        Transparent =
+-            Transparent(
+-                bgPrimary = TransparentColorPalette.Light
+-            ),
+-        NoTheme = NoTheme(welcomeText = Shark.`50`)
+-    )
++import co.electriccoin.zcash.ui.design.theme.internal.LightColorPalette
++
++val LightZashiColorsInternal = materialZashiColors(LightColorPalette, dark = false)
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/MaterialZashiColors.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/MaterialZashiColors.kt
+new file mode 100644
+index 000000000..b8095cf26
+--- /dev/null
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/MaterialZashiColors.kt
+@@ -0,0 +1,479 @@
++@file:Suppress("MagicNumber", "LongMethod")
++
++package co.electriccoin.zcash.ui.design.theme.colors
++
++import androidx.compose.material3.ColorScheme
++
++/** Material role adapter; status hues remain independent of the wallpaper accent. */
++internal fun materialZashiColors(s: ColorScheme, dark: Boolean): ZashiColorsInternal {
++    val disabledContainer = s.onSurface.copy(alpha = 0.12f)
++    val disabledContent = s.onSurface.copy(alpha = 0.38f)
++    return ZashiColorsInternal(
++        Surfaces = Surfaces(
++            bgPrimary = s.background,
++            bgAdjust = s.surface,
++            bgSecondary = s.surfaceContainerLow,
++            bgTertiary = s.surfaceContainer,
++            bgQuaternary = s.surfaceContainerHigh,
++            strokePrimary = s.outline,
++            strokeSecondary = s.outlineVariant,
++            bgAlt = s.inverseSurface,
++            bgHide = s.scrim,
++            brandBg = s.primary,
++            brandFg = s.onPrimary,
++            divider = s.outlineVariant,
++        ),
++        Text = Text(
++            textPrimary = s.onSurface,
++            textSecondary = s.onSurfaceVariant,
++            textTertiary = s.onSurfaceVariant,
++            textQuaternary = s.onSurfaceVariant,
++            textSupport = s.onSurfaceVariant,
++            textDisabled = disabledContent,
++            textError = s.error,
++            textLink = s.primary,
++            textLight = Shark.`50`,
++            textLightSupport = Shark.`50`,
++        ),
++        Btns = Btns(
++            Brand = BtnBrand(
++                btnBrandBg = s.primary,
++                btnBrandBgHover = s.primary,
++                btnBrandFg = s.onPrimary,
++                btnBrandFgHover = s.onPrimary,
++                btnBrandBgDisabled = disabledContainer,
++                btnBrandFgDisabled = disabledContent,
++            ),
++            Secondary = BtnSecondary(
++                btnSecondaryBg = s.secondaryContainer,
++                btnSecondaryBgHover = s.secondaryContainer,
++                btnSecondaryFg = s.onSecondaryContainer,
++                btnSecondaryFgHover = s.onSecondaryContainer,
++                btnSecondaryBorder = s.outline,
++                btnSecondaryBorderHover = s.outline,
++                btnSecondaryBgDisabled = disabledContainer,
++                btnSecondaryFgDisabled = disabledContent,
++            ),
++            Tertiary = BtnTertiary(
++                btnTertiaryBg = s.secondaryContainer,
++                btnTertiaryBgHover = s.secondaryContainer,
++                btnTertiaryFg = s.onSecondaryContainer,
++                btnTertiaryFgHover = s.onSecondaryContainer,
++                btnTertiaryBgDisabled = disabledContainer,
++                btnTertiaryFgDisabled = disabledContent,
++            ),
++            Quaternary = BtnQuaternary(
++                btnQuartBg = s.secondaryContainer,
++                btnQuartBgHover = s.secondaryContainer,
++                btnQuartFg = s.onSecondaryContainer,
++                btnQuartFgHover = s.onSecondaryContainer,
++                btnQuartBgDisabled = disabledContainer,
++                btnQuartFgDisabled = disabledContent,
++            ),
++            Destructive1 = BtnDestructive1(
++                btnDestroy1Bg = s.errorContainer,
++                btnDestroy1BgHover = s.errorContainer,
++                btnDestroy1Fg = s.onErrorContainer,
++                btnDestroy1FgHover = s.onErrorContainer,
++                btnDestroy1Border = s.error,
++                btnDestroy1BorderHover = s.error,
++                btnDestroy1BgDisabled = disabledContainer,
++                btnDestroy1FgDisabled = disabledContent,
++            ),
++            Destructive2 = BtnDestructive2(
++                btnDestroy2Bg = s.error,
++                btnDestroy2BgHover = s.error,
++                btnDestroy2Fg = s.onError,
++                btnDestroy2BgDisabled = disabledContainer,
++                btnDestroy2FgDisabled = disabledContent,
++            ),
++            Primary = BtnPrimary(
++                btnPrimaryBg = s.primary,
++                btnPrimaryBgHover = s.primary,
++                btnPrimaryFg = s.onPrimary,
++                btnPrimaryBgDisabled = disabledContainer,
++                btnBoldFgDisabled = disabledContent,
++            ),
++            Ghost = BtnGhost(
++                btnGhostBg = s.surfaceContainerLow,
++                btnGhostBgHover = s.surfaceContainerLow,
++                btnGhostFg = s.primary,
++                btnGhostBgDisabled = disabledContainer,
++                btnGhostFgDisabled = disabledContent,
++            ),
++        ),
++        Avatars = Avatars(
++            avatarProfileBorder = s.surface,
++            avatarBg = s.secondaryContainer,
++            avatarBgSecondary = s.secondaryContainer,
++            avatarStatus = if (dark) SuccessGreen.`400` else SuccessGreen.`600`,
++            avatarTextFg = s.onSecondaryContainer,
++            avatarBadgeBg = s.primary,
++            avatarBadgeFg = s.onPrimary,
++        ),
++        Sliders = Sliders(
++            sliderHandleBorder = s.outline,
++            sliderHandleBg = s.primary,
++        ),
++        Inputs = Inputs(
++            Default = InputDefault(
++                bg = s.surfaceContainerHigh,
++                bgAlt = s.surfaceContainerHigh,
++                label = s.onSurfaceVariant,
++                text = s.onSurface,
++                hint = s.onSurfaceVariant,
++                required = s.error,
++                icon = s.onSurfaceVariant,
++                stroke = s.outline,
++            ),
++            Hover = InputHover(
++                bg = s.surfaceContainerHigh,
++                bgAlt = s.surfaceContainerHigh,
++                asideBg = s.surfaceContainerHigh,
++                stroke = s.outline,
++                label = s.onSurfaceVariant,
++                text = s.onSurface,
++                hint = s.onSurfaceVariant,
++                icon = s.onSurfaceVariant,
++                required = s.error,
++            ),
++            Filled = InputFilled(
++                bg = s.surfaceContainerHigh,
++                bgAlt = s.surfaceContainerHigh,
++                asideBg = s.surfaceContainerHigh,
++                stroke = s.outline,
++                label = s.onSurfaceVariant,
++                text = s.onSurface,
++                hint = s.onSurfaceVariant,
++                icon = s.onSurfaceVariant,
++                iconMain = s.onSurfaceVariant,
++                required = s.error,
++            ),
++            Focused = InputFocused(
++                bg = s.surfaceContainerHigh,
++                asideBg = s.surfaceContainerHigh,
++                stroke = s.primary,
++                stroke2 = s.primary,
++                label = s.onSurfaceVariant,
++                text = s.onSurface,
++                hint = s.onSurfaceVariant,
++                icon = s.onSurfaceVariant,
++                iconMain = s.onSurfaceVariant,
++                defaultRequired = s.error,
++            ),
++            Disabled = InputDisabled(
++                bg = s.surfaceContainerHigh,
++                stroke = s.outline,
++                label = disabledContent,
++                text = disabledContent,
++                hint = disabledContent,
++                icon = disabledContent,
++                iconMain = disabledContent,
++                required = disabledContent,
++            ),
++            ErrorDefault = InputErrorDefault(
++                bg = s.surfaceContainerHigh,
++                bgAlt = s.surfaceContainerHigh,
++                label = s.error,
++                text = s.onSurface,
++                textAside = s.onSurfaceVariant,
++                textMain = s.onSurface,
++                hint = s.onSurfaceVariant,
++                icon = s.error,
++                iconMain = s.error,
++                stroke = s.error,
++                strokeAlt = s.error,
++                dropdown = s.error,
++            ),
++            ErrorHover = InputErrorHover(
++                bg = s.surfaceContainerHigh,
++                bgAlt = s.surfaceContainerHigh,
++                label = s.error,
++                text = s.onSurface,
++                textAside = s.onSurfaceVariant,
++                textMain = s.onSurface,
++                hint = s.onSurfaceVariant,
++                icon = s.error,
++                iconMain = s.error,
++                stroke = s.error,
++                strokeAlt = s.error,
++                dropdown = s.error,
++            ),
++            ErrorFilled = InputErrorFilled(
++                bg = s.surfaceContainerHigh,
++                bgAlt = s.surfaceContainerHigh,
++                label = s.error,
++                text = s.onSurface,
++                textAside = s.onSurfaceVariant,
++                hint = s.onSurfaceVariant,
++                icon = s.error,
++                iconMain = s.error,
++                stroke = s.error,
++                strokeAlt = s.error,
++                dropdown = s.error,
++            ),
++            ErrorFocused = InputErrorFocused(
++                bg = s.surfaceContainerHigh,
++                bgAlt = s.surfaceContainerHigh,
++                label = s.error,
++                text = s.onSurface,
++                textAside = s.onSurfaceVariant,
++                hint = s.onSurfaceVariant,
++                icon = s.error,
++                iconMain = s.error,
++                stroke = s.error,
++                strokeAlt = s.error,
++                dropdown = s.error,
++            ),
++        ),
++        Accordion = Accordion(
++            xBtnDefaultFg = s.onSurfaceVariant,
++            xBtnHoverBg = s.surfaceContainerHigh,
++            xBtnOnHoverBg = s.surfaceContainerHigh,
++            xBtnHoverFg = s.onSurfaceVariant,
++            xBtnFocusBg = s.surfaceContainerHigh,
++            xBtnFocusFg = s.onSurfaceVariant,
++            xBtnFocusStroke = s.primary,
++            xBtnDisabledBg = disabledContainer,
++            xBtnDisabledFg = disabledContent,
++            defaultBg = s.surfaceContainerLow,
++            defaultStroke = s.outlineVariant,
++            defaultIcon = s.onSurfaceVariant,
++            focusStroke = s.primary,
++            expandedBg = s.surfaceContainerHigh,
++            expandedHoverBg = s.surfaceContainerHigh,
++            expandedStroke = s.outlineVariant,
++            dividers = s.outlineVariant,
++            expandedFocusStroke = s.primary,
++        ),
++        Switcher = Switcher(
++            defaultText = s.onSurface,
++            defaultTagBg = s.surfaceContainerLow,
++            defaultIcon = s.onSurfaceVariant,
++            hoverBg = s.surfaceContainerHigh,
++            hoverTagBg = s.surfaceContainerHigh,
++            hoverIcon = s.onSurfaceVariant,
++            hoverText = s.onSurface,
++            hoverTagText = s.onSurface,
++            selectedBg = s.secondaryContainer,
++            selectedIcon = s.onSecondaryContainer,
++            selectedText = s.onSecondaryContainer,
++            selectedTagBg = s.secondaryContainer,
++            selectedStroke = s.primary,
++            disabledText = disabledContent,
++            disabledIcon = disabledContent,
++            disabledTagBg = disabledContainer,
++            surfacePrimary = s.surfaceContainerLow,
++        ),
++        Toggles = Toggles(
++            tgDefaultBg = s.surfaceContainerHighest,
++            tgDefaultFg = s.onSurfaceVariant,
++            tgActiveBg = s.primary,
++            tgActiveFg = s.onPrimary,
++            tgDefaultHoverBg = s.surfaceContainerHighest,
++            tgDefaultHoverFg = s.onSurfaceVariant,
++            tgActiveHoverBg = s.primary,
++            tgActiveHoverFg = s.onPrimary,
++            tgDefaultDisabledBg = disabledContainer,
++            tgDefaultDisabledFg = disabledContent,
++            tgActiveDisabledBg = disabledContainer,
++            tgActiveDisabledFg = disabledContent,
++        ),
++        Tags = Tags(
++            tcDefaultFg = s.onSurfaceVariant,
++            tcHoverBg = s.surfaceContainerHigh,
++            tcHoverFg = s.onSurfaceVariant,
++            tcCountBg = s.surfaceContainerLow,
++            tcCountFg = s.onSurfaceVariant,
++            statusIndicator = if (dark) SuccessGreen.`400` else SuccessGreen.`600`,
++            surfacePrimary = s.surface,
++            surfaceStroke = s.outlineVariant,
++        ),
++        Dropdowns = Dropdowns(
++            Default = DropdownDefault(
++                bg = s.surfaceContainerHigh,
++                label = s.onSurfaceVariant,
++                text = s.onSurface,
++                hint = s.onSurfaceVariant,
++                required = s.error,
++                icon = s.onSurfaceVariant,
++                dropdown = s.onSurfaceVariant,
++                active = s.onSurfaceVariant,
++            ),
++            Filled = DropdownFilled(
++                bg = s.surfaceContainerHigh,
++                label = s.onSurfaceVariant,
++                textMain = s.onSurface,
++                textSupport = s.onSurfaceVariant,
++                hint = s.onSurfaceVariant,
++                required = s.error,
++                icon = s.onSurfaceVariant,
++                dropdown = s.onSurfaceVariant,
++                active = s.onSurfaceVariant,
++            ),
++            Focused = DropdownFocused(
++                bg = s.surfaceContainerHigh,
++                stroke = s.primary,
++                label = s.onSurfaceVariant,
++                textMain = s.onSurface,
++                textSupport = s.onSurfaceVariant,
++                hint = s.onSurfaceVariant,
++                defaultRequired = s.error,
++                icon = s.onSurfaceVariant,
++                dropdown = s.onSurfaceVariant,
++                active = s.onSurfaceVariant,
++            ),
++            Disabled = DropdownDisabled(
++                bg = s.surfaceContainerHigh,
++                stroke = s.outline,
++                label = disabledContent,
++                textMain = disabledContent,
++                textSupport = disabledContent,
++                hint = disabledContent,
++                required = disabledContent,
++                icon = disabledContent,
++                dropdown = disabledContent,
++                active = disabledContent,
++            ),
++            Parts = DropdownParts(
++                scrollBar = s.outline,
++                divider = s.outline,
++                lhText = s.onSurfaceVariant,
++                lhBorder = s.outline,
++                liTextPrimary = s.onSurface,
++                liTextSecondary = s.onSurfaceVariant,
++                liTextTertiary = s.onSurfaceVariant,
++                liFgDisabled = disabledContent,
++                liIconDisabled = disabledContent,
++                liBgHover = s.surfaceContainerHigh,
++                statusActive = s.primary,
++                statusMain = s.onSurfaceVariant,
++                statusDisabled = disabledContent,
++                bgDisabled = s.surfaceContainerHigh,
++            ),
++        ),
++        Tabs = Tabs(
++            defaultText = s.onSurface,
++            defaultIcon = s.onSurfaceVariant,
++            defaultTagBg = s.surfaceContainerLow,
++            hoverText = s.onSurface,
++            hoverTagText = s.onSurface,
++            hoverIcon = s.onSurfaceVariant,
++            hoverTagBg = s.surfaceContainerHigh,
++            hoverBorder = s.outlineVariant,
++            selectedText = s.primary,
++            selectedIcon = s.primary,
++            selectedTagBg = s.secondaryContainer,
++            selectedBorder = s.primary,
++            disabledText = disabledContent,
++            disabledIcon = disabledContent,
++            disabledTagBg = disabledContainer,
++            disabledTagText = disabledContent,
++        ),
++        Checkboxes = Checkboxes(
++            boxOffBg = s.surface,
++            boxOffStroke = s.outline,
++            boxOffHoverBg = s.surface,
++            boxOffHoverStroke = s.outline,
++            boxOffDisabledBg = disabledContainer,
++            boxOffDisabledStroke = disabledContent,
++            boxOnBg = s.primary,
++            boxOnFg = s.onPrimary,
++            boxOnHoverBg = s.primary,
++            boxOnDisabledBg = disabledContainer,
++            boxOnDisabledStroke = disabledContent,
++            boxOnDisabledFg = disabledContent,
++        ),
++        Loading = Loading(
++            loadingBgPrimary = s.surfaceContainerLow,
++            loadingBgSecondary = s.surfaceContainerLow,
++            loadingFgPrimary = s.onSurface,
++        ),
++        Modals = Modals(
++            defaultBg = s.surfaceContainerLow,
++            defaultFg = s.onSurfaceVariant,
++            hoverBg = s.surfaceContainerHigh,
++            hoverFg = s.onSurfaceVariant,
++            focusedBg = s.surfaceContainerHigh,
++            focusedStroke = s.primary,
++            disabledBg = disabledContainer,
++            disabledFg = disabledContent,
++            surfacePrimary = s.surfaceContainerLow,
++            surfaceStroke = s.outlineVariant,
++        ),
++        HintTooltips = HintTooltips(
++            surfacePrimary = s.inverseSurface,
++            defaultBg = s.inverseSurface,
++            defaultFg = s.inverseOnSurface,
++            hoverBg = s.inverseSurface,
++            hoverFg = s.inverseOnSurface,
++            focusedBg = s.inverseSurface,
++            focusedStroke = s.inverseOnSurface,
++            disabledBg = s.inverseSurface,
++            disabledFg = s.inverseOnSurface,
++        ),
++        TwoFA = TwoFA(
++            defaultBg = s.surfaceContainerLow,
++            defaultStroke = s.outlineVariant,
++            defaultText = s.onSurface,
++            focusedBg = s.surfaceContainerHigh,
++            focusedStroke = s.primary,
++            focusedText = s.onSurface,
++            filledBg = s.surfaceContainerLow,
++            filledStroke = s.outlineVariant,
++            filledText = s.onSurface,
++            disabledBg = disabledContainer,
++            disabledText = disabledContent,
++            separatorDash = s.onSurfaceVariant,
++        ),
++        Utility = Utility(
++            Gray = UtilityGray(
++                utilityGray700 = s.onSurfaceVariant,
++                utilityGray600 = s.onSurfaceVariant,
++                utilityGray500 = s.onSurfaceVariant,
++                utilityGray200 = s.surfaceContainerHigh,
++                utilityGray50 = s.surfaceContainerLow,
++                utilityGray100 = s.surfaceContainerHigh,
++                utilityGray400 = s.outline,
++                utilityGray300 = s.outline,
++                utilityGray900 = s.onSurface,
++                utilityGray800 = s.onSurface,
++                utilityGray950 = s.onSurface,
++            ),
++            SuccessGreen = UtilitySuccessGreen(                utilitySuccess600 = if (dark) SuccessGreen.`400` else SuccessGreen.`600`,                utilitySuccess700 = if (dark) SuccessGreen.`300` else SuccessGreen.`700`,                utilitySuccess500 = SuccessGreen.`500`,                utilitySuccess200 = if (dark) SuccessGreen.`800` else SuccessGreen.`200`,                utilitySuccess800 = if (dark) SuccessGreen.`200` else SuccessGreen.`800`,                utilitySuccess50 = if (dark) SuccessGreen.`950` else SuccessGreen.`50`,                utilitySuccess100 = if (dark) SuccessGreen.`900` else SuccessGreen.`100`,                utilitySuccess400 = if (dark) SuccessGreen.`600` else SuccessGreen.`400`,                utilitySuccess300 = if (dark) SuccessGreen.`700` else SuccessGreen.`300`,
++            ),
++            ErrorRed = UtilityErrorRed(                utilityError600 = if (dark) ErrorRed.`400` else ErrorRed.`600`,                utilityError700 = if (dark) ErrorRed.`300` else ErrorRed.`700`,                utilityError500 = ErrorRed.`500`,                utilityError200 = if (dark) ErrorRed.`800` else ErrorRed.`200`,                utilityError800 = if (dark) ErrorRed.`200` else ErrorRed.`800`,                utilityError50 = if (dark) ErrorRed.`950` else ErrorRed.`50`,                utilityError100 = if (dark) ErrorRed.`900` else ErrorRed.`100`,                utilityError400 = if (dark) ErrorRed.`600` else ErrorRed.`400`,                utilityError300 = if (dark) ErrorRed.`700` else ErrorRed.`300`,
++            ),
++            WarningYellow = UtilityWarningYellow(                utilityOrange600 = if (dark) WarningYellow.`400` else WarningYellow.`600`,                utilityOrange700 = if (dark) WarningYellow.`300` else WarningYellow.`700`,                utilityOrange500 = WarningYellow.`500`,                utilityOrange200 = if (dark) WarningYellow.`800` else WarningYellow.`200`,                utilityOrange800 = if (dark) WarningYellow.`200` else WarningYellow.`800`,                utilityOrange900 = if (dark) WarningYellow.`100` else WarningYellow.`900`,                utilityOrange50 = if (dark) WarningYellow.`950` else WarningYellow.`50`,                utilityOrange100 = if (dark) WarningYellow.`900` else WarningYellow.`100`,                utilityOrange400 = if (dark) WarningYellow.`600` else WarningYellow.`400`,                utilityOrange300 = if (dark) WarningYellow.`700` else WarningYellow.`300`,
++            ),
++            HyperBlue = UtilityHyperBlue(                utilityBlueDark600 = if (dark) HyperBlue.`400` else HyperBlue.`600`,                utilityBlueDark700 = if (dark) HyperBlue.`300` else HyperBlue.`700`,                utilityBlueDark500 = HyperBlue.`500`,                utilityBlueDark200 = if (dark) HyperBlue.`800` else HyperBlue.`200`,                utilityBlueDark800 = if (dark) HyperBlue.`200` else HyperBlue.`800`,                utilityBlueDark50 = if (dark) HyperBlue.`950` else HyperBlue.`50`,                utilityBlueDark100 = if (dark) HyperBlue.`900` else HyperBlue.`100`,                utilityBlueDark400 = if (dark) HyperBlue.`600` else HyperBlue.`400`,                utilityBlueDark300 = if (dark) HyperBlue.`700` else HyperBlue.`300`,
++            ),
++            Indigo = UtilityIndigo(                utilityIndigo600 = if (dark) Indigo.`400` else Indigo.`600`,                utilityIndigo700 = if (dark) Indigo.`300` else Indigo.`700`,                utilityIndigo500 = Indigo.`500`,                utilityIndigo200 = if (dark) Indigo.`800` else Indigo.`200`,                utilityIndigo800 = if (dark) Indigo.`200` else Indigo.`800`,                utilityIndigo50 = if (dark) Indigo.`950` else Indigo.`50`,                utilityIndigo100 = if (dark) Indigo.`900` else Indigo.`100`,                utilityIndigo400 = if (dark) Indigo.`600` else Indigo.`400`,                utilityIndigo300 = if (dark) Indigo.`700` else Indigo.`300`,
++            ),
++            Purple = UtilityPurple(                utilityPurple600 = if (dark) Purple.`400` else Purple.`600`,                utilityPurple700 = if (dark) Purple.`300` else Purple.`700`,                utilityPurple500 = Purple.`500`,                utilityPurple200 = if (dark) Purple.`800` else Purple.`200`,                utilityPurple800 = if (dark) Purple.`200` else Purple.`800`,                utilityPurple50 = if (dark) Purple.`950` else Purple.`50`,                utilityPurple100 = if (dark) Purple.`900` else Purple.`100`,                utilityPurple400 = if (dark) Purple.`600` else Purple.`400`,                utilityPurple300 = if (dark) Purple.`700` else Purple.`300`,                utilityPurple900 = if (dark) Purple.`50` else Purple.`900`,
++            ),
++            Espresso = UtilityEspresso(
++                utilityEspresso700 = s.onSurfaceVariant,
++                utilityEspresso600 = s.onSurfaceVariant,
++                utilityEspresso500 = s.onSurfaceVariant,
++                utilityEspresso200 = s.surfaceContainerHigh,
++                utilityEspresso50 = s.surfaceContainerLow,
++                utilityEspresso100 = s.surfaceContainerHigh,
++                utilityEspresso400 = s.outline,
++                utilityEspresso300 = s.outline,
++                utilityEspresso900 = s.onSurface,
++                utilityEspresso950 = s.onSurface,
++                utilityEspresso800 = s.onSurface,
++            ),
++        ),
++        Accents = Accents(
++            green = if (dark) SuccessGreen.`400` else SuccessGreen.`600`,
++        ),
++        Transparent = Transparent(
++            bgPrimary = s.scrim.copy(alpha = 0.5f),
++        ),
++        NoTheme = NoTheme(
++            welcomeText = Shark.`50`,
++        ),
++    )
++}
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/OledZashiColors.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/OledZashiColors.kt
+index 669b2d470..66999f125 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/OledZashiColors.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/OledZashiColors.kt
+@@ -3 +3 @@ package co.electriccoin.zcash.ui.design.theme.colors
+-private val dark = DarkZashiColorsInternal
++import co.electriccoin.zcash.ui.design.theme.internal.OledColorPalette
+@@ -5,210 +5 @@ private val dark = DarkZashiColorsInternal
+-internal val OledZashiColorsInternal =
+-    dark.copy(
+-        Surfaces =
+-            dark.Surfaces.copy(
+-                bgPrimary = Base.Black,
+-                bgAdjust = Shark.`950`,
+-                bgSecondary = SharkShades.`01dp`,
+-                bgTertiary = Shark.`900`,
+-                bgQuaternary = Shark.`800`,
+-                strokePrimary = Shark.`800`,
+-                strokeSecondary = Shark.`800`,
+-                bgHide = Base.Black,
+-                divider = Shark.`950`
+-            ),
+-        Btns =
+-            dark.Btns.copy(
+-                Brand =
+-                    dark.Btns.Brand.copy(
+-                        btnBrandBgDisabled = Shark.`950`
+-                    ),
+-                Secondary =
+-                    dark.Btns.Secondary.copy(
+-                        btnSecondaryBg = Base.Black,
+-                        btnSecondaryBorder = Shark.`800`,
+-                        btnSecondaryBgDisabled = Shark.`950`
+-                    ),
+-                Tertiary =
+-                    dark.Btns.Tertiary.copy(
+-                        btnTertiaryBg = Shark.`950`,
+-                        btnTertiaryBgHover = Shark.`900`,
+-                        btnTertiaryBgDisabled = Shark.`950`
+-                    ),
+-                Quaternary =
+-                    dark.Btns.Quaternary.copy(
+-                        btnQuartBg = Shark.`800`,
+-                        btnQuartBgDisabled = Shark.`950`
+-                    ),
+-                Destructive1 =
+-                    dark.Btns.Destructive1.copy(
+-                        btnDestroy1BgDisabled = Shark.`950`
+-                    ),
+-                Destructive2 =
+-                    dark.Btns.Destructive2.copy(
+-                        btnDestroy2BgDisabled = Shark.`950`
+-                    ),
+-                Primary =
+-                    dark.Btns.Primary.copy(
+-                        btnPrimaryBgDisabled = Shark.`950`
+-                    ),
+-                Ghost =
+-                    dark.Btns.Ghost.copy(
+-                        btnGhostBg = Base.Black,
+-                        btnGhostBgDisabled = Shark.`950`
+-                    )
+-            ),
+-        Avatars =
+-            dark.Avatars.copy(
+-                avatarProfileBorder = Base.Black
+-            ),
+-        Sliders =
+-            dark.Sliders.copy(
+-                sliderHandleBg = Base.Black
+-            ),
+-        Inputs =
+-            dark.Inputs.copy(
+-                Default =
+-                    dark.Inputs.Default.copy(
+-                        bg = Shark.`950`,
+-                        stroke = Shark.`900`
+-                    ),
+-                Hover =
+-                    dark.Inputs.Hover.copy(
+-                        bg = Shark.`900`,
+-                        asideBg = Shark.`950`,
+-                        stroke = Shark.`800`
+-                    ),
+-                Filled =
+-                    dark.Inputs.Filled.copy(
+-                        bg = Shark.`950`,
+-                        asideBg = Shark.`950`,
+-                        stroke = Shark.`800`
+-                    ),
+-                Focused =
+-                    dark.Inputs.Focused.copy(
+-                        asideBg = Shark.`950`,
+-                        stroke2 = Shark.`800`
+-                    ),
+-                Disabled =
+-                    dark.Inputs.Disabled.copy(
+-                        bg = Shark.`950`,
+-                        stroke = Shark.`800`
+-                    ),
+-                ErrorDefault =
+-                    dark.Inputs.ErrorDefault.copy(
+-                        bgAlt = Shark.`950`,
+-                        strokeAlt = Shark.`800`
+-                    ),
+-                ErrorHover =
+-                    dark.Inputs.ErrorHover.copy(
+-                        bgAlt = Shark.`950`,
+-                        strokeAlt = Shark.`800`
+-                    ),
+-                ErrorFilled =
+-                    dark.Inputs.ErrorFilled.copy(
+-                        bgAlt = Shark.`950`,
+-                        strokeAlt = Shark.`800`
+-                    ),
+-                ErrorFocused =
+-                    dark.Inputs.ErrorFocused.copy(
+-                        bgAlt = Shark.`950`,
+-                        strokeAlt = Shark.`800`
+-                    )
+-            ),
+-        Accordion =
+-            dark.Accordion.copy(
+-                xBtnHoverBg = Shark.`900`,
+-                xBtnOnHoverBg = Shark.`900`,
+-                xBtnFocusBg = Shark.`800`,
+-                xBtnDisabledBg = Shark.`950`,
+-                defaultBg = Base.Black,
+-                defaultStroke = Shark.`950`,
+-                expandedBg = Shark.`950`,
+-                expandedHoverBg = Shark.`900`,
+-                expandedStroke = Shark.`800`,
+-                dividers = Shark.`800`
+-            ),
+-        Switcher =
+-            dark.Switcher.copy(
+-                defaultTagBg = Shark.`800`,
+-                hoverBg = Shark.`800`,
+-                disabledTagBg = Shark.`900`,
+-                surfacePrimary = Shark.`950`
+-            ),
+-        Tags =
+-            dark.Tags.copy(
+-                tcHoverBg = Shark.`900`,
+-                tcCountBg = Shark.`800`,
+-                surfacePrimary = Base.Black,
+-                surfaceStroke = Shark.`800`
+-            ),
+-        Dropdowns =
+-            dark.Dropdowns.copy(
+-                Default =
+-                    dark.Dropdowns.Default.copy(
+-                        bg = Shark.`950`
+-                    ),
+-                Filled =
+-                    dark.Dropdowns.Filled.copy(
+-                        bg = Shark.`950`
+-                    ),
+-                Disabled =
+-                    dark.Dropdowns.Disabled.copy(
+-                        bg = Shark.`950`,
+-                        stroke = Shark.`800`
+-                    ),
+-                Parts =
+-                    dark.Dropdowns.Parts.copy(
+-                        scrollBar = Shark.`800`,
+-                        divider = Shark.`800`,
+-                        lhBorder = Shark.`800`,
+-                        liBgHover = Shark.`900`,
+-                        bgDisabled = Shark.`950`
+-                    )
+-            ),
+-        Tabs =
+-            dark.Tabs.copy(
+-                defaultTagBg = Shark.`950`,
+-                disabledTagBg = Shark.`950`
+-            ),
+-        Checkboxes =
+-            dark.Checkboxes.copy(
+-                boxOffBg = Shark.`950`,
+-                boxOffDisabledBg = Shark.`800`,
+-                boxOnDisabledBg = Shark.`800`
+-            ),
+-        Loading =
+-            dark.Loading.copy(
+-                loadingBgPrimary = Base.Black,
+-                loadingBgSecondary = Shark.`900`
+-            ),
+-        Modals =
+-            dark.Modals.copy(
+-                defaultBg = Base.Black,
+-                hoverBg = Shark.`900`,
+-                focusedBg = Shark.`800`,
+-                disabledBg = Shark.`950`,
+-                surfacePrimary = Base.Black,
+-                surfaceStroke = Shark.`900`
+-            ),
+-        HintTooltips =
+-            dark.HintTooltips.copy(
+-                surfacePrimary = Shark.`900`,
+-                defaultBg = Shark.`900`,
+-                hoverBg = Shark.`800`,
+-                focusedBg = Shark.`800`,
+-                disabledBg = Shark.`900`
+-            ),
+-        TwoFA =
+-            dark.TwoFA.copy(
+-                defaultBg = Shark.`900`,
+-                defaultStroke = Shark.`900`,
+-                filledBg = Shark.`800`,
+-                filledStroke = Shark.`800`,
+-                disabledBg = Shark.`950`
+-            ),
+-        Transparent =
+-            dark.Transparent.copy(
+-                bgPrimary = Base.Black
+-            )
+-    )
++internal val OledZashiColorsInternal = materialZashiColors(OledColorPalette, dark = true)
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/ButtonColors.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/ButtonColors.kt
+index 3cabb19a5..d8bddcd04 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/ButtonColors.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/ButtonColors.kt
+@@ -32,83 +31,0 @@ internal data class DefaultButtonColors(
+-
+-// LIGHT THEME BUTTONS:
+-
+-internal data class LightPrimaryButtonColors(
+-    override val containerColor: Color = Color(0xFF000000),
+-    override val disabledContainerColor: Color = Color(0xFFB7B7B7),
+-    override val shadowColor: Color = Color(0xFFFFFFFF),
+-    override val disabledShadowColor: Color = Color(0xFFFFFFFF),
+-    override val textColor: Color = Color(0xFFFFFFFF),
+-    override val disabledTextColor: Color = Color(0xFFDDDDDD),
+-    override val strokeColor: Color = Color(0xFF000000),
+-    override val disabledStrokeColor: Color = Color(0xFF000000),
+-    override val shadowStrokeColor: Color = Color(0xFF000000),
+-    override val shadowDisabledStrokeColor: Color = Color(0xFF000000),
+-) : ButtonColors
+-
+-internal data class LightSecondaryButtonColors(
+-    override val containerColor: Color = Color(0xFFFFFFFF),
+-    override val disabledContainerColor: Color = Color(0xFFFFFFFF),
+-    override val shadowColor: Color = Color(0xFF000000),
+-    override val disabledShadowColor: Color = Color(0xFFFFFFFF),
+-    override val textColor: Color = Color(0xFF000000),
+-    override val disabledTextColor: Color = Color(0xFFDDDDDD),
+-    override val strokeColor: Color = Color(0xFF000000),
+-    override val disabledStrokeColor: Color = Color(0xFF000000),
+-    override val shadowStrokeColor: Color = Color(0xFFE6E7E8),
+-    override val shadowDisabledStrokeColor: Color = Color(0xFF000000),
+-) : ButtonColors
+-
+-// Currently the same as Light-Primary version
+-internal data class LightTertiaryButtonColors(
+-    override val containerColor: Color = Color(0xFF000000),
+-    override val disabledContainerColor: Color = Color(0xFFB7B7B7),
+-    override val shadowColor: Color = Color(0xFFFFFFFF),
+-    override val disabledShadowColor: Color = Color(0xFFFFFFFF),
+-    override val textColor: Color = Color(0xFFFFFFFF),
+-    override val disabledTextColor: Color = Color(0xFFDDDDDD),
+-    override val strokeColor: Color = Color(0xFF000000),
+-    override val disabledStrokeColor: Color = Color(0xFF000000),
+-    override val shadowStrokeColor: Color = Color(0xFF000000),
+-    override val shadowDisabledStrokeColor: Color = Color(0xFF000000),
+-) : ButtonColors
+-
+-// DARK THEME BUTTONS:
+-
+-internal data class DarkPrimaryButtonColors(
+-    override val containerColor: Color = Color(0xFF181716),
+-    override val disabledContainerColor: Color = Color(0xFF4D4D4D),
+-    override val shadowColor: Color = Color(0xFF181716),
+-    override val disabledShadowColor: Color = Color(0xFF181716),
+-    override val textColor: Color = Color(0xFFFFFFFF),
+-    override val disabledTextColor: Color = Color(0xFFFFFFFF),
+-    override val strokeColor: Color = Color(0xFFFFFFFF),
+-    override val disabledStrokeColor: Color = Color(0xFFFFFFFF),
+-    override val shadowStrokeColor: Color = Color(0xFFFFFFFF),
+-    override val shadowDisabledStrokeColor: Color = Color(0xFFFFFFFF),
+-) : ButtonColors
+-
+-internal data class DarkSecondaryButtonColors(
+-    override val containerColor: Color = Color(0xFF181716),
+-    override val disabledContainerColor: Color = Color(0xFFFFFFFF),
+-    override val shadowColor: Color = Color(0xFF4D4D4D),
+-    override val disabledShadowColor: Color = Color(0xFFFFFFFF),
+-    override val textColor: Color = Color(0xFFFFFFFF),
+-    override val disabledTextColor: Color = Color(0xFFB7B7B7),
+-    override val strokeColor: Color = Color(0xFFFFFFFF),
+-    override val disabledStrokeColor: Color = Color(0xFF000000),
+-    override val shadowStrokeColor: Color = Color(0xFFFFFFFF),
+-    override val shadowDisabledStrokeColor: Color = Color(0xFF000000),
+-) : ButtonColors
+-
+-internal data class DarkTertiaryButtonColors(
+-    override val containerColor: Color = Color(0xFFFFFFFF),
+-    override val disabledContainerColor: Color = Color(0xFFB7B7B7),
+-    override val shadowColor: Color = Color(0xFF000000),
+-    override val disabledShadowColor: Color = Color(0xFFFFFFFF),
+-    override val textColor: Color = Color(0xFF000000),
+-    override val disabledTextColor: Color = Color(0xFFDDDDDD),
+-    override val strokeColor: Color = Color(0xFF000000),
+-    override val disabledStrokeColor: Color = Color(0xFF000000),
+-    override val shadowStrokeColor: Color = Color(0xFFE6E7E8),
+-    override val shadowDisabledStrokeColor: Color = Color(0xFF000000),
+-) : ButtonColors
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/Color.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/Color.kt
+index 7ef5bfce5..433a313eb 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/Color.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/Color.kt
+@@ -4,0 +5 @@ package co.electriccoin.zcash.ui.design.theme.internal
++import androidx.compose.material3.ColorScheme
+@@ -11,134 +12,25 @@ import co.electriccoin.zcash.ui.design.theme.ExtendedColors
+-internal object Dark {
+-    val primaryColor = Color(0xFF231F20)
+-    val secondaryColor = Color(0xFFFFFFFF)
+-
+-    val backgroundColor = primaryColor
+-    val gridColor = Color(0xFF272727)
+-
+-    val textPrimary = secondaryColor
+-    val textSecondary = primaryColor
+-    val textDisabled = Color(0xFF4D4D4D)
+-    val textFieldFrame = Color(0xFFFFFFFF)
+-    val textFieldWarning = Color(0xFFFE5858)
+-    val textFieldHint = Color(0xFFB7B7B7)
+-    val textDescription = Color(0xFFC1C1C1)
+-    val textDescriptionDark = Color(0xFFFFFFFF)
+-    val reference = Color(0xFFFFFFFF)
+-
+-    val welcomeAnimationColor = Color(0xFF181716)
+-    val complementaryColor = Color(0xFFF4B728)
+-
+-    val primaryDividerColor = Color(0xFF4D4D4D)
+-    val secondaryDividerColor = Color(0xFFFFFFFF)
+-    val tertiaryDividerColor = Color(0xFF4D4D4D)
+-
+-    val panelBackgroundColor = Color(0xFF262324)
+-    val panelBackgroundColorActive = Color(0xFF000000)
+-
+-    val layoutStroke = Color(0xFFFFFFFF)
+-    val layoutStrokeSecondary = Color(0xFFDDDDDD)
+-    val cameraDisabledBackgroundColor = Color(0xFF000000)
+-    val cameraDisabledFrameColor = Color(0xFF5E5C5C)
+-
+-    val primaryButtonColors = DarkPrimaryButtonColors()
+-    val secondaryButtonColors = DarkSecondaryButtonColors()
+-    val tertiaryButtonColors = DarkTertiaryButtonColors()
+-
+-    val circularProgressBarSmall = Color(0xFFFFFFFF)
+-    val circularProgressBarSmallDark = Color(0xFFFFFFFF)
+-    val circularProgressBarScreen = Color(0xFFFFFFFF)
+-    val linearProgressBarTrack = Color(0xFFDDDDDD)
+-    val linearProgressBarBackground = complementaryColor
+-
+-    val overlay = Color(0x22000000)
+-    val overlayProgressBar = Color(0xFFFFFFFF)
+-
+-    val historyBackgroundColor = Color(0xFF262324)
+-    val historyRedColor = textFieldWarning
+-    val historySyncingColor = Color(0xFF181716)
+-    val historyMessageBubbleColor = Color(0xFF000000)
+-    val historyMessageBubbleStrokeColor = Color(0xFF000000)
+-
+-    val topAppBarColors = DarkTopAppBarColors()
+-    val transparentTopAppBarColors = TransparentTopAppBarColors()
+-}
+-
+-internal object Light {
+-    val primaryColor = Color(0xFFFFFFFF)
+-    val secondaryColor = Color(0xFF000000)
+-
+-    val backgroundColor = primaryColor
+-    val gridColor = Color(0xFFFBFBFB)
+-
+-    val textPrimary = secondaryColor
+-    val textSecondary = primaryColor
+-    val textDisabled = Color(0xFFB7B7B7)
+-    val textFieldFrame = Color(0xFF000000)
+-    val textFieldWarning = Color(0xFFF40202)
+-    val textFieldHint = Color(0xFFB7B7B7)
+-    val textDescription = Color(0xFF777777)
+-    val textDescriptionDark = Color(0xFF4D4D4D)
+-    val reference = Color(0xFF000000)
+-
+-    val welcomeAnimationColor = Color(0xFF231F20)
+-    val complementaryColor = Color(0xFFF4B728)
+-
+-    val primaryDividerColor = Color(0xFFDDDDDD)
+-    val secondaryDividerColor = Color(0xFF000000)
+-    val tertiaryDividerColor = Color(0xFF000000)
+-
+-    val panelBackgroundColor = Color(0xFFEBEBEB)
+-    val panelBackgroundColorActive = Color(0xFFFFFFFF)
+-
+-    val layoutStroke = Color(0xFF000000)
+-    val layoutStrokeSecondary = Color(0xFFDDDDDD)
+-    val cameraDisabledBackgroundColor = Color(0xFF5E5C5C)
+-    val cameraDisabledFrameColor = Color(0xFFFFFFFF)
+-
+-    val primaryButtonColors = LightPrimaryButtonColors()
+-    val secondaryButtonColors = LightSecondaryButtonColors()
+-    val tertiaryButtonColors = LightTertiaryButtonColors()
+-
+-    val circularProgressBarSmall = Color(0xFF8B8A8A)
+-    val circularProgressBarSmallDark = textPrimary
+-    val circularProgressBarScreen = Color(0xFF000000)
+-    val linearProgressBarTrack = Color(0xFFDDDDDD)
+-    val linearProgressBarBackground = complementaryColor
+-
+-    val overlay = Color(0x22000000)
+-    val overlayProgressBar = Color(0xFFFFFFFF)
+-
+-    val historyBackgroundColor = Color(0xFFF6F6F6)
+-    val historyRedColor = textFieldWarning
+-    val historySyncingColor = Color(0xFFEBEBEB)
+-    val historyMessageBubbleColor = Color(0xFFDDDDDD)
+-    val historyMessageBubbleStrokeColor = Color(0xFF000000)
+-
+-    val topAppBarColors = LightTopAppBarColors()
+-    val transparentTopAppBarColors = TransparentTopAppBarColors()
+-}
+-
+-internal val DarkColorPalette =
+-    darkColorScheme(
+-        // Our colors intentionally use a different naming than the ones from MaterialTheme
+-        primary = Dark.textPrimary,
+-        secondary = Dark.secondaryColor,
+-        onPrimary = Dark.textPrimary,
+-        onSecondary = Dark.textSecondary,
+-        surface = Dark.backgroundColor,
+-        onSurface = Dark.textPrimary,
+-        background = Dark.backgroundColor,
+-        onBackground = Dark.textPrimary,
+-    )
+-
+-internal val LightColorPalette =
+-    lightColorScheme(
+-        // Our colors intentionally use a different naming than the ones from MaterialTheme
+-        primary = Light.textPrimary,
+-        secondary = Light.secondaryColor,
+-        onPrimary = Light.textPrimary,
+-        onSecondary = Light.textSecondary,
+-        surface = Light.backgroundColor,
+-        onSurface = Light.textPrimary,
+-        background = Light.backgroundColor,
+-        onBackground = Light.textPrimary,
++// Static fallbacks also serve previews and callers outside composition.
++internal val LightColorPalette = lightColorScheme()
++internal val DarkColorPalette = darkColorScheme()
++internal val OledColorPalette = DarkColorPalette.copy(background = Color.Black, surface = Color.Black)
++
++internal val LightExtendedColorPalette = materialExtendedColors(LightColorPalette, dark = false)
++internal val DarkExtendedColorPalette = materialExtendedColors(DarkColorPalette, dark = true)
++internal val OledExtendedColorPalette = materialExtendedColors(OledColorPalette, dark = true)
++
++@Suppress("UNUSED_PARAMETER")
++internal fun materialExtendedColors(s: ColorScheme, dark: Boolean): ExtendedColors {
++    val disabledContent = s.onSurface.copy(alpha = 0.38f)
++    val disabledContainer = s.onSurface.copy(alpha = 0.12f)
++    val appBar = DefaultTopAppBarColors(s.background, s.onSurface, s.onSurface, s.onSurfaceVariant, s.onSurface)
++    fun button(container: Color, content: Color, stroke: Color) = DefaultButtonColors(
++        containerColor = container,
++        disabledContainerColor = disabledContainer,
++        shadowColor = Color.Transparent,
++        disabledShadowColor = Color.Transparent,
++        textColor = content,
++        disabledTextColor = disabledContent,
++        strokeColor = stroke,
++        disabledStrokeColor = disabledContainer,
++        shadowStrokeColor = Color.Transparent,
++        shadowDisabledStrokeColor = Color.Transparent,
+@@ -146,44 +38,42 @@ internal val LightColorPalette =
+-
+-internal val DarkExtendedColorPalette =
+-    ExtendedColors(
+-        primaryColor = Dark.primaryColor,
+-        secondaryColor = Dark.secondaryColor,
+-        backgroundColor = Dark.backgroundColor,
+-        gridColor = Dark.gridColor,
+-        circularProgressBarSmall = Dark.circularProgressBarSmall,
+-        circularProgressBarSmallDark = Dark.circularProgressBarSmallDark,
+-        circularProgressBarScreen = Dark.circularProgressBarScreen,
+-        linearProgressBarTrack = Dark.linearProgressBarTrack,
+-        linearProgressBarBackground = Dark.linearProgressBarBackground,
+-        textPrimary = Dark.textPrimary,
+-        textSecondary = Dark.textSecondary,
+-        textDisabled = Dark.textDisabled,
+-        textFieldFrame = Dark.textFieldFrame,
+-        textFieldWarning = Dark.textFieldWarning,
+-        textFieldHint = Dark.textFieldHint,
+-        textDescription = Dark.textDescription,
+-        textDescriptionDark = Dark.textDescriptionDark,
+-        layoutStroke = Dark.layoutStroke,
+-        layoutStrokeSecondary = Dark.layoutStrokeSecondary,
+-        overlay = Dark.overlay,
+-        overlayProgressBar = Dark.overlayProgressBar,
+-        reference = Dark.reference,
+-        welcomeAnimationColor = Dark.welcomeAnimationColor,
+-        complementaryColor = Dark.complementaryColor,
+-        primaryDividerColor = Dark.primaryDividerColor,
+-        secondaryDividerColor = Dark.secondaryDividerColor,
+-        tertiaryDividerColor = Dark.tertiaryDividerColor,
+-        panelBackgroundColor = Dark.panelBackgroundColor,
+-        panelBackgroundColorActive = Dark.panelBackgroundColorActive,
+-        cameraDisabledBackgroundColor = Dark.cameraDisabledBackgroundColor,
+-        cameraDisabledFrameColor = Dark.cameraDisabledFrameColor,
+-        historyBackgroundColor = Dark.historyBackgroundColor,
+-        historyRedColor = Dark.historyRedColor,
+-        historySyncingColor = Dark.historySyncingColor,
+-        historyMessageBubbleColor = Dark.historyMessageBubbleColor,
+-        historyMessageBubbleStrokeColor = Dark.historyMessageBubbleStrokeColor,
+-        topAppBarColors = Dark.topAppBarColors,
+-        transparentTopAppBarColors = Dark.transparentTopAppBarColors,
+-        primaryButtonColors = Dark.primaryButtonColors,
+-        secondaryButtonColors = Dark.secondaryButtonColors,
+-        tertiaryButtonColors = Dark.tertiaryButtonColors,
++    return ExtendedColors(
++        primaryColor = s.background,
++        secondaryColor = s.onBackground,
++        backgroundColor = s.background,
++        gridColor = s.surfaceContainerLow,
++        circularProgressBarSmall = s.primary,
++        circularProgressBarSmallDark = s.primary,
++        circularProgressBarScreen = s.primary,
++        linearProgressBarTrack = s.surfaceContainerHighest,
++        linearProgressBarBackground = s.primary,
++        textPrimary = s.onSurface,
++        textSecondary = s.inverseOnSurface,
++        textDescription = s.onSurfaceVariant,
++        textDisabled = disabledContent,
++        textFieldHint = s.onSurfaceVariant,
++        textFieldWarning = s.error,
++        textFieldFrame = s.outline,
++        textDescriptionDark = s.onSurface,
++        layoutStroke = s.outlineVariant,
++        layoutStrokeSecondary = s.outlineVariant,
++        overlay = s.scrim.copy(alpha = 0.32f),
++        overlayProgressBar = s.onPrimary,
++        reference = s.primary,
++        welcomeAnimationColor = s.surface,
++        complementaryColor = s.primary,
++        primaryDividerColor = s.outlineVariant,
++        secondaryDividerColor = s.outlineVariant,
++        tertiaryDividerColor = s.outlineVariant,
++        panelBackgroundColor = s.surfaceContainerLow,
++        panelBackgroundColorActive = s.surface,
++        cameraDisabledBackgroundColor = s.scrim,
++        cameraDisabledFrameColor = s.inverseOnSurface,
++        historyBackgroundColor = s.surfaceContainerLow,
++        historyMessageBubbleColor = s.secondaryContainer,
++        historyMessageBubbleStrokeColor = s.outlineVariant,
++        historyRedColor = s.error,
++        historySyncingColor = s.surfaceContainerLow,
++        primaryButtonColors = button(s.primary, s.onPrimary, s.primary),
++        secondaryButtonColors = button(s.secondaryContainer, s.onSecondaryContainer, s.outline),
++        tertiaryButtonColors = button(s.tertiaryContainer, s.onTertiaryContainer, s.tertiaryContainer),
++        topAppBarColors = appBar,
++        transparentTopAppBarColors = appBar.copyColors(containerColor = Color.Transparent),
+@@ -191,5 +80,0 @@ internal val DarkExtendedColorPalette =
+-
+-internal object OledDark {
+-    val backgroundColor = Color(0xFF000000)
+-    val panelBackgroundColor = Color(0xFF231F20)
+-    val historyBackgroundColor = Color(0xFF231F20)
+@@ -198,59 +82,0 @@ internal object OledDark {
+-internal val OledColorPalette =
+-    DarkColorPalette.copy(
+-        surface = OledDark.backgroundColor,
+-        background = OledDark.backgroundColor,
+-    )
+-
+-internal val OledExtendedColorPalette =
+-    DarkExtendedColorPalette.copy(
+-        backgroundColor = OledDark.backgroundColor,
+-        panelBackgroundColor = OledDark.panelBackgroundColor,
+-        historyBackgroundColor = OledDark.historyBackgroundColor,
+-        topAppBarColors = Dark.topAppBarColors.copyColors(containerColor = OledDark.backgroundColor),
+-    )
+-
+-internal val LightExtendedColorPalette =
+-    ExtendedColors(
+-        primaryColor = Light.primaryColor,
+-        secondaryColor = Light.secondaryColor,
+-        backgroundColor = Light.backgroundColor,
+-        gridColor = Light.gridColor,
+-        circularProgressBarScreen = Light.circularProgressBarScreen,
+-        circularProgressBarSmall = Light.circularProgressBarSmall,
+-        circularProgressBarSmallDark = Light.circularProgressBarSmallDark,
+-        linearProgressBarTrack = Light.linearProgressBarTrack,
+-        linearProgressBarBackground = Light.linearProgressBarBackground,
+-        textPrimary = Light.textPrimary,
+-        textSecondary = Light.textSecondary,
+-        textDisabled = Light.textDisabled,
+-        textFieldFrame = Light.textFieldFrame,
+-        textFieldWarning = Light.textFieldWarning,
+-        textFieldHint = Light.textFieldHint,
+-        textDescription = Light.textDescription,
+-        textDescriptionDark = Light.textDescriptionDark,
+-        layoutStroke = Light.layoutStroke,
+-        layoutStrokeSecondary = Light.layoutStrokeSecondary,
+-        overlay = Light.overlay,
+-        overlayProgressBar = Light.overlayProgressBar,
+-        reference = Light.reference,
+-        welcomeAnimationColor = Light.welcomeAnimationColor,
+-        complementaryColor = Light.complementaryColor,
+-        primaryDividerColor = Light.primaryDividerColor,
+-        secondaryDividerColor = Light.secondaryDividerColor,
+-        tertiaryDividerColor = Light.tertiaryDividerColor,
+-        panelBackgroundColor = Light.panelBackgroundColor,
+-        panelBackgroundColorActive = Light.panelBackgroundColorActive,
+-        cameraDisabledBackgroundColor = Light.cameraDisabledBackgroundColor,
+-        cameraDisabledFrameColor = Light.cameraDisabledFrameColor,
+-        historyBackgroundColor = Light.historyBackgroundColor,
+-        historyRedColor = Light.historyRedColor,
+-        historySyncingColor = Light.historySyncingColor,
+-        historyMessageBubbleColor = Light.historyMessageBubbleColor,
+-        historyMessageBubbleStrokeColor = Light.historyMessageBubbleStrokeColor,
+-        topAppBarColors = Light.topAppBarColors,
+-        transparentTopAppBarColors = Light.transparentTopAppBarColors,
+-        primaryButtonColors = Light.primaryButtonColors,
+-        secondaryButtonColors = Light.secondaryButtonColors,
+-        tertiaryButtonColors = Light.tertiaryButtonColors,
+-    )
+-
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/TopAppBarColors.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/TopAppBarColors.kt
+index e4e876c5e..b7ce998a5 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/TopAppBarColors.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/TopAppBarColors.kt
+@@ -58,66 +57,0 @@ internal data class DefaultTopAppBarColors(
+-
+-internal data class LightTopAppBarColors(
+-    override val containerColor: Color = Color(0xFFFFFFFF),
+-    override val navigationColor: Color = Color(0xFF000000),
+-    override val titleColor: Color = Color(0xFF000000),
+-    override val subTitleColor: Color = Color(0xFF8A8888),
+-    override val actionColor: Color = Color(0xFF000000),
+-) : TopAppBarColors {
+-    override fun copyColors(
+-        containerColor: Color,
+-        navigationColor: Color,
+-        titleColor: Color,
+-        subTitleColor: Color,
+-        actionColor: Color
+-    ) = this.copy(
+-        containerColor = containerColor,
+-        navigationColor = navigationColor,
+-        titleColor = titleColor,
+-        subTitleColor = subTitleColor,
+-        actionColor = actionColor
+-    )
+-}
+-
+-internal data class DarkTopAppBarColors(
+-    override val containerColor: Color = Color(0xFF231F20),
+-    override val navigationColor: Color = Color(0xFFFFFFFF),
+-    override val titleColor: Color = Color(0xFFFFFFFF),
+-    override val subTitleColor: Color = Color(0xFFFFFFFF),
+-    override val actionColor: Color = Color(0xFFFFFFFF),
+-) : TopAppBarColors {
+-    override fun copyColors(
+-        containerColor: Color,
+-        navigationColor: Color,
+-        titleColor: Color,
+-        subTitleColor: Color,
+-        actionColor: Color
+-    ) = this.copy(
+-        containerColor = containerColor,
+-        navigationColor = navigationColor,
+-        titleColor = titleColor,
+-        subTitleColor = subTitleColor,
+-        actionColor = actionColor
+-    )
+-}
+-
+-internal data class TransparentTopAppBarColors(
+-    override val containerColor: Color = Color(0x00000000),
+-    override val navigationColor: Color = Color(0xFFFFFFFF),
+-    override val titleColor: Color = Color(0xFFFFFFFF),
+-    override val subTitleColor: Color = Color(0xFFFFFFFF),
+-    override val actionColor: Color = Color(0xFFFFFFFF),
+-) : TopAppBarColors {
+-    override fun copyColors(
+-        containerColor: Color,
+-        navigationColor: Color,
+-        titleColor: Color,
+-        subTitleColor: Color,
+-        actionColor: Color
+-    ) = this.copy(
+-        containerColor = containerColor,
+-        navigationColor = navigationColor,
+-        titleColor = titleColor,
+-        subTitleColor = subTitleColor,
+-        actionColor = actionColor
+-    )
+-}
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/Typography.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/Typography.kt
+index 8f5c52796..62c2d7613 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/Typography.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/internal/Typography.kt
+@@ -10,2 +9,0 @@ import androidx.compose.ui.text.font.FontWeight
+-import androidx.compose.ui.text.googlefonts.Font
+-import androidx.compose.ui.text.googlefonts.GoogleFont
+@@ -15 +12,0 @@ import androidx.compose.ui.unit.sp
+-import co.electriccoin.zcash.ui.design.R
+@@ -17,6 +14,3 @@ import co.electriccoin.zcash.ui.design.R
+-private val provider =
+-    GoogleFont.Provider(
+-        providerAuthority = "com.google.android.gms.fonts",
+-        providerPackage = "com.google.android.gms",
+-        certificates = R.array.com_google_android_gms_fonts_certs
+-    )
++// Legacy wallet text roles retain their sizes; ordinary Material controls use the default scale.
++private val InterFontFamily = FontFamily.Default
++private val ArchivoFontFamily = FontFamily.Default
+@@ -24,30 +17,0 @@ private val provider =
+-// We use bestEffort here to be able to get the closest font weight, if accidentally use
+-// an unspecified font weight and not the default one.
+-private val InterFont = GoogleFont(name = "Inter", bestEffort = true)
+-private val ArchivoFont = GoogleFont(name = "Archivo", bestEffort = true)
+-
+-private val InterFontFamily =
+-    FontFamily(
+-        // W400
+-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.Normal),
+-        // W500
+-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.Medium),
+-        // W600
+-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.SemiBold),
+-        // W700
+-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.Bold)
+-    )
+-private val ArchivoFontFamily =
+-    FontFamily(
+-        // W400
+-        Font(googleFont = ArchivoFont, fontProvider = provider, weight = FontWeight.Normal),
+-        // W500
+-        Font(googleFont = ArchivoFont, fontProvider = provider, weight = FontWeight.Medium),
+-        // W600
+-        Font(googleFont = ArchivoFont, fontProvider = provider, weight = FontWeight.SemiBold),
+-        // W700
+-        Font(googleFont = ArchivoFont, fontProvider = provider, weight = FontWeight.Bold)
+-    )
+-
+-// If you change this definition of our Typography, don't forget to check if you use only
+-// the defined font weights above, otherwise the closest one will be used.
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/typography/ZashiTypographyInternal.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/typography/ZashiTypographyInternal.kt
+index 6a689e8f7..e8850c32d 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/typography/ZashiTypographyInternal.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/typography/ZashiTypographyInternal.kt
+@@ -6,2 +5,0 @@ import androidx.compose.ui.text.font.FontWeight
+-import androidx.compose.ui.text.googlefonts.Font
+-import androidx.compose.ui.text.googlefonts.GoogleFont
+@@ -9 +6,0 @@ import androidx.compose.ui.unit.sp
+-import co.electriccoin.zcash.ui.design.R
+@@ -98,29 +95,3 @@ object ZashiTypographyInternal {
+-private val provider =
+-    GoogleFont.Provider(
+-        providerAuthority = "com.google.android.gms.fonts",
+-        providerPackage = "com.google.android.gms",
+-        certificates = R.array.com_google_android_gms_fonts_certs
+-    )
+-
+-private val InterFont = GoogleFont(name = "Inter", bestEffort = true)
+-private val RobotoMonoFont = GoogleFont(name = "Roboto Mono", bestEffort = true)
+-
+-val InterFontFamily =
+-    FontFamily(
+-        // W400
+-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.Normal),
+-        // W500
+-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.Medium),
+-        // W600
+-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.SemiBold),
+-        // W700
+-        Font(googleFont = InterFont, fontProvider = provider, weight = FontWeight.Bold)
+-    )
+-
+-val RobotoMonoFontFamily =
+-    FontFamily(
+-        // W400
+-        Font(googleFont = RobotoMonoFont, fontProvider = provider, weight = FontWeight.Normal),
+-        // W500
+-        Font(googleFont = RobotoMonoFont, fontProvider = provider, weight = FontWeight.Medium),
+-    )
++// Keep the existing typography API while using platform fonts without a provider dependency.
++val InterFontFamily = FontFamily.Default
++val RobotoMonoFontFamily = FontFamily.Monospace
 diff --git a/ui-design-lib/src/main/res/ui/common/drawable-es/logo_with_hi.png b/ui-design-lib/src/main/res/ui/common/drawable-es/logo_with_hi.png
 deleted file mode 100644
 index ab1bbb368661c87dfedbea2be6fc7d22c4e8cac6..0000000000000000000000000000000000000000
@@ -2926,6 +5573,45 @@ index 7b9af8bf7..3a7d0af99 100644
 -    <string name="migrationTipUnavailable_message">Zodl debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private sigue sincronizando</string>
 +    <string name="migrationTipUnavailable_message">ZEC Private debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
+diff --git a/ui-design-lib/src/main/res/ui/common/values/font_certs.xml b/ui-design-lib/src/main/res/ui/common/values/font_certs.xml
+deleted file mode 100644
+index 5ece3f5f9..000000000
+--- a/ui-design-lib/src/main/res/ui/common/values/font_certs.xml
++++ /dev/null
+@@ -1,32 +0,0 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<!--
+-  Copyright 2022 The Android Open Source Project
+-
+-  Licensed under the Apache License, Version 2.0 (the "License");
+-  you may not use this file except in compliance with the License.
+-  You may obtain a copy of the License at
+-
+-        http://www.apache.org/licenses/LICENSE-2.0
+-
+-  Unless required by applicable law or agreed to in writing, software
+-  distributed under the License is distributed on an "AS IS" BASIS,
+-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-  See the License for the specific language governing permissions and
+-  limitations under the License.
+--->
+-<resources>
+-    <array name="com_google_android_gms_fonts_certs">
+-        <item>@array/com_google_android_gms_fonts_certs_dev</item>
+-        <item>@array/com_google_android_gms_fonts_certs_prod</item>
+-    </array>
+-    <string-array name="com_google_android_gms_fonts_certs_dev">
+-        <item>
+-            MIIEqDCCA5CgAwIBAgIJANWFuGx90071MA0GCSqGSIb3DQEBBAUAMIGUMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMNTW91bnRhaW4gVmlldzEQMA4GA1UEChMHQW5kcm9pZDEQMA4GA1UECxMHQW5kcm9pZDEQMA4GA1UEAxMHQW5kcm9pZDEiMCAGCSqGSIb3DQEJARYTYW5kcm9pZEBhbmRyb2lkLmNvbTAeFw0wODA0MTUyMzM2NTZaFw0zNTA5MDEyMzM2NTZaMIGUMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMNTW91bnRhaW4gVmlldzEQMA4GA1UEChMHQW5kcm9pZDEQMA4GA1UECxMHQW5kcm9pZDEQMA4GA1UEAxMHQW5kcm9pZDEiMCAGCSqGSIb3DQEJARYTYW5kcm9pZEBhbmRyb2lkLmNvbTCCASAwDQYJKoZIhvcNAQEBBQADggENADCCAQgCggEBANbOLggKv+IxTdGNs8/TGFy0PTP6DHThvbbR24kT9ixcOd9W+EaBPWW+wPPKQmsHxajtWjmQwWfna8mZuSeJS48LIgAZlKkpFeVyxW0qMBujb8X8ETrWy550NaFtI6t9+u7hZeTfHwqNvacKhp1RbE6dBRGWynwMVX8XW8N1+UjFaq6GCJukT4qmpN2afb8sCjUigq0GuMwYXrFVee74bQgLHWGJwPmvmLHC69EH6kWr22ijx4OKXlSIx2xT1AsSHee70w5iDBiK4aph27yH3TxkXy9V89TDdexAcKk/cVHYNnDBapcavl7y0RiQ4biu8ymM8Ga/nmzhRKya6G0cGw8CAQOjgfwwgfkwHQYDVR0OBBYEFI0cxb6VTEM8YYY6FbBMvAPyT+CyMIHJBgNVHSMEgcEwgb6AFI0cxb6VTEM8YYY6FbBMvAPyT+CyoYGapIGXMIGUMQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMNTW91bnRhaW4gVmlldzEQMA4GA1UEChMHQW5kcm9pZDEQMA4GA1UECxMHQW5kcm9pZDEQMA4GA1UEAxMHQW5kcm9pZDEiMCAGCSqGSIb3DQEJARYTYW5kcm9pZEBhbmRyb2lkLmNvbYIJANWFuGx90071MAwGA1UdEwQFMAMBAf8wDQYJKoZIhvcNAQEEBQADggEBABnTDPEF+3iSP0wNfdIjIz1AlnrPzgAIHVvXxunW7SBrDhEglQZBbKJEk5kT0mtKoOD1JMrSu1xuTKEBahWRbqHsXclaXjoBADb0kkjVEJu/Lh5hgYZnOjvlba8Ld7HCKePCVePoTJBdI4fvugnL8TsgK05aIskyY0hKI9L8KfqfGTl1lzOv2KoWD0KWwtAWPoGChZxmQ+nBli+gwYMzM1vAkP+aayLe0a1EQimlOalO762r0GXO0ks+UeXde2Z4e+8S/pf7pITEI/tP+MxJTALw9QUWEv9lKTk+jkbqxbsh8nfBUapfKqYn0eidpwq2AzVp3juYl7//fKnaPhJD9gs=
+-        </item>
+-    </string-array>
+-    <string-array name="com_google_android_gms_fonts_certs_prod">
+-        <item>
+-            MIIEQzCCAyugAwIBAgIJAMLgh0ZkSjCNMA0GCSqGSIb3DQEBBAUAMHQxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1Nb3VudGFpbiBWaWV3MRQwEgYDVQQKEwtHb29nbGUgSW5jLjEQMA4GA1UECxMHQW5kcm9pZDEQMA4GA1UEAxMHQW5kcm9pZDAeFw0wODA4MjEyMzEzMzRaFw0zNjAxMDcyMzEzMzRaMHQxCzAJBgNVBAYTAlVTMRMwEQYDVQQIEwpDYWxpZm9ybmlhMRYwFAYDVQQHEw1Nb3VudGFpbiBWaWV3MRQwEgYDVQQKEwtHb29nbGUgSW5jLjEQMA4GA1UECxMHQW5kcm9pZDEQMA4GA1UEAxMHQW5kcm9pZDCCASAwDQYJKoZIhvcNAQEBBQADggENADCCAQgCggEBAKtWLgDYO6IIrgqWbxJOKdoR8qtW0I9Y4sypEwPpt1TTcvZApxsdyxMJZ2JORland2qSGT2y5b+3JKkedxiLDmpHpDsz2WCbdxgxRczfey5YZnTJ4VZbH0xqWVW/8lGmPav5xVwnIiJS6HXk+BVKZF+JcWjAsb/GEuq/eFdpuzSqeYTcfi6idkyugwfYwXFU1+5fZKUaRKYCwkkFQVfcAs1fXA5V+++FGfvjJ/CxURaSxaBvGdGDhfXE28LWuT9ozCl5xw4Yq5OGazvV24mZVSoOO0yZ31j7kYvtwYK6NeADwbSxDdJEqO4k//0zOHKrUiGYXtqw/A0LFFtqoZKFjnkCAQOjgdkwgdYwHQYDVR0OBBYEFMd9jMIhF1Ylmn/Tgt9r45jk14alMIGmBgNVHSMEgZ4wgZuAFMd9jMIhF1Ylmn/Tgt9r45jk14aloXikdjB0MQswCQYDVQQGEwJVUzETMBEGA1UECBMKQ2FsaWZvcm5pYTEWMBQGA1UEBxMNTW91bnRhaW4gVmlldzEUMBIGA1UEChMLR29vZ2xlIEluYy4xEDAOBgNVBAsTB0FuZHJvaWQxEDAOBgNVBAMTB0FuZHJvaWSCCQDC4IdGZEowjTAMBgNVHRMEBTADAQH/MA0GCSqGSIb3DQEBBAUAA4IBAQBt0lLO74UwLDYKqs6Tm8/yzKkEu116FmH4rkaymUIE0P9KaMftGlMexFlaYjzmB2OxZyl6euNXEsQH8gjwyxCUKRJNexBiGcCEyj6z+a1fuHHvkiaai+KL8W1EyNmgjmyy8AW7P+LLlkR+ho5zEHatRbM/YAnqGcFh5iZBqpknHf1SKMXFh4dd239FJ1jWYfbMDMy3NS5CTMQ2XFI1MvcyUTdZPErjQfTbQe3aDQsQcafEQPD+nqActifKZ0Np0IS9L9kR/wbNvyz6ENwPiTrjV2KRkEjH78ZMcUQXg0L3BYHJ3lc69Vs5Ddf9uUGGMYldX3WfMBEmh/9iFBDAaTCK
+-        </item>
+-    </string-array>
+-</resources>
+\ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 index f41234151..8461421f0 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
@@ -3469,6 +6155,55 @@ index f41234151..8461421f0 100644
 -    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open Zodl manually at each scheduled time to send.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open ZEC Private manually at each scheduled time to send.</string>
+diff --git a/ui-design-lib/src/test/java/co/electriccoin/zcash/ui/design/theme/MaterialThemeRolesTest.kt b/ui-design-lib/src/test/java/co/electriccoin/zcash/ui/design/theme/MaterialThemeRolesTest.kt
+new file mode 100644
+index 000000000..36f153231
+--- /dev/null
++++ b/ui-design-lib/src/test/java/co/electriccoin/zcash/ui/design/theme/MaterialThemeRolesTest.kt
+@@ -0,0 +1,43 @@
++package co.electriccoin.zcash.ui.design.theme
++
++import androidx.compose.material3.darkColorScheme
++import androidx.compose.material3.lightColorScheme
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.graphics.luminance
++import co.electriccoin.zcash.ui.design.theme.colors.materialZashiColors
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertTrue
++
++class MaterialThemeRolesTest {
++    @Test
++    fun oledChangesThePageWithoutFlatteningInteractiveSurfaces() {
++        val dark = darkColorScheme()
++        val oled = dark.withOledBackground(true)
++        assertEquals(Color.Black, oled.background)
++        assertEquals(Color.Black, oled.surface)
++        assertEquals(dark.surfaceContainerHigh, oled.surfaceContainerHigh)
++        assertEquals(dark.primary, oled.primary)
++        assertEquals(dark, dark.withOledBackground(false))
++    }
++
++    @Test
++    fun enabledButtonAndInputContentRemainsReadableAcrossFallbackModes() {
++        listOf(lightColorScheme(), darkColorScheme(), darkColorScheme().withOledBackground(true))
++            .forEachIndexed { index, scheme ->
++                val colors = materialZashiColors(scheme, index != 0)
++                val pairs = listOf(
++                    colors.Btns.Primary.btnPrimaryBg to colors.Btns.Primary.btnPrimaryFg,
++                    colors.Btns.Secondary.btnSecondaryBg to colors.Btns.Secondary.btnSecondaryFg,
++                    colors.Btns.Tertiary.btnTertiaryBg to colors.Btns.Tertiary.btnTertiaryFg,
++                    colors.Surfaces.bgPrimary to colors.Text.textPrimary,
++                )
++                pairs.forEach { (background, foreground) ->
++                    val bright = maxOf(background.luminance(), foreground.luminance())
++                    val dim = minOf(background.luminance(), foreground.luminance())
++                    assertTrue((bright + 0.05f) / (dim + 0.05f) >= 4.5f, "Low contrast in mode $index")
++                }
++                assertTrue(colors.Btns.Tertiary.btnTertiaryBg.alpha > 0f, "A button became bare text")
++            }
++    }
++}
 diff --git a/ui-lib/build.gradle.kts b/ui-lib/build.gradle.kts
 index 717b3f997..b8908fd45 100644
 --- a/ui-lib/build.gradle.kts
@@ -6191,10 +8926,10 @@ index 000000000..a034246bc
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
 new file mode 100644
-index 000000000..80a68407b
+index 000000000..8055774f0
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,158 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.activity.compose.BackHandler
@@ -6214,6 +8949,7 @@ index 000000000..80a68407b
 +import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
 +import co.electriccoin.zcash.ui.design.component.ZashiButton
 +import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
++import co.electriccoin.zcash.ui.design.component.ZashiTextButton
 +import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
 +import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarBackNavigation
 +import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
@@ -6298,13 +9034,13 @@ index 000000000..80a68407b
 +            if (state.unsupported) {
 +                DonationMessage(stringResource(R.string.private_support_software_only))
 +            }
-+            ZashiButton(
-+                text = stringResource(R.string.private_support_addresses),
++            ZashiTextButton(
 +                onClick = onExternalAddresses,
 +                enabled = !state.busy,
-+                colors = ZashiButtonDefaults.secondaryColors(),
 +                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-+            )
++            ) {
++                Text(stringResource(R.string.private_support_addresses))
++            }
 +        }
 +    }
 +}
@@ -6352,7 +9088,6 @@ index 000000000..80a68407b
 +        onBack = {}
 +    )
 +}
-\ No newline at end of file
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt
 new file mode 100644
 index 000000000..83851deac
@@ -7122,6 +9857,33 @@ index 627591300..18e06ea59 100644
 +            supportInvitation = if (support.showInvitation) ({ HomeDonationInvitation(support) }) else null,
 @@ -49,0 +63 @@ internal fun AndroidHome() {
 +@Suppress("MatchingDeclarationName")
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeMessageWrapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeMessageWrapper.kt
+index 965e55926..61e4d1950 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeMessageWrapper.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeMessageWrapper.kt
+@@ -5 +4,0 @@ import androidx.compose.foundation.clickable
+-import androidx.compose.foundation.isSystemInDarkTheme
+@@ -12,0 +12 @@ import androidx.compose.material3.LocalContentColor
++import androidx.compose.material3.MaterialTheme
+@@ -29,2 +28,0 @@ import co.electriccoin.zcash.ui.design.component.ZashiCircularProgressIndicatorD
+-import co.electriccoin.zcash.ui.design.theme.colors.ZashiDarkColors
+-import co.electriccoin.zcash.ui.design.theme.colors.ZashiLightColors
+@@ -45,2 +43,2 @@ fun HomeMessageWrapper(
+-            0f to ZashiLightColors.Utility.Purple.utilityPurple500,
+-            1f to ZashiLightColors.Utility.Purple.utilityPurple900,
++            0f to MaterialTheme.colorScheme.tertiaryContainer,
++            1f to MaterialTheme.colorScheme.tertiaryContainer,
+@@ -48,3 +46,3 @@ fun HomeMessageWrapper(
+-    contentColor: Color = ZashiLightColors.Utility.Purple.utilityPurple50,
+-    subtitleColor: Color = ZashiLightColors.Utility.Purple.utilityPurple200,
+-    progressTrackColor: Color = ZashiLightColors.Utility.Purple.utilityPurple400,
++    contentColor: Color = MaterialTheme.colorScheme.onTertiaryContainer,
++    subtitleColor: Color = MaterialTheme.colorScheme.onTertiaryContainer,
++    progressTrackColor: Color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.24f),
+@@ -100 +98,2 @@ fun HomeMessageWrapper(
+-                        if (isSystemInDarkTheme()) ZashiLightColors else ZashiDarkColors
++                        containerColor = MaterialTheme.colorScheme.tertiary,
++                        contentColor = MaterialTheme.colorScheme.onTertiary
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeView.kt
 index 34fb7e33b..a772c9ecb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/home/HomeView.kt

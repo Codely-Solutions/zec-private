@@ -65,6 +65,10 @@ def declaration_name_errors(path, name):
     text = path.read_text()
     if '"MatchingDeclarationName"' in text:
         return []
+    # Compose files commonly pair the named top-level function with a state/defaults class.
+    if re.search(r'^(?:(?:internal|private|public)\s+)?fun\s+' + re.escape(path.stem) + r'\s*\(',
+                 text, re.MULTILINE):
+        return []
     names = re.findall(
         r'^(?:(?:internal|private|public|protected|data|sealed|open|abstract|enum|annotation|value|expect|actual)\s+)*'
         r'(?:class|interface|object)\s+(\w+)', text, re.MULTILINE)
