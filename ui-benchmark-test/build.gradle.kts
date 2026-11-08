@@ -4,7 +4,6 @@ import model.NetworkDimension
 
 plugins {
     id("com.android.test")
-    kotlin("android")
     id("secant.android-build-conventions")
 }
 

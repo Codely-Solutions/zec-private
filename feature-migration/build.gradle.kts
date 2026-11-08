@@ -3,7 +3,6 @@ import model.NetworkDimension
 
 plugins {
     id("com.android.library")
-    kotlin("android")
     kotlin("plugin.serialization")
     id("org.jetbrains.kotlin.plugin.compose")
     id("secant.android-build-conventions")
@@ -23,10 +22,6 @@ android {
         // JVM unit tests instead of no-oping — needed so ViewModel logging doesn't crash tests
         // that don't otherwise touch Android framework classes.
         unitTests.isReturnDefaultValues = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.androidx.compose.compiler.get().versionConstraint.displayName
     }
 
     // Mirrors ui-lib's dimensions so variant matching against it is automatic.

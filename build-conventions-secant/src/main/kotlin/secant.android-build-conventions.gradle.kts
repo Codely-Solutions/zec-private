@@ -2,14 +2,13 @@ import com.android.build.api.dsl.ManagedVirtualDevice
 import model.BuildType
 import org.jetbrains.kotlin.compose.compiler.gradle.ComposeCompilerGradlePluginExtension
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension
 
 pluginManager.withPlugin("com.android.application") {
     project.extensions.getByType<com.android.build.api.dsl.ApplicationExtension>()
         .androidResources.localeFilters.addAll(
         listOf("en", "en-rUS", "en-rGB", "en-rAU", "es", "en-rXA", "ar-rXB")
     )
-    project.the<com.android.build.gradle.AppExtension>().apply {
+    project.the<com.android.build.api.dsl.ApplicationExtension>().apply {
         configureBaseExtension()
 
         defaultConfig {
@@ -36,13 +35,14 @@ pluginManager.withPlugin("com.android.library") {
         testOptions.targetSdk = project.property("ANDROID_TARGET_SDK_VERSION").toString().toInt()
         lint.targetSdk = project.property("ANDROID_TARGET_SDK_VERSION").toString().toInt()
     }
-    project.the<com.android.build.gradle.LibraryExtension>().apply {
+    project.the<com.android.build.api.dsl.LibraryExtension>().apply {
         configureBaseExtension()
 
         defaultConfig {
             minSdk = project.property("ANDROID_MIN_SDK_VERSION").toString().toInt()
 
             testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+            aarMetadata { minCompileSdk = 36 }
             project.file("proguard-consumer.txt").takeIf { it.isFile }?.let { consumerProguardFiles(it) }
 
             testInstrumentationRunnerArguments["useTestStorageService"] = "true"
@@ -57,7 +57,7 @@ pluginManager.withPlugin("com.android.library") {
 }
 
 pluginManager.withPlugin("com.android.test") {
-    project.the<com.android.build.gradle.TestExtension>().apply {
+    project.the<com.android.build.api.dsl.TestExtension>().apply {
         configureBaseExtension()
 
         defaultConfig {
@@ -78,11 +78,13 @@ pluginManager.withPlugin("com.android.test") {
 }
 
 @Suppress("LongMethod")
-fun com.android.build.gradle.BaseExtension.configureBaseExtension() {
-    compileSdkVersion(project.property("ANDROID_COMPILE_SDK_VERSION").toString().toInt())
+fun com.android.build.api.dsl.CommonExtension.configureBaseExtension() {
+    compileSdk = project.property("ANDROID_COMPILE_SDK_VERSION").toString().toInt()
     ndkVersion = project.property("ANDROID_NDK_VERSION").toString()
 
-    compileOptions {
+    buildFeatures.resValues = true
+
+    compileOptions.apply {
         isCoreLibraryDesugaringEnabled = true
 
         val javaVersion = JavaVersion.toVersion(project.property("ANDROID_JVM_TARGET").toString())
@@ -90,17 +92,16 @@ fun com.android.build.gradle.BaseExtension.configureBaseExtension() {
         targetCompatibility = javaVersion
     }
 
-    buildTypes {
+    buildTypes.apply {
         getByName(BuildType.DEBUG.value).apply {
             val coverageEnabled =
                 project.property("IS_ANDROID_INSTRUMENTATION_TEST_COVERAGE_ENABLED").toString().toBoolean()
-            isTestCoverageEnabled = coverageEnabled
             enableAndroidTestCoverage = coverageEnabled
             enableUnitTestCoverage = coverageEnabled
         }
     }
 
-    signingConfigs {
+    signingConfigs.apply {
         val debugKeystorePath = project.property("ZCASH_DEBUG_KEYSTORE_PATH").toString()
         val isExplicitDebugSigningEnabled = !debugKeystorePath.isNullOrBlank()
         if (isExplicitDebugSigningEnabled) {
@@ -111,7 +112,7 @@ fun com.android.build.gradle.BaseExtension.configureBaseExtension() {
         }
     }
 
-    testOptions {
+    testOptions.apply {
         animationsDisabled = true
 
         if (project.property("IS_USE_TEST_ORCHESTRATOR").toString().toBoolean()) {
@@ -150,7 +151,7 @@ fun com.android.build.gradle.BaseExtension.configureBaseExtension() {
         }
     }
 
-    packagingOptions {
+    packaging.apply {
         resources.excludes.addAll(
             listOf(
                 "META-INF/AL2.0",
@@ -169,7 +170,7 @@ fun com.android.build.gradle.BaseExtension.configureBaseExtension() {
         )
     }
 
-    project.extensions.findByType<KotlinAndroidProjectExtension>()?.apply {
+    project.tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEach {
         compilerOptions {
             jvmTarget.set(JvmTarget.fromTarget(project.property("ANDROID_JVM_TARGET").toString()))
             allWarningsAsErrors.set(project.property("ZCASH_IS_TREAT_WARNINGS_AS_ERRORS").toString().toBoolean())

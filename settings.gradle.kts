@@ -51,7 +51,6 @@ pluginManagement {
         id("com.osacky.fulladle") version (extra["FULLADLE_VERSION"].toString()) apply false
         id("org.jetbrains.kotlinx.kover") version (extra["KOVER_VERSION"].toString()) apply false
         id("org.jetbrains.kotlin.plugin.compose") version (kotlinVersion) apply (false)
-        kotlin("android") version (kotlinVersion) apply false
         kotlin("jvm") version (kotlinVersion) apply false
         kotlin("multiplatform") version (kotlinVersion) apply false
         kotlin("plugin.serialization") version (kotlinVersion) apply false
@@ -260,6 +259,10 @@ dependencyResolutionManagement {
             library("haze", "dev.chrisbanes.haze:haze:$hazeVersion")
             library("ktor-bom", "io.ktor:ktor-bom:$ktorVersion")
             library("ktor-core", "io.ktor" ,"ktor-client-core").withoutVersion()
+            library("okhttp-bom", "com.squareup.okhttp3:okhttp-bom:${extra["OKHTTP_VERSION"]}")
+            library("okhttp", "com.squareup.okhttp3", "okhttp").withoutVersion()
+            library("okhttp-tls", "com.squareup.okhttp3", "okhttp-tls").withoutVersion()
+            library("okhttp-mockwebserver", "com.squareup.okhttp3", "mockwebserver3").withoutVersion()
             library("ktor-okhttp", "io.ktor" ,"ktor-client-okhttp").withoutVersion()
             library("ktor-negotiation", "io.ktor" ,"ktor-client-content-negotiation").withoutVersion()
             library("ktor-json", "io.ktor" ,"ktor-serialization-kotlinx-json").withoutVersion()

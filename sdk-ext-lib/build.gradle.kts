@@ -1,6 +1,5 @@
 plugins {
     id("com.android.library")
-    kotlin("android")
     id("secant.android-build-conventions")
     id("secant.jacoco-conventions")
 }
@@ -15,6 +14,8 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.datetime)
 
+    api(platform(libs.okhttp.bom))
+    api(libs.okhttp)
     api(enforcedPlatform(libs.ktor.bom))
     api(libs.ktor.core)
     api(libs.ktor.okhttp)

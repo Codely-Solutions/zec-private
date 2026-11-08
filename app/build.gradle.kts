@@ -8,7 +8,6 @@ import java.util.Locale
 
 plugins {
     id("com.android.application")
-    kotlin("android")
     id("secant.android-build-conventions")
     id("com.osacky.fladle")
     id("publish.secant.publish-conventions")
@@ -168,50 +167,6 @@ android {
         }
     }
 
-    // Resolve final app name
-    // Format: [BuildDistributionNetwork] - D=Debug/R=Release, S=Store/F=FOSS/I=Internal, M=Mainnet/T=Testnet
-    applicationVariants.all {
-        val defaultAppName = project.property("ZCASH_RELEASE_APP_NAME").toString()
-        when (this.name) {
-            "zcashtestnetStoreDebug" -> {
-                resValue("string", "app_name", "$defaultAppName [DST]")
-            }
-            "zcashmainnetStoreDebug" -> {
-                resValue("string", "app_name", "$defaultAppName [DSM]")
-            }
-            "zcashtestnetStoreRelease" -> {
-                resValue("string", "app_name", "$defaultAppName [RST]")
-            }
-            "zcashmainnetStoreRelease" -> {
-                resValue("string", "app_name", defaultAppName)
-            }
-            "zcashtestnetFossDebug" -> {
-                resValue("string", "app_name", "$defaultAppName [DFT]")
-            }
-            "zcashmainnetFossDebug" -> {
-                resValue("string", "app_name", "$defaultAppName [DFM]")
-            }
-            "zcashtestnetFossRelease" -> {
-                resValue("string", "app_name", "$defaultAppName [RFT]")
-            }
-            "zcashmainnetFossRelease" -> {
-                resValue("string", "app_name", defaultAppName)
-            }
-            "zcashmainnetInternalRelease" -> {
-                resValue("string", "app_name", "$defaultAppName [RIM]")
-            }
-            "zcashtestnetInternalRelease" -> {
-                resValue("string", "app_name", "$defaultAppName [RIT]")
-            }
-            "zcashmainnetInternalDebug" -> {
-                resValue("string", "app_name", "$defaultAppName [DIM]")
-            }
-            "zcashtestnetInternalDebug" -> {
-                resValue("string", "app_name", "$defaultAppName [DIT]")
-            }
-        }
-    }
-
     dependenciesInfo {
         // Disables dependency metadata when building APKs
         includeInApk = false
@@ -264,6 +219,22 @@ dependencies {
 
 androidComponents {
     onVariants { variant ->
+        val defaultAppName = project.property("ZCASH_RELEASE_APP_NAME").toString()
+        val appName = mapOf(
+            "zcashtestnetStoreDebug" to "$defaultAppName [DST]",
+            "zcashmainnetStoreDebug" to "$defaultAppName [DSM]",
+            "zcashtestnetStoreRelease" to "$defaultAppName [RST]",
+            "zcashmainnetStoreRelease" to defaultAppName,
+            "zcashtestnetFossDebug" to "$defaultAppName [DFT]",
+            "zcashmainnetFossDebug" to "$defaultAppName [DFM]",
+            "zcashtestnetFossRelease" to "$defaultAppName [RFT]",
+            "zcashmainnetFossRelease" to defaultAppName,
+            "zcashmainnetInternalRelease" to "$defaultAppName [RIM]",
+            "zcashtestnetInternalRelease" to "$defaultAppName [RIT]",
+            "zcashmainnetInternalDebug" to "$defaultAppName [DIM]",
+            "zcashtestnetInternalDebug" to "$defaultAppName [DIT]"
+        ).getValue(variant.name)
+        variant.resValues.put(variant.makeResValueKey("string", "app_name"), ResValue(appName))
         for (output in variant.outputs) {
             // Configure strict mode in runtime
             variant.buildConfigFields?.put(
