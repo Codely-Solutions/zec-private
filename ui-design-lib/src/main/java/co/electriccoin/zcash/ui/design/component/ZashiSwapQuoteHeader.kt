@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.design.R
@@ -44,14 +45,15 @@ fun ZashiSwapQuoteHeader(
             Surface(
                 modifier = Modifier.size(32.dp),
                 shape = RoundedCornerShape(8.dp),
-                color = ZashiColors.Btns.Secondary.btnSecondaryBg
+                color = Color.Transparent
             ) {
                 Box(
                     contentAlignment = Alignment.Center
                 ) {
                     Image(
                         painter = painterResource(R.drawable.ic_arrow_right),
-                        contentDescription = null
+                        contentDescription = null,
+                        colorFilter = ColorFilter.tint(ZashiColors.Text.textTertiary)
                     )
                 }
             }
