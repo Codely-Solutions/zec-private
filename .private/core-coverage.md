@@ -1,12 +1,12 @@
 # Core acceptance coverage
 
-Status: signed revision 13 independently verified on 2026-11-07. The revision-specific evidence is in core-acceptance.json and core-validation-summary.json. It does not validate later working-tree changes.
+Status: revision-14 candidate `d7471a007` passed real acceptance on 2026-11-08; signing is pending. Current exact-input evidence is in core-acceptance.json and core-validation-summary.json. Historical releases retain their own immutable evidence.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
 | Quote dismissal poisons the next request; stale callbacks overwrite state | Existing deterministic cancellation tests and real unfunded production quote UI receipt | Reuse only while the relevant production source/build inputs match; short Tor session when invalidated. |
 | Wallet cannot receive or spend; wrong recipient, amount, memo or fee | Installed testnet app graph, real faucet payment, app proposal creation/submission and sender/recipient history | One small transfer reused by the other core assertions; no exhaustive asset matrix. |
-| Installed update loses wallet or transaction data | Prior revision 12 testnet build updated in place to candidate; seed identity, funded balance and account behavior checked | Same isolated guest and funding fixture; dedicated disposable test certificate, separate permanent release checks. |
+| Installed update loses wallet or transaction data | Pinned revision 13 testnet build updated in place to candidate; seed identity, funded balance and account behavior checked | Same isolated guest and funding fixture; dedicated disposable test certificate, separate permanent release checks. |
 | Restart loses transaction state or recovery fails | Process restart followed by clean target-data erase and seed/birthday restoration into recipient wallet | Reuse the same test transaction; restoration cannot reuse the populated target database. |
 | Tor interruption causes direct fallback or unrecoverable state | App-native Tor request during a controlled app-UID outage; dual-stack egress enforcement and rejection counters | One interruption before broadcast, with bounded recovery; retain deterministic failure/race tests for diagnosis. |
 | Unvalidated or wrong candidate enters signing | Trusted controller independently checks current relevant-input fingerprint, receipt identity and artifact digests | Fast early status check prevents unnecessary release preparation; unsigned artifact promotion remains separate from secrets. |
