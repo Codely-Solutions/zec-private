@@ -94,6 +94,8 @@ SDK Tor HTTP cancellation is cooperative: a coroutine deadline cannot interrupt 
 
 OkHttp 5.5.1 blocks compromised eMudhra intermediates ([upstream fix](https://github.com/square/okhttp/commit/6db98026dfb817a23c0282aa4e53d8187b309052)), but its Android AAR requires compileSdk 37. The 4.12.1 backport is not a verified drop-in beneath Ktor's 5.3.2 dependency and internal API use; no compatible 5.x Android backport was found on 2026-11-08. The JVM artifact is not an equivalent Android implementation. The retained toolchain leaves this mitigation unresolved for direct OkHttp traffic. Revisit with a supported compatible fix; SDK-native Tor TLS uses a separate trust path.
 
+[Android certificate transparency](https://developer.android.com/privacy-and-security/security-config#CertificateTransparency) is another platform protection: opt-in on API 36, default on API 37, unavailable on older versions. Assess its effective client coverage and live TLS compatibility before changing policy; it does not establish protection for older devices or the native SDK's separate TLS stack.
+
 ## Donation UI review
 
 `.private/donation-review/include.gradle` explicitly adds a debug-only activity for inspecting the production Home and donation components with synthetic activity. It uses the real local reminder policy but cannot submit a payment. Follow [UI-REVIEW.md](UI-REVIEW.md) for artifact-bound capture and inspection. Ordinary builds omit this activity. Emulator screenshots establish presentation and reminder interactions; they do not establish wallet transaction or release acceptance.
