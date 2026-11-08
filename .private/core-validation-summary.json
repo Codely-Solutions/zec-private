@@ -1,64 +1,118 @@
 {
-  "status": "signed-and-independently-verified",
-  "scope": "Recovery copy, manual donation amount/message, compatible security and toolchain maintenance",
-  "source_sha": "b286524d2d76c8c9a8d83454886a0cc993d935ee",
-  "candidate_run": 42439820603,
-  "baseline": "v3.19.0-private.14",
+  "status": "accepted-awaiting-signing",
+  "scope": "Material migration",
+  "source_sha": "a6ea7cf81986f6f74db1847a513dd14b0bb4d649",
+  "candidate_run": 42473584723,
+  "core_run": 42473586817,
+  "baseline": "v3.19.0-private.15",
+  "profiles": {
+    "core": {
+      "guard_job": "7e0b26ea473442f9a299eb57a72fae5d",
+      "guard_receipt_sha256": "eb73786d34cab18f8ec0b7c7cbeca90a941b1e954b7ebf32000bfa6159d7c980",
+      "preserved_task_source_bindings": 0
+    },
+    "quotes": {
+      "guard_job": "fec1df516cc14f1797154e18e2697cfe",
+      "guard_receipt_sha256": "461beed7acf3a99b8c5fab590158a01fa654438f2b8a3df4cb62fabc3ce4f795",
+      "preserved_task_source_bindings": 0
+    },
+    "visual": {
+      "guard_job": "066e48258d224b9ba3fdac718fac0b2f",
+      "guard_receipt_sha256": "3d6518ac7c58da19904e00d8ec41e1d8b7b180a7eba5d0ef2fbb9c395f29260a",
+      "preserved_task_source_bindings": 0
+    }
+  },
+  "core_seconds": 617.137297600013,
+  "quote_cycles": 3,
+  "production_arm_executed": false,
+  "physical_biometric_ui_executed": false,
+  "synthetic_material_capture": {
+    "schema": 1,
+    "passed": true,
+    "synthetic": true,
+    "fundsTransferred": false,
+    "personalWalletAccess": false,
+    "mainWalletOpened": false,
+    "quoteRequests": 0,
+    "source_sha": "a6ea7cf81986f6f74db1847a513dd14b0bb4d649",
+    "artifact_id": 13615070547,
+    "original_artifact_digest": "sha256:79375ce25f56ecb63b85a58868ac246601a30d56b8f36ec9259923098f0ddde3",
+    "tested_apk_sha256": "486cd8cc081eb56f5aa208d0f5838a513d600ebabca083bc8a86063016336fe2",
+    "screens": [
+      {
+        "file": "material-send-error-before-light.png",
+        "sha256": "a8624ed64f76905b6c556f07e58190d5baaf98a3f45cc453f8cd7bbc692edb49",
+        "hierarchy_file": "material-send-error-before-light.xml",
+        "hierarchy_sha256": "565565c466ca83b755d67d11d2f72fab5abc0922abafda9ebf4104ac0d15b46f",
+        "phase": "before",
+        "theme": "light",
+        "font_scale": 1.0
+      },
+      {
+        "file": "material-send-error-before-dark.png",
+        "sha256": "4370396f38580929687265a21b16713c54320766ad883af99ee2cb087236a7db",
+        "hierarchy_file": "material-send-error-before-dark.xml",
+        "hierarchy_sha256": "565565c466ca83b755d67d11d2f72fab5abc0922abafda9ebf4104ac0d15b46f",
+        "phase": "before",
+        "theme": "dark",
+        "font_scale": 1.0
+      },
+      {
+        "file": "material-send-error-before-oled.png",
+        "sha256": "11fe8aa0965cdeecbed340a278d5d56a371b64e98462b64466fd887d341a78ce",
+        "hierarchy_file": "material-send-error-before-oled.xml",
+        "hierarchy_sha256": "565565c466ca83b755d67d11d2f72fab5abc0922abafda9ebf4104ac0d15b46f",
+        "phase": "before",
+        "theme": "oled",
+        "font_scale": 1.0
+      },
+      {
+        "file": "material-send-error-after-light.png",
+        "sha256": "8905d044faae1ca139f1fd242f7d05ea2185c4a08c8c48799c648f57b0294712",
+        "hierarchy_file": "material-send-error-after-light.xml",
+        "hierarchy_sha256": "a676e8fe6088e82e0150b8da56d18bc6c8243ff250fb7535e6e6ff516ae99e2a",
+        "phase": "after",
+        "theme": "light",
+        "font_scale": 1.3
+      },
+      {
+        "file": "material-send-error-after-dark.png",
+        "sha256": "dc10bcfad56f2bb6084a12ebe8e5c8624bd5efdc656738ff891585a928b5082c",
+        "hierarchy_file": "material-send-error-after-dark.xml",
+        "hierarchy_sha256": "a676e8fe6088e82e0150b8da56d18bc6c8243ff250fb7535e6e6ff516ae99e2a",
+        "phase": "after",
+        "theme": "dark",
+        "font_scale": 1.3
+      },
+      {
+        "file": "material-send-error-after-oled.png",
+        "sha256": "728f36d7e16223585c0389ec9b8696a6d1b5b6c65e8c030d21f320424f684950",
+        "hierarchy_file": "material-send-error-after-oled.xml",
+        "hierarchy_sha256": "a676e8fe6088e82e0150b8da56d18bc6c8243ff250fb7535e6e6ff516ae99e2a",
+        "phase": "after",
+        "theme": "oled",
+        "font_scale": 1.3
+      }
+    ]
+  },
   "tests": {
     "tests": 1749,
     "failures": 0,
     "errors": 0,
     "skipped": 0
   },
-  "runtime_components": 334,
-  "production_gradle_seconds": 749,
-  "core_seconds": 627.5685254000127,
-  "core_transaction_evidence": {
-    "fundingTxId": "3e8dbdc1da85abca87060d9fc52cd0693dff0ca83c30f5b7783b2799c460e84a",
-    "fundingProvider": "jinolabs-testnet",
-    "fundedBalance": 10000000,
-    "balanceBeforeSend": 10000000,
-    "feeZatoshi": 10000,
-    "senderConfirmedBalance": 8990000,
-    "restoreMinedHeight": 4596384,
-    "restoreTransactionState": "Pending",
-    "candidateTxIds": [
-      "e7be9b4a6c38974e08dcdef6ccbd804e97ec5b8dfff40e90830e517e1675dcf0"
+  "focused_material_role_tests": 3,
+  "production_gradle_seconds": 920,
+  "runtime_components": 333,
+  "scroll_check": {
+    "guard_job": "db0356f704bf40c5996a2191be2d25a7",
+    "font_scale": 1.3,
+    "review_control_bounds": [
+      63,
+      1605,
+      1017,
+      1731
     ],
-    "initialSubmitType": "Success"
-  },
-  "quote_cycles": 3,
-  "production_arm_executed": false,
-  "physical_biometric_ui_executed": false,
-  "clipboard_process_death_cleanup_guaranteed": false,
-  "costs": {
-    "revision14_gradle_seconds": 682,
-    "revision15_gradle_seconds": 749,
-    "controlled_performance_benchmark": false
-  },
-  "security_review": {
-    "maven_coordinates_queried": 317,
-    "maven_registry_matches": 0,
-    "native_source_registry_versions_queried": 735,
-    "native_source_matched_packages": 11,
-    "native_sdk_version": "6.0.0",
-    "native_sdk_changed": false,
-    "native_binary_feature_union_verified": false,
-    "remaining": "Known source-lock advisories require SDK feature/call-path and published AAR provenance review; OkHttp CA mitigation needs a compatible SDK37 toolchain. No native security-clearance claim."
-  },
-  "signed_release": {
-    "passed": true,
-    "release": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.15",
-    "apk_bytes": 67828595,
-    "apk_sha256": "e5c789cc75b77e2f4f9c67cf771371bda3219bae01cce3735ffa809704e9dd83",
-    "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
-    "version_code": 3234015,
-    "package": "com.personal.zecprivate.foss",
-    "abis": [
-      "arm64-v8a"
-    ],
-    "signed_payload_matches_validated_unsigned": true,
-    "production_arm_executed": false,
-    "bytes_change_from_revision14": 108
+    "passed": true
   }
 }
