@@ -8,6 +8,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -23,22 +24,7 @@ fun ZashiSelectionIndicator(
     circular: Boolean = false,
     useDot: Boolean = false,
 ) {
-    val colors = ZashiColors.Checkboxes
-    val background =
-        when {
-            !isEnabled && isChecked -> colors.boxOnDisabledBg
-            !isEnabled -> colors.boxOffDisabledBg
-            isChecked -> colors.boxOnBg
-            else -> colors.boxOffBg
-        }
-    val border =
-        when {
-            !isEnabled && isChecked -> colors.boxOnDisabledStroke
-            !isEnabled -> colors.boxOffDisabledStroke
-            isChecked -> colors.boxOnBg
-            else -> colors.boxOffStroke
-        }
-    val foreground = if (isEnabled) colors.boxOnFg else colors.boxOnDisabledFg
+    val (background, border, foreground) = selectionIndicatorColors(isChecked, isEnabled)
     Canvas(Modifier.size(if (circular) 20.dp else 16.dp)) {
         val unit = size.width / if (circular) 20f else 16f
         val inset = unit / 2f
@@ -78,5 +64,22 @@ fun ZashiSelectionIndicator(
                 )
             }
         }
+    }
+}
+
+private data class SelectionIndicatorColors(val background: Color, val border: Color, val foreground: Color)
+
+@Composable
+private fun selectionIndicatorColors(isChecked: Boolean, isEnabled: Boolean): SelectionIndicatorColors {
+    val colors = ZashiColors.Checkboxes
+    return when {
+        !isEnabled && isChecked -> SelectionIndicatorColors(
+            colors.boxOnDisabledBg, colors.boxOnDisabledStroke, colors.boxOnDisabledFg,
+        )
+        !isEnabled -> SelectionIndicatorColors(
+            colors.boxOffDisabledBg, colors.boxOffDisabledStroke, colors.boxOnDisabledFg,
+        )
+        isChecked -> SelectionIndicatorColors(colors.boxOnBg, colors.boxOnBg, colors.boxOnFg)
+        else -> SelectionIndicatorColors(colors.boxOffBg, colors.boxOffStroke, colors.boxOnFg)
     }
 }
