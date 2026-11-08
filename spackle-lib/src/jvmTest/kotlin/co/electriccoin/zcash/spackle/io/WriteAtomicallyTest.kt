@@ -12,8 +12,8 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WriteAtomicallyTest {
-    // Putting in the build directory so that it doesn't show up as dirty in git
-    private fun newFile() = File(File("build"), "atomic_file_test-${UUID.randomUUID()}")
+    // Use the configured temporary root; Gradle build outputs may be relocated.
+    private fun newFile() = File(System.getProperty("java.io.tmpdir"), "atomic_file_test-${UUID.randomUUID()}")
 
     @Test
     fun `file has temp name`() =

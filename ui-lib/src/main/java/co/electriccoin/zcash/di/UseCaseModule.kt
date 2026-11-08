@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.common.usecase.CancelSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.CancelSwapUseCase
 import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
+import co.electriccoin.zcash.ui.common.usecase.CopyRecoveryToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.CreateIncreaseEphemeralGapLimitProposalUseCase
@@ -183,6 +184,7 @@ val useCaseModule =
         factoryOf(::ObserveContactByAddressUseCase)
         singleOf(::ObserveABContactPickedUseCase)
         factoryOf(::CopyToClipboardUseCase)
+        singleOf(::CopyRecoveryToClipboardUseCase)
         factoryOf(::ShareImageUseCase)
         singleOf(::DeleteSharedQRImagesUseCase)
         factoryOf(::Zip321BuildUriUseCase)

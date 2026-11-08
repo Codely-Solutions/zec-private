@@ -180,6 +180,48 @@ index 7e1b440d1..4b1b532d0 100644
 @@ -13 +13 @@
 -            android:authorities="co.electriccoin.zcash.provider.testnet"
 +            android:authorities="com.personal.zecprivate.provider.testnet"
+diff --git a/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts b/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts
+index 4a0d7d9d8..4ad60f54f 100644
+--- a/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts
++++ b/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts
+@@ -1 +0,0 @@
+-import com.android.build.api.dsl.CommonExtension
+@@ -8,0 +8,3 @@ pluginManager.withPlugin("com.android.application") {
++    project.extensions.getByType<com.android.build.api.dsl.ApplicationExtension>().androidResources.localeFilters.addAll(
++        listOf("en", "en-rUS", "en-rGB", "en-rAU", "es", "en_XA", "ar_XB")
++    )
+@@ -20 +21,0 @@ pluginManager.withPlugin("com.android.application") {
+-            resourceConfigurations.addAll(listOf("en", "en-rUS", "en-rGB", "en-rAU", "es", "en_XA", "ar_XB"))
+@@ -32,0 +34,4 @@ pluginManager.withPlugin("com.android.library") {
++    project.extensions.getByType<com.android.build.api.dsl.LibraryExtension>().apply {
++        testOptions.targetSdk = project.property("ANDROID_TARGET_SDK_VERSION").toString().toInt()
++        lint.targetSdk = project.property("ANDROID_TARGET_SDK_VERSION").toString().toInt()
++    }
+@@ -38,12 +42,0 @@ pluginManager.withPlugin("com.android.library") {
+-            // This is deprecated but we don't have a replacement for the instrumentation APKs yet
+-            // TODO [#1815]: Gradle targetSdk deprecated #1815
+-            // TODO [#1815]: https://github.com/Electric-Coin-Company/zashi-android/issues/1815
+-            targetSdk = project.property("ANDROID_TARGET_SDK_VERSION").toString().toInt()
+-
+-            // The last two are for support of pseudolocales in debug builds.
+-            // If we add other localizations, they should be included in this list.
+-            // By explicitly setting supported locales, we strip out unused localizations from third party
+-            // libraries (e.g. play services)
+-            // TODO [#1816]: Gradle resourceConfigurations deprecation #1816
+-            // TODO [#1816]: https://github.com/Electric-Coin-Company/zashi-android/issues/1816
+-            resourceConfigurations.addAll(listOf("en", "en-rUS", "en-rGB", "en-rAU", "es", "en_XA", "ar_XB"))
+@@ -52 +45 @@ pluginManager.withPlugin("com.android.library") {
+-            consumerProguardFiles("proguard-consumer.txt")
++            project.file("proguard-consumer.txt").takeIf { it.isFile }?.let { consumerProguardFiles(it) }
+@@ -73,8 +65,0 @@ pluginManager.withPlugin("com.android.test") {
+-            // The last two are for support of pseudolocales in debug builds.
+-            // If we add other localizations, they should be included in this list.
+-            // By explicitly setting supported locales, we strip out unused localizations from third party
+-            // libraries (e.g. play services)
+-            // TODO [#1816]: Gradle resourceConfigurations deprecation #1816
+-            // TODO [#1816]: https://github.com/Electric-Coin-Company/zashi-android/issues/1816
+-            resourceConfigurations.addAll(listOf("en", "en-rUS", "en-rGB", "en-rAU", "es", "en_XA", "ar_XB"))
+-
 diff --git a/build-conventions-secant/src/main/kotlin/secant.kotlin-multiplatform-build-conventions.gradle.kts b/build-conventions-secant/src/main/kotlin/secant.kotlin-multiplatform-build-conventions.gradle.kts
 index b018cbc20..1691c7274 100644
 --- a/build-conventions-secant/src/main/kotlin/secant.kotlin-multiplatform-build-conventions.gradle.kts
@@ -710,6 +752,15 @@ index 5831568a4..8a9b07649 100644
 -include("feature-voting")
 @@ -371,0 +368 @@ include("ui-lib")
 +include("wallet-foundation-lib")
+diff --git a/spackle-lib/src/jvmTest/kotlin/co/electriccoin/zcash/spackle/io/WriteAtomicallyTest.kt b/spackle-lib/src/jvmTest/kotlin/co/electriccoin/zcash/spackle/io/WriteAtomicallyTest.kt
+index 3d17eec6d..5457e9bae 100644
+--- a/spackle-lib/src/jvmTest/kotlin/co/electriccoin/zcash/spackle/io/WriteAtomicallyTest.kt
++++ b/spackle-lib/src/jvmTest/kotlin/co/electriccoin/zcash/spackle/io/WriteAtomicallyTest.kt
+@@ -15,2 +15,2 @@ class WriteAtomicallyTest {
+-    // Putting in the build directory so that it doesn't show up as dirty in git
+-    private fun newFile() = File(File("build"), "atomic_file_test-${UUID.randomUUID()}")
++    // Use the configured temporary root; Gradle build outputs may be relocated.
++    private fun newFile() = File(System.getProperty("java.io.tmpdir"), "atomic_file_test-${UUID.randomUUID()}")
 diff --git a/ui-design-lib/src/main/res/ui/common/drawable-es/logo_with_hi.png b/ui-design-lib/src/main/res/ui/common/drawable-es/logo_with_hi.png
 deleted file mode 100644
 index ab1bbb368661c87dfedbea2be6fc7d22c4e8cac6..0000000000000000000000000000000000000000
@@ -3430,22 +3481,26 @@ index 1c2a8787c..bae9379dc 100644
 -        singleOf(::TransactionRepositoryImpl) bind TransactionRepository::class
 +        single<TransactionRepository> { TransactionRepositoryImpl(get(), get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
-index c9262f680..4f994ad64 100644
+index c9262f680..fc14464b6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
-@@ -12 +11,0 @@ import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
+@@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
++import co.electriccoin.zcash.ui.common.usecase.CopyRecoveryToClipboardUseCase
+@@ -12 +12,0 @@ import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 -import co.electriccoin.zcash.ui.common.usecase.CreateFlexaTransactionUseCase
-@@ -42 +40,0 @@ import co.electriccoin.zcash.ui.common.usecase.GetFilteredActivitiesUseCase
+@@ -42 +41,0 @@ import co.electriccoin.zcash.ui.common.usecase.GetFilteredActivitiesUseCase
 -import co.electriccoin.zcash.ui.common.usecase.GetFlexaStatusUseCase
-@@ -137 +134,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
+@@ -137 +135,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 -import co.electriccoin.zcash.ui.common.usecase.SendSupportEmailUseCase
-@@ -201 +197,0 @@ val useCaseModule =
+@@ -188,0 +187 @@ val useCaseModule =
++        singleOf(::CopyRecoveryToClipboardUseCase)
+@@ -201 +199,0 @@ val useCaseModule =
 -        factoryOf(::SendSupportEmailUseCase)
-@@ -256 +251,0 @@ val useCaseModule =
+@@ -256 +253,0 @@ val useCaseModule =
 -        factoryOf(::CreateFlexaTransactionUseCase)
-@@ -261 +255,0 @@ val useCaseModule =
+@@ -261 +257,0 @@ val useCaseModule =
 -        factoryOf(::GetFlexaStatusUseCase)
-@@ -325 +319 @@ val useCaseModule =
+@@ -325 +321 @@ val useCaseModule =
 -        factoryOf(::GetSwapStatusUseCase)
 +        factory { GetSwapStatusUseCase(get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt
@@ -4815,6 +4870,157 @@ index 1d3fdf0e2..f1f74ce28 100644
 +                    if (clearSendForm) observeClearSend.requestClear()
 +                    navigationRouter.backTo(Send::class)
 +                }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CopyRecoveryToClipboardUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CopyRecoveryToClipboardUseCase.kt
+new file mode 100644
+index 000000000..b8207bb29
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CopyRecoveryToClipboardUseCase.kt
+@@ -0,0 +1,133 @@
++package co.electriccoin.zcash.ui.common.usecase
++
++import android.content.ClipData
++import android.content.ClipboardManager
++import android.content.Context
++import android.os.PersistableBundle
++import android.os.SystemClock
++import android.widget.Toast
++import co.electriccoin.zcash.spackle.AndroidApiVersion
++import co.electriccoin.zcash.spackle.getSystemService
++import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
++import java.util.UUID
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.collectLatest
++import kotlinx.coroutines.flow.combine
++import kotlinx.coroutines.launch
++
++/** Application-scoped lease: leaving the recovery screen does not cancel clipboard cleanup. */
++class CopyRecoveryToClipboardUseCase(
++    context: Context,
++    applicationStateProvider: ApplicationStateProvider,
++    private val copyToClipboard: CopyToClipboardUseCase
++) {
++    private val applicationContext = context.applicationContext
++    private val clipboard = applicationContext.getSystemService<ClipboardManager>()
++    private val lease = RecoveryClipboardLease()
++    private val revision = MutableStateFlow(0L)
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
++
++    init {
++        scope.launch {
++            combine(applicationStateProvider.isInForeground, revision) { foreground, _ -> foreground }
++                .collectLatest { foreground ->
++                    val expiresAt = lease.expiresAt ?: return@collectLatest
++                    if (foreground) {
++                        delay((expiresAt - SystemClock.elapsedRealtime()).coerceAtLeast(0))
++                        // Focus can arrive after ON_START. A denied/null read retains the lease for the next return.
++                        repeat(FOCUS_ATTEMPTS) {
++                            if (tryClear()) return@collectLatest
++                            delay(FOCUS_RETRY_MS)
++                        }
++                    }
++                }
++        }
++    }
++
++    operator fun invoke(value: String) {
++        val owner = UUID.randomUUID().toString()
++        val copied = copyRecoverySafely(
++            write = {
++                copyToClipboard.copyWithMetadata(
++                    value,
++                    PersistableBundle().apply { putString(OWNER_KEY, owner) }
++                )
++            },
++            onDenied = {
++                Toast.makeText(applicationContext, R.string.recovery_copy_failed, Toast.LENGTH_SHORT).show()
++            }
++        )
++        if (!copied) return
++        lease.start(owner, SystemClock.elapsedRealtime())
++        revision.value += 1
++    }
++
++    @Suppress("TooGenericExceptionCaught")
++    private fun tryClear(): Boolean =
++        try {
++            val description = clipboard.primaryClipDescription
++            // Null can mean Android withheld access. Never infer ownership from the copied text.
++            if (description == null) {
++                false
++            } else {
++                lease.expire(SystemClock.elapsedRealtime(), description.extras?.getString(OWNER_KEY).orEmpty()) {
++                    clearRecoveryClipboard(clipboard)
++                }
++            }
++        } catch (_: RuntimeException) {
++            false
++        }
++
++    private companion object {
++        const val OWNER_KEY = "co.electriccoin.zcash.recovery.clipboard.OWNER"
++        const val FOCUS_ATTEMPTS = 5
++        const val FOCUS_RETRY_MS = 1_000L
++    }
++}
++
++/** Holds only ownership metadata; clipboard text is never retained or read back. */
++internal class RecoveryClipboardLease {
++    var expiresAt: Long? = null
++        private set
++    private var owner: String? = null
++
++    fun start(token: String, now: Long) {
++        owner = token
++        expiresAt = now + LEASE_MS
++    }
++
++    fun expire(now: Long, observedOwner: String?, clear: () -> Unit): Boolean {
++        val expiry = expiresAt ?: return true
++        if (now < expiry || observedOwner == null) return false
++        if (owner == observedOwner) clear()
++        owner = null
++        expiresAt = null
++        return true
++    }
++
++    private companion object {
++        const val LEASE_MS = 60_000L
++    }
++}
++
++internal fun clearRecoveryClipboard(clipboard: ClipboardManager) {
++    if (AndroidApiVersion.isAtLeastP) {
++        clipboard.clearPrimaryClip()
++    } else {
++        clipboard.setPrimaryClip(ClipData.newPlainText("", ""))
++    }
++}
++
++internal fun copyRecoverySafely(write: () -> Unit, onDenied: () -> Unit): Boolean =
++    try {
++        write()
++        true
++    } catch (_: SecurityException) {
++        onDenied()
++        false
++    }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CopyToClipboardUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CopyToClipboardUseCase.kt
+index 8f2c7efe7..2c7990599 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CopyToClipboardUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CopyToClipboardUseCase.kt
+@@ -35 +35,3 @@ class CopyToClipboardUseCase(
+-    operator fun invoke(value: String) {
++    operator fun invoke(value: String) = copyWithMetadata(value, PersistableBundle())
++
++    internal fun copyWithMetadata(value: String, metadata: PersistableBundle) {
+@@ -41 +43 @@ class CopyToClipboardUseCase(
+-                    description.extras = PersistableBundle().apply { putBoolean(extraIsSensitive, true) }
++                    description.extras = PersistableBundle(metadata).apply { putBoolean(extraIsSensitive, true) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateFlexaTransactionUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateFlexaTransactionUseCase.kt
 deleted file mode 100644
 index 572bbb6b4..000000000
@@ -7085,6 +7291,80 @@ index b1f6403cd..30ee1cd5d 100644
 +                    stringRes(Zatoshi(10000000), HIDDEN),
 +                    stringRes("ZEC"),
 +                )
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupState.kt
+index 9dcdf7ae4..04e0a54cb 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupState.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupState.kt
+@@ -14 +14,3 @@ data class WalletBackupState(
+-    val onBack: (() -> Unit)?
++    val onBack: (() -> Unit)?,
++    val copyPhrase: ButtonState? = null,
++    val copyBirthday: ButtonState? = null
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupView.kt
+index 376f5f34f..9d24744cb 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupView.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupView.kt
+@@ -148,0 +149 @@ private fun SeedRecoveryMainContent(
++        state.copyPhrase?.let { CopyButton(it) }
+@@ -152,0 +154,9 @@ private fun SeedRecoveryMainContent(
++        state.copyBirthday?.let { CopyButton(it) }
++        if (state.copyPhrase != null || state.copyBirthday != null) {
++            Spacer(8.dp)
++            Text(
++                text = stringResource(R.string.recovery_copy_notice),
++                color = ZashiColors.Text.textPrimary,
++                style = ZashiTypography.textSm
++            )
++        }
+@@ -173,0 +184,10 @@ private fun SeedRecoveryMainContent(
++@Composable
++private fun CopyButton(state: ButtonState) {
++    Spacer(8.dp)
++    ZashiButton(
++        state = state,
++        modifier = Modifier.fillMaxWidth(),
++        defaultPrimaryColors = ZashiButtonDefaults.secondaryColors()
++    )
++}
++
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupViewModel.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupViewModel.kt
+index 35d04d186..57bf62563 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupViewModel.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupViewModel.kt
+@@ -12,0 +13 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
++import co.electriccoin.zcash.ui.common.usecase.CopyRecoveryToClipboardUseCase
+@@ -41 +42,2 @@ class WalletBackupViewModel(
+-    private val biometricRepository: BiometricRepository
++    private val biometricRepository: BiometricRepository,
++    private val copyRecoveryToClipboard: CopyRecoveryToClipboardUseCase
+@@ -141,0 +144,20 @@ class WalletBackupViewModel(
++                copyPhrase = wallet?.takeIf { isRevealed }?.let { wallet ->
++                    ButtonState(text = stringRes(R.string.recovery_copy_phrase), onClick = {
++                        copyRecoveryIfRevealed(
++                            isRevealed = this.isRevealed.value,
++                            value = { wallet.seedPhrase.split.joinToString(" ") },
++                            copy = copyRecoveryToClipboard::invoke
++                        )
++                    })
++                },
++                copyBirthday = wallet?.takeIf { isRevealed }?.let { wallet ->
++                    wallet.birthday?.let { birthday ->
++                        ButtonState(text = stringRes(R.string.recovery_copy_birthday), onClick = {
++                            copyRecoveryIfRevealed(
++                                isRevealed = this.isRevealed.value,
++                                value = { birthday.value.toString() },
++                                copy = copyRecoveryToClipboard::invoke
++                            )
++                        })
++                    }
++                },
+@@ -182,0 +205,6 @@ class WalletBackupViewModel(
++
++internal fun copyRecoveryIfRevealed(isRevealed: Boolean, value: () -> String, copy: (String) -> Unit) {
++    if (isRevealed) {
++        copy(value())
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/whatsnew/AndroidWhatsNew.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/whatsnew/AndroidWhatsNew.kt
 deleted file mode 100644
 index 33610ecb3..000000000
@@ -11635,6 +11915,19 @@ index 000000000..c1e6f124b
 +    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFFFF" android:strokeWidth="1.7" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M12,9.4 L8.8,6.3 C6.1,3.6 10.1,0.8 12,3.5 C13.9,0.8 17.9,3.6 15.2,6.3 Z M3,13 L6,13 L6,21 L3,21 Z M6,14 L9,12 L12,12 C14,12 14,15 12,15 L10,15 M12,15 L18,12.5 C20,11.8 21.3,13.7 19.7,15.1 L14,20 L6,19" />
 +</vector>
 \ No newline at end of file
+diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_recovery_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_recovery_strings.xml
+new file mode 100644
+index 000000000..bdaf3e5ab
+--- /dev/null
++++ b/ui-lib/src/main/res/ui/non_translatable/values/private_recovery_strings.xml
+@@ -0,0 +1,7 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="recovery_copy_phrase">Copy recovery phrase</string>
++    <string name="recovery_copy_birthday">Copy wallet birthday</string>
++    <string name="recovery_copy_notice">Other apps may read copied recovery details. We try to clear them after 60 seconds, or when you return to the app. Save your backup somewhere private.</string>
++    <string name="recovery_copy_failed">Could not copy. Keep the app open and try again.</string>
++</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
 index 000000000..52d15f3f9
@@ -13082,6 +13375,215 @@ index 40bfe60a6..39059e4b6 100644
 +            coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved) }
 +        }
 +
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardLeaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardLeaseTest.kt
+new file mode 100644
+index 000000000..66271503f
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardLeaseTest.kt
+@@ -0,0 +1,65 @@
++package co.electriccoin.zcash.ui.common.usecase
++
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertFailsWith
++import kotlin.test.assertNull
++import kotlin.test.assertTrue
++
++class RecoveryClipboardLeaseTest {
++    @Test
++    fun clearsOnlyAfterSixtySeconds() {
++        val lease = RecoveryClipboardLease()
++        var clears = 0
++        lease.start("fake-owner", 100)
++        assertFalse(lease.expire(60_099, "fake-owner") { clears++ })
++        assertTrue(lease.expire(60_100, "fake-owner") { clears++ })
++        assertEquals(1, clears)
++        assertNull(lease.expiresAt)
++    }
++
++    @Test
++    fun sameTextReplacementWithDifferentOwnershipIsPreserved() {
++        val lease = RecoveryClipboardLease()
++        lease.start("original-fake-owner", 0)
++        assertTrue(lease.expire(60_000, "external-owner") { error("must preserve replacement") })
++        assertNull(lease.expiresAt)
++    }
++
++    @Test
++    fun replacementWithoutMetadataIsPreserved() {
++        val lease = RecoveryClipboardLease()
++        lease.start("fake-owner", 0)
++        assertTrue(lease.expire(60_000, "") { error("must preserve replacement") })
++    }
++
++    @Test
++    fun deniedBackgroundReadDefersUntilForegroundAccessReturns() {
++        val lease = RecoveryClipboardLease()
++        var clears = 0
++        lease.start("fake-owner", 0)
++        assertFalse(lease.expire(60_000, null) { clears++ })
++        assertTrue(lease.expire(90_000, "fake-owner") { clears++ })
++        assertEquals(1, clears)
++    }
++
++    @Test
++    fun secondCopyGetsItsOwnFullLease() {
++        val lease = RecoveryClipboardLease()
++        lease.start("first", 0)
++        lease.start("second", 50_000)
++        assertFalse(lease.expire(60_000, "second") { error("too early") })
++        assertTrue(lease.expire(110_000, "second") {})
++    }
++    @Test
++    fun deniedClearRetainsOwnershipForRetry() {
++        val lease = RecoveryClipboardLease()
++        lease.start("fake-owner", 0)
++        assertFailsWith<SecurityException> {
++            lease.expire(60_000, "fake-owner") { throw SecurityException("fake denial") }
++        }
++        assertEquals(60_000L, lease.expiresAt)
++        assertTrue(lease.expire(90_000, "fake-owner") {})
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardPlatformTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardPlatformTest.kt
+new file mode 100644
+index 000000000..cd3bfb9aa
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardPlatformTest.kt
+@@ -0,0 +1,40 @@
++package co.electriccoin.zcash.ui.common.usecase
++
++import android.content.ClipData
++import android.content.ClipboardManager
++import co.electriccoin.zcash.spackle.AndroidApiVersion
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.mockkObject
++import io.mockk.mockkStatic
++import io.mockk.unmockkAll
++import io.mockk.verify
++import kotlin.test.AfterTest
++import kotlin.test.Test
++
++class RecoveryClipboardPlatformTest {
++    @AfterTest
++    fun tearDown() = unmockkAll()
++
++    @Test
++    fun modernAndroidClearsOwnedClip() {
++        mockkObject(AndroidApiVersion)
++        every { AndroidApiVersion.isAtLeastP } returns true
++        val clipboard = mockk<ClipboardManager>(relaxUnitFun = true)
++        clearRecoveryClipboard(clipboard)
++        verify(exactly = 1) { clipboard.clearPrimaryClip() }
++    }
++
++    @Test
++    fun api27ReplacesOwnedClipWithEmptyText() {
++        mockkObject(AndroidApiVersion)
++        every { AndroidApiVersion.isAtLeastP } returns false
++        mockkStatic(ClipData::class)
++        val empty = mockk<ClipData>()
++        every { ClipData.newPlainText("", "") } returns empty
++        val clipboard = mockk<ClipboardManager>(relaxUnitFun = true)
++        clearRecoveryClipboard(clipboard)
++        verify(exactly = 1) { clipboard.setPrimaryClip(empty) }
++        verify(exactly = 0) { clipboard.clearPrimaryClip() }
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardWriteTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardWriteTest.kt
+new file mode 100644
+index 000000000..bc0e490ee
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardWriteTest.kt
+@@ -0,0 +1,86 @@
++package co.electriccoin.zcash.ui.common.usecase
++
++import android.content.ClipData
++import android.content.ClipboardManager
++import android.content.Context
++import android.os.PersistableBundle
++import android.os.UserManager
++import android.widget.Toast
++import co.electriccoin.zcash.spackle.AndroidApiVersion
++import co.electriccoin.zcash.ui.R
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.mockkObject
++import io.mockk.mockkStatic
++import io.mockk.slot
++import io.mockk.unmockkAll
++import io.mockk.verify
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import kotlin.test.AfterTest
++import kotlin.test.BeforeTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class RecoveryClipboardWriteTest {
++    private val clipboard = mockk<ClipboardManager>(relaxUnitFun = true)
++    private val userManager = mockk<UserManager>()
++    private val toast = mockk<Toast>(relaxUnitFun = true)
++    private val context = mockk<Context>()
++
++    @BeforeTest
++    fun setUp() {
++        mockkObject(AndroidApiVersion)
++        every { AndroidApiVersion.isAtLeastTiramisu } returns true
++        every { AndroidApiVersion.isAtLeastUpsideDownCake } returns true
++        every { context.getSystemService(ClipboardManager::class.java) } returns clipboard
++        every { context.getSystemService(UserManager::class.java) } returns userManager
++        every { userManager.isAdminUser } returns false
++        mockkStatic(Toast::class)
++        every { Toast.makeText(context, R.string.general_copied_to_clipboard, Toast.LENGTH_SHORT) } returns toast
++    }
++
++    @AfterTest
++    fun tearDown() = unmockkAll()
++
++    @Test
++    fun ownershipMetadataPreservesSensitiveFlagAndNonAdminFeedback() {
++        val clip = slot<ClipData>()
++        every { clipboard.setPrimaryClip(capture(clip)) } returns Unit
++        val metadata = PersistableBundle().apply {
++            putString("fake-owner-key", "fake-owner")
++            putBoolean("android.content.extra.IS_SENSITIVE", false)
++        }
++        CopyToClipboardUseCase(context).copyWithMetadata("fake recovery text", metadata)
++        assertEquals("fake-owner", clip.captured.description.extras?.getString("fake-owner-key"))
++        assertTrue(clip.captured.description.extras!!.getBoolean("android.content.extra.IS_SENSITIVE"))
++        assertEquals("fake recovery text", clip.captured.getItemAt(0).text.toString())
++        verify(exactly = 1) { toast.show() }
++    }
++
++    @Test
++    fun existingOneArgumentApiKeepsSensitiveFlag() {
++        val clip = slot<ClipData>()
++        every { clipboard.setPrimaryClip(capture(clip)) } returns Unit
++        CopyToClipboardUseCase(context)("fake existing caller")
++        assertTrue(clip.captured.description.extras!!.getBoolean("android.content.extra.IS_SENSITIVE"))
++    }
++
++    @Test
++    fun deniedRecoveryWriteReportsFailureOnceWithoutSuccessFeedback() {
++        every { clipboard.setPrimaryClip(any()) } throws SecurityException("fake denial")
++        var failures = 0
++        val copied = copyRecoverySafely(
++            write = { CopyToClipboardUseCase(context).copyWithMetadata("fake text", PersistableBundle()) },
++            onDenied = { failures++ }
++        )
++        assertFalse(copied)
++        assertEquals(1, failures)
++        verify(exactly = 0) { toast.show() }
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 index c01988b65..8d44dda7f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
@@ -14093,6 +14595,39 @@ index 3027e6cda..60dbff0cc 100644
 @@ -128 +172 @@ class SwapQuoteVMTest {
 -            cancelSwapQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true),
 +            cancelSwapQuote = cancelQuote,
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/walletbackup/RecoveryCopyGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/walletbackup/RecoveryCopyGuardTest.kt
+new file mode 100644
+index 000000000..62b0800ea
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/walletbackup/RecoveryCopyGuardTest.kt
+@@ -0,0 +1,27 @@
++package co.electriccoin.zcash.ui.screen.walletbackup
++
++import kotlin.test.Test
++import kotlin.test.assertEquals
++
++class RecoveryCopyGuardTest {
++    @Test
++    fun callbackCapturedWhileRevealedChecksCurrentHiddenState() {
++        var revealed = true
++        var copies = 0
++        val callback = {
++            copyRecoveryIfRevealed(revealed, { error("hidden secret must not be evaluated") }, { copies++ })
++        }
++        revealed = false
++        callback()
++        assertEquals(0, copies)
++    }
++
++    @Test
++    fun revealedCopyPassesExactText() {
++        var copied = ""
++        copyRecoveryIfRevealed(true, { "fake phrase only" }, { copied = it })
++        assertEquals("fake phrase only", copied)
++        copyRecoveryIfRevealed(true, { "1234567" }, { copied = it })
++        assertEquals("1234567", copied)
++    }
++}
 diff --git a/ui-screenshot-test/build.gradle.kts b/ui-screenshot-test/build.gradle.kts
 index 21de45f4b..cc166ec80 100644
 --- a/ui-screenshot-test/build.gradle.kts

@@ -146,10 +146,20 @@ private fun SeedRecoveryMainContent(
         Spacer(20.dp)
 
         ZashiSeedText(modifier = Modifier.fillMaxWidth(), state = state.seed)
+        state.copyPhrase?.let { CopyButton(it) }
 
         Spacer(24.dp)
 
         BDSecret(modifier = Modifier.fillMaxWidth(), state = state.birthday)
+        state.copyBirthday?.let { CopyButton(it) }
+        if (state.copyPhrase != null || state.copyBirthday != null) {
+            Spacer(8.dp)
+            Text(
+                text = stringResource(R.string.recovery_copy_notice),
+                color = ZashiColors.Text.textPrimary,
+                style = ZashiTypography.textSm
+            )
+        }
 
         Spacer(28.dp)
 
@@ -169,6 +179,16 @@ private fun SeedRecoveryMainContent(
             modifier = Modifier.fillMaxWidth()
         )
     }
+}
+
+@Composable
+private fun CopyButton(state: ButtonState) {
+    Spacer(8.dp)
+    ZashiButton(
+        state = state,
+        modifier = Modifier.fillMaxWidth(),
+        defaultPrimaryColors = ZashiButtonDefaults.secondaryColors()
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -11,7 +11,9 @@ data class WalletBackupState(
     val info: IconButtonState,
     val secondaryButton: ButtonState?,
     val primaryButton: ButtonState,
-    val onBack: (() -> Unit)?
+    val onBack: (() -> Unit)?,
+    val copyPhrase: ButtonState? = null,
+    val copyBirthday: ButtonState? = null
 )
 
 data class SeedSecretState(
