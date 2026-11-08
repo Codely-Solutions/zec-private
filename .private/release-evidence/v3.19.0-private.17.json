@@ -1,0 +1,635 @@
+{
+  "source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
+  "controller_sha": "c607ea3e9b3997c8c00b573428d48c50221b1cb3",
+  "artifact_run_id": "42524865003",
+  "apk_sha256": "78f43b0553eb23180134bae388f0d871aa1ff446de8b01dae43661d46c49118a",
+  "core": {
+    "schema": 1,
+    "passed": true,
+    "evidence_class": "real-app-testnet",
+    "network": "zcash-testnet",
+    "clearnet_fallback": false,
+    "direct_bulk_downloads": true,
+    "personal_wallet_access": false,
+    "real_funds_used": false,
+    "stages": {
+      "fund": {
+        "stage": "fund",
+        "passed": true,
+        "network": "zcash-testnet",
+        "transport": "Tor sensitive RPCs; upstream direct bulk",
+        "seconds": 411.1190703,
+        "native_rpc_probe": {
+          "wallet_access": false,
+          "valid_transaction_submissions": 0,
+          "height_response_class": "Success",
+          "height": 4599093,
+          "malformed_submit_calls": 1,
+          "submit_response_class": "OverTor",
+          "sdk_code": 3200,
+          "native_rejection_code": -22,
+          "seconds": 11.8079562
+        },
+        "funding_txid": "3cbea0511e245067bf919d8711817443757a29142448d1d91599f236c3105f7c",
+        "balance_zatoshi": 10000000,
+        "app_transaction_state": "Confirmed",
+        "public_relay_directory_transport": "direct HTTPS before wallet firewall; no wallet data",
+        "public_relay_fetch_millis": 8093,
+        "database_input": {
+          "database_count": 1,
+          "accounts": [
+            1
+          ],
+          "ironwood_note_counts": [
+            1,
+            10000000,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null,
+            null
+          ],
+          "checkpoint_counts_and_maxima": [
+            73,
+            4599108,
+            73,
+            4599108,
+            73,
+            4599108
+          ],
+          "ironwood_shard_counts": [
+            1,
+            0,
+            0
+          ],
+          "note_height_ranges": [
+            4599098,
+            4599098,
+            4599098,
+            4599098,
+            null,
+            null
+          ],
+          "legacy_tip_and_anchor": [
+            4599110,
+            4599107,
+            4599107,
+            4599107,
+            0
+          ]
+        }
+      },
+      "upgrade": {
+        "stage": "upgrade",
+        "passed": true,
+        "network": "zcash-testnet",
+        "transport": "Tor sensitive RPCs; upstream direct bulk",
+        "seconds": 4.6854523,
+        "database_input": {
+          "database_count": 1,
+          "accounts": [
+            1
+          ],
+          "ironwood_note_counts": [
+            1,
+            10000000,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            null,
+            null
+          ],
+          "checkpoint_counts_and_maxima": [
+            73,
+            4599108,
+            73,
+            4599108,
+            73,
+            4599108
+          ],
+          "ironwood_shard_counts": [
+            1,
+            0,
+            0
+          ],
+          "note_height_ranges": [
+            4599098,
+            4599098,
+            4599098,
+            4599098,
+            null,
+            null
+          ],
+          "legacy_tip_and_anchor": [
+            4599110,
+            4599107,
+            4599107,
+            4599107,
+            0
+          ]
+        }
+      },
+      "interruption": {
+        "passed": true,
+        "metadata_blocked": true,
+        "direct_bulk_reachable": true,
+        "metadata_recovered": true,
+        "blocked_packets": 83,
+        "seconds": 63.62591699999757,
+        "sync_restarted": true,
+        "synced": true,
+        "balance_preserved": true,
+        "update_metadata_valid_before": true,
+        "update_metadata_valid_after": true,
+        "update_blocked_during_outage": true,
+        "probe_only": false,
+        "scanned_height": 4599112,
+        "outage_marker_ms": 25981,
+        "outage_observed_ms": 9045,
+        "metadata_finished_ms": 38688,
+        "update_finished_ms": 39474,
+        "total_ms": 55376,
+        "update_ui_responsive": true,
+        "update_ui_heartbeat_ms": 2,
+        "history_preserved": true
+      },
+      "send": {
+        "stage": "send",
+        "passed": true,
+        "network": "zcash-testnet",
+        "transport": "Tor sensitive RPCs; upstream direct bulk",
+        "seconds": 111.1610755,
+        "txId": "2b04354b01e4c5bf9833b637706c859e7276e4e9d64f22dbf77639345dc63fe6",
+        "fee_zatoshi": 10000,
+        "initial_submit_type": "Success",
+        "manual_resubmissions": 0,
+        "ui_review": true,
+        "ui_cancel_no_submission": true,
+        "ui_approval": true,
+        "ui_approval_actions": 1,
+        "ui_review_sync_checks": 3,
+        "ui_review_sync_wait_millis": 4125,
+        "setup": "production support screen; actual donation review/cancel and approval clicks",
+        "shielded_donation": true,
+        "automatic_identifying_memo": false,
+        "reviewed_memo_verified": true,
+        "clipboard_metadata_verified": true,
+        "newer_clipboard_preserved": true,
+        "clipboard_lease_age_ms": 102498,
+        "multi_recipient_sdk_accepted": true,
+        "multi_recipient_wallet_rejected": true,
+        "multi_recipient_submitted": false,
+        "biometric_prompt_executed": false
+      },
+      "restart": {
+        "stage": "restart",
+        "passed": true,
+        "network": "zcash-testnet",
+        "transport": "Tor sensitive RPCs; upstream direct bulk",
+        "seconds": 4.5575105,
+        "txId": "2b04354b01e4c5bf9833b637706c859e7276e4e9d64f22dbf77639345dc63fe6"
+      },
+      "restore": {
+        "stage": "restore",
+        "passed": true,
+        "network": "zcash-testnet",
+        "transport": "Tor sensitive RPCs; upstream direct bulk",
+        "seconds": 60.7448656,
+        "txId": "2b04354b01e4c5bf9833b637706c859e7276e4e9d64f22dbf77639345dc63fe6",
+        "mined_height": 4599115,
+        "amount_zatoshi": 1000000,
+        "app_transaction_state": "Pending",
+        "reviewed_memo_verified": true
+      }
+    },
+    "instrumentation_pairing": {
+      "stages": {
+        "networkTargets": {
+          "role": "baseline",
+          "original_sha256": "84d394acf82e408d24be8e6d5f00716ec1afdf0b5034e90b777c03b2074b70a1",
+          "executed_sha256": "00bb25f22a87c3920e6cba1951f569c19c85ce149753e04ab19f49e13e6e0acd",
+          "source_sha": "a6ea7cf81986f6f74db1847a513dd14b0bb4d649",
+          "app_version_code": 3234016,
+          "installed_hash_verified": true
+        },
+        "recipient": {
+          "role": "baseline",
+          "original_sha256": "84d394acf82e408d24be8e6d5f00716ec1afdf0b5034e90b777c03b2074b70a1",
+          "executed_sha256": "00bb25f22a87c3920e6cba1951f569c19c85ce149753e04ab19f49e13e6e0acd",
+          "source_sha": "a6ea7cf81986f6f74db1847a513dd14b0bb4d649",
+          "app_version_code": 3234016,
+          "installed_hash_verified": true
+        },
+        "sender": {
+          "role": "baseline",
+          "original_sha256": "84d394acf82e408d24be8e6d5f00716ec1afdf0b5034e90b777c03b2074b70a1",
+          "executed_sha256": "00bb25f22a87c3920e6cba1951f569c19c85ce149753e04ab19f49e13e6e0acd",
+          "source_sha": "a6ea7cf81986f6f74db1847a513dd14b0bb4d649",
+          "app_version_code": 3234016,
+          "installed_hash_verified": true
+        },
+        "fund": {
+          "role": "baseline",
+          "original_sha256": "84d394acf82e408d24be8e6d5f00716ec1afdf0b5034e90b777c03b2074b70a1",
+          "executed_sha256": "00bb25f22a87c3920e6cba1951f569c19c85ce149753e04ab19f49e13e6e0acd",
+          "source_sha": "a6ea7cf81986f6f74db1847a513dd14b0bb4d649",
+          "app_version_code": 3234016,
+          "installed_hash_verified": true
+        },
+        "upgrade": {
+          "role": "candidate",
+          "original_sha256": "f49dba022158cd09d3f66c22a2eaadcbbaea8cc95d745d8e3ecb0f4ec2215888",
+          "executed_sha256": "c49a3591babc2099f839551f903897457b0679f1bd684e85381607c88dfb928d",
+          "source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
+          "app_version_code": 3234017,
+          "installed_hash_verified": true
+        },
+        "transport": {
+          "role": "candidate",
+          "original_sha256": "f49dba022158cd09d3f66c22a2eaadcbbaea8cc95d745d8e3ecb0f4ec2215888",
+          "executed_sha256": "c49a3591babc2099f839551f903897457b0679f1bd684e85381607c88dfb928d",
+          "source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
+          "app_version_code": 3234017,
+          "installed_hash_verified": true
+        },
+        "send": {
+          "role": "candidate",
+          "original_sha256": "f49dba022158cd09d3f66c22a2eaadcbbaea8cc95d745d8e3ecb0f4ec2215888",
+          "executed_sha256": "c49a3591babc2099f839551f903897457b0679f1bd684e85381607c88dfb928d",
+          "source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
+          "app_version_code": 3234017,
+          "installed_hash_verified": true
+        },
+        "restart": {
+          "role": "candidate",
+          "original_sha256": "f49dba022158cd09d3f66c22a2eaadcbbaea8cc95d745d8e3ecb0f4ec2215888",
+          "executed_sha256": "c49a3591babc2099f839551f903897457b0679f1bd684e85381607c88dfb928d",
+          "source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
+          "app_version_code": 3234017,
+          "installed_hash_verified": true
+        },
+        "restore": {
+          "role": "candidate",
+          "original_sha256": "f49dba022158cd09d3f66c22a2eaadcbbaea8cc95d745d8e3ecb0f4ec2215888",
+          "executed_sha256": "c49a3591babc2099f839551f903897457b0679f1bd684e85381607c88dfb928d",
+          "source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
+          "app_version_code": 3234017,
+          "installed_hash_verified": true
+        }
+      },
+      "baseline": {
+        "original_sha256": "84d394acf82e408d24be8e6d5f00716ec1afdf0b5034e90b777c03b2074b70a1",
+        "executed_sha256": "00bb25f22a87c3920e6cba1951f569c19c85ce149753e04ab19f49e13e6e0acd",
+        "source_sha": "a6ea7cf81986f6f74db1847a513dd14b0bb4d649",
+        "app_version_code": 3234016
+      },
+      "candidate": {
+        "original_sha256": "f49dba022158cd09d3f66c22a2eaadcbbaea8cc95d745d8e3ecb0f4ec2215888",
+        "executed_sha256": "c49a3591babc2099f839551f903897457b0679f1bd684e85381607c88dfb928d",
+        "source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
+        "app_version_code": 3234017
+      }
+    },
+    "input_fingerprint": "d56d760bf4fc59ac6f730ef894025285cd83805fdc98ae070b42badfa25c34e8",
+    "runtime_input_fingerprint": "19202d37e2073d7570ac996d25ff6fb9dcf0bc09fccf0dab6eed27963ad39205",
+    "build_input_fingerprint": "046ebd1cf18554586d317aaca026f906f8f4a9d4a2dc8eab5b8d7c2d1c7bccd6",
+    "build_source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
+    "baseline_source_sha": "a6ea7cf81986f6f74db1847a513dd14b0bb4d649",
+    "baseline_version_code": 3234016,
+    "candidate_version_code": 3234017,
+    "candidate_apk_sha256": "782fa16964bb8dbe51f2caee204d72542e76e48a343397294affb2341a0de54d",
+    "baseline_apk_sha256": "2ecc46ab70b6f5b59eab18844be7bbee3f68150003c14545e9ba4c442d299ddc",
+    "instrumentation_apk_sha256": "f49dba022158cd09d3f66c22a2eaadcbbaea8cc95d745d8e3ecb0f4ec2215888",
+    "baseline_instrumentation_apk_sha256": "84d394acf82e408d24be8e6d5f00716ec1afdf0b5034e90b777c03b2074b70a1",
+    "harness_sha256": "1c435818b021bfa63333da789252751d95dc450da34133174a311c988045fab5",
+    "connection_tracing": true,
+    "bootstrap_policy_sha256": "c9c82d336a50ef5c8f4ce7223b462250a2bf78fe62b704e1835fa35c53aa434c",
+    "sync_preflight": {
+      "stage": "sender",
+      "passed": true,
+      "network": "zcash-testnet",
+      "transport": "Tor sensitive RPCs; upstream direct bulk",
+      "seconds": 34.2280101,
+      "scanned_height": 4599095,
+      "network_height": 4599095,
+      "mode": "caught-up"
+    },
+    "funding_setup": {
+      "tor_transport_verified": true,
+      "proxy_unavailable_failed_closed": true,
+      "tor_exit_verified": false,
+      "route_evidence": "Pinned owned Tor SOCKS; unavailable-proxy negative; validated faucet TLS",
+      "txid": "3cbea0511e245067bf919d8711817443757a29142448d1d91599f236c3105f7c",
+      "provider": "jinolabs-testnet",
+      "persistent_tor_connection": true,
+      "bundle_sha256": "2ee123e9167318a3742778ff704e75f01d4780f05a14522d451fe011011077c4",
+      "download_bytes": 23537200,
+      "bundle_cache_hit": false,
+      "expanded_bytes": 16453120,
+      "setup_seconds": 1.4348761000146624,
+      "bootstrap_seconds": 33.04195970000001,
+      "proof_compute_seconds": 3.496573199983686,
+      "claim_seconds": 12.12730079999892,
+      "tor_binary_sha256": "1607d98f5d13859077b1b349c55beba76b09acc788f0431fd824d11966fb1074",
+      "tor_version": "Tor version 0.4.9.15 (git-4d8efff53a86670b).",
+      "seconds": 51.90733050002018
+    },
+    "iptables_denials": [
+      "       0        0 REJECT     17   --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable",
+      "       0        0 REJECT     all  --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable",
+      "       0        0 REJECT     all  --  *      *       0.0.0.0/0            172.235.26.235       reject-with icmp-port-unreachable"
+    ],
+    "ip6tables_denials": [
+      "       0        0 REJECT     17   --  *      *       ::/0                 ::/0                 reject-with icmp6-port-unreachable",
+      "       0        0 REJECT     all  --  *      *       ::/0                 ::/0                 reject-with icmp6-port-unreachable"
+    ],
+    "network_enforcement": {
+      "passed": true,
+      "mode": "direct public bulk endpoint TCP443 plus Tor relay allowlist; sensitive provider direct egress denied; metadata outage assertion",
+      "allowed_relay_peers": 10158,
+      "embedded_bootstrap_pairs": 300,
+      "sensitive_targets": 1,
+      "direct_bulk_targets": [
+        "2a09:8280:1::32:da2a:0",
+        "66.241.124.102"
+      ],
+      "metadata_no_direct_fallback_observed": true,
+      "metadata_rpc_scope": [
+        "getServerInfo",
+        "getLatestBlockHeight"
+      ],
+      "sdk_transport_policy": "published SDK6.0.0 source inspected; bulk direct, sensitive calls Tor"
+    },
+    "seconds": 848.6751345999946,
+    "last_stage": "restore",
+    "connection_trace_header": "# tracer: nop\r\n#\r\n# entries-in-buffer/entries-written: 425/425   #P:2\r\n#\r\n#                                          _-----=> irqs-off/BH-disabled\r\n#                                         / _----=> need-resched\r\n#                                        | / _---=> hardirq/softirq\r\n#                                        || / _--=> preempt-depth\r\n#                                        ||| / _-=> migrate-disable\r\n#                                        |||| /     delay\r\n#           TASK-PID  ",
+    "connection_trace_sample": [
+      "            netd-371     (    349) [001] b..1.    50.867141: inet_sock_set_state: family=AF_INET protocol=IPPROTO_TCP sport=52640 dport=853 saddr=10.0.2.16 daddr=10.0.2.3 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:10.0.2.3 oldstate=TCP_SYN_SENT newstate=TCP_CLOSE",
+      "   TlsVerify_101-2194    (    349) [001] .....    54.999453: inet_sock_set_state: family=AF_INET protocol=IPPROTO_TCP sport=0 dport=853 saddr=10.0.2.16 daddr=10.0.2.3 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:10.0.2.3 oldstate=TCP_CLOSE newstate=TCP_SYN_SENT",
+      "   TlsVerify_101-2220    (    349) [001] .....    55.572229: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=0 dport=853 saddr=0.0.0.0 daddr=0.0.0.0 saddrv6=fec0::f6c5:fd59:b4a7:adec daddrv6=fec0::3 oldstate=TCP_CLOSE newstate=TCP_SYN_SENT",
+      "     kworker/1:2-392     (    392) [001] ..s1.    56.027330: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=48370 dport=853 saddr=0.0.0.0 daddr=0.0.0.0 saddrv6=fec0::f6c5:fd59:b4a7:adec daddrv6=fec0::3 oldstate=TCP_SYN_SENT newstate=TCP_CLOSE",
+      "        Thread-9-2199    (    982) [000] .....    56.037255: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=0 dport=80 saddr=10.0.2.16 daddr=142.251.150.120 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.150.120 oldstate=TCP_CLOSE newstate=TCP_SYN_SENT",
+      "     ksoftirqd/1-26      (     26) [001] ..s1.    56.526874: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=57316 dport=80 saddr=10.0.2.16 daddr=142.251.150.120 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.150.120 oldstate=TCP_SYN_SENT newstate=TCP_ESTABLISHED",
+      "     kworker/1:2-392     (    392) [001] ..s1.    57.038589: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=57316 dport=80 saddr=10.0.2.16 daddr=142.251.150.120 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.150.120 oldstate=TCP_ESTABLISHED newstate=TCP_CLOSE_WAIT",
+      "        Thread-9-2199    (    982) [000] .....    57.039524: inet_sock_set_state: family=AF_INET6 protocol=IPPROTO_TCP sport=57316 dport=80 saddr=10.0.2.16 daddr=142.251.150.120 saddrv6=::ffff:10.0.2.16 daddrv6=::ffff:142.251.150.120 oldstate=TCP_CLOSE_WAIT newstate=TCP_LAST_ACK"
+    ],
+    "application_pids": [
+      1934,
+      2426,
+      2569,
+      2697,
+      2983,
+      3094,
+      3380,
+      3557,
+      3694
+    ],
+    "connection_destinations": [
+      {
+        "address": "130.89.149.57",
+        "port": 9001
+      },
+      {
+        "address": "15.204.141.10",
+        "port": 443
+      },
+      {
+        "address": "171.25.193.235",
+        "port": 443
+      },
+      {
+        "address": "18.18.82.18",
+        "port": 9001
+      },
+      {
+        "address": "185.66.71.141",
+        "port": 9100
+      },
+      {
+        "address": "188.68.49.235",
+        "port": 9100
+      },
+      {
+        "address": "194.15.115.92",
+        "port": 9001
+      },
+      {
+        "address": "2001:67c:289c:2::235",
+        "port": 443
+      },
+      {
+        "address": "204.8.99.156",
+        "port": 443
+      },
+      {
+        "address": "217.154.19.45",
+        "port": 443
+      },
+      {
+        "address": "217.154.204.108",
+        "port": 9001
+      },
+      {
+        "address": "23.141.188.93",
+        "port": 443
+      },
+      {
+        "address": "23.82.137.99",
+        "port": 443
+      },
+      {
+        "address": "2a01:239:24a:7200::1",
+        "port": 42069
+      },
+      {
+        "address": "2a01:239:43e:900::1",
+        "port": 9001
+      },
+      {
+        "address": "2a01:4f8:221:c9d::2",
+        "port": 443
+      },
+      {
+        "address": "2a02:2479:bc:fd00::1",
+        "port": 443
+      },
+      {
+        "address": "2a03:4000:6:d042:5440:88ff:fedd:4ae5",
+        "port": 9100
+      },
+      {
+        "address": "2a09:8280:1::32:da2a:0",
+        "port": 443
+      },
+      {
+        "address": "2a12:a800:2:1:45:138:16:69",
+        "port": 9100
+      },
+      {
+        "address": "31.14.252.98",
+        "port": 9001
+      },
+      {
+        "address": "45.138.16.69",
+        "port": 9100
+      },
+      {
+        "address": "45.249.101.87",
+        "port": 9090
+      },
+      {
+        "address": "45.66.35.26",
+        "port": 1984
+      },
+      {
+        "address": "45.84.107.84",
+        "port": 587
+      },
+      {
+        "address": "5.199.162.114",
+        "port": 9001
+      },
+      {
+        "address": "64.65.0.134",
+        "port": 443
+      },
+      {
+        "address": "64.65.1.111",
+        "port": 443
+      },
+      {
+        "address": "66.241.124.102",
+        "port": 443
+      },
+      {
+        "address": "77.20.3.30",
+        "port": 443
+      },
+      {
+        "address": "85.215.129.4",
+        "port": 42069
+      },
+      {
+        "address": "88.99.148.243",
+        "port": 9001
+      },
+      {
+        "address": "88.99.96.157",
+        "port": 443
+      },
+      {
+        "address": "90.87.16.3",
+        "port": 9001
+      },
+      {
+        "address": "96.9.98.81",
+        "port": 443
+      }
+    ],
+    "connection_destinations_truncated": false,
+    "iptables_counters": [
+      "       0        0 REJECT     17   --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable",
+      "       0        0 REJECT     all  --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-port-unreachable",
+      "       0        0 REJECT     all  --  *      *       0.0.0.0/0            172.235.26.235       reject-with icmp-port-unreachable"
+    ],
+    "ip6tables_counters": [
+      "       0        0 REJECT     17   --  *      *       ::/0                 ::/0                 reject-with icmp6-port-unreachable",
+      "       0        0 REJECT     all  --  *      *       ::/0                 ::/0                 reject-with icmp6-port-unreachable"
+    ],
+    "blocked_connection_diagnostics": [],
+    "transaction_evidence": {
+      "fundingTxId": "3cbea0511e245067bf919d8711817443757a29142448d1d91599f236c3105f7c",
+      "fundingProvider": "jinolabs-testnet",
+      "fundedBalance": 10000000,
+      "balanceBeforeSend": 10000000,
+      "feeZatoshi": 10000,
+      "senderConfirmedBalance": 8990000,
+      "restoreMinedHeight": 4599115,
+      "restoreTransactionState": "Pending",
+      "candidateTxIds": [
+        "2b04354b01e4c5bf9833b637706c859e7276e4e9d64f22dbf77639345dc63fe6"
+      ],
+      "initialSubmitType": "Success"
+    },
+    "guard_job": "b73f9cf7d78d49ff92ffe2aa4ee4e2ff",
+    "artifact_id": 13634891664,
+    "workflow_run_id": 42524867394,
+    "apk_preparation": {
+      "app-zcashtestnet-foss-debug-androidTest.apk": {
+        "originalSha256": "f49dba022158cd09d3f66c22a2eaadcbbaea8cc95d745d8e3ecb0f4ec2215888",
+        "testedSha256": "c49a3591babc2099f839551f903897457b0679f1bd684e85381607c88dfb928d",
+        "preservedExecutionEntries": 8,
+        "executionEntriesDigest": "34c92738ee58b58d0cb0cb6de41669b0052d4e11ff134ce3ef398244c55a323a",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key"
+      },
+      "app-zcashtestnet-foss-debug.apk": {
+        "originalSha256": "782fa16964bb8dbe51f2caee204d72542e76e48a343397294affb2341a0de54d",
+        "testedSha256": "873c4ced7b8be0e12557e67a4a34a1909fbb2517edc0b297aeabb32c36beab95",
+        "preservedExecutionEntries": 34,
+        "executionEntriesDigest": "a0772fc76ac67e2079712e065c14cf4dd005e77a0634c004254f963386f6ac5d",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key"
+      },
+      "baseline-ui.apk": {
+        "originalSha256": "2ecc46ab70b6f5b59eab18844be7bbee3f68150003c14545e9ba4c442d299ddc",
+        "testedSha256": "47da8d045f610fa1cfed10e8fd25bd995a66b1db75df337392131cf3841072d8",
+        "preservedExecutionEntries": 33,
+        "executionEntriesDigest": "98bf9f52a8aa4b1865513eec6b7cf1992467226e717135bb462769dc7f7568c5",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key"
+      },
+      "baseline-androidTest.apk": {
+        "originalSha256": "84d394acf82e408d24be8e6d5f00716ec1afdf0b5034e90b777c03b2074b70a1",
+        "testedSha256": "00bb25f22a87c3920e6cba1951f569c19c85ce149753e04ab19f49e13e6e0acd",
+        "preservedExecutionEntries": 7,
+        "executionEntriesDigest": "03f9ca30632de4897edb483133f9707997e2fad383efde8c25ef92f278d73a41",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key"
+      }
+    }
+  },
+  "production_quotes": {
+    "schema": 1,
+    "evidence_class": "real-app-production-quotes",
+    "passed": true,
+    "build_source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
+    "input_fingerprint": "1fe85a125ad5e9ec3d5fd55d4b9fdbc23840eba47af0668cb16c9a83d4516d5d",
+    "executed_apk_sha256": "fce65cafaae11ec3fe23bb89672186ae8c05b558d0f891925ac51999fda10494",
+    "original_apk_sha256": "13d630cee92439ffde4be8a8759065e4777b95dc3d2d2c469690940a236cdc9e",
+    "quote_requests": 3,
+    "quote_reviews": 3,
+    "dismissals": 3,
+    "tor_enabled": true,
+    "funds_transferred": false,
+    "personal_wallet_access": false,
+    "artifact_id": 13634773630,
+    "workflow_run_id": 42524865003,
+    "archive_sha256": "dc39761b98cca6b7fb7dcd00abad5a248e695abee4d2b2d72c2886696923ef74",
+    "apk_preparation": {
+      "originalSha256": "13d630cee92439ffde4be8a8759065e4777b95dc3d2d2c469690940a236cdc9e",
+      "testedSha256": "fce65cafaae11ec3fe23bb89672186ae8c05b558d0f891925ac51999fda10494",
+      "preservedExecutionEntries": 34,
+      "executionEntriesDigest": "0fa0c015ad84bdee1568f4a56eeec74111b0c52ef124654584db3587aa54ce42",
+      "executionEntriesUnchanged": true,
+      "abi": "x86_64",
+      "signing": "ephemeral test key; not release key"
+    },
+    "guard_job": "f58c38aa51da457fbddab3748acc5148",
+    "provider_timeouts": []
+  },
+  "production_arm_executed": false,
+  "real_funds_used": false
+}
