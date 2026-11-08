@@ -1,6 +1,13 @@
 package co.electriccoin.zcash.ui.screen.donation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import co.electriccoin.zcash.ui.design.theme.AppearanceMode
+import co.electriccoin.zcash.ui.screen.theme.settings.*
+import co.electriccoin.zcash.ui.screen.theme.darklook.*
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.appbar.ZashiMainTopAppBarState
 import co.electriccoin.zcash.ui.design.component.*
@@ -15,7 +22,33 @@ import co.electriccoin.zcash.ui.screen.swap.quote.*
 /** Synthetic display-only state. Every payment, clipboard and destructive action is inert. */
 @Composable
 internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: ZashiMainTopAppBarState): Boolean {
+    var selectedMode by remember(screen) {
+        mutableStateOf(when (screen) {
+            "theme-settings-light" -> AppearanceMode.LIGHT
+            "theme-settings-dark" -> AppearanceMode.DARK
+            else -> AppearanceMode.SYSTEM
+        })
+    }
+    var selectedOled by remember(screen) { mutableStateOf(screen == "dark-look-oled") }
     when (screen) {
+        "theme-settings", "theme-settings-system", "theme-settings-light", "theme-settings-dark" -> ThemeSettingsView(
+            ThemeSettingsState(
+                options = listOf(AppearanceMode.SYSTEM, AppearanceMode.LIGHT, AppearanceMode.DARK).map { mode ->
+                    AppearanceModeOptionState(mode, selectedMode == mode, onClick = { selectedMode = mode })
+                },
+                saveButton = ButtonState(stringRes(R.string.currencyConversion_saveBtn), onClick = {}),
+                onBack = onBack,
+            )
+        )
+        "dark-look", "dark-look-classic", "dark-look-oled" -> ThemeDarkLookView(
+            ThemeDarkLookState(
+                options = listOf(false, true).map { oled ->
+                    DarkLookOptionState(oled, selectedOled == oled, onClick = { selectedOled = oled })
+                },
+                saveButton = ButtonState(stringRes(R.string.currencyConversion_saveBtn), onClick = {}),
+                onBack = onBack,
+            )
+        )
         "receive" -> ReceiveView(
             state = ReceiveState(
                 items = listOf(true, false).map { shielded ->
