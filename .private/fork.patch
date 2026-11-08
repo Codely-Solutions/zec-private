@@ -180,6 +180,55 @@ index 7e1b440d1..4b1b532d0 100644
 @@ -13 +13 @@
 -            android:authorities="co.electriccoin.zcash.provider.testnet"
 +            android:authorities="com.personal.zecprivate.provider.testnet"
+diff --git a/build-conventions-secant/gradle.lockfile b/build-conventions-secant/gradle.lockfile
+index af7fd10ac..541a3d26c 100644
+--- a/build-conventions-secant/gradle.lockfile
++++ b/build-conventions-secant/gradle.lockfile
+@@ -133,3 +133,3 @@ org.jetbrains.intellij.deps:trove4j:1.0.20200330=kotlinBuildToolsApiClasspath,ko
+-org.jetbrains.kotlin:abi-tools-api:2.3.10=runtimeClasspath
+-org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.3.10=compileClasspath,runtimeClasspath
+-org.jetbrains.kotlin:fus-statistics-gradle-plugin:2.3.10=compileClasspath,runtimeClasspath
++org.jetbrains.kotlin:abi-tools-api:2.3.21=runtimeClasspath
++org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.3.21=compileClasspath,runtimeClasspath
++org.jetbrains.kotlin:fus-statistics-gradle-plugin:2.3.21=compileClasspath,runtimeClasspath
+@@ -138 +138 @@ org.jetbrains.kotlin:kotlin-build-common:2.0.21=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-build-statistics:2.3.10=runtimeClasspath
++org.jetbrains.kotlin:kotlin-build-statistics:2.3.21=runtimeClasspath
+@@ -140 +140 @@ org.jetbrains.kotlin:kotlin-build-tools-api:2.0.21=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-build-tools-api:2.3.10=compileClasspath,runtimeClasspath
++org.jetbrains.kotlin:kotlin-build-tools-api:2.3.21=compileClasspath,runtimeClasspath
+@@ -144 +144 @@ org.jetbrains.kotlin:kotlin-compiler-runner:2.0.21=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-compiler-runner:2.3.10=runtimeClasspath
++org.jetbrains.kotlin:kotlin-compiler-runner:2.3.21=runtimeClasspath
+@@ -146 +146 @@ org.jetbrains.kotlin:kotlin-daemon-client:2.0.21=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-daemon-client:2.3.10=runtimeClasspath
++org.jetbrains.kotlin:kotlin-daemon-client:2.3.21=runtimeClasspath
+@@ -148,8 +148,8 @@ org.jetbrains.kotlin:kotlin-daemon-embeddable:2.0.21=kotlinBuildToolsApiClasspat
+-org.jetbrains.kotlin:kotlin-gradle-plugin-annotations:2.3.10=compileClasspath,runtimeClasspath
+-org.jetbrains.kotlin:kotlin-gradle-plugin-api:2.3.10=compileClasspath,runtimeClasspath
+-org.jetbrains.kotlin:kotlin-gradle-plugin-idea-proto:2.3.10=runtimeClasspath
+-org.jetbrains.kotlin:kotlin-gradle-plugin-idea:2.3.10=runtimeClasspath
+-org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.10=compileClasspath,runtimeClasspath
+-org.jetbrains.kotlin:kotlin-gradle-plugins-bom:2.3.10=compileClasspath,runtimeClasspath
+-org.jetbrains.kotlin:kotlin-klib-commonizer-api:2.3.10=runtimeClasspath
+-org.jetbrains.kotlin:kotlin-native-utils:2.3.10=compileClasspath,runtimeClasspath
++org.jetbrains.kotlin:kotlin-gradle-plugin-annotations:2.3.21=compileClasspath,runtimeClasspath
++org.jetbrains.kotlin:kotlin-gradle-plugin-api:2.3.21=compileClasspath,runtimeClasspath
++org.jetbrains.kotlin:kotlin-gradle-plugin-idea-proto:2.3.21=runtimeClasspath
++org.jetbrains.kotlin:kotlin-gradle-plugin-idea:2.3.21=runtimeClasspath
++org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.21=compileClasspath,runtimeClasspath
++org.jetbrains.kotlin:kotlin-gradle-plugins-bom:2.3.21=compileClasspath,runtimeClasspath
++org.jetbrains.kotlin:kotlin-klib-commonizer-api:2.3.21=runtimeClasspath
++org.jetbrains.kotlin:kotlin-native-utils:2.3.21=compileClasspath,runtimeClasspath
+@@ -169,4 +169,4 @@ org.jetbrains.kotlin:kotlin-stdlib:2.2.0=runtimeClasspath
+-org.jetbrains.kotlin:kotlin-tooling-core:2.3.10=compileClasspath,runtimeClasspath
+-org.jetbrains.kotlin:kotlin-util-io:2.3.10=compileClasspath,runtimeClasspath
+-org.jetbrains.kotlin:kotlin-util-klib-metadata:2.3.10=runtimeClasspath
+-org.jetbrains.kotlin:kotlin-util-klib:2.3.10=runtimeClasspath
++org.jetbrains.kotlin:kotlin-tooling-core:2.3.21=compileClasspath,runtimeClasspath
++org.jetbrains.kotlin:kotlin-util-io:2.3.21=compileClasspath,runtimeClasspath
++org.jetbrains.kotlin:kotlin-util-klib-metadata:2.3.21=runtimeClasspath
++org.jetbrains.kotlin:kotlin-util-klib:2.3.21=runtimeClasspath
 diff --git a/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts b/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts
 index 4a0d7d9d8..77b55acbc 100644
 --- a/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts
@@ -235,12 +284,206 @@ index b018cbc20..1691c7274 100644
 +        org.jetbrains.kotlin.gradle.dsl.JvmTarget.fromTarget(project.property("KOTLIN_JVM_TARGET").toString())
 +    )
 +}
+diff --git a/build-info-lib/gradle.lockfile b/build-info-lib/gradle.lockfile
+index 665cb8c34..a83f71539 100644
+--- a/build-info-lib/gradle.lockfile
++++ b/build-info-lib/gradle.lockfile
+@@ -9,3 +9,4 @@ org.jetbrains.kotlin:abi-tools:2.3.10=kotlinInternalAbiValidation
+-org.jetbrains.kotlin:kotlin-build-tools-api:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-build-tools-compat:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-build-tools-impl:2.3.10=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-api:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-compat:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-cri-impl:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-impl:2.3.21=kotlinBuildToolsApiClasspath
+@@ -13,4 +14,6 @@ org.jetbrains.kotlin:kotlin-compiler-embeddable:1.6.20=kotlinCompilerClasspathCo
+-org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
+-org.jetbrains.kotlin:kotlin-compiler-runner:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-daemon-client:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.10=kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-compiler-runner:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-daemon-client:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.10=kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.21=kotlinBuildToolsApiClasspath
+@@ -23 +26,2 @@ org.jetbrains.kotlin:kotlin-script-runtime:1.8.21=kotlinCompilerPluginClasspathM
+-org.jetbrains.kotlin:kotlin-script-runtime:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-script-runtime:2.3.10=kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-script-runtime:2.3.21=kotlinBuildToolsApiClasspath,kotlinCompilerPluginClasspathJvmMain
+@@ -25 +29,2 @@ org.jetbrains.kotlin:kotlin-scripting-common:1.8.21=kotlinCompilerPluginClasspat
+-org.jetbrains.kotlin:kotlin-scripting-common:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-common:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-common:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -29 +34,2 @@ org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:1.8.21=kotlinCompilerP
+-org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -31 +37,2 @@ org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:1.8.21=kotlinComp
+-org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -33 +40,2 @@ org.jetbrains.kotlin:kotlin-scripting-jvm:1.8.21=kotlinCompilerPluginClasspathMe
+-org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -43 +51,2 @@ org.jetbrains.kotlin:kotlin-stdlib:2.1.10=commonMainApiDependenciesMetadata,comm
+-org.jetbrains.kotlin:kotlin-stdlib:2.3.10=allSourceSetsCompileDependenciesMetadata,allTestSourceSetsCompileDependenciesMetadata,commonMainResolvableDependenciesMetadata,commonTestResolvableDependenciesMetadata,jvmCompileClasspath,jvmMainCompileClasspath,jvmMainResolvableDependenciesMetadata,jvmMainRuntimeClasspath,jvmRuntimeClasspath,jvmTestCompileClasspath,jvmTestResolvableDependenciesMetadata,jvmTestRuntimeClasspath,kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinInternalAbiValidation,kotlinKlibCommonizerClasspath,metadataCompileClasspath
++org.jetbrains.kotlin:kotlin-stdlib:2.3.10=allSourceSetsCompileDependenciesMetadata,allTestSourceSetsCompileDependenciesMetadata,commonMainResolvableDependenciesMetadata,commonTestResolvableDependenciesMetadata,jvmMainResolvableDependenciesMetadata,jvmMainRuntimeClasspath,jvmRuntimeClasspath,jvmTestCompileClasspath,jvmTestResolvableDependenciesMetadata,jvmTestRuntimeClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinInternalAbiValidation,kotlinKlibCommonizerClasspath,metadataCompileClasspath
++org.jetbrains.kotlin:kotlin-stdlib:2.3.21=jvmCompileClasspath,jvmMainCompileClasspath,kotlinBuildToolsApiClasspath,kotlinCompilerPluginClasspathJvmMain
+@@ -50 +59 @@ org.jetbrains.kotlin:kotlin-test:2.3.10=allTestSourceSetsCompileDependenciesMeta
+-org.jetbrains.kotlin:kotlin-tooling-core:2.3.10=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-tooling-core:2.3.21=kotlinBuildToolsApiClasspath
 diff --git a/build.gradle.kts b/build.gradle.kts
 index ebbd24d3c..edac136cd 100644
 --- a/build.gradle.kts
 +++ b/build.gradle.kts
 @@ -112 +111,0 @@ tasks {
 -            "ZCASH_FLEXA_KEY" to "",
+diff --git a/buildscript-gradle.lockfile b/buildscript-gradle.lockfile
+index b1cd82313..3a94308f3 100644
+--- a/buildscript-gradle.lockfile
++++ b/buildscript-gradle.lockfile
+@@ -143,3 +143,3 @@ org.jetbrains.intellij.deps:intellij-coverage-reporter:1.0.765=classpath
+-org.jetbrains.kotlin:abi-tools-api:2.3.10=classpath
+-org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.3.10=classpath
+-org.jetbrains.kotlin:fus-statistics-gradle-plugin:2.3.10=classpath
++org.jetbrains.kotlin:abi-tools-api:2.3.21=classpath
++org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.3.21=classpath
++org.jetbrains.kotlin:fus-statistics-gradle-plugin:2.3.21=classpath
+@@ -147,12 +147,12 @@ org.jetbrains.kotlin:kotlin-bom:2.0.21=classpath
+-org.jetbrains.kotlin:kotlin-build-statistics:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-build-tools-api:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-compiler-runner:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-daemon-client:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-gradle-plugin-annotations:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-gradle-plugin-api:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-gradle-plugin-idea-proto:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-gradle-plugin-idea:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-gradle-plugins-bom:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-klib-commonizer-api:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-native-utils:2.3.10=classpath
++org.jetbrains.kotlin:kotlin-build-statistics:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-build-tools-api:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-compiler-runner:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-daemon-client:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-gradle-plugin-annotations:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-gradle-plugin-api:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-gradle-plugin-idea-proto:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-gradle-plugin-idea:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-gradle-plugin:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-gradle-plugins-bom:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-klib-commonizer-api:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-native-utils:2.3.21=classpath
+@@ -164,4 +164,4 @@ org.jetbrains.kotlin:kotlin-stdlib:2.0.21=classpath
+-org.jetbrains.kotlin:kotlin-tooling-core:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-util-io:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-util-klib-metadata:2.3.10=classpath
+-org.jetbrains.kotlin:kotlin-util-klib:2.3.10=classpath
++org.jetbrains.kotlin:kotlin-tooling-core:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-util-io:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-util-klib-metadata:2.3.21=classpath
++org.jetbrains.kotlin:kotlin-util-klib:2.3.21=classpath
+diff --git a/configuration-api-lib/gradle.lockfile b/configuration-api-lib/gradle.lockfile
+index 3beb3f19a..21eec7e80 100644
+--- a/configuration-api-lib/gradle.lockfile
++++ b/configuration-api-lib/gradle.lockfile
+@@ -9,7 +9,10 @@ org.jetbrains.kotlin:abi-tools:2.3.10=kotlinInternalAbiValidation
+-org.jetbrains.kotlin:kotlin-build-tools-api:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-build-tools-compat:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-build-tools-impl:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
+-org.jetbrains.kotlin:kotlin-compiler-runner:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-daemon-client:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-build-tools-api:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-compat:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-cri-impl:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-impl:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.10=kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-compiler-runner:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-daemon-client:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.10=kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.21=kotlinBuildToolsApiClasspath
+@@ -21 +24,2 @@ org.jetbrains.kotlin:kotlin-script-runtime:1.8.21=kotlinCompilerPluginClasspathM
+-org.jetbrains.kotlin:kotlin-script-runtime:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-script-runtime:2.3.10=kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-script-runtime:2.3.21=kotlinBuildToolsApiClasspath,kotlinCompilerPluginClasspathJvmMain
+@@ -23 +27,2 @@ org.jetbrains.kotlin:kotlin-scripting-common:1.8.21=kotlinCompilerPluginClasspat
+-org.jetbrains.kotlin:kotlin-scripting-common:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-common:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-common:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -25 +30,2 @@ org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:1.8.21=kotlinCompilerP
+-org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -27 +33,2 @@ org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:1.8.21=kotlinComp
+-org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -29 +36,2 @@ org.jetbrains.kotlin:kotlin-scripting-jvm:1.8.21=kotlinCompilerPluginClasspathMe
+-org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -39 +47,2 @@ org.jetbrains.kotlin:kotlin-stdlib:2.1.10=commonMainApiDependenciesMetadata,comm
+-org.jetbrains.kotlin:kotlin-stdlib:2.3.10=allSourceSetsCompileDependenciesMetadata,allTestSourceSetsCompileDependenciesMetadata,commonMainResolvableDependenciesMetadata,commonTestResolvableDependenciesMetadata,jvmCompileClasspath,jvmMainCompileClasspath,jvmMainResolvableDependenciesMetadata,jvmMainRuntimeClasspath,jvmRuntimeClasspath,jvmTestCompileClasspath,jvmTestResolvableDependenciesMetadata,jvmTestRuntimeClasspath,kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinInternalAbiValidation,kotlinKlibCommonizerClasspath,metadataCompileClasspath
++org.jetbrains.kotlin:kotlin-stdlib:2.3.10=allSourceSetsCompileDependenciesMetadata,allTestSourceSetsCompileDependenciesMetadata,commonMainResolvableDependenciesMetadata,commonTestResolvableDependenciesMetadata,jvmMainResolvableDependenciesMetadata,jvmMainRuntimeClasspath,jvmRuntimeClasspath,jvmTestCompileClasspath,jvmTestResolvableDependenciesMetadata,jvmTestRuntimeClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinInternalAbiValidation,kotlinKlibCommonizerClasspath,metadataCompileClasspath
++org.jetbrains.kotlin:kotlin-stdlib:2.3.21=jvmCompileClasspath,jvmMainCompileClasspath,kotlinBuildToolsApiClasspath,kotlinCompilerPluginClasspathJvmMain
+@@ -43 +52 @@ org.jetbrains.kotlin:kotlin-test:2.3.10=allTestSourceSetsCompileDependenciesMeta
+-org.jetbrains.kotlin:kotlin-tooling-core:2.3.10=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-tooling-core:2.3.21=kotlinBuildToolsApiClasspath
+diff --git a/crash-lib/gradle.lockfile b/crash-lib/gradle.lockfile
+index 8c6f0b5b2..16a31bf58 100644
+--- a/crash-lib/gradle.lockfile
++++ b/crash-lib/gradle.lockfile
+@@ -24,3 +24,4 @@ org.jetbrains.kotlin:abi-tools:2.3.10=kotlinInternalAbiValidation
+-org.jetbrains.kotlin:kotlin-build-tools-api:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-build-tools-compat:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-build-tools-impl:2.3.10=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-api:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-compat:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-cri-impl:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-impl:2.3.21=kotlinBuildToolsApiClasspath
+@@ -28,4 +29,6 @@ org.jetbrains.kotlin:kotlin-compiler-embeddable:1.6.20=kotlinCompilerClasspathCo
+-org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
+-org.jetbrains.kotlin:kotlin-compiler-runner:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-daemon-client:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.10=kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-compiler-runner:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-daemon-client:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.10=kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.21=kotlinBuildToolsApiClasspath
+@@ -38 +41,2 @@ org.jetbrains.kotlin:kotlin-script-runtime:1.8.21=kotlinCompilerPluginClasspathM
+-org.jetbrains.kotlin:kotlin-script-runtime:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-script-runtime:2.3.10=kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-script-runtime:2.3.21=kotlinBuildToolsApiClasspath,kotlinCompilerPluginClasspathJvmMain
+@@ -40 +44,2 @@ org.jetbrains.kotlin:kotlin-scripting-common:1.8.21=kotlinCompilerPluginClasspat
+-org.jetbrains.kotlin:kotlin-scripting-common:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-common:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-common:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -44 +49,2 @@ org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:1.8.21=kotlinCompilerP
+-org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -46 +52,2 @@ org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:1.8.21=kotlinComp
+-org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -48 +55,2 @@ org.jetbrains.kotlin:kotlin-scripting-jvm:1.8.21=kotlinCompilerPluginClasspathMe
+-org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -64 +72,2 @@ org.jetbrains.kotlin:kotlin-stdlib:2.1.20=commonMainApiDependenciesMetadata,comm
+-org.jetbrains.kotlin:kotlin-stdlib:2.3.10=allSourceSetsCompileDependenciesMetadata,allTestSourceSetsCompileDependenciesMetadata,commonMainResolvableDependenciesMetadata,commonTestResolvableDependenciesMetadata,jvmCompileClasspath,jvmMainCompileClasspath,jvmMainResolvableDependenciesMetadata,jvmMainRuntimeClasspath,jvmRuntimeClasspath,jvmTestCompileClasspath,jvmTestResolvableDependenciesMetadata,jvmTestRuntimeClasspath,kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinInternalAbiValidation,kotlinKlibCommonizerClasspath,metadataCompileClasspath
++org.jetbrains.kotlin:kotlin-stdlib:2.3.10=allSourceSetsCompileDependenciesMetadata,allTestSourceSetsCompileDependenciesMetadata,commonMainResolvableDependenciesMetadata,commonTestResolvableDependenciesMetadata,jvmMainResolvableDependenciesMetadata,jvmMainRuntimeClasspath,jvmRuntimeClasspath,jvmTestCompileClasspath,jvmTestResolvableDependenciesMetadata,jvmTestRuntimeClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinInternalAbiValidation,kotlinKlibCommonizerClasspath,metadataCompileClasspath
++org.jetbrains.kotlin:kotlin-stdlib:2.3.21=jvmCompileClasspath,jvmMainCompileClasspath,kotlinBuildToolsApiClasspath,kotlinCompilerPluginClasspathJvmMain
+@@ -71 +80 @@ org.jetbrains.kotlin:kotlin-test:2.3.10=allTestSourceSetsCompileDependenciesMeta
+-org.jetbrains.kotlin:kotlin-tooling-core:2.3.10=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-tooling-core:2.3.21=kotlinBuildToolsApiClasspath
 diff --git a/docs/Architecture.md b/docs/Architecture.md
 index 66cc3760c..5935d66eb 100644
 --- a/docs/Architecture.md
@@ -742,6 +985,56 @@ index 207c4600b..f900c2060 100644
 -distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.4-bin.zip
 +distributionSha256Sum=7988ed071b2a07900e2ec715fca15c6ab72bce6db433af301fa7fa7e9407bd24
 +distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.6-bin.zip
+diff --git a/preference-api-lib/gradle.lockfile b/preference-api-lib/gradle.lockfile
+index 1c946b382..f9204071f 100644
+--- a/preference-api-lib/gradle.lockfile
++++ b/preference-api-lib/gradle.lockfile
+@@ -9,3 +9,4 @@ org.jetbrains.kotlin:abi-tools:2.3.10=kotlinInternalAbiValidation
+-org.jetbrains.kotlin:kotlin-build-tools-api:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-build-tools-compat:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-build-tools-impl:2.3.10=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-api:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-compat:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-cri-impl:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-impl:2.3.21=kotlinBuildToolsApiClasspath
+@@ -13,4 +14,6 @@ org.jetbrains.kotlin:kotlin-compiler-embeddable:1.6.20=kotlinCompilerClasspathCo
+-org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
+-org.jetbrains.kotlin:kotlin-compiler-runner:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-daemon-client:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.10=kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-compiler-runner:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-daemon-client:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.10=kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.21=kotlinBuildToolsApiClasspath
+@@ -23 +26,2 @@ org.jetbrains.kotlin:kotlin-script-runtime:1.8.21=kotlinCompilerPluginClasspathM
+-org.jetbrains.kotlin:kotlin-script-runtime:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-script-runtime:2.3.10=kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-script-runtime:2.3.21=kotlinBuildToolsApiClasspath,kotlinCompilerPluginClasspathJvmMain
+@@ -25 +29,2 @@ org.jetbrains.kotlin:kotlin-scripting-common:1.8.21=kotlinCompilerPluginClasspat
+-org.jetbrains.kotlin:kotlin-scripting-common:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-common:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-common:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -29 +34,2 @@ org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:1.8.21=kotlinCompilerP
+-org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -31 +37,2 @@ org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:1.8.21=kotlinComp
+-org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -33 +40,2 @@ org.jetbrains.kotlin:kotlin-scripting-jvm:1.8.21=kotlinCompilerPluginClasspathMe
+-org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.10=kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.21=kotlinCompilerPluginClasspathJvmMain
+@@ -45 +53,2 @@ org.jetbrains.kotlin:kotlin-stdlib:2.1.10=commonMainApiDependenciesMetadata,comm
+-org.jetbrains.kotlin:kotlin-stdlib:2.3.10=allSourceSetsCompileDependenciesMetadata,allTestSourceSetsCompileDependenciesMetadata,commonMainResolvableDependenciesMetadata,commonTestResolvableDependenciesMetadata,jvmCompileClasspath,jvmMainCompileClasspath,jvmMainResolvableDependenciesMetadata,jvmMainRuntimeClasspath,jvmRuntimeClasspath,jvmTestCompileClasspath,jvmTestResolvableDependenciesMetadata,jvmTestRuntimeClasspath,kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinInternalAbiValidation,kotlinKlibCommonizerClasspath,metadataCompileClasspath
++org.jetbrains.kotlin:kotlin-stdlib:2.3.10=allSourceSetsCompileDependenciesMetadata,allTestSourceSetsCompileDependenciesMetadata,commonMainResolvableDependenciesMetadata,commonTestResolvableDependenciesMetadata,jvmMainResolvableDependenciesMetadata,jvmMainRuntimeClasspath,jvmRuntimeClasspath,jvmTestCompileClasspath,jvmTestResolvableDependenciesMetadata,jvmTestRuntimeClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinInternalAbiValidation,kotlinKlibCommonizerClasspath,metadataCompileClasspath
++org.jetbrains.kotlin:kotlin-stdlib:2.3.21=jvmCompileClasspath,jvmMainCompileClasspath,kotlinBuildToolsApiClasspath,kotlinCompilerPluginClasspathJvmMain
+@@ -51 +60 @@ org.jetbrains.kotlin:kotlin-test:2.3.10=allTestSourceSetsCompileDependenciesMeta
+-org.jetbrains.kotlin:kotlin-tooling-core:2.3.10=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-tooling-core:2.3.21=kotlinBuildToolsApiClasspath
 diff --git a/settings.gradle.kts b/settings.gradle.kts
 index 5831568a4..8a9b07649 100644
 --- a/settings.gradle.kts
@@ -755,6 +1048,62 @@ index 5831568a4..8a9b07649 100644
 -include("feature-voting")
 @@ -371,0 +368 @@ include("ui-lib")
 +include("wallet-foundation-lib")
+diff --git a/spackle-lib/gradle.lockfile b/spackle-lib/gradle.lockfile
+index b53a4cdae..994cc0469 100644
+--- a/spackle-lib/gradle.lockfile
++++ b/spackle-lib/gradle.lockfile
+@@ -24,3 +24,4 @@ org.jetbrains.kotlin:abi-tools:2.3.10=kotlinInternalAbiValidation
+-org.jetbrains.kotlin:kotlin-build-tools-api:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-build-tools-compat:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-build-tools-impl:2.3.10=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-api:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-compat:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-cri-impl:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-build-tools-impl:2.3.21=kotlinBuildToolsApiClasspath
+@@ -28,4 +29,6 @@ org.jetbrains.kotlin:kotlin-compiler-embeddable:1.6.20=kotlinCompilerClasspathCo
+-org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
+-org.jetbrains.kotlin:kotlin-compiler-runner:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-daemon-client:2.3.10=kotlinBuildToolsApiClasspath
+-org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.10=kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-compiler-runner:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-daemon-client:2.3.21=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.10=kotlinCompilerClasspath,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-daemon-embeddable:2.3.21=kotlinBuildToolsApiClasspath
+@@ -38 +41,2 @@ org.jetbrains.kotlin:kotlin-script-runtime:1.8.21=kotlinCompilerPluginClasspathM
+-org.jetbrains.kotlin:kotlin-script-runtime:2.3.10=kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-script-runtime:2.3.10=kotlinCompilerClasspath,kotlinCompilerPluginClasspathMetadataMain,kotlinKlibCommonizerClasspath
++org.jetbrains.kotlin:kotlin-script-runtime:2.3.21=kotlinBuildToolsApiClasspath,kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest
+@@ -40 +44,2 @@ org.jetbrains.kotlin:kotlin-scripting-common:1.8.21=kotlinCompilerPluginClasspat
+-org.jetbrains.kotlin:kotlin-scripting-common:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-common:2.3.10=kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-common:2.3.21=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest
+@@ -44 +49,2 @@ org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:1.8.21=kotlinCompilerP
+-org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.10=kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-embeddable:2.3.21=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest
+@@ -46 +52,2 @@ org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:1.8.21=kotlinComp
+-org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.10=kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-compiler-impl-embeddable:2.3.21=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest
+@@ -48 +55,2 @@ org.jetbrains.kotlin:kotlin-scripting-jvm:1.8.21=kotlinCompilerPluginClasspathMe
+-org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.10=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.10=kotlinCompilerPluginClasspathMetadataMain
++org.jetbrains.kotlin:kotlin-scripting-jvm:2.3.21=kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest
+@@ -63 +71,2 @@ org.jetbrains.kotlin:kotlin-stdlib:2.1.20=commonMainApiDependenciesMetadata,comm
+-org.jetbrains.kotlin:kotlin-stdlib:2.3.10=allSourceSetsCompileDependenciesMetadata,allTestSourceSetsCompileDependenciesMetadata,commonMainResolvableDependenciesMetadata,commonTestResolvableDependenciesMetadata,jvmCompileClasspath,jvmMainCompileClasspath,jvmMainResolvableDependenciesMetadata,jvmMainRuntimeClasspath,jvmRuntimeClasspath,jvmTestCompileClasspath,jvmTestResolvableDependenciesMetadata,jvmTestRuntimeClasspath,kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest,kotlinCompilerPluginClasspathMetadataMain,kotlinInternalAbiValidation,kotlinKlibCommonizerClasspath,metadataCompileClasspath
++org.jetbrains.kotlin:kotlin-stdlib:2.3.10=allSourceSetsCompileDependenciesMetadata,allTestSourceSetsCompileDependenciesMetadata,commonMainResolvableDependenciesMetadata,commonTestResolvableDependenciesMetadata,jvmMainResolvableDependenciesMetadata,jvmMainRuntimeClasspath,jvmRuntimeClasspath,jvmTestResolvableDependenciesMetadata,kotlinCompilerClasspath,kotlinCompilerPluginClasspathMetadataMain,kotlinInternalAbiValidation,kotlinKlibCommonizerClasspath,metadataCompileClasspath
++org.jetbrains.kotlin:kotlin-stdlib:2.3.21=jvmCompileClasspath,jvmMainCompileClasspath,jvmTestCompileClasspath,jvmTestRuntimeClasspath,kotlinBuildToolsApiClasspath,kotlinCompilerPluginClasspathJvmMain,kotlinCompilerPluginClasspathJvmTest
+@@ -65 +74 @@ org.jetbrains.kotlin:kotlin-test-junit:1.6.20=commonTestImplementationCopy,jvmTe
+-org.jetbrains.kotlin:kotlin-test-junit:2.3.10=jvmTestCompileClasspath,jvmTestRuntimeClasspath
++org.jetbrains.kotlin:kotlin-test-junit:2.3.21=jvmTestCompileClasspath,jvmTestRuntimeClasspath
+@@ -69,2 +78,3 @@ org.jetbrains.kotlin:kotlin-test:2.1.10=commonTestApiDependenciesMetadata,common
+-org.jetbrains.kotlin:kotlin-test:2.3.10=allTestSourceSetsCompileDependenciesMetadata,commonTestResolvableDependenciesMetadata,jvmTestCompileClasspath,jvmTestResolvableDependenciesMetadata,jvmTestRuntimeClasspath
+-org.jetbrains.kotlin:kotlin-tooling-core:2.3.10=kotlinBuildToolsApiClasspath
++org.jetbrains.kotlin:kotlin-test:2.3.10=allTestSourceSetsCompileDependenciesMetadata,commonTestResolvableDependenciesMetadata,jvmTestResolvableDependenciesMetadata
++org.jetbrains.kotlin:kotlin-test:2.3.21=jvmTestCompileClasspath,jvmTestRuntimeClasspath
++org.jetbrains.kotlin:kotlin-tooling-core:2.3.21=kotlinBuildToolsApiClasspath
 diff --git a/spackle-lib/src/jvmTest/kotlin/co/electriccoin/zcash/spackle/io/WriteAtomicallyTest.kt b/spackle-lib/src/jvmTest/kotlin/co/electriccoin/zcash/spackle/io/WriteAtomicallyTest.kt
 index 3d17eec6d..5457e9bae 100644
 --- a/spackle-lib/src/jvmTest/kotlin/co/electriccoin/zcash/spackle/io/WriteAtomicallyTest.kt

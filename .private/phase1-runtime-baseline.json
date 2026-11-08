@@ -365,5 +365,168 @@
       "id": 42053515212,
       "repository_id": 1446185273
     }
-  }
+  },
+  "reviewedVersionUpdates": {
+    "com.google.errorprone:error_prone_annotations": {
+      "from": "2.44.0",
+      "to": "2.52.0"
+    },
+    "com.google.guava:guava": {
+      "from": "33.5.0-android",
+      "to": "33.8.0-android"
+    },
+    "io.ktor:ktor-bom": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-client-content-negotiation-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-client-content-negotiation": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-client-core-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-client-core": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-client-logging-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-client-logging": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-client-okhttp-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-client-okhttp": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-events-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-events": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-http-cio-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-http-cio": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-http-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-http": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-io-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-io": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-network-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-network": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-serialization-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-serialization-kotlinx-json-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-serialization-kotlinx-json": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-serialization-kotlinx-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-serialization-kotlinx": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-serialization": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-sse-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-sse": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-utils-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-utils": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-websocket-serialization-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-websocket-serialization": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-websockets-jvm": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "io.ktor:ktor-websockets": {
+      "from": "3.4.0",
+      "to": "3.4.3"
+    },
+    "org.jetbrains.kotlin:kotlin-stdlib-common": {
+      "from": "2.3.20",
+      "to": "2.3.21"
+    },
+    "org.jetbrains.kotlin:kotlin-stdlib-jdk7": {
+      "from": "2.3.10",
+      "to": "2.3.21"
+    },
+    "org.jetbrains.kotlin:kotlin-stdlib-jdk8": {
+      "from": "2.3.10",
+      "to": "2.3.21"
+    },
+    "org.jetbrains.kotlin:kotlin-stdlib": {
+      "from": "2.3.20",
+      "to": "2.3.21"
+    },
+    "org.jspecify:jspecify": {
+      "from": "1.0.0",
+      "to": "1.0.1"
+    }
+  },
+  "reviewedVersionUpdateReason": "Revision15 compatible Kotlin/Ktor patches and Guava security update; Error Prone/JSpecify annotation transitives. Original artifact/components remain historical; current build and real acceptance are separate."
 }

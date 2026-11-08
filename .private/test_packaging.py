@@ -1,12 +1,27 @@
 """Packaging boundary regressions use tiny archives, never wallet state."""
+import json
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
 from apk_architecture import check_apk
+from compare_runtime import compare
 
 
 class PackagingTests(unittest.TestCase):
+    def test_reviewed_runtime_upgrades_do_not_allow_rollback_or_unreviewed_drift(self):
+        baseline = json.loads((Path(__file__).resolve().parent / 'phase1-runtime-baseline.json').read_text())
+        components = list(baseline['components'])
+        for key, update in baseline['reviewedVersionUpdates'].items():
+            components.remove(key + ':' + update['from'])
+            components.append(key + ':' + update['to'])
+        self.assertTrue(compare({'components': components})['retainedVersionsUnchanged'])
+        for version in ('33.5.0-android', '99.0.0-android'):
+            invalid = [c for c in components if not c.startswith('com.google.guava:guava:')]
+            invalid.append('com.google.guava:guava:' + version)
+            with self.subTest(version=version), self.assertRaises(RuntimeError):
+                compare({'components': invalid})
+
     def test_candidate_variants_are_independent_and_promotion_builds_neither(self):
         root = Path(__file__).resolve().parents[1]
         workflow = (root / '.github/workflows/build-release.yml').read_text()

@@ -10,6 +10,11 @@ def compare(candidate):
     def versions(components):
         return {s.rsplit(':',1)[0]:s.rsplit(':',1)[1] for s in components if s.count(':')==2}
     before=versions(baseline['components'])
+    # Preserve the original removal baseline; reviewed upgrades are explicit expectations.
+    for key, update in baseline.get('reviewedVersionUpdates', {}).items():
+        if key not in before or before[key] != update['from']:
+            raise RuntimeError('Invalid reviewed runtime upgrade: '+key)
+        before[key] = update['to']
     after=versions(candidate['components'])
     changed={key:[old,after[key]] for key,old in before.items() if key in after and old!=after[key]}
     if changed:
