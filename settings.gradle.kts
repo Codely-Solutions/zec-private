@@ -200,7 +200,6 @@ dependencyResolutionManagement {
             library("androidx-activity-compose", "androidx.activity:activity-compose:$androidxActivityVersion")
             library("androidx-annotation", "androidx.annotation:annotation:$androidxAnnotationVersion")
             library("androidx-biometric", "androidx.biometric:biometric:$androidxBiometricVersion")
-            library("androidx-biometric-ktx", "androidx.biometric:biometric-ktx:1.4.0-alpha02")
             library("androidx-camera", "androidx.camera:camera-camera2:$androidxCameraVersion")
             library("androidx-camera-lifecycle", "androidx.camera:camera-lifecycle:$androidxCameraVersion")
             library("androidx-camera-view", "androidx.camera:camera-view:$androidxCameraVersion")
@@ -288,7 +287,6 @@ dependencyResolutionManagement {
                 "androidx-biometric",
                 listOf(
                     "androidx-biometric",
-                    "androidx-biometric-ktx",
                 )
             )
             bundle(
