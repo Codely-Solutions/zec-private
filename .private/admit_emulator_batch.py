@@ -19,6 +19,7 @@ EVIDENCE = {'tor-probe-result.json', 'core-testnet-result.json', 'core-testnet-d
     'phase1-scenario-error.json', 'swap-ui-artifact-verification.json', 'swap-live-presentation.json',
     'donation-ui-result.json', 'donation-capture-evidence.json', 'command.log', 'emulator.log',
     'smoke-result.json', 'smoke-observation.json', 'batch-result.json', 'batch-smoke-verification.json', 'manifest.json',
+    'donation-light.png', 'donation-dark.png', 'recovery-copy-light.png', 'recovery-copy-dark.png',
     'donation-off-light.png', 'donation-off-dark.png', 'donation-on-light.png', 'donation-on-dark.png'}
 
 

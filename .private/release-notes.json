@@ -15,5 +15,10 @@
   "v3.19.0-private.14": [
     "Add a home shortcut and dismissible invitation to support development.",
     "Simplify manual shielded donations. Donation reminders can be snoozed or permanently dismissed."
+  ],
+  "v3.19.0-private.15": [
+    "Add copy controls for the revealed recovery phrase and wallet birthday.",
+    "Use the send amount input for donations, with an optional private message.",
+    "Update a vulnerable dependency and modernize the build target."
   ]
 }

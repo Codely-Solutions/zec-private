@@ -88,8 +88,9 @@ class AcceptancePolicyTest(unittest.TestCase):
         receipt['sync_preflight']=dict(passed=True,mode='advancing-scan',scanned_height=12340,network_height=12345)
         receipt['stages']['send'].update(fee_zatoshi=10000,ui_review=True,ui_cancel_no_submission=True,ui_approval=True,ui_approval_actions=1,
             shielded_donation=True,multi_recipient_sdk_accepted=True,multi_recipient_wallet_rejected=True,
-            identifying_memo=False,multi_recipient_submitted=False)
-        receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000,app_transaction_state='Confirmed')
+            automatic_identifying_memo=False,reviewed_memo_verified=True,multi_recipient_submitted=False,
+            clipboard_metadata_verified=True,newer_clipboard_preserved=True)
+        receipt['stages']['restore'].update(mined_height=12346,amount_zatoshi=1000000,app_transaction_state='Confirmed',reviewed_memo_verified=True)
         return receipt
 
     def test_required_real_evidence(self):
@@ -103,7 +104,10 @@ class AcceptancePolicyTest(unittest.TestCase):
             with self.subTest(key=key), self.assertRaises(ValueError):
                 validate_core(bad, 'inputs')
         for stage,key,value in [('send','ui_approval',False),('send','ui_cancel_no_submission',False),
-                                ('send','ui_review',False),('send','ui_approval_actions',2),('fund','app_transaction_state','Pending')]:
+                                ('send','ui_review',False),('send','ui_approval_actions',2),('fund','app_transaction_state','Pending'),
+                                ('send','automatic_identifying_memo',True),('send','reviewed_memo_verified',False),
+                                ('restore','reviewed_memo_verified',False),('send','clipboard_metadata_verified',False),
+                                ('send','newer_clipboard_preserved',False)]:
             bad=self.receipt();bad['stages'][stage][key]=value
             with self.assertRaises(ValueError):validate_core(bad,'inputs')
         for name in CORE_STAGES:

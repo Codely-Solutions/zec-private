@@ -181,23 +181,24 @@ index 7e1b440d1..4b1b532d0 100644
 -            android:authorities="co.electriccoin.zcash.provider.testnet"
 +            android:authorities="com.personal.zecprivate.provider.testnet"
 diff --git a/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts b/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts
-index 4a0d7d9d8..4ad60f54f 100644
+index 4a0d7d9d8..fd2402216 100644
 --- a/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts
 +++ b/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts
 @@ -1 +0,0 @@
 -import com.android.build.api.dsl.CommonExtension
-@@ -8,0 +8,3 @@ pluginManager.withPlugin("com.android.application") {
-+    project.extensions.getByType<com.android.build.api.dsl.ApplicationExtension>().androidResources.localeFilters.addAll(
+@@ -8,0 +8,4 @@ pluginManager.withPlugin("com.android.application") {
++    project.extensions.getByType<com.android.build.api.dsl.ApplicationExtension>()
++        .androidResources.localeFilters.addAll(
 +        listOf("en", "en-rUS", "en-rGB", "en-rAU", "es", "en_XA", "ar_XB")
 +    )
-@@ -20 +21,0 @@ pluginManager.withPlugin("com.android.application") {
+@@ -20 +22,0 @@ pluginManager.withPlugin("com.android.application") {
 -            resourceConfigurations.addAll(listOf("en", "en-rUS", "en-rGB", "en-rAU", "es", "en_XA", "ar_XB"))
-@@ -32,0 +34,4 @@ pluginManager.withPlugin("com.android.library") {
+@@ -32,0 +35,4 @@ pluginManager.withPlugin("com.android.library") {
 +    project.extensions.getByType<com.android.build.api.dsl.LibraryExtension>().apply {
 +        testOptions.targetSdk = project.property("ANDROID_TARGET_SDK_VERSION").toString().toInt()
 +        lint.targetSdk = project.property("ANDROID_TARGET_SDK_VERSION").toString().toInt()
 +    }
-@@ -38,12 +42,0 @@ pluginManager.withPlugin("com.android.library") {
+@@ -38,12 +43,0 @@ pluginManager.withPlugin("com.android.library") {
 -            // This is deprecated but we don't have a replacement for the instrumentation APKs yet
 -            // TODO [#1815]: Gradle targetSdk deprecated #1815
 -            // TODO [#1815]: https://github.com/Electric-Coin-Company/zashi-android/issues/1815
@@ -210,10 +211,10 @@ index 4a0d7d9d8..4ad60f54f 100644
 -            // TODO [#1816]: Gradle resourceConfigurations deprecation #1816
 -            // TODO [#1816]: https://github.com/Electric-Coin-Company/zashi-android/issues/1816
 -            resourceConfigurations.addAll(listOf("en", "en-rUS", "en-rGB", "en-rAU", "es", "en_XA", "ar_XB"))
-@@ -52 +45 @@ pluginManager.withPlugin("com.android.library") {
+@@ -52 +46 @@ pluginManager.withPlugin("com.android.library") {
 -            consumerProguardFiles("proguard-consumer.txt")
 +            project.file("proguard-consumer.txt").takeIf { it.isFile }?.let { consumerProguardFiles(it) }
-@@ -73,8 +65,0 @@ pluginManager.withPlugin("com.android.test") {
+@@ -73,8 +66,0 @@ pluginManager.withPlugin("com.android.test") {
 -            // The last two are for support of pseudolocales in debug builds.
 -            // If we add other localizations, they should be included in this list.
 -            // By explicitly setting supported locales, we strip out unused localizations from third party
@@ -256,7 +257,7 @@ index 98f902023..7bd1ee8c0 100644
 +
 diff --git a/docs/DONATIONS.md b/docs/DONATIONS.md
 new file mode 100644
-index 000000000..ab8f147d4
+index 000000000..509eb0d79
 --- /dev/null
 +++ b/docs/DONATIONS.md
 @@ -0,0 +1,27 @@
@@ -264,7 +265,7 @@ index 000000000..ab8f147d4
 +
 +Donations help fund development and maintenance. They are optional.
 +
-+Tap the hand-and-heart icon on Home, or open **Settings → More → Support development** to donate shielded ZEC. Enter an amount and review the payment before sending.
++Tap the hand-and-heart icon on Home, or open **Settings → More → Support development** to donate shielded ZEC. Enter an amount, optionally add a message, and review the payment before sending.
 +
 +You can also donate using the addresses below. Check the asset, network and destination before sending.
 +
@@ -692,7 +693,7 @@ index 96a911cd4..799c7d501 100644
 -    <string name="view_only_remove_message">Removing this account clears its data from Zodl on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 +    <string name="view_only_remove_message">Removing this account clears its data from ZEC Private on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..a50eb20d7 100644
+index ec56161b5..9ceeee9f0 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
@@ -717,12 +718,15 @@ index ec56161b5..a50eb20d7 100644
 @@ -186 +183 @@ KEYSTONE_VERSION=0.8.3
 -KOTLIN_VERSION=2.3.10
 +KOTLIN_VERSION=2.3.21
-@@ -203,0 +201 @@ ZIP_321_VERSION=1.0.2
+@@ -204 +201,3 @@ ZIP_321_VERSION=1.0.2
+-KTOR_VERSION=3.4.0
 +GUAVA_VERSION=33.8.0-android
-@@ -208 +206 @@ ZCASH_BIP39_VERSION=1.0.9
++OKHTTP_BOM_VERSION=5.5.1
++KTOR_VERSION=3.4.3
+@@ -208 +207 @@ ZCASH_BIP39_VERSION=1.0.9
 -ZCASH_SDK_VERSION=6.0.0-SNAPSHOT
 +ZCASH_SDK_VERSION=6.0.0
-@@ -215,3 +213,4 @@ JVM_TOOLCHAIN=21
+@@ -215,3 +214,4 @@ JVM_TOOLCHAIN=21
 -# This shouldn't be changed, as Android doesn't support targets beyond Java 8
 -KOTLIN_JVM_TARGET=8
 -ANDROID_JVM_TARGET=1.8
@@ -3105,7 +3109,7 @@ index f41234151..a0ce9dd18 100644
 +    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open ZEC Private manually at each scheduled time to send.</string>
 diff --git a/ui-lib/build.gradle.kts b/ui-lib/build.gradle.kts
-index 717b3f997..b8908fd45 100644
+index 717b3f997..d8666f714 100644
 --- a/ui-lib/build.gradle.kts
 +++ b/ui-lib/build.gradle.kts
 @@ -155,8 +154,0 @@ androidComponents {
@@ -3117,7 +3121,8 @@ index 717b3f997..b8908fd45 100644
 -                comment = "Publishable key of the Flexa integration"
 -            )
 -        )
-@@ -183,0 +176,8 @@ dependencies {
+@@ -183,0 +176,9 @@ dependencies {
++    implementation(platform("com.squareup.okhttp3:okhttp-bom:${project.property("OKHTTP_BOM_VERSION")}"))
 +    constraints {
 +        implementation("com.google.guava:guava:${project.property("GUAVA_VERSION")}") {
 +            because("Fix Guava deserialization allocation and collection hash-flooding denial of service")
@@ -3126,13 +3131,13 @@ index 717b3f997..b8908fd45 100644
 +            because("Preserve the released wallet SDK runtime after removing Flexa's transitive constraints")
 +        }
 +    }
-@@ -208,0 +209,2 @@ dependencies {
+@@ -208,0 +210,2 @@ dependencies {
 +    // Expose the pinned SDK's existing runtime for proposal privacy validation; no new runtime component.
 +    implementation("com.google.protobuf:protobuf-javalite:4.34.0")
-@@ -214,2 +215,0 @@ dependencies {
+@@ -214,2 +216,0 @@ dependencies {
 -    api(libs.flexa.core)
 -    api(libs.flexa.spend)
-@@ -216,0 +217 @@ dependencies {
+@@ -216,0 +218 @@ dependencies {
 +    api(projects.walletFoundationLib)
 diff --git a/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/support/util/EmailUtilTest.kt b/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/support/util/EmailUtilTest.kt
 deleted file mode 100644
@@ -4044,10 +4049,10 @@ index f0ef84ad1..c81390205 100644
 +    val destinationChainTxHashes: List<TransactionChainHash>? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
 new file mode 100644
-index 000000000..6d709397b
+index 000000000..3d2d1b627
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
-@@ -0,0 +1,80 @@
+@@ -0,0 +1,87 @@
 +package co.electriccoin.zcash.ui.common.model.zcash
 +
 +import cash.z.ecc.android.sdk.model.Proposal
@@ -4098,7 +4103,7 @@ index 000000000..6d709397b
 +        val payment = parsed.paymentRequest.payments.single()
 +        require(payment.recipientAddress.value == send.destination.address &&
 +            payment.nonNegativeAmount?.toZecValueString()?.toBigDecimal()?.movePointRight(8)?.longValueExact() ==
-+            send.amount.value && isEmptyMemo(payment.memo?.data)) { "Donation payment differs from review" }
++            send.amount.value && memoMatchesReview(payment.memo?.data, send.memo.value)) { "Donation payment differs from review" }
 +        require(!step.isShielding && step.inputsCount > 0) { "Donation requires shielded funds" }
 +        require(step.inputsList.all { it.hasReceivedOutput() && isShielded(it.receivedOutput.valuePool) }) {
 +            "Donation requires shielded inputs"
@@ -4115,7 +4120,14 @@ index 000000000..6d709397b
 +        require(Math.subtractExact(Math.subtractExact(spent, change), step.balance.feeRequired) == send.amount.value) {
 +            "Donation amount differs from proposal"
 +        }
-+        require(send.memo.value.isEmpty()) { "Donations do not include identifying memos" }
++    }
++
++    private fun memoMatchesReview(data: ByteArray?, reviewed: String): Boolean {
++        if (reviewed.isEmpty()) return isEmptyMemo(data)
++        val expected = reviewed.toByteArray(Charsets.UTF_8)
++        if (data == null || data.size > 512 || data.size < expected.size) return false
++        return data.take(expected.size).toByteArray().contentEquals(expected) &&
++            data.drop(expected.size).all { it == 0.toByte() }
 +    }
 +
 +    // ZIP321 may preserve the protocol's empty-memo marker and its zero padding.
@@ -4872,10 +4884,10 @@ index 1d3fdf0e2..f1f74ce28 100644
 +                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CopyRecoveryToClipboardUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CopyRecoveryToClipboardUseCase.kt
 new file mode 100644
-index 000000000..b8207bb29
+index 000000000..4462ef3ee
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CopyRecoveryToClipboardUseCase.kt
-@@ -0,0 +1,133 @@
+@@ -0,0 +1,138 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.content.ClipData
@@ -4980,12 +4992,17 @@ index 000000000..b8207bb29
 +    }
 +
 +    fun expire(now: Long, observedOwner: String?, clear: () -> Unit): Boolean {
-+        val expiry = expiresAt ?: return true
-+        if (now < expiry || observedOwner == null) return false
-+        if (owner == observedOwner) clear()
-+        owner = null
-+        expiresAt = null
-+        return true
++        val expiry = expiresAt
++        return when {
++            expiry == null -> true
++            now < expiry || observedOwner == null -> false
++            else -> {
++                if (owner == observedOwner) clear()
++                owner = null
++                expiresAt = null
++                true
++            }
++        }
 +    }
 +
 +    private companion object {
@@ -5689,14 +5706,15 @@ index 000000000..c504b0a03
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt
 new file mode 100644
-index 000000000..de0e8508d
+index 000000000..a034246bc
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationScreen.kt
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,118 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.compose.runtime.collectAsState
 +import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
 +import androidx.compose.runtime.getValue
 +import androidx.compose.runtime.mutableStateOf
 +import androidx.compose.runtime.remember
@@ -5706,14 +5724,17 @@ index 000000000..de0e8508d
 +import androidx.compose.ui.platform.LocalContext
 +import cash.z.ecc.android.sdk.model.Memo
 +import cash.z.ecc.android.sdk.model.WalletAddress
-+import cash.z.ecc.android.sdk.model.Zatoshi
 +import cash.z.ecc.android.sdk.model.ZecSend
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
 +import co.electriccoin.zcash.ui.common.model.ZodlAccount
 +import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
++import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
++import co.electriccoin.zcash.ui.design.util.getString
++import co.electriccoin.zcash.ui.screen.send.model.AmountField
++import co.electriccoin.zcash.ui.screen.send.model.AmountState
++import co.electriccoin.zcash.ui.screen.send.model.MemoState
 +import co.electriccoin.zcash.ui.NavigationRouter
-+import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.screen.ExternalUrl
 +import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionArgs
 +import kotlinx.coroutines.CancellationException
@@ -5726,28 +5747,55 @@ index 000000000..de0e8508d
 +    val router = koinInject<NavigationRouter>()
 +    val accounts = koinInject<AccountDataSource>()
 +    val proposals = koinInject<ZashiProposalRepository>()
++    val rates = koinInject<ExchangeRateRepository>()
++    val exchangeRate by rates.state.collectAsState()
 +    val context = LocalContext.current
 +    val preferences = remember(context) { DonationPreferences(context) }
 +    val scope = rememberCoroutineScope()
 +    val account by accounts.selectedAccount.collectAsState(initial = null)
-+    var amount by rememberSaveable { mutableStateOf("") }
++    var amountState by rememberSaveable(stateSaver = AmountState.getSaver(context)) {
++        mutableStateOf(AmountState.newFromZec("", "", false, exchangeRate))
++    }
++    var memoState by rememberSaveable(stateSaver = MemoState.Saver) { mutableStateOf(MemoState.new("")) }
++    var memoExpanded by rememberSaveable { mutableStateOf(false) }
 +    var busy by remember { mutableStateOf(false) }
 +    var failed by remember { mutableStateOf(false) }
 +    var unsupported by remember { mutableStateOf(false) }
-+    val zatoshi = amount.toBigDecimalOrNull()?.let {
-+        runCatching { it.movePointRight(8).longValueExact() }.getOrNull()?.takeIf { value -> value > 0 }
++    LaunchedEffect(rates) { rates.refreshExchangeRateUsd() }
++    LaunchedEffect(exchangeRate, busy) {
++        if (!busy) {
++            amountState = if (amountState.lastFieldChangedByUser == AmountField.FIAT) {
++                AmountState.newFromFiat(
++                    amountState.value.getString(context), amountState.fiatValue.getString(context), false, exchangeRate
++                )
++            } else {
++                AmountState.newFromZec(
++                    amountState.value.getString(context), amountState.fiatValue.getString(context), false, exchangeRate
++                )
++            }
++        }
 +    }
++    val zatoshi = (amountState as? AmountState.Valid)?.zatoshi?.takeIf { it.value > 0 }
 +    DonationView(
 +        state = DonationViewState(
-+            amount = amount,
++            amountState = amountState,
++            memoState = memoState,
++            memoExpanded = memoExpanded,
++            exchangeRateState = exchangeRate,
++            spendableShieldedBalance = account?.spendableShieldedBalance,
 +            busy = busy,
 +            error = failed,
 +            unsupported = unsupported || (account != null && account !is ZodlAccount),
-+            canReview = zatoshi != null && DonationPolicy.recipient() != null && account is ZodlAccount,
++            canReview = zatoshi != null && memoState is MemoState.Correct &&
++                DonationPolicy.recipient() != null && account is ZodlAccount && account?.canSpend(zatoshi) == true,
 +        ),
-+        onAmountChanged = { amount = it; failed = false },
++        onAmountChanged = { if (!busy) { amountState = it; failed = false } },
++        onMemoChanged = { if (!busy) { memoState = it; failed = false } },
++        onToggleMemo = { if (!busy) memoExpanded = !memoExpanded },
 +        onReview = {
-+            if (!busy && zatoshi != null) {
++            val reviewedAmount = (amountState as? AmountState.Valid)?.zatoshi?.takeIf { it.value > 0 }
++            val reviewedMemo = (memoState as? MemoState.Correct)?.text
++            if (!busy && reviewedAmount != null && reviewedMemo != null) {
 +                busy = true
 +                failed = false
 +                unsupported = false
@@ -5759,7 +5807,7 @@ index 000000000..de0e8508d
 +                        } else {
 +                            val send = ZecSend(
 +                                WalletAddress.Unified.new(requireNotNull(DonationPolicy.recipient())),
-+                                Zatoshi(zatoshi), Memo(""), null
++                                reviewedAmount, Memo(reviewedMemo), null
 +                            )
 +                            preferences.postpone(System.currentTimeMillis())
 +                            proposals.createDonationProposal(send)
@@ -5782,10 +5830,10 @@ index 000000000..de0e8508d
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
 new file mode 100644
-index 000000000..b3daf1701
+index 000000000..97f62ec56
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
-@@ -0,0 +1,153 @@
+@@ -0,0 +1,150 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.activity.compose.BackHandler
@@ -5794,38 +5842,37 @@ index 000000000..b3daf1701
 +import androidx.compose.foundation.layout.fillMaxWidth
 +import androidx.compose.foundation.layout.padding
 +import androidx.compose.foundation.rememberScrollState
-+import androidx.compose.foundation.text.KeyboardActions
-+import androidx.compose.foundation.text.KeyboardOptions
 +import androidx.compose.foundation.verticalScroll
 +import androidx.compose.material3.Text
 +import androidx.compose.runtime.Composable
 +import androidx.compose.ui.Modifier
-+import androidx.compose.ui.platform.LocalFocusManager
 +import androidx.compose.ui.res.stringResource
-+import androidx.compose.ui.semantics.contentDescription
-+import androidx.compose.ui.semantics.semantics
 +import androidx.compose.ui.text.font.FontWeight
 +import androidx.compose.ui.text.input.ImeAction
-+import androidx.compose.ui.text.input.KeyboardType
 +import androidx.compose.ui.unit.dp
 +import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
 +import co.electriccoin.zcash.ui.design.component.ZashiButton
 +import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
 +import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
-+import co.electriccoin.zcash.ui.design.component.ZashiTextField
-+import co.electriccoin.zcash.ui.design.component.ZashiTextFieldDefaults
 +import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarBackNavigation
 +import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
 +import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 +import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 +import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 +import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.screen.send.model.AmountState
++import co.electriccoin.zcash.ui.screen.send.model.MemoState
++import co.electriccoin.zcash.ui.screen.send.view.SendFormAmountTextField
++import co.electriccoin.zcash.ui.screen.send.view.SendFormMemoTextField
 +
 +@Suppress("LongParameterList", "LongMethod", "MagicNumber")
 +@Composable
 +internal fun DonationView(
 +    state: DonationViewState,
-+    onAmountChanged: (String) -> Unit,
++    onAmountChanged: (AmountState) -> Unit,
++    onMemoChanged: (MemoState) -> Unit,
++    onToggleMemo: () -> Unit,
 +    onReview: () -> Unit,
 +    onExternalAddresses: () -> Unit,
 +    onBack: () -> Unit,
@@ -5847,13 +5894,32 @@ index 000000000..b3daf1701
 +        ) {
 +            DonationHeading(stringResource(R.string.private_support_once))
 +            DonationMessage(stringResource(R.string.private_support_description))
-+            DonationInput(
-+                label = stringResource(R.string.private_support_amount),
-+                value = state.amount,
-+                suffix = "ZEC",
++            SendFormAmountTextField(
++                amountState = state.amountState,
++                imeAction = if (state.memoExpanded) ImeAction.Next else ImeAction.Done,
++                isTransparentOrTextRecipient = false,
++                exchangeRateState = state.exchangeRateState,
++                setAmountState = onAmountChanged,
++                spendableShieldedBalance = state.spendableShieldedBalance,
 +                enabled = !state.busy,
-+                onValueChange = onAmountChanged
 +            )
++            ZashiButton(
++                text = stringResource(
++                    if (state.memoExpanded) R.string.private_support_hide_message else R.string.private_support_add_message
++                ),
++                onClick = onToggleMemo,
++                enabled = !state.busy,
++                colors = ZashiButtonDefaults.tertiaryColors(),
++                modifier = Modifier.fillMaxWidth(),
++            )
++            if (state.memoExpanded) {
++                SendFormMemoTextField(
++                    isMemoFieldAvailable = true,
++                    memoState = state.memoState,
++                    setMemoState = onMemoChanged,
++                    enabled = !state.busy,
++                )
++            }
 +            ZashiButton(
 +                text = stringResource(R.string.private_support_review),
 +                onClick = onReview,
@@ -5898,35 +5964,12 @@ index 000000000..b3daf1701
 +    )
 +}
 +
-+@Composable
-+private fun DonationInput(
-+    label: String,
-+    value: String,
-+    suffix: String,
-+    enabled: Boolean,
-+    onValueChange: (String) -> Unit,
-+) {
-+    val focus = LocalFocusManager.current
-+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-+        Text(text = label, style = ZashiTypography.textSm, color = ZashiColors.Text.textPrimary)
-+        ZashiTextField(
-+            value = value,
-+            onValueChange = onValueChange,
-+            isEnabled = enabled,
-+            singleLine = true,
-+            suffix = { Text(suffix, style = ZashiTypography.textMd, color = ZashiColors.Text.textTertiary) },
-+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
-+            keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
-+            modifier = Modifier.fillMaxWidth(),
-+            innerModifier = ZashiTextFieldDefaults.innerModifier.semantics { contentDescription = label }
-+        )
-+    }
-+}
-+
 +@PreviewScreens
 +@Composable
 +private fun DonationPreviewScreen() = ZcashTheme {
-+    DonationPreview(DonationViewState(amount = "0.01", canReview = true))
++    DonationPreview(
++        DonationViewState(amountState = AmountState.newFromZec("0.01", "", false, ExchangeRateState.OptedOut), canReview = true)
++    )
 +}
 +
 +@Composable
@@ -5934,6 +5977,8 @@ index 000000000..b3daf1701
 +    DonationView(
 +        state = state,
 +        onAmountChanged = {},
++        onMemoChanged = {},
++        onToggleMemo = {},
 +        onReview = {},
 +        onExternalAddresses = {},
 +        onBack = {}
@@ -5942,14 +5987,23 @@ index 000000000..b3daf1701
 \ No newline at end of file
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt
 new file mode 100644
-index 000000000..999cff62d
+index 000000000..83851deac
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationViewState.kt
-@@ -0,0 +1,9 @@
+@@ -0,0 +1,18 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
++import cash.z.ecc.android.sdk.model.Zatoshi
++import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.screen.send.model.AmountState
++import co.electriccoin.zcash.ui.screen.send.model.MemoState
++
 +internal data class DonationViewState(
-+    val amount: String = "",
++    val amountState: AmountState = AmountState.newFromZec("", "", false, ExchangeRateState.OptedOut),
++    val memoState: MemoState = MemoState.new(""),
++    val memoExpanded: Boolean = false,
++    val exchangeRateState: ExchangeRateState = ExchangeRateState.OptedOut,
++    val spendableShieldedBalance: Zatoshi? = null,
 +    val busy: Boolean = false,
 +    val error: Boolean = false,
 +    val unsupported: Boolean = false,
@@ -6916,6 +6970,41 @@ index 7db73b703..2698a3260 100644
 @@ -691 +691 @@ private fun Zip321Preview() =
 -                                title = stringRes(co.electriccoin.zcash.ui.R.string.send_feeSummary),
 +                                title = stringRes(co.electriccoin.zcash.ui.R.string.private_wallet_transaction_fee),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt
+index fd16f97b7..4177cec48 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt
+@@ -7,0 +8 @@ object SendTag {
++    const val SEND_MEMO_FIELD = "SEND_MEMO_FIELD"
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt
+index 4e17a4f74..44142b740 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt
+@@ -55,0 +56 @@ import cash.z.ecc.android.sdk.model.WalletAddress
++import cash.z.ecc.android.sdk.model.Zatoshi
+@@ -56,0 +58 @@ import cash.z.ecc.android.sdk.model.ZecSend
++import cash.z.ecc.android.sdk.model.Zatoshi
+@@ -305 +307 @@ private fun SendForm(
+-            selectedAccount = selectedAccount
++            spendableShieldedBalance = selectedAccount.spendableShieldedBalance
+@@ -560 +562,2 @@ fun SendFormAmountTextField(
+-    selectedAccount: WalletAccount,
++    spendableShieldedBalance: Zatoshi?,
++    enabled: Boolean = true,
+@@ -579 +581,0 @@ fun SendFormAmountTextField(
+-                val spendableShieldedBalance = selectedAccount.spendableShieldedBalance
+@@ -610,0 +613 @@ fun SendFormAmountTextField(
++                isEnabled = enabled,
+@@ -675 +678 @@ fun SendFormAmountTextField(
+-                    isEnabled = !exchangeRateState.isStale && exchangeRateState.currencyConversion != null,
++                    isEnabled = enabled && !exchangeRateState.isStale && exchangeRateState.currencyConversion != null,
+@@ -736,0 +740 @@ fun SendFormMemoTextField(
++    enabled: Boolean = true,
+@@ -758 +762 @@ fun SendFormMemoTextField(
+-            isEnabled = isMemoFieldAvailable,
++            isEnabled = isMemoFieldAvailable && enabled,
+@@ -813,0 +818 @@ fun SendFormMemoTextField(
++            innerModifier = ZashiTextFieldDefaults.innerModifier.testTag(SendTag.SEND_MEMO_FIELD),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
 index 79f574053..d0207084f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
@@ -7301,12 +7390,14 @@ index 9dcdf7ae4..04e0a54cb 100644
 +    val copyPhrase: ButtonState? = null,
 +    val copyBirthday: ButtonState? = null
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupView.kt
-index 376f5f34f..9d24744cb 100644
+index 376f5f34f..e5310958c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupView.kt
-@@ -148,0 +149 @@ private fun SeedRecoveryMainContent(
+@@ -11,0 +12 @@ import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.height
+@@ -148,0 +150 @@ private fun SeedRecoveryMainContent(
 +        state.copyPhrase?.let { CopyButton(it) }
-@@ -152,0 +154,9 @@ private fun SeedRecoveryMainContent(
+@@ -152,0 +155,9 @@ private fun SeedRecoveryMainContent(
 +        state.copyBirthday?.let { CopyButton(it) }
 +        if (state.copyPhrase != null || state.copyBirthday != null) {
 +            Spacer(8.dp)
@@ -7316,10 +7407,10 @@ index 376f5f34f..9d24744cb 100644
 +                style = ZashiTypography.textSm
 +            )
 +        }
-@@ -173,0 +184,10 @@ private fun SeedRecoveryMainContent(
+@@ -173,0 +185,10 @@ private fun SeedRecoveryMainContent(
 +@Composable
 +private fun CopyButton(state: ButtonState) {
-+    Spacer(8.dp)
++    Spacer(Modifier.height(8.dp))
 +    ZashiButton(
 +        state = state,
 +        modifier = Modifier.fillMaxWidth(),
@@ -11930,10 +12021,10 @@ index 000000000..bdaf3e5ab
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
-index 000000000..52d15f3f9
+index 000000000..14c13a22e
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,27 @@
 +<resources>
 +    <string name="private_wallet_transaction_fee" translatable="false">Zcash network fee</string>
 +    <string name="private_provider_costs" translatable="false">NEAR platform fee</string>
@@ -11948,12 +12039,14 @@ index 000000000..52d15f3f9
 +    <string name="private_support_amount">Donation amount</string>
 +    <string name="private_support_failed">Cannot prepare donation. Check shielded funds, synchronization and connection. Nothing was submitted.</string>
 +    <string name="private_support_software_only">In-app donations currently require a software wallet. Hardware and view-only accounts can use the published address in a compatible wallet.</string>
++    <string name="private_support_add_message">Add a message (optional)</string>
++    <string name="private_support_hide_message">Hide message</string>
 +    <string name="private_support_review">Review donation</string>
 +    <string name="private_support_invitation">Swap completed. Would you like to support development?</string>
 +    <string name="private_support_not_now">Not now</string>
 +    <string name="private_support_never">Don’t ask again</string>
 +    <string name="private_support_once">Donate once</string>
-+    <string name="private_support_description">Choose an amount to support ZEC Private development. Your donation uses a shielded address. Review the amount and network fee before sending.</string>
++    <string name="private_support_description">Help maintain and improve ZEC Private.</string>
 +    <string name="private_support_home_title">Support ZEC Private</string>
 +    <string name="private_support_home_message">Help fund continued development and maintenance.</string>
 +    <string name="private_support_donate">Donate</string>
@@ -13375,6 +13468,121 @@ index 40bfe60a6..39059e4b6 100644
 +            coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved) }
 +        }
 +
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardIntegrationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardIntegrationTest.kt
+new file mode 100644
+index 000000000..cd0439b55
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardIntegrationTest.kt
+@@ -0,0 +1,109 @@
++package co.electriccoin.zcash.ui.common.usecase
++
++import android.content.ClipData
++import android.content.ClipboardManager
++import android.content.Context
++import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
++import io.mockk.every
++import io.mockk.mockk
++import java.time.Duration
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.cancel
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.test.StandardTestDispatcher
++import kotlinx.coroutines.test.TestCoroutineScheduler
++import kotlinx.coroutines.test.resetMain
++import kotlinx.coroutines.test.setMain
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import org.robolectric.shadows.ShadowSystemClock
++import kotlin.test.AfterTest
++import kotlin.test.BeforeTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertNotNull
++import kotlin.test.assertTrue
++
++@OptIn(ExperimentalCoroutinesApi::class)
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class RecoveryClipboardIntegrationTest {
++    private val scheduler = TestCoroutineScheduler()
++    private val foreground = MutableStateFlow(true)
++    private lateinit var clipboard: ClipboardManager
++    private lateinit var copyRecovery: CopyRecoveryToClipboardUseCase
++
++    @BeforeTest
++    fun setUp() {
++        Dispatchers.setMain(StandardTestDispatcher(scheduler))
++        val context = RuntimeEnvironment.getApplication()
++        clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
++        clipboard.clearPrimaryClip()
++        val applicationState = mockk<ApplicationStateProvider>()
++        every { applicationState.isInForeground } returns foreground
++        copyRecovery = CopyRecoveryToClipboardUseCase(context, applicationState, CopyToClipboardUseCase(context))
++        scheduler.runCurrent()
++    }
++
++    @AfterTest
++    fun tearDown() {
++        // The production singleton owns an application-lifetime scope. Retire this test's instance explicitly.
++        val scopeField = CopyRecoveryToClipboardUseCase::class.java.getDeclaredField("scope")
++        scopeField.isAccessible = true
++        (scopeField.get(copyRecovery) as CoroutineScope).cancel()
++        scheduler.runCurrent()
++        clipboard.clearPrimaryClip()
++        Dispatchers.resetMain()
++    }
++
++    @Test
++    fun ownedFakeClipExpiresAfterSixtySecondsInForeground() {
++        copyRecovery("fake recovery phrase")
++        scheduler.runCurrent()
++        assertTrue(clipboard.primaryClipDescription!!.extras!!.getBoolean("android.content.extra.IS_SENSITIVE"))
++        assertNotNull(clipboard.primaryClipDescription!!.extras!!.getString(OWNER_KEY))
++        advanceTime(59_999)
++        assertEquals("fake recovery phrase", clipboard.primaryClip!!.getItemAt(0).text.toString())
++        advanceTime(1)
++        assertFalse(clipboard.hasPrimaryClip())
++    }
++
++    @Test
++    fun backgroundExpiryWaitsForForegroundReturn() {
++        copyRecovery("fake birthday 123456")
++        scheduler.runCurrent()
++        foreground.value = false
++        scheduler.runCurrent()
++        advanceTime(60_000)
++        assertTrue(clipboard.hasPrimaryClip())
++        foreground.value = true
++        scheduler.runCurrent()
++        assertFalse(clipboard.hasPrimaryClip())
++    }
++
++    @Test
++    fun newerExternalClipsSurviveIncludingSameTextWithoutOwnershipMetadata() {
++        listOf("new fake external text", "fake recovery phrase").forEach { replacement ->
++            copyRecovery("fake recovery phrase")
++            scheduler.runCurrent()
++            clipboard.setPrimaryClip(ClipData.newPlainText("external fake clip", replacement))
++            advanceTime(60_000)
++            assertEquals(replacement, clipboard.primaryClip!!.getItemAt(0).text.toString())
++        }
++    }
++
++    private fun advanceTime(milliseconds: Long) {
++        ShadowSystemClock.advanceBy(Duration.ofMillis(milliseconds))
++        scheduler.advanceTimeBy(milliseconds)
++        scheduler.runCurrent()
++    }
++
++    private companion object {
++        const val OWNER_KEY = "co.electriccoin.zcash.recovery.clipboard.OWNER"
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardLeaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardLeaseTest.kt
 new file mode 100644
 index 000000000..66271503f
@@ -13840,10 +14048,10 @@ index 708658383..b6cff1756 100644
 -            assertNull(state.keystonePromo)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt
 new file mode 100644
-index 000000000..dbd1be1d4
+index 000000000..ad06c9220
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt
-@@ -0,0 +1,139 @@
+@@ -0,0 +1,174 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
@@ -13924,7 +14132,7 @@ index 000000000..dbd1be1d4
 +    }
 +
 +    @Test
-+    fun amountMismatchAndIdentifyingMemoAreRejected() {
++    fun amountMismatchAndUnreviewedMemoAreRejected() {
 +        reject(step().setBalance(balance().setFeeRequired(10_001)))
 +        assertFailsWith<IllegalArgumentException> {
 +            DonationPolicy.requireShielded(proposal(step()), send(amount = 99_999))
@@ -13935,7 +14143,7 @@ index 000000000..dbd1be1d4
 +    }
 +
 +    @Test
-+    fun serializedPaymentMustMatchReviewWithoutMemoOrExtraRecipients() {
++    fun serializedPaymentMustMatchReviewWithoutExtraRecipients() {
 +        reject(step().setTransactionRequest("zcash:${DonationPolicy.RECIPIENT}?amount=0.002"))
 +        reject(step().setTransactionRequest("zcash:t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU?amount=0.001"))
 +        reject(step().setTransactionRequest("zcash:${DonationPolicy.RECIPIENT}?amount=0.001&memo=aWRlbnRpdHk"))
@@ -13948,6 +14156,41 @@ index 000000000..dbd1be1d4
 +        reject(step().clearPaymentOutputPools().addPaymentOutputPools(
 +            paymentPool(ValuePool.Orchard).setPaymentIndex(1)
 +        ))
++    }
++
++    @Test
++    fun reviewedUnicodeMemoIsAcceptedExactly() {
++        val reviewed = "Thanks 💚"
++        val encoded = java.util.Base64.getUrlEncoder().withoutPadding()
++            .encodeToString(reviewed.toByteArray(Charsets.UTF_8))
++        val matching = step().setTransactionRequest("zcash:${DonationPolicy.RECIPIENT}?amount=0.001&memo=$encoded")
++        DonationPolicy.requireShielded(proposal(matching), send(memo = reviewed))
++        assertFailsWith<IllegalArgumentException> {
++            DonationPolicy.requireShielded(proposal(matching), send(memo = "Thanks"))
++        }
++        assertFailsWith<IllegalArgumentException> {
++            DonationPolicy.requireShielded(proposal(matching), send())
++        }
++    }
++
++    @Test
++    fun paddedReviewedMemoIsAcceptedButAdditionalBytesAreRejected() {
++        val reviewed = "Support"
++        val bytes = reviewed.toByteArray(Charsets.UTF_8)
++        val encoder = java.util.Base64.getUrlEncoder().withoutPadding()
++        val padded = encoder.encodeToString(bytes.copyOf(512))
++        DonationPolicy.requireShielded(
++            proposal(step().setTransactionRequest("zcash:${DonationPolicy.RECIPIENT}?amount=0.001&memo=$padded")),
++            send(memo = reviewed)
++        )
++        val altered = bytes.copyOf(512).apply { this[511] = 1 }
++        assertFailsWith<IllegalArgumentException> {
++            DonationPolicy.requireShielded(
++                proposal(step().setTransactionRequest(
++                    "zcash:${DonationPolicy.RECIPIENT}?amount=0.001&memo=${encoder.encodeToString(altered)}"
++                )), send(memo = reviewed)
++            )
++        }
 +    }
 +
 +    private fun reject(step: ProposalOuterClass.ProposalStep.Builder) {
