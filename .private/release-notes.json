@@ -13,7 +13,7 @@
     "[Support development](https://github.com/Sammy-Lastre/zec-private/blob/main/docs/DONATIONS.md)."
   ],
   "v3.19.0-private.14": [
-    "Redesign donation settings with clear one-time and optional automatic support.",
-    "Add opt-in shielded donations after successful swaps; skip donations when the extra network fee is too high."
+    "Add a home shortcut and dismissible invitation to support development.",
+    "Simplify manual shielded donations. Donation reminders can be snoozed or permanently dismissed."
   ]
 }

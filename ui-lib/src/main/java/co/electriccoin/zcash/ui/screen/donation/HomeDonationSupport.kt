@@ -172,11 +172,11 @@ internal fun HomeDonationInvitation(state: HomeDonationSupportState) {
             color = ZashiColors.Text.textSecondary,
         )
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            ZashiTextButton(onClick = state.onLater, modifier = Modifier.weight(1f)) {
-                Text(stringResource(R.string.private_support_later))
-            }
             ZashiTextButton(onClick = state.onNever, modifier = Modifier.weight(1f)) {
                 Text(stringResource(R.string.private_support_never))
+            }
+            ZashiTextButton(onClick = state.onLater, modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.private_support_later))
             }
         }
     }
