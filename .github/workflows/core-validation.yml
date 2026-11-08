@@ -24,7 +24,7 @@ jobs:
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
         with:
           cache-read-only: false
@@ -49,9 +49,26 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Read baseline selection from the current controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 170eb24caaa90969849c3f8dcfcb77f4016196ab
+          persist-credentials: false
+      - name: Select the pinned prior-release source
+        id: selected-baseline
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          baseline = json.load(open(".private/upgrade-baseline.json"))
+          source_sha = baseline["source_sha"]
+          assert re.fullmatch(r"[0-9a-f]{40}", source_sha), "Invalid baseline source SHA"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"source_sha={source_sha}\n")
+          print(f"Selected prior release: {baseline['release']} ({source_sha})")
+          PY
+      - name: Check out the selected prior release
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ steps.selected-baseline.outputs.source_sha }}
           persist-credentials: false
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
         with:
@@ -60,7 +77,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
         with:
           cache-read-only: true
-      - name: Build exact revision 11 testnet baseline only when needed
+      - name: Build selected prior-release testnet baseline with JDK 21 only when needed
         run: |
           chmod +x gradlew
           ./gradlew -I .private/tor-ui-abi.gradle --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process :app:assembleZcashtestnetFossDebug

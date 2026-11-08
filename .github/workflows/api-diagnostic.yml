@@ -19,11 +19,11 @@ jobs:
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: '25'
       - name: Verify the selected JDK
         run: |
           "$JAVA_HOME/bin/java" -version
-          grep -Eq '^JAVA_VERSION="21[."]' "$JAVA_HOME/release"
+          grep -Eq '^JAVA_VERSION="25[."]' "$JAVA_HOME/release"
       - name: Probe public API from the hosted runner
         if: inputs.check_api
         run: bash .private/run_tor_ci.sh
