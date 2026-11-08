@@ -13,6 +13,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -106,7 +108,7 @@ private fun HomePreview(dark: Boolean, onSend: () -> Unit, onDonate: () -> Unit)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         HomeAction("Receive", Icons.Outlined.ArrowDownward, Modifier.weight(1f)) {}
         HomeAction("Send", Icons.Outlined.ArrowUpward, Modifier.weight(1f), onSend)
-        HomeAction("Pay", Icons.Outlined.ArrowForward, Modifier.weight(1f)) {}
+        HomeAction("Pay", Icons.AutoMirrored.Outlined.ArrowForward, Modifier.weight(1f)) {}
         HomeAction("Swap", Icons.Outlined.SwapVert, Modifier.weight(1f)) {}
     }
     if (invitation) {
@@ -187,6 +189,6 @@ private fun PaymentPreview(donation: Boolean) {
     if (donation) TextButton(onClick = {}) {
         Text("Donation addresses")
         Spacer(Modifier.width(8.dp))
-        Icon(Icons.Outlined.OpenInNew, null, modifier = Modifier.size(18.dp))
+        Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, modifier = Modifier.size(18.dp))
     }
 }
