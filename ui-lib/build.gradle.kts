@@ -4,7 +4,6 @@ import model.NetworkDimension
 
 plugins {
     id("com.android.library")
-    kotlin("android")
     kotlin("plugin.serialization")
     id("org.jetbrains.kotlin.plugin.compose")
     id("secant.android-build-conventions")
@@ -34,10 +33,6 @@ android {
         // JVM unit tests instead of no-oping — needed so ViewModel logging doesn't crash tests
         // that don't otherwise touch Android framework classes.
         unitTests.isReturnDefaultValues = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.androidx.compose.compiler.get().versionConstraint.displayName
     }
 
     sourceSets {
@@ -173,6 +168,10 @@ androidComponents {
 }
 
 dependencies {
+    testImplementation(platform(libs.okhttp.bom))
+    testImplementation(libs.okhttp.tls)
+    testImplementation(libs.okhttp.mockwebserver)
+
     constraints {
         implementation("com.google.guava:guava:${project.property("GUAVA_VERSION")}") {
             because("Fix Guava deserialization allocation and collection hash-flooding denial of service")

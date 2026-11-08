@@ -3,7 +3,6 @@ import model.NetworkDimension
 
 plugins {
     id("com.android.library")
-    kotlin("android")
     id("secant.android-build-conventions")
     id("secant.jacoco-conventions")
 }

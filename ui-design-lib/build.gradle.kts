@@ -1,6 +1,5 @@
 plugins {
     id("com.android.library")
-    kotlin("android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("secant.android-build-conventions")
     id("secant.jacoco-conventions")
@@ -16,10 +15,6 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = libs.androidx.compose.compiler.get().versionConstraint.displayName
     }
 
     sourceSets {

@@ -1,6 +1,5 @@
 package publish
 
-import com.android.build.gradle.internal.tasks.factory.dependsOn
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.http.AbstractInputStreamContent
 import com.google.api.client.http.FileContent
@@ -410,8 +409,9 @@ tasks {
         googlePlayPublisherApiKey,
         deployTrack.toGooglePlayIdentifier(),
         deployStatus.toGooglePlayIdentifier()
-    )
-        .dependsOn(":app:assembleZcashmainnetStoreDebug")
-        .dependsOn(":app:bundleZcashmainnetStoreRelease")
-        .dependsOn(":app:packageZcashmainnetStoreReleaseUniversalApk")
+    ) {
+        dependsOn(":app:assembleZcashmainnetStoreDebug")
+        dependsOn(":app:bundleZcashmainnetStoreRelease")
+        dependsOn(":app:packageZcashmainnetStoreReleaseUniversalApk")
+    }
 }
