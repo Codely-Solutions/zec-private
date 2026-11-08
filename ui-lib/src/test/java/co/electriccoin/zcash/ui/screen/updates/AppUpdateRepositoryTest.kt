@@ -82,6 +82,7 @@ class AppUpdateRepositoryTest {
                     override val config = HttpClientEngineConfig().apply(block)
                     private val closed = AtomicBoolean(false)
 
+                    @OptIn(io.ktor.utils.io.InternalAPI::class)
                     override suspend fun execute(data: HttpRequestData): HttpResponseData {
                         try {
                             nativeLock.withLock {
