@@ -953,11 +953,11 @@ class CoreWalletAcceptance {
                                 for (index in 0 until node.childCount) node.getChild(index)?.let { pending.add(it) }
                             }
                         } finally {
-                            node.recycle()
+                            releaseUiNode(node)
                         }
                     }
                 } finally {
-                    while (pending.isNotEmpty()) pending.removeFirst().recycle()
+                    while (pending.isNotEmpty()) releaseUiNode(pending.removeFirst())
                 }
                 if (entered) return@withTimeout
                 delay(200)
