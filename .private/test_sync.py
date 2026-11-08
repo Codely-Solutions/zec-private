@@ -17,6 +17,31 @@ class SyncTests(unittest.TestCase):
         return dict(tag_name=tag,published_at=published,draft=False,prerelease=False,
                     html_url='https://github.com/zodl-inc/zodl-android/releases/tag/'+tag,**extra)
 
+    def test_github_overlay_preserves_all_fork_metadata_and_removes_upstream_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)/'controller'
+            candidate=Path(temp)/'candidate'
+            expected={
+                'FUNDING.yml':b'custom: fork-donation\n',
+                'pull_request_template.md':b'Fork review\r\n',
+                'workflows/review.yml':b'name: trusted\n',
+                'actions/setup/action.yml':b'name: setup\n',
+                'scripts/check.sh':b'echo check\n',
+            }
+            for name,data in expected.items():
+                path=root/'.github'/name
+                path.parent.mkdir(parents=True,exist_ok=True)
+                path.write_bytes(data)
+            stale=candidate/'.github/workflows/upstream-only.yml'
+            stale.parent.mkdir(parents=True)
+            stale.write_text('untrusted upstream workflow')
+            (candidate/'.github/FUNDING.yml').write_text('upstream funding')
+            with patch.object(sync,'ROOT',root):
+                sync.overlay_github(candidate)
+            actual={p.relative_to(candidate/'.github').as_posix():p.read_bytes()
+                    for p in (candidate/'.github').rglob('*') if p.is_file()}
+            self.assertEqual(expected,actual)
+
     def test_duplicate_poll_ignores_old_formats_and_prereleases(self):
         releases=[self.release(self.state['tag']),self.release('old-format','2025-01-01T00:00:00Z')]
         draft=self.release('99.0.0-9999');draft['draft']=True
@@ -112,10 +137,12 @@ class SyncTests(unittest.TestCase):
                 self.assertFalse(any(name.startswith('feature-voting/') for name in tree))
                 self.assertFalse(any('/ui/screen/flexa/' in name for name in tree))
                 self.assertIn('wallet-foundation-lib/build.gradle.kts', tree)
-                templates={name for name in tree if name.startswith('.github/ISSUE_TEMPLATE/')}
-                expected={'.github/ISSUE_TEMPLATE/'+p.name for p in (sync.ROOT/'.github/ISSUE_TEMPLATE').iterdir()}
-                self.assertEqual(expected,templates)
-                for name in sorted(expected | {'.github/SECURITY.md'}):
+                metadata={name for name in tree if name.startswith('.github/')}
+                expected={p.relative_to(sync.ROOT).as_posix()
+                          for p in (sync.ROOT/'.github').rglob('*') if p.is_file()
+                          and '__pycache__' not in p.parts and p.suffix!='.pyc'}
+                self.assertEqual(expected,metadata)
+                for name in sorted(expected):
                     self.assertEqual(original('git','show',output.call_args.kwargs['source_sha']+':'+name),
                                      (sync.ROOT/name).read_text().strip())
                 self.assertIn('app/src/main/java/co/electriccoin/zcash/app/ZecPrivateProductModule.kt', tree)
