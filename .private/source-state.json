@@ -82,7 +82,7 @@
   "buildSrc/gradle.lockfile": "cf81c600134cafc821859ccf87d628284fb2b758d6fe5b2d1c04dc11f11de603",
   "buildSrc/settings.gradle.kts": "b8470bc512f9ada4677ceb3a576d2fa89017c1fb82024737c384453311b449d3",
   "buildSrc/src/main/kotlin/co/electriccoin/zcash/Git.kt": "a60af3e4c5829197535c0398bf264f1d7241f4ea6afaacc4a22c273af8023171",
-  "buildscript-gradle.lockfile": "7f1a6404ee89a397643f8afa8dbc1fdf2d35ebfadbb22451d625d8c4a85f87e7",
+  "buildscript-gradle.lockfile": "0d03f23e6fe3e304985d5121e6c24624c2504472f979d3b402f191779e1b1d20",
   "compose_stability_config.conf": "d361e20b82022bab463cc71624f121e109183c05ce66141e40a9d7fda031175b",
   "configuration-api-lib/build.gradle.kts": "6823826ed08b4a36fa8a564c18082811b4a9ce24b54755287a9fad4ac565121d",
   "configuration-api-lib/gradle.lockfile": "927497fb20dd2e19bf6de95b543844aa60ee483d24f3ab93201b482f02caf121",
