@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision 16 is signed and independently verified. Exact immutable publication evidence is in `release-evidence/v3.19.0-private.16.json`; root receipts bind its executed artifacts. Revision 15 remains the rollback.
+Status: revision 17 acceptance passed against revision 16. Its exact source, APKs and closed execution records are bound in `core-validation-summary.json`; publication is tracked separately in `release-evidence/`. Revision 16 remains the published rollback until promotion completes.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
@@ -50,14 +50,14 @@ Production Detekt retains its rules and existing baseline. Its release-only init
 
 ## Current release evidence
 
-Revision 16 passed 1,749 reported unit tests, three focused Material role tests and the real testnet lifecycle from revision 15. One manual shielded donation verified review, cancellation, one approval and exact nonempty message; restart and clean recipient restoration reused it. A fake clipboard entry verified sensitive metadata and preservation of newer content across expiry. Clipboard process-death cleanup and physical authentication UI remain outside that execution.
+Revision 17 executed real testnet receive/confirmation, the revision-16 installed update, controlled native Tor interruption/recovery, one shielded send, restart and clean recipient seed/birthday restoration. The same transaction established the recipient amount, message and mined history. Version-matched baseline/candidate instrumentation and installed APK hashes are checked at each stage. A separate unfunded native probe established the corrected transport boundary before funding. The first faucet attempt explicitly refused without sending (HTTP503); one repeat followed recovered public service health.
 
-Three unfunded Tor quote/dismiss cycles passed without timeout using the normal launcher. Six final synthetic error renders cover light/dark/OLED at 1.0 and 1.3 font scale; a separate enlarged-text scroll check confirmed the full Review control is reachable. Unchanged approved comparison frames were reused with their original identities. Layout scenes cannot spend or establish authentication. Prior signed evidence remains immutable under `release-evidence/`.
+Three unfunded Tor quote/dismiss/requote cycles passed without provider timeout. Thirteen final synthetic frames cover update/donation copy, themed icons, error states and selection controls across light/dark/OLED, with opposite system/app appearance. Real Obtainium import and stable-release discovery passed without installing the production wallet. Layout scenes cannot establish payment or authentication. Earlier clipboard, manual-donation approval and enlarged-text evidence retains its original revision-16 scope; clipboard process-death cleanup and physical authentication remain unexecuted.
 
 ## Retained dependency-security work
 
 The unchanged SDK 6.0.0 pinned source lock has known Rustls, h2, constant-time arithmetic, Tokio and compression advisory matches. Tor/transparent-input source features reach some affected dependencies; actual published AAR feature union and exploitable call paths remain unresolved. Review supported SDK fixes and native build provenance before claiming these risks resolved; registry presence alone establishes neither an exploit nor immunity. Relevant examples: [Rustls protocol defect](https://rustsec.org/advisories/RUSTSEC-2026-0285.html), [constant-time arithmetic](https://rustsec.org/advisories/RUSTSEC-2026-0387.html). No newer supported Maven SDK was found during this review.
 
-The exact Maven graph query covered 317 coordinates with no match; it does not clear native dependencies or the separately documented OkHttp CA limitation in [maintenance guidance](MAINTENANCE.md).
+Fixed upstream OkHttp 5.5.1 is resolved through Ktor 3.6.1. TLS regression tests allow a valid connection and reject a wrong hostname and compromised emSign chain before HTTP data reaches the test server. This establishes the OkHttp path, not the native SDK's separate TLS implementation. The older revision-16 Maven advisory query does not clear the upgraded graph or native dependencies; retain the scoped findings in [maintenance guidance](MAINTENANCE.md).
 
 The [consolidation security review](native-security-review.json) binds the published ARM64 binary and narrows two suspected secret-operation paths. It confirms affected-version markers for five native dependencies, while advisory-specific reachability and full native build provenance remain unresolved. Inspected wallet HMAC derivation does not invoke the cited ctutils comparison methods; inspected Tor SSH features do not establish P256 activation. Neither finding clears other consumers. No supported SDK newer than 6.0.0 was found on 8 November 2026.

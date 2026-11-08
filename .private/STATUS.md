@@ -1,9 +1,7 @@
-# Last published release — revision 16
+# Revision 17 — acceptance complete
 
-Candidate `a6ea7cf81986f6f74db1847a513dd14b0bb4d649`, run `42473584723`, passed 1,749 reported unit tests, lint, Detekt, live Tor contracts and disposable upstream integration. Three focused Material role tests also passed. [Revision 16](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.16) is signed and independently verified: original payload, permanent certificate, package and ARM64-only packaging preserved. The next seedless update fixture is preserved in the maintenance draft.
+Candidate `d3956b2f3679facf4158e524bdbf3d27eef51a67`, production/UI run `42524865003` and core run `42524867394`, passed required deterministic checks, real testnet lifecycle, three unfunded Tor quote cycles and disposable upstream integration. Signed publication remains pending; revision 16 is the published rollback.
 
-Existing screens now use shared Material 3 roles, system colors and OLED black. Shared error hints use the error role; ordinary hints and entered text retain their own roles. Real rendered light/dark/OLED and enlarged-text scrolling checks passed.
+The coordinated toolchain upgrade includes fixed upstream OkHttp. Quiet update discovery and verified Obtainium setup are ready; installation remains with Obtainium/Android. Donation labels, themed icons and the unnecessary About footer are corrected. Thirteen actual synthetic frames were inspected.
 
-Real isolated testnet acceptance covered revision 15 installed update, receive/confirmation, Tor interruption/recovery, manual donation review/cancel/one approval, restart and clean recipient restoration with the same message. Three unfunded Tor BTC→ZEC quote/dismiss cycles passed. Production is ARM64-only; executed guests are API 35/x86_64.
-
-See [validation](core-validation-summary.json) and [coverage](core-coverage.md), including retained dependency-security limits. Physical ARM/biometric execution and funded production settlement remain untested. Clipboard cleanup cannot be guaranteed after process death.
+[Validation](core-validation-summary.json) binds the exact artifacts and closed guest records. [Coverage](core-coverage.md) distinguishes executed API35/x86_64 testnet behavior from inspected production ARM64 packaging. Native SDK advisory reachability/provenance, physical authentication/ARM execution, funded production settlement and clipboard process-death cleanup remain limited. No custom native SDK or OkHttp fork is maintained.
