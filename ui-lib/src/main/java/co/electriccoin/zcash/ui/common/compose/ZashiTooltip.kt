@@ -56,13 +56,13 @@ fun TooltipScope.ZashiTooltip(
             ) {
                 Text(
                     modifier = Modifier.padding(top = 12.dp),
-                    color = ZashiColors.Text.textLight,
+                    color = ZashiColors.HintTooltips.defaultFg,
                     style = ZashiTypography.textMd,
                     text = title.getValue()
                 )
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    color = ZashiColors.Text.textLightSupport,
+                    color = ZashiColors.HintTooltips.defaultFg,
                     style = ZashiTypography.textSm,
                     text = message.getValue()
                 )

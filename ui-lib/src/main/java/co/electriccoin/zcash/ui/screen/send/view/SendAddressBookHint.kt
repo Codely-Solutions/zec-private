@@ -32,7 +32,7 @@ fun SendAddressBookHint(modifier: Modifier = Modifier) {
         colors =
             CardDefaults.cardColors(
                 containerColor = ZashiColors.HintTooltips.surfacePrimary,
-                contentColor = ZashiColors.Text.textLight
+                contentColor = ZashiColors.HintTooltips.defaultFg
             ),
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
     ) {
@@ -41,7 +41,7 @@ fun SendAddressBookHint(modifier: Modifier = Modifier) {
         ) {
             Image(
                 painter = painterResource(id = R.drawable.ic_send_address_book_hint),
-                colorFilter = ColorFilter.tint(ZashiColors.Text.textLightSupport),
+                colorFilter = ColorFilter.tint(ZashiColors.HintTooltips.defaultFg),
                 contentDescription = null
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -49,7 +49,7 @@ fun SendAddressBookHint(modifier: Modifier = Modifier) {
                 text = stringResource(id = R.string.send_addressNotInBook),
                 style = ZashiTypography.textXs,
                 fontWeight = FontWeight.Medium,
-                color = ZashiColors.Text.textLight
+                color = ZashiColors.HintTooltips.defaultFg
             )
         }
     }
