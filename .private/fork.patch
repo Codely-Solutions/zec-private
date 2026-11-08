@@ -11213,10 +11213,10 @@ index 000000000..f44f1d117
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt
 new file mode 100644
-index 000000000..03717dd52
+index 000000000..bc26bc791
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt
-@@ -0,0 +1,135 @@
+@@ -0,0 +1,139 @@
 +package co.electriccoin.zcash.ui.screen.updates
 +
 +import android.content.Context
@@ -11228,11 +11228,13 @@ index 000000000..03717dd52
 +import io.ktor.client.request.header
 +import io.ktor.client.statement.bodyAsText
 +import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.StateFlow
 +import kotlinx.coroutines.flow.asStateFlow
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
++import kotlinx.coroutines.withContext
 +import kotlinx.coroutines.withTimeoutOrNull
 +import kotlinx.serialization.json.JsonNull
 +import kotlinx.serialization.json.JsonPrimitive
@@ -11299,18 +11301,20 @@ index 000000000..03717dd52
 +        mutableState.value = cachedAvailability() ?: AppUpdateState.Idle
 +    }
 +
-+    /** Explicit network-bound read for isolated acceptance; never downloads or installs APKs. */
-+    suspend fun readLatestRelease(): AppUpdateRelease = withTimeoutOrNull(REQUEST_DEADLINE_MILLIS) {
-+        httpClientProvider.create().use { client ->
-+            val response = client.get(LATEST_RELEASE_URL) {
-+                header("Accept", "application/vnd.github+json")
-+                header("User-Agent", "ZEC-Private")
-+                header("X-GitHub-Api-Version", "2022-11-28")
++    /** Native client disposal can block after cancellation; keep its whole lifetime off Main. */
++    suspend fun readLatestRelease(): AppUpdateRelease = withContext(Dispatchers.IO) {
++        withTimeoutOrNull(REQUEST_DEADLINE_MILLIS) {
++            httpClientProvider.create().use { client ->
++                val response = client.get(LATEST_RELEASE_URL) {
++                    header("Accept", "application/vnd.github+json")
++                    header("User-Agent", "ZEC-Private")
++                    header("X-GitHub-Api-Version", "2022-11-28")
++                }
++                require(response.status.value == HTTP_OK)
++                UpdatePolicy.parse(response.bodyAsText())
 +            }
-+            require(response.status.value == HTTP_OK)
-+            UpdatePolicy.parse(response.bodyAsText())
-+        }
-+    } ?: throw IOException("Update check deadline exceeded")
++        } ?: throw IOException("Update check deadline exceeded")
++    }
 +
 +    private fun cachedRelease(): AppUpdateRelease? =
 +        try {
