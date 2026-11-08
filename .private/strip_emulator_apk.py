@@ -1,7 +1,7 @@
 """Drop unused CPU libraries from emulator-only copies; preserve executable bytes."""
-import zipfile,hashlib,subprocess,json,re
+import zipfile,hashlib,subprocess,json,re,os
 from pathlib import Path
-JDK=Path(r"C:\Users\User\.gradle\jdks\eclipse_adoptium-21-amd64-windows.2")
+JDK=Path(os.environ.get("ZEC_PRIVATE_JDK", str(Path.home()/".codex/cache/jdks/temurin-21.0.13+9")))
 def prepare(paths, root, sdk):
     key=root/'ephemeral-test.p12'
     subprocess.run([str(JDK/'bin/keytool.exe'),'-genkeypair','-keystore',str(key),'-storepass','android','-keypass','android','-alias','test','-dname','CN=Isolated Unfunded Emulator Test','-keyalg','RSA','-keysize','2048','-validity','2'],capture_output=True,check=True,timeout=30)

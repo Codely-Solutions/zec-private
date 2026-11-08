@@ -86,6 +86,9 @@ def main():
         ROOT / '.private/tor_resident_ui_driver.py')]
     from emulator_session import SDK
     sources += [str(SDK / 'emulator/emulator.exe'), str(SDK / 'platform-tools/adb.exe')]
+    from strip_emulator_apk import JDK
+    sources += [str(JDK/'bin/java.exe'), str(JDK/'bin/keytool.exe'),
+                str(SDK/'build-tools/36.0.0/lib/apksigner.jar'), str(SDK/'build-tools/36.0.0/zipalign.exe')]
     workers = []
     seconds = 600 if args.smoke else 0
     reserve = 17 * 1024**3 if args.smoke else 0

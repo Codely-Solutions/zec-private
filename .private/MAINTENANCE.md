@@ -30,6 +30,8 @@ python3 .private/test_controls.py
 ./gradlew --no-daemon --no-watch-fs --max-workers=2 :ui-lib:testZcashmainnetFossReleaseUnitTest detektAll :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease
 ```
 
+Windows project checks and emulator APK preparation use verified portable Temurin21.0.13+9 at `%USERPROFILE%/.codex/cache/jdks/temurin-21.0.13+9`; `ZEC_PRIVATE_JDK` can select another reviewed JDK for emulator preparation. Set `JAVA_HOME` only in the child build environment. The cache receipt records the official package checksum; preserve machine-wide Java/PATH and unrelated JDK caches.
+
 Use the applicable resource guard and project acceptance policy. Offline preflight also checks local links in the maintained documentation entry points. After reorganizing procedures, verify task-table destinations, script bindings and any archive-recovery examples; historical/generated links are outside that narrow automated check. Build each required variant once per candidate and promote its validated unsigned artifact after acceptance. Production APKs are ARM64-only; x86_64 is reserved for isolated emulator debug acceptance. Release debuggability and debug-key signing are disabled.
 
 [Swap amount rules](SWAP-AMOUNTS.md) explain amount provenance and fee accounting for maintainers.
