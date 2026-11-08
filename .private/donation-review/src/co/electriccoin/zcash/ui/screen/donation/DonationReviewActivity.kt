@@ -47,7 +47,10 @@ class DonationReviewActivity : ComponentActivity() {
                 var amount by remember { mutableStateOf("") }
                 if (screen == "donation") {
                     DonationView(
-                        state = DonationViewState(amount = amount, canReview = amount.toBigDecimalOrNull()?.signum() == 1),
+                        state = DonationViewState(
+                            amount = amount,
+                            canReview = amount.toBigDecimalOrNull()?.signum() == 1,
+                        ),
                         onAmountChanged = { amount = it },
                         onReview = {},
                         onExternalAddresses = {},
