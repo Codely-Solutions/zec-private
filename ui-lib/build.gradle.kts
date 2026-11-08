@@ -173,6 +173,7 @@ androidComponents {
 }
 
 dependencies {
+    implementation(platform("com.squareup.okhttp3:okhttp-bom:${project.property("OKHTTP_BOM_VERSION")}"))
     constraints {
         implementation("com.google.guava:guava:${project.property("GUAVA_VERSION")}") {
             because("Fix Guava deserialization allocation and collection hash-flooding denial of service")

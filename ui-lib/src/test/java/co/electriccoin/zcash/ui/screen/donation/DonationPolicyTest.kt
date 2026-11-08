@@ -78,7 +78,7 @@ class DonationPolicyTest {
     }
 
     @Test
-    fun amountMismatchAndIdentifyingMemoAreRejected() {
+    fun amountMismatchAndUnreviewedMemoAreRejected() {
         reject(step().setBalance(balance().setFeeRequired(10_001)))
         assertFailsWith<IllegalArgumentException> {
             DonationPolicy.requireShielded(proposal(step()), send(amount = 99_999))
@@ -89,7 +89,7 @@ class DonationPolicyTest {
     }
 
     @Test
-    fun serializedPaymentMustMatchReviewWithoutMemoOrExtraRecipients() {
+    fun serializedPaymentMustMatchReviewWithoutExtraRecipients() {
         reject(step().setTransactionRequest("zcash:${DonationPolicy.RECIPIENT}?amount=0.002"))
         reject(step().setTransactionRequest("zcash:t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU?amount=0.001"))
         reject(step().setTransactionRequest("zcash:${DonationPolicy.RECIPIENT}?amount=0.001&memo=aWRlbnRpdHk"))
@@ -102,6 +102,41 @@ class DonationPolicyTest {
         reject(step().clearPaymentOutputPools().addPaymentOutputPools(
             paymentPool(ValuePool.Orchard).setPaymentIndex(1)
         ))
+    }
+
+    @Test
+    fun reviewedUnicodeMemoIsAcceptedExactly() {
+        val reviewed = "Thanks 💚"
+        val encoded = java.util.Base64.getUrlEncoder().withoutPadding()
+            .encodeToString(reviewed.toByteArray(Charsets.UTF_8))
+        val matching = step().setTransactionRequest("zcash:${DonationPolicy.RECIPIENT}?amount=0.001&memo=$encoded")
+        DonationPolicy.requireShielded(proposal(matching), send(memo = reviewed))
+        assertFailsWith<IllegalArgumentException> {
+            DonationPolicy.requireShielded(proposal(matching), send(memo = "Thanks"))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            DonationPolicy.requireShielded(proposal(matching), send())
+        }
+    }
+
+    @Test
+    fun paddedReviewedMemoIsAcceptedButAdditionalBytesAreRejected() {
+        val reviewed = "Support"
+        val bytes = reviewed.toByteArray(Charsets.UTF_8)
+        val encoder = java.util.Base64.getUrlEncoder().withoutPadding()
+        val padded = encoder.encodeToString(bytes.copyOf(512))
+        DonationPolicy.requireShielded(
+            proposal(step().setTransactionRequest("zcash:${DonationPolicy.RECIPIENT}?amount=0.001&memo=$padded")),
+            send(memo = reviewed)
+        )
+        val altered = bytes.copyOf(512).apply { this[511] = 1 }
+        assertFailsWith<IllegalArgumentException> {
+            DonationPolicy.requireShielded(
+                proposal(step().setTransactionRequest(
+                    "zcash:${DonationPolicy.RECIPIENT}?amount=0.001&memo=${encoder.encodeToString(altered)}"
+                )), send(memo = reviewed)
+            )
+        }
     }
 
     private fun reject(step: ProposalOuterClass.ProposalStep.Builder) {

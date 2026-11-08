@@ -5,7 +5,8 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.dsl.KotlinAndroidProjectExtension
 
 pluginManager.withPlugin("com.android.application") {
-    project.extensions.getByType<com.android.build.api.dsl.ApplicationExtension>().androidResources.localeFilters.addAll(
+    project.extensions.getByType<com.android.build.api.dsl.ApplicationExtension>()
+        .androidResources.localeFilters.addAll(
         listOf("en", "en-rUS", "en-rGB", "en-rAU", "es", "en_XA", "ar_XB")
     )
     project.the<com.android.build.gradle.AppExtension>().apply {

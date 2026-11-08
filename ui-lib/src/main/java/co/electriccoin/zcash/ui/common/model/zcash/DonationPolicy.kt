@@ -48,7 +48,7 @@ object DonationPolicy {
         val payment = parsed.paymentRequest.payments.single()
         require(payment.recipientAddress.value == send.destination.address &&
             payment.nonNegativeAmount?.toZecValueString()?.toBigDecimal()?.movePointRight(8)?.longValueExact() ==
-            send.amount.value && isEmptyMemo(payment.memo?.data)) { "Donation payment differs from review" }
+            send.amount.value && memoMatchesReview(payment.memo?.data, send.memo.value)) { "Donation payment differs from review" }
         require(!step.isShielding && step.inputsCount > 0) { "Donation requires shielded funds" }
         require(step.inputsList.all { it.hasReceivedOutput() && isShielded(it.receivedOutput.valuePool) }) {
             "Donation requires shielded inputs"
@@ -65,7 +65,14 @@ object DonationPolicy {
         require(Math.subtractExact(Math.subtractExact(spent, change), step.balance.feeRequired) == send.amount.value) {
             "Donation amount differs from proposal"
         }
-        require(send.memo.value.isEmpty()) { "Donations do not include identifying memos" }
+    }
+
+    private fun memoMatchesReview(data: ByteArray?, reviewed: String): Boolean {
+        if (reviewed.isEmpty()) return isEmptyMemo(data)
+        val expected = reviewed.toByteArray(Charsets.UTF_8)
+        if (data == null || data.size > 512 || data.size < expected.size) return false
+        return data.take(expected.size).toByteArray().contentEquals(expected) &&
+            data.drop(expected.size).all { it == 0.toByte() }
     }
 
     // ZIP321 may preserve the protocol's empty-memo marker and its zero padding.

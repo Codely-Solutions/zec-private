@@ -72,6 +72,7 @@ class CoreWalletAcceptance {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private val arguments = InstrumentationRegistry.getArguments()
+    private val reviewedDonationMemo = "Isolated testnet support 💚"
     private var approvalActions = 0
     private var reviewReadyChecks = 0
     private var reviewReadyWaitMillis = 0L
@@ -153,6 +154,7 @@ class CoreWalletAcceptance {
                     awaitReviewSync()
                     val sdk = dependency<SynchronizerProvider>().getSynchronizer()
                     val account = dependency<AccountDataSource>().getZashiAccount()
+                    beginClipboardCheck(state)
                     val multiUri = "zcash:$destination?amount=0.001&address.1=" +
                         state.getString("senderAddress") + "&amount.1=0.001"
                     val multiProposal = sdk.proposeFulfillingPaymentUri(account.sdkAccount, multiUri)
@@ -178,6 +180,8 @@ class CoreWalletAcceptance {
                     co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy.setIsolatedTestnetRecipient(destination)
                     dependency<NavigationRouter>().forward(co.electriccoin.zcash.ui.screen.donation.DonationArgs("2"))
                     enterDonationAmount("0.01")
+                    clickUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_add_message), "expand_memo")
+                    enterDonationAmount(reviewedDonationMemo, co.electriccoin.zcash.ui.screen.send.SendTag.SEND_MEMO_FIELD)
                     scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_review))
                     suspend fun openReview() {
                         reviewAttempt++
@@ -228,6 +232,7 @@ class CoreWalletAcceptance {
                             "review_title"
                         )
                         waitUi("0.01", "review_amount", exact = false)
+                        scrollToText(reviewedDonationMemo)
                         co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy.requireShielded(
                             proposal.proposal,
                             ZecSend(proposal.destination, proposal.amount, proposal.memo, null)
@@ -235,7 +240,7 @@ class CoreWalletAcceptance {
                         check(proposal.isDonation)
                         check(proposal.amount.value == 1_000_000L)
                         check(proposal.destination.address == destination)
-                        check(proposal.memo.value.isEmpty())
+                        check(proposal.memo.value == reviewedDonationMemo)
                     }
                     openReview()
                     check(instrumentation.uiAutomation.performGlobalAction(AccessibilityService.GLOBAL_ACTION_BACK))
@@ -281,6 +286,7 @@ class CoreWalletAcceptance {
                     }
                     state.put("txId", result.txIds.single()); save(state)
                     checkSent()
+                    finishClipboardCheck()
                 }
                 "restore" -> {
                     val state = fixture()
@@ -296,7 +302,7 @@ class CoreWalletAcceptance {
                             .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight!=null }
                     }
                     check(transaction.amount.value == 1_000_000L)
-                    check(dependency<TransactionRepository>().getMemos(transaction).all { it.isEmpty() })
+                    check(dependency<TransactionRepository>().getMemos(transaction).single() == reviewedDonationMemo)
                     awaitBalance(1_000_000)
                     check(balance() == 1_000_000L)
                     save(state.put("restoreMinedHeight",checkNotNull(transaction.overview.minedHeight).value)
@@ -444,13 +450,17 @@ class CoreWalletAcceptance {
             .put("ui_review_sync_checks",reviewReadyChecks)
             .put("ui_review_sync_wait_millis",reviewReadyWaitMillis)
             .put("setup","production support screen; actual donation review/cancel and approval clicks")
-            .put("shielded_donation",true).put("identifying_memo",false)
+            .put("shielded_donation",true).put("automatic_identifying_memo",false).put("reviewed_memo_verified",true)
+            .put("clipboard_metadata_verified",fixture().getBoolean("clipboardMetadataVerified"))
+            .put("newer_clipboard_preserved",fixture().getBoolean("newerClipboardPreserved"))
+            .put("clipboard_lease_age_ms",fixture().getLong("clipboardLeaseAgeMs"))
             .put("multi_recipient_sdk_accepted",fixture().getBoolean("multiRecipientSdkAccepted"))
             .put("multi_recipient_wallet_rejected",fixture().getBoolean("multiRecipientRejectedByWallet"))
             .put("multi_recipient_submitted",false)
             .put("biometric_prompt_executed",false)
         if (stage=="restore") receipt.put("mined_height",fixture().getLong("restoreMinedHeight"))
             .put("amount_zatoshi",1_000_000L).put("app_transaction_state",fixture().getString("restoreTransactionState"))
+            .put("reviewed_memo_verified",true)
 
         // No exception messages, seeds, addresses, HTTP bodies or private fixture are printed.
         println("CORE_RESULT $receipt")
@@ -894,7 +904,32 @@ class CoreWalletAcceptance {
     }
 
     @Suppress("DEPRECATION")
-    private suspend fun enterDonationAmount(amount: String) {
+    private fun beginClipboardCheck(state: JSONObject) {
+        instrumentation.runOnMainSync {
+            dependency<co.electriccoin.zcash.ui.common.usecase.CopyRecoveryToClipboardUseCase>()("isolated clipboard fixture")
+            val clipboard = checkNotNull(context.getSystemService(android.content.ClipboardManager::class.java))
+            val description = checkNotNull(clipboard.primaryClipDescription)
+            val metadata = checkNotNull(description.extras)
+            check(metadata.getBoolean("android.content.extra.IS_SENSITIVE"))
+            check(!metadata.getString("co.electriccoin.zcash.recovery.clipboard.OWNER").isNullOrEmpty())
+            check(clipboard.primaryClip?.getItemAt(0)?.text?.toString() == "isolated clipboard fixture")
+            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", "newer isolated fixture"))
+        }
+        save(state.put("clipboardMetadataVerified",true).put("clipboardLeaseStartMs",android.os.SystemClock.elapsedRealtime()))
+    }
+
+    private fun finishClipboardCheck() {
+        instrumentation.runOnMainSync {
+            val clipboard = checkNotNull(context.getSystemService(android.content.ClipboardManager::class.java))
+            check(clipboard.primaryClip?.getItemAt(0)?.text?.toString() == "newer isolated fixture")
+            clipboard.clearPrimaryClip()
+        }
+        val state = fixture()
+        save(state.put("newerClipboardPreserved",true)
+            .put("clipboardLeaseAgeMs",android.os.SystemClock.elapsedRealtime()-state.getLong("clipboardLeaseStartMs")))
+    }
+
+    private suspend fun enterDonationAmount(amount: String, tag: String? = null) {
         withTimeout(15_000) {
             while (true) {
                 val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
@@ -905,7 +940,10 @@ class CoreWalletAcceptance {
                     while (pending.isNotEmpty() && count++ < 500 && !entered) {
                         val node = pending.removeFirst()
                         try {
-                            if (node.isVisibleToUser && node.isEnabled && node.isEditable) {
+                            if (node.isEnabled && node.isEditable && (tag == null || node.viewIdResourceName == tag)) {
+                                if (!node.isVisibleToUser) {
+                                    node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.id)
+                                }
                                 val arguments = android.os.Bundle().apply {
                                     putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, amount)
                                 }

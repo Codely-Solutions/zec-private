@@ -44,14 +44,49 @@ class DonationReviewActivity : ComponentActivity() {
                 isOledEnabled = dark,
             ) {
                 var screen by remember { mutableStateOf(if (requested == "revisit") "home" else requested) }
-                var amount by remember { mutableStateOf("") }
-                if (screen == "donation") {
+                var amount by remember {
+                    mutableStateOf(co.electriccoin.zcash.ui.screen.send.model.AmountState.newFromZec(
+                        "", "", false, co.electriccoin.zcash.ui.common.wallet.ExchangeRateState.OptedOut
+                    ))
+                }
+                var memo by remember { mutableStateOf(co.electriccoin.zcash.ui.screen.send.model.MemoState.new("")) }
+                var memoExpanded by remember { mutableStateOf(false) }
+                if (screen == "recovery") {
+                    co.electriccoin.zcash.ui.screen.walletbackup.WalletBackupView(
+                        co.electriccoin.zcash.ui.screen.walletbackup.WalletBackupState(
+                            seed = co.electriccoin.zcash.ui.design.component.SeedTextState(
+                                seed = (1..24).joinToString(" ") { "sample$it" }, isRevealed = true
+                            ),
+                            birthday = co.electriccoin.zcash.ui.screen.walletbackup.SeedSecretState(
+                                title = stringRes(R.string.recoveryPhraseDisplay_birthdayTitle),
+                                text = stringRes("4600000"), isRevealed = true, tooltip = null, onClick = null
+                            ),
+                            info = co.electriccoin.zcash.ui.design.component.IconButtonState(
+                                icon = R.drawable.ic_help, onClick = {}
+                            ),
+                            primaryButton = co.electriccoin.zcash.ui.design.component.ButtonState(
+                                text = stringRes("Done"), onClick = { screen = "home" }
+                            ),
+                            secondaryButton = null, onBack = { screen = "home" },
+                            copyPhrase = co.electriccoin.zcash.ui.design.component.ButtonState(
+                                text = stringRes(R.string.recovery_copy_phrase), onClick = {}
+                            ),
+                            copyBirthday = co.electriccoin.zcash.ui.design.component.ButtonState(
+                                text = stringRes(R.string.recovery_copy_birthday), onClick = {}
+                            ),
+                        )
+                    )
+                } else if (screen == "donation") {
                     DonationView(
                         state = DonationViewState(
-                            amount = amount,
-                            canReview = amount.toBigDecimalOrNull()?.signum() == 1,
+                            amountState = amount,
+                            memoState = memo,
+                            memoExpanded = memoExpanded,
+                            canReview = amount is co.electriccoin.zcash.ui.screen.send.model.AmountState.Valid,
                         ),
                         onAmountChanged = { amount = it },
+                        onMemoChanged = { memo = it },
+                        onToggleMemo = { memoExpanded = !memoExpanded },
                         onReview = {},
                         onExternalAddresses = {},
                         onBack = { screen = "home" },

@@ -6,38 +6,37 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
 import co.electriccoin.zcash.ui.design.component.ZashiButton
 import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
 import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
-import co.electriccoin.zcash.ui.design.component.ZashiTextField
-import co.electriccoin.zcash.ui.design.component.ZashiTextFieldDefaults
 import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarBackNavigation
 import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+import co.electriccoin.zcash.ui.screen.send.model.AmountState
+import co.electriccoin.zcash.ui.screen.send.model.MemoState
+import co.electriccoin.zcash.ui.screen.send.view.SendFormAmountTextField
+import co.electriccoin.zcash.ui.screen.send.view.SendFormMemoTextField
 
 @Suppress("LongParameterList", "LongMethod", "MagicNumber")
 @Composable
 internal fun DonationView(
     state: DonationViewState,
-    onAmountChanged: (String) -> Unit,
+    onAmountChanged: (AmountState) -> Unit,
+    onMemoChanged: (MemoState) -> Unit,
+    onToggleMemo: () -> Unit,
     onReview: () -> Unit,
     onExternalAddresses: () -> Unit,
     onBack: () -> Unit,
@@ -59,13 +58,32 @@ internal fun DonationView(
         ) {
             DonationHeading(stringResource(R.string.private_support_once))
             DonationMessage(stringResource(R.string.private_support_description))
-            DonationInput(
-                label = stringResource(R.string.private_support_amount),
-                value = state.amount,
-                suffix = "ZEC",
+            SendFormAmountTextField(
+                amountState = state.amountState,
+                imeAction = if (state.memoExpanded) ImeAction.Next else ImeAction.Done,
+                isTransparentOrTextRecipient = false,
+                exchangeRateState = state.exchangeRateState,
+                setAmountState = onAmountChanged,
+                spendableShieldedBalance = state.spendableShieldedBalance,
                 enabled = !state.busy,
-                onValueChange = onAmountChanged
             )
+            ZashiButton(
+                text = stringResource(
+                    if (state.memoExpanded) R.string.private_support_hide_message else R.string.private_support_add_message
+                ),
+                onClick = onToggleMemo,
+                enabled = !state.busy,
+                colors = ZashiButtonDefaults.tertiaryColors(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (state.memoExpanded) {
+                SendFormMemoTextField(
+                    isMemoFieldAvailable = true,
+                    memoState = state.memoState,
+                    setMemoState = onMemoChanged,
+                    enabled = !state.busy,
+                )
+            }
             ZashiButton(
                 text = stringResource(R.string.private_support_review),
                 onClick = onReview,
@@ -110,35 +128,12 @@ private fun DonationMessage(text: String, isError: Boolean = false) {
     )
 }
 
-@Composable
-private fun DonationInput(
-    label: String,
-    value: String,
-    suffix: String,
-    enabled: Boolean,
-    onValueChange: (String) -> Unit,
-) {
-    val focus = LocalFocusManager.current
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = label, style = ZashiTypography.textSm, color = ZashiColors.Text.textPrimary)
-        ZashiTextField(
-            value = value,
-            onValueChange = onValueChange,
-            isEnabled = enabled,
-            singleLine = true,
-            suffix = { Text(suffix, style = ZashiTypography.textMd, color = ZashiColors.Text.textTertiary) },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = ImeAction.Done),
-            keyboardActions = KeyboardActions(onDone = { focus.clearFocus() }),
-            modifier = Modifier.fillMaxWidth(),
-            innerModifier = ZashiTextFieldDefaults.innerModifier.semantics { contentDescription = label }
-        )
-    }
-}
-
 @PreviewScreens
 @Composable
 private fun DonationPreviewScreen() = ZcashTheme {
-    DonationPreview(DonationViewState(amount = "0.01", canReview = true))
+    DonationPreview(
+        DonationViewState(amountState = AmountState.newFromZec("0.01", "", false, ExchangeRateState.OptedOut), canReview = true)
+    )
 }
 
 @Composable
@@ -146,6 +141,8 @@ private fun DonationPreview(state: DonationViewState) {
     DonationView(
         state = state,
         onAmountChanged = {},
+        onMemoChanged = {},
+        onToggleMemo = {},
         onReview = {},
         onExternalAddresses = {},
         onBack = {}

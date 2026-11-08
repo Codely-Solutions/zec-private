@@ -53,7 +53,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.WalletAddress
+import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
+import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSendExt
 import cash.z.ecc.android.sdk.type.AddressType
 import cash.z.ecc.sdk.type.ZcashCurrency
@@ -302,7 +304,7 @@ private fun SendForm(
                 } ?: false,
             exchangeRateState = exchangeRateState,
             setAmountState = setAmountState,
-            selectedAccount = selectedAccount
+            spendableShieldedBalance = selectedAccount.spendableShieldedBalance
         )
 
         Spacer(Modifier.size(ZcashTheme.dimens.spacingDefault))
@@ -557,7 +559,8 @@ fun SendFormAmountTextField(
     isTransparentOrTextRecipient: Boolean,
     exchangeRateState: ExchangeRateState,
     setAmountState: (AmountState) -> Unit,
-    selectedAccount: WalletAccount,
+    spendableShieldedBalance: Zatoshi?,
+    enabled: Boolean = true,
 ) {
     val focusManager = LocalFocusManager.current
 
@@ -576,7 +579,6 @@ fun SendFormAmountTextField(
             }
 
             is AmountState.Valid -> {
-                val spendableShieldedBalance = selectedAccount.spendableShieldedBalance
                 if (spendableShieldedBalance != null && spendableShieldedBalance < amountState.zatoshi) {
                     stringResource(id = R.string.sheet_insufficientBalance_title)
                 } else {
@@ -608,6 +610,7 @@ fun SendFormAmountTextField(
         ) {
             ZashiTextField(
                 singleLine = true,
+                isEnabled = enabled,
                 maxLines = 1,
                 value = amountState.value.getString(context),
                 onValueChange = { newValue ->
@@ -672,7 +675,7 @@ fun SendFormAmountTextField(
                 ZashiTextField(
                     singleLine = true,
                     maxLines = 1,
-                    isEnabled = !exchangeRateState.isStale && exchangeRateState.currencyConversion != null,
+                    isEnabled = enabled && !exchangeRateState.isStale && exchangeRateState.currencyConversion != null,
                     value = amountState.fiatValue.getString(context),
                     onValueChange = { newValue ->
                         setAmountState(
@@ -734,6 +737,7 @@ fun SendFormMemoTextField(
     isMemoFieldAvailable: Boolean,
     memoState: MemoState,
     setMemoState: (MemoState) -> Unit,
+    enabled: Boolean = true,
 ) {
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
 
@@ -755,7 +759,7 @@ fun SendFormMemoTextField(
 
         ZashiTextField(
             minLines = if (isMemoFieldAvailable) 4 else 1,
-            isEnabled = isMemoFieldAvailable,
+            isEnabled = isMemoFieldAvailable && enabled,
             value =
                 if (isMemoFieldAvailable) {
                     memoState.text
@@ -811,6 +815,7 @@ fun SendFormMemoTextField(
                         disabledPlaceholderColor = ZashiColors.Inputs.Disabled.text,
                     )
                 },
+            innerModifier = ZashiTextFieldDefaults.innerModifier.testTag(SendTag.SEND_MEMO_FIELD),
             modifier = Modifier.fillMaxWidth(),
         )
 

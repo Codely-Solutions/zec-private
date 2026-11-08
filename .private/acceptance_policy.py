@@ -142,8 +142,12 @@ def validate_core(receipt, expected_inputs):
         raise ValueError('Actual review/cancellation/approval UI evidence required')
     if (not all(send.get(key) is True for key in ('shielded_donation', 'multi_recipient_sdk_accepted',
                                                  'multi_recipient_wallet_rejected')) or
-            send.get('identifying_memo') is not False or send.get('multi_recipient_submitted') is not False):
+            send.get('automatic_identifying_memo') is not False or send.get('reviewed_memo_verified') is not True or send.get('multi_recipient_submitted') is not False):
         raise ValueError('Real shielded donation and fail-closed multi-recipient review evidence required')
+    if not all(send.get(key) is True for key in ('clipboard_metadata_verified','newer_clipboard_preserved')):
+        raise ValueError('Real isolated clipboard ownership/metadata evidence required')
+    if stages['restore'].get('reviewed_memo_verified') is not True:
+        raise ValueError('Restored recipient memo must match explicit review')
     if send.get('ui_approval_actions') != 1:
         raise ValueError('Exactly one real UI approval action required')
     if stages['fund'].get('app_transaction_state') != 'Confirmed':

@@ -102,12 +102,17 @@ internal class RecoveryClipboardLease {
     }
 
     fun expire(now: Long, observedOwner: String?, clear: () -> Unit): Boolean {
-        val expiry = expiresAt ?: return true
-        if (now < expiry || observedOwner == null) return false
-        if (owner == observedOwner) clear()
-        owner = null
-        expiresAt = null
-        return true
+        val expiry = expiresAt
+        return when {
+            expiry == null -> true
+            now < expiry || observedOwner == null -> false
+            else -> {
+                if (owner == observedOwner) clear()
+                owner = null
+                expiresAt = null
+                true
+            }
+        }
     }
 
     private companion object {

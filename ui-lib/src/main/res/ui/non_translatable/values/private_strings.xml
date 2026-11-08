@@ -12,12 +12,14 @@
     <string name="private_support_amount">Donation amount</string>
     <string name="private_support_failed">Cannot prepare donation. Check shielded funds, synchronization and connection. Nothing was submitted.</string>
     <string name="private_support_software_only">In-app donations currently require a software wallet. Hardware and view-only accounts can use the published address in a compatible wallet.</string>
+    <string name="private_support_add_message">Add a message (optional)</string>
+    <string name="private_support_hide_message">Hide message</string>
     <string name="private_support_review">Review donation</string>
     <string name="private_support_invitation">Swap completed. Would you like to support development?</string>
     <string name="private_support_not_now">Not now</string>
     <string name="private_support_never">Don’t ask again</string>
     <string name="private_support_once">Donate once</string>
-    <string name="private_support_description">Choose an amount to support ZEC Private development. Your donation uses a shielded address. Review the amount and network fee before sending.</string>
+    <string name="private_support_description">Help maintain and improve ZEC Private.</string>
     <string name="private_support_home_title">Support ZEC Private</string>
     <string name="private_support_home_message">Help fund continued development and maintenance.</string>
     <string name="private_support_donate">Donate</string>

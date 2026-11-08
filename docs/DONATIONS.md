@@ -2,7 +2,7 @@
 
 Donations help fund development and maintenance. They are optional.
 
-Tap the hand-and-heart icon on Home, or open **Settings → More → Support development** to donate shielded ZEC. Enter an amount and review the payment before sending.
+Tap the hand-and-heart icon on Home, or open **Settings → More → Support development** to donate shielded ZEC. Enter an amount, optionally add a message, and review the payment before sending.
 
 You can also donate using the addresses below. Check the asset, network and destination before sending.
 
