@@ -10,9 +10,11 @@ import androidx.compose.runtime.setValue
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.component.BigIconButtonState
+import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.styledStringResource
 import co.electriccoin.zcash.ui.fixture.ZashiMainTopAppBarStateFixture
 import co.electriccoin.zcash.ui.screen.balances.BalanceWidgetState
 import co.electriccoin.zcash.ui.screen.home.HomeState
@@ -56,19 +58,36 @@ class DonationReviewActivity : ComponentActivity() {
                     val activity = ActivityWidgetStateFixture.new().copy(
                         header = ActivityWidgetStateFixture.new().header.copy(title = stringRes("Activity")),
                         transactions = listOf(
-                            ActivityStateFixture.new().copy(title = stringRes("Received"), subtitle = stringRes("Yesterday")),
-                            ActivityStateFixture.new().copy(title = stringRes("Sent"), subtitle = stringRes("2 days ago")),
+                            ActivityStateFixture.new().copy(
+                                title = stringRes("Received"),
+                                subtitle = stringRes("Yesterday"),
+                                bigIcon = R.drawable.ic_transaction_received,
+                                smallIcon = null,
+                            ),
+                            ActivityStateFixture.new().copy(
+                                title = stringRes("Sent"),
+                                subtitle = stringRes("2 days ago"),
+                                value = styledStringResource("-0.01 ZEC"),
+                                smallIcon = null,
+                            ),
                         ),
                     )
                     val home = HomeState.preview.copy(
                         firstButton = BigIconButtonState(stringRes("Receive"), R.drawable.ic_home_receive, onClick = {}),
                         secondButton = BigIconButtonState(stringRes("Send"), R.drawable.ic_home_send, onClick = {}),
-                        thirdButton = BigIconButtonState(stringRes("Pay"), R.drawable.ic_home_scan, onClick = {}),
-                        fourthButton = BigIconButtonState(stringRes("Swap"), R.drawable.ic_home_buy, onClick = {}),
+                        thirdButton = BigIconButtonState(stringRes("Pay"), R.drawable.ic_home_pay, onClick = {}),
+                        fourthButton = BigIconButtonState(stringRes("Swap"), R.drawable.ic_home_swap, onClick = {}),
                         message = if (screen == "backup") WalletBackupMessageState({}, {}) else null,
                     )
                     HomeView(
-                        appBarState = ZashiMainTopAppBarStateFixture.new(),
+                        appBarState = ZashiMainTopAppBarStateFixture.new(
+                            balanceVisibilityButton = IconButtonState(
+                                co.electriccoin.zcash.ui.design.R.drawable.ic_app_bar_balances_show,
+                                contentDescription = stringRes(R.string.hide_balances_content_description),
+                                onClick = {},
+                            ),
+                            settingsButton = IconButtonState(R.drawable.ic_home_more, onClick = {}),
+                        ),
                         balanceWidgetState = BalanceWidgetState.emptyPreview.copy(totalBalance = Zatoshi(0)),
                         transactionWidgetState = activity,
                         state = home,
