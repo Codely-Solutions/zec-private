@@ -5,7 +5,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -31,10 +30,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import co.electriccoin.zcash.ui.design.R
 import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
@@ -147,18 +144,12 @@ fun ZashiRadioButton(
 
 @Composable
 fun RadioButtonUncheckedContent(state: RadioButtonState) {
-    Image(
-        painter = painterResource(id = R.drawable.ic_radio_button_unchecked),
-        contentDescription = state.text.getValue(),
-    )
+    ZashiSelectionIndicator(isChecked = false, isEnabled = state.isEnabled, circular = true)
 }
 
 @Composable
 fun RadioButtonCheckedContent(state: RadioButtonState) {
-    Image(
-        painter = painterResource(id = R.drawable.ic_radio_button_checked),
-        contentDescription = state.text.getValue(),
-    )
+    ZashiSelectionIndicator(isChecked = true, isEnabled = state.isEnabled, circular = true)
 }
 
 @Composable

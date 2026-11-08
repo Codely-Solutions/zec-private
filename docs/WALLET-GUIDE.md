@@ -12,6 +12,12 @@ Check the APK against `SHA256SUMS`. To verify the signer, run Android SDK `apksi
 
 The package is `com.personal.zecprivate.foss`, so it can coexist with the official wallet.
 
+### Automatic updates
+
+[Obtainium](https://obtainium.imranr.dev/) can check GitHub and install new releases. Import [the ZEC Private configuration](obtainium.json) through Obtainium’s Import/Export screen, or add `https://github.com/Sammy-Lastre/zec-private` and select only `zec-private-latest.apk`. The configuration excludes drafts and prereleases. Configure background updates in Obtainium; Android may require installation permission or confirmation.
+
+The wallet also checks for updates while open, at most once a day. Use **About → Check for updates** to check sooner. Dismissing a home notice hides that version. Update links open Obtainium or your browser; those apps use their own connection settings. Install over the existing wallet to preserve its data.
+
 ## Swaps and CrossPay
 
 For an incoming swap, choose the source asset/network, amount and refund address. Review the quote and minimum received. Dismissing the quote sends nothing. After accepting, follow its exact deposit instructions from your external wallet. Keep the swap record until settlement or refund completes.

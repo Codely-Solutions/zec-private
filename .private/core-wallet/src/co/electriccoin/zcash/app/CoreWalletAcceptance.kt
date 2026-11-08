@@ -6,6 +6,7 @@ import android.os.Build
 import android.view.accessibility.AccessibilityNodeInfo
 import android.accessibilityservice.AccessibilityService
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.screen.updates.AppUpdateRepository
 import co.electriccoin.zcash.ui.screen.send.Send
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendData
@@ -317,6 +318,8 @@ class CoreWalletAcceptance {
                     val fundingId=fixture().getString("fundingTxId")
                     val endpoint=dependency<PersistableWalletProvider>().requirePersistableWallet().endpoint
                     requireEndpointReady(original, "before_outage")
+                    val updates = dependency<AppUpdateRepository>()
+                    val updateBefore = updates.readLatestRelease()
                     val ready=File(context.filesDir,"core-sync-ready.json")
                     ready.writeText(JSONObject().put("ready",true).put("height",height.value).toString())
                     withTimeout(60_000) {
@@ -324,6 +327,14 @@ class CoreWalletAcceptance {
                     }
                     val metadataDuringOutage=withTimeoutOrNull(8_000) { original.validateServerEndpoint(context,endpoint) }
                     check(metadataDuringOutage != ServerValidation.Valid) { "Sensitive metadata succeeded while Tor was blocked" }
+                    val updateDuringOutage = try {
+                        withTimeoutOrNull(8_000) { updates.readLatestRelease() }
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (_: Exception) {
+                        null
+                    }
+                    check(updateDuringOutage == null) { "Update request succeeded while Tor was blocked" }
                     // A plain TLS handshake proves the authorized direct bulk path
                     // is reachable; no wallet RPC or wallet data is sent here.
                     withTimeout(8_000) {
@@ -340,7 +351,7 @@ class CoreWalletAcceptance {
                             }
                         }
                     }
-                    File(context.filesDir,"core-sync-requested.json").writeText("{\"requested\":true,\"metadata_blocked\":true,\"direct_bulk_reachable\":true}")
+                    File(context.filesDir,"core-sync-requested.json").writeText("{\"requested\":true,\"metadata_blocked\":true,\"update_blocked\":true,\"direct_bulk_reachable\":true}")
                     dependency<ConfirmResyncUseCase>()(BlockHeight.new(height.value-1))
                     val recovered=withTimeout(180_000) { provider.synchronizer.filterNotNull().first { it!==original } }
                     withTimeout(180_000) {
@@ -350,8 +361,12 @@ class CoreWalletAcceptance {
                         dependency<TransactionRepository>().observeTransaction(fundingId).filterNotNull().first { it is ReceiveTransaction.Success }
                         requireEndpointReady(recovered, "after_outage")
                     }
+                    val updateAfter = updates.readLatestRelease()
                     File(context.filesDir,"core-sync-result.json").writeText(JSONObject()
                         .put("sync_restarted",true).put("synced",true).put("balance_preserved",true)
+                        .put("update_metadata_valid_before", updateBefore.versionCode > 0)
+                        .put("update_metadata_valid_after", updateAfter.versionCode > 0)
+                        .put("update_blocked_during_outage", true)
                         .put("history_preserved",true).put("scanned_height",recovered.fullyScannedHeight.value?.value).toString())
                 }
                 "rpcProbe" -> {

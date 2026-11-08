@@ -214,6 +214,12 @@ private fun ComparisonScreens(requested: String) {
                 state = home,
                 supportAction = { DonationShortcut(support) },
                 supportInvitation = if (support.showInvitation) ({ HomeDonationInvitation(support) }) else null,
+                updateNotice = if (screen == "home-update" && !invitationDismissed) ({
+                    co.electriccoin.zcash.ui.screen.updates.AppUpdateNotice(
+                        tag = "v3.19.0-private.17", onOpen = {},
+                        onDismiss = { invitationDismissed = true },
+                    )
+                }) else null,
             )
         }
     }

@@ -18,10 +18,20 @@
     <string name="private_support_invitation">Swap completed. Would you like to support development?</string>
     <string name="private_support_not_now">Not now</string>
     <string name="private_support_never">Don’t ask again</string>
-    <string name="private_support_once">Donate once</string>
+    <string name="private_support_once">Donate</string>
     <string name="private_support_description">Help maintain and improve ZEC Private.</string>
     <string name="private_support_home_title">Support ZEC Private</string>
     <string name="private_support_home_message">Help fund continued development and maintenance.</string>
     <string name="private_support_donate">Donate</string>
     <string name="private_support_later">Remind me later</string>
+    <string name="private_updates_title">App updates</string>
+    <string name="private_updates_check">Check for updates</string>
+    <string name="private_updates_checking">Checking…</string>
+    <string name="private_updates_available">ZEC Private %1$s is available</string>
+    <string name="private_updates_view">View update</string>
+    <string name="private_updates_dismiss">Dismiss</string>
+    <string name="private_updates_current">You’re up to date</string>
+    <string name="private_updates_failed">Couldn’t check for updates. Try again.</string>
+    <string name="private_updates_obtainium">Automatic updates with Obtainium</string>
+    <string name="private_updates_external">Update links open another app, which uses its own connection settings.</string>
 </resources>

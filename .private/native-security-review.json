@@ -1,0 +1,27 @@
+{
+  "reviewed_on": "2026-11-08",
+  "sdk": "6.0.0",
+  "supported_newer_sdk_found": false,
+  "release_authority": "https://repo.maven.apache.org/maven2/com/zodl/android/zcash-android-sdk/maven-metadata.xml",
+  "backend_aar_sha256": "908fe053ccb4991aa1d7d5a945c2f926b7d8f86c7ded1a3e48328f46b5f383b1",
+  "arm64_library_sha256": "af99c33b53a1fb70c3e1eadb494c43768bf2d94be5c967a73fd00c343bf62654",
+  "positive_compiled_markers": ["h2-0.4.15", "rustls-0.23.43", "tokio-1.53.1", "rsa-0.9.10", "zstd-safe-7.2.4"],
+  "evidence_boundary": "Markers establish dependency inclusion, not advisory-specific reachable behavior or source-to-binary reproducibility. Missing markers do not establish absence. No public build attestation or complete resolved feature union was verified.",
+  "narrowed_paths": {
+    "ctutils_wallet_derivation": "Checksum-bound bip32 0.6.0 HMAC finalize().into_bytes() and digest 0.11.3 output conversion do not invoke the inspected ctutils MAC equality/verification methods. Other consumers remain unassessed.",
+    "crypto_bigint_tor_p256": "Inspected tor-keymgr/tor-key-forge requests do not activate ssh-key-fork-arti optional P256 crypto features. Lockfile adjacency did not establish this secret-operation path. Global feature union remains unresolved.",
+    "rsa": "Confirmed RSA uses num-bigint-dig, not proof of crypto-bigint inclusion. Marvin applicability still requires attacker-observable private-key operations.",
+    "rustls_debug": "Custom session-store Debug logging is required; ordinary connection and built-in cache Debug are outside this advisory.",
+    "zstd_legacy_writer": "Read decoder/decode_all/bulk paths are outside the inspected legacy writer-decoder disclosure condition. Actual complete binary call paths remain unresolved."
+  },
+  "disposition": "Retain explicit conditional native risks. No applicable new funds/key exploit path was demonstrated; this is not a clean dependency or independent security assurance claim. An applicable material path gates publication pending a decision.",
+  "next_consumer": "SDK/upstream security maintenance",
+  "recheck_when": "New stable SDK, relevant advisory or native feature/call-path change",
+  "sources": [
+    "https://rustsec.org/advisories/RUSTSEC-2026-0385.html",
+    "https://rustsec.org/advisories/RUSTSEC-2026-0387.html",
+    "https://rustsec.org/advisories/RUSTSEC-2023-0071.html",
+    "https://rustsec.org/advisories/RUSTSEC-2026-0346.html",
+    "https://rustsec.org/advisories/RUSTSEC-2026-0403.html"
+  ]
+}

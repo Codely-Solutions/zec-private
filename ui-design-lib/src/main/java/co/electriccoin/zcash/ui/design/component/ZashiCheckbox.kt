@@ -5,7 +5,6 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
@@ -23,12 +22,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import co.electriccoin.zcash.ui.design.R
 import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
@@ -107,34 +104,15 @@ fun ZashiCheckbox(
 }
 
 @Composable
-fun ZashiCheckboxIndicator(isChecked: Boolean) {
+fun ZashiCheckboxIndicator(isChecked: Boolean, isEnabled: Boolean = true) {
     Box {
-        Image(
-            painter = painterResource(R.drawable.ic_zashi_checkbox),
-            contentDescription = null
-        )
-
+        ZashiSelectionIndicator(isChecked = false, isEnabled = isEnabled)
         AnimatedVisibility(
             visible = isChecked,
-            enter =
-                scaleIn(
-                    spring(
-                        stiffness = Spring.StiffnessMedium,
-                        dampingRatio = Spring.DampingRatioMediumBouncy
-                    )
-                ),
-            exit =
-                scaleOut(
-                    spring(
-                        stiffness = Spring.StiffnessHigh,
-                        dampingRatio = Spring.DampingRatioMediumBouncy
-                    )
-                )
+            enter = scaleIn(spring(stiffness = Spring.StiffnessMedium, dampingRatio = Spring.DampingRatioMediumBouncy)),
+            exit = scaleOut(spring(stiffness = Spring.StiffnessHigh, dampingRatio = Spring.DampingRatioMediumBouncy))
         ) {
-            Image(
-                painter = painterResource(R.drawable.ic_zashi_checkbox_checked),
-                contentDescription = null
-            )
+            ZashiSelectionIndicator(isChecked = true, isEnabled = isEnabled)
         }
     }
 }

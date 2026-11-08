@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "release": "v3.19.0-private.15",
-  "source_sha": "b286524d2d76c8c9a8d83454886a0cc993d935ee",
-  "version_code": 3234015,
+  "release": "v3.19.0-private.16",
+  "source_sha": "a6ea7cf81986f6f74db1847a513dd14b0bb4d649",
+  "version_code": 3234016,
   "package": "com.personal.zecprivate.testnet.foss.debug",
   "artifact": {
-    "release_asset_id": 722724292,
-    "digest": "sha256:99f924a49920cddf28c6df25f980f6447553f2b4a068991278513fcf8a0d12d1",
-    "size_in_bytes": 65533396
+    "release_asset_id": 723832781,
+    "digest": "sha256:6b62c88955cb88e044e4442bf75479afdd9eb51e4812f812aa064bcd46455060",
+    "size_in_bytes": 65510062
   },
-  "next_use": "Revision 15 seedless installed-update baseline for the Material 3 release"
+  "next_use": "Revision 16 seedless installed-update baseline for consolidation"
 }

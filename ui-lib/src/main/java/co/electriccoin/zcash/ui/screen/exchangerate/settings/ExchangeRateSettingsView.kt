@@ -20,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -31,6 +32,7 @@ import co.electriccoin.zcash.ui.design.component.BlankSurface
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ZashiBaseSettingsOptIn
 import co.electriccoin.zcash.ui.design.component.ZashiButton
+import co.electriccoin.zcash.ui.design.component.ZashiSelectionIndicator
 import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
 import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
@@ -129,17 +131,7 @@ fun Option(
                 ).padding(20.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Image(
-            painter =
-                painterResource(
-                    if (isChecked) {
-                        R.drawable.ic_checkbox_checked
-                    } else {
-                        R.drawable.ic_checkbox_unchecked
-                    }
-                ),
-            contentDescription = null
-        )
+        ZashiSelectionIndicator(isChecked = isChecked, circular = true, useDot = true)
         Spacer(modifier = Modifier.width(12.dp))
         Column(
             modifier = Modifier.weight(1f),
@@ -202,7 +194,8 @@ internal fun CurrencyField(
             )
             Image(
                 painter = painterResource(co.electriccoin.zcash.ui.design.R.drawable.ic_chevron_right),
-                contentDescription = null
+                contentDescription = null,
+                colorFilter = ColorFilter.tint(ZashiColors.Text.textTertiary)
             )
         }
     }

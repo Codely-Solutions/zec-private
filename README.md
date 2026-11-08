@@ -8,6 +8,8 @@ Download **zec-private-latest.apk** from the [latest release](https://github.com
 
 Install updates over the existing app. Keep your recovery phrase and birthday safe before troubleshooting; uninstalling can erase your wallet data.
 
+For automatic updates, [set up Obtainium](docs/WALLET-GUIDE.md#automatic-updates).
+
 ## Use the wallet
 
 - Send, receive and recover Zcash, redeem gifts, or swap supported assets.
