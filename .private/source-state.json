@@ -2849,6 +2849,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/disconnect/DisconnectVMTest.kt": "cee4f0916820a0d14aee070daa3563105f403900319ff1ff4d446d1536090629",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPolicyTest.kt": "6c7b0a422e6c9fd333b1473c41a7e1130f924cb8d3e2a7dff276d8d794f665fa",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/DonationPreferencesTest.kt": "2a5bedad9a46a427e3a9d6037d2b6fa12eb52b3965a632c51a22902676161eeb",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupportTest.kt": "a3d8d060fdca0377489078e3d52bfb8431018c6fdf3a16098e275b44e7184048",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountVMTest.kt": "1804e7e384e24661685bb3a9d7c5b2beb37f9ff2812019eb6a8bbf4ccc6578cc",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/editaccount/EditAccountViewTest.kt": "b2ebd30fe55a609718a4c7617f3fc1309d9e47d3bf8b936e5fb4a73795305c87",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/error/LedgerErrorCopyTest.kt": "239d64ba00f7676c50c50c3957da9a380272b37e139845fe2562754db784c191",

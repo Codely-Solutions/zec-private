@@ -13592,6 +13592,79 @@ index 000000000..359f3acd3
 +    }
 +
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupportTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupportTest.kt
+new file mode 100644
+index 000000000..1ef929732
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupportTest.kt
+@@ -0,0 +1,67 @@
++package co.electriccoin.zcash.ui.screen.donation
++
++import android.content.Context
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.test.junit4.createComposeRule
++import org.junit.Before
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import org.robolectric.annotation.GraphicsMode
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++@GraphicsMode(GraphicsMode.Mode.NATIVE)
++class HomeDonationSupportTest {
++    @get:Rule
++    val compose = createComposeRule()
++
++    @Before
++    fun reset() {
++        RuntimeEnvironment.getApplication().getSharedPreferences("private_donation_suggestions", Context.MODE_PRIVATE)
++            .edit().clear().commit()
++    }
++
++    @Test
++    fun introductionSurvivesInitialLifecycleSetupButDoesNotRepeatOnReturn() {
++        var mounted by mutableStateOf(true)
++        var state = HomeDonationSupportState()
++        compose.setContent {
++            if (mounted) state = rememberHomeDonationSupport(blocked = false, onDonate = {})
++        }
++        compose.runOnIdle {
++            assertTrue(state.showIntroduction)
++            assertFalse(state.showInvitation)
++            mounted = false
++        }
++        compose.runOnIdle { mounted = true }
++        compose.runOnIdle { assertFalse(state.showIntroduction) }
++    }
++
++    @Test
++    fun ignoredInvitationRemainsVisibleForItsVisitAndIsSuppressedOnReturn() {
++        DonationPreferences(RuntimeEnvironment.getApplication()).recordSuccessfulTransaction()
++        var mounted by mutableStateOf(true)
++        var state = HomeDonationSupportState()
++        compose.setContent {
++            if (mounted) state = rememberHomeDonationSupport(blocked = false, onDonate = {})
++        }
++        compose.runOnIdle {
++            assertTrue(state.showInvitation)
++            assertFalse(state.showIntroduction)
++            mounted = false
++        }
++        compose.runOnIdle { mounted = true }
++        compose.runOnIdle {
++            assertFalse(state.showInvitation)
++            assertFalse(state.showIntroduction)
++        }
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt
 index acc8741c2..430fc754d 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/integrations/IntegrationsVMTest.kt
