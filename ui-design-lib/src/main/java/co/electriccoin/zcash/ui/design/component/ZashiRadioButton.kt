@@ -31,6 +31,8 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
@@ -75,8 +77,9 @@ fun ZashiRadioButton(
                         } else {
                             state.onClick
                         },
-                    role = Role.Button,
-                ).padding(horizontal = 20.dp)
+                    role = Role.RadioButton,
+                ).semantics { selected = state.isChecked }
+                .padding(horizontal = 20.dp)
                 .then(
                     if (testTag != null) {
                         Modifier.testTag(testTag)
