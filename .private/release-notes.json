@@ -1,4 +1,8 @@
 {
+  "v3.19.0-private.16": [
+    "Refresh the existing screens with Material 3 styling and system colors.",
+    "Keep OLED true-black mode and restore clear input error colors."
+  ],
   "v3.19.0-private.12": [
     "Update Gradle to 8.14.6 with security fixes.",
     "Simplify the download documentation and release assets."

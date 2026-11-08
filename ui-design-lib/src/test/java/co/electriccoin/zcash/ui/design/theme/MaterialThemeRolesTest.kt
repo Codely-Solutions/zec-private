@@ -11,6 +11,24 @@ import kotlin.test.assertTrue
 
 class MaterialThemeRolesTest {
     @Test
+    fun inputErrorsUseTheErrorRoleWithoutRecoloringEnteredTextOrOrdinaryHints() {
+        listOf(lightColorScheme(), darkColorScheme(), darkColorScheme().withOledBackground(true))
+            .forEachIndexed { index, scheme ->
+                val inputs = materialZashiColors(scheme, index != 0).Inputs
+                listOf(
+                    inputs.ErrorDefault.hint, inputs.ErrorHover.hint, inputs.ErrorFilled.hint, inputs.ErrorFocused.hint
+                )
+                    .forEach { assertEquals(scheme.error, it) }
+                listOf(
+                    inputs.ErrorDefault.text, inputs.ErrorHover.text, inputs.ErrorFilled.text, inputs.ErrorFocused.text
+                )
+                    .forEach { assertEquals(scheme.onSurface, it) }
+                listOf(inputs.Default.hint, inputs.Hover.hint, inputs.Filled.hint, inputs.Focused.hint)
+                    .forEach { assertEquals(scheme.onSurfaceVariant, it) }
+            }
+    }
+
+    @Test
     fun oledChangesThePageWithoutFlatteningInteractiveSurfaces() {
         val dark = darkColorScheme()
         val oled = dark.withOledBackground(true)
