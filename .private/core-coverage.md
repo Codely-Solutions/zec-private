@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision 15 candidate acceptance passed; signing is pending. Revision 14 signed evidence remains immutable in `release-evidence/v3.19.0-private.14.json`. The root receipts bind the executed revision 15 candidate.
+Status: revision 15 is signed and independently verified. Exact immutable evidence is in `release-evidence/v3.19.0-private.15.json`; root receipts bind that executed candidate.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
@@ -48,7 +48,7 @@ The bounded sandbox review is recorded in `core-provider-review.json`. Tidepool 
 
 Production Detekt retains its rules and existing baseline. Its release-only init excludes the procedural private instrumentation source, which is outside the shipped source sets and separately compiled by the core producer. That harness is checked through exact source/APK bindings, review and real execution. This does not exempt production Kotlin or the ordinary unit tests from analysis.
 
-## Current candidate evidence
+## Current release evidence
 
 Revision 15 passed 1,749 unit tests and the real testnet lifecycle from revision 14. One manual shielded donation verified review, cancellation, one approval and exact nonempty message; restart and clean recipient restoration reused it. A fake clipboard entry verified sensitive metadata and preservation of newer content across expiry. Clipboard process-death cleanup and physical authentication UI remain outside that execution.
 

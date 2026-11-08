@@ -1,5 +1,5 @@
 {
-  "status": "accepted-awaiting-signature",
+  "status": "signed-and-independently-verified",
   "scope": "Recovery copy, manual donation amount/message, compatible security and toolchain maintenance",
   "source_sha": "b286524d2d76c8c9a8d83454886a0cc993d935ee",
   "candidate_run": 42439820603,
@@ -45,5 +45,20 @@
     "native_sdk_changed": false,
     "native_binary_feature_union_verified": false,
     "remaining": "Known source-lock advisories require SDK feature/call-path and published AAR provenance review; OkHttp CA mitigation needs a compatible SDK37 toolchain. No native security-clearance claim."
+  },
+  "signed_release": {
+    "passed": true,
+    "release": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.15",
+    "apk_bytes": 67828595,
+    "apk_sha256": "e5c789cc75b77e2f4f9c67cf771371bda3219bae01cce3735ffa809704e9dd83",
+    "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
+    "version_code": 3234015,
+    "package": "com.personal.zecprivate.foss",
+    "abis": [
+      "arm64-v8a"
+    ],
+    "signed_payload_matches_validated_unsigned": true,
+    "production_arm_executed": false,
+    "bytes_change_from_revision14": 108
   }
 }
