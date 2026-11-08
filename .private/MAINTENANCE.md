@@ -72,6 +72,8 @@ Dependabot checks Gradle Wrapper and GitHub Actions weekly, allowing patch/minor
 
 Gradle 8.14.6 is the current maintenance choice. The latest Gradle9/AGP9 releases exceed the currently verified Kotlin support matrix. Guava33.8.0-android addresses the known collection denial-of-service advisories; effective resolution is checked before release. Java/Kotlin output is being validated at 17 to retire obsolete compiler mode; the build runtime remains JDK 21. Do not suppress these warnings or switch targets just to clear a summary. Review primary release/compatibility/security notes when changing the toolchain; preserve detailed deprecation logs in the normal candidate build.
 
+OkHttp5.5.1 blocks compromised eMudhra intermediates ([upstream fix](https://github.com/square/okhttp/commit/6db98026dfb817a23c0282aa4e53d8187b309052)), but its Android AAR requires compileSdk37. No compatible published backport was found on 2026-11-08; the JVM artifact is not an equivalent Android implementation. The retained supported toolchain leaves this CA mitigation unresolved for direct OkHttp traffic. Revisit with a compatible SDK37 toolchain; inspect SDK-native Tor TLS separately rather than treating this as its fix.
+
 ## Donation UI review
 
 `.private/donation-review/include.gradle` explicitly adds a debug-only activity for inspecting the production Home and donation components with synthetic activity. It uses the real local reminder policy but cannot submit a payment. Follow [UI-REVIEW.md](UI-REVIEW.md) for artifact-bound capture and inspection. Ordinary builds omit this activity. Emulator screenshots establish presentation and reminder interactions; they do not establish wallet transaction or release acceptance.

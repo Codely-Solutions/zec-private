@@ -693,7 +693,7 @@ index 96a911cd4..799c7d501 100644
 -    <string name="view_only_remove_message">Removing this account clears its data from Zodl on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 +    <string name="view_only_remove_message">Removing this account clears its data from ZEC Private on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..9ceeee9f0 100644
+index ec56161b5..08a174074 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
@@ -718,15 +718,14 @@ index ec56161b5..9ceeee9f0 100644
 @@ -186 +183 @@ KEYSTONE_VERSION=0.8.3
 -KOTLIN_VERSION=2.3.10
 +KOTLIN_VERSION=2.3.21
-@@ -204 +201,3 @@ ZIP_321_VERSION=1.0.2
+@@ -204 +201,2 @@ ZIP_321_VERSION=1.0.2
 -KTOR_VERSION=3.4.0
 +GUAVA_VERSION=33.8.0-android
-+OKHTTP_BOM_VERSION=5.5.1
 +KTOR_VERSION=3.4.3
-@@ -208 +207 @@ ZCASH_BIP39_VERSION=1.0.9
+@@ -208 +206 @@ ZCASH_BIP39_VERSION=1.0.9
 -ZCASH_SDK_VERSION=6.0.0-SNAPSHOT
 +ZCASH_SDK_VERSION=6.0.0
-@@ -215,3 +214,4 @@ JVM_TOOLCHAIN=21
+@@ -215,3 +213,4 @@ JVM_TOOLCHAIN=21
 -# This shouldn't be changed, as Android doesn't support targets beyond Java 8
 -KOTLIN_JVM_TARGET=8
 -ANDROID_JVM_TARGET=1.8
@@ -3109,7 +3108,7 @@ index f41234151..a0ce9dd18 100644
 +    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open ZEC Private manually at each scheduled time to send.</string>
 diff --git a/ui-lib/build.gradle.kts b/ui-lib/build.gradle.kts
-index 717b3f997..d8666f714 100644
+index 717b3f997..b8908fd45 100644
 --- a/ui-lib/build.gradle.kts
 +++ b/ui-lib/build.gradle.kts
 @@ -155,8 +154,0 @@ androidComponents {
@@ -3121,8 +3120,7 @@ index 717b3f997..d8666f714 100644
 -                comment = "Publishable key of the Flexa integration"
 -            )
 -        )
-@@ -183,0 +176,9 @@ dependencies {
-+    implementation(platform("com.squareup.okhttp3:okhttp-bom:${project.property("OKHTTP_BOM_VERSION")}"))
+@@ -183,0 +176,8 @@ dependencies {
 +    constraints {
 +        implementation("com.google.guava:guava:${project.property("GUAVA_VERSION")}") {
 +            because("Fix Guava deserialization allocation and collection hash-flooding denial of service")
@@ -3131,13 +3129,13 @@ index 717b3f997..d8666f714 100644
 +            because("Preserve the released wallet SDK runtime after removing Flexa's transitive constraints")
 +        }
 +    }
-@@ -208,0 +210,2 @@ dependencies {
+@@ -208,0 +209,2 @@ dependencies {
 +    // Expose the pinned SDK's existing runtime for proposal privacy validation; no new runtime component.
 +    implementation("com.google.protobuf:protobuf-javalite:4.34.0")
-@@ -214,2 +216,0 @@ dependencies {
+@@ -214,2 +215,0 @@ dependencies {
 -    api(libs.flexa.core)
 -    api(libs.flexa.spend)
-@@ -216,0 +218 @@ dependencies {
+@@ -216,0 +217 @@ dependencies {
 +    api(projects.walletFoundationLib)
 diff --git a/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/support/util/EmailUtilTest.kt b/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/support/util/EmailUtilTest.kt
 deleted file mode 100644
