@@ -4047,10 +4047,10 @@ index f0ef84ad1..c81390205 100644
 +    val destinationChainTxHashes: List<TransactionChainHash>? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
 new file mode 100644
-index 000000000..3d2d1b627
+index 000000000..d85a5fdd8
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
-@@ -0,0 +1,87 @@
+@@ -0,0 +1,88 @@
 +package co.electriccoin.zcash.ui.common.model.zcash
 +
 +import cash.z.ecc.android.sdk.model.Proposal
@@ -4101,7 +4101,8 @@ index 000000000..3d2d1b627
 +        val payment = parsed.paymentRequest.payments.single()
 +        require(payment.recipientAddress.value == send.destination.address &&
 +            payment.nonNegativeAmount?.toZecValueString()?.toBigDecimal()?.movePointRight(8)?.longValueExact() ==
-+            send.amount.value && memoMatchesReview(payment.memo?.data, send.memo.value)) { "Donation payment differs from review" }
++            send.amount.value &&
++            memoMatchesReview(payment.memo?.data, send.memo.value)) { "Donation payment differs from review" }
 +        require(!step.isShielding && step.inputsCount > 0) { "Donation requires shielded funds" }
 +        require(step.inputsList.all { it.hasReceivedOutput() && isShielded(it.receivedOutput.valuePool) }) {
 +            "Donation requires shielded inputs"
@@ -5828,10 +5829,10 @@ index 000000000..a034246bc
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
 new file mode 100644
-index 000000000..97f62ec56
+index 000000000..80a68407b
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
-@@ -0,0 +1,150 @@
+@@ -0,0 +1,157 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.activity.compose.BackHandler
@@ -5903,7 +5904,11 @@ index 000000000..97f62ec56
 +            )
 +            ZashiButton(
 +                text = stringResource(
-+                    if (state.memoExpanded) R.string.private_support_hide_message else R.string.private_support_add_message
++                    if (state.memoExpanded) {
++                        R.string.private_support_hide_message
++                    } else {
++                        R.string.private_support_add_message
++                    }
 +                ),
 +                onClick = onToggleMemo,
 +                enabled = !state.busy,
@@ -5966,7 +5971,10 @@ index 000000000..97f62ec56
 +@Composable
 +private fun DonationPreviewScreen() = ZcashTheme {
 +    DonationPreview(
-+        DonationViewState(amountState = AmountState.newFromZec("0.01", "", false, ExchangeRateState.OptedOut), canReview = true)
++        DonationViewState(
++            amountState = AmountState.newFromZec("0.01", "", false, ExchangeRateState.OptedOut),
++            canReview = true
++        )
 +    )
 +}
 +
@@ -6975,33 +6983,31 @@ index fd16f97b7..4177cec48 100644
 @@ -7,0 +8 @@ object SendTag {
 +    const val SEND_MEMO_FIELD = "SEND_MEMO_FIELD"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt
-index 4e17a4f74..44142b740 100644
+index 4e17a4f74..3e24df8b9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt
 @@ -55,0 +56 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 +import cash.z.ecc.android.sdk.model.Zatoshi
-@@ -56,0 +58 @@ import cash.z.ecc.android.sdk.model.ZecSend
-+import cash.z.ecc.android.sdk.model.Zatoshi
-@@ -305 +307 @@ private fun SendForm(
+@@ -305 +306 @@ private fun SendForm(
 -            selectedAccount = selectedAccount
 +            spendableShieldedBalance = selectedAccount.spendableShieldedBalance
-@@ -560 +562,2 @@ fun SendFormAmountTextField(
+@@ -560 +561,2 @@ fun SendFormAmountTextField(
 -    selectedAccount: WalletAccount,
 +    spendableShieldedBalance: Zatoshi?,
 +    enabled: Boolean = true,
-@@ -579 +581,0 @@ fun SendFormAmountTextField(
+@@ -579 +580,0 @@ fun SendFormAmountTextField(
 -                val spendableShieldedBalance = selectedAccount.spendableShieldedBalance
-@@ -610,0 +613 @@ fun SendFormAmountTextField(
+@@ -610,0 +612 @@ fun SendFormAmountTextField(
 +                isEnabled = enabled,
-@@ -675 +678 @@ fun SendFormAmountTextField(
+@@ -675 +677 @@ fun SendFormAmountTextField(
 -                    isEnabled = !exchangeRateState.isStale && exchangeRateState.currencyConversion != null,
 +                    isEnabled = enabled && !exchangeRateState.isStale && exchangeRateState.currencyConversion != null,
-@@ -736,0 +740 @@ fun SendFormMemoTextField(
+@@ -736,0 +739 @@ fun SendFormMemoTextField(
 +    enabled: Boolean = true,
-@@ -758 +762 @@ fun SendFormMemoTextField(
+@@ -758 +761 @@ fun SendFormMemoTextField(
 -            isEnabled = isMemoFieldAvailable,
 +            isEnabled = isMemoFieldAvailable && enabled,
-@@ -813,0 +818 @@ fun SendFormMemoTextField(
+@@ -813,0 +817 @@ fun SendFormMemoTextField(
 +            innerModifier = ZashiTextFieldDefaults.innerModifier.testTag(SendTag.SEND_MEMO_FIELD),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
 index 79f574053..d0207084f 100644

@@ -48,7 +48,8 @@ object DonationPolicy {
         val payment = parsed.paymentRequest.payments.single()
         require(payment.recipientAddress.value == send.destination.address &&
             payment.nonNegativeAmount?.toZecValueString()?.toBigDecimal()?.movePointRight(8)?.longValueExact() ==
-            send.amount.value && memoMatchesReview(payment.memo?.data, send.memo.value)) { "Donation payment differs from review" }
+            send.amount.value &&
+            memoMatchesReview(payment.memo?.data, send.memo.value)) { "Donation payment differs from review" }
         require(!step.isShielding && step.inputsCount > 0) { "Donation requires shielded funds" }
         require(step.inputsList.all { it.hasReceivedOutput() && isShielded(it.receivedOutput.valuePool) }) {
             "Donation requires shielded inputs"
