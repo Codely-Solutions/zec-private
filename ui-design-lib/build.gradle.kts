@@ -19,7 +19,8 @@ android {
 
     sourceSets {
         getByName("main").apply {
-            res.setSrcDirs(
+            res.directories.clear()
+            res.directories.addAll(
                 setOf(
                     "src/main/res/ui/common",
                 )

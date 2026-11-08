@@ -114,7 +114,7 @@ tasks {
             "BIP_39_INCLUDED_BUILD_PATH" to ""
         )
 
-        val actualPropertyValues = project.properties.filterKeys { it in expectedPropertyValues.keys }
+        val actualPropertyValues = expectedPropertyValues.keys.associateWith { project.findProperty(it) }
 
         doLast {
             val warnings = expectedPropertyValues.filter { (key, value) ->
