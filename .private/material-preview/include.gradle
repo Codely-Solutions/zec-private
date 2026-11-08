@@ -1,0 +1,11 @@
+// Experimental presentation only. Ordinary/debug/release builds omit these activities.
+allprojects { p ->
+    p.plugins.withId('com.android.library') {
+        if (p.path == ':ui-lib') {
+            def debug = p.android.sourceSets.getByName('debug')
+            debug.java.srcDir(new File(p.rootProject.projectDir, '.private/donation-review/src'))
+            debug.java.srcDir(new File(p.rootProject.projectDir, '.private/material-preview/src'))
+            debug.manifest.srcFile(new File(p.rootProject.projectDir, '.private/material-preview/AndroidManifest.xml'))
+        }
+    }
+}
