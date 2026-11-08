@@ -1,8 +1,8 @@
-# Wallet guide
+# ZEC Private: Android Zcash wallet guide
 
 ## Installation and updates
 
-Download the APK and `SHA256SUMS` from [Releases](https://github.com/Sammy-Lastre/zec-private/releases). Releases support ARM64 Android devices. Install updates over the existing app; avoid uninstalling or clearing its data without securing your recovery phrase and birthday.
+Download the APK and `SHA256SUMS` from [Releases](https://github.com/Sammy-Lastre/zec-private/releases). Releases support ARM64 devices running Android 8.1 or later. Install updates over the existing app; avoid uninstalling or clearing its data without securing your recovery phrase and birthday.
 
 Check the APK against `SHA256SUMS`. To verify the signer, run Android SDK `apksigner verify --print-certs` and compare its certificate SHA-256 with:
 
@@ -19,6 +19,8 @@ The package is `com.personal.zecprivate.foss`, so it can coexist with the offici
 The wallet also checks for updates while open, at most once a day. Use **About → Check for updates** to check sooner. Dismissing a home notice hides that version. Update links open Obtainium or your browser; those apps use their own connection settings. Install over the existing wallet to preserve its data.
 
 ## Swaps and CrossPay
+
+ZEC Private holds Zcash (ZEC); cross-chain swaps use external wallets for other assets. For example, swap Bitcoin (BTC) into shielded ZEC, or use CrossPay to pay a Bitcoin address from ZEC. Available assets and quotes depend on the provider.
 
 For an incoming swap, choose the source asset/network, amount and refund address. Review the quote and minimum received. Dismissing the quote sends nothing. After accepting, follow its exact deposit instructions from your external wallet. Keep the swap record until settlement or refund completes.
 

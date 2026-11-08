@@ -74,6 +74,10 @@ Keep signing custody and notification credentials outside the repository. Routin
 
 Notifications contain build/release information and GitHub links. The ntfy topic is private credential material; service acceptance does not prove delivery to a phone. Actions, review issues and Releases remain available when delivery fails.
 
+## Public repository information
+
+Keep the README product definition, GitHub About description and repository topics aligned with the shipping wallet. Use concrete user terms such as Zcash/ZEC wallet for Android, self-custody, shielded payments and cross-chain swaps, with accurate fee and privacy qualifications. Update GitHub metadata separately when capabilities change; source integration preserves the fork README and user guides.
+
 ## Release descriptions
 
 Add concise user-facing changes to `release-notes.json`, keyed by the exact private tag. Unlisted tags link to upstream changes. User help belongs in the [wallet guide](../docs/WALLET-GUIDE.md); test methodology and provenance belong in bound validation evidence. Preserve the `Android versionCode: N` line: the publisher uses it to reject non-increasing updates.
