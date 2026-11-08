@@ -42,7 +42,6 @@ pluginManager.withPlugin("com.android.library") {
             minSdk = project.property("ANDROID_MIN_SDK_VERSION").toString().toInt()
 
             testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-            aarMetadata { minCompileSdk = 36 }
             project.file("proguard-consumer.txt").takeIf { it.isFile }?.let { consumerProguardFiles(it) }
 
             testInstrumentationRunnerArguments["useTestStorageService"] = "true"
