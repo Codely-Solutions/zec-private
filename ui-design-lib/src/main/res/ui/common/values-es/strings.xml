@@ -825,14 +825,14 @@
     <string name="swapAndPay_totalFees">Comisiones totales</string>
     <string name="swapAndPay_maxSlippage">Slippage máximo %s</string>
     <string name="swapAndPay_totalAmount">Monto total</string>
-    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %s menos según el deslizamiento %s que configuraste.</string>
+    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %1$s menos según el deslizamiento %2$s que configuraste.</string>
     <string name="swapAndPay_getQuote">Obtener cotización</string>
     <string name="swapAndPay_custom">Otro</string>
     <string name="swapAndPay_payNow">Pagar ahora</string>
     <string name="swapAndPay_payFrom">Pagar desde</string>
     <string name="swapAndPay_payTo">Pagar a</string>
     <string name="swap_to_zec_footer">Usa tu wallet %s \n para depositar fondos. Depositar otros activos puede resultar en pérdida de fondos.</string>
-    <string name="swapToZec_info2">%s en %s</string>
+    <string name="swapToZec_info2">%1$s en %2$s</string>
     <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en ZEC Private</string>
     <string name="swapToZec_refundAddress">Dirección de reembolso</string>
     <string name="swapToZec_refundAddress_title">Dirección de reembolso</string>
