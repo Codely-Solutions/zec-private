@@ -1,18 +1,21 @@
 package co.electriccoin.zcash.ui.design.component
 
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
-import dev.chrisbanes.haze.HazeDefaults
+import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeProgressive
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.HazeStyle
-import dev.chrisbanes.haze.HazeTint
-import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.blur.HazeBlurDefaults
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.HazeColorEffect
+import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 
@@ -63,9 +66,8 @@ fun rememberZashiFrostState(): HazeState = rememberHazeState()
  * alpha, so a transparent one degenerates to pure blur and at rest the header paints nothing,
  * letting that background show through untouched.
  *
- * Blur is only available on devices where Haze can run it (see [HazeState.blurEnabled], which
- * defaults to `HazeDefaults.blurEnabled()`). Everywhere else Haze would degrade to a translucent
- * scrim, which combined with the vertical fade would let list rows show through the header
+ * Blur is enabled on Android 12 and newer, preserving the Haze 1 platform policy.
+ * Elsewhere, a translucent scrim combined with the vertical fade would let list rows show through the header
  * unblurred, so the header instead becomes an opaque bar painted in [fallbackColor], deliberately
  * ignoring [frostColor] — a transparent fallback would show the content unblurred on those
  * devices. Surfaces whose resting background is not bgPrimary (a bottom sheet, for instance) pass
@@ -114,7 +116,7 @@ fun Modifier.zashiFrostedHeader(
                 )
             ),
         tint =
-            HazeTint(
+            HazeColorEffect.tint(
                 Brush.verticalGradient(
                     0f to tintColor,
                     1f to tintColor.copy(alpha = 0f)
@@ -163,7 +165,7 @@ fun Modifier.zashiFrostedFooter(
                 )
             ),
         tint =
-            HazeTint(
+            HazeColorEffect.tint(
                 Brush.verticalGradient(
                     0f to tintColor.copy(alpha = 0f),
                     1f to tintColor
@@ -179,25 +181,29 @@ private fun Modifier.zashiFrost(
     frostColor: Color,
     fallbackColor: Color,
     progressive: HazeProgressive,
-    tint: HazeTint? = null,
-    noiseFactor: Float = HazeDefaults.noiseFactor
-): Modifier =
-    if (hazeState.blurEnabled) {
-        hazeEffect(
-            state = hazeState,
-            style =
-                HazeStyle(
-                    backgroundColor = frostColor,
-                    tint = tint ?: HazeTint(frostColor.copy(alpha = frostColor.alpha * FROST_TINT_ALPHA)),
-                    blurRadius = FROST_BLUR_RADIUS,
-                    noiseFactor = noiseFactor
-                )
-        ) {
-            this.progressive = progressive
-        }
-    } else {
-        background(fallbackColor)
+    tint: HazeColorEffect? = null,
+    noiseFactor: Float = HazeBlurDefaults.noiseFactor
+): Modifier {
+    if (!isZashiFrostBlurEnabled()) {
+        return background(fallbackColor)
     }
+    val style = remember(frostColor, tint, noiseFactor, progressive) {
+        HazeBlurStyle {
+            blurEnabled(true)
+            backgroundColor(frostColor)
+            colorEffects(
+                listOf(tint ?: HazeColorEffect.tint(frostColor.copy(alpha = frostColor.alpha * FROST_TINT_ALPHA)))
+            )
+            blurRadius(FROST_BLUR_RADIUS)
+            noiseFactor(noiseFactor)
+            progressive(progressive)
+        }
+    }
+    return hazeBlur(input = HazeInput.Sources(hazeState), style = style)
+}
+
+// Keep the Haze 1.7.2 Android support boundary: older devices use our opaque bar.
+private fun isZashiFrostBlurEnabled(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
 /**
  * Marks this content as the source blurred by a [zashiFrostedHeader] or [zashiFrostedFooter] using
@@ -206,7 +212,7 @@ private fun Modifier.zashiFrost(
  */
 @Composable
 fun Modifier.zashiFrostSource(hazeState: HazeState): Modifier =
-    if (hazeState.blurEnabled) {
+    if (isZashiFrostBlurEnabled()) {
         hazeSource(hazeState)
     } else {
         this
