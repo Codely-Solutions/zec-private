@@ -3,8 +3,8 @@
 # This file is expected to be part of source control.
 # To regenerate this file, run: ./gradlew :buildSrc:dependencies --write-locks
 com.googlecode.javaewah:JavaEWAH:1.2.3=buildScriptClasspath,compileClasspath
-commons-codec:commons-codec:1.20.0=buildScriptClasspath,compileClasspath
-org.eclipse.jgit:org.eclipse.jgit:7.5.0.202512021534-r=buildScriptClasspath,compileClasspath
+commons-codec:commons-codec:1.22.1=buildScriptClasspath,compileClasspath
+org.eclipse.jgit:org.eclipse.jgit:7.8.1.202611041320-r=buildScriptClasspath,compileClasspath
 org.jetbrains.intellij.deps:trove4j:1.0.20200330=kotlinCompilerClasspath
 org.jetbrains.kotlin:kotlin-assignment-compiler-plugin-embeddable:2.4.21=kotlinCompilerPluginClasspathMain
 org.jetbrains.kotlin:kotlin-build-tools-api:2.4.21=kotlinBuildToolsApiClasspath
@@ -32,5 +32,5 @@ org.jetbrains.kotlin:kotlin-tooling-core:2.4.21=kotlinBuildToolsApiClasspath
 org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.6.4=kotlinCompilerClasspath
 org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.8.0=kotlinBuildToolsApiClasspath
 org.jetbrains:annotations:13.0=compileClasspath,kotlinBuildToolsApiClasspath,kotlinCompilerClasspath,kotlinCompilerPluginClasspathMain
-org.slf4j:slf4j-api:2.0.17=buildScriptClasspath,compileClasspath
+org.slf4j:slf4j-api:2.0.18=buildScriptClasspath,compileClasspath
 empty=annotationProcessor,kotlinScriptDefExtensions
