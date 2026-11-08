@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision-14 candidate `d7471a007` passed real acceptance and independent signed-artifact verification on 2026-11-08. Current exact-input evidence is in core-acceptance.json and core-validation-summary.json. Historical releases retain their own immutable evidence.
+Status: revision14 is the latest signed evidence, preserved in `release-evidence/v3.19.0-private.14.json`. The root acceptance receipts describe the working candidate and remain pending until its exact inputs pass fresh real execution.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|

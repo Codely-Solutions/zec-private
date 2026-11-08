@@ -1,29 +1,8 @@
 {
   "schema": 1,
-  "evidence_class": "real-app-production-quotes",
-  "passed": true,
-  "build_source_sha": "d7471a007f131a808986a9e66f70638750c305ea",
-  "input_fingerprint": "ed33d9aaf3b4478c346dbf7efbd93ce248ae8bf0aa10c521ad03267c09947752",
-  "executed_apk_sha256": "928f6ff8aee3b9ee1551be5e965303060e9872a2eacc6133bfbfd2ca98ab40d4",
-  "original_apk_sha256": "9cda0d6d9d4253473cdb44b20a0f8cce89fd7c9ced1daa471183400ac0b590e6",
-  "quote_requests": 3,
-  "quote_reviews": 3,
-  "dismissals": 3,
-  "tor_enabled": true,
-  "funds_transferred": false,
-  "personal_wallet_access": false,
-  "artifact_id": 13597381865,
-  "workflow_run_id": 42429934172,
-  "archive_sha256": "5e3ea2a771944ac074b5dc6be4b3360d6e3df6559cf0e831f425bd3f18fa985f",
-  "apk_preparation": {
-    "originalSha256": "9cda0d6d9d4253473cdb44b20a0f8cce89fd7c9ced1daa471183400ac0b590e6",
-    "testedSha256": "928f6ff8aee3b9ee1551be5e965303060e9872a2eacc6133bfbfd2ca98ab40d4",
-    "preservedExecutionEntries": 33,
-    "executionEntriesDigest": "60179d4fdfcdb2f33f70a4e716d8070ec52a9366e2b411b8f9b56d406a084af9",
-    "executionEntriesUnchanged": true,
-    "abi": "x86_64",
-    "signing": "ephemeral test key; not release key"
-  },
-  "guard_job": "06b466f1e63e44599a6a22fce811b547",
-  "provider_timeouts": []
+  "passed": false,
+  "status": "pending",
+  "input_fingerprint": "87c6b4aace0686892537ca208fddedfc65299d3987dac462c474f59391982cfa",
+  "required": "Fresh real isolated acceptance for revision15; no inherited pass",
+  "last_signed_evidence": "release-evidence/v3.19.0-private.14.json"
 }
