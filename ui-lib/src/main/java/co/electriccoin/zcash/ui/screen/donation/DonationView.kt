@@ -69,7 +69,11 @@ internal fun DonationView(
             )
             ZashiButton(
                 text = stringResource(
-                    if (state.memoExpanded) R.string.private_support_hide_message else R.string.private_support_add_message
+                    if (state.memoExpanded) {
+                        R.string.private_support_hide_message
+                    } else {
+                        R.string.private_support_add_message
+                    }
                 ),
                 onClick = onToggleMemo,
                 enabled = !state.busy,
@@ -132,7 +136,10 @@ private fun DonationMessage(text: String, isError: Boolean = false) {
 @Composable
 private fun DonationPreviewScreen() = ZcashTheme {
     DonationPreview(
-        DonationViewState(amountState = AmountState.newFromZec("0.01", "", false, ExchangeRateState.OptedOut), canReview = true)
+        DonationViewState(
+            amountState = AmountState.newFromZec("0.01", "", false, ExchangeRateState.OptedOut),
+            canReview = true
+        )
     )
 }
 
