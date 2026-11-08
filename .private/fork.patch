@@ -5727,10 +5727,10 @@ index 000000000..999cff62d
 +)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt
 new file mode 100644
-index 000000000..19f3a5c5d
+index 000000000..3dce5ba53
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/HomeDonationSupport.kt
-@@ -0,0 +1,185 @@
+@@ -0,0 +1,188 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.compose.foundation.background
@@ -5814,7 +5814,7 @@ index 000000000..19f3a5c5d
 +            } else {
 +                dismissed = true
 +            }
-+        } else if (resumed && !blocked && !eligibleAtEntry && !dismissed && !introduction) {
++        } else if (!introduction && canIntroduce(resumed, blocked, eligibleAtEntry, dismissed)) {
 +            // Keep a successful claim when lifecycle setup restarts this effect.
 +            introduction = preferences.claimAutomaticIntroduction()
 +        }
@@ -5841,6 +5841,9 @@ index 000000000..19f3a5c5d
 +        },
 +    )
 +}
++
++private fun canIntroduce(resumed: Boolean, blocked: Boolean, invitationEligible: Boolean, dismissed: Boolean) =
++    resumed && !blocked && !invitationEligible && !dismissed
 +
 +@OptIn(ExperimentalMaterial3Api::class)
 +@Composable
