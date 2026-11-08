@@ -1,10 +1,10 @@
 diff --git a/.gitattributes b/.gitattributes
 new file mode 100644
-index 000000000..26b9ea8f1
+index 000000000..bdb2b4fa4
 --- /dev/null
 +++ b/.gitattributes
 @@ -0,0 +1 @@
-+.private/fork.patch text eol=lf
++.private/fork.patch -text
 diff --git a/.gitignore b/.gitignore
 index 31940f5da..0e8dbc645 100644
 --- a/.gitignore

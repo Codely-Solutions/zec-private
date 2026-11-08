@@ -6,6 +6,55 @@ from unittest.mock import patch
 spec=importlib.util.spec_from_file_location('sync',Path(__file__).with_name('sync.py'))
 sync=importlib.util.module_from_spec(spec);spec.loader.exec_module(sync)
 
+class RefreshPatchTests(unittest.TestCase):
+    def test_index_patch_preserves_crlf_hunks_across_checkout_modes(self):
+        import refresh_source
+        patches=[]
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            def git(*args):
+                return subprocess.check_output(['git',*args],cwd=root,stderr=subprocess.STDOUT)
+            git('init','--quiet')
+            git('config','user.name','Canonical patch test')
+            git('config','user.email','canonical-patch@example.invalid')
+            git('config','core.autocrlf','false')
+            (root/'.private').mkdir()
+            # A patch contains meaningful CR bytes inside text hunks. Treat its
+            # bytes as opaque so staging does not normalize those embedded CRs.
+            (root/'.gitattributes').write_bytes(b'.private/fork.patch -text\n')
+            before=b'@rem upstream\r\n@echo old\r\n'
+            after=b'@rem upstream\r\n@echo reviewed\r\n'
+            (root/'gradlew.bat').write_bytes(before)
+            git('add','.')
+            git('commit','--quiet','-m','Synthetic upstream CRLF blob')
+            upstream=git('rev-parse','HEAD').decode().strip()
+            for mode in ('true','false'):
+                with self.subTest(autocrlf=mode):
+                    git('config','core.autocrlf',mode)
+                    (root/'gradlew.bat').write_bytes(after)
+                    git('add','gradlew.bat')
+                    generated=refresh_source.generate_patch(root,upstream,
+                        ['.',':(exclude).private'])
+                    self.assertIn(b'-@echo old\r\n+@echo reviewed\r\n',generated)
+                    patches.append(generated)
+                    patch_file=root/'.private/fork.patch'
+                    patch_file.write_bytes(generated)
+                    git('add','.private/fork.patch')
+                    self.assertEqual(generated,git('show',':.private/fork.patch'))
+                    # Simulate Linux's unconverted checkout of the upstream blob.
+                    git('config','core.autocrlf','false')
+                    git('checkout',upstream,'--','gradlew.bat')
+                    self.assertEqual(before,(root/'gradlew.bat').read_bytes())
+                    git('apply','--unidiff-zero','--check',str(patch_file))
+                    git('apply','--unidiff-zero',str(patch_file))
+                    self.assertEqual(after,(root/'gradlew.bat').read_bytes())
+                    git('checkout',upstream,'--','gradlew.bat')
+            self.assertEqual(patches[0],patches[1])
+            (root/'gradlew.bat').write_bytes(after)
+            with self.assertRaisesRegex(RuntimeError,'Stage reviewed source changes'):
+                refresh_source.generate_patch(root,upstream,['.',':(exclude).private'])
+
+
 class SyncTests(unittest.TestCase):
     def setUp(self):
         self.state=json.loads((sync.ROOT/'.private/upstream.json').read_text())
