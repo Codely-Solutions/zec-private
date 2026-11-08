@@ -22,6 +22,21 @@ class PackagingTests(unittest.TestCase):
             with self.subTest(version=version), self.assertRaises(RuntimeError):
                 compare({'components': invalid})
 
+    def test_every_reviewed_runtime_upgrade_rejects_its_original_version_and_unknown_drift(self):
+        baseline = json.loads((Path(__file__).resolve().parent / 'phase1-runtime-baseline.json').read_text())
+        versions = {c.rsplit(':', 1)[0]: c.rsplit(':', 1)[1]
+                    for c in baseline['components'] if c.count(':') == 2}
+        for key, update in baseline['reviewedVersionUpdates'].items():
+            self.assertEqual(versions[key], update['from'])
+            self.assertNotEqual(update['from'], update['to'])
+            versions[key] = update['to']
+        for key, update in baseline['reviewedVersionUpdates'].items():
+            for invalid_version in (update['from'], update['to'] + '-unreviewed'):
+                candidate = dict(versions)
+                candidate[key] = invalid_version
+                with self.subTest(component=key, version=invalid_version), self.assertRaises(RuntimeError):
+                    compare({'components': [k + ':' + v for k, v in candidate.items()]})
+
     def test_candidate_variants_are_independent_and_promotion_builds_neither(self):
         root = Path(__file__).resolve().parents[1]
         workflow = (root / '.github/workflows/build-release.yml').read_text()

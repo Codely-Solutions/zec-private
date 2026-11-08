@@ -367,6 +367,410 @@
     }
   },
   "reviewedVersionUpdates": {
+    "androidx.activity:activity": {
+      "from": "1.12.4",
+      "to": "1.13.0"
+    },
+    "androidx.activity:activity-compose": {
+      "from": "1.12.4",
+      "to": "1.13.0"
+    },
+    "androidx.activity:activity-ktx": {
+      "from": "1.12.4",
+      "to": "1.13.0"
+    },
+    "androidx.annotation:annotation": {
+      "from": "1.9.1",
+      "to": "1.11.0"
+    },
+    "androidx.annotation:annotation-jvm": {
+      "from": "1.9.1",
+      "to": "1.11.0"
+    },
+    "androidx.browser:browser": {
+      "from": "1.9.0",
+      "to": "1.10.0"
+    },
+    "androidx.camera.featurecombinationquery:featurecombinationquery": {
+      "from": "1.5.3",
+      "to": "1.6.2"
+    },
+    "androidx.camera:camera-camera2": {
+      "from": "1.5.3",
+      "to": "1.6.2"
+    },
+    "androidx.camera:camera-core": {
+      "from": "1.5.3",
+      "to": "1.6.2"
+    },
+    "androidx.camera:camera-lifecycle": {
+      "from": "1.5.3",
+      "to": "1.6.2"
+    },
+    "androidx.camera:camera-video": {
+      "from": "1.5.3",
+      "to": "1.6.2"
+    },
+    "androidx.camera:camera-view": {
+      "from": "1.5.3",
+      "to": "1.6.2"
+    },
+    "androidx.collection:collection": {
+      "from": "1.5.0",
+      "to": "1.7.0"
+    },
+    "androidx.collection:collection-jvm": {
+      "from": "1.5.0",
+      "to": "1.7.0"
+    },
+    "androidx.collection:collection-ktx": {
+      "from": "1.5.0",
+      "to": "1.7.0"
+    },
+    "androidx.compose.animation:animation": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.animation:animation-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.animation:animation-core": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.animation:animation-core-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.foundation:foundation": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.foundation:foundation-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.foundation:foundation-layout": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.foundation:foundation-layout-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.runtime:runtime": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.runtime:runtime-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.runtime:runtime-annotation": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.runtime:runtime-annotation-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.runtime:runtime-retain": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.runtime:runtime-retain-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.runtime:runtime-saveable": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.runtime:runtime-saveable-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-geometry": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-geometry-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-graphics": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-graphics-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-text": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-text-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-tooling": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-tooling-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-tooling-data": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-tooling-data-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-tooling-preview": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-tooling-preview-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-unit": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-unit-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-util": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.compose.ui:ui-util-android": {
+      "from": "1.10.6",
+      "to": "1.12.1"
+    },
+    "androidx.core:core": {
+      "from": "1.17.0",
+      "to": "1.19.1"
+    },
+    "androidx.core:core-ktx": {
+      "from": "1.17.0",
+      "to": "1.19.1"
+    },
+    "androidx.fragment:fragment": {
+      "from": "1.8.9",
+      "to": "1.9.1"
+    },
+    "androidx.fragment:fragment-compose": {
+      "from": "1.8.9",
+      "to": "1.9.1"
+    },
+    "androidx.fragment:fragment-ktx": {
+      "from": "1.8.9",
+      "to": "1.9.1"
+    },
+    "androidx.lifecycle:lifecycle-common": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-common-java8": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-common-jvm": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-livedata": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-livedata-core": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-livedata-core-ktx": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-livedata-ktx": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-process": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-runtime": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-runtime-android": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-runtime-compose": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-runtime-compose-android": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-runtime-ktx": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-runtime-ktx-android": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-service": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-viewmodel": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-android": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-compose": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-compose-android": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-ktx": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-savedstate": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.lifecycle:lifecycle-viewmodel-savedstate-android": {
+      "from": "2.10.0",
+      "to": "2.11.0"
+    },
+    "androidx.navigation:navigation-common": {
+      "from": "2.9.7",
+      "to": "2.10.2"
+    },
+    "androidx.navigation:navigation-common-android": {
+      "from": "2.9.7",
+      "to": "2.10.2"
+    },
+    "androidx.navigation:navigation-compose": {
+      "from": "2.9.7",
+      "to": "2.10.2"
+    },
+    "androidx.navigation:navigation-compose-android": {
+      "from": "2.9.7",
+      "to": "2.10.2"
+    },
+    "androidx.navigation:navigation-runtime": {
+      "from": "2.9.7",
+      "to": "2.10.2"
+    },
+    "androidx.navigation:navigation-runtime-android": {
+      "from": "2.9.7",
+      "to": "2.10.2"
+    },
+    "androidx.navigationevent:navigationevent": {
+      "from": "1.0.2",
+      "to": "1.1.2"
+    },
+    "androidx.navigationevent:navigationevent-android": {
+      "from": "1.0.2",
+      "to": "1.1.2"
+    },
+    "androidx.navigationevent:navigationevent-compose": {
+      "from": "1.0.2",
+      "to": "1.1.2"
+    },
+    "androidx.navigationevent:navigationevent-compose-android": {
+      "from": "1.0.2",
+      "to": "1.1.2"
+    },
+    "androidx.savedstate:savedstate": {
+      "from": "1.4.0",
+      "to": "1.5.0"
+    },
+    "androidx.savedstate:savedstate-android": {
+      "from": "1.4.0",
+      "to": "1.5.0"
+    },
+    "androidx.savedstate:savedstate-compose": {
+      "from": "1.4.0",
+      "to": "1.5.0"
+    },
+    "androidx.savedstate:savedstate-compose-android": {
+      "from": "1.4.0",
+      "to": "1.5.0"
+    },
+    "androidx.savedstate:savedstate-ktx": {
+      "from": "1.4.0",
+      "to": "1.5.0"
+    },
+    "androidx.tracing:tracing": {
+      "from": "1.3.0",
+      "to": "2.0.5"
+    },
+    "androidx.tracing:tracing-android": {
+      "from": "1.3.0",
+      "to": "2.0.5"
+    },
+    "androidx.tracing:tracing-ktx": {
+      "from": "1.3.0",
+      "to": "2.0.5"
+    },
+    "androidx.transition:transition": {
+      "from": "1.6.0",
+      "to": "1.7.2"
+    },
+    "androidx.work:work-runtime": {
+      "from": "2.11.1",
+      "to": "2.12.0"
+    },
+    "androidx.work:work-runtime-ktx": {
+      "from": "2.11.1",
+      "to": "2.12.0"
+    },
+    "com.airbnb.android:lottie": {
+      "from": "6.6.4",
+      "to": "6.7.1"
+    },
+    "com.airbnb.android:lottie-compose": {
+      "from": "6.6.4",
+      "to": "6.7.1"
+    },
+    "com.github.KeystoneHQ:keystone-sdk-android": {
+      "from": "0.8.3",
+      "to": "0.9.0"
+    },
+    "com.google.crypto.tink:tink-android": {
+      "from": "1.20.0",
+      "to": "1.24.0"
+    },
     "com.google.errorprone:error_prone_annotations": {
       "from": "2.44.0",
       "to": "2.52.0"
@@ -375,158 +779,394 @@
       "from": "33.5.0-android",
       "to": "33.8.0-android"
     },
+    "com.squareup.okhttp3:okhttp": {
+      "from": "5.3.2",
+      "to": "5.5.1"
+    },
+    "com.squareup.okhttp3:okhttp-android": {
+      "from": "5.3.2",
+      "to": "5.5.1"
+    },
+    "com.squareup.okio:okio": {
+      "from": "3.16.4",
+      "to": "3.18.2"
+    },
+    "com.squareup.okio:okio-jvm": {
+      "from": "3.16.4",
+      "to": "3.18.2"
+    },
+    "com.valentinilk.shimmer:compose-shimmer": {
+      "from": "1.3.3",
+      "to": "1.5.0"
+    },
+    "com.valentinilk.shimmer:compose-shimmer-android": {
+      "from": "1.3.3",
+      "to": "1.5.0"
+    },
+    "dev.chrisbanes.haze:haze": {
+      "from": "1.7.2",
+      "to": "2.1.0"
+    },
+    "dev.chrisbanes.haze:haze-android": {
+      "from": "1.7.2",
+      "to": "2.1.0"
+    },
+    "io.github.zxing-cpp:android": {
+      "from": "3.0.2",
+      "to": "3.1.1"
+    },
+    "io.insert-koin:koin-android": {
+      "from": "4.1.1",
+      "to": "4.2.2"
+    },
+    "io.insert-koin:koin-androidx-compose": {
+      "from": "4.1.1",
+      "to": "4.2.2"
+    },
+    "io.insert-koin:koin-compose": {
+      "from": "4.1.1",
+      "to": "4.2.2"
+    },
+    "io.insert-koin:koin-compose-android": {
+      "from": "4.1.1",
+      "to": "4.2.2"
+    },
+    "io.insert-koin:koin-compose-viewmodel": {
+      "from": "4.1.1",
+      "to": "4.2.2"
+    },
+    "io.insert-koin:koin-compose-viewmodel-android": {
+      "from": "4.1.1",
+      "to": "4.2.2"
+    },
+    "io.insert-koin:koin-core": {
+      "from": "4.1.1",
+      "to": "4.2.2"
+    },
+    "io.insert-koin:koin-core-jvm": {
+      "from": "4.1.1",
+      "to": "4.2.2"
+    },
+    "io.insert-koin:koin-core-viewmodel": {
+      "from": "4.1.1",
+      "to": "4.2.2"
+    },
+    "io.insert-koin:koin-core-viewmodel-android": {
+      "from": "4.1.1",
+      "to": "4.2.2"
+    },
     "io.ktor:ktor-bom": {
       "from": "3.4.0",
-      "to": "3.4.3"
-    },
-    "io.ktor:ktor-client-content-negotiation-jvm": {
-      "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
     "io.ktor:ktor-client-content-negotiation": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "io.ktor:ktor-client-core-jvm": {
+    "io.ktor:ktor-client-content-negotiation-jvm": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
     "io.ktor:ktor-client-core": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "io.ktor:ktor-client-logging-jvm": {
+    "io.ktor:ktor-client-core-jvm": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
     "io.ktor:ktor-client-logging": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "io.ktor:ktor-client-okhttp-jvm": {
+    "io.ktor:ktor-client-logging-jvm": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
     "io.ktor:ktor-client-okhttp": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "io.ktor:ktor-events-jvm": {
+    "io.ktor:ktor-client-okhttp-jvm": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
     "io.ktor:ktor-events": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "io.ktor:ktor-http-cio-jvm": {
+    "io.ktor:ktor-events-jvm": {
       "from": "3.4.0",
-      "to": "3.4.3"
-    },
-    "io.ktor:ktor-http-cio": {
-      "from": "3.4.0",
-      "to": "3.4.3"
-    },
-    "io.ktor:ktor-http-jvm": {
-      "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
     "io.ktor:ktor-http": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "io.ktor:ktor-io-jvm": {
+    "io.ktor:ktor-http-cio": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
+    },
+    "io.ktor:ktor-http-cio-jvm": {
+      "from": "3.4.0",
+      "to": "3.6.1"
+    },
+    "io.ktor:ktor-http-jvm": {
+      "from": "3.4.0",
+      "to": "3.6.1"
     },
     "io.ktor:ktor-io": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "io.ktor:ktor-network-jvm": {
+    "io.ktor:ktor-io-jvm": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
     "io.ktor:ktor-network": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "io.ktor:ktor-serialization-jvm": {
+    "io.ktor:ktor-network-jvm": {
       "from": "3.4.0",
-      "to": "3.4.3"
-    },
-    "io.ktor:ktor-serialization-kotlinx-json-jvm": {
-      "from": "3.4.0",
-      "to": "3.4.3"
-    },
-    "io.ktor:ktor-serialization-kotlinx-json": {
-      "from": "3.4.0",
-      "to": "3.4.3"
-    },
-    "io.ktor:ktor-serialization-kotlinx-jvm": {
-      "from": "3.4.0",
-      "to": "3.4.3"
-    },
-    "io.ktor:ktor-serialization-kotlinx": {
-      "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
     "io.ktor:ktor-serialization": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "io.ktor:ktor-sse-jvm": {
+    "io.ktor:ktor-serialization-jvm": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
+    },
+    "io.ktor:ktor-serialization-kotlinx": {
+      "from": "3.4.0",
+      "to": "3.6.1"
+    },
+    "io.ktor:ktor-serialization-kotlinx-json": {
+      "from": "3.4.0",
+      "to": "3.6.1"
+    },
+    "io.ktor:ktor-serialization-kotlinx-json-jvm": {
+      "from": "3.4.0",
+      "to": "3.6.1"
+    },
+    "io.ktor:ktor-serialization-kotlinx-jvm": {
+      "from": "3.4.0",
+      "to": "3.6.1"
     },
     "io.ktor:ktor-sse": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "io.ktor:ktor-utils-jvm": {
+    "io.ktor:ktor-sse-jvm": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
     "io.ktor:ktor-utils": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "io.ktor:ktor-websocket-serialization-jvm": {
+    "io.ktor:ktor-utils-jvm": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
     "io.ktor:ktor-websocket-serialization": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "io.ktor:ktor-websockets-jvm": {
+    "io.ktor:ktor-websocket-serialization-jvm": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
     "io.ktor:ktor-websockets": {
       "from": "3.4.0",
-      "to": "3.4.3"
+      "to": "3.6.1"
     },
-    "org.jetbrains.kotlin:kotlin-stdlib-common": {
-      "from": "2.3.20",
-      "to": "2.3.21"
+    "io.ktor:ktor-websockets-jvm": {
+      "from": "3.4.0",
+      "to": "3.6.1"
     },
-    "org.jetbrains.kotlin:kotlin-stdlib-jdk7": {
-      "from": "2.3.10",
-      "to": "2.3.21"
+    "org.jetbrains.androidx.lifecycle:lifecycle-common": {
+      "from": "2.9.6",
+      "to": "2.11.0"
     },
-    "org.jetbrains.kotlin:kotlin-stdlib-jdk8": {
-      "from": "2.3.10",
-      "to": "2.3.21"
+    "org.jetbrains.androidx.lifecycle:lifecycle-runtime": {
+      "from": "2.9.6",
+      "to": "2.11.0"
+    },
+    "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose": {
+      "from": "2.9.6",
+      "to": "2.11.0"
+    },
+    "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel": {
+      "from": "2.9.6",
+      "to": "2.11.0"
+    },
+    "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose": {
+      "from": "2.9.3",
+      "to": "2.11.0"
+    },
+    "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-savedstate": {
+      "from": "2.9.6",
+      "to": "2.11.0"
+    },
+    "org.jetbrains.compose.animation:animation": {
+      "from": "1.10.0",
+      "to": "1.12.2"
+    },
+    "org.jetbrains.compose.animation:animation-core": {
+      "from": "1.10.0",
+      "to": "1.12.2"
+    },
+    "org.jetbrains.compose.foundation:foundation": {
+      "from": "1.10.0",
+      "to": "1.12.2"
+    },
+    "org.jetbrains.compose.foundation:foundation-layout": {
+      "from": "1.10.0",
+      "to": "1.12.2"
+    },
+    "org.jetbrains.compose.runtime:runtime": {
+      "from": "1.10.0",
+      "to": "1.12.2"
+    },
+    "org.jetbrains.compose.runtime:runtime-saveable": {
+      "from": "1.10.0",
+      "to": "1.12.2"
+    },
+    "org.jetbrains.compose.ui:ui": {
+      "from": "1.10.0",
+      "to": "1.12.2"
+    },
+    "org.jetbrains.compose.ui:ui-geometry": {
+      "from": "1.10.0",
+      "to": "1.12.2"
+    },
+    "org.jetbrains.compose.ui:ui-graphics": {
+      "from": "1.10.0",
+      "to": "1.12.2"
+    },
+    "org.jetbrains.compose.ui:ui-text": {
+      "from": "1.10.0",
+      "to": "1.12.2"
+    },
+    "org.jetbrains.compose.ui:ui-unit": {
+      "from": "1.10.0",
+      "to": "1.12.2"
+    },
+    "org.jetbrains.compose.ui:ui-util": {
+      "from": "1.10.0",
+      "to": "1.12.2"
     },
     "org.jetbrains.kotlin:kotlin-stdlib": {
       "from": "2.3.20",
-      "to": "2.3.21"
+      "to": "2.4.21"
+    },
+    "org.jetbrains.kotlin:kotlin-stdlib-common": {
+      "from": "2.3.20",
+      "to": "2.4.21"
+    },
+    "org.jetbrains.kotlin:kotlin-stdlib-jdk7": {
+      "from": "2.3.10",
+      "to": "2.4.21"
+    },
+    "org.jetbrains.kotlin:kotlin-stdlib-jdk8": {
+      "from": "2.3.10",
+      "to": "2.4.21"
+    },
+    "org.jetbrains.kotlinx:kotlinx-collections-immutable": {
+      "from": "0.4.0",
+      "to": "0.5.2"
+    },
+    "org.jetbrains.kotlinx:kotlinx-collections-immutable-jvm": {
+      "from": "0.4.0",
+      "to": "0.5.2"
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-android": {
+      "from": "1.10.2",
+      "to": "1.11.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-bom": {
+      "from": "1.10.2",
+      "to": "1.11.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core": {
+      "from": "1.10.2",
+      "to": "1.11.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm": {
+      "from": "1.10.2",
+      "to": "1.11.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-guava": {
+      "from": "1.10.2",
+      "to": "1.11.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-coroutines-slf4j": {
+      "from": "1.10.2",
+      "to": "1.11.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-datetime": {
+      "from": "0.7.1",
+      "to": "0.8.0-0.6.x-compat"
+    },
+    "org.jetbrains.kotlinx:kotlinx-datetime-jvm": {
+      "from": "0.7.1",
+      "to": "0.8.0-0.6.x-compat"
+    },
+    "org.jetbrains.kotlinx:kotlinx-io-bytestring": {
+      "from": "0.8.2",
+      "to": "0.9.1"
+    },
+    "org.jetbrains.kotlinx:kotlinx-io-bytestring-jvm": {
+      "from": "0.8.2",
+      "to": "0.9.1"
+    },
+    "org.jetbrains.kotlinx:kotlinx-io-core": {
+      "from": "0.8.2",
+      "to": "0.9.1"
+    },
+    "org.jetbrains.kotlinx:kotlinx-io-core-jvm": {
+      "from": "0.8.2",
+      "to": "0.9.1"
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-bom": {
+      "from": "1.10.0",
+      "to": "1.12.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-core": {
+      "from": "1.10.0",
+      "to": "1.12.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-core-jvm": {
+      "from": "1.10.0",
+      "to": "1.12.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-json": {
+      "from": "1.10.0",
+      "to": "1.12.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-json-io": {
+      "from": "1.10.0",
+      "to": "1.12.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-json-io-jvm": {
+      "from": "1.10.0",
+      "to": "1.12.0"
+    },
+    "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm": {
+      "from": "1.10.0",
+      "to": "1.12.0"
     },
     "org.jspecify:jspecify": {
       "from": "1.0.0",
       "to": "1.0.1"
+    },
+    "org.slf4j:slf4j-api": {
+      "from": "2.0.17",
+      "to": "2.0.19"
     }
   },
-  "reviewedVersionUpdateReason": "Revision15 compatible Kotlin/Ktor patches and Guava security update; Error Prone/JSpecify annotation transitives. Original artifact/components remain historical; current build and real acceptance are separate."
+  "reviewedVersionUpdateReason": "Consolidation coordinated stable upgrade review, 8 November 2026. Exact expectations retain the original artifact and 351-component removal baseline. Reviewed against resolved graph de43e626df0430825b8f188895324103e7d3ecfa: AndroidX Activity/Annotation/Browser/Camera/Compose/Core/Fragment/Lifecycle/Navigation/WorkManager direct upgrades and Collection/NavigationEvent/SavedState/Tracing transitives; Kotlin 2.4.21, kotlinx families (datetime 0.8.0-0.6.x-compat preserves SDK binary compatibility); Ktor 3.6.1, OkHttp 5.5.1 and Okio; Koin 4.2.2; Haze 2.1.0 with Compose Multiplatform 1.12.2 and JetBrains Lifecycle 2.11.0; Keystone, Lottie, Shimmer, ZXing and Tink. Existing Guava/Error Prone/JSpecify expectations retained, SLF4J transitive reviewed. Newly resolved Camera2 Pipe/Viewfinder/Media3/Dagger, Haze blur/utils/Compose Android variants, and Ktor OpenAPI/Kaml/SnakeYAML/urlencoder families require packaging and runtime acceptance. Unexpected Transition 1.6.0 to 1.2.0 downgrade is rejected; expected 1.7.2 is the separately selected stable repair (https://developer.android.com/jetpack/androidx/releases/transition). Version review and graph resolution do not establish release acceptance."
 }
