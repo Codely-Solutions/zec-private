@@ -1446,7 +1446,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteResponseDto.kt": "3349327d46be9a90271612a955d0478f3bdef85720cec2ba2a18fa6dd922bdc6",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/SubmitDepositTransactionRequest.kt": "44c3e424b2cfe9fbdd88aad65a79959c9cd82b5a49f450f6de75c55500462744",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/SwapStatusResponseDto.kt": "023de75c9868755d07aa31d0f2b7fccf4ea6d71dea45a98ed63747fe498ead6a",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt": "b246bce2b2baf2b98d107f66c6ab2c790e1fa5f5d55b2679807fd71f67062a76",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt": "9e11d7a65a2fc4f9147721740d0fd084eb7d384e7ec41efde461413d0d7ebc81",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/ZcashSwapQuote.kt": "16d31c1ca51823c4150353c8504a4f4840c1ddee79430756eeb08eee2fe2783f",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/AddressBookKeyStorageProvider.kt": "9a6e54ebe55511a1d0ffb6ff2c335ab40adc6a97c31fea3a5df405e80e2d2978",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/AddressBookProvider.kt": "f53cfcfe8f156db85998c44a4f0a4e5c6c4e299adf72bd67c83fc8ae188b7e57",
