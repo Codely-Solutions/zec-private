@@ -174,6 +174,9 @@ dependencies {
     testImplementation(libs.okhttp.mockwebserver)
 
     constraints {
+        implementation("androidx.transition:transition:${project.property("ANDROIDX_TRANSITION_VERSION")}") {
+            because("Preserve the reviewed transition runtime when transitive constraints change")
+        }
         implementation("com.google.guava:guava:${project.property("GUAVA_VERSION")}") {
             because("Fix Guava deserialization allocation and collection hash-flooding denial of service")
         }

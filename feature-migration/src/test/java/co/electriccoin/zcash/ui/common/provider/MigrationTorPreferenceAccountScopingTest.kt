@@ -221,7 +221,7 @@ private class FakeAccountDataSource(
         birthday: BlockHeight?
     ): cash.z.ecc.android.sdk.model.Account = error("unsupported")
 
-    override suspend fun requestNextShieldedAddress(): String = error("unsupported")
+    override suspend fun requestNextShieldedAddress(requireFresh: Boolean): String = error("unsupported")
 
     override suspend fun deleteAccount(account: WalletAccount) = error("unsupported")
 
