@@ -107,6 +107,7 @@ def run(root, stop):
             else:raise RuntimeError('Provider timeout retry budget exhausted')
             if 'review quote' not in labels(state):raise RuntimeError('Quote response deadline exceeded')
             action('assert_text',text='Review Quote')
+            state=wait('Confirm')
             title=next(n for n in state['nodes'] if n['text'].casefold()=='review quote')
             title_top=int(title['bounds'].split()[1])
             accept=next(n for n in state['nodes'] if n['text'].casefold()=='confirm')

@@ -174,6 +174,9 @@ androidComponents {
 
 dependencies {
     constraints {
+        implementation("com.google.guava:guava:${project.property("GUAVA_VERSION")}") {
+            because("Fix Guava deserialization allocation and collection hash-flooding denial of service")
+        }
         implementation("androidx.room:room-runtime:2.7.2") {
             because("Preserve the released wallet SDK runtime after removing Flexa's transitive constraints")
         }

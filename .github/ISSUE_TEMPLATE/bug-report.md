@@ -1,45 +1,26 @@
 ---
 name: Bug report
-about: Create a report about a bug in Zashi Android Wallet.
+about: Report a reproducible problem in ZEC Private.
 title: ''
-labels: 'bug'
-assignees: ''
-
+labels: bug
 ---
 
-<!--
-This issue tracker is only for technical issues related to Zashi Android Wallet.
+## What happened?
+Describe the result and what you expected instead.
 
-General Zcash questions and/or support requests and are best directed to either:
- * Zcash Forum: https://forum.zcashcommunity.com/)
- * Discord Community: https://discord.io/zcash-community
+## How can we reproduce it?
+1.
+2.
 
-If you wish to report a security issue, please follow our Responsible Disclosure Guidelines: https://github.com/zcash/ZcashLightClientKit/blob/master/responsible_disclosure.md
--->
+Does it happen every time, occasionally, or only once?
 
-### Describe the issue
-<!-- Please provide a general summary of the issue you're experiencing -->
+## Environment
+- ZEC Private version:
+- Device and Android version:
+- Tor enabled? (if relevant):
+- Software, hardware, or view-only account? (if relevant):
 
-### Can you reliably reproduce the issue?
-#### If so, please list the steps to reproduce below:
-1. 
-2. 
-3. 
+## Evidence (optional)
+Include the error text or a cropped screenshot. Remove recovery phrases, keys, addresses, balances and transaction identifiers unless specifically needed for a private investigation.
 
-### Expected behavior
-<!-- Tell us what should happen -->
-
-### Actual behavior + errors
-<!-- Tell us what happens instead including any noticeable error output (any messages
-displayed on-screen when e.g. a crash occurred) -->
-<!-- Note: please do not include sensitive information. blur, scratch or annotate any
-information like addresses, usernames, amounts or anything other that you might consider sensitive and it's not relevant to the problem you are reporting.  -->
-
-- App Version: 
-- Android Version:
-- Device: (if applies)
-
-### Any extra information that might be useful in the debugging process.
-<!-- Note: please do not include sensitive information. blur, scratch or annotate any
-information like addresses, usernames, amounts or anything other that you might consider sensitive and it's not relevant to the problem you are reporting.-->
-
+For a security vulnerability, use [private reporting](https://github.com/Sammy-Lastre/zec-private/security/advisories/new).

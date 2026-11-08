@@ -1,5 +1,5 @@
 {
-  "status": "validated-candidate-awaiting-signing",
+  "status": "signed-and-independently-verified",
   "scope": "Manual shielded donations and home discovery",
   "source_sha": "d7471a007f131a808986a9e66f70638750c305ea",
   "candidate_run": 42429934172,
@@ -44,5 +44,20 @@
     "ARM64 production packaging inspected, not physically executed",
     "No real funds, personal wallet, funded production settlement or physical biometric/signer execution",
     "Restored recipient transaction mined; recipient spendability confirmation wait not repeated"
-  ]
+  ],
+  "release": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.14",
+  "signed_apk": {
+    "passed": true,
+    "apk_bytes": 67828487,
+    "apk_sha256": "af636ba827f4936ef25dd56734a17c053b1cf9dd1293ca49eccc2573271a097a",
+    "certificate_sha256": "410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168",
+    "version_code": 3234014,
+    "package": "com.personal.zecprivate.foss",
+    "abis": [
+      "arm64-v8a"
+    ],
+    "signed_payload_matches_validated_unsigned": true,
+    "production_arm_executed": false,
+    "release": "https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.14"
+  }
 }
