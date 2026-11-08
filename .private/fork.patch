@@ -636,7 +636,7 @@ index 000000000..cdadb0a3b
 +See the [wallet guide](WALLET-GUIDE.md) for instructions and [privacy](PRIVACY.md) before sharing diagnostics.
 diff --git a/docs/WALLET-GUIDE.md b/docs/WALLET-GUIDE.md
 new file mode 100644
-index 000000000..ad4e6163d
+index 000000000..85babe560
 --- /dev/null
 +++ b/docs/WALLET-GUIDE.md
 @@ -0,0 +1,49 @@
@@ -656,7 +656,7 @@ index 000000000..ad4e6163d
 +
 +### Automatic updates
 +
-+[Obtainium](https://obtainium.imranr.dev/) can check GitHub and install new releases. Import [the ZEC Private configuration](obtainium.json) through Obtainium’s Import/Export screen, or add `https://github.com/Sammy-Lastre/zec-private` and select only `zec-private-latest.apk`. The configuration excludes drafts and prereleases. Configure background updates in Obtainium; Android may require installation permission or confirmation.
++[Obtainium](https://obtainium.imranr.dev/) can check GitHub and install new releases. [Add ZEC Private to Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%257B%2522id%2522%253A%2522com.personal.zecprivate.foss%2522%252C%2522url%2522%253A%2522https%253A%252F%252Fgithub.com%252FSammy-Lastre%252Fzec-private%2522%252C%2522author%2522%253A%2522Sammy-Lastre%2522%252C%2522name%2522%253A%2522ZEC%2520Private%2522%252C%2522additionalSettings%2522%253A%2522%257B%255C%2522includePrereleases%255C%2522%253Afalse%252C%255C%2522includeDrafts%255C%2522%253Afalse%252C%255C%2522fallbackToOlderReleases%255C%2522%253Afalse%252C%255C%2522apkFilterRegEx%255C%2522%253A%255C%2522%255Ezec-private-latest%255C%255C.apk%2524%255C%2522%252C%255C%2522autoApkFilterByArch%255C%2522%253Atrue%252C%255C%2522trackOnly%255C%2522%253Afalse%257D%2522%257D) or import [the configuration file](obtainium.json). Drafts, prereleases and non-production assets are excluded. Enable background updates in Obtainium; Android may require installation permission or confirmation.
 +
 +The wallet also checks for updates while open, at most once a day. Use **About → Check for updates** to check sooner. Dismissing a home notice hides that version. Update links open Obtainium or your browser; those apps use their own connection settings. Install over the existing wallet to preserve its data.
 +

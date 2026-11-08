@@ -31,6 +31,29 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
     }
     var selectedOled by remember(screen) { mutableStateOf(screen == "dark-look-oled") }
     when (screen) {
+        "server-badged" -> co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerView(
+            co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerState(
+                connectionMode = co.electriccoin.zcash.ui.screen.chooseserver.ServerConnectionModeState(
+                    automatic = RadioButtonState(stringRes("Automatic"), false, onClick = {}),
+                    manual = RadioButtonState(stringRes("Manual"), true, onClick = {}),
+                    automaticBadge = stringRes("Recommended"),
+                ),
+                fastest = co.electriccoin.zcash.ui.screen.chooseserver.ServerListState.Fastest(
+                    title = stringRes("Fastest servers"),
+                    servers = listOf(co.electriccoin.zcash.ui.screen.chooseserver.ServerState.Default(
+                        key = "synthetic-active", radioButtonState = RadioButtonState(
+                            stringRes("Example server"), true, onClick = {},
+                        ), badge = stringRes("Active"),
+                    )),
+                    retryButton = ButtonState(stringRes("Retry"), onClick = {}), isLoading = false,
+                ),
+                other = co.electriccoin.zcash.ui.screen.chooseserver.ServerListState.Other(
+                    title = stringRes("Other servers"), servers = emptyList(),
+                ),
+                saveButton = ButtonState(stringRes("Save"), onClick = {}),
+                dialogState = null, onBack = onBack,
+            )
+        )
         "about", "about-update", "about-update-error" -> co.electriccoin.zcash.ui.screen.about.view.About(
             onBack = onBack,
             configInfo = co.electriccoin.zcash.ui.fixture.ConfigInfoFixture.new(),
