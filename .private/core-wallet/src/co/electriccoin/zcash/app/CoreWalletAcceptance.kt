@@ -496,7 +496,7 @@ class CoreWalletAcceptance {
                 mark("metadata_finished")
             }
         }
-        val updateJob = launch(kotlinx.coroutines.Dispatchers.IO) {
+        val updateJob = launch(kotlinx.coroutines.Dispatchers.Main) {
             mark("update_start")
             updateStarted.complete(Unit)
             try {
@@ -559,6 +559,16 @@ class CoreWalletAcceptance {
         // No timeout wrapper is claimed to interrupt JNI. These are structured children.
         metadataJob.cancel()
         updateJob.cancel()
+        // Exercise the real caller dispatcher while native disposal may still be pending.
+        // The host already has its release marker, so this check cannot recreate the DROP cycle.
+        val heartbeatStartedMs = elapsed()
+        mark("update_ui_heartbeat_start")
+        val updateUiResponsive = withTimeout(5_000) {
+            withContext(kotlinx.coroutines.Dispatchers.Main) { true }
+        }
+        val updateUiHeartbeatMs = elapsed() - heartbeatStartedMs
+        check(updateUiResponsive && updateUiHeartbeatMs < 5_000) { "Update cancellation blocked the UI dispatcher" }
+        mark("update_ui_heartbeat_finished")
         metadataJob.join()
         updateJob.join()
         mark("outage_children_joined")
@@ -584,6 +594,7 @@ class CoreWalletAcceptance {
             .put("outage_marker_ms", requestedMs).put("outage_observed_ms", requestedMs - dropMs)
             .put("metadata_finished_ms", metadataFinishedMs.get())
             .put("update_finished_ms", updateFinishedMs.get()).put("total_ms", elapsed())
+            .put("update_ui_responsive", updateUiResponsive).put("update_ui_heartbeat_ms", updateUiHeartbeatMs)
         if (!probeOnly) result.put("history_preserved", true)
         File(context.filesDir, "core-sync-result.json").writeText(result.toString())
         mark("transport_finished")

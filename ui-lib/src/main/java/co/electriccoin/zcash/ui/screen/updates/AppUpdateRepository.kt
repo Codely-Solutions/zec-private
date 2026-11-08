@@ -9,11 +9,13 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
@@ -80,18 +82,20 @@ class AppUpdateRepository(context: Context, private val httpClientProvider: Http
         mutableState.value = cachedAvailability() ?: AppUpdateState.Idle
     }
 
-    /** Explicit network-bound read for isolated acceptance; never downloads or installs APKs. */
-    suspend fun readLatestRelease(): AppUpdateRelease = withTimeoutOrNull(REQUEST_DEADLINE_MILLIS) {
-        httpClientProvider.create().use { client ->
-            val response = client.get(LATEST_RELEASE_URL) {
-                header("Accept", "application/vnd.github+json")
-                header("User-Agent", "ZEC-Private")
-                header("X-GitHub-Api-Version", "2022-11-28")
+    /** Native client disposal can block after cancellation; keep its whole lifetime off Main. */
+    suspend fun readLatestRelease(): AppUpdateRelease = withContext(Dispatchers.IO) {
+        withTimeoutOrNull(REQUEST_DEADLINE_MILLIS) {
+            httpClientProvider.create().use { client ->
+                val response = client.get(LATEST_RELEASE_URL) {
+                    header("Accept", "application/vnd.github+json")
+                    header("User-Agent", "ZEC-Private")
+                    header("X-GitHub-Api-Version", "2022-11-28")
+                }
+                require(response.status.value == HTTP_OK)
+                UpdatePolicy.parse(response.bodyAsText())
             }
-            require(response.status.value == HTTP_OK)
-            UpdatePolicy.parse(response.bodyAsText())
-        }
-    } ?: throw IOException("Update check deadline exceeded")
+        } ?: throw IOException("Update check deadline exceeded")
+    }
 
     private fun cachedRelease(): AppUpdateRelease? =
         try {

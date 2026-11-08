@@ -2281,7 +2281,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressView.kt": "4a95d64333a4a7f70e8e2d16f9962a3d8be820b6a1df5ce44c11b34fe19550a3",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AndroidAppUpdates.kt": "01df19086b9ace64bcc509eef08e0813f2f58b87051bb618fd9053a852670ae4",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateContent.kt": "dce11c37fdefede765ee3452cf64f828b88861b36ec31c328a14beb1bed5c8de",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt": "76f8938abd31cd7cd4148c0db919c3d512be37116fb055a506353973b4338b71",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt": "ede12b4b4354123a1fc286aebe273d528a0b76968613fc0b52e178365c984165",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/UpdatePolicy.kt": "d1778927326c235089fbc553ac541039b51a6c2b3fe44251afda6e4eaa986604",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/AndroidWalletBackup.kt": "bcba0854ea2150271a729b340237f1c7c960dad61c1ec283a7b5896b953b757e",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/walletbackup/WalletBackupState.kt": "4222d6539bf9004ed7dc6faba8ec6c3e440c783606a24d6ddcfc801a745be227",
