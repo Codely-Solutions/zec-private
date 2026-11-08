@@ -133,9 +133,7 @@ class LedgerSignVM(
                     if (signingState.issue.kind == LedgerIssueKind.PERMISSIONS) retryLedgerSigning()
                 }
 
-                else -> {
-                    Unit
-                }
+                else -> return@launch
             }
         }
     }

@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.screen.scan.ImageToQrCodeResult
 import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
 import co.electriccoin.zcash.ui.screen.viewingkey.alreadyimported.AlreadyImportedVKArgs
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -59,6 +60,7 @@ internal class ScanVKVM(
     private var sheetJob: Job? = null
 
     private val checkJob = SupervisorJob(viewModelScope.coroutineContext.job)
+    private val checkScope = CoroutineScope(viewModelScope.coroutineContext + checkJob)
 
     val state: StateFlow<ScanVKState> =
         validation
@@ -78,10 +80,10 @@ internal class ScanVKVM(
     private fun createState(validation: ScanValidationState) =
         ScanVKState.create(validation = validation, onBack = ::onBack)
 
-    fun onScanned(result: String) = viewModelScope.launch(checkJob) { handle(result) }
+    fun onScanned(result: String) = checkScope.launch { handle(result) }
 
     fun onImageScanned(result: ImageToQrCodeResult) =
-        viewModelScope.launch(checkJob) {
+        checkScope.launch {
             when (result) {
                 is ImageToQrCodeResult.SingleCode -> handle(result.text)
                 ImageToQrCodeResult.MultipleCodes -> setValidation(ScanValidationState.SEVERAL_CODES_FOUND)

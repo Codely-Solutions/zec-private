@@ -258,12 +258,7 @@ class MigrationCompleteVM(
                 // The background chain and any leftover notification are already cancelled in
                 // init{} (as soon as this screen was shown, not deferred until now) — a subsequent
                 // Keystone round re-arms a fresh chain at its own commit either way.
-                if (moreRoundsNeeded) {
-                    // Nothing to clear anymore — the home banner derives "another round needed"
-                    // live from engine Complete × the residual balance (proposal §3); leaving
-                    // hasSeenComplete unset keeps the celebration for the true campaign end.
-                    Unit
-                } else {
+                if (!moreRoundsNeeded) {
                     // Marks the *banner's* seen-flag too, not a separate one — a user who's already
                     // been shown (and dismissed) this dedicated celebration screen doesn't also need
                     // the home banner nagging them afterwards; they're the same acknowledgment.
