@@ -49,7 +49,7 @@ class AppUpdateRepositoryTest {
     }
 
     @Test
-    fun cancellationRestoresAbsentOrPreviousTimestampAndAllowsRetry() = runBlocking {
+    fun cancellationRestoresAbsentOrPreviousTimestampAndAllowsRetry(): Unit = runBlocking {
         for (previous in listOf<Long?>(null, 123L)) {
             preferences.edit().clear().apply()
             previous?.let { preferences.edit().putLong("last_check", it).apply() }
@@ -76,7 +76,7 @@ class AppUpdateRepositoryTest {
     }
 
     @Test
-    fun completedFailureKeepsCooldownAcrossRecreationWhileManualCheckRetries() = runBlocking {
+    fun completedFailureKeepsCooldownAcrossRecreationWhileManualCheckRetries(): Unit = runBlocking {
         val provider = UpdateTestClientProvider { throw IOException("Synthetic outage") }
         val repository = AppUpdateRepository(context, provider)
         assertTrue(repository.enabled)
@@ -96,7 +96,7 @@ class AppUpdateRepositoryTest {
     }
 
     @Test
-    fun dismissalSurvivesRecreationManualCheckFindsNewerAndUpgradeRetiresNotice() = runBlocking {
+    fun dismissalSurvivesRecreationManualCheckFindsNewerAndUpgradeRetiresNotice(): Unit = runBlocking {
         val provider = UpdateTestClientProvider { releaseMetadata(200) }
         val repository = AppUpdateRepository(context, provider)
         assertTrue(repository.enabled)
