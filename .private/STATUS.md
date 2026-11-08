@@ -1,6 +1,6 @@
-# Revision 17 — acceptance complete
+# Last published release — revision 17
 
-Candidate `d3956b2f3679facf4158e524bdbf3d27eef51a67`, production/UI run `42524865003` and core run `42524867394`, passed required deterministic checks, real testnet lifecycle, three unfunded Tor quote cycles and disposable upstream integration. Signed publication remains pending; revision 16 is the published rollback.
+Candidate `d3956b2f3679facf4158e524bdbf3d27eef51a67`, production/UI run `42524865003` and core run `42524867394`, passed 1,766 reported unit tests and required deterministic checks, real testnet lifecycle, three unfunded Tor quote cycles and disposable upstream integration. [Revision 17](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.17) is signed and independently verified against the validated unsigned payload, permanent certificate, package, ARM64-only packaging and 16-KiB ZIP alignment. Revision 16 remains the rollback. The next seedless app/instrumentation pair is preserved in the authenticated maintenance draft.
 
 The coordinated toolchain upgrade includes fixed upstream OkHttp. Quiet update discovery and verified Obtainium setup are ready; installation remains with Obtainium/Android. Donation labels, themed icons and the unnecessary About footer are corrected. Thirteen actual synthetic frames were inspected.
 

@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision 17 acceptance passed against revision 16. Its exact source, APKs and closed execution records are bound in `core-validation-summary.json`; publication is tracked separately in `release-evidence/`. Revision 16 remains the published rollback until promotion completes.
+Status: revision 17 is signed and independently verified, with revision 16 as rollback. `core-validation-summary.json` binds the executed source/APKs; `release-evidence/v3.19.0-private.17.json` binds publication. The next version-matched app/instrumentation fixture is preserved in the maintenance draft.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
