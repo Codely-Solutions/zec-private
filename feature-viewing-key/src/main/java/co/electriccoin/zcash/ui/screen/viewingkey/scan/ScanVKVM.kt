@@ -15,8 +15,8 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.scan.ImageToQrCodeResult
 import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
 import co.electriccoin.zcash.ui.screen.viewingkey.alreadyimported.AlreadyImportedVKArgs
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
