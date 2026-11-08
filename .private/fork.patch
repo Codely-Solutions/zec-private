@@ -18935,7 +18935,7 @@ index 3027e6cda..60dbff0cc 100644
 +            cancelSwapQuote = cancelQuote,
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
 new file mode 100644
-index 000000000..34baad434
+index 000000000..2fa4801b4
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
 @@ -0,0 +1,158 @@
@@ -18990,7 +18990,7 @@ index 000000000..34baad434
 +    }
 +
 +    @Test
-+    fun cancellationRestoresAbsentOrPreviousTimestampAndAllowsRetry() = runBlocking {
++    fun cancellationRestoresAbsentOrPreviousTimestampAndAllowsRetry(): Unit = runBlocking {
 +        for (previous in listOf<Long?>(null, 123L)) {
 +            preferences.edit().clear().apply()
 +            previous?.let { preferences.edit().putLong("last_check", it).apply() }
@@ -19017,7 +19017,7 @@ index 000000000..34baad434
 +    }
 +
 +    @Test
-+    fun completedFailureKeepsCooldownAcrossRecreationWhileManualCheckRetries() = runBlocking {
++    fun completedFailureKeepsCooldownAcrossRecreationWhileManualCheckRetries(): Unit = runBlocking {
 +        val provider = UpdateTestClientProvider { throw IOException("Synthetic outage") }
 +        val repository = AppUpdateRepository(context, provider)
 +        assertTrue(repository.enabled)
@@ -19037,7 +19037,7 @@ index 000000000..34baad434
 +    }
 +
 +    @Test
-+    fun dismissalSurvivesRecreationManualCheckFindsNewerAndUpgradeRetiresNotice() = runBlocking {
++    fun dismissalSurvivesRecreationManualCheckFindsNewerAndUpgradeRetiresNotice(): Unit = runBlocking {
 +        val provider = UpdateTestClientProvider { releaseMetadata(200) }
 +        val repository = AppUpdateRepository(context, provider)
 +        assertTrue(repository.enabled)
