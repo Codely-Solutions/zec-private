@@ -37,6 +37,9 @@ jobs:
           mkdir -p core-artifact
           cp app/build/outputs/apk/zcashtestnetFoss/debug/*.apk core-artifact/
           cp app/build/outputs/apk/androidTest/zcashtestnetFoss/debug/*.apk core-artifact/
+          for apk in core-artifact/*androidTest*.apk; do
+            python3 -B .private/fixture_classes.py "$apk" co.electriccoin.zcash.app.CoreWalletAcceptance
+          done
           git rev-parse HEAD > core-artifact/source-sha.txt
           sha256sum core-artifact/*.apk > core-artifact/SHA256SUMS
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

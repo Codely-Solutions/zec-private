@@ -2,7 +2,7 @@
 allprojects { p ->
     p.plugins.withId('com.android.library') {
         if (p.path == ':ui-lib') {
-            p.android.sourceSets.debug.java.srcDir(new File(p.rootProject.projectDir, '.private/style-comparison/src'))
+            p.android.sourceSets.debug.kotlin.directories.add(new File(p.rootProject.projectDir, '.private/style-comparison/src').path)
             p.android.sourceSets.debug.manifest.srcFile(new File(p.rootProject.projectDir, '.private/style-comparison/AndroidManifest.xml'))
         }
     }
