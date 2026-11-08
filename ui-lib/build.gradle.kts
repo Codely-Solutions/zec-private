@@ -131,7 +131,7 @@ android {
 
     sourceSets {
         getByName("internal").apply {
-            java.srcDirs("src/internal/java")
+            kotlin.srcDirs("src/internal/java")
         }
     }
 }
