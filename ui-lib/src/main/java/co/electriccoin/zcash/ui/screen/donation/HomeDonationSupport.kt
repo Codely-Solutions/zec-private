@@ -81,7 +81,7 @@ internal fun rememberHomeDonationSupport(blocked: Boolean, onDonate: () -> Unit)
             } else {
                 dismissed = true
             }
-        } else if (!introduction && canIntroduce(resumed, blocked, eligibleAtEntry, dismissed)) {
+        } else if (canIntroduce(resumed, blocked, eligibleAtEntry, dismissed, introduction)) {
             // Keep a successful claim when lifecycle setup restarts this effect.
             introduction = preferences.claimAutomaticIntroduction()
         }
@@ -109,8 +109,16 @@ internal fun rememberHomeDonationSupport(blocked: Boolean, onDonate: () -> Unit)
     )
 }
 
-private fun canIntroduce(resumed: Boolean, blocked: Boolean, invitationEligible: Boolean, dismissed: Boolean) =
-    resumed && !blocked && !invitationEligible && !dismissed
+private fun canIntroduce(
+    resumed: Boolean,
+    blocked: Boolean,
+    invitationEligible: Boolean,
+    dismissed: Boolean,
+    alreadyIntroduced: Boolean,
+): Boolean {
+    if (alreadyIntroduced) return false
+    return resumed && !blocked && !invitationEligible && !dismissed
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
