@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="recovery_copy_phrase">Copy recovery phrase</string>
+    <string name="recovery_copy_birthday">Copy wallet birthday</string>
+    <string name="recovery_copy_notice">Other apps may read copied recovery details. We try to clear them after 60 seconds, or when you return to the app. Save your backup somewhere private.</string>
+    <string name="recovery_copy_failed">Could not copy. Keep the app open and try again.</string>
+</resources>

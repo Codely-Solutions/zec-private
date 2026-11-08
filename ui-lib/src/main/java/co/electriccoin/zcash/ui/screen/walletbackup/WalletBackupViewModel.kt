@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRequest
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
+import co.electriccoin.zcash.ui.common.usecase.CopyRecoveryToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetPersistableWalletUseCase
 import co.electriccoin.zcash.ui.common.usecase.OnUserSavedWalletBackupUseCase
 import co.electriccoin.zcash.ui.common.usecase.RemindWalletBackupLaterUseCase
@@ -38,7 +39,8 @@ class WalletBackupViewModel(
     private val navigationRouter: NavigationRouter,
     private val onUserSavedWalletBackup: OnUserSavedWalletBackupUseCase,
     private val remindWalletBackupLater: RemindWalletBackupLaterUseCase,
-    private val biometricRepository: BiometricRepository
+    private val biometricRepository: BiometricRepository,
+    private val copyRecoveryToClipboard: CopyRecoveryToClipboardUseCase
 ) : ViewModel() {
     private val lockoutDuration =
         walletBackupMessageUseCase
@@ -139,6 +141,26 @@ class WalletBackupViewModel(
                             ),
                         onClick = null,
                     ),
+                copyPhrase = wallet?.takeIf { isRevealed }?.let { wallet ->
+                    ButtonState(text = stringRes(R.string.recovery_copy_phrase), onClick = {
+                        copyRecoveryIfRevealed(
+                            isRevealed = this.isRevealed.value,
+                            value = { wallet.seedPhrase.split.joinToString(" ") },
+                            copy = copyRecoveryToClipboard::invoke
+                        )
+                    })
+                },
+                copyBirthday = wallet?.takeIf { isRevealed }?.let { wallet ->
+                    wallet.birthday?.let { birthday ->
+                        ButtonState(text = stringRes(R.string.recovery_copy_birthday), onClick = {
+                            copyRecoveryIfRevealed(
+                                isRevealed = this.isRevealed.value,
+                                value = { birthday.value.toString() },
+                                copy = copyRecoveryToClipboard::invoke
+                            )
+                        })
+                    }
+                },
                 onBack = ::onBack
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT), null)
@@ -179,4 +201,10 @@ class WalletBackupViewModel(
     }
 
     private fun onBack() = navigationRouter.back()
+}
+
+internal fun copyRecoveryIfRevealed(isRevealed: Boolean, value: () -> String, copy: (String) -> Unit) {
+    if (isRevealed) {
+        copy(value())
+    }
 }

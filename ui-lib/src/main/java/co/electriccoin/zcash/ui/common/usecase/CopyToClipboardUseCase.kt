@@ -32,13 +32,15 @@ class CopyToClipboardUseCase(
                 !AndroidApiVersion.isAtLeastUpsideDownCake ||
                 !context.getSystemService<UserManager>().isAdminUser
 
-    operator fun invoke(value: String) {
+    operator fun invoke(value: String) = copyWithMetadata(value, PersistableBundle())
+
+    internal fun copyWithMetadata(value: String, metadata: PersistableBundle) {
         val clipboardManager = context.getSystemService<ClipboardManager>()
         val data =
             ClipData
                 .newPlainText("", value)
                 .apply {
-                    description.extras = PersistableBundle().apply { putBoolean(extraIsSensitive, true) }
+                    description.extras = PersistableBundle(metadata).apply { putBoolean(extraIsSensitive, true) }
                 }
         if (AndroidApiVersion.isAtLeastTiramisu) {
             clipboardManager.setPrimaryClip(data)
