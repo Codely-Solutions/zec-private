@@ -1,8 +1,9 @@
-// This procedural instrumentation is compiled only by core-validation.yml.
-// Its APK and host driver are verified by real acceptance, not shipped code.
+// Procedural instrumentation and synthetic screen fixtures are opt-in debug tools.
+// Their APK/host inputs are bound and executed separately; none ships in production.
 // Keep production Detekt rules and its existing baseline unchanged.
 allprojects {
     tasks.matching { it.name == 'detektAll' }.configureEach {
         exclude('**/.private/core-wallet/**')
+        exclude('**/.private/style-comparison/**')
     }
 }

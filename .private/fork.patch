@@ -2501,10 +2501,10 @@ index f15fc4a02..cd86c6b46 100644
 +val LightZashiColorsInternal = materialZashiColors(LightColorPalette, dark = false)
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/MaterialZashiColors.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/MaterialZashiColors.kt
 new file mode 100644
-index 000000000..989c96ed0
+index 000000000..d18a24660
 --- /dev/null
 +++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/theme/colors/MaterialZashiColors.kt
-@@ -0,0 +1,479 @@
+@@ -0,0 +1,481 @@
 +@file:Suppress("MagicNumber", "LongMethod")
 +
 +package co.electriccoin.zcash.ui.design.theme.colors
@@ -2512,6 +2512,8 @@ index 000000000..989c96ed0
 +import androidx.compose.material3.ColorScheme
 +
 +/** Material role adapter; status hues remain independent of the wallpaper accent. */
++// Independent light/dark palette selections form a declarative mapping.
++@Suppress("CyclomaticComplexMethod")
 +internal fun materialZashiColors(s: ColorScheme, dark: Boolean): ZashiColorsInternal {
 +    val disabledContainer = s.onSurface.copy(alpha = 0.12f)
 +    val disabledContent = s.onSurface.copy(alpha = 0.38f)

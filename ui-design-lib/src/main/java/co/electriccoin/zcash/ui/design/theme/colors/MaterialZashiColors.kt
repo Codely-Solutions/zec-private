@@ -5,6 +5,8 @@ package co.electriccoin.zcash.ui.design.theme.colors
 import androidx.compose.material3.ColorScheme
 
 /** Material role adapter; status hues remain independent of the wallpaper accent. */
+// Independent light/dark palette selections form a declarative mapping.
+@Suppress("CyclomaticComplexMethod")
 internal fun materialZashiColors(s: ColorScheme, dark: Boolean): ZashiColorsInternal {
     val disabledContainer = s.onSurface.copy(alpha = 0.12f)
     val disabledContent = s.onSurface.copy(alpha = 0.38f)
