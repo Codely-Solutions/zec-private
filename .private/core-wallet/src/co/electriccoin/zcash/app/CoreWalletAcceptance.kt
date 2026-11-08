@@ -59,7 +59,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
@@ -69,6 +68,11 @@ import org.junit.Test
 import org.koin.core.context.GlobalContext
 import java.io.File
 import java.lang.reflect.Proxy
+
+// The Java bridge binds the runBlocking JVM ABI shared by the baseline and candidate.
+fun interface CoreWalletStage {
+    suspend fun kotlinx.coroutines.CoroutineScope.run()
+}
 
 /** Exercises the installed app graph. No mocks, SDK-only wallet, or mainnet spending. */
 class CoreWalletAcceptance {
@@ -87,7 +91,7 @@ class CoreWalletAcceptance {
     private fun save(value: JSONObject) = fixtureFile.writeText(value.toString())
 
     @Test
-    fun executeStage() = runBlocking {
+    fun executeStage() = LegacyRunBlocking.run(CoreWalletStage {
         check(context.packageName == "com.personal.zecprivate.testnet.foss.debug")
         check(context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0)
         check(ZcashNetwork.fromResources(context) == ZcashNetwork.Testnet)
@@ -442,7 +446,7 @@ class CoreWalletAcceptance {
 
         // No exception messages, seeds, addresses, HTTP bodies or private fixture are printed.
         println("CORE_RESULT $receipt")
-    }
+    })
 
     /** Test-only: the host restores DROP independently after receiving requested.json. */
     private suspend fun runTransport(probeOnly: Boolean) = kotlinx.coroutines.coroutineScope {

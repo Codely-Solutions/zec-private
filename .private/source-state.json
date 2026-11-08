@@ -29,7 +29,7 @@
   ".idea/runConfigurations/ui_lib_connectedCheck.xml": "967b6ca05e06b79b1946c208f0be1a1e79ab9014cc55dac5de6c37702bdf6112",
   "CHANGELOG.md": "e2b7cd70784ad1f7661c031de398f430ea385522adfd17c77799503b65e07ebd",
   "LICENSE": "6424401cbd59db0b23d10c29ffbc56d0061460178d3661cfb2ac55d6c9434fd3",
-  "app/build.gradle.kts": "16d9622e2c36dcc56b4d5c9ecb566ef1b2d6d6f2f366e9e455de2bbe247337aa",
+  "app/build.gradle.kts": "e79bc812b30437180978d03a56b0391e20bdc5b2264bc5b131c42594155e0d15",
   "app/proguard-project.txt": "e053417688fccee865edb2d20be8a4fdc24e84ea34230e00c1d8f133f6b8cf0f",
   "app/src/androidTest/AndroidManifest.xml": "cbe8202ec267f6888e9804d380098eb75ab85e6577c1294833b9c0a61d76a8ef",
   "app/src/androidTest/java/co/electriccoin/zcash/app/AndroidApiTest.kt": "99fd6354733b636be00de65590e946892689ca1e1cb15719f832d4be10cff810",
