@@ -48,7 +48,7 @@ android {
 
     sourceSets {
         getByName("internal").apply {
-            kotlin.srcDirs("src/internal/kotlin")
+            kotlin.directories.add("src/internal/kotlin")
         }
     }
 }

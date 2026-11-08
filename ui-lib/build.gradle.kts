@@ -37,7 +37,8 @@ android {
 
     sourceSets {
         getByName("main").apply {
-            res.setSrcDirs(
+            res.directories.clear()
+            res.directories.addAll(
                 setOf(
                     // This is a special case as these texts are not translated, they are replaced in build time via
                     // app/build.gradle.kts instead
@@ -131,7 +132,7 @@ android {
 
     sourceSets {
         getByName("internal").apply {
-            kotlin.srcDirs("src/internal/java")
+            kotlin.directories.add("src/internal/java")
         }
     }
 }
