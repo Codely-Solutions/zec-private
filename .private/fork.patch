@@ -181,7 +181,7 @@ index 7e1b440d1..4b1b532d0 100644
 -            android:authorities="co.electriccoin.zcash.provider.testnet"
 +            android:authorities="com.personal.zecprivate.provider.testnet"
 diff --git a/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts b/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts
-index 4a0d7d9d8..fd2402216 100644
+index 4a0d7d9d8..77b55acbc 100644
 --- a/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts
 +++ b/build-conventions-secant/src/main/kotlin/secant.android-build-conventions.gradle.kts
 @@ -1 +0,0 @@
@@ -189,7 +189,7 @@ index 4a0d7d9d8..fd2402216 100644
 @@ -8,0 +8,4 @@ pluginManager.withPlugin("com.android.application") {
 +    project.extensions.getByType<com.android.build.api.dsl.ApplicationExtension>()
 +        .androidResources.localeFilters.addAll(
-+        listOf("en", "en-rUS", "en-rGB", "en-rAU", "es", "en_XA", "ar_XB")
++        listOf("en", "en-rUS", "en-rGB", "en-rAU", "es", "en-rXA", "ar-rXB")
 +    )
 @@ -20 +22,0 @@ pluginManager.withPlugin("com.android.application") {
 -            resourceConfigurations.addAll(listOf("en", "en-rUS", "en-rGB", "en-rAU", "es", "en_XA", "ar_XB"))
@@ -2240,7 +2240,7 @@ index 042c8652c..23aa98f43 100644
 +<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108"><path android:fillColor="#123A46" android:pathData="M0,0h108v108h-108z"/><path android:fillColor="#B9F3DC" android:pathData="M32,30h44v10L46,68h30v10H32V68l30,-28H32z"/></vector>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..8e1325d04 100644
+index 7b9af8bf7..3a7d0af99 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -73 +73 @@
@@ -2480,8 +2480,13 @@ index 7b9af8bf7..8e1325d04 100644
 @@ -816 +798 @@
 -    <string name="pay_slippage_info">Podrías pagar hasta %s más, además de las comisiones de transacción.</string>
 +    <string name="pay_slippage_info">Podrías pagar hasta %s más si cambia el precio. Las comisiones de red de Zcash son adicionales.</string>
-@@ -854 +836 @@
+@@ -846 +828 @@
+-    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %s menos según el deslizamiento %s que configuraste.</string>
++    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %1$s menos según el deslizamiento %2$s que configuraste.</string>
+@@ -853,2 +835,2 @@
+-    <string name="swapToZec_info2">%s en %s</string>
 -    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en Zodl</string>
++    <string name="swapToZec_info2">%1$s en %2$s</string>
 +    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en ZEC Private</string>
 @@ -884 +866 @@
 -    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="Zodl" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
@@ -2573,7 +2578,7 @@ index 7b9af8bf7..8e1325d04 100644
 +    <string name="migrationTipUnavailable_title">ZEC Private sigue sincronizando</string>
 +    <string name="migrationTipUnavailable_message">ZEC Private debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..a0ce9dd18 100644
+index f41234151..8461421f0 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -2770,6 +2775,9 @@ index f41234151..a0ce9dd18 100644
 @@ -545 +526 @@
 -        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
 +        https://github.com/Sammy-Lastre/zec-private/releases</string>
+@@ -559 +540 @@
+-    <string name="receive_info_shielded_bullet_1">Use this address to receive and store your %s privately. Transparent and shielded %s sent to this address will be received and stored as shielded %s.</string>
++    <string name="receive_info_shielded_bullet_1">Use this address to receive and store your %1$s privately. Transparent and shielded %2$s sent to this address will be received and stored as shielded %3$s.</string>
 @@ -566 +547 @@
 -    <string name="receive_help_transparent_desc3">To protect your privacy, Zodl will guide you to shield any transparent %s you receive with just one click.</string>
 +    <string name="receive_help_transparent_desc3">To protect your privacy, ZEC Private will guide you to shield any transparent %s you receive with just one click.</string>
@@ -2838,8 +2846,13 @@ index f41234151..a0ce9dd18 100644
 @@ -886 +858 @@
 -    <string name="pay_slippage_info">You may pay up to %s more, in addition to transaction fees.</string>
 +    <string name="pay_slippage_info">You may pay up to %s more if the price changes. Zcash network fees are additional.</string>
-@@ -924 +896 @@
+@@ -916 +888 @@
+-    <string name="swapAndPay_swapQuoteSlippageWarn">You could receive up to %s less based on the %s slippage you set.</string>
++    <string name="swapAndPay_swapQuoteSlippageWarn">You could receive up to %1$s less based on the %2$s slippage you set.</string>
+@@ -923,2 +895,2 @@
+-    <string name="swapToZec_info2">%s on %s</string>
 -    <string name="swap_to_zec_share_text">Deposit address for %1$s %2$s on %3$s swap to %4$s in Zodl</string>
++    <string name="swapToZec_info2">%1$s on %2$s</string>
 +    <string name="swap_to_zec_share_text">Deposit address for %1$s %2$s on %3$s swap to %4$s in ZEC Private</string>
 @@ -954 +926 @@
 -    <string name="taxExport_desc">Download your <xliff:g example="Zodl" id="account_name">%s</xliff:g> transaction history from the previous calendar year in a .csv format.</string>
