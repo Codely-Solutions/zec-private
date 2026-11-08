@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision 15 is signed and independently verified. Exact immutable evidence is in `release-evidence/v3.19.0-private.15.json`; root receipts bind that executed candidate.
+Status: revision 16 candidate passed real acceptance and awaits isolated signing. Root receipts bind its executed source and artifacts; revision 15 remains the published rollback.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
@@ -50,9 +50,9 @@ Production Detekt retains its rules and existing baseline. Its release-only init
 
 ## Current release evidence
 
-Revision 15 passed 1,749 unit tests and the real testnet lifecycle from revision 14. One manual shielded donation verified review, cancellation, one approval and exact nonempty message; restart and clean recipient restoration reused it. A fake clipboard entry verified sensitive metadata and preservation of newer content across expiry. Clipboard process-death cleanup and physical authentication UI remain outside that execution.
+Revision 16 passed 1,749 reported unit tests, three focused Material role tests and the real testnet lifecycle from revision 15. One manual shielded donation verified review, cancellation, one approval and exact nonempty message; restart and clean recipient restoration reused it. A fake clipboard entry verified sensitive metadata and preservation of newer content across expiry. Clipboard process-death cleanup and physical authentication UI remain outside that execution.
 
-Three unfunded Tor quote/dismiss cycles passed without timeout. Actual light/dark synthetic donation/recovery captures were inspected; these layout scenes cannot spend and do not establish authentication. Prior signed evidence remains immutable under `release-evidence/`.
+Three unfunded Tor quote/dismiss cycles passed without timeout using the normal launcher. Six final synthetic error renders cover light/dark/OLED at 1.0 and 1.3 font scale; a separate enlarged-text scroll check confirmed the full Review control is reachable. Unchanged approved comparison frames were reused with their original identities. Layout scenes cannot spend or establish authentication. Prior signed evidence remains immutable under `release-evidence/`.
 
 ## Retained dependency-security work
 
