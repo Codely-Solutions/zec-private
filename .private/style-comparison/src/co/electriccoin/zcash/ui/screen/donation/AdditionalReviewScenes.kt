@@ -150,7 +150,7 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                 info = ReceiveShieldedStateFixture.new().copy(completedTimestamp = stringRes("8 November 2026, 12:00")), errorFooter = null, infoFooter = null,
                 primaryButton = null, secondaryButton = null,
                 explorerLinks = listOf(TransactionExplorerLink(
-                    label = stringRes("Zcash transaction"), transactionId = "ab".repeat(32), onOpen = {}, onCopy = {},
+                    label = stringRes("Zcash transaction"), transactionId = "ab".repeat(32), onOpen = {},
                 )),
             ), mainAppBarState = appBar,
         )

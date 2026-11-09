@@ -8,7 +8,7 @@
     <string name="private_estimated_output" translatable="false">Quoted output (execution unavailable)</string>
     <string name="private_total_zec_to_spend" translatable="false">Total ZEC to spend</string>
     <string name="private_support_title">Support development</string>
-    <string name="private_support_addresses">Donation addresses ↗</string>
+    <string name="private_support_addresses">Donation addresses</string>
     <string name="private_support_amount">Donation amount</string>
     <string name="private_support_failed">Cannot prepare donation. Check shielded funds, synchronization and connection. Nothing was submitted.</string>
     <string name="private_support_software_only">In-app donations currently require a software wallet. Hardware and view-only accounts can use the published address in a compatible wallet.</string>

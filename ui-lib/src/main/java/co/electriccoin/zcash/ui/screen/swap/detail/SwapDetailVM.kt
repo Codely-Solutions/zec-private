@@ -105,15 +105,13 @@ class SwapDetailVM(
                             ids = status.originTransactionIds,
                             label = stringRes(R.string.private_explorer_deposit, status.originAsset.chainName),
                             testnet = testnet,
-                            router = navigationRouter,
-                            copy = copyToClipboard::invoke
+                            router = navigationRouter
                         ) + co.electriccoin.zcash.ui.screen.transactiondetail.explorerLinks(
                             chain = status.destinationAsset.blockchain.chainTicker,
                             ids = status.destinationTransactionIds,
                             label = stringRes(R.string.private_explorer_destination, status.destinationAsset.chainName),
                             testnet = testnet,
-                            router = navigationRouter,
-                            copy = copyToClipboard::invoke
+                            router = navigationRouter
                         )
                     }.orEmpty(),
                     refundedAmount = swapData.status?.positiveRefund?.let { refund ->

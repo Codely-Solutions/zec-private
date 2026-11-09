@@ -17,8 +17,6 @@ import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.transactiondetail.ReceiveTransparentStateFixture
-import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailIdRows
-import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLink
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoColumn
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoColumnState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoContainer
@@ -30,8 +28,7 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDe
 @Composable
 fun ReceiveTransparent(
     state: ReceiveTransparentState,
-    modifier: Modifier = Modifier,
-    explorerLinks: List<TransactionExplorerLink> = emptyList(),
+    modifier: Modifier = Modifier
 ) {
     Column(
         modifier = modifier
@@ -45,9 +42,9 @@ fun ReceiveTransparent(
         )
         Spacer(Modifier.height(8.dp))
         TransactionDetailInfoContainer {
-            TransactionDetailIdRows(
-                links = explorerLinks,
-                fallback =
+            TransactionDetailInfoRow(
+                modifier = Modifier.fillMaxWidth(),
+                state =
                     TransactionDetailInfoRowState(
                         title = stringRes(R.string.transactionList_transactionId),
                         message = state.transactionId.withStyle(),

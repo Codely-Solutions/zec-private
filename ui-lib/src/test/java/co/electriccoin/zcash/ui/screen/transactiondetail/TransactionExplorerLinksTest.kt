@@ -1,11 +1,5 @@
 package co.electriccoin.zcash.ui.screen.transactiondetail
 
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.SemanticsMatcher
-import androidx.compose.ui.test.assert
-import androidx.compose.ui.test.click
-import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -13,11 +7,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
-import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
 import co.electriccoin.zcash.ui.design.util.getString
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByTransactionId
-import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoContainer
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -35,76 +27,66 @@ class TransactionExplorerLinksTest {
     val compose = createComposeRule()
 
     @Test
-    fun rowCopiesAndExplorerOpensWithoutCopyingAgain() {
-        var copies = 0
+    fun wholeRowOpensExplorerWithoutDisplayingIdOrCopyAction() {
         var opens = 0
-        showLink(onCopy = { copies++ }, onOpen = { opens++ })
+        showLinks(listOf(TransactionExplorerLink(stringRes("ZEC deposit"), TRANSACTION_ID, { opens++ })))
 
-        compose.onNodeWithText("ZEC deposit")
-            .assert(hasCopyActionLabel())
-            .performClick()
-        compose.runOnIdle {
-            assertEquals(1, copies)
-            assertEquals(0, opens)
-        }
-
-        compose.onNodeWithContentDescription("Open ZEC deposit in explorer").performTouchInput { click() }
-        compose.runOnIdle {
-            assertEquals(1, copies)
-            assertEquals(1, opens)
-        }
-        // Only the row and explorer are actions; the copy glyph is decorative.
-        compose.onAllNodes(hasClickAction(), useUnmergedTree = true).assertCountEquals(2)
-    }
-
-    @Test
-    fun unsupportedExplorerKeepsAccessibleRowCopyAndHidesIdWithBalances() {
-        var copies = 0
-        showLink(balancesAvailable = false, onCopy = { copies++ }, onOpen = null)
-
+        compose.onNodeWithText("View ZEC deposit").performClick()
+        compose.runOnIdle { assertEquals(1, opens) }
+        compose.onAllNodes(hasClickAction(), useUnmergedTree = true).assertCountEquals(1)
+        compose.onNodeWithText(TRANSACTION_ID, useUnmergedTree = true).assertDoesNotExist()
         val abbreviatedId = stringResByTransactionId(TRANSACTION_ID, abbreviated = true)
             .getString(RuntimeEnvironment.getApplication())
         compose.onNodeWithText(abbreviatedId, useUnmergedTree = true).assertDoesNotExist()
-        compose.onNodeWithText(TRANSACTION_ID, useUnmergedTree = true).assertDoesNotExist()
-        compose.onNodeWithContentDescription("Open ZEC deposit in explorer").assertDoesNotExist()
-        compose.onAllNodes(hasClickAction(), useUnmergedTree = true).assertCountEquals(1)
-        compose.onNodeWithText("ZEC deposit")
-            .assert(hasCopyActionLabel())
-            .performClick()
-        compose.runOnIdle { assertEquals(1, copies) }
+        compose.onNodeWithContentDescription("Copy ZEC deposit ID", useUnmergedTree = true).assertDoesNotExist()
+        compose.onNodeWithContentDescription("Open ZEC deposit in explorer", useUnmergedTree = true)
+            .assertDoesNotExist()
     }
 
-    private fun showLink(
-        balancesAvailable: Boolean = true,
-        onCopy: () -> Unit,
-        onOpen: (() -> Unit)?,
-    ) {
+    @Test
+    fun multipleIdsInSameLegAreNumberedAndDuplicatesAreExcluded() {
+        var firstOpens = 0
+        var secondOpens = 0
+        var duplicateOpens = 0
+        showLinks(
+            listOf(
+                TransactionExplorerLink(stringRes("Bitcoin payment"), TRANSACTION_ID, { firstOpens++ }),
+                TransactionExplorerLink(stringRes("Bitcoin payment"), SECOND_TRANSACTION_ID, { secondOpens++ }),
+                TransactionExplorerLink(stringRes("Bitcoin payment"), TRANSACTION_ID, { duplicateOpens++ }),
+            )
+        )
+
+        compose.onNodeWithText("View Bitcoin payment 1").assertExists()
+        compose.onNodeWithText("View Bitcoin payment 2").performClick()
+        compose.onNodeWithText("View Bitcoin payment 3").assertDoesNotExist()
+        compose.onAllNodes(hasClickAction(), useUnmergedTree = true).assertCountEquals(2)
+        compose.runOnIdle {
+            assertEquals(0, firstOpens)
+            assertEquals(1, secondOpens)
+            assertEquals(0, duplicateOpens)
+        }
+    }
+
+    @Test
+    fun unsupportedExplorerHasNoNavigationRowOrAction() {
+        showLinks(listOf(TransactionExplorerLink(stringRes("ZEC deposit"), TRANSACTION_ID, null)))
+
+        compose.onNodeWithText("View ZEC deposit").assertDoesNotExist()
+        compose.onNodeWithText("ZEC deposit").assertDoesNotExist()
+        compose.onNodeWithText(TRANSACTION_ID, useUnmergedTree = true).assertDoesNotExist()
+        compose.onAllNodes(hasClickAction(), useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    private fun showLinks(links: List<TransactionExplorerLink>) {
         compose.setContent {
             ZcashTheme {
-                CompositionLocalProvider(LocalBalancesAvailable provides balancesAvailable) {
-                    TransactionDetailInfoContainer {
-                        TransactionExplorerLinks(
-                            listOf(
-                                TransactionExplorerLink(
-                                    label = stringRes("ZEC deposit"),
-                                    transactionId = TRANSACTION_ID,
-                                    onOpen = onOpen,
-                                    onCopy = onCopy,
-                                )
-                            )
-                        )
-                    }
-                }
+                TransactionExplorerLinks(links)
             }
         }
     }
 
-    private fun hasCopyActionLabel() = SemanticsMatcher("copy action describes the transaction leg") {
-        it.config.contains(SemanticsActions.OnClick) &&
-            it.config[SemanticsActions.OnClick].label == "Copy ZEC deposit ID"
-    }
-
     private companion object {
         const val TRANSACTION_ID = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        const val SECOND_TRANSACTION_ID = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
     }
 }

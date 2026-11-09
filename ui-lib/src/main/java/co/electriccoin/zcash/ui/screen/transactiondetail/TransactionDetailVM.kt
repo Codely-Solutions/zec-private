@@ -171,8 +171,7 @@ class TransactionDetailVM(
                 if (data.swap == null) R.string.private_explorer_transaction else R.string.private_explorer_zec_deposit
             ),
             testnet = testnet,
-            router = navigationRouter,
-            copy = copyToClipboard::invoke
+            router = navigationRouter
         )
         val status = data.swap?.status ?: return deposit
         val otherOriginTransactions = explorerLinks(
@@ -182,16 +181,14 @@ class TransactionDetailVM(
             },
             label = stringRes(R.string.private_explorer_deposit, status.originAsset.chainName),
             testnet = testnet,
-            router = navigationRouter,
-            copy = copyToClipboard::invoke
+            router = navigationRouter
         )
         return deposit + otherOriginTransactions + explorerLinks(
             chain = status.destinationAsset.blockchain.chainTicker,
             ids = status.destinationTransactionIds,
             label = stringRes(R.string.private_explorer_destination, status.destinationAsset.chainName),
             testnet = testnet,
-            router = navigationRouter,
-            copy = copyToClipboard::invoke
+            router = navigationRouter
         )
     }
 
