@@ -23468,7 +23468,7 @@ index 000000000..660ac8c75
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
-index d55620b20..331047916 100644
+index d55620b20..e5a475e55 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 @@ -4 +3,0 @@ import cash.z.ecc.android.sdk.model.WalletAddress
@@ -23491,18 +23491,27 @@ index d55620b20..331047916 100644
 @@ -241 +237 @@ class SwapRepositoryImplTest {
 -                        requestQuote(any(), any(), any(), any(), any(), any(), any(), any())
 +                        requestQuote(any(), any(), any(), any(), any(), any(), any())
-@@ -277 +273 @@ class SwapRepositoryImplTest {
+@@ -261 +257 @@ class SwapRepositoryImplTest {
+-    fun quoteIsNoOpWhenAssetsNotLoaded() =
++    fun quoteFailsWithoutProviderRequestWhenAssetsNotLoaded() =
+@@ -263,2 +259 @@ class SwapRepositoryImplTest {
+-            // Without a prior refresh there is no ZEC asset, so the request short-circuits: the quote is
+-            // left in Loading and the data source is never queried.
++            // Missing assets terminate loading immediately; the provider is never queried.
+@@ -276,2 +271,2 @@ class SwapRepositoryImplTest {
+-            assertEquals(SwapQuoteData.Loading, repository.quote.value)
 -            coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) }
++            assertPlainError(repository, SwapMode.EXACT_INPUT)
 +            coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any()) }
-@@ -391 +387 @@ class SwapRepositoryImplTest {
+@@ -391 +386 @@ class SwapRepositoryImplTest {
 -                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } throws
 +                    coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } throws
-@@ -421 +417 @@ class SwapRepositoryImplTest {
+@@ -421 +416 @@ class SwapRepositoryImplTest {
 -            assertEquals("test", mismatch.provider)
 +            assertEquals("near", mismatch.provider)
-@@ -675,0 +672 @@ class SwapRepositoryImplTest {
+@@ -675,0 +671 @@ class SwapRepositoryImplTest {
 +            every { provider } returns "near"
-@@ -764 +761 @@ class SwapRepositoryImplTest {
+@@ -764 +760 @@ class SwapRepositoryImplTest {
 -            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } returns quote
 +            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
