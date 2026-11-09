@@ -30,7 +30,7 @@ class ValidateSwapABContactAddressUseCase(
                     if (exclude == null) true else it != exclude
                 }.any {
                     it.address == validateSwapRecipient(address, blockchain.chainTicker).input?.address &&
-                        it.blockchain.chainTicker?.lowercase() == blockchain.chainTicker?.lowercase()
+                        it.blockchain?.chainTicker.equals(blockchain.chainTicker, ignoreCase = true)
                 } -> ContactAddressValidationResult.NotUnique
 
             else -> ContactAddressValidationResult.Valid

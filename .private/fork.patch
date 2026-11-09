@@ -11355,13 +11355,14 @@ index feef536f5..13ee1cfdf 100644
 +            level = LogLevel.NONE
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnostics.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnostics.kt
 new file mode 100644
-index 000000000..f0af2e0a1
+index 000000000..c6658544f
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnostics.kt
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,48 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import android.util.Log
++import co.electriccoin.zcash.ui.BuildConfig
 +import io.ktor.client.plugins.ResponseException
 +
 +enum class QuoteRequestStage {
@@ -11376,7 +11377,7 @@ index 000000000..f0af2e0a1
 +/** Records bounded lifecycle metadata only. Never pass request values or exception messages to the sink. */
 +class QuoteRequestDiagnostics(
 +    private val sink: (String) -> Unit = {
-+        Log.i("SwapQuoteStage", it)
++        if (BuildConfig.DEBUG) Log.i("SwapQuoteStage", it)
 +        Unit
 +    },
 +    private val nanoTime: () -> Long = System::nanoTime
@@ -12766,7 +12767,7 @@ index 4003797c4..a0421e8b5 100644
 +        val receivingAddress = recipient?.input?.address ?: address
 +        addressBookRepository.updateContact(contact = contact, name = name, address = receivingAddress, chain = chain)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
-index 7bda1f0f5..050beb840 100644
+index 7bda1f0f5..1680837b2 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -12779,7 +12780,7 @@ index 7bda1f0f5..050beb840 100644
 -                    it.address == address.trim() &&
 -                        it.blockchain?.chainTicker?.lowercase() == blockchain?.chainTicker?.lowercase()
 +                    it.address == validateSwapRecipient(address, blockchain.chainTicker).input?.address &&
-+                        it.blockchain.chainTicker?.lowercase() == blockchain.chainTicker?.lowercase()
++                        it.blockchain?.chainTicker.equals(blockchain.chainTicker, ignoreCase = true)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt
 index 3e12c9c99..bd85a60d3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt
