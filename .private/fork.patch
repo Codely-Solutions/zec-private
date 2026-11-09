@@ -11444,7 +11444,7 @@ index feef536f5..13ee1cfdf 100644
 +            level = LogLevel.NONE
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
 new file mode 100644
-index 000000000..26eaf5e37
+index 000000000..3f056c580
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
 @@ -0,0 +1,113 @@
@@ -11456,7 +11456,7 @@ index 000000000..26eaf5e37
 +import co.electriccoin.zcash.ui.common.model.SwapQuote
 +import io.ktor.client.request.prepareGet
 +import io.ktor.client.statement.bodyAsChannel
-+import io.ktor.utils.io.readRemaining
++import io.ktor.utils.io.readBuffer
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.TimeoutCancellationException
@@ -11513,7 +11513,7 @@ index 000000000..26eaf5e37
 +                                    url { parameters.append("pair", pair) }
 +                                }.execute { response ->
 +                                    check(response.status.value == 200)
-+                                    val bytes = response.bodyAsChannel().readRemaining(65_537L).readByteArray()
++                                    val bytes = response.bodyAsChannel().readBuffer(65_537L).readByteArray()
 +                                    require(bytes.size <= 65_536)
 +                                    parseKrakenObservation(pair, bytes.decodeToString(), System.currentTimeMillis())
 +                                }
