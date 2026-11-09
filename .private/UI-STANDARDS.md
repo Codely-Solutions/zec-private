@@ -7,7 +7,7 @@ Use this guide when changing screens or shared controls. Material 3 and Android 
 - Reuse existing screens and shared controls. Use Material 3 components, semantic color/type/shape roles and system appearance settings, including readable true-black OLED surfaces.
 - Give the main action clear button emphasis. Use lower-emphasis buttons for secondary actions, recognizable icon buttons for compact actions, links for navigation and ordinary text for information. Preserve each element's meaning and emphasis when restyling it.
 - Keep routine action labels short and naturally single-line. Allow wrapping when translation, narrow space or larger text requires it; preserve the complete action and a comfortable target. Place supporting explanation beside the control. A two-line information label remains ordinary text.
-- Present details as aligned label/value rows. Group each transaction leg's ID, copy action and explorer action together. Display each ID once in its relevant context and copy its full value.
+- Present details as aligned label/value rows. For transaction IDs, make tapping the row copy the full value, retain a small decorative copy cue, and give the explorer a distinct trailing button. Display each ID once in its relevant leg and provide action labels and copy feedback.
 
 ## Make information useful
 
