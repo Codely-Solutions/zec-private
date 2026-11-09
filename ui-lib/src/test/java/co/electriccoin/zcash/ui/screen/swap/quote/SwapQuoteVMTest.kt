@@ -190,7 +190,7 @@ class SwapQuoteVMTest {
         val state = vm.state.value as SwapQuoteState.Success
         assertTrue(state.primaryButton.isEnabled)
         assertTrue(state.priceCheck?.isWarning == false)
-        assertFalse(state.priceCheck?.showInline ?: true)
+        assertFalse(state.priceCheck.showInline)
         assertEquals(
             "Price check unavailable",
             state.priceCheck.label.getString(RuntimeEnvironment.getApplication(), Locale.US),
