@@ -49,8 +49,10 @@ def gradle(root, config, jdk):
     if set(config) - {'tasks', 'init_scripts', 'properties', 'tests'}:
         raise ValueError('Unsupported Gradle configuration')
     tasks = config.get('tasks', [])
-    if not tasks or any(not re.fullmatch(r':[\w:-]+', task) or not ('Debug' in task or task.endswith('UnitTest') or task == ':wallet-foundation-lib:test') for task in tasks):
-        raise ValueError('Explicit debug or unit-test tasks required')
+    if not tasks or any(not re.fullmatch(r':[\w:-]+', task) or not (
+            'Debug' in task or task.endswith('UnitTest') or task in {':wallet-foundation-lib:test', ':detektAll'}
+    ) for task in tasks):
+        raise ValueError('Explicit debug, unit-test or Detekt analysis tasks required')
     scripts = config.get('init_scripts', [])
     for script in scripts:
         path = Path(script)

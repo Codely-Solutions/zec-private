@@ -7,6 +7,12 @@ import dev_session as session
 
 
 class SessionTest(unittest.TestCase):
+    def test_static_analysis_does_not_admit_production_assembly(self):
+        command = session.gradle(self.root, dict(tasks=[':detektAll']), Path('verified-jdk'))
+        self.assertIn(':detektAll', command)
+        with self.assertRaises(ValueError):
+            session.gradle(self.root, dict(tasks=[':app:assembleZcashmainnetFossRelease']), Path('verified-jdk'))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
