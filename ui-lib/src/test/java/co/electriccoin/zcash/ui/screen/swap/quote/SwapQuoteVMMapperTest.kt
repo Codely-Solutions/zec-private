@@ -90,6 +90,12 @@ class SwapQuoteVMMapperTest {
             map(quote).to.valueDifference,
         )
         kotlin.test.assertNull(map(quote.copy(timestamp = now - kotlin.time.Duration.parse("4m"))).to.valueDifference)
+        val missingOutput = map(quote.copy(amountOutUsd = BigDecimal.ZERO))
+        kotlin.test.assertNull(missingOutput.to.valueDifference)
+        assertEquals(co.electriccoin.zcash.ui.design.util.stringRes("—"), missingOutput.to.fiatAmount)
+        val missingInput = map(quote.copy(amountInUsd = BigDecimal.ZERO))
+        kotlin.test.assertNull(missingInput.to.valueDifference)
+        assertEquals(co.electriccoin.zcash.ui.design.util.stringRes("—"), missingInput.from.fiatAmount)
     }
 
     @Test

@@ -157,7 +157,7 @@ internal class SwapQuoteVMMapper {
             bigIcon = quote.originAsset.swapQuoteTokenIcon(),
             smallIcon = quote.originAsset.swapQuoteChainIcon(isShielded = true),
             amount = stringResByNumber(quote.amountInFormatted, minDecimals = 0),
-            fiatAmount = stringResByDynamicCurrencyNumber(quote.amountInUsd, FiatCurrency.USD.symbol),
+            fiatAmount = quoteFiatAmount(quote.amountInUsd),
             token = stringRes(quote.originAsset.tokenTicker),
             chain = quote.originAsset.chainName
         )
@@ -171,7 +171,7 @@ internal class SwapQuoteVMMapper {
                     quote.amountOutFormatted.setScale(quote.destinationAsset.decimals, RoundingMode.DOWN),
                     minDecimals = 0,
                 ),
-            fiatAmount = stringResByDynamicCurrencyNumber(quote.amountOutUsd, FiatCurrency.USD.symbol),
+            fiatAmount = quoteFiatAmount(quote.amountOutUsd),
             token = stringRes(quote.destinationAsset.tokenTicker),
             chain = quote.destinationAsset.chainName,
             valueDifference = createValueDifference(),
@@ -199,4 +199,7 @@ internal class SwapQuoteVMMapper {
             validUntilMillis = minOf(quote.timestamp + 3.minutes, quote.deadline).toEpochMilliseconds(),
         )
     }
+
+    private fun quoteFiatAmount(usd: BigDecimal): StringResource =
+        if (usd.signum() > 0) stringResByDynamicCurrencyNumber(usd, FiatCurrency.USD.symbol) else stringRes("—")
 }

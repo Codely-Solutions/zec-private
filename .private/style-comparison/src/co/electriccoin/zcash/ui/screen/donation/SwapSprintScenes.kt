@@ -16,7 +16,7 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
     val zec = SwapTokenAmountState(stringRes("0.01"), stringRes("$0.40"), stringRes("ZEC"), stringRes("Zcash"), imageRes(R.drawable.ic_zec_round_full), imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_zec_shielded))
     val btc = SwapTokenAmountState(stringRes("0.000004"), stringRes("$0.39"), stringRes("BTC"), stringRes("Bitcoin"), imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc), imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc))
     when (screen) {
-        "sprint-mapper-crosspay" -> {
+        "sprint-mapper-crosspay", "sprint-mapper-missing" -> {
             val now = kotlin.time.Clock.System.now()
             val account = co.electriccoin.zcash.ui.common.model.ZodlAccount(
                 sdkAccount = cash.z.ecc.android.sdk.model.Account.new(cash.z.ecc.android.sdk.model.AccountUuid.new(ByteArray(16))),
@@ -43,7 +43,7 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                 override val amountInUsd = java.math.BigDecimal("10")
                 override val amountOut = java.math.BigDecimal("13157")
                 override val amountOutFormatted = java.math.BigDecimal("0.00013157")
-                override val amountOutUsd = java.math.BigDecimal("9.85")
+                override val amountOutUsd = if (screen == "sprint-mapper-missing") java.math.BigDecimal.ZERO else java.math.BigDecimal("9.85")
                 override val inputAllowance = java.math.BigDecimal("0.0005")
                 override val affiliateFee = java.math.BigDecimal.ZERO
                 override val affiliateFeeUsd = java.math.BigDecimal.ZERO
@@ -88,7 +88,10 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                     header = TransactionDetailHeaderState(stringRes(if (refunded) "Refunded" else "Paid"), stringRes("0.0101 ZEC"), listOf(imageRes(R.drawable.ic_transaction_received))),
                     info = SendSwapState(
                         status = if (refunded) SwapStatus.REFUNDED else SwapStatus.SUCCESS,
-                        message = null, quoteHeader = SwapQuoteHeaderState(zec, btc),
+                        message = null, quoteHeader = SwapQuoteHeaderState(
+                            if (screen == "sprint-refund") zec.copy(amount = stringRes("0.0098"), fiatAmount = stringRes("$0.392")) else zec,
+                            btc,
+                        ),
                         depositAddress = stringRes("Synthetic deposit").withStyle(), totalFees = stringRes("0.0001 ZEC"),
                         recipientAddress = stringRes("Synthetic recipient").withStyle(), transactionId = stringRes("abab…abab"),
                         refundedAmount = if (screen == "sprint-no-refund") null else stringRes(if (refunded) "0.01 ZEC" else "0.0002 ZEC"),
@@ -104,6 +107,15 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                 ), mainAppBarState = appBar,
             )
         }
+        "sprint-send" -> TransactionDetailView(
+            state = TransactionDetailState(
+                onBack = onBack, bookmarkButton = null,
+                header = TransactionDetailHeaderState(stringRes("Sent"), stringRes("0.01"), listOf(imageRes(R.drawable.ic_transaction_received))),
+                info = SendShieldStateFixture.new().copy(completedTimestamp = stringRes("8 November 2026, 12:00")),
+                errorFooter = null, infoFooter = null, primaryButton = null, secondaryButton = null,
+                explorerLinks = listOf(TransactionExplorerLink(stringRes("Zcash transaction"), "ab".repeat(32), {}, {})),
+            ), mainAppBarState = appBar,
+        )
         else -> return false
     }
     return true
