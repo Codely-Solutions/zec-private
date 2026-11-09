@@ -917,7 +917,7 @@
   "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/CommonTag.kt": "42aa51c6fd4e8a439bb8a72ea3c85b137ad4152f99d279eb7cda9efd29fed2bf",
   "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ConfigurationOverride.kt": "b42bc6b0207e2f06777e5e9e7e054df58d1fe8682be656e2eb903df7435c1239",
   "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/Dialog.kt": "af91ef25929010a5921d13f166c9ef0c1457a605bf5c6698011fefaf61b0a9a0",
-  "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ExternalLinkRow.kt": "2c6c0b7bdbd4e63bf4bb99566291add640c856b3e23543a567c555339c840965",
+  "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ExternalLinkRow.kt": "24f955bb8ae891fce077a9cc1a51e3840ef24a9eea01edd6e4bf39ee0fa9fa24",
   "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/LottieProgress.kt": "ec25d9cfca00c70ba11e51f593d1c1ab38e14a863473a1bc09dc678f9179a3ac",
   "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/OldZashiBottomBar.kt": "f680275fd6affdda7549f4de5dcc432a3c76ff7d232360caf5877ce490040a1d",
   "ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/Override.kt": "52cbdf81b379815ef37eace89280128bc89326edf857b0c75cde950f90c03d5a",

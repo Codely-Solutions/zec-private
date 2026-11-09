@@ -31,7 +31,7 @@ fun ExternalLinkRow(
         Text(
             text = "↗",
             modifier = Modifier.clearAndSetSemantics {},
-            style = MaterialTheme.typography.titleMedium,
+            style = MaterialTheme.typography.headlineMedium,
         )
     }
 }
