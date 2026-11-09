@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision 17 is signed and independently verified, with revision 16 as rollback. `core-validation-summary.json` binds the executed source/APKs; `release-evidence/v3.19.0-private.17.json` binds publication. The next version-matched app/instrumentation fixture is preserved in the maintenance draft.
+Status: revision18 candidate acceptance passed against the verified revision17 installed-update fixture; signing/publication is pending. Revision17 remains signed and available. `core-validation-summary.json` binds the executed source/APKs; `release-evidence/v3.19.0-private.17.json` binds publication. The next version-matched app/instrumentation fixture is preserved in the maintenance draft.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
@@ -49,6 +49,10 @@ The bounded sandbox review is recorded in `core-provider-review.json`. Tidepool 
 Production Detekt retains its rules and existing baseline. Its release-only init excludes the procedural private instrumentation source, which is outside the shipped source sets and separately compiled by the core producer. That harness is checked through exact source/APK bindings, review and real execution. This does not exempt production Kotlin or the ordinary unit tests from analysis.
 
 ## Current release evidence
+
+Revision18 executed real testnet receive/confirmation, revision17 installed-update preservation, controlled native Tor interruption/recovery, one shielded send, restart and clean recipient seed/birthday restoration. The same transaction established the received amount, memo and mined history. Three unfunded Tor quote/dismiss/requote cycles passed without provider timeouts. All 1,786 reported release-variant tests passed, including updater, TLS, quote, explorer and theme checks.
+
+The post-lifecycle explorer UI dump failed before reaching a transaction-detail action; that failed attempt remains separate. A fresh seedless guest then invoked the candidate's actual explorer-link callback through the real app router, opened the exact real testnet transaction URL in Android's browser, and returned with Back. App executable payloads matched the lifecycle candidate. Physical detail-row tapping is covered separately by Compose tests; the native probe does not claim that tap or a loaded explorer page. Approved synthetic theme/large-text captures retain their original source bindings. No additional funded lifecycle was used for browser diagnosis.
 
 Revision 17 executed real testnet receive/confirmation, the revision-16 installed update, controlled native Tor interruption/recovery, one shielded send, restart and clean recipient seed/birthday restoration. The same transaction established the recipient amount, message and mined history. Version-matched baseline/candidate instrumentation and installed APK hashes are checked at each stage. A separate unfunded native probe established the corrected transport boundary before funding. The first faucet attempt explicitly refused without sending (HTTP503); one repeat followed recovered public service health.
 

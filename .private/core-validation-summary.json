@@ -1,348 +1,80 @@
 {
   "status": "accepted-awaiting-signing",
-  "scope": "Consolidation",
-  "source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
-  "acceptance_source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
-  "core_build_source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
-  "ui_source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
-  "ui_run": 42524865003,
-  "candidate_run": 42524865003,
-  "core_run": 42524867394,
-  "baseline": "v3.19.0-private.16",
+  "scope": "Swap confidence and clarity release18",
+  "source_sha": "a300ecfb1a3c4334067739e18eee11db370088a4",
+  "acceptance_source_sha": "a300ecfb1a3c4334067739e18eee11db370088a4",
+  "core_build_source_sha": "a300ecfb1a3c4334067739e18eee11db370088a4",
+  "ui_source_sha": "a300ecfb1a3c4334067739e18eee11db370088a4",
+  "ui_run": 42623116892,
+  "candidate_run": 42623116892,
+  "core_run": 42623123596,
+  "baseline": "v3.19.0-private.17",
   "profiles": {
     "core": {
-      "guard_job": "b73f9cf7d78d49ff92ffe2aa4ee4e2ff",
-      "guard_receipt_sha256": "a555be2641402aba6ac22aa0c640ad5bf161f43bafb0d847b3a0ff16348c7915",
+      "guard_job": "13e231519ae34339bf9bfe45f0151bd7",
+      "guard_receipt_sha256": "ac5069dff17a38046b472bccb4ccff2cfabf426db1601a1aed12bd4a5ed2cd40",
       "worker": "core"
     },
     "quotes": {
-      "guard_job": "f58c38aa51da457fbddab3748acc5148",
-      "guard_receipt_sha256": "b0f5c5eed807d2ee3f9b260aa1676587958e38cfe556e451c091b7f347cb54f0",
+      "guard_job": "13e231519ae34339bf9bfe45f0151bd7",
+      "guard_receipt_sha256": "ac5069dff17a38046b472bccb4ccff2cfabf426db1601a1aed12bd4a5ed2cd40",
       "worker": "quotes"
     },
-    "visual": {
-      "guard_job": "f58c38aa51da457fbddab3748acc5148",
-      "guard_receipt_sha256": "b0f5c5eed807d2ee3f9b260aa1676587958e38cfe556e451c091b7f347cb54f0",
-      "worker": "visual"
-    },
-    "obtainium": {
-      "guard_job": "f58c38aa51da457fbddab3748acc5148",
-      "guard_receipt_sha256": "b0f5c5eed807d2ee3f9b260aa1676587958e38cfe556e451c091b7f347cb54f0",
-      "worker": "visual"
+    "handoff": {
+      "guard_job": "bedcf9d547ea4c3a8554710270b45b0c",
+      "guard_receipt_sha256": "478bd752845784f921f92584213ebd8562fa212fdbd62916a3bc728602eda670",
+      "worker": "handoff"
     }
   },
-  "core_seconds": 848.6751345999946,
+  "core_seconds": 776.2243220000018,
   "quote_cycles": 3,
   "production_arm_executed": false,
   "physical_biometric_ui_executed": false,
-  "synthetic_consolidation_capture": {
-    "schema": 1,
+  "explorer_handoff": {
     "passed": true,
-    "synthetic": true,
-    "fundsTransferred": false,
-    "personalWalletAccess": false,
-    "mainWalletOpened": false,
-    "quoteRequests": 0,
-    "source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
-    "artifact_id": 13634773630,
-    "original_artifact_digest": "sha256:dc39761b98cca6b7fb7dcd00abad5a248e695abee4d2b2d72c2886696923ef74",
-    "tested_apk_sha256": "be6bae81697c05d0087baf71ef543fdef994260a4244fe440c15c5a905c62314",
-    "screens": [
-      {
-        "file": "material-about-update-light.png",
-        "sha256": "5dca94ed0ab69043599cfc1377bf5fbc73d7a19dcc63b8d53a06c449e6e3bafe",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-about-update-light.xml",
-        "hierarchy_sha256": "83d747cd5b4800562955754869fd3351d74dae144a49bbc07074d2927ae47bec",
-        "scene": "about-update",
-        "theme": "light",
-        "os_night": "yes",
-        "font_scale": 1.0,
-        "expected": "v3.19.0-private.17",
-        "targetHierarchyVerified": true
+    "synthetic": false,
+    "isolated_testnet": true,
+    "personal_wallet_access": false,
+    "financial_actions": 0,
+    "chain": "zec",
+    "network": "testnet",
+    "page_load_claimed": false,
+    "build_source_sha": "a300ecfb1a3c4334067739e18eee11db370088a4",
+    "artifact_id": 13676798729,
+    "artifact_digest": "sha256:dfaa5d331078df5c3a1076b43a40a7ea99e934c085e5fb83c2548cce60610e64",
+    "original_app_sha256": "891b0b44ab7266df8d21a245810d997c58d107bd18e14fce780fe1b820ca505a",
+    "apk_preparation": {
+      "candidate.apk": {
+        "originalSha256": "891b0b44ab7266df8d21a245810d997c58d107bd18e14fce780fe1b820ca505a",
+        "testedSha256": "ff886c6cae9df421f79434cac10c9da1860e1dd2edeef8e814797beb6098a402",
+        "preservedExecutionEntries": 34,
+        "executionEntriesDigest": "3daa556ad2d8c46fa2b1b39c5c2a5110042fd3f2ef9726aa083ba4fedb5e587d",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key"
       },
-      {
-        "file": "material-about-update-dark.png",
-        "sha256": "cd13e71e7fcc22f8de3082353a454c9c7292c74e51dd5d807f38fcbc4104eab7",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-about-update-dark.xml",
-        "hierarchy_sha256": "83d747cd5b4800562955754869fd3351d74dae144a49bbc07074d2927ae47bec",
-        "scene": "about-update",
-        "theme": "dark",
-        "os_night": "no",
-        "font_scale": 1.0,
-        "expected": "v3.19.0-private.17",
-        "targetHierarchyVerified": true
-      },
-      {
-        "file": "material-about-update-oled.png",
-        "sha256": "bd984936cb315f2f3d4adb91ae85b348c716b963b9e936a2a5744f6c81790aed",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-about-update-oled.xml",
-        "hierarchy_sha256": "83d747cd5b4800562955754869fd3351d74dae144a49bbc07074d2927ae47bec",
-        "scene": "about-update",
-        "theme": "oled",
-        "os_night": "no",
-        "font_scale": 1.0,
-        "expected": "v3.19.0-private.17",
-        "targetHierarchyVerified": true
-      },
-      {
-        "file": "material-selection-indicators-light.png",
-        "sha256": "a5afcac37f3e1844145d60b614497c0fef67ecd55af99ac78634c9d98de1d9ae",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-selection-indicators-light.xml",
-        "hierarchy_sha256": "48f7ca8af18ba41df260c609c3ed066a880915f3da80d4f2f1e3c7117edcfc2b",
-        "scene": "selection-indicators",
-        "theme": "light",
-        "os_night": "yes",
-        "font_scale": 1.0,
-        "expected": "Enabled: false, selected: true",
-        "targetHierarchyVerified": true
-      },
-      {
-        "file": "material-selection-indicators-dark.png",
-        "sha256": "02ce2bd6f8014cbdf76a66165d8011b557baf52a6a916638d059c87c8bd9f2ba",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-selection-indicators-dark.xml",
-        "hierarchy_sha256": "48f7ca8af18ba41df260c609c3ed066a880915f3da80d4f2f1e3c7117edcfc2b",
-        "scene": "selection-indicators",
-        "theme": "dark",
-        "os_night": "no",
-        "font_scale": 1.0,
-        "expected": "Enabled: false, selected: true",
-        "targetHierarchyVerified": true
-      },
-      {
-        "file": "material-selection-indicators-oled.png",
-        "sha256": "8e5f351314e080d1e453aed5812486e12733445faca9507814fd1ab25313c8f5",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-selection-indicators-oled.xml",
-        "hierarchy_sha256": "48f7ca8af18ba41df260c609c3ed066a880915f3da80d4f2f1e3c7117edcfc2b",
-        "scene": "selection-indicators",
-        "theme": "oled",
-        "os_night": "no",
-        "font_scale": 1.0,
-        "expected": "Enabled: false, selected: true",
-        "targetHierarchyVerified": true
-      },
-      {
-        "file": "material-home-update-light.png",
-        "sha256": "32919fb557e21924a0cd4c459e8191f2f62f89eb63d359151d643e0f1585bf84",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-home-update-light.xml",
-        "hierarchy_sha256": "df13c8edc1fbc77e4e5af7aa2775c8c4ab0faf02584756c8c9de46bb2e62e9bc",
-        "scene": "home-update",
-        "theme": "light",
-        "os_night": "yes",
-        "font_scale": 1.0,
-        "expected": "View update",
-        "targetHierarchyVerified": true
-      },
-      {
-        "file": "material-home-update-dark.png",
-        "sha256": "052fe344123470fa857c5c8e6afefc0875791490f2235ea71901fe1c109593cd",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-home-update-dark.xml",
-        "hierarchy_sha256": "df13c8edc1fbc77e4e5af7aa2775c8c4ab0faf02584756c8c9de46bb2e62e9bc",
-        "scene": "home-update",
-        "theme": "dark",
-        "os_night": "no",
-        "font_scale": 1.0,
-        "expected": "View update",
-        "targetHierarchyVerified": true
-      },
-      {
-        "file": "material-donation-light.png",
-        "sha256": "66b1c154798629fa76521caf17582326408ed943eb25cd93996efd3ac9cb97fd",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-donation-light.xml",
-        "hierarchy_sha256": "c7dae842c63cdcd465e5b30db22fa73b2e0f43c07565564369773399c301abb4",
-        "scene": "donation",
-        "theme": "light",
-        "os_night": "yes",
-        "font_scale": 1.0,
-        "expected": "Review donation",
-        "targetHierarchyVerified": true
-      },
-      {
-        "file": "material-donation-oled.png",
-        "sha256": "b6bde71354baab4a8af46c75a477c521a298eba5d00d06a93ce705002b0a64b3",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-donation-oled.xml",
-        "hierarchy_sha256": "c7dae842c63cdcd465e5b30db22fa73b2e0f43c07565564369773399c301abb4",
-        "scene": "donation",
-        "theme": "oled",
-        "os_night": "no",
-        "font_scale": 1.0,
-        "expected": "Review donation",
-        "targetHierarchyVerified": true
-      },
-      {
-        "file": "material-about-update-error-light.png",
-        "sha256": "a354b4af9912d6892c2edca1915f3dd2debdcdf1851e1893939a25ad5a3a515f",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-about-update-error-light.xml",
-        "hierarchy_sha256": "7f082fd3f354a6c8411289f5178832a8606feacce7f06a56470c98fec7a56fb9",
-        "scene": "about-update-error",
-        "theme": "light",
-        "os_night": "yes",
-        "font_scale": 1.0,
-        "expected": "Couldn\u2019t check for updates",
-        "targetHierarchyVerified": true
-      },
-      {
-        "file": "material-about-update-error-oled.png",
-        "sha256": "976b61d0f21bb805059d91c14b8208286dc20c60ac3da50325ece9052f9658b1",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-about-update-error-oled.xml",
-        "hierarchy_sha256": "7f082fd3f354a6c8411289f5178832a8606feacce7f06a56470c98fec7a56fb9",
-        "scene": "about-update-error",
-        "theme": "oled",
-        "os_night": "no",
-        "font_scale": 1.0,
-        "expected": "Couldn\u2019t check for updates",
-        "targetHierarchyVerified": true
-      },
-      {
-        "file": "material-server-badged-oled.png",
-        "sha256": "b326b30cf898eec65c97363f0d2e887226183b3f8ae9d9a4501362237a43709c",
-        "width": 1080,
-        "height": 1920,
-        "hierarchy_file": "material-server-badged-oled.xml",
-        "hierarchy_sha256": "e062555dc4a4da9be45876d4bd439206f09659e7a71ebdbe32190c30c4a21a7c",
-        "scene": "server-badged",
-        "theme": "oled",
-        "os_night": "no",
-        "font_scale": 1.0,
-        "expected": "Example server",
-        "targetHierarchyVerified": true
+      "explorer-androidTest.apk": {
+        "originalSha256": "b71d8328baba1421bea32aba2908be6ff1f6f3a97618258de08b2e39bf18bd04",
+        "testedSha256": "56827430fd5393ddffc40ea82c973642ae07562d28d029b3783559cc5892ec05",
+        "preservedExecutionEntries": 6,
+        "executionEntriesDigest": "ee61f54f7236a0bd992f68c8590c769958294c7e713e8cb5a98267279fa176d7",
+        "executionEntriesUnchanged": true,
+        "abi": "x86_64",
+        "signing": "ephemeral test key; not release key"
       }
-    ],
-    "obtainium": {
-      "requested": false
     },
-    "viewport": "Physical size: 1080x1920",
-    "density": "Physical density: 420"
-  },
-  "obtainium_acceptance": {
-    "requested": true,
-    "passed": true,
-    "apk_sha256": "f4e0ba24f2ba7b49d7268a8f7b47b9c233afd864d1e5214f709e6e2ae30a7580",
-    "signer_sha256": "b353601f6a1d5fd6603ae2f50be80cf301367b86b6ab8b1f66243da96cd57362",
-    "productionWalletInstalled": false,
-    "installButtonClicked": false,
-    "boundary": "Public provider APK/tag and imported app detail verified",
-    "firstRunActions": [
-      "welcome",
-      "note"
-    ],
-    "downloadAndSignerVerified": true,
-    "obtainiumInstalled": true,
-    "obtainiumUid": 10149,
-    "freshGuestLogcatCleared": true,
-    "config_sha256": "930e143ef2d32951b9eb028c0109a863cd2d72e6f0a54dc5c3da924d73612c8a",
-    "deliveredPayloadVerified": true,
-    "firstFrame": {
-      "file": "material-obtainium-import.png",
-      "sha256": "ca4d4c9b8502e1f233dfcc411986a4333f0dbc5775d764434e569295a64f5293",
-      "width": 1080,
-      "height": 1920,
-      "hierarchy_file": "material-obtainium-import.xml",
-      "hierarchy_sha256": "817507cf1c57b3ab81279b4083abbd885c5dd703edf3a61aa2d78376263972c7"
-    },
-    "importStageLogcatCleared": true,
-    "confirmationAction": "continue",
-    "importDiagnostics": [
-      {
-        "stage": "immediately-after-continue",
-        "uid": 10149,
-        "logcatReturnCode": 0,
-        "errorSummaries": [],
-        "publicAppStateReadReturnCode": 0,
-        "publicAppIdentityMatches": true,
-        "publicAppIdentityKeysPresent": [
-          "id",
-          "url",
-          "name",
-          "author"
-        ]
-      }
-    ],
-    "scopedRefreshRequested": true,
-    "discoveryFrame": {
-      "file": "material-obtainium-discovery.png",
-      "sha256": "d9cfeaba46fec1f74dd5da5cca8d258410cb8db19d374edbdfa2e40844cff674",
-      "width": 1080,
-      "height": 1920,
-      "hierarchy_file": "material-obtainium-discovery.xml",
-      "hierarchy_sha256": "96252a1492f981c3f7ff6578f88e903c4b03ea0a8daf848394a03aa228aa2f46"
-    },
-    "observedPublicProviderState": {
-      "latestVersion": "v3.19.0-private.16",
-      "apkUrls": [
-        {
-          "name": "zec-private-latest.apk",
-          "scheme": "https",
-          "host": "api.github.com",
-          "path": "/repos/Sammy-Lastre/zec-private/releases/assets/723826198"
-        }
-      ]
-    },
-    "publicProviderDiscovery": {
-      "id": "com.personal.zecprivate.foss",
-      "latestVersion": "v3.19.0-private.16",
-      "apkUrls": [
-        {
-          "name": "zec-private-latest.apk",
-          "url": "https://api.github.com/repos/Sammy-Lastre/zec-private/releases/assets/723826198"
-        }
-      ],
-      "publicReleaseMetadataBinding": {
-        "tag": "v3.19.0-private.16",
-        "releaseId": 438222330,
-        "assetId": 723826198,
-        "name": "zec-private-latest.apk",
-        "size": 67828595,
-        "digest": "sha256:9112aeab6def23ffab8d0c8eedd042f672fada79815734482c9c39811de721de",
-        "metadataUrl": "https://api.github.com/repos/Sammy-Lastre/zec-private/releases/tags/v3.19.0-private.16"
-      },
-      "versionDetection": true,
-      "trackOnly": false,
-      "installedVersionIsNull": true
-    },
-    "detailRowOpened": true
-  },
-  "unfunded_transport_preflight": {
-    "record": "D:\\Data\\Crypto\\zec-private\\emulator-batch-records\\e531bc4c604a402fb48481d72b5b66cb",
-    "guard_receipt_sha256": "9aac7125422a04f894e5c9d080ff875ce69e77e806b475e936f2f1ba4733aa48",
-    "result_sha256": "3408c2475bd59024d653d5c67cf45531e1736c69bdf6fe2e60bcc8795696051f",
-    "guard_job": "c72e2cc4b1744ffcb58fca657f3f6c20",
-    "source_sha": "d3956b2f3679facf4158e524bdbf3d27eef51a67",
-    "artifact_id": 13634891664,
-    "workflow_run_id": 42524867394,
-    "apk_hashes": {
-      "candidate_apk_sha256": "782fa16964bb8dbe51f2caee204d72542e76e48a343397294affb2341a0de54d",
-      "instrumentation_apk_sha256": "f49dba022158cd09d3f66c22a2eaadcbbaea8cc95d745d8e3ecb0f4ec2215888",
-      "baseline_apk_sha256": "2ecc46ab70b6f5b59eab18844be7bbee3f68150003c14545e9ba4c442d299ddc",
-      "baseline_instrumentation_apk_sha256": "84d394acf82e408d24be8e6d5f00716ec1afdf0b5034e90b777c03b2074b70a1"
-    }
+    "input_state": "Real lifecycle transaction ID in a fresh seedless app; actual production callback invoked",
+    "physical_detail_row_tap": false,
+    "browser_package": "org.chromium.webview_shell",
+    "url_verified": true,
+    "transaction_id_matches_restored_history": true,
+    "android_view_handoff": true,
+    "production_callback_invoked": true,
+    "returned_to_wallet": true
   },
   "production_unsigned_artifact": {
-    "id": 13635093799,
-    "digest": "sha256:df6925e2c2d5724dd626006258455164e35653c37856c29affff8843110bed51",
-    "size_in_bytes": 31282092
+    "id": 13678686175,
+    "digest": "sha256:c0738c8d5e64998e54d57ab7be40db009e869f9742d65d3ec2a2ff99b832e2f5",
+    "size_in_bytes": 31293939
   }
 }
