@@ -75,6 +75,15 @@ class ValidateSwapABContactAddressUseCaseTest {
     }
 
     @Test
+    fun amountBearingPaymentUriIsRejectedBeforeContactLookup() = runTest {
+        assertEquals(
+            ContactAddressValidationResult.Invalid,
+            validate("bitcoin:${existing.address}?amount=1", btc)
+        )
+        verify(exactly = 0) { addressBookRepository.contacts }
+    }
+
+    @Test
     fun invalidLegacyContactsRemainUnchangedDuringValidation() = runTest {
         val legacy = existing.copy(contact = existing.contact.copy(address = "legacy-invalid-address"))
         val contacts = MutableStateFlow(listOf(legacy))

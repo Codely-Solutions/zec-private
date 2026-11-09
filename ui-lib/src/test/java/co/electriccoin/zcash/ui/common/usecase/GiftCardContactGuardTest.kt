@@ -158,4 +158,21 @@ class GiftCardContactGuardTest {
         verify(exactly = 1) { addressBookRepository.updateContact(existing, "Synthetic EVM", evm, "eth") }
         verify(exactly = 2) { navigationRouter.back() }
     }
+
+    @Test
+    fun amountBearingPaymentUrisCannotBeSavedOrUpdated() {
+        val save = SaveABContactUseCase(addressBookRepository, navigationRouter)
+        val update = UpdateABContactUseCase(addressBookRepository, navigationRouter)
+        val requests = listOf(
+            "bitcoin:1BoatSLRHtKNngkdXEeobR76b53LETtpyT?amount=1" to "btc",
+            "ethereum:0x1111111111111111111111111111111111111111@1?value=1e18" to "eth"
+        )
+        requests.forEach { (request, chain) ->
+            assertEquals(ABContactSaveResult.InvalidAddress, save("Synthetic", request, chain))
+            assertEquals(ABContactSaveResult.InvalidAddress, update(existing, "Synthetic", request, chain))
+        }
+        verify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
+        verify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
+        verify { navigationRouter wasNot Called }
+    }
 }
