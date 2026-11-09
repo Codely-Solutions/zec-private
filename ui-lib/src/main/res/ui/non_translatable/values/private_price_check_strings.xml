@@ -4,8 +4,12 @@
     <string name="private_price_unavailable">Price check unavailable</string>
     <string name="private_price_unavailable_details">No fresh reference is available. This check supports native BTC, ETH, SOL and ZEC.</string>
     <string name="private_price_check_details">Kraken spot reference, not an executable swap. Includes quoted costs and any known Zcash network fee; external sending fees may be extra.</string>
-    <string name="private_price_compared">Compared with Kraken</string>
-    <string name="private_price_compared_details">Kraken reference difference: %1$s%%, including quoted costs and known Zcash network fees. A spot-price comparison, not an executable swap.</string>
+    <string name="private_price_reference">Market reference</string>
+    <string name="private_price_reference_difference">Reference difference</string>
+    <string name="private_price_reference_details">Spot-price comparison, including quoted costs and known Zcash network fees.</string>
+    <string name="private_quote_details">Quote details</string>
+    <string name="private_quote_details_expanded">Expanded</string>
+    <string name="private_quote_details_collapsed">Collapsed</string>
     <string name="private_price_poor">%1$s%% below market reference</string>
     <string name="private_swap_anyway">Swap anyway</string>
     <string name="private_pay_anyway">Pay anyway</string>

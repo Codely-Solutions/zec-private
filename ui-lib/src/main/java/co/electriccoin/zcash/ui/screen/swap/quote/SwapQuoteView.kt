@@ -6,22 +6,34 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -182,7 +194,7 @@ private fun Success(
                     color = ZashiColors.Surfaces.bgPrimary
                 )
             }
-            state.priceCheck?.let {
+            state.priceCheck?.takeIf { it.showInline }?.let {
                 Spacer(8.dp)
                 PriceCheckNotice(it)
             }
@@ -202,6 +214,10 @@ private fun Success(
                 descriptionFontWeight = FontWeight.Medium,
                 descriptionColor = ZashiColors.Text.textPrimary
             )
+            state.priceCheck?.takeUnless { it.showInline }?.let {
+                Spacer(8.dp)
+                QuotePriceDetails(it)
+            }
             if (state.infoText != null) {
                 Spacer(48.dp)
                 ZashiInfoText(
@@ -235,6 +251,47 @@ private fun Success(
                 )
             }
         )
+    }
+}
+
+@Composable
+private fun QuotePriceDetails(state: PriceCheckNoticeState) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val description = stringResource(
+        if (expanded) R.string.private_quote_details_expanded else R.string.private_quote_details_collapsed
+    )
+    Column(Modifier.fillMaxWidth()) {
+        TextButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { stateDescription = description },
+            contentPadding = PaddingValues(0.dp),
+        ) {
+            Text(
+                stringResource(R.string.private_quote_details),
+                modifier = Modifier.weight(1f), textAlign = TextAlign.Start,
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                contentDescription = null, modifier = Modifier.size(24.dp),
+            )
+        }
+        if (state.detailItems.isEmpty()) {
+            Text(
+                state.label.getValue(), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (expanded) {
+            state.detailItems.forEach { item ->
+                Spacer(8.dp)
+                SwapQuoteInfo(item)
+            }
+            Spacer(8.dp)
+            Text(
+                state.explanation.getValue(), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

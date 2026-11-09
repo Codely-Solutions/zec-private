@@ -50,6 +50,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -189,6 +190,7 @@ class SwapQuoteVMTest {
         val state = vm.state.value as SwapQuoteState.Success
         assertTrue(state.primaryButton.isEnabled)
         assertTrue(state.priceCheck?.isWarning == false)
+        assertFalse(state.priceCheck?.showInline ?: true)
         assertEquals(
             "Price check unavailable",
             state.priceCheck.label.getString(RuntimeEnvironment.getApplication(), Locale.US),
@@ -204,8 +206,14 @@ class SwapQuoteVMTest {
         val vm = vm(zashi(), prices = prices)
         collect(vm)
         val notice = (vm.state.value as SwapQuoteState.Success).priceCheck ?: error("Missing comparison")
-        assertEquals("Compared with Kraken", notice.label.getString(RuntimeEnvironment.getApplication(), Locale.US))
-        assertTrue(notice.explanation.getString(RuntimeEnvironment.getApplication(), Locale.US).contains("-2.50%"))
+        assertFalse(notice.showInline)
+        assertEquals(
+            listOf("Kraken", "-2.50%"),
+            notice.detailItems.map {
+                (it.title as StyledStringResource.ByStringResource).resource
+                    .getString(RuntimeEnvironment.getApplication(), Locale.US)
+            },
+        )
     }
 
     private fun fromRowTitle(vm: SwapQuoteVM): Int {
