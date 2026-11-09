@@ -157,9 +157,9 @@ object RecipientAddressPolicy {
                 return unsupported()
             }
             val baseUnits = it.toBigDecimal()
-            if (baseUnits.scale() !in -MAX_EVM_AMOUNT_PRECISION..MAX_EVM_AMOUNT_PRECISION ||
-                baseUnits.scale() > 0 && baseUnits.stripTrailingZeros().scale() > 0 ||
-                baseUnits.precision() > MAX_EVM_AMOUNT_PRECISION ||
+            if (baseUnits.scale() !in -MAX_EVM_AMOUNT_PRECISION..MAX_EVM_AMOUNT_PRECISION) return unsupported()
+            if (baseUnits.scale() > 0 && baseUnits.stripTrailingZeros().scale() > 0) return unsupported()
+            if (baseUnits.precision() > MAX_EVM_AMOUNT_PRECISION ||
                 baseUnits.abs() >= BigDecimal(BigInteger.ONE.shiftLeft(EVM_AMOUNT_BITS))
             ) return unsupported()
             baseUnits.movePointLeft(EVM_DECIMAL_PLACES)

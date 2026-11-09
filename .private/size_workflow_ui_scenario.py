@@ -99,6 +99,8 @@ def run(root, stop):
         if any('choose a recipient on' in label for label in labels(state)):
             raise RuntimeError('Corrected recipient validation remained stale')
         provider_errors=[]
+        independent_comparisons = 0
+        reference_states = []
         for index in range(3):
             for attempt in range(3):
                 state=click('Get a quote')
@@ -125,6 +127,25 @@ def run(root, stop):
             if 'review quote' not in labels(state):raise RuntimeError('Quote response deadline exceeded')
             action('assert_text',text='Review Quote')
             state=wait('Confirm')
+            reference_deadline = time.monotonic() + 15
+            while 'checking market price…' in labels(state) and time.monotonic() < reference_deadline:
+                if stop.wait(.5):raise InterruptedError('UI driver stopped')
+                state = action('snapshot')
+            if 'quote details' in labels(state):
+                state = click('Quote details')
+                if 'kraken' in labels(state):
+                    independent_comparisons += 1
+                    reference_states.append('compared')
+                elif 'price check unavailable' in labels(state):
+                    reference_states.append('unavailable')
+                else:
+                    raise RuntimeError('Independent reference details missing')
+                state = click('Quote details')
+            elif any('below market reference' in label for label in labels(state)):
+                independent_comparisons += 1
+                reference_states.append('warning')
+            else:
+                raise RuntimeError('Independent price assessment did not finish')
             title=next(n for n in state['nodes'] if n['text'].casefold()=='review quote')
             title_top=int(title['bounds'].split()[1])
             accept=next(n for n in state['nodes'] if n['text'].casefold()=='confirm')
@@ -146,6 +167,7 @@ def run(root, stop):
         result={'passed':True,'freshIsolatedWallet':True,'quotesReviewedAndDismissed':3,
                 'providerTimeouts':provider_errors,'excludedSettingsAbsent':True,'settingsLabels':sorted(current),
                 'recipientNetworkMismatchBlocked':True,'correctedWithoutLeavingForm':True,'fundsTransferred':False}
+        result.update(independentComparisons=independent_comparisons, referenceStates=reference_states)
         (root/'phase1-scenario-result.json').write_text(json.dumps(result,indent=2)+'\n')
         action('finish')
     except Exception as error:
