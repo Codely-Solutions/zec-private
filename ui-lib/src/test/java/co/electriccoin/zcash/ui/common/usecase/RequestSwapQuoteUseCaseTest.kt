@@ -654,7 +654,9 @@ class RequestSwapQuoteUseCaseTest {
 
         val shieldedAddress = "deposit"
         coEvery { synchronizer.validateAddress(any()) } returns AddressType.Unified
-        val synchronizerProvider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer }
+        val synchronizerProvider = mockk<SynchronizerProvider> {
+            coEvery { getSynchronizer() } returns this@RequestSwapQuoteUseCaseTest.synchronizer
+        }
         coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returns shieldedAddress
         coEvery { accountDataSource.getSelectedAccount() } returns selectedAccount
         return RequestSwapQuoteUseCase(

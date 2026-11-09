@@ -23334,7 +23334,7 @@ index 000000000..bc0e490ee
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
-index c01988b65..561c1375f 100644
+index c01988b65..a2db08466 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 @@ -6,0 +7 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -23520,19 +23520,22 @@ index c01988b65..561c1375f 100644
 @@ -472 +636 @@ class RequestSwapQuoteUseCaseTest {
 -            refundAddress = "refund",
 +            refundAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
-@@ -492 +656 @@ class RequestSwapQuoteUseCaseTest {
+@@ -492,3 +656,5 @@ class RequestSwapQuoteUseCaseTest {
 -        val synchronizer = mockk<Synchronizer> { coEvery { validateAddress(any()) } returns AddressType.Unified }
-+        coEvery { synchronizer.validateAddress(any()) } returns AddressType.Unified
-@@ -494 +658 @@ class RequestSwapQuoteUseCaseTest {
+-        val synchronizerProvider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer }
 -        coEvery { accountDataSource.requestNextShieldedAddress() } returns shieldedAddress
++        coEvery { synchronizer.validateAddress(any()) } returns AddressType.Unified
++        val synchronizerProvider = mockk<SynchronizerProvider> {
++            coEvery { getSynchronizer() } returns this@RequestSwapQuoteUseCaseTest.synchronizer
++        }
 +        coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returns shieldedAddress
-@@ -518 +682 @@ class RequestSwapQuoteUseCaseTest {
+@@ -518 +684 @@ class RequestSwapQuoteUseCaseTest {
 -        destinationAddress: String = "destination",
 +        destinationAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
-@@ -541 +705 @@ class RequestSwapQuoteUseCaseTest {
+@@ -541 +707 @@ class RequestSwapQuoteUseCaseTest {
 -        destinationAddress: String = "destination",
 +        destinationAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
-@@ -559 +723 @@ class RequestSwapQuoteUseCaseTest {
+@@ -559 +725 @@ class RequestSwapQuoteUseCaseTest {
 -        refundAddress: String = "refund",
 +        refundAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCaseTest.kt
