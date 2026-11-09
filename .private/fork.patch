@@ -3947,20 +3947,19 @@ index 703df121a..c44616fb3 100644
 +            res.directories.addAll(
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ExternalLinkRow.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ExternalLinkRow.kt
 new file mode 100644
-index 000000000..e0f3cfc9b
+index 000000000..d4cda0a6f
 --- /dev/null
 +++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ExternalLinkRow.kt
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,37 @@
 +package co.electriccoin.zcash.ui.design.component
 +
-+import androidx.compose.foundation.layout.PaddingValues
 +import androidx.compose.foundation.layout.Spacer
 +import androidx.compose.foundation.layout.fillMaxWidth
 +import androidx.compose.foundation.layout.heightIn
 +import androidx.compose.foundation.layout.width
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.material3.Text
-+import androidx.compose.material3.TextButton
++import androidx.compose.material3.OutlinedButton
 +import androidx.compose.runtime.Composable
 +import androidx.compose.ui.Modifier
 +import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -3975,11 +3974,10 @@ index 000000000..e0f3cfc9b
 +    modifier: Modifier = Modifier,
 +    enabled: Boolean = true,
 +) {
-+    TextButton(
++    OutlinedButton(
 +        onClick = onClick,
 +        enabled = enabled,
 +        modifier = modifier.fillMaxWidth().heightIn(min = 48.dp),
-+        contentPadding = PaddingValues(vertical = 12.dp),
 +    ) {
 +        Text(label, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
 +        Spacer(Modifier.width(16.dp))
@@ -14434,14 +14432,16 @@ index 9c9ef5fc6..c94e4ae13 100644
 +                    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt
 new file mode 100644
-index 000000000..cb4d3db74
+index 000000000..8d7ff183e
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt
-@@ -0,0 +1,49 @@
+@@ -0,0 +1,51 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
 +import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Arrangement
 +import androidx.compose.runtime.Composable
++import androidx.compose.ui.unit.dp
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.model.TransactionExplorer
@@ -14474,7 +14474,7 @@ index 000000000..cb4d3db74
 +fun TransactionExplorerLinks(links: List<TransactionExplorerLink>) {
 +    val destinations = links.filter { it.onOpen != null }.distinctBy { it.label to it.transactionId }
 +    if (destinations.isEmpty()) return
-+    Column {
++    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
 +        destinations.groupBy { it.label }.forEach { (label, transactions) ->
 +            transactions.forEachIndexed { index, link ->
 +                val title = if (transactions.size == 1) {

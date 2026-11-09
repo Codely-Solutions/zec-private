@@ -1,7 +1,9 @@
 package co.electriccoin.zcash.ui.screen.transactiondetail
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.TransactionExplorer
@@ -34,7 +36,7 @@ fun explorerLinks(
 fun TransactionExplorerLinks(links: List<TransactionExplorerLink>) {
     val destinations = links.filter { it.onOpen != null }.distinctBy { it.label to it.transactionId }
     if (destinations.isEmpty()) return
-    Column {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         destinations.groupBy { it.label }.forEach { (label, transactions) ->
             transactions.forEachIndexed { index, link ->
                 val title = if (transactions.size == 1) {
