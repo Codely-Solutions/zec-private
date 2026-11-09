@@ -34,5 +34,10 @@
     "Strengthen swap quote validation and clarify included allowances.",
     "Show reported partial refunds and estimated value differences.",
     "Open transaction explorers from payment and swap details."
+  ],
+  "v3.19.0-private.19": [
+    "Validate recipients and contacts against the selected network, with correction in the same swap form.",
+    "Add independent market-price warnings for native BTC, ETH, SOL and ZEC; keep reference details collapsed.",
+    "Center transaction-explorer icons and update repository links after the project transfer."
   ]
 }
