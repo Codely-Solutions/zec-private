@@ -1,3 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"><application>
 <activity android:name="co.electriccoin.zcash.ui.screen.donation.StyleComparisonActivity" android:exported="true" android:theme="@android:style/Theme.Material.NoActionBar" />
+<activity android:name="co.electriccoin.zcash.ui.screen.donation.NativePriceProbeActivity" android:exported="true" android:theme="@android:style/Theme.Material.NoActionBar" />
 </application></manifest>

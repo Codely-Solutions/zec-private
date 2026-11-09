@@ -3,17 +3,19 @@ package co.electriccoin.zcash.ui.design.component
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
-/** One external-navigation action; the trailing glyph is decorative. */
+/** One external-navigation action; the trailing icon is decorative. */
 @Composable
 fun ExternalLinkRow(
     label: String,
@@ -28,10 +30,10 @@ fun ExternalLinkRow(
     ) {
         Text(label, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
         Spacer(Modifier.width(16.dp))
-        Text(
-            text = "↗",
-            modifier = Modifier.clearAndSetSemantics {},
-            style = MaterialTheme.typography.headlineMedium,
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
         )
     }
 }

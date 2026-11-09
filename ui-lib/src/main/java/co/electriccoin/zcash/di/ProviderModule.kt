@@ -20,6 +20,8 @@ import co.electriccoin.zcash.ui.common.provider.HasSeenHowToVoteKeystoneStorageP
 import co.electriccoin.zcash.ui.common.provider.HasSeenHowToVoteStorageProvider
 import co.electriccoin.zcash.ui.common.provider.HasSeenHowToVoteStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
+import co.electriccoin.zcash.ui.common.provider.IndependentPriceProvider
+import co.electriccoin.zcash.ui.common.provider.KrakenPriceProvider
 import co.electriccoin.zcash.ui.common.provider.HttpClientProviderImpl
 import co.electriccoin.zcash.ui.common.provider.IsBackgroundExecutionAvailableProvider
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
@@ -136,6 +138,7 @@ val providerModule =
         factoryOf(::IsKeepScreenOnDuringRestoreProviderImpl) bind IsKeepScreenOnDuringRestoreProvider::class
         factoryOf(::KeepScreenOnSyncSessionProviderImpl) bind KeepScreenOnSyncSessionProvider::class
         singleOf(::EphemeralAddressStorageProviderImpl) bind EphemeralAddressStorageProvider::class
+        singleOf(::KrakenPriceProvider) bind IndependentPriceProvider::class
         singleOf(::CMCApiProviderImpl) bind CMCApiProvider::class
         factoryOf(::KeystoneSDKProviderImpl) bind KeystoneSDKProvider::class
         singleOf(::LastNetworkActivityStorageProviderImpl) bind LastNetworkActivityStorageProvider::class

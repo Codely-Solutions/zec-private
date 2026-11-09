@@ -21,6 +21,11 @@ import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
 import co.electriccoin.zcash.ui.design.util.getString
+import io.mockk.coVerify
+import kotlinx.coroutines.CompletableDeferred
+import io.mockk.coEvery
+import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
+import co.electriccoin.zcash.ui.common.provider.IndependentPriceProvider
 import io.mockk.verify
 import io.mockk.every
 import io.mockk.mockk
@@ -136,6 +141,60 @@ class SwapQuoteVMTest {
             assertTrue(subtitle.contains("0.12283949 zec"), subtitle)
         }
 
+    @Test
+    fun checkingBlocksContinuationThenPoorQuoteUsesExplicitAction() = runTest {
+        val decision = CompletableDeferred<IndependentPriceCheck>()
+        val prices = mockk<IndependentPriceProvider> { coEvery { check(any(), any()) } coAnswers { decision.await() } }
+        val submit = mockk<SubmitProposalUseCase>(relaxed = true)
+        val vm = vm(zashi(), prices = prices, submit = submit)
+        collect(vm)
+        val checking = vm.state.value as SwapQuoteState.Success
+        assertTrue(!checking.primaryButton.isEnabled)
+        decision.complete(IndependentPriceCheck.Compared(BigDecimal("-20"), System.currentTimeMillis() + 60_000))
+        val poor = vm.state.value as SwapQuoteState.Success
+        assertTrue(poor.priceCheck?.isWarning == true)
+        assertEquals("Swap anyway", poor.primaryButton.text.getString(RuntimeEnvironment.getApplication(), Locale.US))
+        checking.primaryButton.onClick()
+        coVerify(exactly = 0) { submit() }
+        poor.primaryButton.onClick()
+        coVerify(exactly = 1) { submit() }
+    }
+
+    @Test
+    fun callbacksFromReplacedQuoteCannotProceed() = runTest {
+        val quotes = MutableStateFlow<SwapQuoteData?>(SwapQuoteData.Success(FakeSwapQuote(
+            destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT,
+        )))
+        val submit = mockk<SubmitProposalUseCase>(relaxed = true)
+        val vm = vm(zashi(), quotes = quotes, submit = submit)
+        collect(vm)
+        val old = vm.state.value as SwapQuoteState.Success
+        quotes.value = SwapQuoteData.Success(
+            FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
+        )
+        old.primaryButton.onClick()
+        coVerify(exactly = 0) { submit() }
+        (vm.state.value as SwapQuoteState.Success).primaryButton.onClick()
+        coVerify(exactly = 1) { submit() }
+    }
+
+    @Test
+    fun expiredReferenceBecomesUnavailableAndKeepsQuoteAvailable() = runTest {
+        val prices = mockk<IndependentPriceProvider> {
+            coEvery { check(any(), any()) } returns
+                IndependentPriceCheck.Compared(BigDecimal("-20"), System.currentTimeMillis() - 1)
+        }
+        val vm = vm(zashi(), prices = prices)
+        collect(vm)
+        val state = vm.state.value as SwapQuoteState.Success
+        assertTrue(state.primaryButton.isEnabled)
+        assertTrue(state.priceCheck?.isWarning == false)
+        assertEquals(
+            "Price check unavailable",
+            state.priceCheck!!.label.getString(RuntimeEnvironment.getApplication(), Locale.US),
+        )
+    }
+
     private fun fromRowTitle(vm: SwapQuoteVM): Int {
         val state = assertNotNull(vm.state.value) as SwapQuoteState.Success
         return state.items
@@ -147,6 +206,11 @@ class SwapQuoteVMTest {
     private fun vm(
         account: WalletAccount,
         cancelQuote: CancelSwapQuoteUseCase = mockk(relaxed = true),
+        prices: IndependentPriceProvider = mockk {
+            coEvery { check(any(), any()) } returns IndependentPriceCheck.Unavailable
+        },
+        submit: SubmitProposalUseCase = mockk(relaxed = true),
+        quotes: MutableStateFlow<SwapQuoteData?>? = null,
         quoteData: SwapQuoteData = SwapQuoteData.Success(
             quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
         ),
@@ -167,13 +231,14 @@ class SwapQuoteVMTest {
             swapRepository =
                 mockk<SwapRepository>(relaxed = true) {
                     every { quote } returns
-                        MutableStateFlow(quoteData)
+                        (quotes ?: MutableStateFlow(quoteData))
                 },
             cancelSwapQuote = cancelQuote,
             cancelSwap = mockk<CancelSwapUseCase>(relaxed = true),
             swapQuoteSuccessMapper = SwapQuoteVMMapper(),
-            submitProposal = mockk<SubmitProposalUseCase>(relaxed = true),
+            submitProposal = submit,
             navigationRouter = mockk<NavigationRouter>(relaxed = true),
+            independentPrices = prices,
         )
 
     private fun zashi(isSelected: Boolean = true) =

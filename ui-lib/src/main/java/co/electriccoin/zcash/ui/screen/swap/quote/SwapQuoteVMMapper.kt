@@ -6,6 +6,7 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_OUTPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
+import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
 import co.electriccoin.zcash.ui.common.model.isZCashAsset
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.SwapTokenAmountState
@@ -31,7 +32,8 @@ internal class SwapQuoteVMMapper {
         state: SwapQuoteInternalState,
         onBack: () -> Unit,
         onSubmitQuoteClick: () -> Unit,
-        onNavigateToOnRampSwap: () -> Unit
+        onNavigateToOnRampSwap: () -> Unit,
+        priceCheck: IndependentPriceCheck? = null,
     ): SwapQuoteState.Success =
         with(state) {
             return SwapQuoteState.Success(
@@ -49,9 +51,16 @@ internal class SwapQuoteVMMapper {
                 amount = createTotalAmountState(),
                 onBack = onBack,
                 infoText = createInfoText(),
+                priceCheck = priceCheck?.toNotice(),
                 primaryButton =
                     ButtonState(
-                        text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm),
+                        text = when {
+                            priceCheck is IndependentPriceCheck.Compared && priceCheck.poor ->
+                                stringRes(if (quote.mode == EXACT_OUTPUT) R.string.private_pay_anyway
+                                else R.string.private_swap_anyway)
+                            else -> stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm)
+                        },
+                        isEnabled = priceCheck != IndependentPriceCheck.Checking,
                         onClick = {
                             if (quote.destinationAsset.isZCashAsset) {
                                 onNavigateToOnRampSwap()
@@ -62,6 +71,29 @@ internal class SwapQuoteVMMapper {
                     )
             )
         }
+
+    private fun IndependentPriceCheck.toNotice(): PriceCheckNoticeState = when (this) {
+        IndependentPriceCheck.Checking -> PriceCheckNoticeState(
+            stringRes(R.string.private_price_checking), stringRes(R.string.private_price_check_details)
+        )
+        IndependentPriceCheck.Unavailable -> PriceCheckNoticeState(
+            stringRes(R.string.private_price_unavailable), stringRes(R.string.private_price_unavailable_details)
+        )
+        is IndependentPriceCheck.Compared -> PriceCheckNoticeState(
+            label = if (isPoor) {
+                stringRes(
+                    R.string.private_price_poor,
+                    differencePercent.abs().setScale(1, RoundingMode.HALF_UP).toPlainString(),
+                )
+            } else {
+                val rounded = differencePercent.setScale(2, RoundingMode.HALF_UP)
+                val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString()
+                stringRes(R.string.private_price_difference, signed)
+            },
+            explanation = stringRes(R.string.private_price_check_details),
+            isWarning = isPoor,
+        )
+    }
 
     @Suppress("MagicNumber")
     private fun SwapQuoteInternalState.createInfoText(): StringResource? {

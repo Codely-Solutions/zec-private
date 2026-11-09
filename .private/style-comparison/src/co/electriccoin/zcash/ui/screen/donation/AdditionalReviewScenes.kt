@@ -154,7 +154,7 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                 )),
             ), mainAppBarState = appBar,
         )
-        "swap-review", "crosspay-review" -> SwapQuoteView(
+        "swap-review", "crosspay-review", "price-normal", "price-warning", "price-unavailable", "price-checking" -> SwapQuoteView(
             SwapQuoteState.Success(
                 title = stringRes(if (screen == "crosspay-review") "Pay now" else "Swap"), rotateIcon = screen == "swap-review",
                 from = SwapTokenAmountState(amount = stringRes("0.01"), fiatAmount = stringRes("$0.40"), chain = stringRes("Zcash"), token = stringRes("ZEC"), bigIcon = imageRes(R.drawable.ic_zec_round_full), smallIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_zec_shielded)),
@@ -170,7 +170,29 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                     SwapQuoteInfoItem(stringRes(R.string.private_wallet_transaction_fee), styledStringResource("0.0001 ZEC")),
                 ),
                 amount = SwapQuoteInfoItem(stringRes("Total amount"), styledStringResource("0.0101 ZEC")),
-                primaryButton = ButtonState(stringRes("Confirm"), onClick = {}),
+                primaryButton = ButtonState(
+                    stringRes(if (screen == "price-warning") "Swap anyway" else "Confirm"),
+                    isEnabled = screen != "price-checking", onClick = {},
+                ),
+                priceCheck = when (screen) {
+                    "price-warning" -> PriceCheckNoticeState(
+                        stringRes(R.string.private_price_poor, "24.8"),
+                        stringRes(R.string.private_price_check_details), true,
+                    )
+                    "price-normal" -> PriceCheckNoticeState(
+                        stringRes(R.string.private_price_difference, "-2.50"),
+                        stringRes(R.string.private_price_check_details),
+                    )
+                    "price-unavailable" -> PriceCheckNoticeState(
+                        stringRes(R.string.private_price_unavailable),
+                        stringRes(R.string.private_price_unavailable_details),
+                    )
+                    "price-checking" -> PriceCheckNoticeState(
+                        stringRes(R.string.private_price_checking),
+                        stringRes(R.string.private_price_check_details),
+                    )
+                    else -> null
+                },
                 infoText = stringRes("Synthetic review only. No payment can be submitted."), onBack = onBack,
             )
         )
