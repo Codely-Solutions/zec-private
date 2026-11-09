@@ -87,7 +87,7 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
                             state =
                                 TransactionDetailInfoRowState(
                                     title = stringRes(R.string.swapAndPay_refundedAmount),
-                                    message = state.refundedAmount?.withStyle(),
+                                    message = state.refundedAmount.withStyle(),
                                 )
                         )
                     }

@@ -14450,12 +14450,15 @@ index 13b042bd7..60b0df221 100644
 -                                    stringRes(R.string.transactionDetail_feeSummary),
 +                                    stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
-index ad8bc8549..3723cf507 100644
+index ad8bc8549..ef0012736 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
 @@ -83 +83 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
 -                    if (state.status == SwapStatus.REFUNDED) {
 +                    if (state.refundedAmount != null) {
+@@ -90 +90 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+-                                    message = state.refundedAmount?.withStyle(),
++                                    message = state.refundedAmount.withStyle(),
 @@ -123 +123 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
 -                                title = stringRes(R.string.swapAndPay_totalFees),
 +                                title = stringRes(R.string.private_wallet_transaction_fee),
