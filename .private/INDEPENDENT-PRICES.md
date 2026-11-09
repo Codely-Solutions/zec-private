@@ -6,7 +6,7 @@
 
 Value the reviewed input at the reference bid and the output at the ask. Add the separately known Zcash network fee for outgoing native ZEC. The reviewed quote input already includes any EXACT_OUTPUT allowance; quoted costs are counted once. Provider fiat estimates remain separate from this reference.
 
-A difference of −15% or worse produces an inline warning and changes the existing action to **Swap anyway** or **Pay anyway**. Details remain available on tap. The threshold is a conservative advisory: small transfers can legitimately have large percentage costs. It does not certify a fair or executable rate, nor establish settlement output. Missing, stale, unsupported or failed comparisons display **Price check unavailable** and keep the quote usable.
+A difference of −15% or worse produces an inline warning and changes the existing action to **Swap anyway** or **Pay anyway**. Ordinary results stay in collapsed **Quote details** below the total, using the existing label/value layout for the reference and difference. Missing, stale, unsupported or failed comparisons show **Price check unavailable** in that details area and keep the quote usable. The threshold is a conservative advisory: small transfers can legitimately have large percentage costs. It does not certify a fair or executable rate, nor establish settlement output.
 
 ## Network and freshness
 
