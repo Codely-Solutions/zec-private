@@ -12,7 +12,7 @@ class NavigateToSwapAssetPickerUseCase(
 ) {
     private val pipeline = MutableSharedFlow<SelectSwapAssetPipelineResult>()
 
-    suspend operator fun invoke(onlyChainTicker: String?): SwapAsset? {
+    suspend operator fun invoke(onlyChainTicker: String? = null): SwapAsset? {
         val args = SwapAssetPickerArgs(onlyChainTicker = onlyChainTicker)
         // Subscribe before forwarding so a result emitted as soon as the screen appears can never be
         // dropped (a bare SharedFlow emit with no collector is lost and would hang the caller).

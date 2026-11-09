@@ -12509,6 +12509,13 @@ index e9d94f210..20baea5b4 100644
 +            val args = SelectABSwapRecipientArgs(network = network)
 @@ -50,0 +51 @@ class NavigateToSelectABSwapRecipientUseCase(
 +        if (args.network != null && !args.network.equals(contact.blockchain?.chainTicker, ignoreCase = true)) return
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapAssetPickerUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapAssetPickerUseCase.kt
+index 80a163cdc..c45553fa7 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapAssetPickerUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapAssetPickerUseCase.kt
+@@ -15 +15 @@ class NavigateToSwapAssetPickerUseCase(
+-    suspend operator fun invoke(onlyChainTicker: String?): SwapAsset? {
++    suspend operator fun invoke(onlyChainTicker: String? = null): SwapAsset? {
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
 index eab9cf9da..0c491fdc7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
