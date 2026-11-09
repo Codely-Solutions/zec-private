@@ -66,13 +66,18 @@ class NativePriceProbeActivity : ComponentActivity() {
                         Case("sol_out", "sol", "0.1"),
                         Case("crosspay_btc", "btc", "0.0001", exactOutput = true),
                     )
-                    for (case in cases) {
+                    val caseStart = intent.getIntExtra("caseStart", 0)
+                    require(caseStart in cases.indices)
+                    for (case in cases.drop(caseStart)) {
+                        record("request_begin", JSONObject().put("case", case.name))
+                        try {
                         check(accounts.getSelectedAccount().totalBalance?.value == 0L && tor.get() == true)
                         val asset = assets.single { it.assetId == "nep141:${case.symbol}.omft.near" }
                         val fixture = when (case.symbol) {
                             "btc" -> "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
                             "eth" -> "0x1111111111111111111111111111111111111111"
-                            else -> "11111111111111111111111111111111"
+                            // RFC 8032 section 7.1 public-key vector encoded as base58; not a program account.
+                            else -> "FVen3X669xLzsi6N2V91DoiyzHzg1uAgqiT8jZ9nS96Z"
                         }
                         val quote = swaps.requestQuote(
                             swapMode = when {
@@ -100,6 +105,19 @@ class NativePriceProbeActivity : ComponentActivity() {
                             row.put("differencePercent", checked.differencePercent.toPlainString()).put("poor", checked.poor)
                         }
                         record("quote_checked", row)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            val near = e as? co.electriccoin.zcash.ui.common.provider.ResponseWithNearErrorException
+                            val text = near?.error?.message.orEmpty().lowercase()
+                            val reason = when {
+                                "recipient" in text || "address" in text -> "recipient_or_address_rejected"
+                                "too low" in text -> "below_provider_minimum"
+                                else -> "provider_or_transport_failure"
+                            }
+                            record("quote_failed", JSONObject().put("case", case.name)
+                                .put("exceptionClass", e.javaClass.simpleName).put("reason", reason))
+                        }
                     }
                     record("complete")
                 }
