@@ -126,7 +126,7 @@ internal class PayVM(
                 initialValue = null
             )
 
-    // Stable method references — created once and reused across every state emission.
+    // Stable handlers; quote dispatch adds a guard for the state used by each rendered button.
     private val callbacks =
         ExactOutputStateCallbacks(
             onBack = ::onBack,
@@ -156,7 +156,11 @@ internal class PayVM(
                         account = account,
                         isABHintVisible = isABHintVisible
                     ),
-                callbacks = callbacks
+                callbacks = callbacks.copy(
+                    onRequestSwapQuoteClick = { amount, fiatAmount, address ->
+                        if (internalState.value == state) onRequestSwapQuoteClick(amount, fiatAmount, address)
+                    }
+                )
             )
         }.stateIn(
             scope = viewModelScope,
