@@ -1,0 +1,6 @@
+{
+  "maxMemoryBytes": 8589934592,
+  "maxTransientBytes": 19327352832,
+  "maxProcesses": 64,
+  "maxSeconds": 1800
+}

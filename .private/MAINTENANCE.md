@@ -10,6 +10,7 @@ Use this entry for the checkout; local task state lives in the surrounding works
 |---|---|---|
 | Design or change UI | [UI-STANDARDS.md](UI-STANDARDS.md) | Component choices, hierarchy, wording and accessibility defaults. |
 | Inspect UI / capture screenshots | [UI-REVIEW.md](UI-REVIEW.md) | Established capture/control components; artifact/state orchestration must match the current task. |
+| Reuse local development state | [DEVELOPMENT.md](DEVELOPMENT.md), [dev_session.py](dev_session.py) | Related pinned checks in one bounded isolated workspace; no production release assembly. |
 | Select quick checks and release checks | Build section below; [core coverage](core-coverage.md) | Coverage records identify their executed revision; current evidence must match inputs. |
 | Run real wallet acceptance | [core coverage](core-coverage.md), [core_testnet_driver.py](core_testnet_driver.py), [acceptance_policy.py](acceptance_policy.py) | Requires a current prepared job, baseline and artifact bindings; not a screenshot prerequisite. |
 | Overlap independent emulator checks | [emulator-batch.md](emulator-batch.md) | Prepared jobs only; one shared guard and separate workers. |
@@ -20,6 +21,24 @@ Use this entry for the checkout; local task state lives in the surrounding works
 | Locate prior local orchestration | Surrounding workspace's `records/INDEX.md` and `tools/extract-records.py` | Local private archives; recover selected files for inspection, not blind execution. |
 
 `docs/Setup.md`, `docs/CI.md`, `docs/Deployment.md` and the upstream testing notes are inherited references, not this fork's release procedures. Parser-sensitive changelogs and attribution remain source inputs. [prepare_core_acceptance.py](prepare_core_acceptance.py) is a legacy preparer with a revision-6 baseline; the current baseline comes from [upgrade-baseline.json](upgrade-baseline.json) and [maintenance-assets.json](maintenance-assets.json). Single-worker admission helpers still expect root-level job files. Adapt those assumptions within an authorized task before use; their presence is not a claim that an old job remains runnable.
+
+## Reuse and cleanup
+
+Choose lifetimes by the next consumer. At check completion, stop check-only workers and remove outputs with no remaining consumer. Related checks may share checkout, incremental state, APKs or a guest within one registered session with a storage budget, deadline and shutdown path.
+
+| Resource | Reuse boundary | Retirement |
+|---|---|---|
+| Pinned SDK/JDK, Gradle dependencies, verified Android system image | Managed tool cache; verify selected versions and integrity | Managed cache policy, not each check |
+| Isolated development checkout, project cache and incremental outputs | Related edits/checks at stable paths within one bounded development session | End of session; retain offline for an explicit resume consumer only |
+| Built/downloaded APK and emulator-prepared copy | Exact artifact/source/configuration identity; verify digest and preparation provenance | After the last capture/acceptance consumer; retain only current candidate and required baseline |
+| Emulator userdata and isolated test wallet | Compatible scenarios in the same bounded session | Stop guest/private ADB and remove disposable disks when that session ends; clean-wallet/recovery assertions get the required fresh state |
+| Helper processes and tool sessions | Active registered consumer, with exact process/session identity | Shutdown and verify exit at session end or pause; use the owning tool's release mechanism for app-managed services |
+| JUnit, captures, receipts and fixtures | Named review, acceptance, recovery or release-history consumer | Keep canonical evidence; retire superseded attempts and orchestration after preserving needed findings |
+
+Reusable build state is an optimization, not acceptance evidence. Bind each check to its source and configuration, label executed versus reused results, and keep release artifacts immutable. Stop processes on pause even when offline caches are retained. Preserve unassigned services until ownership is established and record that unresolved scope accurately.
+
+Use the [development session](DEVELOPMENT.md) for incremental checks and the [prepared APK/capture path](UI-REVIEW.md) for UI work. Both retain the existing guard's teardown guarantees. Task configuration selects source/scenes; maintained helpers own orchestration. The disposable release/integration path remains separate. Tor routing behavior is unchanged.
+
 
 ## Build and validation
 

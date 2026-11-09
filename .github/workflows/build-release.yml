@@ -75,6 +75,9 @@ jobs:
           python3 -B .private/test_toolchain_policy.py
           python3 -B .private/test_fixture_download.py
           python3 -B .private/test_core_instrumentation_pairing.py
+          python3 -B .private/test_dev_session.py
+          python3 -B .private/test_prepared_apks.py
+          python3 -B .private/test_ui_capture.py
       - name: Select acceptance by exact relevant inputs before expensive preparation
         env:
           VALIDATION_ONLY: ${{ inputs.validation_only || false }}
