@@ -47,4 +47,6 @@ internal data class PriceCheckNoticeState(
     val label: StringResource,
     val explanation: StringResource,
     val isWarning: Boolean = false,
+    val showInline: Boolean = true,
+    val detailItems: List<SwapQuoteInfoItem> = emptyList(),
 )

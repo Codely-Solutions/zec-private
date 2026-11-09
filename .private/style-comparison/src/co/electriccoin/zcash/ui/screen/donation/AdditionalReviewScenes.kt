@@ -180,12 +180,18 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                         stringRes(R.string.private_price_check_details), true,
                     )
                     "price-normal" -> PriceCheckNoticeState(
-                        stringRes(R.string.private_price_compared),
-                        stringRes(R.string.private_price_compared_details, "-2.50"),
+                        stringRes(R.string.private_price_reference),
+                        stringRes(R.string.private_price_reference_details),
+                        showInline = false,
+                        detailItems = listOf(
+                            SwapQuoteInfoItem(stringRes(R.string.private_price_reference), styledStringResource("Kraken")),
+                            SwapQuoteInfoItem(stringRes(R.string.private_price_reference_difference), styledStringResource("-2.50%")),
+                        ),
                     )
                     "price-unavailable" -> PriceCheckNoticeState(
                         stringRes(R.string.private_price_unavailable),
                         stringRes(R.string.private_price_unavailable_details),
+                        showInline = false,
                     )
                     "price-checking" -> PriceCheckNoticeState(
                         stringRes(R.string.private_price_checking),

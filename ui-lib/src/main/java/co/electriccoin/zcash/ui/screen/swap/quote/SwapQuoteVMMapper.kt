@@ -77,7 +77,8 @@ internal class SwapQuoteVMMapper {
             stringRes(R.string.private_price_checking), stringRes(R.string.private_price_check_details)
         )
         IndependentPriceCheck.Unavailable -> PriceCheckNoticeState(
-            stringRes(R.string.private_price_unavailable), stringRes(R.string.private_price_unavailable_details)
+            stringRes(R.string.private_price_unavailable), stringRes(R.string.private_price_unavailable_details),
+            showInline = false,
         )
         is IndependentPriceCheck.Compared -> PriceCheckNoticeState(
             label = if (poor) {
@@ -86,16 +87,27 @@ internal class SwapQuoteVMMapper {
                     differencePercent.abs().setScale(1, RoundingMode.HALF_UP).toPlainString(),
                 )
             } else {
-                stringRes(R.string.private_price_compared)
+                stringRes(R.string.private_price_reference)
             },
             explanation = if (poor) {
                 stringRes(R.string.private_price_check_details)
             } else {
-                val rounded = differencePercent.setScale(2, RoundingMode.HALF_UP)
-                val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString()
-                stringRes(R.string.private_price_compared_details, signed)
+                stringRes(R.string.private_price_reference_details)
             },
             isWarning = poor,
+            showInline = poor,
+            detailItems = if (poor) emptyList() else {
+                val rounded = differencePercent.setScale(2, RoundingMode.HALF_UP)
+                val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString() + "%"
+                listOf(
+                    SwapQuoteInfoItem(
+                        stringRes(R.string.private_price_reference), stringRes("Kraken").withStyle(),
+                    ),
+                    SwapQuoteInfoItem(
+                        stringRes(R.string.private_price_reference_difference), stringRes(signed).withStyle(),
+                    ),
+                )
+            },
         )
     }
 
