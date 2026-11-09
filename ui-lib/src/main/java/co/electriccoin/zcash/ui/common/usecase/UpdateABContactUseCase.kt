@@ -24,7 +24,7 @@ class UpdateABContactUseCase(
         chain: String?,
     ): ABContactSaveResult {
         if (GiftCardSecretDetector.mayContainGiftCardSecret(address)) return ABContactSaveResult.GiftCardLinkRefused
-        val recipient = chain?.let { validateSwapRecipient(address, it) }
+        val recipient = chain?.let { validateSwapRecipient(address, it, allowPaymentAmount = false) }
         if (recipient != null && !recipient.isValid) return ABContactSaveResult.InvalidAddress
         val receivingAddress = recipient?.input?.address ?: address
         addressBookRepository.updateContact(contact = contact, name = name, address = receivingAddress, chain = chain)

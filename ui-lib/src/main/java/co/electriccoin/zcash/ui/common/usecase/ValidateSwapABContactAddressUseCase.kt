@@ -19,7 +19,9 @@ class ValidateSwapABContactAddressUseCase(
         when {
             GiftCardSecretDetector.mayContainGiftCardSecret(address) -> ContactAddressValidationResult.GiftCardLink
 
-            blockchain == null || !validateSwapRecipient(address, blockchain.chainTicker).isValid ->
+            blockchain == null || !validateSwapRecipient(
+                address, blockchain.chainTicker, allowPaymentAmount = false
+            ).isValid ->
                 ContactAddressValidationResult.Invalid
 
             addressBookRepository.contacts
@@ -29,7 +31,9 @@ class ValidateSwapABContactAddressUseCase(
                 .filter {
                     if (exclude == null) true else it != exclude
                 }.any {
-                    it.address == validateSwapRecipient(address, blockchain.chainTicker).input?.address &&
+                    it.address == validateSwapRecipient(
+                        address, blockchain.chainTicker, allowPaymentAmount = false
+                    ).input?.address &&
                         it.blockchain?.chainTicker.equals(blockchain.chainTicker, ignoreCase = true)
                 } -> ContactAddressValidationResult.NotUnique
 

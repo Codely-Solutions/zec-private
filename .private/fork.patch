@@ -12670,14 +12670,14 @@ index 76c590a49..6ee4e003f 100644
 +            } catch (e: CancellationException) {
 +                throw e
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SaveABContactUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SaveABContactUseCase.kt
-index 30515d3df..0b2440894 100644
+index 30515d3df..32cd2145b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SaveABContactUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SaveABContactUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
 +import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 @@ -24 +25,4 @@ class SaveABContactUseCase(
 -        addressBookRepository.saveContact(name = name, address = address, chain = chain)
-+        val recipient = chain?.let { validateSwapRecipient(address, it) }
++        val recipient = chain?.let { validateSwapRecipient(address, it, allowPaymentAmount = false) }
 +        if (recipient != null && !recipient.isValid) return ABContactSaveResult.InvalidAddress
 +        val receivingAddress = recipient?.input?.address ?: address
 +        addressBookRepository.saveContact(name = name, address = receivingAddress, chain = chain)
@@ -12755,31 +12755,35 @@ index b63a9a929..000000000
 -    }
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/UpdateABContactUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/UpdateABContactUseCase.kt
-index 4003797c4..a0421e8b5 100644
+index 4003797c4..0bc325256 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/UpdateABContactUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/UpdateABContactUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
 +import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 @@ -26 +27,4 @@ class UpdateABContactUseCase(
 -        addressBookRepository.updateContact(contact = contact, name = name, address = address, chain = chain)
-+        val recipient = chain?.let { validateSwapRecipient(address, it) }
++        val recipient = chain?.let { validateSwapRecipient(address, it, allowPaymentAmount = false) }
 +        if (recipient != null && !recipient.isValid) return ABContactSaveResult.InvalidAddress
 +        val receivingAddress = recipient?.input?.address ?: address
 +        addressBookRepository.updateContact(contact = contact, name = name, address = receivingAddress, chain = chain)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
-index 7bda1f0f5..1680837b2 100644
+index 7bda1f0f5..f9ef271e3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
 +import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
-@@ -20,0 +22,3 @@ class ValidateSwapABContactAddressUseCase(
-+            blockchain == null || !validateSwapRecipient(address, blockchain.chainTicker).isValid ->
+@@ -20,0 +22,5 @@ class ValidateSwapABContactAddressUseCase(
++            blockchain == null || !validateSwapRecipient(
++                address, blockchain.chainTicker, allowPaymentAmount = false
++            ).isValid ->
 +                ContactAddressValidationResult.Invalid
 +
-@@ -28,2 +32,2 @@ class ValidateSwapABContactAddressUseCase(
+@@ -28,2 +34,4 @@ class ValidateSwapABContactAddressUseCase(
 -                    it.address == address.trim() &&
 -                        it.blockchain?.chainTicker?.lowercase() == blockchain?.chainTicker?.lowercase()
-+                    it.address == validateSwapRecipient(address, blockchain.chainTicker).input?.address &&
++                    it.address == validateSwapRecipient(
++                        address, blockchain.chainTicker, allowPaymentAmount = false
++                    ).input?.address &&
 +                        it.blockchain?.chainTicker.equals(blockchain.chainTicker, ignoreCase = true)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt
 index 3e12c9c99..bd85a60d3 100644
@@ -22998,7 +23002,7 @@ index 40bfe60a6..39059e4b6 100644
 +        }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GiftCardContactGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GiftCardContactGuardTest.kt
-index b1db33a76..dd41ac17b 100644
+index b1db33a76..637449d3a 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GiftCardContactGuardTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GiftCardContactGuardTest.kt
 @@ -85,0 +86 @@ class GiftCardContactGuardTest {
@@ -23043,6 +23047,24 @@ index b1db33a76..dd41ac17b 100644
 +        ))
 +        verify(exactly = 1) { addressBookRepository.saveContact("Synthetic BTC", btc, "btc") }
 +        verify(exactly = 1) { addressBookRepository.updateContact(existing, "Synthetic EVM", evm, "eth") }
+@@ -125,0 +161,17 @@ class GiftCardContactGuardTest {
++
++    @Test
++    fun amountBearingPaymentUrisCannotBeSavedOrUpdated() {
++        val save = SaveABContactUseCase(addressBookRepository, navigationRouter)
++        val update = UpdateABContactUseCase(addressBookRepository, navigationRouter)
++        val requests = listOf(
++            "bitcoin:1BoatSLRHtKNngkdXEeobR76b53LETtpyT?amount=1" to "btc",
++            "ethereum:0x1111111111111111111111111111111111111111@1?value=1e18" to "eth"
++        )
++        requests.forEach { (request, chain) ->
++            assertEquals(ABContactSaveResult.InvalidAddress, save("Synthetic", request, chain))
++            assertEquals(ABContactSaveResult.InvalidAddress, update(existing, "Synthetic", request, chain))
++        }
++        verify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
++        verify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
++        verify { navigationRouter wasNot Called }
++    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCaseTest.kt
 index 639d7ef33..00800531a 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCaseTest.kt
@@ -23603,7 +23625,7 @@ index c01988b65..a2db08466 100644
 -        refundAddress: String = "refund",
 +        refundAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCaseTest.kt
-index 9e55e6f64..f78885bbb 100644
+index 9e55e6f64..977109934 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCaseTest.kt
 @@ -9,0 +10 @@ import io.mockk.mockk
@@ -23619,7 +23641,7 @@ index 9e55e6f64..f78885bbb 100644
 +            assertEquals(ContactAddressValidationResult.Valid, validate("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", btc))
 +            assertEquals(ContactAddressValidationResult.NotUnique, validate(existing.address, btc))
 +            assertEquals(ContactAddressValidationResult.Valid, validate(existing.address, btc, exclude = existing))
-@@ -56,0 +60,27 @@ class ValidateSwapABContactAddressUseCaseTest {
+@@ -56,0 +60,36 @@ class ValidateSwapABContactAddressUseCaseTest {
 +
 +    @Test
 +    fun invalidAddressAndMissingNetworkAreRejectedBeforeContactLookup() = runTest {
@@ -23635,6 +23657,15 @@ index 9e55e6f64..f78885bbb 100644
 +    @Test
 +    fun paymentUriUsesParsedAddressForDuplicateCheck() = runTest {
 +        assertEquals(ContactAddressValidationResult.NotUnique, validate("bitcoin:${existing.address}", btc))
++    }
++
++    @Test
++    fun amountBearingPaymentUriIsRejectedBeforeContactLookup() = runTest {
++        assertEquals(
++            ContactAddressValidationResult.Invalid,
++            validate("bitcoin:${existing.address}?amount=1", btc)
++        )
++        verify(exactly = 0) { addressBookRepository.contacts }
 +    }
 +
 +    @Test
