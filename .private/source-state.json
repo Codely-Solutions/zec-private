@@ -2205,7 +2205,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteScreen.kt": "a64dedb14bf236c4bcffaf9cf48819952df3bb9d193a4121d33baa7c9c985a43",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt": "ba738ff2102aed2c71aaea86f9e77cecc9afb878a171e195e1c05b72482956fd",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt": "704cc289a8e7f2cc59c7171696c862f2439e9562b86b3a0bf2d61ed37e63d2d5",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt": "2c1fe625e3972a1a4580758483ea38c005092224f420345cd07b9ee27e8a7846",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt": "9857ea3f8ded143a7d53a61fdd4aea0088dfbf4a4a5f404d9aa4f5b23d88bbe2",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt": "9b9805324e9aa6f79e324a3278f567f4b06346f6a3fd69f46e77abe8148474f4",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/refundwarning/SwapRefundWarningScreen.kt": "dae2ebc79a2cf3a36d00c67f29aeba898bf275c2ea8184e67074660ff1cda485",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/refundwarning/SwapRefundWarningState.kt": "7ad8ee531901994db5b7ecb46ced46d72f4fe965bc3fdabfe90404eb3d2e525c",
