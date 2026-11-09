@@ -14965,7 +14965,7 @@ index 8458fbd36..379cd2086 100644
 +    val requestId: String = UUID.randomUUID().toString(),
 +    val network: String? = null
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVM.kt
-index 1ff62de27..c7c212873 100644
+index 1ff62de27..2bc81d98a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVM.kt
 @@ -39 +39,5 @@ class SelectSwapABRecipientVM(
@@ -15000,9 +15000,11 @@ index 1ff62de27..c7c212873 100644
 -                address = null
 +                address = null,
 +                network = args.network
-@@ -105 +125 @@ class SelectSwapABRecipientVM(
+@@ -105 +125,3 @@ class SelectSwapABRecipientVM(
 -                navigationRouter.replace(AddSwapABContactArgs(address = contact.address))
-+                navigationRouter.replace(AddSwapABContactArgs(address = contact.rawInput ?: contact.address, network = args.network))
++                navigationRouter.replace(
++                    AddSwapABContactArgs(address = contact.rawInput ?: contact.address, network = args.network)
++                )
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
 index 22fac8c3b..0e534cb3e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
@@ -24592,113 +24594,129 @@ index 23393674d..6c082a48b 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
-index bf5467055..954af6792 100644
+index bf5467055..8d6a6501f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
-@@ -30,0 +31,2 @@ import io.mockk.verify
-+import io.mockk.withInstanceFactory
+@@ -2,0 +3,4 @@ package co.electriccoin.zcash.ui.screen.swap
++import cash.z.ecc.android.sdk.model.Account
++import cash.z.ecc.android.sdk.model.AccountUuid
++import cash.z.ecc.android.sdk.model.WalletBalance
++import cash.z.ecc.android.sdk.model.Zatoshi
+@@ -3,0 +8 @@ import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.common.model.AddressBookContact
+@@ -7,0 +13 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
++import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
+@@ -8,0 +15 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
++import co.electriccoin.zcash.ui.common.model.ZodlAccount
+@@ -24,0 +32 @@ import co.electriccoin.zcash.ui.common.usecase.ScanResult
++import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -30,0 +39 @@ import io.mockk.verify
 +import kotlinx.coroutines.CancellationException
-@@ -59,0 +62,5 @@ class SwapVMTest {
+@@ -35,0 +45 @@ import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
+@@ -48,0 +59 @@ import kotlin.test.assertNull
++import kotlin.time.Instant
+@@ -59,0 +71,5 @@ class SwapVMTest {
 +    private companion object {
 +        const val BTC_ADDRESS = "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu"
 +        const val ETH_ADDRESS = "0xde709f2102306220921060314715629080e2fb77"
 +    }
 +
-@@ -151,2 +158,4 @@ class SwapVMTest {
+@@ -151,2 +167,4 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
 -            coVerify(exactly = 0) { harness.requestSwapQuote.requestExactInput(any(), any(), any(), any(), any()) }
 +            harness.onAddressChange(BTC_ADDRESS)
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
 +            coVerify(exactly = 0) { harness.requestSwapQuote.requestExactInput(any(), any(), any(), any(), any(),
 +                any()) }
-@@ -154 +163 @@ class SwapVMTest {
+@@ -154 +172 @@ class SwapVMTest {
 -                harness.requestSwapQuote.requestFlexInputIntoZec(any(), "refund-address", asset, any(), any())
 +                harness.requestSwapQuote.requestFlexInputIntoZec(any(), BTC_ADDRESS, asset, any(), any(), null)
-@@ -178 +187,3 @@ class SwapVMTest {
+@@ -178 +196,3 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
 +            harness.onAddressChange(BTC_ADDRESS)
 +
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
-@@ -184 +195 @@ class SwapVMTest {
+@@ -184 +204 @@ class SwapVMTest {
 -                    refundAddress = "refund-address",
 +                    refundAddress = BTC_ADDRESS,
-@@ -187 +198,2 @@ class SwapVMTest {
+@@ -187 +207,2 @@ class SwapVMTest {
 -                    canNavigateToSwapQuote = any()
 +                    canNavigateToSwapQuote = any(),
 +                    contactNetwork = null
-@@ -200 +212,2 @@ class SwapVMTest {
+@@ -200 +221,2 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
 +            harness.onAddressChange(BTC_ADDRESS)
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
-@@ -205 +218 @@ class SwapVMTest {
+@@ -205 +227 @@ class SwapVMTest {
 -                    address = "destination-address",
 +                    address = BTC_ADDRESS,
-@@ -208 +221,2 @@ class SwapVMTest {
+@@ -208 +230,2 @@ class SwapVMTest {
 -                    canNavigateToSwapQuote = any()
 +                    canNavigateToSwapQuote = any(),
 +                    contactNetwork = null
-@@ -230 +244 @@ class SwapVMTest {
+@@ -230 +253 @@ class SwapVMTest {
 -    fun pickingAbContactOnNewChainWithSingleAssetSelectsThatAsset() =
 +    fun pickingAbContactWithoutSelectedAssetSelectsOnlyCompatibleAsset() =
-@@ -235 +249 @@ class SwapVMTest {
+@@ -235 +258 @@ class SwapVMTest {
 -                    preselect = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
 +                    preselect = null,
-@@ -247 +261 @@ class SwapVMTest {
+@@ -247 +270 @@ class SwapVMTest {
 -    fun pickingAbContactOnNewChainWithMultipleAssetsClearsSelection() =
 +    fun pickingAbContactWithoutSelectedAssetKeepsMultipleAssetsExplicit() =
-@@ -251 +265 @@ class SwapVMTest {
+@@ -251 +274 @@ class SwapVMTest {
 -                    preselect = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
 +                    preselect = null,
-@@ -266 +280 @@ class SwapVMTest {
+@@ -266 +289 @@ class SwapVMTest {
 -            // The chain has more than one asset, so the VM cannot disambiguate and clears the selection.
 +            // The contact supplies the network; choosing between its compatible assets stays explicit.
-@@ -278 +292,3 @@ class SwapVMTest {
+@@ -278 +301,3 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
 +            harness.onAddressChange(BTC_ADDRESS)
 +
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
-@@ -282 +298 @@ class SwapVMTest {
+@@ -282 +307 @@ class SwapVMTest {
 -                harness.requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any())
 +                harness.requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
-@@ -293 +309,3 @@ class SwapVMTest {
+@@ -293 +318,3 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
 +            harness.onAddressChange(BTC_ADDRESS)
 +
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
-@@ -306 +324,3 @@ class SwapVMTest {
+@@ -306 +333,3 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), "refund-address")
 +            harness.onAddressChange(BTC_ADDRESS)
 +
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), BTC_ADDRESS)
-@@ -309 +329 @@ class SwapVMTest {
+@@ -309 +338 @@ class SwapVMTest {
 -                harness.requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any())
 +                harness.requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
-@@ -320 +340,3 @@ class SwapVMTest {
+@@ -320 +349,3 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), "refund-address")
 +            harness.onAddressChange(BTC_ADDRESS)
 +
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), BTC_ADDRESS)
-@@ -326 +348,2 @@ class SwapVMTest {
+@@ -326 +357,2 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("50"), "destination-address")
 +            harness.onAddressChange(BTC_ADDRESS)
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("50"), BTC_ADDRESS)
-@@ -354 +377,2 @@ class SwapVMTest {
+@@ -354 +386,2 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
 +            harness.onAddressChange(BTC_ADDRESS)
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
-@@ -367 +391,2 @@ class SwapVMTest {
+@@ -367 +400,2 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
 +            harness.onAddressChange(BTC_ADDRESS)
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
-@@ -383 +408,2 @@ class SwapVMTest {
+@@ -383 +417,2 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
 +            harness.onAddressChange(BTC_ADDRESS)
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
-@@ -402 +428,2 @@ class SwapVMTest {
+@@ -402 +437,2 @@ class SwapVMTest {
 -            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
 +            harness.onAddressChange(BTC_ADDRESS)
 +            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
-@@ -431,0 +459,36 @@ class SwapVMTest {
+@@ -431,0 +468,36 @@ class SwapVMTest {
 +    @Test
 +    fun computedTokenInputKeepsDisplayedAndStoredAmountIdentical() =
 +        runTest {
@@ -24735,31 +24753,42 @@ index bf5467055..954af6792 100644
 +            assertEquals(0, BigDecimal("0.12345678").compareTo(harness.capturedState.amountTextState.amount))
 +        }
 +
-@@ -487 +550 @@ class SwapVMTest {
+@@ -477 +549,6 @@ class SwapVMTest {
+-                    recipient = mockk(relaxed = true) { every { blockchain } returns null }
++                    recipient = EnhancedABContact(
++                        AddressBookContact(
++                            "Synthetic unscoped contact", BTC_ADDRESS, Instant.fromEpochMilliseconds(0), null
++                        ),
++                        null
++                    )
+@@ -487 +564 @@ class SwapVMTest {
 -    fun scanResultAppliesAddressAndAmountAndClearsContact() =
 +    fun scanResultPreservesRawRequestWithoutApplyingDestinationAmountToInput() =
-@@ -492 +555,5 @@ class SwapVMTest {
+@@ -492 +569,5 @@ class SwapVMTest {
 -                    scanResult = ScanResult(address = "scanned-address", amount = BigDecimal("2.5"))
 +                    scanResult = ScanResult(
 +                        address = BTC_ADDRESS,
 +                        amount = BigDecimal("2.5"),
 +                        rawInput = "bitcoin:$BTC_ADDRESS?amount=2.5"
 +                    )
-@@ -499,2 +566,2 @@ class SwapVMTest {
+@@ -499,2 +580,2 @@ class SwapVMTest {
 -            assertEquals("scanned-address", harness.capturedState.addressText)
 -            assertEquals(0, BigDecimal("2.5").compareTo(harness.capturedState.amountTextState.amount))
 +            assertEquals("bitcoin:$BTC_ADDRESS?amount=2.5", harness.capturedState.addressText)
 +            assertNull(harness.capturedState.amountTextState.amount)
-@@ -520 +587 @@ class SwapVMTest {
+@@ -520 +601 @@ class SwapVMTest {
 -    fun assetPickerIsFilteredBySelectedContactChain() =
 +    fun assetPickerRemainsEditableAfterSelectingContact() =
-@@ -525,0 +593 @@ class SwapVMTest {
+@@ -525,0 +607 @@ class SwapVMTest {
 +                    preselect = eth,
-@@ -533 +601,2 @@ class SwapVMTest {
+@@ -533 +615,2 @@ class SwapVMTest {
 -            coVerify { harness.navigateToSwapAssetPicker(onlyChainTicker = "eth") }
 +            coVerify { harness.navigateToSwapAssetPicker() }
 +            coVerify { harness.navigateToSelectSwapRecipient(network = "eth") }
-@@ -552,0 +622,86 @@ class SwapVMTest {
+@@ -553,3 +636,101 @@ class SwapVMTest {
+-    /** A relaxed account mock reports `isSpendable = false`, so the spend authority is always stubbed explicitly. */
+-    private fun account(isSpendable: Boolean): WalletAccount =
+-        mockk(relaxed = true) { every { this@mockk.isSpendable } returns isSpendable }
 +    @Test
 +    fun tokenNetworkChangeRetainsContactAndCorrectionQuotesWithoutLeavingForm() =
 +        runTest {
@@ -24846,18 +24875,48 @@ index bf5467055..954af6792 100644
 +            assertEquals(false, harness.capturedState.isRequestingQuote)
 +        }
 +
-@@ -558 +713,4 @@ class SwapVMTest {
--        mockk(relaxed = true) { every { blockchain } returns SwapAssetTestFixture.blockchain(chainTicker) }
-+        mockk(relaxed = true) {
-+            every { blockchain } returns SwapAssetTestFixture.blockchain(chainTicker)
-+            every { address } returns if (chainTicker == "btc") BTC_ADDRESS else ETH_ADDRESS
++    private fun account(isSpendable: Boolean): WalletAccount {
++        val sdkAccount = Account.new(AccountUuid.new(ByteArray(16)))
++        val zero = WalletBalance(Zatoshi(0), Zatoshi(0), Zatoshi(0), Zatoshi(0))
++        return if (isSpendable) {
++            ZodlAccount(
++                sdkAccount, "synthetic-unified", "synthetic-transparent", "synthetic-sapling",
++                zero, zero, zero, Zatoshi(0), true
++            )
++        } else {
++            ViewOnlyAccount(
++                sdkAccount, "synthetic-unified", "synthetic-transparent", zero, zero, zero, Zatoshi(0), true,
++                stringRes("Synthetic view-only"), null, 0
++            )
 +        }
-@@ -580 +738 @@ class SwapVMTest {
++    }
+@@ -558 +739,9 @@ class SwapVMTest {
+-        mockk(relaxed = true) { every { blockchain } returns SwapAssetTestFixture.blockchain(chainTicker) }
++        EnhancedABContact(
++            contact = AddressBookContact(
++                name = "Synthetic contact",
++                address = if (chainTicker == "btc") BTC_ADDRESS else ETH_ADDRESS,
++                lastUpdated = Instant.fromEpochMilliseconds(0),
++                chain = chainTicker,
++            ),
++            blockchain = SwapAssetTestFixture.blockchain(chainTicker),
++        )
+@@ -580 +769 @@ class SwapVMTest {
 -            mockk<NavigateToSelectABSwapRecipientUseCase> { coEvery { this@mockk.invoke() } returns recipient }
 +            mockk<NavigateToSelectABSwapRecipientUseCase> { coEvery { this@mockk.invoke(any()) } returns recipient }
-@@ -615,0 +774 @@ class SwapVMTest {
+@@ -610 +799 @@ class SwapVMTest {
+-        val mapper = mockk<SwapVMMapper>()
++        val mapper = SwapVMMapper()
+@@ -615,0 +805 @@ class SwapVMTest {
 +                navigateToSelectSwapRecipient = navigateToSelectSwapRecipient,
-@@ -629,14 +788,18 @@ class SwapVMTest {
+@@ -623 +813,2 @@ class SwapVMTest {
+-                selectedAccount = selectedAccount
++                selectedAccount = selectedAccount,
++                assets = assets
+@@ -626,19 +816,0 @@ class SwapVMTest {
+-        // The VM exposes its callbacks only through SwapVMMapper.createState; capture the callbacks
+-        // object and pull each handler out by name, so the tests can drive the VM the same way the
+-        // View would — and adding/reordering a callback can't silently misroute the others.
 -        every { mapper.createState(any(), any()) } answers {
 -            val callbacks = arg<SwapStateCallbacks>(1)
 -            harness.capturedState = firstArg()
@@ -24872,27 +24931,50 @@ index bf5467055..954af6792 100644
 -            harness.onChangeButtonClick = callbacks.onChangeButtonClick
 -            harness.onAddressClick = callbacks.onAddressClick
 -            mockk()
-+        // Supply a real immutable view state during both stub recording and invocation. MockK's
-+        // automatic return-value mock otherwise tries to instrument the entire UI value graph.
-+        withInstanceFactory({ SwapState.previewViewOnly }) {
-+            every { mapper.createState(any(), any()) } answers {
-+                val callbacks = arg<SwapStateCallbacks>(1)
-+                harness.capturedState = firstArg()
-+                harness.onBack = callbacks.onBack
-+                harness.onSwapAssetPickerClick = callbacks.onSwapAssetPickerClick
-+                harness.onSwapCurrencyTypeClick = callbacks.onSwapCurrencyTypeClick
-+                harness.onSlippageClick = callbacks.onSlippageClick
-+                harness.onRequestSwapQuoteClick = callbacks.onRequestSwapQuoteClick
-+                harness.onAddressChange = callbacks.onAddressChange
-+                harness.onQrCodeScannerClick = callbacks.onQrCodeScannerClick
-+                harness.onAddressBookClick = callbacks.onAddressBookClick
-+                harness.onChangeButtonClick = callbacks.onChangeButtonClick
-+                harness.onAddressClick = callbacks.onAddressClick
-+                SwapState.previewViewOnly
-+            }
-@@ -666,0 +830 @@ class SwapVMTest {
+-        }
+-
+@@ -666,0 +839 @@ class SwapVMTest {
 +        val navigateToSelectSwapRecipient: NavigateToSelectABSwapRecipientUseCase,
-@@ -693 +857 @@ class SwapVMTest {
+@@ -674,0 +848 @@ class SwapVMTest {
++        val assets: SwapAssetsData,
+@@ -677,11 +851,25 @@ class SwapVMTest {
+-        lateinit var capturedState: InternalState
+-        var onBack: () -> Unit = {}
+-        var onSlippageClick: (BigDecimal?) -> Unit = {}
+-        var onSwapAssetPickerClick: () -> Unit = {}
+-        var onSwapCurrencyTypeClick: (BigDecimal?) -> Unit = {}
+-        var onChangeButtonClick: () -> Unit = {}
+-        var onAddressBookClick: () -> Unit = {}
+-        var onAddressChange: (String) -> Unit = {}
+-        var onQrCodeScannerClick: () -> Unit = {}
+-        var onAddressClick: () -> Unit = {}
+-        var onRequestSwapQuoteClick: (BigDecimal, BigDecimal?, String) -> Unit = { _, _, _ -> }
++
++        // Read the VM's immutable snapshot and existing callback bundle directly. The production
++        // mapper runs normally; no MockK proxy for its final UI-state return graph is required.
++        // Reflection stays in this test fixture and fails immediately if either field is renamed.
++        private val callbacks: SwapStateCallbacks by lazy {
++            SwapVM::class.java.getDeclaredField("callbacks").apply { isAccessible = true }
++                .get(vm) as SwapStateCallbacks
++        }
++        @Suppress("UNCHECKED_CAST")
++        private val internalState: StateFlow<InternalStateImpl> by lazy {
++            SwapVM::class.java.getDeclaredField("internalState").apply { isAccessible = true }
++                .get(vm) as StateFlow<InternalStateImpl>
++        }
++        val capturedState: InternalState
++            get() = internalState.value.copy(account = selectedAccount.value, swapAssets = assets)
++        val onBack get() = callbacks.onBack
++        val onSlippageClick get() = callbacks.onSlippageClick
++        val onSwapAssetPickerClick get() = callbacks.onSwapAssetPickerClick
++        val onSwapCurrencyTypeClick get() = callbacks.onSwapCurrencyTypeClick
++        val onChangeButtonClick get() = callbacks.onChangeButtonClick
++        val onAddressBookClick get() = callbacks.onAddressBookClick
++        val onAddressChange get() = callbacks.onAddressChange
++        val onQrCodeScannerClick get() = callbacks.onQrCodeScannerClick
++        val onAddressClick get() = callbacks.onAddressClick
++        val onRequestSwapQuoteClick get() = callbacks.onRequestSwapQuoteClick
+@@ -693 +881 @@ class SwapVMTest {
 -                requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any())
 +                requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVMTest.kt

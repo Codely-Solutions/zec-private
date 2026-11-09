@@ -1,11 +1,18 @@
 package co.electriccoin.zcash.ui.screen.swap
 
+import cash.z.ecc.android.sdk.model.Account
+import cash.z.ecc.android.sdk.model.AccountUuid
+import cash.z.ecc.android.sdk.model.WalletBalance
+import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.model.AddressBookContact
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapDirection
 import co.electriccoin.zcash.ui.common.model.SwapMode
+import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.repository.SwapAssetsData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
@@ -22,19 +29,20 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapQuoteIfAvailableUse
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapRefundWarningUseCase
 import co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.ScanResult
+import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.swap.info.SwapRefundAddressInfoArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
-import io.mockk.withInstanceFactory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -48,6 +56,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.time.Instant
 
 /**
  * [SwapVM] now owns the selected asset and slippage in its merged state: preselect applies only when
@@ -537,7 +546,12 @@ class SwapVMTest {
             val harness =
                 harness(
                     preselect = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
-                    recipient = mockk(relaxed = true) { every { blockchain } returns null }
+                    recipient = EnhancedABContact(
+                        AddressBookContact(
+                            "Synthetic unscoped contact", BTC_ADDRESS, Instant.fromEpochMilliseconds(0), null
+                        ),
+                        null
+                    )
                 )
             harness.collectState(this)
 
@@ -705,15 +719,32 @@ class SwapVMTest {
             assertEquals(false, harness.capturedState.isRequestingQuote)
         }
 
-    /** A relaxed account mock reports `isSpendable = false`, so the spend authority is always stubbed explicitly. */
-    private fun account(isSpendable: Boolean): WalletAccount =
-        mockk(relaxed = true) { every { this@mockk.isSpendable } returns isSpendable }
+    private fun account(isSpendable: Boolean): WalletAccount {
+        val sdkAccount = Account.new(AccountUuid.new(ByteArray(16)))
+        val zero = WalletBalance(Zatoshi(0), Zatoshi(0), Zatoshi(0), Zatoshi(0))
+        return if (isSpendable) {
+            ZodlAccount(
+                sdkAccount, "synthetic-unified", "synthetic-transparent", "synthetic-sapling",
+                zero, zero, zero, Zatoshi(0), true
+            )
+        } else {
+            ViewOnlyAccount(
+                sdkAccount, "synthetic-unified", "synthetic-transparent", zero, zero, zero, Zatoshi(0), true,
+                stringRes("Synthetic view-only"), null, 0
+            )
+        }
+    }
 
     private fun contactOnChain(chainTicker: String): EnhancedABContact =
-        mockk(relaxed = true) {
-            every { blockchain } returns SwapAssetTestFixture.blockchain(chainTicker)
-            every { address } returns if (chainTicker == "btc") BTC_ADDRESS else ETH_ADDRESS
-        }
+        EnhancedABContact(
+            contact = AddressBookContact(
+                name = "Synthetic contact",
+                address = if (chainTicker == "btc") BTC_ADDRESS else ETH_ADDRESS,
+                lastUpdated = Instant.fromEpochMilliseconds(0),
+                chain = chainTicker,
+            ),
+            blockchain = SwapAssetTestFixture.blockchain(chainTicker),
+        )
 
     @Suppress("LongMethod")
     private fun harness(
@@ -765,7 +796,7 @@ class SwapVMTest {
             mockk<GetSelectedWalletAccountUseCase> {
                 every { observe() } returns selectedAccount
             }
-        val mapper = mockk<SwapVMMapper>()
+        val mapper = SwapVMMapper()
         val swapRepository =
             mockk<SwapRepository>(relaxed = true) { every { this@mockk.assets } returns MutableStateFlow(assets) }
 
@@ -779,31 +810,9 @@ class SwapVMTest {
                 cancelSwap = cancelSwap,
                 navigateToSwapQuoteIfAvailable = navigateToSwapQuoteIfAvailable,
                 navigationRouter = navigationRouter,
-                selectedAccount = selectedAccount
+                selectedAccount = selectedAccount,
+                assets = assets
             )
-
-        // The VM exposes its callbacks only through SwapVMMapper.createState; capture the callbacks
-        // object and pull each handler out by name, so the tests can drive the VM the same way the
-        // View would — and adding/reordering a callback can't silently misroute the others.
-        // Supply a real immutable view state during both stub recording and invocation. MockK's
-        // automatic return-value mock otherwise tries to instrument the entire UI value graph.
-        withInstanceFactory({ SwapState.previewViewOnly }) {
-            every { mapper.createState(any(), any()) } answers {
-                val callbacks = arg<SwapStateCallbacks>(1)
-                harness.capturedState = firstArg()
-                harness.onBack = callbacks.onBack
-                harness.onSwapAssetPickerClick = callbacks.onSwapAssetPickerClick
-                harness.onSwapCurrencyTypeClick = callbacks.onSwapCurrencyTypeClick
-                harness.onSlippageClick = callbacks.onSlippageClick
-                harness.onRequestSwapQuoteClick = callbacks.onRequestSwapQuoteClick
-                harness.onAddressChange = callbacks.onAddressChange
-                harness.onQrCodeScannerClick = callbacks.onQrCodeScannerClick
-                harness.onAddressBookClick = callbacks.onAddressBookClick
-                harness.onChangeButtonClick = callbacks.onChangeButtonClick
-                harness.onAddressClick = callbacks.onAddressClick
-                SwapState.previewViewOnly
-            }
-        }
 
         harness.vm =
             SwapVM(
@@ -836,19 +845,34 @@ class SwapVMTest {
         val navigateToSwapQuoteIfAvailable: NavigateToSwapQuoteIfAvailableUseCase,
         val navigationRouter: NavigationRouter,
         val selectedAccount: MutableStateFlow<WalletAccount?>,
+        val assets: SwapAssetsData,
     ) {
         lateinit var vm: SwapVM
-        lateinit var capturedState: InternalState
-        var onBack: () -> Unit = {}
-        var onSlippageClick: (BigDecimal?) -> Unit = {}
-        var onSwapAssetPickerClick: () -> Unit = {}
-        var onSwapCurrencyTypeClick: (BigDecimal?) -> Unit = {}
-        var onChangeButtonClick: () -> Unit = {}
-        var onAddressBookClick: () -> Unit = {}
-        var onAddressChange: (String) -> Unit = {}
-        var onQrCodeScannerClick: () -> Unit = {}
-        var onAddressClick: () -> Unit = {}
-        var onRequestSwapQuoteClick: (BigDecimal, BigDecimal?, String) -> Unit = { _, _, _ -> }
+
+        // Read the VM's immutable snapshot and existing callback bundle directly. The production
+        // mapper runs normally; no MockK proxy for its final UI-state return graph is required.
+        // Reflection stays in this test fixture and fails immediately if either field is renamed.
+        private val callbacks: SwapStateCallbacks by lazy {
+            SwapVM::class.java.getDeclaredField("callbacks").apply { isAccessible = true }
+                .get(vm) as SwapStateCallbacks
+        }
+        @Suppress("UNCHECKED_CAST")
+        private val internalState: StateFlow<InternalStateImpl> by lazy {
+            SwapVM::class.java.getDeclaredField("internalState").apply { isAccessible = true }
+                .get(vm) as StateFlow<InternalStateImpl>
+        }
+        val capturedState: InternalState
+            get() = internalState.value.copy(account = selectedAccount.value, swapAssets = assets)
+        val onBack get() = callbacks.onBack
+        val onSlippageClick get() = callbacks.onSlippageClick
+        val onSwapAssetPickerClick get() = callbacks.onSwapAssetPickerClick
+        val onSwapCurrencyTypeClick get() = callbacks.onSwapCurrencyTypeClick
+        val onChangeButtonClick get() = callbacks.onChangeButtonClick
+        val onAddressBookClick get() = callbacks.onAddressBookClick
+        val onAddressChange get() = callbacks.onAddressChange
+        val onQrCodeScannerClick get() = callbacks.onQrCodeScannerClick
+        val onAddressClick get() = callbacks.onAddressClick
+        val onRequestSwapQuoteClick get() = callbacks.onRequestSwapQuoteClick
 
         /** Makes the next flex-input quote request hang so `isRequestingQuote` stays true. */
         fun makeQuoteHang(): CompletableDeferred<Unit> {
