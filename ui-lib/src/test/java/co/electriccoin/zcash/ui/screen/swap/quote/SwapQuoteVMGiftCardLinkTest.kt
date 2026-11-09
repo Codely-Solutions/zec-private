@@ -77,6 +77,7 @@ class SwapQuoteVMGiftCardLinkTest {
             swapQuoteSuccessMapper = mockk(relaxed = true),
             submitProposal = mockk(relaxed = true),
             navigationRouter = mockk(relaxed = true),
+            independentPrices = mockk(relaxed = true),
         )
     }
 }

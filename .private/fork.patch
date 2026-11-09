@@ -26027,6 +26027,12 @@ index 000000000..91b204fd8
 +    private fun compare(input: String, output: String, now: Instant = quoted) =
 +        quoteValueDifference(BigDecimal(input), BigDecimal(output), quoted, quoted + 5.minutes, now)
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMGiftCardLinkTest.kt
+index 881e28b09..74f1857a7 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMGiftCardLinkTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMGiftCardLinkTest.kt
+@@ -79,0 +80 @@ class SwapQuoteVMGiftCardLinkTest {
++            independentPrices = mockk(relaxed = true),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 index 38427672d..7256c0e4f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
