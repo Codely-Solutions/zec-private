@@ -10432,10 +10432,10 @@ index befe3b652..3c6b6ef3a 100644
 +                stringResByCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker, minDecimals = 0)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt
 new file mode 100644
-index 000000000..a239cdd88
+index 000000000..cd94b5972
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,79 @@
 +package co.electriccoin.zcash.ui.common.model
 +
 +import java.math.BigDecimal
@@ -10506,12 +10506,15 @@ index 000000000..a239cdd88
 +    }
 +
 +    private fun valid(observation: MarketObservation, now: Long): Boolean = with(observation) {
-+        bid.signum() > 0 && ask >= bid &&
++        boundedMarketNumber(bid) && boundedMarketNumber(ask) && bid.signum() > 0 && ask >= bid &&
 +            ask.subtract(bid).divide(bid, MathContext.DECIMAL128) <= BigDecimal("0.02") &&
 +            observedAtMillis <= now + 5_000L && observedAtMillis > now - 120_000L &&
 +            receivedAtMillis <= now + 5_000L && receivedAtMillis > now - 60_000L
 +    }
 +}
++
++/** Bound untrusted decimal exponents before arithmetic can expand them. Values remain exact. */
++internal fun boundedMarketNumber(value: BigDecimal): Boolean = value.precision() <= 32 && value.scale() in -12..18
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt
 new file mode 100644
 index 000000000..c5199a480
@@ -11444,12 +11447,13 @@ index feef536f5..13ee1cfdf 100644
 +            level = LogLevel.NONE
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
 new file mode 100644
-index 000000000..3f056c580
+index 000000000..6ae1893b1
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,115 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
++import co.electriccoin.zcash.ui.common.model.boundedMarketNumber
 +import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
 +import co.electriccoin.zcash.ui.common.model.IndependentPricePolicy
 +import co.electriccoin.zcash.ui.common.model.MarketObservation
@@ -11557,6 +11561,7 @@ index 000000000..3f056c580
 +        val observedAtMillis = seconds.multiply(BigDecimal("1000")).longValueExact()
 +        val bid = row[1].jsonPrimitive.content.toBigDecimal()
 +        val ask = row[2].jsonPrimitive.content.toBigDecimal()
++        require(boundedMarketNumber(bid) && boundedMarketNumber(ask))
 +        require(bid.signum() > 0 && ask >= bid)
 +        MarketObservation(pair, bid, ask, observedAtMillis, receivedAtMillis)
 +    }.maxBy { it.observedAtMillis }
@@ -22447,10 +22452,10 @@ index 000000000..2a71971b1
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt
 new file mode 100644
-index 000000000..2662daa63
+index 000000000..7a1f34530
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt
-@@ -0,0 +1,131 @@
+@@ -0,0 +1,132 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
@@ -22578,6 +22583,7 @@ index 000000000..2662daa63
 +            """{"error":[],"result":{"XZECZUSD":[],"last":100}}""",
 +            """{"error":[],"result":{"XZECZUSD":[[100,"0","21"]],"last":100}}""",
 +            """{"error":[],"result":{"XZECZUSD":[[100,"22","21"]],"last":100}}""",
++            """{"error":[],"result":{"XZECZUSD":[[100,"1","1e2147483647"]],"last":100}}""",
 +            " ".repeat(65_537)
 +        ).forEach { body -> assertFails { parseKrakenObservation("ZECUSD", body, 100_000) } }
 +    }

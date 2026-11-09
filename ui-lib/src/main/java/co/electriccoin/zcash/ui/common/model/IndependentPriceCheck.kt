@@ -68,9 +68,12 @@ object IndependentPricePolicy {
     }
 
     private fun valid(observation: MarketObservation, now: Long): Boolean = with(observation) {
-        bid.signum() > 0 && ask >= bid &&
+        boundedMarketNumber(bid) && boundedMarketNumber(ask) && bid.signum() > 0 && ask >= bid &&
             ask.subtract(bid).divide(bid, MathContext.DECIMAL128) <= BigDecimal("0.02") &&
             observedAtMillis <= now + 5_000L && observedAtMillis > now - 120_000L &&
             receivedAtMillis <= now + 5_000L && receivedAtMillis > now - 60_000L
     }
 }
+
+/** Bound untrusted decimal exponents before arithmetic can expand them. Values remain exact. */
+internal fun boundedMarketNumber(value: BigDecimal): Boolean = value.precision() <= 32 && value.scale() in -12..18
