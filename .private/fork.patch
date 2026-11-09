@@ -11447,10 +11447,10 @@ index feef536f5..13ee1cfdf 100644
 +            level = LogLevel.NONE
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
 new file mode 100644
-index 000000000..6ae1893b1
+index 000000000..d3fee4031
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,117 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import co.electriccoin.zcash.ui.common.model.boundedMarketNumber
@@ -11458,6 +11458,7 @@ index 000000000..6ae1893b1
 +import co.electriccoin.zcash.ui.common.model.IndependentPricePolicy
 +import co.electriccoin.zcash.ui.common.model.MarketObservation
 +import co.electriccoin.zcash.ui.common.model.SwapQuote
++import io.ktor.client.plugins.expectSuccess
 +import io.ktor.client.request.prepareGet
 +import io.ktor.client.statement.bodyAsChannel
 +import io.ktor.utils.io.readBuffer
@@ -11514,6 +11515,7 @@ index 000000000..6ae1893b1
 +                                delay(waitMillis.coerceAtLeast(0L))
 +                                lastRequestStartedMillis = System.currentTimeMillis()
 +                                cache[pair] = client.prepareGet("https://api.kraken.com/0/public/Spread") {
++                                    expectSuccess = false
 +                                    url { parameters.append("pair", pair) }
 +                                }.execute { response ->
 +                                    check(response.status.value == 200)
@@ -15621,7 +15623,7 @@ index 9f37c1d93..e4ab3f2e1 100644
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..05bbaf94e 100644
+index 717411935..a7ac8a872 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
@@ -15650,7 +15652,7 @@ index 717411935..05bbaf94e 100644
 +                            else -> stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm)
 +                        },
 +                        isEnabled = priceCheck != IndependentPriceCheck.Checking,
-@@ -62,0 +75,23 @@ internal class SwapQuoteVMMapper {
+@@ -62,0 +75,27 @@ internal class SwapQuoteVMMapper {
 +    private fun IndependentPriceCheck.toNotice(): PriceCheckNoticeState = when (this) {
 +        IndependentPriceCheck.Checking -> PriceCheckNoticeState(
 +            stringRes(R.string.private_price_checking), stringRes(R.string.private_price_check_details)
@@ -15665,26 +15667,30 @@ index 717411935..05bbaf94e 100644
 +                    differencePercent.abs().setScale(1, RoundingMode.HALF_UP).toPlainString(),
 +                )
 +            } else {
++                stringRes(R.string.private_price_compared)
++            },
++            explanation = if (poor) {
++                stringRes(R.string.private_price_check_details)
++            } else {
 +                val rounded = differencePercent.setScale(2, RoundingMode.HALF_UP)
 +                val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString()
-+                stringRes(R.string.private_price_difference, signed)
++                stringRes(R.string.private_price_compared_details, signed)
 +            },
-+            explanation = stringRes(R.string.private_price_check_details),
 +            isWarning = poor,
 +        )
 +    }
 +
-@@ -65,0 +101,6 @@ internal class SwapQuoteVMMapper {
+@@ -65,0 +105,6 @@ internal class SwapQuoteVMMapper {
 +        val minimum = quote.minimumAmountOut?.let {
 +            stringRes(
 +                R.string.private_minimum_received,
 +                stringResByCurrencyNumber(it, quote.destinationAsset.tokenTicker, minDecimals = 0)
 +            )
 +        }
-@@ -67 +108 @@ internal class SwapQuoteVMMapper {
+@@ -67 +112 @@ internal class SwapQuoteVMMapper {
 -        return stringRes(
 +        return minimum ?: stringRes(
-@@ -96,7 +137,2 @@ internal class SwapQuoteVMMapper {
+@@ -96,7 +141,2 @@ internal class SwapQuoteVMMapper {
 -                description = stringRes(R.string.swapAndPay_totalFees),
 -                title =
 -                    if (quote.destinationAsset.isZCashAsset) {
@@ -15694,33 +15700,33 @@ index 717411935..05bbaf94e 100644
 -                    }.withStyle(),
 +                description = stringRes(R.string.private_wallet_transaction_fee),
 +                title = stringRes(totalFeesZatoshi).withStyle(),
-@@ -107,0 +144,6 @@ internal class SwapQuoteVMMapper {
+@@ -107,0 +148,6 @@ internal class SwapQuoteVMMapper {
 +            ).takeIf { !quote.destinationAsset.isZCashAsset && totalFeesZatoshi.value > 0 },
 +            SwapQuoteInfoItem(
 +                description = stringRes(R.string.private_provider_costs),
 +                title = stringRes(R.string.private_provider_costs_included).withStyle(),
 +                subtitle = null,
 +                layout = SwapQuoteInfoLayout.STACKED
-@@ -111 +153,4 @@ internal class SwapQuoteVMMapper {
+@@ -111 +157,4 @@ internal class SwapQuoteVMMapper {
 -                val slippageUsd = quote.amountOutUsd.multiply(slippage)
 +                val allowance = quote.inputAllowance ?: quote.amountInFormatted.multiply(slippage)
 +                val slippageUsd = quote.amountInUsd
 +                    .divide(quote.amountInFormatted, MathContext.DECIMAL128)
 +                    .multiply(allowance)
-@@ -113,5 +158 @@ internal class SwapQuoteVMMapper {
+@@ -113,5 +162 @@ internal class SwapQuoteVMMapper {
 -                    quote.amountInFormatted
 -                        .multiply(
 -                            slippage,
 -                            MathContext.DECIMAL128
 -                        ).convertZecToZatoshi()
 +                    allowance.convertZecToZatoshi()
-@@ -122 +163 @@ internal class SwapQuoteVMMapper {
+@@ -122 +167 @@ internal class SwapQuoteVMMapper {
 -                            R.string.swapAndPay_maxSlippage,
 +                            R.string.private_included_input_allowance,
-@@ -127 +168 @@ internal class SwapQuoteVMMapper {
+@@ -127 +172 @@ internal class SwapQuoteVMMapper {
 -                        stringResByDynamicCurrencyNumber(slippageUsd, FiatCurrency.USD.symbol).withStyle()
 +                        quoteFiatAmount(slippageUsd, quote.amountInUsd.signum() > 0).withStyle()
-@@ -136,3 +177,8 @@ internal class SwapQuoteVMMapper {
+@@ -136,3 +181,8 @@ internal class SwapQuoteVMMapper {
 -            description = stringRes(R.string.swapAndPay_totalAmount),
 -            title = stringResByDynamicCurrencyNumber(total, quote.originAsset.tokenTicker).withStyle(),
 -            subtitle = stringResByDynamicCurrencyNumber(totalUsd, FiatCurrency.USD.symbol).withStyle()
@@ -15732,20 +15738,20 @@ index 717411935..05bbaf94e 100644
 +                },
 +            title = stringResByCurrencyNumber(total, quote.originAsset.tokenTicker, minDecimals = 0).withStyle(),
 +            subtitle = quoteFiatAmount(totalUsd, quote.amountInUsd.signum() > 0).withStyle()
-@@ -145,2 +191,2 @@ internal class SwapQuoteVMMapper {
+@@ -145,2 +195,2 @@ internal class SwapQuoteVMMapper {
 -            amount = stringResByDynamicNumber(quote.amountInFormatted),
 -            fiatAmount = stringResByDynamicCurrencyNumber(quote.amountInUsd, FiatCurrency.USD.symbol),
 +            amount = stringResByNumber(quote.amountInFormatted, minDecimals = 0),
 +            fiatAmount = quoteFiatAmount(quote.amountInUsd),
-@@ -156 +202 @@ internal class SwapQuoteVMMapper {
+@@ -156 +206 @@ internal class SwapQuoteVMMapper {
 -                stringResByDynamicNumber(
 +                stringResByNumber(
-@@ -157,0 +204 @@ internal class SwapQuoteVMMapper {
+@@ -157,0 +208 @@ internal class SwapQuoteVMMapper {
 +                    minDecimals = 0,
-@@ -159 +206 @@ internal class SwapQuoteVMMapper {
+@@ -159 +210 @@ internal class SwapQuoteVMMapper {
 -            fiatAmount = stringResByDynamicCurrencyNumber(quote.amountOutUsd, FiatCurrency.USD.symbol),
 +            fiatAmount = quoteFiatAmount(quote.amountOutUsd),
-@@ -161 +208,24 @@ internal class SwapQuoteVMMapper {
+@@ -161 +212,24 @@ internal class SwapQuoteVMMapper {
 -            chain = quote.destinationAsset.chainName
 +            chain = quote.destinationAsset.chainName,
 +            valueDifference = createValueDifference(),
@@ -15771,7 +15777,7 @@ index 717411935..05bbaf94e 100644
 +            explanation = stringRes(scope),
 +            isNegative = rounded.signum() < 0,
 +            validUntilMillis = minOf(quote.timestamp + 3.minutes, quote.deadline).toEpochMilliseconds(),
-@@ -162,0 +233,5 @@ internal class SwapQuoteVMMapper {
+@@ -162,0 +237,5 @@ internal class SwapQuoteVMMapper {
 +    }
 +
 +    private fun quoteFiatAmount(usd: BigDecimal, available: Boolean = usd.signum() > 0): StringResource =
@@ -21089,17 +21095,18 @@ index 000000000..84b214fa3
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml
 new file mode 100644
-index 000000000..6bb4e0cf3
+index 000000000..6ff08f1ea
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml
-@@ -0,0 +1,11 @@
+@@ -0,0 +1,12 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
 +    <string name="private_price_checking">Checking market price…</string>
 +    <string name="private_price_unavailable">Price check unavailable</string>
-+    <string name="private_price_unavailable_details">A fresh independent price is unavailable for this pair. Review the quoted amounts.</string>
++    <string name="private_price_unavailable_details">No fresh reference is available. This check supports native BTC, ETH, SOL and ZEC.</string>
 +    <string name="private_price_check_details">Kraken spot reference, not an executable swap. Includes quoted costs and any known Zcash network fee; external sending fees may be extra.</string>
-+    <string name="private_price_difference">Market difference: %1$s%%</string>
++    <string name="private_price_compared">Compared with Kraken</string>
++    <string name="private_price_compared_details">Kraken reference difference: %1$s%%, including quoted costs and known Zcash network fees. A spot-price comparison, not an executable swap.</string>
 +    <string name="private_price_poor">%1$s%% below market reference</string>
 +    <string name="private_swap_anyway">Swap anyway</string>
 +    <string name="private_pay_anyway">Pay anyway</string>
@@ -22452,10 +22459,10 @@ index 000000000..2a71971b1
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt
 new file mode 100644
-index 000000000..7a1f34530
+index 000000000..5c7bbab27
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,146 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
@@ -22547,6 +22554,20 @@ index 000000000..7a1f34530
 +            assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
 +        }
 +        coVerify(exactly = 1) { clients.createTor() }
++        coVerify(exactly = 0) { clients.create() }
++    }
++
++    @Test
++    fun httpFailureIsUnavailableEvenWithFactorySuccessValidationEnabled() = runTest {
++        val client = HttpClient(MockEngine { respond("error", HttpStatusCode.ServiceUnavailable) }) {
++            expectSuccess = true
++        }
++        val clients = mockk<HttpClientProvider>()
++        coEvery { clients.createTor() } returns client
++        assertEquals(
++            IndependentPriceCheck.Unavailable,
++            KrakenPriceProvider(clients).check(supportedQuote(), BigDecimal.ZERO),
++        )
 +        coVerify(exactly = 0) { clients.create() }
 +    }
 +
@@ -26290,7 +26311,7 @@ index 38427672d..7256c0e4f 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
-index 3027e6cda..277b131a9 100644
+index 3027e6cda..73e57fa66 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
 @@ -7,0 +8 @@ import co.electriccoin.zcash.ui.R
@@ -26310,7 +26331,7 @@ index 3027e6cda..277b131a9 100644
 +import java.util.Locale
 @@ -42,0 +54 @@ import kotlin.test.assertNotNull
 +import kotlin.test.assertTrue
-@@ -96,0 +109,89 @@ class SwapQuoteVMTest {
+@@ -96,0 +109,102 @@ class SwapQuoteVMTest {
 +    @Test
 +    fun sheetDismissalCallbacksOnlyCancelOnce() =
 +        runTest {
@@ -26400,7 +26421,20 @@ index 3027e6cda..277b131a9 100644
 +        )
 +    }
 +
-@@ -105 +206,12 @@ class SwapQuoteVMTest {
++    @Test
++    fun normalReferenceKeepsItsPercentageInDetails() = runTest {
++        val prices = mockk<IndependentPriceProvider> {
++            coEvery { check(any(), any()) } returns
++                IndependentPriceCheck.Compared(BigDecimal("-2.5"), System.currentTimeMillis() + 60_000)
++        }
++        val vm = vm(zashi(), prices = prices)
++        collect(vm)
++        val notice = (vm.state.value as SwapQuoteState.Success).priceCheck ?: error("Missing comparison")
++        assertEquals("Compared with Kraken", notice.label.getString(RuntimeEnvironment.getApplication(), Locale.US))
++        assertTrue(notice.explanation.getString(RuntimeEnvironment.getApplication(), Locale.US).contains("-2.50%"))
++    }
++
+@@ -105 +219,12 @@ class SwapQuoteVMTest {
 -    private fun vm(account: WalletAccount) =
 +    private fun vm(
 +        account: WalletAccount,
@@ -26414,20 +26448,20 @@ index 3027e6cda..277b131a9 100644
 +            quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
 +        ),
 +    ) =
-@@ -122,5 +234 @@ class SwapQuoteVMTest {
+@@ -122,5 +247 @@ class SwapQuoteVMTest {
 -                        MutableStateFlow(
 -                            SwapQuoteData.Success(
 -                                quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
 -                            )
 -                        )
 +                        (quotes ?: MutableStateFlow(quoteData))
-@@ -128 +236 @@ class SwapQuoteVMTest {
+@@ -128 +249 @@ class SwapQuoteVMTest {
 -            cancelSwapQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true),
 +            cancelSwapQuote = cancelQuote,
-@@ -131 +239 @@ class SwapQuoteVMTest {
+@@ -131 +252 @@ class SwapQuoteVMTest {
 -            submitProposal = mockk<SubmitProposalUseCase>(relaxed = true),
 +            submitProposal = submit,
-@@ -132,0 +241 @@ class SwapQuoteVMTest {
+@@ -132,0 +254 @@ class SwapQuoteVMTest {
 +            independentPrices = prices,
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt
 new file mode 100644

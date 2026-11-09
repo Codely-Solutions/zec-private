@@ -93,6 +93,20 @@ class KrakenPriceProviderTest {
     }
 
     @Test
+    fun httpFailureIsUnavailableEvenWithFactorySuccessValidationEnabled() = runTest {
+        val client = HttpClient(MockEngine { respond("error", HttpStatusCode.ServiceUnavailable) }) {
+            expectSuccess = true
+        }
+        val clients = mockk<HttpClientProvider>()
+        coEvery { clients.createTor() } returns client
+        assertEquals(
+            IndependentPriceCheck.Unavailable,
+            KrakenPriceProvider(clients).check(supportedQuote(), BigDecimal.ZERO),
+        )
+        coVerify(exactly = 0) { clients.create() }
+    }
+
+    @Test
     fun parentCancellationPropagates() = runTest {
         val clients = mockk<HttpClientProvider>()
         coEvery { clients.createTor() } throws CancellationException("cancelled")

@@ -5,6 +5,7 @@ import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
 import co.electriccoin.zcash.ui.common.model.IndependentPricePolicy
 import co.electriccoin.zcash.ui.common.model.MarketObservation
 import co.electriccoin.zcash.ui.common.model.SwapQuote
+import io.ktor.client.plugins.expectSuccess
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
 import io.ktor.utils.io.readBuffer
@@ -61,6 +62,7 @@ class KrakenPriceProvider(private val httpClientProvider: HttpClientProvider) : 
                                 delay(waitMillis.coerceAtLeast(0L))
                                 lastRequestStartedMillis = System.currentTimeMillis()
                                 cache[pair] = client.prepareGet("https://api.kraken.com/0/public/Spread") {
+                                    expectSuccess = false
                                     url { parameters.append("pair", pair) }
                                 }.execute { response ->
                                     check(response.status.value == 200)
