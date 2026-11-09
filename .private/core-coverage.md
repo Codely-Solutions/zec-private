@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision18 candidate acceptance passed against the verified revision17 installed-update fixture; signing/publication is pending. Revision17 remains signed and available. `core-validation-summary.json` binds the executed source/APKs; `release-evidence/v3.19.0-private.17.json` binds publication. The next version-matched app/instrumentation fixture is preserved in the maintenance draft.
+Status: revision18 is signed and independently verified, with revision17 as rollback. The verified revision18 seedless app/instrumentation fixture is preserved for the next update check. `core-validation-summary.json` binds the executed source/APKs; `release-evidence/v3.19.0-private.18.json` binds publication. The next version-matched app/instrumentation fixture is preserved in the maintenance draft.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
@@ -50,13 +50,11 @@ Production Detekt retains its rules and existing baseline. Its release-only init
 
 ## Current release evidence
 
-Revision18 executed real testnet receive/confirmation, revision17 installed-update preservation, controlled native Tor interruption/recovery, one shielded send, restart and clean recipient seed/birthday restoration. The same transaction established the received amount, memo and mined history. Three unfunded Tor quote/dismiss/requote cycles passed without provider timeouts. All 1,786 reported release-variant tests passed, including updater, TLS, quote, explorer and theme checks.
+Revision18 executed real testnet receive/confirmation, revision17 installed-update preservation, controlled native Tor interruption/recovery, one shielded send, restart and clean recipient seed/birthday restoration. The same transaction established the received amount, memo and mined history, with manual donation review/cancel, one approval, clipboard ownership checks and rejection of unsupported multi-recipient review. Three unfunded Tor quote/dismiss/requote cycles passed without provider timeouts. All 1,786 reported release-variant tests passed, including updater, TLS, quote, explorer and theme checks.
 
 The post-lifecycle explorer UI dump failed before reaching a transaction-detail action; that failed attempt remains separate. A fresh seedless guest then invoked the candidate's actual explorer-link callback through the real app router, opened the exact real testnet transaction URL in Android's browser, and returned with Back. App executable payloads matched the lifecycle candidate. Row semantics and callback dispatch are covered separately by Compose/Robolectric tests; the native probe does not claim that tap or a loaded explorer page. Approved synthetic theme/large-text captures retain their original source bindings. No additional funded lifecycle was used for browser diagnosis.
 
-Revision 17 executed real testnet receive/confirmation, the revision-16 installed update, controlled native Tor interruption/recovery, one shielded send, restart and clean recipient seed/birthday restoration. The same transaction established the recipient amount, message and mined history. Version-matched baseline/candidate instrumentation and installed APK hashes are checked at each stage. A separate unfunded native probe established the corrected transport boundary before funding. The first faucet attempt explicitly refused without sending (HTTP503); one repeat followed recovered public service health.
-
-The real send used the manual shielded-donation screen: review/cancel, one approval, exact nonempty message and clipboard metadata/newer-content protection passed on revision 17. Clean recipient restoration found the correct mined payment while its app state remained Pending; it was not required to spend that receipt. Three unfunded Tor quote/dismiss/requote cycles passed without provider timeout. Thirteen final synthetic frames cover update/donation copy, themed icons, errors and selection controls across light/dark/OLED, with opposite system/app appearance. Real Obtainium import and stable-release discovery passed without installing the production wallet. Layout scenes cannot establish payment or authentication. Enlarged-text evidence retains its original revision-16 scope; clipboard process-death cleanup and physical authentication remain unexecuted.
+Existing Obtainium import/release-discovery execution retains its revision17 scope; release18 preserves the technical tag, APK filter and version-code marker. Physical authentication and clipboard process-death cleanup remain unexecuted.
 
 ## Retained dependency-security work
 
