@@ -81,6 +81,23 @@ def run(root, stop):
         action('set_text',index=0,value='0.001')
         click('Open address book','Phase1Fixture')
         click('Phase1Fixture','Get a quote')
+        # Keep the BTC contact visible while selecting an incompatible network,
+        # then correct the token in this same form before requesting any quote.
+        click('BTC', 'Select Token')
+        action('set_text', index=0, value='ETH')
+        click('ETH', 'Get a quote')
+        state = wait('Choose a recipient on ETH or change the asset.')
+        if 'phase1fixture' not in labels(state):
+            raise RuntimeError('Network edit discarded the selected recipient')
+        quote_buttons = [n for n in state['nodes'] if n.get('text', '').casefold() == 'get a quote']
+        if not quote_buttons or any(n.get('enabled') for n in quote_buttons):
+            raise RuntimeError('Incompatible recipient did not block quote action')
+        click('ETH', 'Select Token')
+        action('set_text', index=0, value='BTC')
+        click('BTC', 'Get a quote')
+        state = action('snapshot')
+        if any('choose a recipient on' in label for label in labels(state)):
+            raise RuntimeError('Corrected recipient validation remained stale')
         provider_errors=[]
         for index in range(3):
             for attempt in range(3):
@@ -127,7 +144,8 @@ def run(root, stop):
         action('assert_text',text='About')
         action('assert_text',text="What's New")
         result={'passed':True,'freshIsolatedWallet':True,'quotesReviewedAndDismissed':3,
-                'providerTimeouts':provider_errors,'excludedSettingsAbsent':True,'settingsLabels':sorted(current),'fundsTransferred':False}
+                'providerTimeouts':provider_errors,'excludedSettingsAbsent':True,'settingsLabels':sorted(current),
+                'recipientNetworkMismatchBlocked':True,'correctedWithoutLeavingForm':True,'fundsTransferred':False}
         (root/'phase1-scenario-result.json').write_text(json.dumps(result,indent=2)+'\n')
         action('finish')
     except Exception as error:

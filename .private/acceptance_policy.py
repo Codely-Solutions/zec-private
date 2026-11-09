@@ -236,6 +236,9 @@ def validate_quotes(receipt, expected_inputs):
         raise ValueError('Missing real unfunded production quote acceptance')
     if min(receipt.get(key,0) for key in ('quote_requests','quote_reviews','dismissals'))<3:
         raise ValueError('Repeated quote/dismiss path not established')
+    if not all(receipt.get(key) is True for key in (
+            'recipient_network_mismatch_blocked', 'corrected_without_leaving_form')):
+        raise ValueError('Recipient mismatch and same-form correction not established')
     if not re.fullmatch('[0-9a-f]{64}',str(receipt.get('executed_apk_sha256',''))):
         raise ValueError('Missing executed quote artifact digest')
     if not re.fullmatch('[0-9a-f]{40}',str(receipt.get('build_source_sha',''))):

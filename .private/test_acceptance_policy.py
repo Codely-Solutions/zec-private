@@ -338,9 +338,11 @@ class AcceptancePolicyTest(unittest.TestCase):
     def test_quotes_need_real_repeated_tor_evidence(self):
         receipt=dict(schema=1,input_fingerprint='inputs',evidence_class='real-app-production-quotes',
                      passed=True,tor_enabled=True,funds_transferred=False,personal_wallet_access=False,
-                     quote_requests=3,quote_reviews=3,dismissals=3,executed_apk_sha256='a'*64,build_source_sha='b'*40)
+                     quote_requests=3,quote_reviews=3,dismissals=3,executed_apk_sha256='a'*64,build_source_sha='b'*40,
+                     recipient_network_mismatch_blocked=True,corrected_without_leaving_form=True)
         self.assertTrue(validate_quotes(receipt,'inputs'))
-        for key,value in (('dismissals',2),('tor_enabled',False),('input_fingerprint','old'),('funds_transferred',True)):
+        for key,value in (('dismissals',2),('tor_enabled',False),('input_fingerprint','old'),('funds_transferred',True),
+                          ('recipient_network_mismatch_blocked',False),('corrected_without_leaving_form',False)):
             bad=dict(receipt);bad[key]=value
             with self.subTest(key=key),self.assertRaises(ValueError):validate_quotes(bad,'inputs')
 
