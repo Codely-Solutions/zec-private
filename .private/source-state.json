@@ -1411,7 +1411,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/LedgerPairingMissingException.kt": "28a46713b2727a888f30dfb436ad090638106f16d2004349813a3dbb6ce9b021",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/MutableLce.kt": "bdd01f2052ec48364e5920185782d78eb666e33f775e1f4a07cbff7f89150440",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/OnboardingState.kt": "cc7059d6c7b0da403ce1d5379b09dfbdb399a8c711aa8373ec4c2b3eb7d87b01",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt": "7f6d2dfd689a81ed33e3af39a3fdc2c78d0964646b2489133cf394c2c9649396",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt": "49ca6f584bf8983f0fc80e1c0ad8769eacb1be4abebcdc17ff4738d1ddfbd4b5",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SimpleSwapAsset.kt": "ce6ea8392237b2a2aa70619316c989ab2a9b6029b82df018d42f8e9470e58d6b",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SubmitResult.kt": "879705447301f098349f510169481aedf6bb339b020c8f4c37c44abcbd67cd51",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapAddress.kt": "f2141174d1dbf9a196978add914a0d12be6424b598d33238d6620976ce81e343",

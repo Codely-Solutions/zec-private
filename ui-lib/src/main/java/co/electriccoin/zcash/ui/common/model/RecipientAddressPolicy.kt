@@ -66,7 +66,10 @@ object RecipientAddressPolicy {
     // Prefixes and payload lengths follow each network address wire format.
     @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
     fun validate(address: String, network: String): Validation {
-        if (address.isEmpty() || address.length > 512 || address.any { it.isWhitespace() || it.code < 33 }) {
+        if (address.isEmpty() || address.length > 512) {
+            return Validation.Invalid(Reason.INVALID_ADDRESS)
+        }
+        if (address.any { it.isWhitespace() || it.code < 33 }) {
             return Validation.Invalid(Reason.INVALID_ADDRESS)
         }
         val valid = when (network) {
@@ -181,7 +184,9 @@ object RecipientAddressPolicy {
         } else decodedTarget
         if (validate(address, network) !is Validation.Valid) return ParseResult.Invalid(Reason.INVALID_ADDRESS)
         val amount = params["amount"]?.let {
-            if (!it.matches(Regex("[0-9]+(?:\\.[0-9]{1,8})?")) || it.length > MAX_NATIVE_AMOUNT_LENGTH) return unsupported()
+            if (!it.matches(Regex("[0-9]+(?:\\.[0-9]{1,8})?")) || it.length > MAX_NATIVE_AMOUNT_LENGTH) {
+                return unsupported()
+            }
             it.toBigDecimal()
         }
         return ParseResult.Parsed(RecipientInput(address, network, network, amount, metadata))
@@ -230,7 +235,7 @@ object RecipientAddressPolicy {
 
     private data class Bech(val hrp: String, val data: List<Int>, val checksum: Int)
 
-    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
+    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod", "ComplexCondition")
     private fun bech(value: String, maxLength: Int = 90): Bech? {
         if (value.length !in 8..maxLength || value.any { it.code !in 33..126 } ||
             value != value.lowercase(Locale.ROOT) && value != value.uppercase(Locale.ROOT)) return null
