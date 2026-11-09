@@ -160,7 +160,7 @@ class RequestSwapQuoteUseCase(
         val syntax = address?.let { RecipientAddressPolicy.validate(it, selectedAsset.chainTicker.lowercase()) }
         val needsSdk = (syntax as? RecipientAddressPolicy.Validation.Valid)?.requiresZcashSdkValidation == true
         val sdkValid = !needsSdk || withContext(Dispatchers.Default) {
-            synchronizerProvider.getSynchronizer().validateAddress(address!!) !is AddressType.Invalid
+            synchronizerProvider.getSynchronizer().validateAddress(address) !is AddressType.Invalid
         }
         if (validation.isValid && sdkValid) return address
         if (canNavigate()) {
