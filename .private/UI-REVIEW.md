@@ -16,7 +16,17 @@ The launcher reads the explicit `CODEX_EMULATOR_MANIFEST` path; its default assu
 
 The basic driver writes `ui-state.json` and `ui.png`. Its `ui-command.json` protocol uses increasing `sequence` values and actions including `snapshot`, `screenshot`, `tap`, `text`, `back`, `swipe`, `assert_text` and `finish`. Read its implementation for payload fields and coordinate limits. Basic inspection can finish without running quote acceptance. The resident driver's `finish` requires its quote-cycle acceptance conditions; select the basic path for screenshot-only work unless resident control is actually needed. Never manufacture acceptance results to bypass that distinction.
 
-[ui_step.py](ui_step.py) currently permits only the old `zec-private-tor-retry` and `zec-private-phase1` owners. It is not a generic command-line client for new task owners. Verify the current guard identity and protocol before adapting it.
+Use `python3 -B .private/ui_step.py --owner OWNER` with a JSON command on stdin. `--state-dir` selects the registered guard state when necessary. The helper verifies the exact active owner, root identity and ledger entry before writing and throughout polling. One controller owns the command stream. The two historical no-argument owners remain compatible.
+
+## Prepared APKs and reusable scenes
+
+`run_tor_emulator.py` accepts `CODEX_EMULATOR_PREPARED_RECEIPT` plus its independently pinned `CODEX_EMULATOR_PREPARED_SHA256`. The caller's trusted manifest/guard admission must bind that digest and configuration. [prepared_apks.py](prepared_apks.py) verifies source, role, original/prepared hashes, execution entries, x86_64 ABI and the exact verified test signer before making session-owned copies. This skips download, stripping/alignment and test re-signing. Older receipts missing signer identity require re-verification; preserve their original bytes.
+
+The launcher writes `prepared-apks.json` inside its guard root. Set `CODEX_EMULATOR_PREPARED_EXPORT` to a new absolute task-owned directory to retain verified APK copies and a receipt with retained paths. Account for that output in task storage/retention. The export is exclusive and never replaces existing evidence. Retire it after its final consumer; keep only the current candidate and necessary baseline.
+
+For synthetic review, the UI manifest may include `captureScenes`: objects with `screen`, `theme` (`light`, `dark`, `oled`), `expected`, and optional `name`, `font`, `swipe`, `expand_more`, `tap_text`. [ui_capture.py](ui_capture.py) launches the existing production-component host, verifies hierarchy/PNG, and records each successful frame immediately. Launch failures retain bounded launch output before teardown. `captureOnly: true` ends after these scenes and explicitly records synthetic-only evidence. It cannot replace financial/quote acceptance. With ordinary UI mode, continue the existing interactive driver in the same guest; close it with `finish` when its consumer ends.
+
+Use [dev_session.py](dev_session.py) to build required debug variants at pinned source revisions. For baseline-specific host overlays, pin the reviewed overlay as source in an isolated checkpoint commit and record its difference from the baseline. Reuse the resulting APK for capture-only corrections. Keep task-specific wallet/probe logic separate from shared capture orchestration.
 
 ## Prepare state, then capture
 

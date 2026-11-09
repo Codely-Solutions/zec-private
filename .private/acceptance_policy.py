@@ -57,7 +57,8 @@ def relevant(path):
             '.private/emulator_session.py', '.private/emulator_batch.py', '.private/admit_emulator_batch.py',
             '.private/tor_differential_driver.py', '.private/strip_emulator_apk.py',
             '.private/core_faucet.py', '.private/upgrade-baseline.json',
-            '.private/tor-ui-abi.gradle', '.github/workflows/core-validation.yml'}
+            '.private/tor-ui-abi.gradle', '.github/workflows/core-validation.yml',
+            '.private/prepared_apks.py', '.private/ui_capture.py', '.private/ui_step.py'}
     if path.startswith(('.idea/','docs/')) or '/src/test/' in path or '/src/androidTest/' in path:
         return False
     if any(part in path for part in ('/screen/theme/','/design/theme/','/screen/about/','/screen/whatsnew/',

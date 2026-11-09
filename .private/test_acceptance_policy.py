@@ -13,6 +13,10 @@ from acceptance_policy import input_fingerprint, requirements, validate_core, va
 
 
 class AcceptancePolicyTest(unittest.TestCase):
+    def test_emulator_reuse_helpers_invalidate_acceptance(self):
+        for path in ('.private/prepared_apks.py', '.private/ui_capture.py', '.private/ui_step.py'):
+            self.assertIn('core-testnet', requirements([path])['profiles'])
+
     def test_foundation_changes_invalidate_wallet_and_quote_acceptance(self):
         result=requirements(['wallet-foundation-lib/src/main/kotlin/Flow.kt'])
         self.assertEqual({'core-testnet','production-quotes'},set(result['profiles']))
