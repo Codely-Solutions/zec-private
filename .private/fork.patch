@@ -12643,10 +12643,10 @@ index 000000000..a034246bc
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
 new file mode 100644
-index 000000000..d17613519
+index 000000000..8055774f0
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,158 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.activity.compose.BackHandler
@@ -12666,7 +12666,7 @@ index 000000000..d17613519
 +import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
 +import co.electriccoin.zcash.ui.design.component.ZashiButton
 +import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
-+import co.electriccoin.zcash.ui.design.component.ExternalLinkRow
++import co.electriccoin.zcash.ui.design.component.ZashiTextButton
 +import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
 +import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarBackNavigation
 +import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
@@ -12751,12 +12751,13 @@ index 000000000..d17613519
 +            if (state.unsupported) {
 +                DonationMessage(stringResource(R.string.private_support_software_only))
 +            }
-+            ExternalLinkRow(
-+                label = stringResource(R.string.private_support_addresses),
++            ZashiTextButton(
 +                onClick = onExternalAddresses,
 +                enabled = !state.busy,
 +                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-+            )
++            ) {
++                Text(stringResource(R.string.private_support_addresses))
++            }
 +        }
 +    }
 +}
@@ -19613,7 +19614,7 @@ index 000000000..bdaf3e5ab
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
-index 000000000..cc9fef4ad
+index 000000000..975ecdc5f
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 @@ -0,0 +1,36 @@
@@ -19627,7 +19628,7 @@ index 000000000..cc9fef4ad
 +    <string name="private_estimated_output" translatable="false">Quoted output (execution unavailable)</string>
 +    <string name="private_total_zec_to_spend" translatable="false">Total ZEC to spend</string>
 +    <string name="private_support_title">Support development</string>
-+    <string name="private_support_addresses">Donation addresses</string>
++    <string name="private_support_addresses">Donation addresses ↗</string>
 +    <string name="private_support_amount">Donation amount</string>
 +    <string name="private_support_failed">Cannot prepare donation. Check shielded funds, synchronization and connection. Nothing was submitted.</string>
 +    <string name="private_support_software_only">In-app donations currently require a software wallet. Hardware and view-only accounts can use the published address in a compatible wallet.</string>
