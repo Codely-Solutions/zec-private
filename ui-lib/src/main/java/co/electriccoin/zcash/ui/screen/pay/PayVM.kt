@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -85,6 +86,7 @@ internal class PayVM(
         )
 
     private val isCancelStateVisible = MutableStateFlow(false)
+    private var quoteActionInProgress = false
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val isABHintVisible =
@@ -195,7 +197,7 @@ internal class PayVM(
 
     private fun onAddressBookClick() =
         viewModelScope.launch {
-            val selected = navigateToSelectSwapRecipient()
+            val selected = navigateToSelectSwapRecipient(network = internalState.value.asset?.chainTicker)
 
             if (selected != null) {
                 internalState.update { it.copy(selectedABContact = selected, address = "") }
@@ -207,18 +209,7 @@ internal class PayVM(
             val result = navigateToScanAddress()
             if (result != null) {
                 navigationRouter.back()
-                internalState.update {
-                    it.copy(
-                        selectedABContact = null,
-                        address = result.address,
-                        amount =
-                            if (result.amount != null) {
-                                NumberTextFieldInnerState.fromAmount(result.amount)
-                            } else {
-                                it.amount
-                            }
-                    )
-                }
+                onAddressChange(result.rawInput ?: result.address)
             }
         }
 
@@ -277,36 +268,52 @@ internal class PayVM(
     /** Gates the quote request behind the refund warning before the CTA starts spinning. */
     private fun onRequestSwapQuoteClick(amount: BigDecimal, fiatAmount: BigDecimal?, address: String) =
         viewModelScope.launch {
-            val asset = internalState.value.asset ?: return@launch
-            val slippage = internalState.value.slippage
-            if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = SwapMode.EXACT_OUTPUT)) {
-                return@launch
+            val snapshot = internalState.value
+            if (snapshot.isRequestingQuote || quoteActionInProgress) return@launch
+            val asset = snapshot.asset ?: return@launch
+            val slippage = snapshot.slippage
+            val contactNetwork = snapshot.selectedABContact?.blockchain?.chainTicker
+            val currentAddress = snapshot.selectedABContact?.address ?: snapshot.address
+            if (currentAddress != address || !validateSwapRecipient(
+                    address, asset.chainTicker, asset.tokenTicker, contactNetwork
+                ).isValid
+            ) return@launch
+            quoteActionInProgress = true
+            try {
+                if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = SwapMode.EXACT_OUTPUT)) {
+                    return@launch
+                }
+                internalState.update { it.copy(isRequestingQuote = true) }
+                requestSwapQuote.requestExactOutput(
+                    amount = amount,
+                    address = address,
+                    selectedAsset = asset,
+                    slippage = slippage,
+                    canNavigateToSwapQuote = { !isCancelStateVisible.value },
+                    contactNetwork = contactNetwork
+                )
+            } finally {
+                quoteActionInProgress = false
+                internalState.update { it.copy(isRequestingQuote = false) }
             }
-            internalState.update { it.copy(isRequestingQuote = true) }
-            requestSwapQuote.requestExactOutput(
-                amount = amount,
-                address = address,
-                selectedAsset = asset,
-                slippage = slippage,
-                canNavigateToSwapQuote = { !isCancelStateVisible.value }
-            )
-            internalState.update { it.copy(isRequestingQuote = false) }
         }
 
     private fun onInfoClick() = navigationRouter.forward(PayInfoArgs)
 
     private fun onAddressChange(new: String) =
-        internalState.update { it.copy(selectedABContact = null, address = new) }
+        internalState.update { state ->
+            val recipient = validateSwapRecipient(new, state.asset?.chainTicker, state.asset?.tokenTicker)
+            val requestedAmount = recipient.input?.amount.takeIf { recipient.isValid }
+            val edited = state.copy(selectedABContact = null, address = new)
+            if (requestedAmount == null) edited else edited.copy(
+                amount = NumberTextFieldInnerState.fromAmount(requestedAmount),
+                fiatAmount = NumberTextFieldInnerState()
+            ).withAsset(state.asset)
+        }
 
     private fun onSwapAssetPickerClick() =
         viewModelScope.launch {
-            val asset =
-                navigateToSwapAssetPicker(
-                    onlyChainTicker =
-                        internalState.value.selectedABContact
-                            ?.blockchain
-                            ?.chainTicker
-                )
+            val asset = navigateToSwapAssetPicker()
             if (asset != null) {
                 internalState.update { it.withAsset(asset) }
             }

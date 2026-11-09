@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
+import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.requireSpendable
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
@@ -174,8 +175,8 @@ class ViewOnlySpendGuardTest {
 
             useCase.requestExactInput(
                 amount = BigDecimal.ONE,
-                address = "address",
-                selectedAsset = mockk(relaxed = true),
+                address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+                selectedAsset = SwapAssetTestFixture.asset(),
                 slippage = BigDecimal.ONE,
                 canNavigateToSwapQuote = { true },
             )

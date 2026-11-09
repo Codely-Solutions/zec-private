@@ -22,7 +22,10 @@ def check(root=ROOT):
     provider=(root/COMMON/'provider/NearApiProvider.kt').read_text()
     need(not re.search(r'Authorization|AUTH_TOKEN|Bearer |X-API-Key|eyJhbGci',provider), 'Partner authentication reintroduced')
     need(provider.count('https://1click.chaindefuser.com/v0/')==4,'NEAR endpoint changed')
-    need('httpClientProvider.create().use' in provider,'Tor preference routing changed')
+    need('httpClientProvider.create()' in provider and 'createDirect(' not in provider,
+         'Tor preference routing changed')
+    need('QuoteRequestStage.CLIENT_CLOSE' in provider and 'client.close()' in provider,
+         'Quote client cleanup changed')
     usecase=(root/COMMON/'usecase/RequestSwapQuoteUseCase.kt').read_text()
     need(usecase.count('val newAddress = requestFreshAddress() ?: return')==3,
          'Fresh shielded recipient/refund derivation changed')

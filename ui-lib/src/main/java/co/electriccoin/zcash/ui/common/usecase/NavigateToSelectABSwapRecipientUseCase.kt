@@ -18,7 +18,7 @@ class NavigateToSelectABSwapRecipientUseCase(
 ) {
     private val pipeline = MutableSharedFlow<SelectSwapRecipientPipelineResult>()
 
-    suspend operator fun invoke(): EnhancedABContact? =
+    suspend operator fun invoke(network: String? = null): EnhancedABContact? =
         try {
             biometricRepository.requestBiometrics(
                 BiometricRequest(
@@ -29,7 +29,7 @@ class NavigateToSelectABSwapRecipientUseCase(
                         )
                 )
             )
-            val args = SelectABSwapRecipientArgs()
+            val args = SelectABSwapRecipientArgs(network = network)
             navigationRouter.forward(args)
             val result = pipeline.first { it.args.requestId == args.requestId }
             when (result) {
@@ -48,6 +48,7 @@ class NavigateToSelectABSwapRecipientUseCase(
     }
 
     suspend fun onSelected(contact: EnhancedABContact, args: SelectABSwapRecipientArgs) {
+        if (args.network != null && !args.network.equals(contact.blockchain?.chainTicker, ignoreCase = true)) return
         pipeline.emit(SelectSwapRecipientPipelineResult.Scanned(contact = contact, args = args))
         navigationRouter.back()
     }

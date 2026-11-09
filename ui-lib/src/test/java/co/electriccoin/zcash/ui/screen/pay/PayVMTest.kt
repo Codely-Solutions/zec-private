@@ -27,6 +27,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -56,6 +57,11 @@ import kotlin.test.assertNull
 @OptIn(ExperimentalCoroutinesApi::class)
 class PayVMTest {
     private val mainDispatcher = UnconfinedTestDispatcher()
+
+    private companion object {
+        const val BTC_ADDRESS = "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu"
+        const val ETH_ADDRESS = "0xde709f2102306220921060314715629080e2fb77"
+    }
 
     @BeforeTest
     fun setUp() {
@@ -170,15 +176,18 @@ class PayVMTest {
             val harness = harness(preselect = asset)
             harness.collectState(this)
 
-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
+            harness.onAddressChange(BTC_ADDRESS)
+
+            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
 
             coVerify(exactly = 1) {
                 harness.requestSwapQuote.requestExactOutput(
                     amount = BigDecimal("1"),
-                    address = "destination-address",
+                    address = BTC_ADDRESS,
                     selectedAsset = asset,
                     slippage = BigDecimal("2"),
-                    canNavigateToSwapQuote = any()
+                    canNavigateToSwapQuote = any(),
+                    contactNetwork = null
                 )
             }
         }
@@ -191,11 +200,13 @@ class PayVMTest {
             val harness = harness(preselect = null)
             harness.collectState(this)
 
-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
+            harness.onAddressChange(BTC_ADDRESS)
+
+            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
 
             assertNull(harness.capturedState.asset)
             coVerify(exactly = 0) {
-                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any())
+                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
             }
         }
 
@@ -206,7 +217,9 @@ class PayVMTest {
             harness.collectState(this)
             val gate = harness.makeQuoteHang()
 
-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
+            harness.onAddressChange(BTC_ADDRESS)
+
+            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
             assertEquals(true, harness.capturedState.isRequestingQuote)
 
             gate.complete(Unit)
@@ -219,10 +232,12 @@ class PayVMTest {
             val harness = harness(refundWarningResult = false)
             harness.collectState(this)
 
-            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), "destination-address")
+            harness.onAddressChange(BTC_ADDRESS)
+
+            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), BTC_ADDRESS)
 
             coVerify(exactly = 0) {
-                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any())
+                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
             }
             assertEquals(false, harness.capturedState.isRequestingQuote)
         }
@@ -233,7 +248,9 @@ class PayVMTest {
             val harness = harness()
             harness.collectState(this)
 
-            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), "destination-address")
+            harness.onAddressChange(BTC_ADDRESS)
+
+            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), BTC_ADDRESS)
 
             coVerify(exactly = 1) {
                 harness.navigateToSwapRefundWarning(fiatAmount = BigDecimal("100"), mode = SwapMode.EXACT_OUTPUT)
@@ -262,7 +279,8 @@ class PayVMTest {
             val harness = harness()
             harness.collectState(this)
             harness.makeQuoteHang()
-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
+            harness.onAddressChange(BTC_ADDRESS)
+            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
 
             harness.onBack()
 
@@ -275,7 +293,8 @@ class PayVMTest {
             val harness = harness()
             harness.collectState(this)
             val gate = harness.makeQuoteHang()
-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
+            harness.onAddressChange(BTC_ADDRESS)
+            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
             harness.onBack() // requesting -> show cancel confirmation
             gate.complete(Unit) // request finishes -> no longer requesting, sheet still visible
 
@@ -291,7 +310,8 @@ class PayVMTest {
             val harness = harness()
             harness.collectState(this)
             harness.makeQuoteHang()
-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
+            harness.onAddressChange(BTC_ADDRESS)
+            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
             harness.onBack()
 
             harness.vm.cancelState.value
@@ -310,7 +330,8 @@ class PayVMTest {
             val harness = harness()
             harness.collectState(this)
             harness.makeQuoteHang()
-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
+            harness.onAddressChange(BTC_ADDRESS)
+            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
             harness.onBack()
 
             harness.vm.cancelState.value
@@ -327,19 +348,23 @@ class PayVMTest {
     // region input editing
 
     @Test
-    fun scanResultAppliesAddressAndAmountAndClearsContact() =
+    fun scanResultPreservesCompatiblePaymentRequestAndClearsContact() =
         runTest {
             val harness =
                 harness(
                     recipient = contactOnChain("btc"),
-                    scanResult = ScanResult(address = "scanned-address", amount = BigDecimal("2.5"))
+                    scanResult = ScanResult(
+                        address = BTC_ADDRESS,
+                        amount = BigDecimal("2.5"),
+                        rawInput = "bitcoin:$BTC_ADDRESS?amount=2.5"
+                    )
                 )
             harness.collectState(this)
             harness.onAddressBookClick() // select a contact first, to prove the scan clears it
 
             harness.onQrCodeScannerClick()
 
-            assertEquals("scanned-address", harness.capturedState.address)
+            assertEquals("bitcoin:$BTC_ADDRESS?amount=2.5", harness.capturedState.address)
             assertEquals(0, BigDecimal("2.5").compareTo(harness.capturedState.amount.amount))
             assertNull(harness.capturedState.selectedABContact)
             verify { harness.navigationRouter.back() }
@@ -373,7 +398,7 @@ class PayVMTest {
         }
 
     @Test
-    fun assetPickerIsFilteredBySelectedContactChain() =
+    fun assetPickerRemainsEditableAfterSelectingContact() =
         runTest {
             val harness = harness(recipient = contactOnChain("eth"))
             harness.collectState(this)
@@ -381,13 +406,83 @@ class PayVMTest {
 
             harness.onSwapAssetPickerClick()
 
-            coVerify { harness.navigateToSwapAssetPicker(onlyChainTicker = "eth") }
+            coVerify { harness.navigateToSwapAssetPicker() }
+            coVerify { harness.navigateToSelectSwapRecipient(network = "btc") }
         }
 
     // endregion
 
+    @Test
+    fun tokenNetworkChangeRetainsContactAndCorrectionQuotesWithoutLeavingForm() =
+        runTest {
+            val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth")
+            val btc = SwapAssetTestFixture.asset()
+            val contact = contactOnChain("eth")
+            val harness = harness(preselect = eth, recipient = contact)
+            coEvery { harness.navigateToSwapAssetPicker(any()) } returnsMany listOf(btc, eth)
+            harness.collectState(this)
+            harness.onAddressBookClick()
+
+            harness.onSwapAssetPickerClick()
+            assertEquals(contact, harness.capturedState.selectedABContact)
+            assertEquals(btc, harness.capturedState.asset)
+            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, ETH_ADDRESS)
+            coVerify(exactly = 0) {
+                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
+            }
+
+            harness.onSwapAssetPickerClick()
+            assertEquals(contact, harness.capturedState.selectedABContact)
+            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, ETH_ADDRESS)
+            coVerify(exactly = 1) {
+                harness.requestSwapQuote.requestExactOutput(BigDecimal.ONE, ETH_ADDRESS, eth, BigDecimal("2"),
+                    any(), "eth")
+            }
+        }
+
+    @Test
+    fun callbackWithStaleAddressDoesNotRequestQuote() =
+        runTest {
+            val harness = harness()
+            harness.collectState(this)
+            harness.onAddressChange(BTC_ADDRESS)
+            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, "stale-address")
+            coVerify(exactly = 0) {
+                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
+            }
+        }
+
+    @Test
+    fun cancelledQuoteClearsLoadingAndAllowsCorrectedRetryInSameForm() =
+        runTest {
+            val harness = harness()
+            var attempts = 0
+            coEvery {
+                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
+            } coAnswers {
+                attempts++
+                if (attempts == 1) throw CancellationException("Controlled test cancellation")
+            }
+            harness.collectState(this)
+            harness.onAddressChange(BTC_ADDRESS)
+            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, BTC_ADDRESS)
+            assertEquals(false, harness.capturedState.isRequestingQuote)
+
+            val corrected = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
+            harness.onAddressChange(corrected)
+            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, corrected)
+            assertEquals(2, attempts)
+            assertEquals(false, harness.capturedState.isRequestingQuote)
+            coVerify(exactly = 1) {
+                harness.requestSwapQuote.requestExactOutput(any(), corrected, any(), any(), any(), null)
+            }
+        }
+
     private fun contactOnChain(chainTicker: String): EnhancedABContact =
-        mockk(relaxed = true) { every { blockchain } returns SwapAssetTestFixture.blockchain(chainTicker) }
+        mockk(relaxed = true) {
+            every { blockchain } returns SwapAssetTestFixture.blockchain(chainTicker)
+            every { address } returns if (chainTicker == "btc") BTC_ADDRESS else ETH_ADDRESS
+        }
 
     @Suppress("LongMethod")
     private fun harness(
@@ -410,7 +505,7 @@ class PayVMTest {
                 coEvery { this@mockk.invoke(any()) } returns assetResult
             }
         val navigateToSelectSwapRecipient =
-            mockk<NavigateToSelectABSwapRecipientUseCase> { coEvery { this@mockk.invoke() } returns recipient }
+            mockk<NavigateToSelectABSwapRecipientUseCase> { coEvery { this@mockk.invoke(any()) } returns recipient }
         val navigateToScanAddress =
             mockk<NavigateToScanGenericAddressUseCase> { coEvery { this@mockk.invoke() } returns scanResult }
         val preselectSwapAsset =
@@ -451,6 +546,7 @@ class PayVMTest {
 
         val harness =
             Harness(
+                navigateToSelectSwapRecipient = navigateToSelectSwapRecipient,
                 navigateToSlippage = navigateToSlippage,
                 navigateToSwapAssetPicker = navigateToSwapAssetPicker,
                 navigateToSwapRefundWarning = navigateToSwapRefundWarning,
@@ -501,6 +597,7 @@ class PayVMTest {
     }
 
     private class Harness(
+        val navigateToSelectSwapRecipient: NavigateToSelectABSwapRecipientUseCase,
         val navigateToSlippage: NavigateToSlippageUseCase,
         val navigateToSwapAssetPicker: NavigateToSwapAssetPickerUseCase,
         val navigateToSwapRefundWarning: NavigateToSwapRefundWarningUseCase,
@@ -526,7 +623,7 @@ class PayVMTest {
         fun makeQuoteHang(): CompletableDeferred<Unit> {
             val gate = CompletableDeferred<Unit>()
             coEvery {
-                requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any())
+                requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
             } coAnswers { gate.await() }
             return gate
         }

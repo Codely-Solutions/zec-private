@@ -1,7 +1,6 @@
 package co.electriccoin.zcash.ui.common.provider
 
 import android.util.Log
-import co.electriccoin.zcash.ui.BuildConfig
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.HttpClientEngineConfig
@@ -92,9 +91,9 @@ class HttpClientProviderImpl(
         }
         install(Logging) {
             logger = KtorLogger()
-            // MOB-1346: full request/response bodies (swap recipient + refund addresses + amounts,
-            // voting payloads) must not reach logcat/bugreports in release. Bodies only in debug.
-            level = if (BuildConfig.DEBUG) LogLevel.ALL else LogLevel.NONE
+            // Bodies and URL parameters carry wallet data in debug builds too. Quote lifecycle
+            // diagnostics record bounded stage metadata without exposing payloads or URLs.
+            level = LogLevel.NONE
             sanitizeHeader { header -> header in SANITIZED_HEADERS }
         }
         expectSuccess = true

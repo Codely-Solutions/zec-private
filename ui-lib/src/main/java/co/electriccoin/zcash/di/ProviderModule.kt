@@ -40,6 +40,7 @@ import co.electriccoin.zcash.ui.common.provider.KeepScreenOnSyncSessionProvider
 import co.electriccoin.zcash.ui.common.provider.KeepScreenOnSyncSessionProviderImpl
 import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider
 import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProviderImpl
+import co.electriccoin.zcash.ui.common.provider.QuoteRequestDiagnostics
 import co.electriccoin.zcash.ui.common.provider.KtorNearApiProvider
 import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProvider
 import co.electriccoin.zcash.ui.common.provider.LastNetworkActivityStorageProviderImpl
@@ -127,6 +128,7 @@ val providerModule =
         singleOf(::BlockchainProviderImpl) bind BlockchainProvider::class
         singleOf(::TokenIconProviderImpl) bind TokenIconProvider::class
         singleOf(::TokenNameProviderImpl) bind TokenNameProvider::class
+        single { QuoteRequestDiagnostics() }
         singleOf(::KtorNearApiProvider) bind NearApiProvider::class
         factoryOf(::HttpClientProviderImpl) bind HttpClientProvider::class
         singleOf(::SimpleSwapAssetProviderImpl) bind SimpleSwapAssetProvider::class

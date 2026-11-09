@@ -24,6 +24,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 /**
@@ -41,7 +42,9 @@ class KtorNearApiProviderTest {
     private var createCalls = 0
     private var createTorCalls = 0
 
-    private val provider = KtorNearApiProvider(RecordingHttpClientProvider())
+    private val diagnosticEvents = mutableListOf<String>()
+    private val provider =
+        KtorNearApiProvider(RecordingHttpClientProvider(), QuoteRequestDiagnostics(diagnosticEvents::add))
 
     @Test
     fun getSupportedTokensDoesNotSendAuthorizationHeader() =
@@ -116,6 +119,12 @@ class KtorNearApiProviderTest {
 
             assertEquals("boom", exception.error.message)
             assertRespectsTorPreference()
+            assertEquals(3, diagnosticEvents.size)
+            assertTrue(diagnosticEvents[0].startsWith("stage=CLIENT_CREATE "))
+            assertTrue(diagnosticEvents[1].startsWith("stage=HTTP_REQUEST "))
+            assertTrue(diagnosticEvents[1].endsWith("status=400"))
+            assertTrue(diagnosticEvents[2].startsWith("stage=CLIENT_CLOSE "))
+            assertFalse(diagnosticEvents.any { "boom" in it || "recipient" in it || "refund" in it })
         }
     }
 

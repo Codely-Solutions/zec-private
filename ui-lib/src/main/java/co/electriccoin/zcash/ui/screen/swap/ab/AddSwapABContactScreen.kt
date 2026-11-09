@@ -40,5 +40,6 @@ internal fun AddSwapABContactScreen(args: AddSwapABContactArgs) {
 
 @Serializable
 data class AddSwapABContactArgs(
-    val address: String?
+    val address: String?,
+    val network: String? = null
 )

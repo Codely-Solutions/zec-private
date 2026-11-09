@@ -5,13 +5,14 @@ import cash.z.ecc.android.sdk.ext.Conversions.ZEC_FORMATTER
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.errorText
+import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapDirection
 import co.electriccoin.zcash.ui.common.model.SwapDirection.SWAP_FROM_ZEC
 import co.electriccoin.zcash.ui.common.model.SwapDirection.SWAP_INTO_ZEC
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
-import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector.mayContainGiftCardSecret
 import co.electriccoin.zcash.ui.common.repository.SwapAssetsData
 import co.electriccoin.zcash.ui.design.component.AssetCardState
 import co.electriccoin.zcash.ui.design.component.ButtonState
@@ -498,7 +499,13 @@ internal class SwapVMMapper {
                             amount != null &&
                             amount > BigDecimal(0) &&
                             (state.addressText.isNotBlank() || state.selectedContact != null) &&
-                            !mayContainGiftCardSecret(state.selectedContact?.address ?: state.addressText) &&
+                            validateSwapRecipient(
+                                state.selectedContact?.address ?: state.addressText,
+                                state.swapAsset?.chainTicker,
+                                state.swapAsset?.tokenTicker,
+                                state.selectedContact?.blockchain?.chainTicker,
+                                allowPaymentAmount = false
+                            ).isValid &&
                             !state.isRequestingQuote
                     }
                 },
@@ -514,12 +521,13 @@ internal class SwapVMMapper {
 
         return TextFieldState(
             error =
-                when {
-                    text.isEmpty() -> null
-                    text.isBlank() -> stringRes("")
-                    mayContainGiftCardSecret(text) -> stringRes(R.string.swap_error_giftCardLink)
-                    else -> null
-                },
+                validateSwapRecipient(
+                    state.selectedContact?.address ?: text,
+                    state.swapAsset?.chainTicker,
+                    state.swapAsset?.tokenTicker,
+                    state.selectedContact?.blockchain?.chainTicker,
+                    allowPaymentAmount = false
+                ).errorText(state.swapAsset?.chainTicker),
             value = stringRes(text),
             onValueChange = onAddressChange,
             isEnabled = !state.isRequestingQuote

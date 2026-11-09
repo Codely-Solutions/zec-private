@@ -24,6 +24,10 @@ import co.electriccoin.zcash.wallet.foundation.FundingCapability
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.requireSpendable
+import co.electriccoin.zcash.ui.common.model.RecipientAddressPolicy
+import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
+import co.electriccoin.zcash.ui.common.provider.QuoteRequestDiagnostics
+import co.electriccoin.zcash.ui.common.provider.QuoteRequestStage
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
@@ -36,6 +40,7 @@ import co.electriccoin.zcash.ui.screen.swap.mismatch.toMismatchArgs
 import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteArgs
 import co.electriccoin.zcash.ui.screen.texunsupported.TEXUnsupportedArgs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.math.BigDecimal
@@ -49,20 +54,25 @@ class RequestSwapQuoteUseCase(
     private val ledgerProposalPipeline: LedgerProposalPipeline,
     private val accountDataSource: AccountDataSource,
     private val synchronizerProvider: SynchronizerProvider,
+    private val diagnostics: QuoteRequestDiagnostics = QuoteRequestDiagnostics(),
 ) {
     suspend fun requestExactInput(
         amount: BigDecimal,
         address: String,
         selectedAsset: SwapAsset,
         slippage: BigDecimal,
-        canNavigateToSwapQuote: () -> Boolean
+        canNavigateToSwapQuote: () -> Boolean,
+        contactNetwork: String? = null
     ) {
+        val recipient = validatedRecipient(
+            address, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
+        ) ?: return
         val newAddress = requestFreshAddress() ?: return
         requestQuote(
             requestQuote = {
                 swapRepository.requestExactInputQuote(
                     amount = amount,
-                    address = address,
+                    address = recipient,
                     refundAddress = newAddress,
                     destinationAsset = selectedAsset,
                     slippage = slippage
@@ -78,14 +88,16 @@ class RequestSwapQuoteUseCase(
         address: String,
         selectedAsset: SwapAsset,
         slippage: BigDecimal,
-        canNavigateToSwapQuote: () -> Boolean
+        canNavigateToSwapQuote: () -> Boolean,
+        contactNetwork: String? = null
     ) {
+        val recipient = validatedRecipient(address, selectedAsset, contactNetwork, canNavigateToSwapQuote) ?: return
         val newAddress = requestFreshAddress() ?: return
         requestQuote(
             requestQuote = {
                 swapRepository.requestExactOutputQuote(
                     amount = amount,
-                    address = address,
+                    address = recipient,
                     refundAddress = newAddress,
                     destinationAsset = selectedAsset,
                     slippage = slippage
@@ -101,15 +113,19 @@ class RequestSwapQuoteUseCase(
         refundAddress: String,
         selectedAsset: SwapAsset,
         slippage: BigDecimal,
-        canNavigateToSwapQuote: () -> Boolean
+        canNavigateToSwapQuote: () -> Boolean,
+        contactNetwork: String? = null
     ) {
+        val refund = validatedRecipient(
+            refundAddress, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
+        ) ?: return
         val newAddress = requestFreshAddress() ?: return
         requestQuote(
             requestQuote = {
                 swapRepository
                     .requestFlexInputIntoZec(
                         amount = amount,
-                        refundAddress = refundAddress,
+                        refundAddress = refund,
                         destinationAddress = newAddress,
                         originAsset = selectedAsset,
                         slippage = slippage
@@ -122,11 +138,38 @@ class RequestSwapQuoteUseCase(
 
     private suspend fun requestFreshAddress(): String? =
         try {
-            accountDataSource.requestNextShieldedAddress(requireFresh = true)
+            diagnostics.trace(QuoteRequestStage.FRESH_ADDRESS) {
+                accountDataSource.requestNextShieldedAddress(requireFresh = true)
+            }
         } catch (e: FreshShieldedAddressUnavailableException) {
             navigateToErrorUseCase(ErrorArgs.General(e))
             null
         }
+
+    private suspend fun validatedRecipient(
+        value: String,
+        selectedAsset: SwapAsset,
+        contactNetwork: String?,
+        canNavigate: () -> Boolean,
+        allowPaymentAmount: Boolean = true
+    ): String? {
+        val validation = validateSwapRecipient(
+            value, selectedAsset.chainTicker, selectedAsset.tokenTicker, contactNetwork, allowPaymentAmount
+        )
+        val address = validation.input?.address
+        val syntax = address?.let { RecipientAddressPolicy.validate(it, selectedAsset.chainTicker.lowercase()) }
+        val needsSdk = (syntax as? RecipientAddressPolicy.Validation.Valid)?.requiresZcashSdkValidation == true
+        val sdkValid = !needsSdk || withContext(Dispatchers.Default) {
+            synchronizerProvider.getSynchronizer().validateAddress(address!!) !is AddressType.Invalid
+        }
+        if (validation.isValid && sdkValid) return address
+        if (canNavigate()) {
+            navigateToErrorUseCase(
+                ErrorArgs.General(IllegalArgumentException("Invalid swap recipient for selected asset"))
+            )
+        }
+        return null
+    }
 
     private suspend fun rejectUnsupportedFunding(
         funding: FundingCapability,
@@ -179,7 +222,9 @@ class RequestSwapQuoteUseCase(
 
         if (result is SwapQuoteData.Success && funding == FundingCapability.LOCAL_TRANSACTION) {
             try {
-                createProposal(result.quote)
+                diagnostics.trace(QuoteRequestStage.PROPOSAL) { createProposal(result.quote) }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: TexUnsupportedOnKSException) {
                 swapRepository.clearQuote()
                 zashiProposalRepository.clear()
