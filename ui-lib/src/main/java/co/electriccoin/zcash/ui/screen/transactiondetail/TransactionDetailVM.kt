@@ -175,7 +175,17 @@ class TransactionDetailVM(
             copy = copyToClipboard::invoke
         )
         val status = data.swap?.status ?: return deposit
-        return deposit + explorerLinks(
+        val otherOriginTransactions = explorerLinks(
+            chain = status.originAsset.blockchain.chainTicker,
+            ids = status.originTransactionIds.filterNot {
+                it.equals(data.transaction.id.txIdString(), ignoreCase = true)
+            },
+            label = stringRes(R.string.private_explorer_deposit, status.originAsset.chainName),
+            testnet = testnet,
+            router = navigationRouter,
+            copy = copyToClipboard::invoke
+        )
+        return deposit + otherOriginTransactions + explorerLinks(
             chain = status.destinationAsset.blockchain.chainTicker,
             ids = status.destinationTransactionIds,
             label = stringRes(R.string.private_explorer_destination, status.destinationAsset.chainName),

@@ -14306,14 +14306,14 @@ index a7daa6d5b..fa86faf35 100644
 @@ -15,0 +16 @@ data class TransactionDetailState(
 +    val explorerLinks: List<TransactionExplorerLink> = emptyList(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-index 00fe60557..cb79fec9c 100644
+index 00fe60557..71a424360 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 @@ -12,0 +13 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
 +import co.electriccoin.zcash.ui.common.model.positiveRefund
 @@ -96,0 +98 @@ class TransactionDetailVM(
 +                    explorerLinks = createExplorerLinks(transaction),
-@@ -161,0 +164,24 @@ class TransactionDetailVM(
+@@ -161,0 +164,34 @@ class TransactionDetailVM(
 +    private fun createExplorerLinks(data: DetailedTransactionData): List<TransactionExplorerLink> {
 +        val testnet = co.electriccoin.zcash.ui.common.model.VersionInfo.NETWORK ==
 +            cash.z.ecc.android.sdk.model.ZcashNetwork.Testnet
@@ -14328,7 +14328,17 @@ index 00fe60557..cb79fec9c 100644
 +            copy = copyToClipboard::invoke
 +        )
 +        val status = data.swap?.status ?: return deposit
-+        return deposit + explorerLinks(
++        val otherOriginTransactions = explorerLinks(
++            chain = status.originAsset.blockchain.chainTicker,
++            ids = status.originTransactionIds.filterNot {
++                it.equals(data.transaction.id.txIdString(), ignoreCase = true)
++            },
++            label = stringRes(R.string.private_explorer_deposit, status.originAsset.chainName),
++            testnet = testnet,
++            router = navigationRouter,
++            copy = copyToClipboard::invoke
++        )
++        return deposit + otherOriginTransactions + explorerLinks(
 +            chain = status.destinationAsset.blockchain.chainTicker,
 +            ids = status.destinationTransactionIds,
 +            label = stringRes(R.string.private_explorer_destination, status.destinationAsset.chainName),
@@ -14338,17 +14348,17 @@ index 00fe60557..cb79fec9c 100644
 +        )
 +    }
 +
-@@ -191,2 +217 @@ class TransactionDetailVM(
+@@ -191,2 +227 @@ class TransactionDetailVM(
 -                                transaction.metadata.swapMetadata
 -                                    ?.totalFees
 +                                transaction.transaction.fee
-@@ -202 +227 @@ class TransactionDetailVM(
+@@ -202 +237 @@ class TransactionDetailVM(
 -                                    ?.refundedFormatted
 +                                    ?.positiveRefund
-@@ -205,2 +229,0 @@ class TransactionDetailVM(
+@@ -205,2 +239,0 @@ class TransactionDetailVM(
 -                                    }?.takeIf {
 -                                        transaction.swap.status.status == REFUNDED
-@@ -227,0 +251,10 @@ class TransactionDetailVM(
+@@ -227,0 +261,10 @@ class TransactionDetailVM(
 +                            donationBasisZec = transaction.transaction.fee?.let { fee ->
 +                                (transaction.transaction.amount - fee).value
 +                                    .toBigDecimal().movePointLeft(ZEC_DECIMAL_PLACES)
@@ -14359,7 +14369,7 @@ index 00fe60557..cb79fec9c 100644
 +                                            co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
 +                                    }?.toPlainString()
 +                            },
-@@ -630,0 +664,2 @@ class TransactionDetailVM(
+@@ -630,0 +674,2 @@ class TransactionDetailVM(
 +
 +private const val ZEC_DECIMAL_PLACES = 8
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt
