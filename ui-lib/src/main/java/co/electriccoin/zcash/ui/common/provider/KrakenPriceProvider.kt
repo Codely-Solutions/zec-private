@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.provider
 
+import co.electriccoin.zcash.ui.common.model.boundedMarketNumber
 import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
 import co.electriccoin.zcash.ui.common.model.IndependentPricePolicy
 import co.electriccoin.zcash.ui.common.model.MarketObservation
@@ -107,6 +108,7 @@ internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis
         val observedAtMillis = seconds.multiply(BigDecimal("1000")).longValueExact()
         val bid = row[1].jsonPrimitive.content.toBigDecimal()
         val ask = row[2].jsonPrimitive.content.toBigDecimal()
+        require(boundedMarketNumber(bid) && boundedMarketNumber(ask))
         require(bid.signum() > 0 && ask >= bid)
         MarketObservation(pair, bid, ask, observedAtMillis, receivedAtMillis)
     }.maxBy { it.observedAtMillis }

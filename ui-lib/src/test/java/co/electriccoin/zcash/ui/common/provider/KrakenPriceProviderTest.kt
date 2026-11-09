@@ -125,6 +125,7 @@ class KrakenPriceProviderTest {
             """{"error":[],"result":{"XZECZUSD":[],"last":100}}""",
             """{"error":[],"result":{"XZECZUSD":[[100,"0","21"]],"last":100}}""",
             """{"error":[],"result":{"XZECZUSD":[[100,"22","21"]],"last":100}}""",
+            """{"error":[],"result":{"XZECZUSD":[[100,"1","1e2147483647"]],"last":100}}""",
             " ".repeat(65_537)
         ).forEach { body -> assertFails { parseKrakenObservation("ZECUSD", body, 100_000) } }
     }
