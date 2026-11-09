@@ -2922,7 +2922,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVMTest.kt": "71274d0becda611476df1806143d7699cd50fb4e7a26c3d132c0e231e504bdb4",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt": "c168d618cb7279526819c330423045511d22723d4d716a1c8d0bd0b022f34a24",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/QuoteValueComparisonTest.kt": "38091d126c3e0a3493e02f95749494820e91a2104a072134d864f0118895748c",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMGiftCardLinkTest.kt": "c22cef54ec4aa9c1e87a022e35f60f90d748cf7870bcdc7f64ac0ec81fafd1d3",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMGiftCardLinkTest.kt": "372320c499f85d041066c783f7efe110da06e1b8a19194840a4fd75925724379",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt": "3b05b31262a4c86fec72ed75e4e9ad24370634ed9fb11b24e817e4c7ff7cb620",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt": "fdb9a93d689b254ee1be8335a39ccb519c926093c256d488738b97bd942b0ace",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/refundwarning/SwapRefundWarningVMTest.kt": "521ba8cd4a04e59acb95f1a1d2377e072e1592d17057a93cc0b8165e06922e87",

@@ -56,8 +56,10 @@ class NativePriceProbeActivity : ComponentActivity() {
                     }
                     tor.store(true)
                     wallets.createNewWallet()
-                    val account = withTimeout(90_000L) { accounts.getSelectedAccount() }
-                    check(account.totalBalance?.value == 0L && tor.get() == true)
+                    withTimeout(90_000L) {
+                        while (accounts.getSelectedAccount().totalBalance == null) delay(250)
+                    }
+                    check(accounts.getSelectedAccount().totalBalance?.value == 0L && tor.get() == true)
                     record("isolated_zero_balance_ready")
                     val ownAddress = accounts.requestNextShieldedAddress(requireFresh = true)
                     val assets = swaps.getSupportedTokens()
