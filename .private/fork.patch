@@ -10541,10 +10541,10 @@ index 000000000..9685e469f
 +private const val MAX_MARKET_SCALE = 18
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt
 new file mode 100644
-index 000000000..e41bc1b40
+index 000000000..b6e5e1221
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt
-@@ -0,0 +1,368 @@
+@@ -0,0 +1,373 @@
 +package co.electriccoin.zcash.ui.common.model
 +
 +import java.math.BigDecimal
@@ -10613,7 +10613,10 @@ index 000000000..e41bc1b40
 +    // Prefixes and payload lengths follow each network address wire format.
 +    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
 +    fun validate(address: String, network: String): Validation {
-+        if (address.isEmpty() || address.length > 512 || address.any { it.isWhitespace() || it.code < 33 }) {
++        if (address.isEmpty() || address.length > 512) {
++            return Validation.Invalid(Reason.INVALID_ADDRESS)
++        }
++        if (address.any { it.isWhitespace() || it.code < 33 }) {
 +            return Validation.Invalid(Reason.INVALID_ADDRESS)
 +        }
 +        val valid = when (network) {
@@ -10728,7 +10731,9 @@ index 000000000..e41bc1b40
 +        } else decodedTarget
 +        if (validate(address, network) !is Validation.Valid) return ParseResult.Invalid(Reason.INVALID_ADDRESS)
 +        val amount = params["amount"]?.let {
-+            if (!it.matches(Regex("[0-9]+(?:\\.[0-9]{1,8})?")) || it.length > MAX_NATIVE_AMOUNT_LENGTH) return unsupported()
++            if (!it.matches(Regex("[0-9]+(?:\\.[0-9]{1,8})?")) || it.length > MAX_NATIVE_AMOUNT_LENGTH) {
++                return unsupported()
++            }
 +            it.toBigDecimal()
 +        }
 +        return ParseResult.Parsed(RecipientInput(address, network, network, amount, metadata))
@@ -10777,7 +10782,7 @@ index 000000000..e41bc1b40
 +
 +    private data class Bech(val hrp: String, val data: List<Int>, val checksum: Int)
 +
-+    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
++    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod", "ComplexCondition")
 +    private fun bech(value: String, maxLength: Int = 90): Bech? {
 +        if (value.length !in 8..maxLength || value.any { it.code !in 33..126 } ||
 +            value != value.lowercase(Locale.ROOT) && value != value.uppercase(Locale.ROOT)) return null
