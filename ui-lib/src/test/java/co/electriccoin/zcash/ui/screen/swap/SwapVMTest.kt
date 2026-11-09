@@ -589,6 +589,7 @@ class SwapVMTest {
             val harness =
                 harness(
                     assets = SwapAssetTestFixture.assetsData(data = listOf(eth)),
+                    preselect = eth,
                     recipient = contactOnChain("eth")
                 )
             harness.collectState(this)
@@ -597,7 +598,7 @@ class SwapVMTest {
             harness.onSwapAssetPickerClick()
 
             coVerify { harness.navigateToSwapAssetPicker() }
-            coVerify { harness.navigateToSelectSwapRecipient(network = "btc") }
+            coVerify { harness.navigateToSelectSwapRecipient(network = "eth") }
         }
 
     @Test
