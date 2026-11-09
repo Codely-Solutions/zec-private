@@ -14,6 +14,7 @@ import androidx.compose.ui.res.painterResource
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.TransactionExplorer
+import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.getValue
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -65,6 +66,7 @@ fun TransactionExplorerLinks(links: List<TransactionExplorerLink>) {
                 }
                 IconButton(onClick = link.onCopy) {
                     Icon(painterResource(R.drawable.ic_transaction_detail_info_copy),
+                        tint = ZashiColors.Text.textTertiary,
                         contentDescription = stringRes(R.string.private_copy_explorer_id, link.label).getValue())
                 }
             }

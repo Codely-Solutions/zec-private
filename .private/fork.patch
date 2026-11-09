@@ -14119,7 +14119,7 @@ index 9f37c1d93..61457e85a 100644
 @@ -177 +189,0 @@ internal data class SwapQuoteInternalState(
 -    val totalFees = quote.affiliateFee
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..1e90e27bf 100644
+index 717411935..0b830443a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 @@ -11,0 +12 @@ import co.electriccoin.zcash.ui.design.component.SwapTokenAmountState
@@ -14184,19 +14184,24 @@ index 717411935..1e90e27bf 100644
 +                    stringRes(R.string.private_total_zec_to_spend)
 +                },
 +            title = stringResByCurrencyNumber(total, quote.originAsset.tokenTicker, minDecimals = 0).withStyle(),
-@@ -145 +159 @@ internal class SwapQuoteVMMapper {
+@@ -145,2 +159,2 @@ internal class SwapQuoteVMMapper {
 -            amount = stringResByDynamicNumber(quote.amountInFormatted),
+-            fiatAmount = stringResByDynamicCurrencyNumber(quote.amountInUsd, FiatCurrency.USD.symbol),
 +            amount = stringResByNumber(quote.amountInFormatted, minDecimals = 0),
++            fiatAmount = quoteFiatAmount(quote.amountInUsd),
 @@ -156 +170 @@ internal class SwapQuoteVMMapper {
 -                stringResByDynamicNumber(
 +                stringResByNumber(
 @@ -157,0 +172 @@ internal class SwapQuoteVMMapper {
 +                    minDecimals = 0,
+@@ -159 +174 @@ internal class SwapQuoteVMMapper {
+-            fiatAmount = stringResByDynamicCurrencyNumber(quote.amountOutUsd, FiatCurrency.USD.symbol),
++            fiatAmount = quoteFiatAmount(quote.amountOutUsd),
 @@ -161 +176,2 @@ internal class SwapQuoteVMMapper {
 -            chain = quote.destinationAsset.chainName
 +            chain = quote.destinationAsset.chainName,
 +            valueDifference = createValueDifference(),
-@@ -162,0 +179,23 @@ internal class SwapQuoteVMMapper {
+@@ -162,0 +179,26 @@ internal class SwapQuoteVMMapper {
 +
 +    private fun SwapQuoteInternalState.createValueDifference(): QuoteValueDifferenceState? {
 +        val percentage = quoteValueDifference(
@@ -14220,6 +14225,9 @@ index 717411935..1e90e27bf 100644
 +            validUntilMillis = minOf(quote.timestamp + 3.minutes, quote.deadline).toEpochMilliseconds(),
 +        )
 +    }
++
++    private fun quoteFiatAmount(usd: BigDecimal): StringResource =
++        if (usd.signum() > 0) stringResByDynamicCurrencyNumber(usd, FiatCurrency.USD.symbol) else stringRes("—")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 index 1fa0df8d6..11d189a4b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
@@ -14365,10 +14373,10 @@ index 9c9ef5fc6..c94e4ae13 100644
 +                    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt
 new file mode 100644
-index 000000000..885462c35
+index 000000000..18f24b3ce
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt
-@@ -0,0 +1,73 @@
+@@ -0,0 +1,75 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
 +import androidx.compose.foundation.layout.Column
@@ -14385,6 +14393,7 @@ index 000000000..885462c35
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.model.TransactionExplorer
++import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 +import co.electriccoin.zcash.ui.design.util.StringResource
 +import co.electriccoin.zcash.ui.design.util.getValue
 +import co.electriccoin.zcash.ui.design.util.stringRes
@@ -14436,6 +14445,7 @@ index 000000000..885462c35
 +                }
 +                IconButton(onClick = link.onCopy) {
 +                    Icon(painterResource(R.drawable.ic_transaction_detail_info_copy),
++                        tint = ZashiColors.Text.textTertiary,
 +                        contentDescription = stringRes(R.string.private_copy_explorer_id, link.label).getValue())
 +                }
 +            }
@@ -22597,7 +22607,7 @@ index 000000000..91b204fd8
 +        quoteValueDifference(BigDecimal(input), BigDecimal(output), quoted, quoted + 5.minutes, now)
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-index 38427672d..f6a7d8dd9 100644
+index 38427672d..168662236 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 @@ -2,0 +3,21 @@ package co.electriccoin.zcash.ui.screen.swap.quote
@@ -22643,7 +22653,7 @@ index 38427672d..f6a7d8dd9 100644
 -@Config(sdk = [34])
 +@Config(sdk = [34], qualifiers = "w411dp-h891dp")
 +@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@@ -32,0 +68,56 @@ class SwapQuoteVMMapperTest {
+@@ -32,0 +68,62 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun freshQuoteShowsSignedDifferenceAndStaleQuoteDoesNot() {
 +        val now = kotlin.time.Clock.System.now()
@@ -22669,6 +22679,12 @@ index 38427672d..f6a7d8dd9 100644
 +            map(quote).to.valueDifference,
 +        )
 +        kotlin.test.assertNull(map(quote.copy(timestamp = now - kotlin.time.Duration.parse("4m"))).to.valueDifference)
++        val missingOutput = map(quote.copy(amountOutUsd = BigDecimal.ZERO))
++        kotlin.test.assertNull(missingOutput.to.valueDifference)
++        assertEquals(co.electriccoin.zcash.ui.design.util.stringRes("—"), missingOutput.to.fiatAmount)
++        val missingInput = map(quote.copy(amountInUsd = BigDecimal.ZERO))
++        kotlin.test.assertNull(missingInput.to.valueDifference)
++        assertEquals(co.electriccoin.zcash.ui.design.util.stringRes("—"), missingInput.from.fiatAmount)
 +    }
 +
 +    @Test
@@ -22700,7 +22716,7 @@ index 38427672d..f6a7d8dd9 100644
 +    @get:Rule
 +    val composeTestRule = createComposeRule()
 +
-@@ -68,0 +160,124 @@ class SwapQuoteVMMapperTest {
+@@ -68,0 +166,124 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun incomingQuoteDoesNotInventAWalletTransactionFee() {
 +        val items = createItems(zashi(), SwapAssetTestFixture.zecAsset())
