@@ -80,7 +80,7 @@ internal class SwapQuoteVMMapper {
             stringRes(R.string.private_price_unavailable), stringRes(R.string.private_price_unavailable_details)
         )
         is IndependentPriceCheck.Compared -> PriceCheckNoticeState(
-            label = if (isPoor) {
+            label = if (poor) {
                 stringRes(
                     R.string.private_price_poor,
                     differencePercent.abs().setScale(1, RoundingMode.HALF_UP).toPlainString(),
@@ -91,7 +91,7 @@ internal class SwapQuoteVMMapper {
                 stringRes(R.string.private_price_difference, signed)
             },
             explanation = stringRes(R.string.private_price_check_details),
-            isWarning = isPoor,
+            isWarning = poor,
         )
     }
 

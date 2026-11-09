@@ -15616,7 +15616,7 @@ index 9f37c1d93..e4ab3f2e1 100644
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..a54035640 100644
+index 717411935..05bbaf94e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
@@ -15654,7 +15654,7 @@ index 717411935..a54035640 100644
 +            stringRes(R.string.private_price_unavailable), stringRes(R.string.private_price_unavailable_details)
 +        )
 +        is IndependentPriceCheck.Compared -> PriceCheckNoticeState(
-+            label = if (isPoor) {
++            label = if (poor) {
 +                stringRes(
 +                    R.string.private_price_poor,
 +                    differencePercent.abs().setScale(1, RoundingMode.HALF_UP).toPlainString(),
@@ -15665,7 +15665,7 @@ index 717411935..a54035640 100644
 +                stringRes(R.string.private_price_difference, signed)
 +            },
 +            explanation = stringRes(R.string.private_price_check_details),
-+            isWarning = isPoor,
++            isWarning = poor,
 +        )
 +    }
 +

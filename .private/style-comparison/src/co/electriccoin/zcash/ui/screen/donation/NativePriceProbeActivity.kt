@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
@@ -44,6 +45,15 @@ class NativePriceProbeActivity : ComponentActivity() {
             try {
                 withTimeout(360_000L) {
                     check(persisted.getPersistableWallet() == null)
+                    val targets = JSONObject()
+                    for (host in listOf("api.kraken.com", "1click.chaindefuser.com")) {
+                        targets.put(host, org.json.JSONArray(java.net.InetAddress.getAllByName(host).map { it.hostAddress }))
+                    }
+                    filesDir.resolve("price-probe-targets.json").writeText(targets.toString())
+                    record("awaiting_firewall")
+                    withTimeout(30_000L) {
+                        while (!filesDir.resolve("price-probe-ready").exists()) delay(100)
+                    }
                     tor.store(true)
                     wallets.createNewWallet()
                     val account = withTimeout(90_000L) { accounts.getSelectedAccount() }
