@@ -18,6 +18,7 @@ Use this guide when changing screens or shared controls. Material 3 and Android 
 - Choose visible information and controls for the reader's task. Keep implementation inputs, such as an ID used to build a URL, internal unless exposing them serves that task. Keep useful cues adjacent to their targets; use action feedback to confirm completion.
 - Keep ordinary feedback inline. Put supplementary explanation in a short tooltip or expandable detail. Use existing primary-action wording for deliberate continuation where approved, while retaining payment review and authentication.
 - Use semantic error, warning, selected and disabled styling. Pair color with meaningful text or icons. Honor balance/reveal protections in new controls and accessibility semantics.
+- Keep explicitly selected assets and entered recipients visible when their networks conflict. Show an actionable inline error and block the quote until corrected. Scope contact selection to the selected network while keeping asset selection editable; distinguish declared network metadata from ambiguous raw address syntax.
 
 ## Make the layout accessible and verify it
 

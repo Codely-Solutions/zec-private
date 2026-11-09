@@ -29,6 +29,8 @@ The basic driver writes `ui-state.json` and `ui.png`. Its `ui-command.json` prot
 
 Keep the exact built test APK and its digest until capture diagnostics finish, so a capture-only correction can reuse it. Verify the first target automatically, inspect actual frames during implementation and before handoff, and avoid coupling cleanup to a short manual acknowledgment timer. Retire the APK after its final capture consumer; preserve original frames, source/configuration identities and receipts.
 
+Copy task-only Kotlin overlays into the isolated checkout before adding them to its source sets. Keep their source paths on the same drive as the checkout and build outputs; cross-drive overlays can break Kotlin incremental-cache path relativization on Windows. Bind the copied overlay bytes alongside the source revision.
+
 For external-navigation acceptance, isolate the callback/browser boundary from wallet funding. A seedless guest can execute the exact candidate's production callback and router, verify Android receives the expected URL, and check browser return. Bind the probe source and unchanged app payload. Record callback invocation, physical UI tapping and page loading as separate claims; retain successful financial evidence when only a hierarchy/capture check fails. Keep a task-specific probe historical until repeated use justifies a maintained tool.
 
 ## Historical orchestration and experimental work
