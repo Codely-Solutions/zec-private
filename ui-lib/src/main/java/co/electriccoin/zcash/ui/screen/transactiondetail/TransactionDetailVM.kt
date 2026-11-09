@@ -178,7 +178,7 @@ class TransactionDetailVM(
         return deposit + explorerLinks(
             chain = status.destinationAsset.blockchain.chainTicker,
             ids = status.destinationTransactionIds,
-            label = stringRes(R.string.private_explorer_destination),
+            label = stringRes(R.string.private_explorer_destination, status.destinationAsset.chainName),
             testnet = testnet,
             router = navigationRouter,
             copy = copyToClipboard::invoke

@@ -13913,7 +13913,7 @@ index 22fac8c3b..0e534cb3e 100644
 +    val refundedAmount: TransactionDetailInfoRowState? = null,
 +    val donationBasisZec: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
-index a874453ef..ec34fc786 100644
+index a874453ef..327ad599e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -13930,14 +13930,14 @@ index a874453ef..ec34fc786 100644
 +                        co.electriccoin.zcash.ui.screen.transactiondetail.explorerLinks(
 +                            chain = status.originAsset.blockchain.chainTicker,
 +                            ids = status.originTransactionIds,
-+                            label = stringRes(R.string.private_explorer_deposit),
++                            label = stringRes(R.string.private_explorer_deposit, status.originAsset.chainName),
 +                            testnet = testnet,
 +                            router = navigationRouter,
 +                            copy = copyToClipboard::invoke
 +                        ) + co.electriccoin.zcash.ui.screen.transactiondetail.explorerLinks(
 +                            chain = status.destinationAsset.blockchain.chainTicker,
 +                            ids = status.destinationTransactionIds,
-+                            label = stringRes(R.string.private_explorer_destination),
++                            label = stringRes(R.string.private_explorer_destination, status.destinationAsset.chainName),
 +                            testnet = testnet,
 +                            router = navigationRouter,
 +                            copy = copyToClipboard::invoke
@@ -14298,7 +14298,7 @@ index a7daa6d5b..fa86faf35 100644
 @@ -15,0 +16 @@ data class TransactionDetailState(
 +    val explorerLinks: List<TransactionExplorerLink> = emptyList(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-index 00fe60557..3c88298ea 100644
+index 00fe60557..cb79fec9c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 @@ -12,0 +13 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -14323,7 +14323,7 @@ index 00fe60557..3c88298ea 100644
 +        return deposit + explorerLinks(
 +            chain = status.destinationAsset.blockchain.chainTicker,
 +            ids = status.destinationTransactionIds,
-+            label = stringRes(R.string.private_explorer_destination),
++            label = stringRes(R.string.private_explorer_destination, status.destinationAsset.chainName),
 +            testnet = testnet,
 +            router = navigationRouter,
 +            copy = copyToClipboard::invoke
@@ -14365,7 +14365,7 @@ index 9c9ef5fc6..c94e4ae13 100644
 +                    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt
 new file mode 100644
-index 000000000..69b5cd953
+index 000000000..885462c35
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt
 @@ -0,0 +1,73 @@
@@ -14429,10 +14429,10 @@ index 000000000..69b5cd953
 +                        }
 +                    }
 +                } else {
-+                    Text(
-+                        text = stringResByTransactionId(link.transactionId, abbreviated = true).getValue(),
-+                        modifier = Modifier.weight(1f),
-+                    )
++                    Column(modifier = Modifier.weight(1f)) {
++                        Text(link.label.getValue())
++                        Text(stringResByTransactionId(link.transactionId, abbreviated = true).getValue())
++                    }
 +                }
 +                IconButton(onClick = link.onCopy) {
 +                    Icon(painterResource(R.drawable.ic_transaction_detail_info_copy),
@@ -19527,7 +19527,7 @@ index 000000000..c1e6f124b
 \ No newline at end of file
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_explorer_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_explorer_strings.xml
 new file mode 100644
-index 000000000..ad50e7805
+index 000000000..f3d52bb9b
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_explorer_strings.xml
 @@ -0,0 +1,9 @@
@@ -19537,8 +19537,8 @@ index 000000000..ad50e7805
 +    <string name="private_copy_explorer_id">Copy %1$s transaction ID</string>
 +    <string name="private_explorer_transaction">Zcash transaction</string>
 +    <string name="private_explorer_zec_deposit">ZEC deposit</string>
-+    <string name="private_explorer_deposit">source-chain transaction</string>
-+    <string name="private_explorer_destination">destination payment</string>
++    <string name="private_explorer_deposit">%1$s transaction</string>
++    <string name="private_explorer_destination">%1$s payment</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_quote_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_quote_strings.xml
 new file mode 100644

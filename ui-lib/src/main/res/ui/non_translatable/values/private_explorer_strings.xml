@@ -4,6 +4,6 @@
     <string name="private_copy_explorer_id">Copy %1$s transaction ID</string>
     <string name="private_explorer_transaction">Zcash transaction</string>
     <string name="private_explorer_zec_deposit">ZEC deposit</string>
-    <string name="private_explorer_deposit">source-chain transaction</string>
-    <string name="private_explorer_destination">destination payment</string>
+    <string name="private_explorer_deposit">%1$s transaction</string>
+    <string name="private_explorer_destination">%1$s payment</string>
 </resources>
