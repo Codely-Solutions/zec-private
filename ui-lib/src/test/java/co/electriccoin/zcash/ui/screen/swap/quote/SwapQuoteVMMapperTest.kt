@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.screen.swap.quote
 
 import android.app.Application
+import co.electriccoin.zcash.ui.R
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
@@ -92,10 +93,14 @@ class SwapQuoteVMMapperTest {
         kotlin.test.assertNull(map(quote.copy(timestamp = now - kotlin.time.Duration.parse("4m"))).to.valueDifference)
         val missingOutput = map(quote.copy(amountOutUsd = BigDecimal.ZERO))
         kotlin.test.assertNull(missingOutput.to.valueDifference)
-        assertEquals(co.electriccoin.zcash.ui.design.util.stringRes("—"), missingOutput.to.fiatAmount)
+        assertEquals(co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_quote_estimate_unavailable), missingOutput.to.fiatAmount)
         val missingInput = map(quote.copy(amountInUsd = BigDecimal.ZERO))
         kotlin.test.assertNull(missingInput.to.valueDifference)
-        assertEquals(co.electriccoin.zcash.ui.design.util.stringRes("—"), missingInput.from.fiatAmount)
+        assertEquals(co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_quote_estimate_unavailable), missingInput.from.fiatAmount)
+        assertEquals(
+            co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_quote_estimate_unavailable).withStyle(),
+            missingInput.amount.subtitle,
+        )
     }
 
     @Test
@@ -122,6 +127,15 @@ class SwapQuoteVMMapperTest {
             cash.z.ecc.android.sdk.model.FiatCurrency.USD.symbol,
         ).withStyle(), allowance.subtitle)
         assertEquals(quote.amountInFormatted, SwapQuoteInternalState(null, quote, zashi()).total)
+        val zeroAllowance = mapper.createState(
+            SwapQuoteInternalState(null, quote.copy(inputAllowance = BigDecimal.ZERO), zashi()), {}, {}, {}
+        ).items.last()
+        assertEquals(
+            co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber(
+                BigDecimal.ZERO, cash.z.ecc.android.sdk.model.FiatCurrency.USD.symbol,
+            ).withStyle(),
+            zeroAllowance.subtitle,
+        )
     }
 
     @get:Rule

@@ -64,7 +64,7 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                 from = if (long) from.copy(amount = stringRes("123456.12345678"), fiatAmount = stringRes("$4,938,244.94")) else from,
                 to = to.copy(
                     amount = if (long) stringRes("47.12345678") else to.amount,
-                    fiatAmount = if (missing) stringRes("—") else if (long) stringRes("$4,888,862.49") else to.fiatAmount,
+                    fiatAmount = if (missing) stringRes(R.string.private_quote_estimate_unavailable) else if (long) stringRes("$4,888,862.49") else to.fiatAmount,
                     valueDifference = if (missing) null else QuoteValueDifferenceState(
                         stringRes(if (long) "-1.00%" else if (incoming) "-2.50%" else "-3.47%"),
                         stringRes(if (incoming) R.string.private_value_difference_external else R.string.private_value_difference_known), true,

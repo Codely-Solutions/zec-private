@@ -140,52 +140,54 @@ fun TransactionDetailView(
                         is ReceiveShieldedState -> {
                             ReceiveShielded(
                                 modifier = Modifier.fillMaxWidth(),
-                                state = state.info
+                                state = state.info,
+                                explorerLinks = state.explorerLinks,
                             )
                         }
 
                         is ReceiveTransparentState -> {
                             ReceiveTransparent(
                                 modifier = Modifier.fillMaxWidth(),
-                                state = state.info
+                                state = state.info,
+                                explorerLinks = state.explorerLinks,
                             )
                         }
 
                         is SendShieldedState -> {
                             SendShielded(
                                 modifier = Modifier.fillMaxWidth(),
-                                state = state.info
+                                state = state.info,
+                                explorerLinks = state.explorerLinks,
                             )
                         }
 
                         is SendTransparentState -> {
                             SendTransparent(
                                 modifier = Modifier.fillMaxWidth(),
-                                state = state.info
+                                state = state.info,
+                                explorerLinks = state.explorerLinks,
                             )
                         }
 
                         is ShieldingState -> {
                             Shielding(
                                 modifier = Modifier.fillMaxWidth(),
-                                state = state.info
+                                state = state.info,
+                                explorerLinks = state.explorerLinks,
                             )
                         }
 
                         is SendSwapState -> {
                             SendSwap(
                                 modifier = Modifier.fillMaxWidth(),
-                                state = state.info
+                                state = state.info,
+                                explorerLinks = state.explorerLinks,
                             )
                         }
 
                         null -> {
                             // do nothing
                         }
-                    }
-                    if (state.explorerLinks.isNotEmpty()) {
-                        Spacer(8.dp)
-                        TransactionExplorerLinks(state.explorerLinks)
                     }
                 }
             }

@@ -29,6 +29,8 @@ import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByAddress
 import co.electriccoin.zcash.ui.design.util.withStyle
+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailIdRows
+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLink
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoColumn
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoColumnState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoContainer
@@ -39,7 +41,11 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDe
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
 
 @Composable
-fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+fun SendSwap(
+    state: SendSwapState,
+    modifier: Modifier = Modifier,
+    explorerLinks: List<TransactionExplorerLink> = emptyList(),
+) {
     Column(
         modifier = modifier
     ) {
@@ -105,9 +111,9 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
                         )
                     }
                     ZashiHorizontalDivider(thickness = 2.dp)
-                    TransactionDetailInfoRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        state =
+                    TransactionDetailIdRows(
+                        links = explorerLinks,
+                        fallback =
                             TransactionDetailInfoRowState(
                                 title = stringRes(R.string.transactionList_transactionId),
                                 message = state.transactionId.withStyle(),

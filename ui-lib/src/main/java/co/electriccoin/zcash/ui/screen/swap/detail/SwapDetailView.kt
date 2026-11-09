@@ -69,6 +69,7 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.ErrorFooter
 import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailHeader
 import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailHeaderState
 import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionErrorFooter
+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLinks
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoContainer
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRow
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRowState
@@ -175,16 +176,16 @@ fun SwapDetailView(
                                 }
                             }
                         }
+                        if (state.explorerLinks.isNotEmpty()) {
+                            ZashiHorizontalDivider()
+                            TransactionExplorerLinks(state.explorerLinks)
+                        }
                         ZashiHorizontalDivider()
                         TransactionDetailInfoRow(state = state.timestamp)
                     }
                     state.message?.let {
                         Spacer(8.dp)
                         ZashiMessage(it)
-                    }
-                    if (state.explorerLinks.isNotEmpty()) {
-                        Spacer(8.dp)
-                        co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLinks(state.explorerLinks)
                     }
                 }
             }
