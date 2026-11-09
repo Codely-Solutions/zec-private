@@ -10,13 +10,18 @@ ROOT=Path(__file__).resolve().parents[1]
 REPO=os.environ['GITHUB_REPOSITORY']
 CERT='410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168'
 def run(*args): return subprocess.check_output(args,text=True).strip()
+def release_title(tag):
+    match=re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-private\.([0-9]+)',tag) if isinstance(tag,str) else None
+    if match is None: raise RuntimeError('Invalid private release tag')
+    return f'ZEC Private — Release {int(match[1])}'
+
 def release_notes(proof):
     tag=proof['release_tag']
     changes=json.loads((ROOT/'.private/release-notes.json').read_text()).get(tag,[])
     if not isinstance(changes,list) or len(changes)>6 or any(not isinstance(item,str) or not item.strip() or len(item)>300 for item in changes):
         raise RuntimeError('Release changes must be a list of nonempty strings')
     upstream=f'https://github.com/zodl-inc/zodl-android/releases/tag/{proof["upstream"]["tag"]}'
-    lines=[f'ZEC Private {tag}', '', *[f'- {item}' for item in changes]]
+    lines=[release_title(tag), '', *[f'- {item}' for item in changes]]
     if changes: lines.append('')
     lines.extend([
         'Install **zec-private-latest.apk** (ARM64 Android). Check `SHA256SUMS`; install over the existing wallet.',
@@ -119,7 +124,7 @@ def main():
         raise RuntimeError('Invalid runtime graph binding')
     validate_graph_binding((artifact/'foundation-runtime.json').read_bytes(),proof,expected)
     tag=proof['release_tag']
-    if not re.fullmatch(r'v\d+\.\d+\.\d+-private\.\d+',tag): raise RuntimeError('Invalid private release tag')
+    title=release_title(tag)
     # Existing published tags/assets are immutable, including duplicate polling.
     existing=subprocess.run(['gh','release','view',tag,'--repo',REPO],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     if existing.returncode==0:
@@ -170,7 +175,7 @@ def main():
     validation.write_text(json.dumps(dict(source_sha=expected,controller_sha=controller,artifact_run_id=proof['workflow_run_id'],
         apk_sha256=digest,core=core,production_quotes=quote,production_arm_executed=False,real_funds_used=False),indent=2)+'\n')
     validation_bytes=validation.read_bytes()
-    run('gh','release','create',tag,str(signed),str(checksum),'--repo',REPO,'--target',expected,'--title',tag,'--notes-file',str(notes))
+    run('gh','release','create',tag,str(signed),str(checksum),'--repo',REPO,'--target',expected,'--title',title,'--notes-file',str(notes))
     # Advance the integrated state only after publication. Candidate is already a full patched tree.
     run('git','fetch','origin',expected)
     run('git','checkout','--detach',controller if late_attestation else expected)

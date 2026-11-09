@@ -123,27 +123,51 @@ class NearSwapQuoteValidationTest {
     }
 
     @Test
-    fun requireWithinSlippage_inputFloating_passesAtAndBelowCeiling() {
-        // 10% slippage, amountIn=100 -> ceiling=110. minAmountOut is the fixed side (== amountOut) and ignored here.
-        requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal("110"), A_THOUSAND, BPS_10_PCT)
-        requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal("105"), A_THOUSAND, BPS_10_PCT)
+    fun requireWithinSlippage_inputFloating_acceptsMinimumAtFloorThroughDeposit() {
+        listOf("90", "95", "100", "100.0").forEach { minimum ->
+            requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal(minimum), A_THOUSAND, BPS_10_PCT)
+        }
     }
 
     @Test
-    fun requireWithinSlippage_inputFloating_throwsAboveCeiling() {
-        val e =
-            assertFailsWith<SwapQuoteMismatchException> {
-                // ceiling=110, server demands at least 111
+    fun requireWithinSlippage_inputFloating_rejectsExcessiveAllowance() {
+        val e = assertFailsWith<SwapQuoteMismatchException> {
+            requireWithinSlippage(SwapType.EXACT_OUTPUT, A_THOUSAND, HUNDRED, BigDecimal("900"), HUNDRED, 100)
+        }
+        assertEquals(SwapQuoteMismatchType.SLIPPAGE_EXCEEDED, e.type)
+    }
+
+    @Test
+    fun requireWithinSlippage_inputFloating_rejectsMalformedOrContradictoryAmounts() {
+        listOf(
+            "100" to "110", "0" to "1", "-100" to "90", "100" to "0",
+            "100" to "-1", "100.5" to "95", "100" to "95.5"
+        ).forEach { (deposit, minimum) ->
+            val e = assertFailsWith<SwapQuoteMismatchException> {
                 requireWithinSlippage(
-                    SwapType.EXACT_OUTPUT,
-                    BigDecimal("100"),
-                    A_THOUSAND,
-                    BigDecimal("111"),
-                    A_THOUSAND,
-                    BPS_10_PCT
+                    SwapType.EXACT_OUTPUT, BigDecimal(deposit), A_THOUSAND, BigDecimal(minimum), A_THOUSAND, BPS_10_PCT
                 )
             }
-        assertEquals(SwapQuoteMismatchType.SLIPPAGE_EXCEEDED, e.type)
+            assertEquals(SwapQuoteMismatchType.INPUT_AMOUNT, e.type)
+        }
+    }
+
+    @Test
+    fun requireWithinSlippage_inputFloating_zeroSlippageRequiresEqualInputAmounts() {
+        requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, HUNDRED, A_THOUSAND, 0)
+        assertFailsWith<SwapQuoteMismatchException> {
+            requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal("99"), A_THOUSAND, 0)
+        }
+    }
+
+    @Test
+    fun requireWithinSlippage_inputFloating_rejectsInvalidTolerance() {
+        listOf(-1, 10001).forEach { tolerance ->
+            val e = assertFailsWith<SwapQuoteMismatchException> {
+                requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, HUNDRED, A_THOUSAND, tolerance)
+            }
+            assertEquals(SwapQuoteMismatchType.SLIPPAGE_TOLERANCE, e.type)
+        }
     }
 
     @Test
@@ -182,32 +206,31 @@ class NearSwapQuoteValidationTest {
     }
 
     @Test
-    fun requireWithinSlippage_inputFloating_acceptsServerIntegerRoundedCeiling() {
-        // Symmetric case for EXACT_OUTPUT: amountIn=9897372 × 1.30 = 12866583.6; the server rounds
-        // UP to 12866584 to keep its guarantee conservative. The wallet's ceiling rounds UP too.
+    fun requireWithinSlippage_inputFloating_acceptsSanitizedProviderIntegerFloor() {
+        // Sanitized completed quote: 906756 * 0.995 = 902222.22, truncated to 902222 zats.
         requireWithinSlippage(
-            swapType = SwapType.EXACT_OUTPUT,
-            amountIn = BigDecimal("9897372"),
-            amountOut = BigDecimal("2245828"),
-            minAmountIn = BigDecimal("12866584"),
-            minAmountOut = BigDecimal("2245828"),
-            slippageToleranceBps = 3000
+            SwapType.EXACT_OUTPUT, BigDecimal("906756"), BigDecimal("13157"),
+            BigDecimal("902222"), BigDecimal("13157"), 50
         )
     }
 
     @Test
-    fun requireWithinSlippage_inputFloating_stillRejectsAboveIntegerCeiling() {
-        // One base unit above the rounded-up integer ceiling is genuinely out of tolerance.
-        assertFailsWith<IllegalArgumentException> {
+    fun requireWithinSlippage_inputFloating_rejectsOneAtomicUnitBelowFloor() {
+        val e = assertFailsWith<SwapQuoteMismatchException> {
             requireWithinSlippage(
-                swapType = SwapType.EXACT_OUTPUT,
-                amountIn = BigDecimal("9897372"),
-                amountOut = BigDecimal("2245828"),
-                minAmountIn = BigDecimal("12866585"),
-                minAmountOut = BigDecimal("2245828"),
-                slippageToleranceBps = 3000
+                SwapType.EXACT_OUTPUT, BigDecimal("906756"), BigDecimal("13157"),
+                BigDecimal("902221"), BigDecimal("13157"), 50
             )
         }
+        assertEquals(SwapQuoteMismatchType.SLIPPAGE_EXCEEDED, e.type)
+    }
+
+    @Test
+    fun requireWithinSlippage_inputFloating_preservesPrecisionAboveDecimal128() {
+        requireWithinSlippage(
+            SwapType.EXACT_OUTPUT, BigDecimal("100000000000000000000000000000000000001"), A_THOUSAND,
+            BigDecimal("99500000000000000000000000000000000000"), A_THOUSAND, 50
+        )
     }
 
     // endregion

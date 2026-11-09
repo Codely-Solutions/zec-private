@@ -149,13 +149,21 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                 header = TransactionDetailHeaderState(stringRes("Received"), stringRes("0.01"), listOf(imageRes(R.drawable.ic_transaction_received))),
                 info = ReceiveShieldedStateFixture.new().copy(completedTimestamp = stringRes("8 November 2026, 12:00")), errorFooter = null, infoFooter = null,
                 primaryButton = null, secondaryButton = null,
+                explorerLinks = listOf(TransactionExplorerLink(
+                    label = stringRes("Zcash transaction"), transactionId = "ab".repeat(32), onOpen = {}, onCopy = {},
+                )),
             ), mainAppBarState = appBar,
         )
         "swap-review", "crosspay-review" -> SwapQuoteView(
             SwapQuoteState.Success(
                 title = stringRes(if (screen == "crosspay-review") "Pay now" else "Swap"), rotateIcon = screen == "swap-review",
                 from = SwapTokenAmountState(amount = stringRes("0.01"), fiatAmount = stringRes("$0.40"), chain = stringRes("Zcash"), token = stringRes("ZEC"), bigIcon = imageRes(R.drawable.ic_zec_round_full), smallIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_zec_shielded)),
-                to = SwapTokenAmountState(amount = stringRes("0.000004"), fiatAmount = stringRes("$0.39"), chain = stringRes("Bitcoin"), token = stringRes("BTC"), bigIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc), smallIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc)),
+                to = SwapTokenAmountState(amount = stringRes("0.000004"), fiatAmount = stringRes("$0.39"), chain = stringRes("Bitcoin"), token = stringRes("BTC"), bigIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc), smallIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc),
+                    valueDifference = QuoteValueDifferenceState(
+                        percentage = stringRes("-3.47%"),
+                        explanation = stringRes(if (screen == "crosspay-review") R.string.private_value_difference_buffered else R.string.private_value_difference_known),
+                        isNegative = true,
+                    )),
                 items = listOf(
                     SwapQuoteInfoItem(stringRes("Pay from"), styledStringResource("ZEC Private")),
                     SwapQuoteInfoItem(stringRes("Pay to"), styledStringResource("Synthetic destination")),
@@ -166,7 +174,7 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                 infoText = stringRes("Synthetic review only. No payment can be submitted."), onBack = onBack,
             )
         )
-        else -> return false
+        else -> return SwapSprintScene(screen, onBack, appBar)
     }
     return true
 }

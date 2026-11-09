@@ -40,6 +40,7 @@ import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import java.io.File
 import java.math.BigDecimal
+import co.electriccoin.zcash.ui.design.util.withStyle
 import java.util.Locale
 import org.junit.Rule
 import org.junit.runner.RunWith
@@ -64,6 +65,59 @@ import kotlin.test.assertTrue
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SwapQuoteVMMapperTest {
+    @Test
+    fun freshQuoteShowsSignedDifferenceAndStaleQuoteDoesNot() {
+        val now = kotlin.time.Clock.System.now()
+        val quote = FakeSwapQuote(
+            destinationAsset = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
+            originAsset = SwapAssetTestFixture.zecAsset(),
+            mode = SwapMode.EXACT_INPUT,
+            amountInUsd = BigDecimal("10"),
+            amountOutUsd = BigDecimal("9.85"),
+            timestamp = now,
+            deadline = now + kotlin.time.Duration.parse("5m"),
+        )
+        fun map(q: FakeSwapQuote) = mapper.createState(
+            SwapQuoteInternalState(null, q, zashi()), {}, {}, {}
+        )
+        assertEquals(
+            co.electriccoin.zcash.ui.design.component.QuoteValueDifferenceState(
+                percentage = co.electriccoin.zcash.ui.design.util.stringRes("-1.50%"),
+                explanation = co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_value_difference_known),
+                isNegative = true,
+                validUntilMillis = (now + kotlin.time.Duration.parse("3m")).toEpochMilliseconds(),
+            ),
+            map(quote).to.valueDifference,
+        )
+        kotlin.test.assertNull(map(quote.copy(timestamp = now - kotlin.time.Duration.parse("4m"))).to.valueDifference)
+    }
+
+    @Test
+    fun exactOutputDisplaysActualIncludedAllowance() {
+        val quote = FakeSwapQuote(
+            destinationAsset = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
+            originAsset = SwapAssetTestFixture.zecAsset(),
+            mode = SwapMode.EXACT_OUTPUT,
+            amountInFormatted = BigDecimal("0.00906756"),
+            amountInUsd = BigDecimal("11.54073699"),
+            amountOutUsd = BigDecimal("9.99997785"),
+            inputAllowance = BigDecimal("0.00004534"),
+            slippage = BigDecimal("0.5"),
+        )
+        val state = mapper.createState(SwapQuoteInternalState(null, quote, zashi()), {}, {}, {})
+        val allowance = state.items.last()
+        assertEquals(R.string.private_included_input_allowance, allowance.description.resourceId())
+        assertEquals(
+            co.electriccoin.zcash.ui.design.util.stringRes(cash.z.ecc.android.sdk.model.Zatoshi(4534)).withStyle(),
+            allowance.title,
+        )
+        assertEquals(co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber(
+            BigDecimal("0.0577064850"),
+            cash.z.ecc.android.sdk.model.FiatCurrency.USD.symbol,
+        ).withStyle(), allowance.subtitle)
+        assertEquals(quote.amountInFormatted, SwapQuoteInternalState(null, quote, zashi()).total)
+    }
+
     @get:Rule
     val composeTestRule = createComposeRule()
 

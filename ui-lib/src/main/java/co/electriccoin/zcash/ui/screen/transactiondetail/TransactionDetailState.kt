@@ -13,6 +13,7 @@ data class TransactionDetailState(
     val errorFooter: ErrorFooter?,
     val infoFooter: StringResource?,
     val primaryButton: ButtonState?,
+    val explorerLinks: List<TransactionExplorerLink> = emptyList(),
     val secondaryButton: ButtonState?
 )
 

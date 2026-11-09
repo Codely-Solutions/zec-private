@@ -10,6 +10,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
+import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_OUTPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
@@ -94,6 +95,7 @@ class TransactionDetailVM(
             .mapLatest { transaction ->
                 var info = createTransactionInfoState(transaction)
                 TransactionDetailState(
+                    explorerLinks = createExplorerLinks(transaction),
                     onBack = ::onBack,
                     info = info,
                     header = createTransactionHeaderState(transaction, info),
@@ -159,6 +161,30 @@ class TransactionDetailVM(
             secondaryButton = null,
         )
 
+    private fun createExplorerLinks(data: DetailedTransactionData): List<TransactionExplorerLink> {
+        val testnet = co.electriccoin.zcash.ui.common.model.VersionInfo.NETWORK ==
+            cash.z.ecc.android.sdk.model.ZcashNetwork.Testnet
+        val deposit = explorerLinks(
+            chain = "zec",
+            ids = listOf(data.transaction.id.txIdString()),
+            label = stringRes(
+                if (data.swap == null) R.string.private_explorer_transaction else R.string.private_explorer_zec_deposit
+            ),
+            testnet = testnet,
+            router = navigationRouter,
+            copy = copyToClipboard::invoke
+        )
+        val status = data.swap?.status ?: return deposit
+        return deposit + explorerLinks(
+            chain = status.destinationAsset.blockchain.chainTicker,
+            ids = status.destinationTransactionIds,
+            label = stringRes(R.string.private_explorer_destination),
+            testnet = testnet,
+            router = navigationRouter,
+            copy = copyToClipboard::invoke
+        )
+    }
+
     private fun onAddOrEditNoteClick() {
         navigationRouter.forward(TransactionNote(transactionDetailArgs.transactionId))
     }
@@ -198,11 +224,9 @@ class TransactionDetailVM(
                                 ),
                             refundedAmount =
                                 transaction.swap.status
-                                    ?.refundedFormatted
+                                    ?.positiveRefund
                                     ?.let {
                                         stringResByCurrencyNumber(amount = it, ticker = CURRENCY_TICKER)
-                                    }?.takeIf {
-                                        transaction.swap.status.status == REFUNDED
                                     },
                             onTransactionIdClick = {
                                 onCopyToClipboard(transaction.transaction.id.txIdString())

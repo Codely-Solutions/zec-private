@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import co.electriccoin.zcash.ui.design.R
 import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
+import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.theme.dimensions.ZashiDimensions
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
@@ -103,13 +106,20 @@ private fun Layout(
                 fontWeight = FontWeight.Medium,
                 color = ZashiColors.Text.textPrimary,
             )
-            ShimmerableText(
-                text = state?.let { it.fiatAmount orHiddenString stringRes(R.string.general_hideBalancesMost) },
-                shimmerText = stringResByNumber(BigDecimal(".123")).getValue(),
-                style = ZashiTypography.textXxs,
-                fontWeight = FontWeight.Medium,
-                color = ZashiColors.Text.textTertiary,
-            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(4.dp, if (isMirrored) Alignment.End else Alignment.Start),
+            ) {
+                ShimmerableText(
+                    text = state?.let { it.fiatAmount orHiddenString stringRes(R.string.general_hideBalancesMost) },
+                    shimmerText = stringResByNumber(BigDecimal(".123")).getValue(),
+                    style = ZashiTypography.textXxs,
+                    fontWeight = FontWeight.Medium,
+                    color = ZashiColors.Text.textTertiary,
+                )
+                if (LocalBalancesAvailable.current) {
+                    state?.valueDifference?.let { QuoteValueDifference(it) }
+                }
+            }
         }
     }
 }
@@ -214,6 +224,7 @@ data class SwapTokenAmountState(
     val chain: StringResource,
     val bigIcon: ImageResource,
     val smallIcon: ImageResource,
+    val valueDifference: QuoteValueDifferenceState? = null,
 )
 
 @PreviewScreens

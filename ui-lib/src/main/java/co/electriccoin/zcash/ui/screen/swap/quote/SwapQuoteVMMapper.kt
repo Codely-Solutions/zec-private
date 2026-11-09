@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
 import co.electriccoin.zcash.ui.common.model.isZCashAsset
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.SwapTokenAmountState
+import co.electriccoin.zcash.ui.design.component.QuoteValueDifferenceState
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByAddress
@@ -21,6 +22,8 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.swapQuoteTokenIcon
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 
 internal class SwapQuoteVMMapper {
     @Suppress("UseCheckOrError")
@@ -115,18 +118,17 @@ internal class SwapQuoteVMMapper {
             ),
             if (quote.mode == EXACT_OUTPUT) {
                 val slippage = quote.slippage.divide(BigDecimal("100"))
-                val slippageUsd = quote.amountOutUsd.multiply(slippage)
+                val allowance = quote.inputAllowance ?: quote.amountInFormatted.multiply(slippage)
+                val slippageUsd = quote.amountInUsd
+                    .divide(quote.amountInFormatted, MathContext.DECIMAL128)
+                    .multiply(allowance)
                 val slippageZatoshi =
-                    quote.amountInFormatted
-                        .multiply(
-                            slippage,
-                            MathContext.DECIMAL128
-                        ).convertZecToZatoshi()
+                    allowance.convertZecToZatoshi()
 
                 SwapQuoteInfoItem(
                     description =
                         stringRes(
-                            R.string.swapAndPay_maxSlippage,
+                            R.string.private_included_input_allowance,
                             stringResByNumber(quote.slippage, minDecimals = 0) + stringRes("%")
                         ),
                     title = stringRes(slippageZatoshi).withStyle(),
@@ -171,6 +173,30 @@ internal class SwapQuoteVMMapper {
                 ),
             fiatAmount = stringResByDynamicCurrencyNumber(quote.amountOutUsd, FiatCurrency.USD.symbol),
             token = stringRes(quote.destinationAsset.tokenTicker),
-            chain = quote.destinationAsset.chainName
+            chain = quote.destinationAsset.chainName,
+            valueDifference = createValueDifference(),
         )
+
+    private fun SwapQuoteInternalState.createValueDifference(): QuoteValueDifferenceState? {
+        val percentage = quoteValueDifference(
+            totalSpendUsd = totalUsd,
+            receivedUsd = quote.amountOutUsd,
+            quotedAt = quote.timestamp,
+            deadline = quote.deadline,
+            now = Clock.System.now(),
+        ) ?: return null
+        val rounded = percentage.setScale(2, RoundingMode.HALF_UP)
+        val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString() + "%"
+        val scope = when {
+            quote.destinationAsset.isZCashAsset -> R.string.private_value_difference_external
+            quote.mode == EXACT_OUTPUT -> R.string.private_value_difference_buffered
+            else -> R.string.private_value_difference_known
+        }
+        return QuoteValueDifferenceState(
+            percentage = stringRes(signed),
+            explanation = stringRes(scope),
+            isNegative = rounded.signum() < 0,
+            validUntilMillis = minOf(quote.timestamp + 3.minutes, quote.deadline).toEpochMilliseconds(),
+        )
+    }
 }

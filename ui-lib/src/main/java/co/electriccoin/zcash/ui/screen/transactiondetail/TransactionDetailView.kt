@@ -183,6 +183,10 @@ fun TransactionDetailView(
                             // do nothing
                         }
                     }
+                    if (state.explorerLinks.isNotEmpty()) {
+                        Spacer(8.dp)
+                        TransactionExplorerLinks(state.explorerLinks)
+                    }
                 }
             }
         }

@@ -6,6 +6,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
+import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.model.SwapStatus.EXPIRED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.FAILED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.INCOMPLETE_DEPOSIT
@@ -96,6 +97,33 @@ class SwapDetailVM(
                             .takeIf { swapData.status?.status == PENDING },
                     primaryButton = createPrimaryButtonState(swapData, swapData.error),
                     onBack = ::onBack,
+                    explorerLinks = swapData.status?.let { status ->
+                        val testnet = co.electriccoin.zcash.ui.common.model.VersionInfo.NETWORK ==
+                            cash.z.ecc.android.sdk.model.ZcashNetwork.Testnet
+                        co.electriccoin.zcash.ui.screen.transactiondetail.explorerLinks(
+                            chain = status.originAsset.blockchain.chainTicker,
+                            ids = status.originTransactionIds,
+                            label = stringRes(R.string.private_explorer_deposit),
+                            testnet = testnet,
+                            router = navigationRouter,
+                            copy = copyToClipboard::invoke
+                        ) + co.electriccoin.zcash.ui.screen.transactiondetail.explorerLinks(
+                            chain = status.destinationAsset.blockchain.chainTicker,
+                            ids = status.destinationTransactionIds,
+                            label = stringRes(R.string.private_explorer_destination),
+                            testnet = testnet,
+                            router = navigationRouter,
+                            copy = copyToClipboard::invoke
+                        )
+                    }.orEmpty(),
+                    refundedAmount = swapData.status?.positiveRefund?.let { refund ->
+                        TransactionDetailInfoRowState(
+                            title = stringRes(R.string.swapAndPay_refundedAmount),
+                            message = stringResByCurrencyNumber(
+                                amount = refund, ticker = swapData.status.originAsset.tokenTicker
+                            ).withStyle(),
+                        )
+                    },
                     donationBasisZec = swapData.status?.takeIf {
                         it.status == SUCCESS && it.destinationAsset.tokenTicker == "ZEC"
                     }?.executedAmountOut?.takeIf { it.signum() > 0 }?.toPlainString(),
