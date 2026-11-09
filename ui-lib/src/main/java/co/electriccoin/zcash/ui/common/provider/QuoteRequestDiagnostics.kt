@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.provider
 
 import android.util.Log
+import co.electriccoin.zcash.ui.BuildConfig
 import io.ktor.client.plugins.ResponseException
 
 enum class QuoteRequestStage {
@@ -15,7 +16,7 @@ enum class QuoteRequestStage {
 /** Records bounded lifecycle metadata only. Never pass request values or exception messages to the sink. */
 class QuoteRequestDiagnostics(
     private val sink: (String) -> Unit = {
-        Log.i("SwapQuoteStage", it)
+        if (BuildConfig.DEBUG) Log.i("SwapQuoteStage", it)
         Unit
     },
     private val nanoTime: () -> Long = System::nanoTime
