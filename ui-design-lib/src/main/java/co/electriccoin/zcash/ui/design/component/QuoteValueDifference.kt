@@ -4,6 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
@@ -54,7 +55,7 @@ internal fun QuoteValueDifference(state: QuoteValueDifferenceState) {
     TooltipBox(
         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
         state = tooltip,
-        tooltip = { PlainTooltip { Text(explanation) } },
+        tooltip = { PlainTooltip { Text(explanation, style = MaterialTheme.typography.bodySmall) } },
     ) {
         Text(
             text = "($value)",

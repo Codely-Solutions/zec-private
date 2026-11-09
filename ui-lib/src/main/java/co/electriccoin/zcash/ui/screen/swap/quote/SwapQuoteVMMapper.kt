@@ -133,7 +133,7 @@ internal class SwapQuoteVMMapper {
                         ),
                     title = stringRes(slippageZatoshi).withStyle(),
                     subtitle =
-                        stringResByDynamicCurrencyNumber(slippageUsd, FiatCurrency.USD.symbol).withStyle()
+                        quoteFiatAmount(slippageUsd, quote.amountInUsd.signum() > 0).withStyle()
                 )
             } else {
                 null
@@ -149,7 +149,7 @@ internal class SwapQuoteVMMapper {
                     stringRes(R.string.private_total_zec_to_spend)
                 },
             title = stringResByCurrencyNumber(total, quote.originAsset.tokenTicker, minDecimals = 0).withStyle(),
-            subtitle = stringResByDynamicCurrencyNumber(totalUsd, FiatCurrency.USD.symbol).withStyle()
+            subtitle = quoteFiatAmount(totalUsd, quote.amountInUsd.signum() > 0).withStyle()
         )
 
     private fun SwapQuoteInternalState.createFromState(): SwapTokenAmountState =
@@ -200,6 +200,7 @@ internal class SwapQuoteVMMapper {
         )
     }
 
-    private fun quoteFiatAmount(usd: BigDecimal): StringResource =
-        if (usd.signum() > 0) stringResByDynamicCurrencyNumber(usd, FiatCurrency.USD.symbol) else stringRes("—")
+    private fun quoteFiatAmount(usd: BigDecimal, available: Boolean = usd.signum() > 0): StringResource =
+        if (available) stringResByDynamicCurrencyNumber(usd, FiatCurrency.USD.symbol)
+        else stringRes(R.string.private_quote_estimate_unavailable)
 }

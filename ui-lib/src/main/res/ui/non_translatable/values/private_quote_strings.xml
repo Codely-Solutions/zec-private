@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="private_included_input_allowance" translatable="false">Included allowance (%1$s)</string>
-    <string name="private_value_difference_known" translatable="false">Estimated value received versus total spend, including the Zcash network fee. Based on quote prices.</string>
-    <string name="private_value_difference_external" translatable="false">Estimated value received versus input value. Excludes your sending wallet’s network fee. Based on quote prices.</string>
-    <string name="private_value_difference_buffered" translatable="false">Estimated value received versus total ZEC to fund, including the price-movement allowance and network fee. Based on quote prices.</string>
+    <string name="private_value_difference_known" translatable="false">Estimated value received versus total spend, including the network fee.</string>
+    <string name="private_value_difference_external" translatable="false">Estimated value received versus the amount sent.</string>
+    <string name="private_value_difference_buffered" translatable="false">Estimated value received versus the total to fund, including allowance and network fee.</string>
+    <string name="private_quote_estimate_unavailable" translatable="false">Estimate unavailable</string>
 </resources>

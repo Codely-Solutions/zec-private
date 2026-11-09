@@ -115,6 +115,8 @@ private fun Layout(
                     style = ZashiTypography.textXxs,
                     fontWeight = FontWeight.Medium,
                     color = ZashiColors.Text.textTertiary,
+                    maxLines = 2,
+                    textAlign = if (isMirrored) TextAlign.End else TextAlign.Start,
                 )
                 if (LocalBalancesAvailable.current) {
                     state?.valueDifference?.let { QuoteValueDifference(it) }
