@@ -6,7 +6,7 @@ import co.electriccoin.zcash.ui.common.model.MarketObservation
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
-import io.ktor.utils.io.readRemaining
+import io.ktor.utils.io.readBuffer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
@@ -63,7 +63,7 @@ class KrakenPriceProvider(private val httpClientProvider: HttpClientProvider) : 
                                     url { parameters.append("pair", pair) }
                                 }.execute { response ->
                                     check(response.status.value == 200)
-                                    val bytes = response.bodyAsChannel().readRemaining(65_537L).readByteArray()
+                                    val bytes = response.bodyAsChannel().readBuffer(65_537L).readByteArray()
                                     require(bytes.size <= 65_536)
                                     parseKrakenObservation(pair, bytes.decodeToString(), System.currentTimeMillis())
                                 }
