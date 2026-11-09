@@ -129,12 +129,8 @@ class SwapQuoteVMMapperTest {
         val zeroAllowance = mapper.createState(
             SwapQuoteInternalState(null, quote.copy(inputAllowance = BigDecimal.ZERO), zashi()), {}, {}, {}
         ).items.last()
-        assertEquals(
-            co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber(
-                BigDecimal.ZERO, cash.z.ecc.android.sdk.model.FiatCurrency.USD.symbol,
-            ).withStyle(),
-            zeroAllowance.subtitle,
-        )
+        val zeroFiat = (zeroAllowance.subtitle as StyledStringResource.ByStringResource).resource
+        assertEquals("$0.00", zeroFiat.getString(RuntimeEnvironment.getApplication(), Locale.US))
     }
 
     @get:Rule
