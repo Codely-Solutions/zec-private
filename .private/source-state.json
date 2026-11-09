@@ -1423,7 +1423,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapStatus.kt": "d86498abd2717e1c11e0048af91308ce546ae81e6e2bdbb3e77ef7eb8cb637ff",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SynchronizerError.kt": "452878b503216fe8a3d6a31b5aeb9e5487b4faf130dbd5de89b7ebd15470758f",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/TopAppBarSubTitleState.kt": "a2755e1e5c825d8b32146fb1e21088ab7ec94c7a1bc2002afc0410ed4c851e70",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/TransactionExplorer.kt": "3e95b25b2be9031bf6c6403d6a562e074829482c1bebdcf68846169552c7b0d5",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/TransactionExplorer.kt": "d23dfa06891e846cfa363273a66add9ee3a13693c96857e47004314097aa3ac1",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VKType.kt": "91f95b0ee599c78e510cd52f802ad826b4d9615de3ba5ac958ec867e4fbcff12",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ValidContactName.kt": "bef9965e89bb6d6852fd06a515880f42b098cbfeca11dcfbc8883dfd842ce165",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/VersionInfo.kt": "94d293d1c216bea205ee31c7c3b2afd19cc39e5b05e8764db6edb651a8dcd44a",

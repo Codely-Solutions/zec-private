@@ -20,8 +20,8 @@ object TransactionExplorer {
     )
 
     fun url(chain: String, id: String, testnet: Boolean = false): String? {
-        val explorer = explorers[chain.lowercase()]
-        val prefix = if (testnet) explorer?.testnetPrefix else explorer?.prefix
+        val explorer = explorers[chain.lowercase()] ?: return null
+        val prefix = if (testnet) explorer.testnetPrefix else explorer.prefix
         return if (prefix != null && explorer.idPattern.matches(id)) prefix + id else null
     }
 }

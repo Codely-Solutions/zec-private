@@ -10449,7 +10449,7 @@ index b7f89d023..38be49b5a 100644
 +    val destinationTransactionIds: List<String> get() = emptyList()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/TransactionExplorer.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/TransactionExplorer.kt
 new file mode 100644
-index 000000000..6548a0679
+index 000000000..435cd453b
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/TransactionExplorer.kt
 @@ -0,0 +1,29 @@
@@ -10475,8 +10475,8 @@ index 000000000..6548a0679
 +    )
 +
 +    fun url(chain: String, id: String, testnet: Boolean = false): String? {
-+        val explorer = explorers[chain.lowercase()]
-+        val prefix = if (testnet) explorer?.testnetPrefix else explorer?.prefix
++        val explorer = explorers[chain.lowercase()] ?: return null
++        val prefix = if (testnet) explorer.testnetPrefix else explorer.prefix
 +        return if (prefix != null && explorer.idPattern.matches(id)) prefix + id else null
 +    }
 +}
