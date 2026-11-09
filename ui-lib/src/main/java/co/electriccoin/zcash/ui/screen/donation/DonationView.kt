@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
 import co.electriccoin.zcash.ui.design.component.ZashiButton
 import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
-import co.electriccoin.zcash.ui.design.component.ExternalLinkRow
+import co.electriccoin.zcash.ui.design.component.ZashiTextButton
 import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
 import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarBackNavigation
 import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
@@ -102,12 +102,13 @@ internal fun DonationView(
             if (state.unsupported) {
                 DonationMessage(stringResource(R.string.private_support_software_only))
             }
-            ExternalLinkRow(
-                label = stringResource(R.string.private_support_addresses),
+            ZashiTextButton(
                 onClick = onExternalAddresses,
                 enabled = !state.busy,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-            )
+            ) {
+                Text(stringResource(R.string.private_support_addresses))
+            }
         }
     }
 }
