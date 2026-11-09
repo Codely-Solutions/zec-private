@@ -1,0 +1,45 @@
+"""Release display metadata checks; no signing, build or publication."""
+import importlib.util
+import json
+import os
+from pathlib import Path
+import unittest
+from unittest.mock import patch
+
+spec=importlib.util.spec_from_file_location('private_publish',Path(__file__).with_name('publish.py'))
+publish=importlib.util.module_from_spec(spec)
+with patch.dict(os.environ,{'GITHUB_REPOSITORY':'example/zec-private'}):
+    spec.loader.exec_module(publish)
+
+
+class PublishMetadataTest(unittest.TestCase):
+    def test_title_uses_private_revision(self):
+        self.assertEqual('ZEC Private — Release 18',publish.release_title('v2.3.4-private.18'))
+        self.assertEqual('ZEC Private — Release 120',publish.release_title('v9.10.11-private.120'))
+
+    def test_title_rejects_invalid_tags(self):
+        for tag in (None,18,'v2.3.4','v2.3.4-private.18-extra','v2.3.4-private.18\n',
+                    'v2.3.4-private.-1','v2.3.4-private.１８','v2.3.4-private.18; command'):
+            with self.subTest(tag=tag),self.assertRaisesRegex(RuntimeError,'Invalid private release tag'):
+                publish.release_title(tag)
+
+    def test_notes_keep_technical_links_and_version_code(self):
+        proof={'release_tag':'v2.3.4-private.18','versionCode':123456,'upstream':{'tag':'v2.3.4'}}
+        with patch.object(Path,'read_text',return_value=json.dumps({proof['release_tag']:['Correct quote validation.']})):
+            notes=publish.release_notes(proof)
+        self.assertTrue(notes.startswith('ZEC Private — Release 18\n\n- Correct quote validation.\n'))
+        self.assertIn('Android versionCode: 123456',notes)
+        self.assertIn('/blob/v2.3.4-private.18/docs/WALLET-GUIDE.md',notes)
+        self.assertIn('/.private/release-evidence/v2.3.4-private.18.json',notes)
+        self.assertIn('zec-private-latest.apk',notes)
+
+    def test_notes_preserve_change_limits(self):
+        proof={'release_tag':'v2.3.4-private.18','versionCode':123456,'upstream':{'tag':'v2.3.4'}}
+        for changes in (['Change']*7,['x'*301],[''],[1],{}):
+            with self.subTest(changes=changes):
+                with patch.object(Path,'read_text',return_value=json.dumps({proof['release_tag']:changes})):
+                    with self.assertRaisesRegex(RuntimeError,'Release changes must be a list'):
+                        publish.release_notes(proof)
+
+
+if __name__=='__main__': unittest.main()

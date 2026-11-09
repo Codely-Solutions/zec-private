@@ -141,6 +141,9 @@ data class NearSwapQuoteStatus(
         response.swapDetails?.amountOutFormatted
             ?: response.swapDetails?.amountOut?.movePointLeft(destination.decimals)
 
+    override val originTransactionIds: List<String> =
+        response.swapDetails?.originChainTxHashes?.map { it.hash }.orEmpty()
+
     override val destinationTransactionIds: List<String> =
         response.swapDetails?.destinationChainTxHashes?.map { it.hash }.orEmpty()
 

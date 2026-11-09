@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.model.near
 
+import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapBlockchain
@@ -102,6 +103,44 @@ class NearSwapQuoteStatusTest {
         assertEquals(null, swap.executedAmountOut)
         assertEquals(BigDecimal("2"), swap.amountOutFormatted)
         assertEquals(BigDecimal("2.000000"), swap.quote.minimumAmountOut)
+    }
+
+    @Test
+    fun actualPositiveRefundIsVisibleForSuccessAndFullyRefundedStatus() {
+        listOf(SwapStatus.SUCCESS, SwapStatus.REFUNDED).forEach { status ->
+            val original = nearSwapQuoteStatus(status, Clock.System.now() + 1.hours)
+            val swap = original.copy(response = original.response.copy(
+                swapDetails = SwapDetails(refundedAmount = BigDecimal("123456"))
+            ))
+            assertEquals(BigDecimal("0.00123456"), swap.positiveRefund)
+        }
+    }
+
+    @Test
+    fun missingOrZeroRefundDoesNotInferOneFromDeposit() {
+        val original = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
+        assertEquals(null, original.positiveRefund)
+        listOf(null, BigDecimal.ZERO).forEach { refund ->
+            val swap = original.copy(response = original.response.copy(
+                swapDetails = SwapDetails(
+                    refundedAmountFormatted = refund,
+                    depositedAmountFormatted = BigDecimal("2"),
+                    amountInFormatted = BigDecimal("1")
+                )
+            ))
+            assertEquals(null, swap.positiveRefund)
+        }
+    }
+
+    @Test
+    fun keepsEachReportedTransactionInItsOwnLeg() {
+        val original = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
+        val swap = original.copy(response = original.response.copy(swapDetails = SwapDetails(
+            originChainTxHashes = listOf(TransactionChainHash("deposit-a"), TransactionChainHash("deposit-b")),
+            destinationChainTxHashes = listOf(TransactionChainHash("payment-a"))
+        )))
+        assertEquals(listOf("deposit-a", "deposit-b"), swap.originTransactionIds)
+        assertEquals(listOf("payment-a"), swap.destinationTransactionIds)
     }
 
     private fun nearSwapQuoteStatus(serverStatus: SwapStatus, deadline: Instant) =

@@ -25,6 +25,7 @@ interface SwapQuoteStatus {
     val quotedAmountOut: BigDecimal get() = amountOutFormatted
     val executedAmountIn: BigDecimal? get() = null
     val executedAmountOut: BigDecimal? get() = null
+    val originTransactionIds: List<String> get() = emptyList()
     val destinationTransactionIds: List<String> get() = emptyList()
     val depositedAmountFormatted: BigDecimal?
     val refundedFormatted: BigDecimal?

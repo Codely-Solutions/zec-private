@@ -163,6 +163,10 @@ fun SwapDetailView(
                                 TransactionDetailInfoRow(state.depositTo)
                                 ZashiHorizontalDivider()
                                 TransactionDetailInfoRow(state.recipient)
+                                state.refundedAmount?.let {
+                                    ZashiHorizontalDivider()
+                                    TransactionDetailInfoRow(it)
+                                }
                                 ZashiHorizontalDivider()
                                 TransactionDetailInfoRow(state.totalFees)
                                 ZashiHorizontalDivider()
@@ -177,6 +181,10 @@ fun SwapDetailView(
                     state.message?.let {
                         Spacer(8.dp)
                         ZashiMessage(it)
+                    }
+                    if (state.explorerLinks.isNotEmpty()) {
+                        Spacer(8.dp)
+                        co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLinks(state.explorerLinks)
                     }
                 }
             }

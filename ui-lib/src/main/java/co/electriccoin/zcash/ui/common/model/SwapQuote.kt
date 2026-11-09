@@ -20,6 +20,7 @@ interface SwapQuote {
     val amountOutUsd: BigDecimal
     val amountOutFormatted: BigDecimal
     val minimumAmountOut: BigDecimal? get() = null
+    val inputAllowance: BigDecimal? get() = null
 
     val affiliateFee: BigDecimal
     val affiliateFeeUsd: BigDecimal

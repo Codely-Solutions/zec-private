@@ -55,8 +55,8 @@ data class SwapDetails(
     val amountOutUsd: BigDecimal? = null,
     @SerialName("slippage")
     val slippage: Int? = null,
-    // @SerialName("originChainTxHashes")
-    // val originChainTxHashes: List<TransactionChainHash>,
+    @SerialName("originChainTxHashes")
+    val originChainTxHashes: List<TransactionChainHash>? = null,
     @SerialName("destinationChainTxHashes")
     val destinationChainTxHashes: List<TransactionChainHash>? = null,
     @SerialName("refundedAmount")

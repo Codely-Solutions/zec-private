@@ -80,7 +80,7 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
                 exit = shrinkVertically(shrinkTowards = Alignment.Top)
             ) {
                 Column {
-                    if (state.status == SwapStatus.REFUNDED) {
+                    if (state.refundedAmount != null) {
                         ZashiHorizontalDivider(thickness = 2.dp)
                         TransactionDetailInfoRow(
                             modifier = Modifier.fillMaxWidth(),

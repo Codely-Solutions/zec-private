@@ -23,5 +23,7 @@ data class SwapDetailState(
     val infoFooter: StringResource?,
     val primaryButton: ButtonState?,
     val onBack: () -> Unit,
+    val explorerLinks: List<co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLink> = emptyList(),
+    val refundedAmount: TransactionDetailInfoRowState? = null,
     val donationBasisZec: String? = null,
 )

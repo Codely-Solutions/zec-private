@@ -3945,6 +3945,81 @@ index 703df121a..c44616fb3 100644
 -            res.setSrcDirs(
 +            res.directories.clear()
 +            res.directories.addAll(
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/QuoteValueDifference.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/QuoteValueDifference.kt
+new file mode 100644
+index 000000000..3f5ace713
+--- /dev/null
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/QuoteValueDifference.kt
+@@ -0,0 +1,69 @@
++package co.electriccoin.zcash.ui.design.component
++
++import androidx.compose.foundation.clickable
++import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.PlainTooltip
++import androidx.compose.material3.Text
++import androidx.compose.material3.TooltipAnchorPosition
++import androidx.compose.material3.TooltipBox
++import androidx.compose.material3.TooltipDefaults
++import androidx.compose.material3.rememberTooltipState
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.setValue
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.semantics.Role
++import androidx.compose.ui.semantics.contentDescription
++import androidx.compose.ui.semantics.semantics
++import androidx.compose.ui.text.style.TextDecoration
++import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
++import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
++import co.electriccoin.zcash.ui.design.util.StringResource
++import co.electriccoin.zcash.ui.design.util.getValue
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.delay
++
++data class QuoteValueDifferenceState(
++    val percentage: StringResource,
++    val explanation: StringResource,
++    val isNegative: Boolean,
++    val validUntilMillis: Long? = null,
++)
++
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++internal fun QuoteValueDifference(state: QuoteValueDifferenceState) {
++    var isCurrent by remember(state) {
++        mutableStateOf(state.validUntilMillis?.let { it > System.currentTimeMillis() } ?: true)
++    }
++    LaunchedEffect(state) {
++        state.validUntilMillis?.let {
++            delay((it - System.currentTimeMillis()).coerceAtLeast(0))
++            isCurrent = false
++        }
++    }
++    if (!isCurrent) return
++    val tooltip = rememberTooltipState(isPersistent = true)
++    val scope = rememberCoroutineScope()
++    val value = state.percentage.getValue()
++    val explanation = state.explanation.getValue()
++    TooltipBox(
++        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
++        state = tooltip,
++        tooltip = { PlainTooltip { Text(explanation) } },
++    ) {
++        Text(
++            text = "($value)",
++            style = ZashiTypography.textXxs,
++            color = if (state.isNegative) ZashiColors.Text.textError else ZashiColors.Text.textTertiary,
++            textDecoration = TextDecoration.Underline,
++            modifier = Modifier
++                .semantics { contentDescription = "$value. $explanation" }
++                .clickable(role = Role.Button) { scope.launch { tooltip.show() } },
++        )
++    }
++}
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiBigIconButton.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiBigIconButton.kt
 index 8427cce2e..dfb9eee52 100644
 --- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiBigIconButton.kt
@@ -4269,6 +4344,39 @@ index 000000000..44a181099
 +        else -> SelectionIndicatorColors(colors.boxOffBg, colors.boxOffStroke, colors.boxOnFg)
 +    }
 +}
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteAmount.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteAmount.kt
+index 4662be224..be35ae671 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteAmount.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteAmount.kt
+@@ -8,0 +9,2 @@ import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.FlowRow
++import androidx.compose.foundation.layout.Arrangement
+@@ -31,0 +34 @@ import co.electriccoin.zcash.ui.design.theme.ZcashTheme
++import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
+@@ -106,7 +109,14 @@ private fun Layout(
+-            ShimmerableText(
+-                text = state?.let { it.fiatAmount orHiddenString stringRes(R.string.general_hideBalancesMost) },
+-                shimmerText = stringResByNumber(BigDecimal(".123")).getValue(),
+-                style = ZashiTypography.textXxs,
+-                fontWeight = FontWeight.Medium,
+-                color = ZashiColors.Text.textTertiary,
+-            )
++            FlowRow(
++                horizontalArrangement = Arrangement.spacedBy(4.dp, if (isMirrored) Alignment.End else Alignment.Start),
++            ) {
++                ShimmerableText(
++                    text = state?.let { it.fiatAmount orHiddenString stringRes(R.string.general_hideBalancesMost) },
++                    shimmerText = stringResByNumber(BigDecimal(".123")).getValue(),
++                    style = ZashiTypography.textXxs,
++                    fontWeight = FontWeight.Medium,
++                    color = ZashiColors.Text.textTertiary,
++                )
++                if (LocalBalancesAvailable.current) {
++                    state?.valueDifference?.let { QuoteValueDifference(it) }
++                }
++            }
+@@ -216,0 +227 @@ data class SwapTokenAmountState(
++    val valueDifference: QuoteValueDifferenceState? = null,
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteHeader.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteHeader.kt
 index 65d07deda..aa80314a8 100644
 --- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSwapQuoteHeader.kt
@@ -10260,7 +10368,7 @@ index befe3b652..3c6b6ef3a 100644
 -                stringResByDynamicCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker)
 +                stringResByCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker, minDecimals = 0)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
-index ab4d7ab5b..65a02b4b5 100644
+index ab4d7ab5b..716dcab22 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
 @@ -3,2 +2,0 @@ package co.electriccoin.zcash.ui.common.model
@@ -10268,11 +10376,12 @@ index ab4d7ab5b..65a02b4b5 100644
 -import cash.z.ecc.android.sdk.model.Zatoshi
 @@ -16 +13,0 @@ interface SwapQuote {
 -    val zecExchangeRate: BigDecimal
-@@ -24,0 +22 @@ interface SwapQuote {
+@@ -24,0 +22,2 @@ interface SwapQuote {
 +    val minimumAmountOut: BigDecimal? get() = null
-@@ -27 +24,0 @@ interface SwapQuote {
++    val inputAllowance: BigDecimal? get() = null
+@@ -27 +25,0 @@ interface SwapQuote {
 -    val affiliateFeeZatoshi: Zatoshi
-@@ -35,7 +31,0 @@ interface SwapQuote {
+@@ -35,7 +32,0 @@ interface SwapQuote {
 -    fun getTotal(proposal: Proposal?): BigDecimal
 -
 -    fun getTotalUsd(proposal: Proposal?): BigDecimal
@@ -10281,16 +10390,63 @@ index ab4d7ab5b..65a02b4b5 100644
 -
 -    fun getTotalFeesZatoshi(proposal: Proposal?): Zatoshi
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuoteStatus.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuoteStatus.kt
-index b7f89d023..3dc398f6c 100644
+index b7f89d023..38be49b5a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuoteStatus.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuoteStatus.kt
 @@ -21 +20,0 @@ interface SwapQuoteStatus {
 -    val amountInFee: BigDecimal
-@@ -25,0 +25,4 @@ interface SwapQuoteStatus {
+@@ -25,0 +25,5 @@ interface SwapQuoteStatus {
 +    val quotedAmountOut: BigDecimal get() = amountOutFormatted
 +    val executedAmountIn: BigDecimal? get() = null
 +    val executedAmountOut: BigDecimal? get() = null
++    val originTransactionIds: List<String> get() = emptyList()
 +    val destinationTransactionIds: List<String> get() = emptyList()
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/TransactionExplorer.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/TransactionExplorer.kt
+new file mode 100644
+index 000000000..b6ef8587d
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/TransactionExplorer.kt
+@@ -0,0 +1,40 @@
++package co.electriccoin.zcash.ui.common.model
++
++object TransactionExplorer {
++    private val hex = Regex("[0-9a-fA-F]{64}")
++    private val evm = Regex("0x[0-9a-fA-F]{64}")
++    private val sol = Regex("[1-9A-HJ-NP-Za-km-z]{87,88}")
++
++    fun url(chain: String, id: String, testnet: Boolean = false): String? {
++        val prefix = when (chain.lowercase()) {
++            "zec" -> {
++                if (!hex.matches(id)) return null
++                if (testnet) "https://testnet.zecblock.com/tx/"
++                else "https://blockbook.zec.zelcore.io/tx/"
++            }
++            "btc" -> {
++                if (testnet || !hex.matches(id)) return null
++                "https://mempool.space/tx/"
++            }
++            "sol" -> {
++                if (testnet || !sol.matches(id)) return null
++                "https://solscan.io/tx/"
++            }
++            else -> {
++                if (testnet || !evm.matches(id)) return null
++                when (chain.lowercase()) {
++                    "eth" -> "https://etherscan.io/tx/"
++                    "arb" -> "https://arbiscan.io/tx/"
++                    "base" -> "https://basescan.org/tx/"
++                    "bsc" -> "https://bscscan.com/tx/"
++                    "op" -> "https://optimistic.etherscan.io/tx/"
++                    "pol" -> "https://polygonscan.com/tx/"
++                    else -> return null
++                }
++            }
++        }
++        return prefix + id
++    }
++}
++
++val SwapQuoteStatus.positiveRefund get() = refundedFormatted?.takeIf { it.signum() > 0 }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ZecSwapComposition.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ZecSwapComposition.kt
 new file mode 100644
 index 000000000..d21d293af
@@ -10346,7 +10502,7 @@ index 000000000..d21d293af
 +    private fun SwapAsset.foundationId() = AssetId("mainnet:${blockchain.chainTicker}", assetId)
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
-index e5b3ebffe..08ecdc02e 100644
+index e5b3ebffe..ed01f2d95 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
 @@ -3,6 +2,0 @@ package co.electriccoin.zcash.ui.common.model.near
@@ -10369,9 +10525,16 @@ index e5b3ebffe..08ecdc02e 100644
 -        response.quote.amountInUsd
 -            .divide(response.quote.amountInFormatted, MathContext.DECIMAL128)
 -
-@@ -111,0 +101 @@ data class NearSwapQuote(
+@@ -111,0 +101,8 @@ data class NearSwapQuote(
 +    override val minimumAmountOut: BigDecimal = response.quote.minAmountOut.movePointLeft(destinationAsset.decimals)
-@@ -113,24 +103 @@ data class NearSwapQuote(
++    override val inputAllowance: BigDecimal?
++        get() =
++            if (mode == SwapMode.EXACT_OUTPUT) {
++                response.quote.amountIn.subtract(response.quote.minAmountIn).movePointLeft(originAsset.decimals)
++            } else {
++                null
++            }
+@@ -113,24 +110 @@ data class NearSwapQuote(
 -    override val affiliateFee: BigDecimal =
 -        response.quote.amountInFormatted
 -            .multiply(
@@ -10397,7 +10560,7 @@ index e5b3ebffe..08ecdc02e 100644
 -                .convertZecToZatoshi()
 -        }
 +    override val affiliateFee: BigDecimal = BigDecimal.ZERO
-@@ -138,7 +105 @@ data class NearSwapQuote(
+@@ -138,7 +112 @@ data class NearSwapQuote(
 -    override val affiliateFeeUsd: BigDecimal =
 -        response.quote.amountInUsd
 -            .coerceAtLeast(BigDecimal(0))
@@ -10406,7 +10569,7 @@ index e5b3ebffe..08ecdc02e 100644
 -                MathContext.DECIMAL128
 -            )
 +    override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO
-@@ -149,14 +109,0 @@ data class NearSwapQuote(
+@@ -149,14 +116,0 @@ data class NearSwapQuote(
 -
 -    override fun getTotal(proposal: Proposal?) = amountInFormatted + (getZecFee(proposal) ?: BigDecimal.ZERO)
 -
@@ -10421,8 +10584,50 @@ index e5b3ebffe..08ecdc02e 100644
 -
 -    private fun getZecFeeUsd(proposal: Proposal?): BigDecimal =
 -        zecExchangeRate.multiply(getZecFee(proposal) ?: BigDecimal.ZERO, MathContext.DECIMAL128)
+@@ -224 +178 @@ internal fun requireMatchingAsset(
+- * worst-case guarantee (minAmountOut / minAmountIn) does not exceed the slippage the user requested.
++ * minimum output or included input allowance respects the slippage the user requested.
+@@ -264,4 +218,3 @@ internal fun requireWithinSlippage(
+-        // Input floats: the guaranteed input must not exceed amountIn * (1 + slippage).
+-        // Note: the server names this field `minAmountIn`, but for EXACT_OUTPUT it is the worst-case
+-        // *maximum* input you may pay, hence `maxInputGuarantee`. Round UP — the server's worst-case
+-        // maxInput is truncated UP for its own safety, so the wallet's ceiling must do the same.
++        // EXACT_OUTPUT amountIn includes the allowance; minAmountIn is the minimum needed.
++        // https://docs.near-intents.org/integration/distribution-channels/1click-api/swap-types
++        // Preserve the provider's integer floor; a stronger minimum (smaller allowance) is acceptable.
+@@ -269,2 +222,16 @@ internal fun requireWithinSlippage(
+-            val maxInputGuarantee = minAmountIn
+-            val ceiling =
++            if (slippageToleranceBps !in 0..10000) {
++                throw SwapQuoteMismatchException.Rejected(
++                    type = SwapQuoteMismatchType.SLIPPAGE_TOLERANCE,
++                    message = "Invalid swap slippage tolerance: $slippageToleranceBps bps"
++                )
++            }
++            if (amountIn.signum() <= 0 || minAmountIn.signum() <= 0 ||
++                amountIn.stripTrailingZeros().scale() > 0 || minAmountIn.stripTrailingZeros().scale() > 0 ||
++                minAmountIn > amountIn
++            ) {
++                throw SwapQuoteMismatchException.Rejected(
++                    type = SwapQuoteMismatchType.INPUT_AMOUNT,
++                    message = "Invalid exact-output input amounts: amountIn=$amountIn, minAmountIn=$minAmountIn"
++                )
++            }
++            val floor =
+@@ -272,3 +239,3 @@ internal fun requireWithinSlippage(
+-                    .multiply(basisPointsDenominator.add(bps))
+-                    .divide(basisPointsDenominator, 0, RoundingMode.UP)
+-            if (maxInputGuarantee > ceiling) {
++                    .multiply(basisPointsDenominator.subtract(bps))
++                    .divide(basisPointsDenominator, 0, RoundingMode.DOWN)
++            if (minAmountIn < floor) {
+@@ -278,2 +245,2 @@ internal fun requireWithinSlippage(
+-                        "Swap slippage exceeded: server-guaranteed minAmountIn=$maxInputGuarantee is above the " +
+-                            "slippage ceiling=$ceiling (amountIn=$amountIn, slippageBps=$slippageToleranceBps)"
++                        "Swap input allowance exceeded: minAmountIn=$minAmountIn is below the " +
++                            "slippage floor=$floor (amountIn=$amountIn, slippageBps=$slippageToleranceBps)"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
-index b2c6505ad..280230bfe 100644
+index b2c6505ad..9ed8a1e97 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatus.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.common.model.near
@@ -10471,7 +10676,7 @@ index b2c6505ad..280230bfe 100644
 -                MathContext.DECIMAL128
 -            )
 -
-@@ -111,2 +135,13 @@ data class NearSwapQuoteStatus(
+@@ -111,2 +135,16 @@ data class NearSwapQuoteStatus(
 -    override val amountOutFormatted: BigDecimal =
 -        response.swapDetails?.amountOutFormatted ?: quote.amountOutFormatted
 +    override val quotedAmountOut: BigDecimal = quote.amountOutFormatted
@@ -10483,13 +10688,16 @@ index b2c6505ad..280230bfe 100644
 +        response.swapDetails?.amountOutFormatted
 +            ?: response.swapDetails?.amountOut?.movePointLeft(destination.decimals)
 +
++    override val originTransactionIds: List<String> =
++        response.swapDetails?.originChainTxHashes?.map { it.hash }.orEmpty()
++
 +    override val destinationTransactionIds: List<String> =
 +        response.swapDetails?.destinationChainTxHashes?.map { it.hash }.orEmpty()
 +
 +    override val amountOutFormatted: BigDecimal = executedAmountOut ?: quotedAmountOut
-@@ -116,0 +152 @@ data class NearSwapQuoteStatus(
+@@ -116,0 +155 @@ data class NearSwapQuoteStatus(
 +        ?: response.swapDetails?.depositedAmount?.movePointLeft(origin.decimals)
-@@ -118,0 +155 @@ data class NearSwapQuoteStatus(
+@@ -118,0 +158 @@ data class NearSwapQuoteStatus(
 +        ?: response.swapDetails?.refundedAmount?.movePointLeft(origin.decimals)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteRequest.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteRequest.kt
 index d8016e519..37dcf12b4 100644
@@ -10500,7 +10708,7 @@ index d8016e519..37dcf12b4 100644
 @@ -52,0 +54 @@ data class QuoteRequest(
 +    @EncodeDefault(EncodeDefault.Mode.NEVER)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/SwapStatusResponseDto.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/SwapStatusResponseDto.kt
-index f0ef84ad1..c81390205 100644
+index f0ef84ad1..69f0b3d30 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/SwapStatusResponseDto.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/SwapStatusResponseDto.kt
 @@ -27,8 +27,3 @@ data class SwapStatusResponseDto(
@@ -10515,9 +10723,13 @@ index f0ef84ad1..c81390205 100644
 +@JsonIgnoreUnknownKeys
 +@Serializable
 +data class TransactionChainHash(val hash: String)
-@@ -65,2 +60,2 @@ data class SwapDetails(
+@@ -63,4 +58,4 @@ data class SwapDetails(
+-    // @SerialName("originChainTxHashes")
+-    // val originChainTxHashes: List<TransactionChainHash>,
 -    // @SerialName("destinationChainTxHashes")
 -    // val destinationChainTxHashes: List<TransactionChainHash>,
++    @SerialName("originChainTxHashes")
++    val originChainTxHashes: List<TransactionChainHash>? = null,
 +    @SerialName("destinationChainTxHashes")
 +    val destinationChainTxHashes: List<TransactionChainHash>? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
@@ -13693,31 +13905,62 @@ index 79f574053..d0207084f 100644
 -                    }
 +                currencyType = if (isTokenInput) CurrencyType.TOKEN else CurrencyType.FIAT
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
-index 22fac8c3b..b743984bf 100644
+index 22fac8c3b..0e534cb3e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
-@@ -25,0 +26 @@ data class SwapDetailState(
+@@ -25,0 +26,3 @@ data class SwapDetailState(
++    val explorerLinks: List<co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLink> = emptyList(),
++    val refundedAmount: TransactionDetailInfoRowState? = null,
 +    val donationBasisZec: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
-index a874453ef..259f06f92 100644
+index a874453ef..ec34fc786 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
-@@ -16 +15,0 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
+@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
++import co.electriccoin.zcash.ui.common.model.positiveRefund
+@@ -16 +16,0 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
 -import co.electriccoin.zcash.ui.common.model.isZCashAsset
-@@ -77 +76 @@ class SwapDetailVM(
+@@ -77 +77 @@ class SwapDetailVM(
 -                    totalFees = createTotalFeesState(swapData),
 +                    totalFees = createQuotedOutputState(swapData),
-@@ -99,0 +99,3 @@ class SwapDetailVM(
+@@ -99,0 +100,30 @@ class SwapDetailVM(
++                    explorerLinks = swapData.status?.let { status ->
++                        val testnet = co.electriccoin.zcash.ui.common.model.VersionInfo.NETWORK ==
++                            cash.z.ecc.android.sdk.model.ZcashNetwork.Testnet
++                        co.electriccoin.zcash.ui.screen.transactiondetail.explorerLinks(
++                            chain = status.originAsset.blockchain.chainTicker,
++                            ids = status.originTransactionIds,
++                            label = stringRes(R.string.private_explorer_deposit),
++                            testnet = testnet,
++                            router = navigationRouter,
++                            copy = copyToClipboard::invoke
++                        ) + co.electriccoin.zcash.ui.screen.transactiondetail.explorerLinks(
++                            chain = status.destinationAsset.blockchain.chainTicker,
++                            ids = status.destinationTransactionIds,
++                            label = stringRes(R.string.private_explorer_destination),
++                            testnet = testnet,
++                            router = navigationRouter,
++                            copy = copyToClipboard::invoke
++                        )
++                    }.orEmpty(),
++                    refundedAmount = swapData.status?.positiveRefund?.let { refund ->
++                        TransactionDetailInfoRowState(
++                            title = stringRes(R.string.swapAndPay_refundedAmount),
++                            message = stringResByCurrencyNumber(
++                                amount = refund, ticker = swapData.status.originAsset.tokenTicker
++                            ).withStyle(),
++                        )
++                    },
 +                    donationBasisZec = swapData.status?.takeIf {
 +                        it.status == SUCCESS && it.destinationAsset.tokenTicker == "ZEC"
 +                    }?.executedAmountOut?.takeIf { it.signum() > 0 }?.toPlainString(),
-@@ -111 +113 @@ class SwapDetailVM(
+@@ -111 +141 @@ class SwapDetailVM(
 -    private fun createTotalFeesState(swapData: SwapData): TransactionDetailInfoRowState =
 +    private fun createQuotedOutputState(swapData: SwapData): TransactionDetailInfoRowState =
-@@ -113 +115 @@ class SwapDetailVM(
+@@ -113 +143 @@ class SwapDetailVM(
 -            title = stringRes(R.string.swapAndPay_totalFees),
 +            title = stringRes(R.string.private_quoted_output),
-@@ -115,13 +117,5 @@ class SwapDetailVM(
+@@ -115,13 +145,5 @@ class SwapDetailVM(
 -                if (swapData.status != null) {
 -                    val text =
 -                        stringResByCurrencyNumber(
@@ -13736,7 +13979,7 @@ index a874453ef..259f06f92 100644
 +                        amount = it.quotedAmountOut,
 +                        ticker = it.destinationAsset.tokenTicker
 +                    )
-@@ -199 +193,8 @@ class SwapDetailVM(
+@@ -199 +221,8 @@ class SwapDetailVM(
 -                    SUCCESS -> stringRes(R.string.swapStatus_swapped)
 +                    SUCCESS ->
 +                        stringRes(
@@ -13746,6 +13989,20 @@ index a874453ef..259f06f92 100644
 +                                R.string.private_estimated_output
 +                            }
 +                        )
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
+index 48d3039d5..0f77cf910 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
+@@ -165,0 +166,4 @@ fun SwapDetailView(
++                                state.refundedAmount?.let {
++                                    ZashiHorizontalDivider()
++                                    TransactionDetailInfoRow(it)
++                                }
+@@ -180,0 +185,4 @@ fun SwapDetailView(
++                    if (state.explorerLinks.isNotEmpty()) {
++                        Spacer(8.dp)
++                        co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLinks(state.explorerLinks)
++                    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
 index cd7555ecc..5b692645f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
@@ -13774,6 +14031,36 @@ index 3341e70f0..649f37619 100644
 +                    "ZEC Private uses temporary addresses during swaps and payments to protect your privacy. " +
 +                        "If too many " +
 +                        "remain unused, ZEC Private hits a limit and can’t create new ones.",
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/QuoteValueComparison.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/QuoteValueComparison.kt
+new file mode 100644
+index 000000000..8986e846b
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/QuoteValueComparison.kt
+@@ -0,0 +1,24 @@
++package co.electriccoin.zcash.ui.screen.swap.quote
++
++import java.math.BigDecimal
++import java.math.MathContext
++import kotlin.time.Duration.Companion.minutes
++import kotlin.time.Instant
++
++/** Quote-derived valuation, not an independent market-price assessment. */
++internal fun quoteValueDifference(
++    totalSpendUsd: BigDecimal,
++    receivedUsd: BigDecimal,
++    quotedAt: Instant,
++    deadline: Instant,
++    now: Instant,
++): BigDecimal? {
++    if (totalSpendUsd.signum() <= 0 || receivedUsd.signum() <= 0 ||
++        quotedAt > now || now >= deadline || now - quotedAt >= 3.minutes
++    ) {
++        return null
++    }
++    return receivedUsd.divide(totalSpendUsd, MathContext.DECIMAL128)
++        .subtract(BigDecimal.ONE)
++        .multiply(BigDecimal("100"))
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt
 index 2ceac399f..985329123 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt
@@ -13832,24 +14119,29 @@ index 9f37c1d93..61457e85a 100644
 @@ -177 +189,0 @@ internal data class SwapQuoteInternalState(
 -    val totalFees = quote.affiliateFee
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..adb4cfdeb 100644
+index 717411935..1e90e27bf 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-@@ -14,0 +15 @@ import co.electriccoin.zcash.ui.design.util.stringResByAddress
+@@ -11,0 +12 @@ import co.electriccoin.zcash.ui.design.component.SwapTokenAmountState
++import co.electriccoin.zcash.ui.design.component.QuoteValueDifferenceState
+@@ -14,0 +16 @@ import co.electriccoin.zcash.ui.design.util.stringResByAddress
 +import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
-@@ -16 +16,0 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
+@@ -16 +17,0 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 -import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
-@@ -65,0 +66,6 @@ internal class SwapQuoteVMMapper {
+@@ -23,0 +25,2 @@ import java.math.RoundingMode
++import kotlin.time.Clock
++import kotlin.time.Duration.Companion.minutes
+@@ -65,0 +69,6 @@ internal class SwapQuoteVMMapper {
 +        val minimum = quote.minimumAmountOut?.let {
 +            stringRes(
 +                R.string.private_minimum_received,
 +                stringResByCurrencyNumber(it, quote.destinationAsset.tokenTicker, minDecimals = 0)
 +            )
 +        }
-@@ -67 +73 @@ internal class SwapQuoteVMMapper {
+@@ -67 +76 @@ internal class SwapQuoteVMMapper {
 -        return stringRes(
 +        return minimum ?: stringRes(
-@@ -96,7 +102,2 @@ internal class SwapQuoteVMMapper {
+@@ -96,7 +105,2 @@ internal class SwapQuoteVMMapper {
 -                description = stringRes(R.string.swapAndPay_totalFees),
 -                title =
 -                    if (quote.destinationAsset.isZCashAsset) {
@@ -13859,14 +14151,30 @@ index 717411935..adb4cfdeb 100644
 -                    }.withStyle(),
 +                description = stringRes(R.string.private_wallet_transaction_fee),
 +                title = stringRes(totalFeesZatoshi).withStyle(),
-@@ -107,0 +109,6 @@ internal class SwapQuoteVMMapper {
+@@ -107,0 +112,6 @@ internal class SwapQuoteVMMapper {
 +            ).takeIf { !quote.destinationAsset.isZCashAsset && totalFeesZatoshi.value > 0 },
 +            SwapQuoteInfoItem(
 +                description = stringRes(R.string.private_provider_costs),
 +                title = stringRes(R.string.private_provider_costs_included).withStyle(),
 +                subtitle = null,
 +                layout = SwapQuoteInfoLayout.STACKED
-@@ -136,2 +143,7 @@ internal class SwapQuoteVMMapper {
+@@ -111 +121,4 @@ internal class SwapQuoteVMMapper {
+-                val slippageUsd = quote.amountOutUsd.multiply(slippage)
++                val allowance = quote.inputAllowance ?: quote.amountInFormatted.multiply(slippage)
++                val slippageUsd = quote.amountInUsd
++                    .divide(quote.amountInFormatted, MathContext.DECIMAL128)
++                    .multiply(allowance)
+@@ -113,5 +126 @@ internal class SwapQuoteVMMapper {
+-                    quote.amountInFormatted
+-                        .multiply(
+-                            slippage,
+-                            MathContext.DECIMAL128
+-                        ).convertZecToZatoshi()
++                    allowance.convertZecToZatoshi()
+@@ -122 +131 @@ internal class SwapQuoteVMMapper {
+-                            R.string.swapAndPay_maxSlippage,
++                            R.string.private_included_input_allowance,
+@@ -136,2 +145,7 @@ internal class SwapQuoteVMMapper {
 -            description = stringRes(R.string.swapAndPay_totalAmount),
 -            title = stringResByDynamicCurrencyNumber(total, quote.originAsset.tokenTicker).withStyle(),
 +            description =
@@ -13876,14 +14184,42 @@ index 717411935..adb4cfdeb 100644
 +                    stringRes(R.string.private_total_zec_to_spend)
 +                },
 +            title = stringResByCurrencyNumber(total, quote.originAsset.tokenTicker, minDecimals = 0).withStyle(),
-@@ -145 +157 @@ internal class SwapQuoteVMMapper {
+@@ -145 +159 @@ internal class SwapQuoteVMMapper {
 -            amount = stringResByDynamicNumber(quote.amountInFormatted),
 +            amount = stringResByNumber(quote.amountInFormatted, minDecimals = 0),
-@@ -156 +168 @@ internal class SwapQuoteVMMapper {
+@@ -156 +170 @@ internal class SwapQuoteVMMapper {
 -                stringResByDynamicNumber(
 +                stringResByNumber(
-@@ -157,0 +170 @@ internal class SwapQuoteVMMapper {
+@@ -157,0 +172 @@ internal class SwapQuoteVMMapper {
 +                    minDecimals = 0,
+@@ -161 +176,2 @@ internal class SwapQuoteVMMapper {
+-            chain = quote.destinationAsset.chainName
++            chain = quote.destinationAsset.chainName,
++            valueDifference = createValueDifference(),
+@@ -162,0 +179,23 @@ internal class SwapQuoteVMMapper {
++
++    private fun SwapQuoteInternalState.createValueDifference(): QuoteValueDifferenceState? {
++        val percentage = quoteValueDifference(
++            totalSpendUsd = totalUsd,
++            receivedUsd = quote.amountOutUsd,
++            quotedAt = quote.timestamp,
++            deadline = quote.deadline,
++            now = Clock.System.now(),
++        ) ?: return null
++        val rounded = percentage.setScale(2, RoundingMode.HALF_UP)
++        val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString() + "%"
++        val scope = when {
++            quote.destinationAsset.isZCashAsset -> R.string.private_value_difference_external
++            quote.mode == EXACT_OUTPUT -> R.string.private_value_difference_buffered
++            else -> R.string.private_value_difference_known
++        }
++        return QuoteValueDifferenceState(
++            percentage = stringRes(signed),
++            explanation = stringRes(scope),
++            isNegative = rounded.signum() < 0,
++            validUntilMillis = minOf(quote.timestamp + 3.minutes, quote.deadline).toEpochMilliseconds(),
++        )
++    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 index 1fa0df8d6..11d189a4b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
@@ -13955,15 +14291,56 @@ index c9e6612fa..63eee36c5 100644
 +                                    R.string.private_quoted_output
 +                                }
 +                            )
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailState.kt
+index a7daa6d5b..fa86faf35 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailState.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailState.kt
+@@ -15,0 +16 @@ data class TransactionDetailState(
++    val explorerLinks: List<TransactionExplorerLink> = emptyList(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-index 00fe60557..f054c40ed 100644
+index 00fe60557..3c88298ea 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-@@ -191,2 +191 @@ class TransactionDetailVM(
+@@ -12,0 +13 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
++import co.electriccoin.zcash.ui.common.model.positiveRefund
+@@ -96,0 +98 @@ class TransactionDetailVM(
++                    explorerLinks = createExplorerLinks(transaction),
+@@ -161,0 +164,24 @@ class TransactionDetailVM(
++    private fun createExplorerLinks(data: DetailedTransactionData): List<TransactionExplorerLink> {
++        val testnet = co.electriccoin.zcash.ui.common.model.VersionInfo.NETWORK ==
++            cash.z.ecc.android.sdk.model.ZcashNetwork.Testnet
++        val deposit = explorerLinks(
++            chain = "zec",
++            ids = listOf(data.transaction.id.txIdString()),
++            label = stringRes(
++                if (data.swap == null) R.string.private_explorer_transaction else R.string.private_explorer_zec_deposit
++            ),
++            testnet = testnet,
++            router = navigationRouter,
++            copy = copyToClipboard::invoke
++        )
++        val status = data.swap?.status ?: return deposit
++        return deposit + explorerLinks(
++            chain = status.destinationAsset.blockchain.chainTicker,
++            ids = status.destinationTransactionIds,
++            label = stringRes(R.string.private_explorer_destination),
++            testnet = testnet,
++            router = navigationRouter,
++            copy = copyToClipboard::invoke
++        )
++    }
++
+@@ -191,2 +217 @@ class TransactionDetailVM(
 -                                transaction.metadata.swapMetadata
 -                                    ?.totalFees
 +                                transaction.transaction.fee
-@@ -227,0 +227,10 @@ class TransactionDetailVM(
+@@ -202 +227 @@ class TransactionDetailVM(
+-                                    ?.refundedFormatted
++                                    ?.positiveRefund
+@@ -205,2 +229,0 @@ class TransactionDetailVM(
+-                                    }?.takeIf {
+-                                        transaction.swap.status.status == REFUNDED
+@@ -227,0 +251,10 @@ class TransactionDetailVM(
 +                            donationBasisZec = transaction.transaction.fee?.let { fee ->
 +                                (transaction.transaction.amount - fee).value
 +                                    .toBigDecimal().movePointLeft(ZEC_DECIMAL_PLACES)
@@ -13974,9 +14351,97 @@ index 00fe60557..f054c40ed 100644
 +                                            co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
 +                                    }?.toPlainString()
 +                            },
-@@ -630,0 +640,2 @@ class TransactionDetailVM(
+@@ -630,0 +664,2 @@ class TransactionDetailVM(
 +
 +private const val ZEC_DECIMAL_PLACES = 8
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt
+index 9c9ef5fc6..c94e4ae13 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt
+@@ -185,0 +186,4 @@ fun TransactionDetailView(
++                    if (state.explorerLinks.isNotEmpty()) {
++                        Spacer(8.dp)
++                        TransactionExplorerLinks(state.explorerLinks)
++                    }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt
+new file mode 100644
+index 000000000..69b5cd953
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt
+@@ -0,0 +1,73 @@
++package co.electriccoin.zcash.ui.screen.transactiondetail
++
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.material3.IconButton
++import androidx.compose.material3.Icon
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.res.painterResource
++import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.model.TransactionExplorer
++import co.electriccoin.zcash.ui.design.util.StringResource
++import co.electriccoin.zcash.ui.design.util.getValue
++import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.design.util.stringResByTransactionId
++import co.electriccoin.zcash.ui.screen.ExternalUrl
++
++data class TransactionExplorerLink(
++    val label: StringResource,
++    val transactionId: String,
++    val onOpen: (() -> Unit)?,
++    val onCopy: () -> Unit,
++)
++
++fun explorerLinks(
++    chain: String,
++    ids: List<String>,
++    label: StringResource,
++    testnet: Boolean,
++    router: NavigationRouter,
++    copy: (String) -> Unit,
++): List<TransactionExplorerLink> = ids.filter { it.isNotBlank() }.distinct().map { id ->
++    val open = TransactionExplorer.url(chain, id, testnet)?.let { url ->
++        { router.forward(ExternalUrl(url)) }
++    }
++    TransactionExplorerLink(label, id, open, { copy(id) })
++}
++
++@Composable
++fun TransactionExplorerLinks(links: List<TransactionExplorerLink>) {
++    if (links.isEmpty()) return
++    Column {
++        links.forEach { link ->
++            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
++                val open = link.onOpen
++                if (open != null) {
++                    TextButton(onClick = open, modifier = Modifier.weight(1f)) {
++                        Column {
++                            Text(stringRes(R.string.private_view_in_explorer, link.label).getValue())
++                            if (links.size > 1) {
++                                Text(stringResByTransactionId(link.transactionId, abbreviated = true).getValue())
++                            }
++                        }
++                    }
++                } else {
++                    Text(
++                        text = stringResByTransactionId(link.transactionId, abbreviated = true).getValue(),
++                        modifier = Modifier.weight(1f),
++                    )
++                }
++                IconButton(onClick = link.onCopy) {
++                    Icon(painterResource(R.drawable.ic_transaction_detail_info_copy),
++                        contentDescription = stringRes(R.string.private_copy_explorer_id, link.label).getValue())
++                }
++            }
++        }
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt
 index 13b042bd7..60b0df221 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt
@@ -13985,9 +14450,12 @@ index 13b042bd7..60b0df221 100644
 -                                    stringRes(R.string.transactionDetail_feeSummary),
 +                                    stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
-index ad8bc8549..028003b5c 100644
+index ad8bc8549..3723cf507 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
+@@ -83 +83 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+-                    if (state.status == SwapStatus.REFUNDED) {
++                    if (state.refundedAmount != null) {
 @@ -123 +123 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
 -                                title = stringRes(R.string.swapAndPay_totalFees),
 +                                title = stringRes(R.string.private_wallet_transaction_fee),
@@ -19054,6 +19522,34 @@ index 000000000..c1e6f124b
 +    <path android:fillColor="@android:color/transparent" android:strokeColor="#FFFFFFFF" android:strokeWidth="1.7" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M12,9.4 L8.8,6.3 C6.1,3.6 10.1,0.8 12,3.5 C13.9,0.8 17.9,3.6 15.2,6.3 Z M3,13 L6,13 L6,21 L3,21 Z M6,14 L9,12 L12,12 C14,12 14,15 12,15 L10,15 M12,15 L18,12.5 C20,11.8 21.3,13.7 19.7,15.1 L14,20 L6,19" />
 +</vector>
 \ No newline at end of file
+diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_explorer_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_explorer_strings.xml
+new file mode 100644
+index 000000000..ad50e7805
+--- /dev/null
++++ b/ui-lib/src/main/res/ui/non_translatable/values/private_explorer_strings.xml
+@@ -0,0 +1,9 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="private_view_in_explorer">View %1$s ↗</string>
++    <string name="private_copy_explorer_id">Copy %1$s transaction ID</string>
++    <string name="private_explorer_transaction">Zcash transaction</string>
++    <string name="private_explorer_zec_deposit">ZEC deposit</string>
++    <string name="private_explorer_deposit">source-chain transaction</string>
++    <string name="private_explorer_destination">destination payment</string>
++</resources>
+diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_quote_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_quote_strings.xml
+new file mode 100644
+index 000000000..a199f1a08
+--- /dev/null
++++ b/ui-lib/src/main/res/ui/non_translatable/values/private_quote_strings.xml
+@@ -0,0 +1,7 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="private_included_input_allowance" translatable="false">Included allowance (%1$s)</string>
++    <string name="private_value_difference_known" translatable="false">Estimated value received versus total spend, including the Zcash network fee. Based on quote prices.</string>
++    <string name="private_value_difference_external" translatable="false">Estimated value received versus input value. Excludes your sending wallet’s network fee. Based on quote prices.</string>
++    <string name="private_value_difference_buffered" translatable="false">Estimated value received versus total ZEC to fund, including the price-movement allowance and network fee. Based on quote prices.</string>
++</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_recovery_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_recovery_strings.xml
 new file mode 100644
 index 000000000..bdaf3e5ab
@@ -19491,6 +19987,51 @@ index 3f54429cb..4c5470daa 100644
 -}
 +}
 \ No newline at end of file
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TransactionExplorerTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TransactionExplorerTest.kt
+new file mode 100644
+index 000000000..0ecbe3d01
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TransactionExplorerTest.kt
+@@ -0,0 +1,39 @@
++package co.electriccoin.zcash.ui.common.model
++
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertNull
++
++class TransactionExplorerTest {
++    private val hash = "ab".repeat(32)
++
++    @Test
++    fun zcashNetworkSelectsSeparateTrustedHosts() {
++        assertEquals("https://blockbook.zec.zelcore.io/tx/$hash", TransactionExplorer.url("zec", hash))
++        assertEquals("https://testnet.zecblock.com/tx/$hash", TransactionExplorer.url("zec", hash, true))
++    }
++
++    @Test
++    fun chainIdentityControlsDestinationRatherThanTokenTicker() {
++        assertEquals("https://basescan.org/tx/0x$hash", TransactionExplorer.url("base", "0x$hash"))
++        assertNull(TransactionExplorer.url("zec", "0x$hash"))
++        assertNull(TransactionExplorer.url("unknown", hash))
++        assertNull(TransactionExplorer.url("eth", "0x$hash", true))
++    }
++
++    @Test
++    fun identifiersCannotSupplyUrlOrChangeItsPath() {
++        listOf("", "https://example.com", "$hash/other", "$hash?x=y", " $hash", "$hash#fragment").forEach {
++            assertNull(TransactionExplorer.url("zec", it))
++            assertNull(TransactionExplorer.url("eth", it))
++        }
++    }
++
++    @Test
++    fun solanaAcceptsSignaturesAndRejectsHexAndInvalidBase58() {
++        val signature = "2".repeat(88)
++        assertEquals("https://solscan.io/tx/$signature", TransactionExplorer.url("sol", signature))
++        assertNull(TransactionExplorer.url("sol", hash))
++        assertNull(TransactionExplorer.url("sol", "0".repeat(88)))
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/ZecSwapCompositionTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/ZecSwapCompositionTest.kt
 new file mode 100644
 index 000000000..68c54e72d
@@ -19601,10 +20142,12 @@ index 000000000..68c54e72d
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt
-index 1f1b3f2c9..7ddb3ff5a 100644
+index 1f1b3f2c9..6da9ac173 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt
-@@ -87,0 +88,19 @@ class NearSwapQuoteStatusTest {
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.model.near
++import co.electriccoin.zcash.ui.common.model.positiveRefund
+@@ -87,0 +89,57 @@ class NearSwapQuoteStatusTest {
 +    @Test
 +    fun executedOutputUsesRawBaseUnitsWhenFormattedFieldIsMissing() {
 +        val original = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
@@ -19622,6 +20165,44 @@ index 1f1b3f2c9..7ddb3ff5a 100644
 +        assertEquals(null, swap.executedAmountOut)
 +        assertEquals(BigDecimal("2"), swap.amountOutFormatted)
 +        assertEquals(BigDecimal("2.000000"), swap.quote.minimumAmountOut)
++    }
++
++    @Test
++    fun actualPositiveRefundIsVisibleForSuccessAndFullyRefundedStatus() {
++        listOf(SwapStatus.SUCCESS, SwapStatus.REFUNDED).forEach { status ->
++            val original = nearSwapQuoteStatus(status, Clock.System.now() + 1.hours)
++            val swap = original.copy(response = original.response.copy(
++                swapDetails = SwapDetails(refundedAmount = BigDecimal("123456"))
++            ))
++            assertEquals(BigDecimal("0.00123456"), swap.positiveRefund)
++        }
++    }
++
++    @Test
++    fun missingOrZeroRefundDoesNotInferOneFromDeposit() {
++        val original = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
++        assertEquals(null, original.positiveRefund)
++        listOf(null, BigDecimal.ZERO).forEach { refund ->
++            val swap = original.copy(response = original.response.copy(
++                swapDetails = SwapDetails(
++                    refundedAmountFormatted = refund,
++                    depositedAmountFormatted = BigDecimal("2"),
++                    amountInFormatted = BigDecimal("1")
++                )
++            ))
++            assertEquals(null, swap.positiveRefund)
++        }
++    }
++
++    @Test
++    fun keepsEachReportedTransactionInItsOwnLeg() {
++        val original = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
++        val swap = original.copy(response = original.response.copy(swapDetails = SwapDetails(
++            originChainTxHashes = listOf(TransactionChainHash("deposit-a"), TransactionChainHash("deposit-b")),
++            destinationChainTxHashes = listOf(TransactionChainHash("payment-a"))
++        )))
++        assertEquals(listOf("deposit-a", "deposit-b"), swap.originTransactionIds)
++        assertEquals(listOf("payment-a"), swap.destinationTransactionIds)
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteTest.kt
@@ -19663,6 +20244,108 @@ index a3e430b3c..56993ca02 100644
 +        assertEquals(Zatoshi(1000), quote.getTotalFeesZatoshi(proposal))
 +    }
 +
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteValidationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteValidationTest.kt
+index b8e862cdd..7b397daa8 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteValidationTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteValidationTest.kt
+@@ -126,4 +126,4 @@ class NearSwapQuoteValidationTest {
+-    fun requireWithinSlippage_inputFloating_passesAtAndBelowCeiling() {
+-        // 10% slippage, amountIn=100 -> ceiling=110. minAmountOut is the fixed side (== amountOut) and ignored here.
+-        requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal("110"), A_THOUSAND, BPS_10_PCT)
+-        requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal("105"), A_THOUSAND, BPS_10_PCT)
++    fun requireWithinSlippage_inputFloating_acceptsMinimumAtFloorThroughDeposit() {
++        listOf("90", "95", "100", "100.0").forEach { minimum ->
++            requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal(minimum), A_THOUSAND, BPS_10_PCT)
++        }
+@@ -133,4 +133,14 @@ class NearSwapQuoteValidationTest {
+-    fun requireWithinSlippage_inputFloating_throwsAboveCeiling() {
+-        val e =
+-            assertFailsWith<SwapQuoteMismatchException> {
+-                // ceiling=110, server demands at least 111
++    fun requireWithinSlippage_inputFloating_rejectsExcessiveAllowance() {
++        val e = assertFailsWith<SwapQuoteMismatchException> {
++            requireWithinSlippage(SwapType.EXACT_OUTPUT, A_THOUSAND, HUNDRED, BigDecimal("900"), HUNDRED, 100)
++        }
++        assertEquals(SwapQuoteMismatchType.SLIPPAGE_EXCEEDED, e.type)
++    }
++
++    @Test
++    fun requireWithinSlippage_inputFloating_rejectsMalformedOrContradictoryAmounts() {
++        listOf(
++            "100" to "110", "0" to "1", "-100" to "90", "100" to "0",
++            "100" to "-1", "100.5" to "95", "100" to "95.5"
++        ).forEach { (deposit, minimum) ->
++            val e = assertFailsWith<SwapQuoteMismatchException> {
+@@ -138,6 +148 @@ class NearSwapQuoteValidationTest {
+-                    SwapType.EXACT_OUTPUT,
+-                    BigDecimal("100"),
+-                    A_THOUSAND,
+-                    BigDecimal("111"),
+-                    A_THOUSAND,
+-                    BPS_10_PCT
++                    SwapType.EXACT_OUTPUT, BigDecimal(deposit), A_THOUSAND, BigDecimal(minimum), A_THOUSAND, BPS_10_PCT
+@@ -146 +151,20 @@ class NearSwapQuoteValidationTest {
+-        assertEquals(SwapQuoteMismatchType.SLIPPAGE_EXCEEDED, e.type)
++            assertEquals(SwapQuoteMismatchType.INPUT_AMOUNT, e.type)
++        }
++    }
++
++    @Test
++    fun requireWithinSlippage_inputFloating_zeroSlippageRequiresEqualInputAmounts() {
++        requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, HUNDRED, A_THOUSAND, 0)
++        assertFailsWith<SwapQuoteMismatchException> {
++            requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal("99"), A_THOUSAND, 0)
++        }
++    }
++
++    @Test
++    fun requireWithinSlippage_inputFloating_rejectsInvalidTolerance() {
++        listOf(-1, 10001).forEach { tolerance ->
++            val e = assertFailsWith<SwapQuoteMismatchException> {
++                requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, HUNDRED, A_THOUSAND, tolerance)
++            }
++            assertEquals(SwapQuoteMismatchType.SLIPPAGE_TOLERANCE, e.type)
++        }
+@@ -185,3 +209,2 @@ class NearSwapQuoteValidationTest {
+-    fun requireWithinSlippage_inputFloating_acceptsServerIntegerRoundedCeiling() {
+-        // Symmetric case for EXACT_OUTPUT: amountIn=9897372 × 1.30 = 12866583.6; the server rounds
+-        // UP to 12866584 to keep its guarantee conservative. The wallet's ceiling rounds UP too.
++    fun requireWithinSlippage_inputFloating_acceptsSanitizedProviderIntegerFloor() {
++        // Sanitized completed quote: 906756 * 0.995 = 902222.22, truncated to 902222 zats.
+@@ -189,6 +212,2 @@ class NearSwapQuoteValidationTest {
+-            swapType = SwapType.EXACT_OUTPUT,
+-            amountIn = BigDecimal("9897372"),
+-            amountOut = BigDecimal("2245828"),
+-            minAmountIn = BigDecimal("12866584"),
+-            minAmountOut = BigDecimal("2245828"),
+-            slippageToleranceBps = 3000
++            SwapType.EXACT_OUTPUT, BigDecimal("906756"), BigDecimal("13157"),
++            BigDecimal("902222"), BigDecimal("13157"), 50
+@@ -199,3 +218,2 @@ class NearSwapQuoteValidationTest {
+-    fun requireWithinSlippage_inputFloating_stillRejectsAboveIntegerCeiling() {
+-        // One base unit above the rounded-up integer ceiling is genuinely out of tolerance.
+-        assertFailsWith<IllegalArgumentException> {
++    fun requireWithinSlippage_inputFloating_rejectsOneAtomicUnitBelowFloor() {
++        val e = assertFailsWith<SwapQuoteMismatchException> {
+@@ -203,6 +221,2 @@ class NearSwapQuoteValidationTest {
+-                swapType = SwapType.EXACT_OUTPUT,
+-                amountIn = BigDecimal("9897372"),
+-                amountOut = BigDecimal("2245828"),
+-                minAmountIn = BigDecimal("12866585"),
+-                minAmountOut = BigDecimal("2245828"),
+-                slippageToleranceBps = 3000
++                SwapType.EXACT_OUTPUT, BigDecimal("906756"), BigDecimal("13157"),
++                BigDecimal("902221"), BigDecimal("13157"), 50
+@@ -210,0 +225,9 @@ class NearSwapQuoteValidationTest {
++        assertEquals(SwapQuoteMismatchType.SLIPPAGE_EXCEEDED, e.type)
++    }
++
++    @Test
++    fun requireWithinSlippage_inputFloating_preservesPrecisionAboveDecimal128() {
++        requireWithinSlippage(
++            SwapType.EXACT_OUTPUT, BigDecimal("100000000000000000000000000000000000001"), A_THOUSAND,
++            BigDecimal("99500000000000000000000000000000000000"), A_THOUSAND, 50
++        )
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt
 new file mode 100644
 index 000000000..2a71971b1
@@ -21832,7 +22515,7 @@ index bf5467055..3b956901d 100644
 +        }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
-index bac1a53ce..de6622a6f 100644
+index bac1a53ce..a0a6d7a47 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
 @@ -3,2 +2,0 @@ package co.electriccoin.zcash.ui.screen.swap.quote
@@ -21840,14 +22523,15 @@ index bac1a53ce..de6622a6f 100644
 -import cash.z.ecc.android.sdk.model.Zatoshi
 @@ -28 +25,0 @@ internal data class FakeSwapQuote(
 -    override val zecExchangeRate: BigDecimal = BigDecimal("30"),
-@@ -35,3 +32,3 @@ internal data class FakeSwapQuote(
+@@ -35,3 +32,4 @@ internal data class FakeSwapQuote(
 -    override val affiliateFee: BigDecimal = BigDecimal("0.01"),
 -    override val affiliateFeeZatoshi: Zatoshi = Zatoshi(1000),
 -    override val affiliateFeeUsd: BigDecimal = BigDecimal("1"),
 +    override val minimumAmountOut: BigDecimal? = null,
++    override val inputAllowance: BigDecimal? = null,
 +    override val affiliateFee: BigDecimal = BigDecimal.ZERO,
 +    override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO,
-@@ -41,9 +38 @@ internal data class FakeSwapQuote(
+@@ -41,9 +39 @@ internal data class FakeSwapQuote(
 -) : SwapQuote {
 -    override fun getTotal(proposal: Proposal?): BigDecimal = amountIn
 -
@@ -21858,8 +22542,59 @@ index bac1a53ce..de6622a6f 100644
 -    override fun getTotalFeesZatoshi(proposal: Proposal?): Zatoshi = affiliateFeeZatoshi
 -}
 +) : SwapQuote
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/QuoteValueComparisonTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/QuoteValueComparisonTest.kt
+new file mode 100644
+index 000000000..91b204fd8
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/QuoteValueComparisonTest.kt
+@@ -0,0 +1,45 @@
++package co.electriccoin.zcash.ui.screen.swap.quote
++
++import java.math.BigDecimal
++import java.math.RoundingMode
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertNull
++import kotlin.time.Duration.Companion.minutes
++import kotlin.time.Duration.Companion.seconds
++import kotlin.time.Instant
++
++class QuoteValueComparisonTest {
++    private val quoted = Instant.parse("2026-11-09T10:00:00Z")
++
++    @Test
++    fun includesKnownNetworkFeeOnce() {
++        assertEquals("-3.43", compare("10.20", "9.85")?.setScale(2, RoundingMode.HALF_UP)?.toPlainString())
++        assertEquals("-1.50", compare("10", "9.85")?.setScale(2, RoundingMode.HALF_UP)?.toPlainString())
++    }
++
++    @Test
++    fun supportsPositiveAndEqualValuations() {
++        assertEquals(BigDecimal("10.0"), compare("10", "11"))
++        assertEquals(BigDecimal("0"), compare("10", "10"))
++    }
++
++    @Test
++    fun staleFutureExpiredAndInvalidValuesAreUnavailable() {
++        assertNull(compare("0", "1"))
++        assertNull(compare("-1", "1"))
++        assertNull(compare("1", "0"))
++        assertNull(compare("1", "-1"))
++        assertNull(compare("1", "1", quoted + 3.minutes))
++        assertNull(compare("1", "1", quoted - 1.seconds))
++        assertNull(quoteValueDifference(BigDecimal.ONE, BigDecimal.ONE, quoted, quoted, quoted))
++    }
++
++    @Test
++    fun calculationKeepsUnroundedAmounts() {
++        assertEquals("-0.33333333", compare("3", "2.99")?.setScale(8, RoundingMode.HALF_UP)?.toPlainString())
++    }
++
++    private fun compare(input: String, output: String, now: Instant = quoted) =
++        quoteValueDifference(BigDecimal(input), BigDecimal(output), quoted, quoted + 5.minutes, now)
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-index 38427672d..1e977607a 100644
+index 38427672d..f6a7d8dd9 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 @@ -2,0 +3,21 @@ package co.electriccoin.zcash.ui.screen.swap.quote
@@ -21884,31 +22619,85 @@ index 38427672d..1e977607a 100644
 +import androidx.compose.ui.unit.dp
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 +import androidx.compose.ui.test.onNodeWithText
-@@ -15,0 +37,8 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
+@@ -15,0 +37,9 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
 +import co.electriccoin.zcash.ui.design.util.getString
 +import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 +import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 +import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 +import java.io.File
 +import java.math.BigDecimal
++import co.electriccoin.zcash.ui.design.util.withStyle
 +import java.util.Locale
 +import org.junit.Rule
-@@ -17,0 +47 @@ import org.robolectric.RobolectricTestRunner
+@@ -17,0 +48 @@ import org.robolectric.RobolectricTestRunner
 +import org.robolectric.RuntimeEnvironment
-@@ -18,0 +49 @@ import org.robolectric.annotation.Config
+@@ -18,0 +50 @@ import org.robolectric.annotation.Config
 +import org.robolectric.annotation.GraphicsMode
-@@ -20,0 +52,2 @@ import kotlin.test.assertEquals
+@@ -20,0 +53,2 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertTrue
-@@ -31 +64,2 @@ import kotlin.test.assertEquals
+@@ -31 +65,2 @@ import kotlin.test.assertEquals
 -@Config(sdk = [34])
 +@Config(sdk = [34], qualifiers = "w411dp-h891dp")
 +@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@@ -32,0 +67,3 @@ class SwapQuoteVMMapperTest {
+@@ -32,0 +68,56 @@ class SwapQuoteVMMapperTest {
++    @Test
++    fun freshQuoteShowsSignedDifferenceAndStaleQuoteDoesNot() {
++        val now = kotlin.time.Clock.System.now()
++        val quote = FakeSwapQuote(
++            destinationAsset = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
++            originAsset = SwapAssetTestFixture.zecAsset(),
++            mode = SwapMode.EXACT_INPUT,
++            amountInUsd = BigDecimal("10"),
++            amountOutUsd = BigDecimal("9.85"),
++            timestamp = now,
++            deadline = now + kotlin.time.Duration.parse("5m"),
++        )
++        fun map(q: FakeSwapQuote) = mapper.createState(
++            SwapQuoteInternalState(null, q, zashi()), {}, {}, {}
++        )
++        assertEquals(
++            co.electriccoin.zcash.ui.design.component.QuoteValueDifferenceState(
++                percentage = co.electriccoin.zcash.ui.design.util.stringRes("-1.50%"),
++                explanation = co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_value_difference_known),
++                isNegative = true,
++                validUntilMillis = (now + kotlin.time.Duration.parse("3m")).toEpochMilliseconds(),
++            ),
++            map(quote).to.valueDifference,
++        )
++        kotlin.test.assertNull(map(quote.copy(timestamp = now - kotlin.time.Duration.parse("4m"))).to.valueDifference)
++    }
++
++    @Test
++    fun exactOutputDisplaysActualIncludedAllowance() {
++        val quote = FakeSwapQuote(
++            destinationAsset = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
++            originAsset = SwapAssetTestFixture.zecAsset(),
++            mode = SwapMode.EXACT_OUTPUT,
++            amountInFormatted = BigDecimal("0.00906756"),
++            amountInUsd = BigDecimal("11.54073699"),
++            amountOutUsd = BigDecimal("9.99997785"),
++            inputAllowance = BigDecimal("0.00004534"),
++            slippage = BigDecimal("0.5"),
++        )
++        val state = mapper.createState(SwapQuoteInternalState(null, quote, zashi()), {}, {}, {})
++        val allowance = state.items.last()
++        assertEquals(R.string.private_included_input_allowance, allowance.description.resourceId())
++        assertEquals(
++            co.electriccoin.zcash.ui.design.util.stringRes(cash.z.ecc.android.sdk.model.Zatoshi(4534)).withStyle(),
++            allowance.title,
++        )
++        assertEquals(co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber(
++            BigDecimal("0.0577064850"),
++            cash.z.ecc.android.sdk.model.FiatCurrency.USD.symbol,
++        ).withStyle(), allowance.subtitle)
++        assertEquals(quote.amountInFormatted, SwapQuoteInternalState(null, quote, zashi()).total)
++    }
++
 +    @get:Rule
 +    val composeTestRule = createComposeRule()
 +
-@@ -68,0 +106,124 @@ class SwapQuoteVMMapperTest {
+@@ -68,0 +160,124 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun incomingQuoteDoesNotInventAWalletTransactionFee() {
 +        val items = createItems(zashi(), SwapAssetTestFixture.zecAsset())

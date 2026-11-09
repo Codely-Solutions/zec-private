@@ -99,6 +99,13 @@ data class NearSwapQuote(
     override val amountOutUsd: BigDecimal = response.quote.amountOutUsd
     override val amountOutFormatted: BigDecimal = response.quote.amountOutFormatted
     override val minimumAmountOut: BigDecimal = response.quote.minAmountOut.movePointLeft(destinationAsset.decimals)
+    override val inputAllowance: BigDecimal?
+        get() =
+            if (mode == SwapMode.EXACT_OUTPUT) {
+                response.quote.amountIn.subtract(response.quote.minAmountIn).movePointLeft(originAsset.decimals)
+            } else {
+                null
+            }
 
     override val affiliateFee: BigDecimal = BigDecimal.ZERO
 
@@ -168,7 +175,7 @@ internal fun requireMatchingAsset(
 /**
  * Fail-closed slippage check on the server-determined (floating) side of the quote. The user-fixed side
  * is already pinned by requireQuoteMatchesUserAmount in the use case; this asserts the server's own
- * worst-case guarantee (minAmountOut / minAmountIn) does not exceed the slippage the user requested.
+ * minimum output or included input allowance respects the slippage the user requested.
  *
  * Both bounds are required fields of the 1Click quote response (see QuoteDetails), so the check is always
  * enforced: a server that omits them fails deserialization rather than reaching this point with a null
@@ -208,22 +215,35 @@ internal fun requireWithinSlippage(
             }
         }
 
-        // Input floats: the guaranteed input must not exceed amountIn * (1 + slippage).
-        // Note: the server names this field `minAmountIn`, but for EXACT_OUTPUT it is the worst-case
-        // *maximum* input you may pay, hence `maxInputGuarantee`. Round UP — the server's worst-case
-        // maxInput is truncated UP for its own safety, so the wallet's ceiling must do the same.
+        // EXACT_OUTPUT amountIn includes the allowance; minAmountIn is the minimum needed.
+        // https://docs.near-intents.org/integration/distribution-channels/1click-api/swap-types
+        // Preserve the provider's integer floor; a stronger minimum (smaller allowance) is acceptable.
         SwapType.EXACT_OUTPUT -> {
-            val maxInputGuarantee = minAmountIn
-            val ceiling =
+            if (slippageToleranceBps !in 0..10000) {
+                throw SwapQuoteMismatchException.Rejected(
+                    type = SwapQuoteMismatchType.SLIPPAGE_TOLERANCE,
+                    message = "Invalid swap slippage tolerance: $slippageToleranceBps bps"
+                )
+            }
+            if (amountIn.signum() <= 0 || minAmountIn.signum() <= 0 ||
+                amountIn.stripTrailingZeros().scale() > 0 || minAmountIn.stripTrailingZeros().scale() > 0 ||
+                minAmountIn > amountIn
+            ) {
+                throw SwapQuoteMismatchException.Rejected(
+                    type = SwapQuoteMismatchType.INPUT_AMOUNT,
+                    message = "Invalid exact-output input amounts: amountIn=$amountIn, minAmountIn=$minAmountIn"
+                )
+            }
+            val floor =
                 amountIn
-                    .multiply(basisPointsDenominator.add(bps))
-                    .divide(basisPointsDenominator, 0, RoundingMode.UP)
-            if (maxInputGuarantee > ceiling) {
+                    .multiply(basisPointsDenominator.subtract(bps))
+                    .divide(basisPointsDenominator, 0, RoundingMode.DOWN)
+            if (minAmountIn < floor) {
                 throw SwapQuoteMismatchException.Rejected(
                     type = SwapQuoteMismatchType.SLIPPAGE_EXCEEDED,
                     message =
-                        "Swap slippage exceeded: server-guaranteed minAmountIn=$maxInputGuarantee is above the " +
-                            "slippage ceiling=$ceiling (amountIn=$amountIn, slippageBps=$slippageToleranceBps)"
+                        "Swap input allowance exceeded: minAmountIn=$minAmountIn is below the " +
+                            "slippage floor=$floor (amountIn=$amountIn, slippageBps=$slippageToleranceBps)"
                 )
             }
         }
