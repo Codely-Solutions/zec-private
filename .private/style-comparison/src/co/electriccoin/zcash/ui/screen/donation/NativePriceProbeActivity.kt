@@ -45,16 +45,8 @@ class NativePriceProbeActivity : ComponentActivity() {
             try {
                 withTimeout(360_000L) {
                     check(persisted.getPersistableWallet() == null)
-                    val targets = JSONObject()
-                    for (host in listOf("api.kraken.com", "1click.chaindefuser.com")) {
-                        targets.put(host, org.json.JSONArray(java.net.InetAddress.getAllByName(host).map { it.hostAddress }))
-                    }
-                    filesDir.resolve("price-probe-targets.json").writeText(targets.toString())
-                    record("awaiting_firewall")
-                    withTimeout(30_000L) {
-                        while (!filesDir.resolve("price-probe-ready").exists()) delay(100)
-                    }
                     tor.store(true)
+                    record("creating_isolated_wallet")
                     wallets.createNewWallet()
                     withTimeout(90_000L) {
                         while (accounts.getSelectedAccount().totalBalance == null) delay(250)

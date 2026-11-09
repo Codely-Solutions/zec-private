@@ -180,8 +180,8 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                         stringRes(R.string.private_price_check_details), true,
                     )
                     "price-normal" -> PriceCheckNoticeState(
-                        stringRes(R.string.private_price_difference, "-2.50"),
-                        stringRes(R.string.private_price_check_details),
+                        stringRes(R.string.private_price_compared),
+                        stringRes(R.string.private_price_compared_details, "-2.50"),
                     )
                     "price-unavailable" -> PriceCheckNoticeState(
                         stringRes(R.string.private_price_unavailable),

@@ -86,11 +86,15 @@ internal class SwapQuoteVMMapper {
                     differencePercent.abs().setScale(1, RoundingMode.HALF_UP).toPlainString(),
                 )
             } else {
+                stringRes(R.string.private_price_compared)
+            },
+            explanation = if (poor) {
+                stringRes(R.string.private_price_check_details)
+            } else {
                 val rounded = differencePercent.setScale(2, RoundingMode.HALF_UP)
                 val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString()
-                stringRes(R.string.private_price_difference, signed)
+                stringRes(R.string.private_price_compared_details, signed)
             },
-            explanation = stringRes(R.string.private_price_check_details),
             isWarning = poor,
         )
     }
