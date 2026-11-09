@@ -29,5 +29,10 @@
     "Add quiet update notices and Obtainium setup.",
     "Clarify Donate labels and icons, and keep selection controls consistent with the app theme.",
     "Update security dependencies and strengthen direct HTTPS certificate checks."
+  ],
+  "v3.19.0-private.18": [
+    "Strengthen swap quote validation and clarify included allowances.",
+    "Show reported partial refunds and estimated value differences.",
+    "Open transaction explorers from payment and swap details."
   ]
 }
