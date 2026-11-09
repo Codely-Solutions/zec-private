@@ -85,7 +85,7 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
             TransactionDetailView(
                 state = TransactionDetailState(
                     onBack = onBack, bookmarkButton = null,
-                    header = TransactionDetailHeaderState(stringRes(if (refunded) "Refunded" else "Paid"), stringRes("0.0101 ZEC"), listOf(imageRes(R.drawable.ic_transaction_received))),
+                    header = TransactionDetailHeaderState(stringRes(if (refunded) "Refunded" else "Paid"), stringRes("0.0101"), listOf(imageRes(R.drawable.ic_transaction_received))),
                     info = SendSwapState(
                         status = if (refunded) SwapStatus.REFUNDED else SwapStatus.SUCCESS,
                         message = null, quoteHeader = SwapQuoteHeaderState(
@@ -100,10 +100,8 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                         isPending = false, completedTimestamp = stringRes("8 November 2026, 12:00"),
                     ),
                     errorFooter = null, infoFooter = null, primaryButton = null, secondaryButton = null,
-                    explorerLinks = listOf(
-                        TransactionExplorerLink(stringRes("ZEC deposit"), "ab".repeat(32), {}, {}),
-                        TransactionExplorerLink(stringRes("Bitcoin payment"), "cd".repeat(32), {}, {}),
-                    ),
+                    explorerLinks = listOf(TransactionExplorerLink(stringRes("ZEC deposit"), "ab".repeat(32), {}, {})) +
+                        if (refunded) emptyList() else listOf(TransactionExplorerLink(stringRes("Bitcoin payment"), "cd".repeat(32), {}, {})),
                 ), mainAppBarState = appBar,
             )
         }
