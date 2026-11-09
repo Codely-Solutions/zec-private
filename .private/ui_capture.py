@@ -67,6 +67,12 @@ def capture_scenes(adb, scenes, destination, *, package=PACKAGE, activity=ACTIVI
         if not any(n.get('package') == package for n in nodes) or not any(
                 scene.get('expected', '').lower() in (n.get('text','')+' '+n.get('content-desc','')).lower()
                 for n in nodes):
+            diagnostics = destination/'diagnostics'
+            diagnostics.mkdir(exist_ok=True)
+            (diagnostics/(name+'.xml')).write_bytes(xml)
+            diagnostic_png = adb('exec-out', 'screencap', '-p', timeout=15).stdout
+            if diagnostic_png.startswith(b'\x89PNG\r\n\x1a\n'):
+                (diagnostics/(name+'.png')).write_bytes(diagnostic_png)
             raise RuntimeError('Synthetic scene hierarchy mismatch: '+name)
         png = adb('exec-out', 'screencap', '-p', timeout=15).stdout
         if not png.startswith(b'\x89PNG\r\n\x1a\n'):
