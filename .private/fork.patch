@@ -22788,12 +22788,11 @@ index 000000000..91b204fd8
 +        quoteValueDifference(BigDecimal(input), BigDecimal(output), quoted, quoted + 5.minutes, now)
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-index 38427672d..e7856721a 100644
+index 38427672d..c84e916d4 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-@@ -2,0 +3,22 @@ package co.electriccoin.zcash.ui.screen.swap.quote
+@@ -2,0 +3,21 @@ package co.electriccoin.zcash.ui.screen.swap.quote
 +import android.app.Application
-+import co.electriccoin.zcash.ui.R
 +import android.graphics.Bitmap
 +import android.graphics.Canvas
 +import android.view.View
@@ -22814,7 +22813,7 @@ index 38427672d..e7856721a 100644
 +import androidx.compose.ui.unit.dp
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 +import androidx.compose.ui.test.onNodeWithText
-@@ -15,0 +38,9 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
+@@ -15,0 +37,9 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
 +import co.electriccoin.zcash.ui.design.util.getString
 +import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 +import co.electriccoin.zcash.ui.design.theme.AppearanceMode
@@ -22824,18 +22823,18 @@ index 38427672d..e7856721a 100644
 +import co.electriccoin.zcash.ui.design.util.withStyle
 +import java.util.Locale
 +import org.junit.Rule
-@@ -17,0 +49 @@ import org.robolectric.RobolectricTestRunner
+@@ -17,0 +48 @@ import org.robolectric.RobolectricTestRunner
 +import org.robolectric.RuntimeEnvironment
-@@ -18,0 +51 @@ import org.robolectric.annotation.Config
+@@ -18,0 +50 @@ import org.robolectric.annotation.Config
 +import org.robolectric.annotation.GraphicsMode
-@@ -20,0 +54,2 @@ import kotlin.test.assertEquals
+@@ -20,0 +53,2 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertTrue
-@@ -31 +66,2 @@ import kotlin.test.assertEquals
+@@ -31 +65,2 @@ import kotlin.test.assertEquals
 -@Config(sdk = [34])
 +@Config(sdk = [34], qualifiers = "w411dp-h891dp")
 +@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@@ -32,0 +69,75 @@ class SwapQuoteVMMapperTest {
+@@ -32,0 +68,75 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun freshQuoteShowsSignedDifferenceAndStaleQuoteDoesNot() {
 +        val now = kotlin.time.Clock.System.now()
@@ -22911,7 +22910,7 @@ index 38427672d..e7856721a 100644
 +    @get:Rule
 +    val composeTestRule = createComposeRule()
 +
-@@ -68,0 +180,124 @@ class SwapQuoteVMMapperTest {
+@@ -68,0 +179,124 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun incomingQuoteDoesNotInventAWalletTransactionFee() {
 +        val items = createItems(zashi(), SwapAssetTestFixture.zecAsset())
