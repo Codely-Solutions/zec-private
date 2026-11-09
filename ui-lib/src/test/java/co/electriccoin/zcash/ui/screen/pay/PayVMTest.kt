@@ -186,6 +186,57 @@ class PayVMTest {
         }
 
     @Test
+    fun renderedQuoteCallbackRejectsAmountEditUntilCurrentCallbackIsUsed() =
+        runTest {
+            val harness = harness()
+            harness.collectState(this)
+            harness.onAddressChange(BTC_ADDRESS)
+            harness.onTextFieldChange(
+                NumberTextFieldInnerState.fromAmount(BigDecimal.ONE), NumberTextFieldInnerState()
+            )
+            val staleCallback = harness.onRequestSwapQuoteClick
+
+            harness.onTextFieldChange(
+                NumberTextFieldInnerState.fromAmount(BigDecimal("2")), NumberTextFieldInnerState()
+            )
+            staleCallback(BigDecimal.ONE, null, BTC_ADDRESS)
+            coVerify(exactly = 0) {
+                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
+            }
+
+            harness.onRequestSwapQuoteClick(BigDecimal("2"), null, BTC_ADDRESS)
+            coVerify(exactly = 1) {
+                harness.requestSwapQuote.requestExactOutput(BigDecimal("2"), BTC_ADDRESS, any(), any(), any(), null)
+            }
+        }
+
+    @Test
+    fun renderedQuoteCallbackRejectsTokenEditUntilCurrentCallbackIsUsed() =
+        runTest {
+            val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth", decimals = 18)
+            val wbtc = SwapAssetTestFixture.asset(tokenTicker = "wbtc", chainTicker = "eth")
+            val harness = harness(
+                preselect = eth,
+                assetResult = wbtc,
+                assets = SwapAssetTestFixture.assetsData(data = listOf(eth, wbtc))
+            )
+            harness.collectState(this)
+            harness.onAddressChange(ETH_ADDRESS)
+            val staleCallback = harness.onRequestSwapQuoteClick
+
+            harness.onSwapAssetPickerClick()
+            staleCallback(BigDecimal.ONE, null, ETH_ADDRESS)
+            coVerify(exactly = 0) {
+                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
+            }
+
+            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, ETH_ADDRESS)
+            coVerify(exactly = 1) {
+                harness.requestSwapQuote.requestExactOutput(BigDecimal.ONE, ETH_ADDRESS, wbtc, any(), any(), null)
+            }
+        }
+
+    @Test
     fun priceRefreshDoesNotOverwriteEditedPaymentAmount() =
         runTest {
             val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth", decimals = 18)

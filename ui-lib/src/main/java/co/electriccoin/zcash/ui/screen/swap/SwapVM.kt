@@ -186,7 +186,7 @@ internal class SwapVM(
         }
     }
 
-    // Stable method references — created once and reused across every state emission.
+    // Stable handlers; quote dispatch adds a guard for the state used by each rendered button.
     private val callbacks =
         SwapStateCallbacks(
             onBack = ::onBack,
@@ -206,8 +206,17 @@ internal class SwapVM(
             onAddressClick = ::onAddressClick
         )
 
-    private fun createState(internalState: InternalStateImpl): SwapState =
-        swapVMMapper.createState(internalState = internalState, callbacks = callbacks)
+    private fun createState(rendered: InternalStateImpl): SwapState =
+        swapVMMapper.createState(
+            internalState = rendered,
+            callbacks = callbacks.copy(
+                onRequestSwapQuoteClick = { amount, fiatAmount, address ->
+                    val current = internalState.value
+                    val ownedAtRender = rendered.copy(account = current.account, swapAssets = current.swapAssets)
+                    if (current == ownedAtRender) onRequestSwapQuoteClick(amount, fiatAmount, address)
+                }
+            )
+        )
 
     private fun onBalanceButtonClick() {
         // navigationRouter.forward(SpendableBalanceArgs)

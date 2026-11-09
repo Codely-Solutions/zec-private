@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.swap
 
+import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.WalletBalance
@@ -31,10 +32,13 @@ import co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.ScanResult
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.swap.info.SwapRefundAddressInfoArgs
+import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -76,10 +80,13 @@ class SwapVMTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(mainDispatcher)
+        mockkObject(FiatCurrency.USD)
+        every { FiatCurrency.USD.symbol } returns "$"
     }
 
     @AfterTest
     fun tearDown() {
+        unmockkObject(FiatCurrency.USD)
         Dispatchers.resetMain()
     }
 
@@ -362,6 +369,58 @@ class SwapVMTest {
         }
 
     // endregion
+
+    @Test
+    fun renderedQuoteCallbackRejectsAmountEditUntilCurrentButtonIsUsed() =
+        runTest {
+            val harness = harness()
+            harness.collectState(this)
+            harness.onAddressChange(BTC_ADDRESS)
+            harness.onTextFieldChange(NumberTextFieldInnerState.fromAmount(BigDecimal.ONE))
+            val staleButton = assertNotNull(harness.vm.state.value?.primaryButton)
+
+            harness.onTextFieldChange(NumberTextFieldInnerState.fromAmount(BigDecimal("2")))
+            staleButton.onClick()
+            coVerify(exactly = 0) {
+                harness.requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
+            }
+
+            assertNotNull(harness.vm.state.value?.primaryButton).onClick()
+            coVerify(exactly = 1) {
+                harness.requestSwapQuote.requestFlexInputIntoZec(
+                    BigDecimal("2"), BTC_ADDRESS, any(), any(), any(), null
+                )
+            }
+        }
+
+    @Test
+    fun renderedQuoteCallbackRejectsNetworkEditWithSameEvmAddress() =
+        runTest {
+            val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth", decimals = 18)
+            val base = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "base", decimals = 18)
+            val harness = harness(
+                preselect = eth,
+                assetResult = base,
+                assets = SwapAssetTestFixture.assetsData(data = listOf(eth, base))
+            )
+            harness.collectState(this)
+            harness.onAddressChange(ETH_ADDRESS)
+            harness.onTextFieldChange(NumberTextFieldInnerState.fromAmount(BigDecimal.ONE))
+            val staleButton = assertNotNull(harness.vm.state.value?.primaryButton)
+
+            harness.onSwapAssetPickerClick()
+            staleButton.onClick()
+            coVerify(exactly = 0) {
+                harness.requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
+            }
+
+            assertNotNull(harness.vm.state.value?.primaryButton).onClick()
+            coVerify(exactly = 1) {
+                harness.requestSwapQuote.requestFlexInputIntoZec(
+                    BigDecimal.ONE, ETH_ADDRESS, base, any(), any(), null
+                )
+            }
+        }
 
     // region cancel / back flow
 
@@ -872,6 +931,7 @@ class SwapVMTest {
         val onAddressChange get() = callbacks.onAddressChange
         val onQrCodeScannerClick get() = callbacks.onQrCodeScannerClick
         val onAddressClick get() = callbacks.onAddressClick
+        val onTextFieldChange get() = callbacks.onTextFieldChange
         val onRequestSwapQuoteClick get() = callbacks.onRequestSwapQuoteClick
 
         /** Makes the next flex-input quote request hang so `isRequestingQuote` stays true. */
