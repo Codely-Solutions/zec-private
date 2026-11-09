@@ -27,6 +27,8 @@ The basic driver writes `ui-state.json` and `ui.png`. Its `ui-command.json` prot
 5. For light/dark coverage, set and verify the app/guest theme, wait for the screen/frame to settle, then capture. For a transient hint, inspect a bounded frame sequence: activity launch completion alone does not establish popup visibility. Capture the screen before slow diagnostic commands. Keep original screenshot bytes and bind them to the APK/source and inspected state. Redact secrets before sharing.
 6. Close the guarded session, verify owned descendants exited, and retain only the candidate/evidence needed for review.
 
+Keep the exact built test APK and its digest until capture diagnostics finish, so a capture-only correction can reuse it. Verify the first target automatically, inspect actual frames during implementation and before handoff, and avoid coupling cleanup to a short manual acknowledgment timer. Retire the APK after its final capture consumer; preserve original frames, source/configuration identities and receipts.
+
 ## Historical orchestration and experimental work
 
 In the surrounding workspace, `records/INDEX.md` locates archived `donations_ui_adapter.py`, `donations_ui_scenario.py` and `donations_acceptance.py`. They contain prior artifact checks, theme switching, settled-frame capture and navigation. Recover selected files for inspection. Their automatic-donation assumptions and root-relative paths require review; they are historical examples, not current launch commands.
