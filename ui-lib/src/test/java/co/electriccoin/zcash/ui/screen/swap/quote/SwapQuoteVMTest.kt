@@ -191,7 +191,7 @@ class SwapQuoteVMTest {
         assertTrue(state.priceCheck?.isWarning == false)
         assertEquals(
             "Price check unavailable",
-            state.priceCheck!!.label.getString(RuntimeEnvironment.getApplication(), Locale.US),
+            state.priceCheck.label.getString(RuntimeEnvironment.getApplication(), Locale.US),
         )
     }
 
