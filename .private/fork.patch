@@ -26284,7 +26284,7 @@ index 38427672d..7256c0e4f 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
-index 3027e6cda..e12dc3adf 100644
+index 3027e6cda..277b131a9 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
 @@ -7,0 +8 @@ import co.electriccoin.zcash.ui.R
@@ -26390,7 +26390,7 @@ index 3027e6cda..e12dc3adf 100644
 +        assertTrue(state.priceCheck?.isWarning == false)
 +        assertEquals(
 +            "Price check unavailable",
-+            state.priceCheck!!.label.getString(RuntimeEnvironment.getApplication(), Locale.US),
++            state.priceCheck.label.getString(RuntimeEnvironment.getApplication(), Locale.US),
 +        )
 +    }
 +
