@@ -254,10 +254,9 @@ class SwapRepositoryImplTest {
         }
 
     @Test
-    fun quoteIsNoOpWhenAssetsNotLoaded() =
+    fun quoteFailsWithoutProviderRequestWhenAssetsNotLoaded() =
         runTest {
-            // Without a prior refresh there is no ZEC asset, so the request short-circuits: the quote is
-            // left in Loading and the data source is never queried.
+            // Missing assets terminate loading immediately; the provider is never queried.
             val dataSource = mockk<SwapDataSource>(relaxed = true)
             val repository = repository(dataSource)
 
@@ -269,7 +268,7 @@ class SwapRepositoryImplTest {
                 slippage = BigDecimal("2")
             )
 
-            assertEquals(SwapQuoteData.Loading, repository.quote.value)
+            assertPlainError(repository, SwapMode.EXACT_INPUT)
             coVerify(exactly = 0) { dataSource.requestQuote(any(), any(), any(), any(), any(), any(), any()) }
         }
 
