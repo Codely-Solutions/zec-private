@@ -122,7 +122,7 @@ class SelectSwapABRecipientVM(
         viewModelScope.launch {
             val contact = navigateToScanAddress()
             if (contact != null) {
-                navigationRouter.replace(AddSwapABContactArgs(address = contact.address, network = args.network))
+                navigationRouter.replace(AddSwapABContactArgs(address = contact.rawInput ?: contact.address, network = args.network))
             }
         }
 }

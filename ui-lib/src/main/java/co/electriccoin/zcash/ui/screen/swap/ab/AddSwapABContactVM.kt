@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector
 import co.electriccoin.zcash.ui.common.model.SwapBlockchain
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 import co.electriccoin.zcash.ui.common.usecase.ContactAddressValidationResult
@@ -67,7 +68,9 @@ class AddSwapABContactVM(
 
     private val contactAddressError =
         combine(contactAddress, selectedBlockchain) { address, blockchain ->
-            if (address.isEmpty()) {
+            if (address.isEmpty() ||
+                (blockchain == null && !GiftCardSecretDetector.mayContainGiftCardSecret(address))
+            ) {
                 null
             } else {
                 when (validateABSwapContactAddress(address, blockchain)) {
