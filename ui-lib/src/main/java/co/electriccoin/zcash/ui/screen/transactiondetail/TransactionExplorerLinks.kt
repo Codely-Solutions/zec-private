@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui.screen.transactiondetail
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -18,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -69,7 +72,14 @@ fun TransactionExplorerLinks(links: List<TransactionExplorerLink>) {
                 if (index > 0) ZashiHorizontalDivider(thickness = 2.dp)
                 TransactionDetailRowSurface(
                     onClick = null,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clickable(
+                            onClick = link.onCopy,
+                            onClickLabel = stringRes(R.string.private_copy_explorer_id, link.label).getValue(),
+                            role = Role.Button,
+                        ),
                     contentPadding = PaddingValues(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
                 ) {
                     if (stacked) {
@@ -129,14 +139,15 @@ private fun ExplorerId(
 
 @Composable
 private fun ExplorerActions(link: TransactionExplorerLink) {
-    IconButton(onClick = link.onCopy, modifier = Modifier.size(48.dp)) {
-        Icon(
-            painter = painterResource(R.drawable.ic_transaction_detail_info_copy),
-            tint = ZashiColors.Text.textTertiary,
-            contentDescription = stringRes(R.string.private_copy_explorer_id, link.label).getValue(),
-        )
-    }
+    Spacer(Modifier.width(6.dp))
+    Icon(
+        modifier = Modifier.size(20.dp),
+        painter = painterResource(R.drawable.ic_transaction_detail_info_copy),
+        tint = ZashiColors.Text.textTertiary,
+        contentDescription = null,
+    )
     link.onOpen?.let { open ->
+        Spacer(Modifier.width(4.dp))
         IconButton(onClick = open, modifier = Modifier.size(48.dp)) {
             Icon(
                 imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
