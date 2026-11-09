@@ -18,6 +18,7 @@ internal sealed interface SwapQuoteState : ModalBottomSheetState {
         val primaryButton: ButtonState,
         val infoText: StringResource?,
         override val onBack: () -> Unit,
+        val priceCheck: PriceCheckNoticeState? = null,
     ) : SwapQuoteState
 
     data class Error(
@@ -41,3 +42,9 @@ enum class SwapQuoteInfoLayout {
     INLINE,
     STACKED
 }
+
+internal data class PriceCheckNoticeState(
+    val label: StringResource,
+    val explanation: StringResource,
+    val isWarning: Boolean = false,
+)

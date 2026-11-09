@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="private_price_checking">Checking market price…</string>
+    <string name="private_price_unavailable">Price check unavailable</string>
+    <string name="private_price_unavailable_details">A fresh independent price is unavailable for this pair. Review the quoted amounts.</string>
+    <string name="private_price_check_details">Kraken spot reference, not an executable swap. Includes quoted costs and any known Zcash network fee; external sending fees may be extra.</string>
+    <string name="private_price_difference">Market difference: %1$s%%</string>
+    <string name="private_price_poor">%1$s%% below market reference</string>
+    <string name="private_swap_anyway">Swap anyway</string>
+    <string name="private_pay_anyway">Pay anyway</string>
+</resources>

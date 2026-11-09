@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.swap.quote
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -13,12 +14,14 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_OUTPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
+import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.zcash.getTotal
 import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
 import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
 import co.electriccoin.zcash.ui.common.model.zcash.getTotalUsd
+import co.electriccoin.zcash.ui.common.provider.IndependentPriceProvider
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.provider.ResponseWithNearErrorException
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
@@ -33,6 +36,10 @@ import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationArgs
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
@@ -56,19 +63,29 @@ internal class SwapQuoteVM(
     private val swapQuoteSuccessMapper: SwapQuoteVMMapper,
     private val submitProposal: SubmitProposalUseCase,
     private val navigationRouter: NavigationRouter,
+    private val independentPrices: IndependentPriceProvider,
 ) : ViewModel() {
     private var isClosing = false
+    private val priceCheck = MutableStateFlow<BoundPriceCheck?>(null)
+    private val clock = flow {
+        while (true) {
+            emit(Clock.System.now().toEpochMilliseconds())
+            delay(1_000)
+        }
+    }
 
     val state: StateFlow<SwapQuoteState?> =
         combine(
             swapRepository.quote.filterNotNull(),
             observeProposal.observeNullable(),
             observeSelectedWalletAccount.require(),
-        ) { quote, proposal, account ->
+            priceCheck,
+            clock,
+        ) { quote, proposal, account, check, now ->
             when (quote) {
                 SwapQuoteData.Loading -> null
                 is SwapQuoteData.Error -> createErrorState(quote)
-                is SwapQuoteData.Success -> createState(proposal, quote, account)
+                is SwapQuoteData.Success -> createState(proposal, quote, account, check, now)
             }
         }.stateIn(
             scope = viewModelScope,
@@ -77,6 +94,21 @@ internal class SwapQuoteVM(
         )
 
     init {
+        viewModelScope.launch {
+            combine(swapRepository.quote, observeProposal.observeNullable()) { quote, proposal -> quote to proposal }
+                .collectLatest { (result, proposal) ->
+                    val quote = (result as? SwapQuoteData.Success)?.quote
+                    if (quote == null) {
+                        priceCheck.value = null
+                    } else {
+                        val fee = quote.getTotalFeesZatoshi((proposal as? SwapTransactionProposal)?.proposal)
+                            .convertZatoshiToZec()
+                        priceCheck.value = BoundPriceCheck(quote, fee, IndependentPriceCheck.Checking)
+                        val checked = independentPrices.check(quote, fee)
+                        priceCheck.value = BoundPriceCheck(quote, fee, checked)
+                    }
+                }
+        }
         applicationStateProvider
             .observeOnForeground()
             .onEach {
@@ -91,14 +123,30 @@ internal class SwapQuoteVM(
     private fun createState(
         proposal: TransactionProposal?,
         quote: SwapQuoteData.Success,
-        account: WalletAccount
-    ): SwapQuoteState.Success =
-        swapQuoteSuccessMapper.createState(
+        account: WalletAccount,
+        check: BoundPriceCheck?,
+        nowMillis: Long,
+    ): SwapQuoteState.Success {
+        val fee = quote.quote.getTotalFeesZatoshi((proposal as? SwapTransactionProposal)?.proposal)
+            .convertZatoshiToZec()
+        val assessment = check.current(quote.quote, fee, nowMillis)
+        fun reviewedAction(action: () -> Unit) {
+            val currentQuote = (swapRepository.quote.value as? SwapQuoteData.Success)?.quote
+            val current = priceCheck.value.current(quote.quote, fee, Clock.System.now().toEpochMilliseconds())
+            if (!isClosing && currentQuote === quote.quote && current == assessment &&
+                current != IndependentPriceCheck.Checking
+            ) {
+                action()
+            }
+        }
+        return swapQuoteSuccessMapper.createState(
             state = SwapQuoteInternalState(proposal as? SwapTransactionProposal, quote.quote, account),
             onBack = ::onBack,
-            onSubmitQuoteClick = ::onSubmitQuoteClick,
-            onNavigateToOnRampSwap = ::onNavigateToOnRampSwap
+            onSubmitQuoteClick = { reviewedAction { onSubmitQuoteClick() } },
+            onNavigateToOnRampSwap = { reviewedAction { onNavigateToOnRampSwap() } },
+            priceCheck = assessment,
         )
+    }
 
     private fun onNavigateToOnRampSwap() = navigationRouter.forward(ORSwapConfirmationArgs)
 
@@ -189,4 +237,20 @@ internal data class SwapQuoteInternalState(
     val totalUsd: BigDecimal = quote.getTotalUsd(proposal?.proposal)
     val totalFeesZatoshi: Zatoshi = quote.getTotalFeesZatoshi(proposal?.proposal)
     val totalFeesUsd: BigDecimal = quote.getTotalFeesUsd(proposal?.proposal)
+}
+
+private data class BoundPriceCheck(
+    val quote: SwapQuote,
+    val feeZec: BigDecimal,
+    val assessment: IndependentPriceCheck,
+)
+
+private fun BoundPriceCheck?.current(quote: SwapQuote, fee: BigDecimal, nowMillis: Long): IndependentPriceCheck {
+    if (this == null || this.quote !== quote || feeZec.compareTo(fee) != 0) return IndependentPriceCheck.Checking
+    val checked = assessment
+    return if (checked is IndependentPriceCheck.Compared && checked.validUntilMillis <= nowMillis) {
+        IndependentPriceCheck.Unavailable
+    } else {
+        checked
+    }
 }

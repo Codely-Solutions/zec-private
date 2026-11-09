@@ -182,6 +182,10 @@ private fun Success(
                     color = ZashiColors.Surfaces.bgPrimary
                 )
             }
+            state.priceCheck?.let {
+                Spacer(8.dp)
+                PriceCheckNotice(it)
+            }
             Spacer(32.dp)
             state.items.forEachIndexed { index, item ->
                 if (index != 0) {

@@ -3949,26 +3949,28 @@ index 703df121a..c44616fb3 100644
 +            res.directories.addAll(
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ExternalLinkRow.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ExternalLinkRow.kt
 new file mode 100644
-index 000000000..de230661a
+index 000000000..dd7572bf3
 --- /dev/null
 +++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ExternalLinkRow.kt
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,39 @@
 +package co.electriccoin.zcash.ui.design.component
 +
 +import androidx.compose.foundation.layout.Spacer
 +import androidx.compose.foundation.layout.fillMaxWidth
 +import androidx.compose.foundation.layout.heightIn
++import androidx.compose.foundation.layout.size
 +import androidx.compose.foundation.layout.width
-+import androidx.compose.material3.MaterialTheme
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.automirrored.filled.OpenInNew
++import androidx.compose.material3.Icon
 +import androidx.compose.material3.Text
 +import androidx.compose.material3.OutlinedButton
 +import androidx.compose.runtime.Composable
 +import androidx.compose.ui.Modifier
-+import androidx.compose.ui.semantics.clearAndSetSemantics
 +import androidx.compose.ui.text.style.TextAlign
 +import androidx.compose.ui.unit.dp
 +
-+/** One external-navigation action; the trailing glyph is decorative. */
++/** One external-navigation action; the trailing icon is decorative. */
 +@Composable
 +fun ExternalLinkRow(
 +    label: String,
@@ -3983,10 +3985,10 @@ index 000000000..de230661a
 +    ) {
 +        Text(label, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
 +        Spacer(Modifier.width(16.dp))
-+        Text(
-+            text = "↗",
-+            modifier = Modifier.clearAndSetSemantics {},
-+            style = MaterialTheme.typography.headlineMedium,
++        Icon(
++            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
++            contentDescription = null,
++            modifier = Modifier.size(24.dp),
 +        )
 +    }
 +}
@@ -10089,13 +10091,18 @@ index 000000000..c15f95a55
 +        }
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
-index 9c294ca9d..af5201d8c 100644
+index 9c294ca9d..75ec31618 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
-@@ -42,0 +43 @@ import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProviderImpl
+@@ -22,0 +23,2 @@ import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
++import co.electriccoin.zcash.ui.common.provider.IndependentPriceProvider
++import co.electriccoin.zcash.ui.common.provider.KrakenPriceProvider
+@@ -42,0 +45 @@ import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.QuoteRequestDiagnostics
-@@ -129,0 +131 @@ val providerModule =
+@@ -129,0 +133 @@ val providerModule =
 +        single { QuoteRequestDiagnostics() }
+@@ -136,0 +141 @@ val providerModule =
++        singleOf(::KrakenPriceProvider) bind IndependentPriceProvider::class
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/RepositoryModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/RepositoryModule.kt
 index 1c2a8787c..9a180202c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/RepositoryModule.kt
@@ -10423,6 +10430,88 @@ index befe3b652..3c6b6ef3a 100644
 @@ -119 +119 @@ class SwapSupportMapper {
 -                stringResByDynamicCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker)
 +                stringResByCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker, minDecimals = 0)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt
+new file mode 100644
+index 000000000..a239cdd88
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt
+@@ -0,0 +1,76 @@
++package co.electriccoin.zcash.ui.common.model
++
++import java.math.BigDecimal
++import java.math.MathContext
++
++sealed interface IndependentPriceCheck {
++    data object Checking : IndependentPriceCheck
++    data object Unavailable : IndependentPriceCheck
++    data class Compared(val differencePercent: BigDecimal, val validUntilMillis: Long) : IndependentPriceCheck {
++        val poor: Boolean get() = differencePercent <= BigDecimal("-15")
++    }
++}
++
++data class MarketObservation(
++    val pair: String,
++    val bid: BigDecimal,
++    val ask: BigDecimal,
++    val observedAtMillis: Long,
++    val receivedAtMillis: Long
++)
++
++object IndependentPricePolicy {
++    private data class NativeMarket(val symbol: String, val decimals: Int, val pair: String)
++    private val markets = mapOf(
++        "nep141:zec.omft.near" to NativeMarket("zec", 8, "ZECUSD"),
++        "nep141:btc.omft.near" to NativeMarket("btc", 8, "XBTUSD"),
++        "nep141:eth.omft.near" to NativeMarket("eth", 18, "ETHUSD"),
++        "nep141:sol.omft.near" to NativeMarket("sol", 9, "SOLUSD")
++    )
++
++    fun market(asset: SwapAsset): String? = markets[asset.assetId]?.takeIf {
++        asset.tokenTicker.equals(it.symbol, ignoreCase = true) &&
++            asset.chainTicker.equals(it.symbol, ignoreCase = true) && asset.decimals == it.decimals
++    }?.pair
++
++    fun compare(
++        quote: SwapQuote,
++        networkFeeZec: BigDecimal,
++        observations: Map<String, MarketObservation>,
++        nowMillis: Long
++    ): IndependentPriceCheck {
++        val inputPair = market(quote.originAsset) ?: return IndependentPriceCheck.Unavailable
++        val outputPair = market(quote.destinationAsset) ?: return IndependentPriceCheck.Unavailable
++        val input = observations[inputPair] ?: return IndependentPriceCheck.Unavailable
++        val output = observations[outputPair] ?: return IndependentPriceCheck.Unavailable
++        val selected = listOf(input, output)
++        if (input.pair != inputPair || output.pair != outputPair || selected.any { !valid(it, nowMillis) }) {
++            return IndependentPriceCheck.Unavailable
++        }
++        if (kotlin.math.abs(input.observedAtMillis - output.observedAtMillis) > 30_000L ||
++            quote.amountInFormatted.signum() <= 0 || quote.amountOutFormatted.signum() <= 0 ||
++            networkFeeZec.signum() < 0 || quote.timestamp.toEpochMilliseconds() > nowMillis + 5_000L
++        ) return IndependentPriceCheck.Unavailable
++        val validUntil = minOf(
++            quote.deadline.toEpochMilliseconds(),
++            quote.timestamp.toEpochMilliseconds() + 180_000L,
++            selected.minOf { it.observedAtMillis + 120_000L },
++            selected.minOf { it.receivedAtMillis + 60_000L }
++        )
++        if (validUntil <= nowMillis) return IndependentPriceCheck.Unavailable
++        val inputAmount = quote.amountInFormatted + if (inputPair == "ZECUSD") networkFeeZec else BigDecimal.ZERO
++        val inputValue = inputAmount.multiply(input.bid)
++        val outputValue = quote.amountOutFormatted.multiply(output.ask)
++        return IndependentPriceCheck.Compared(
++            outputValue.divide(inputValue, MathContext.DECIMAL128).subtract(BigDecimal.ONE).multiply(BigDecimal("100")),
++            validUntil
++        )
++    }
++
++    private fun valid(observation: MarketObservation, now: Long): Boolean = with(observation) {
++        bid.signum() > 0 && ask >= bid &&
++            ask.subtract(bid).divide(bid, MathContext.DECIMAL128) <= BigDecimal("0.02") &&
++            observedAtMillis <= now + 5_000L && observedAtMillis > now - 120_000L &&
++            receivedAtMillis <= now + 5_000L && receivedAtMillis > now - 60_000L
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt
 new file mode 100644
 index 000000000..c5199a480
@@ -11353,6 +11442,125 @@ index feef536f5..13ee1cfdf 100644
 +            // Bodies and URL parameters carry wallet data in debug builds too. Quote lifecycle
 +            // diagnostics record bounded stage metadata without exposing payloads or URLs.
 +            level = LogLevel.NONE
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
+new file mode 100644
+index 000000000..26eaf5e37
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
+@@ -0,0 +1,113 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
++import co.electriccoin.zcash.ui.common.model.IndependentPricePolicy
++import co.electriccoin.zcash.ui.common.model.MarketObservation
++import co.electriccoin.zcash.ui.common.model.SwapQuote
++import io.ktor.client.request.prepareGet
++import io.ktor.client.statement.bodyAsChannel
++import io.ktor.utils.io.readRemaining
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.TimeoutCancellationException
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++import kotlinx.coroutines.withContext
++import kotlinx.coroutines.withTimeout
++import kotlinx.io.readByteArray
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.jsonArray
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import java.math.BigDecimal
++
++interface IndependentPriceProvider {
++    suspend fun check(quote: SwapQuote, networkFeeZec: BigDecimal): IndependentPriceCheck
++}
++
++class KrakenPriceProvider(private val httpClientProvider: HttpClientProvider) : IndependentPriceProvider {
++    private val mutex = Mutex()
++    private val cache = mutableMapOf<String, MarketObservation>()
++    @Volatile
++    private var retryAfterMillis = 0L
++    private var lastRequestStartedMillis = 0L
++
++    override suspend fun check(
++        quote: SwapQuote,
++        networkFeeZec: BigDecimal
++    ): IndependentPriceCheck = withContext(Dispatchers.IO) {
++        val pairs = listOf(
++            IndependentPricePolicy.market(quote.originAsset) ?: return@withContext IndependentPriceCheck.Unavailable,
++            IndependentPricePolicy.market(quote.destinationAsset)
++                ?: return@withContext IndependentPriceCheck.Unavailable
++        ).distinct()
++        try {
++            withTimeout(8_000L) {
++                mutex.withLock {
++                    val now = System.currentTimeMillis()
++                    if (now < retryAfterMillis) return@withLock IndependentPriceCheck.Unavailable
++                    val missing = pairs.filter { pair ->
++                        cache[pair]?.let {
++                            now - it.receivedAtMillis in 0 until 60_000L &&
++                                now - it.observedAtMillis in -5_000L until 120_000L
++                        } != true
++                    }
++                    if (missing.isNotEmpty()) {
++                        httpClientProvider.createTor().use { client ->
++                            missing.forEach { pair ->
++                                val waitMillis = lastRequestStartedMillis + 1_000L - System.currentTimeMillis()
++                                delay(waitMillis.coerceAtLeast(0L))
++                                lastRequestStartedMillis = System.currentTimeMillis()
++                                cache[pair] = client.prepareGet("https://api.kraken.com/0/public/Spread") {
++                                    url { parameters.append("pair", pair) }
++                                }.execute { response ->
++                                    check(response.status.value == 200)
++                                    val bytes = response.bodyAsChannel().readRemaining(65_537L).readByteArray()
++                                    require(bytes.size <= 65_536)
++                                    parseKrakenObservation(pair, bytes.decodeToString(), System.currentTimeMillis())
++                                }
++                            }
++                        }
++                    }
++                    IndependentPricePolicy.compare(quote, networkFeeZec, cache, System.currentTimeMillis())
++                }
++            }
++        } catch (_: TimeoutCancellationException) {
++            retryAfterMillis = System.currentTimeMillis() + 60_000L
++            IndependentPriceCheck.Unavailable
++        } catch (cancelled: CancellationException) {
++            throw cancelled
++        } catch (_: Exception) {
++            retryAfterMillis = System.currentTimeMillis() + 60_000L
++            IndependentPriceCheck.Unavailable
++        }
++    }
++}
++
++internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis: Long): MarketObservation {
++    require(body.length <= 65_536 && body.toByteArray(Charsets.UTF_8).size <= 65_536)
++    val key = when (pair) {
++        "XBTUSD" -> "XXBTZUSD"
++        "ZECUSD" -> "XZECZUSD"
++        "ETHUSD" -> "XETHZUSD"
++        "SOLUSD" -> "SOLUSD"
++        else -> error("Unsupported market")
++    }
++    val root = Json.parseToJsonElement(body).jsonObject
++    require(root.getValue("error").jsonArray.isEmpty())
++    val result = root.getValue("result").jsonObject
++    require(result.keys == setOf(key, "last"))
++    val rows = result.getValue(key).jsonArray
++    require(rows.isNotEmpty() && rows.size <= 1_000)
++    return rows.reversed().map { element ->
++        val row = element.jsonArray
++        require(row.size == 3)
++        val seconds = row[0].jsonPrimitive.content.toBigDecimal()
++        val observedAtMillis = seconds.multiply(BigDecimal("1000")).longValueExact()
++        val bid = row[1].jsonPrimitive.content.toBigDecimal()
++        val ask = row[2].jsonPrimitive.content.toBigDecimal()
++        require(bid.signum() > 0 && ask >= bid)
++        MarketObservation(pair, bid, ask, observedAtMillis, receivedAtMillis)
++    }.maxBy { it.observedAtMillis }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnostics.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnostics.kt
 new file mode 100644
 index 000000000..c6658544f
@@ -15163,6 +15371,66 @@ index 3341e70f0..649f37619 100644
 +                    "ZEC Private uses temporary addresses during swaps and payments to protect your privacy. " +
 +                        "If too many " +
 +                        "remain unused, ZEC Private hits a limit and can’t create new ones.",
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/PriceCheckNotice.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/PriceCheckNotice.kt
+new file mode 100644
+index 000000000..7909e1fd6
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/PriceCheckNotice.kt
+@@ -0,0 +1,54 @@
++package co.electriccoin.zcash.ui.screen.swap.quote
++
++import androidx.compose.foundation.clickable
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.heightIn
++import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.layout.Arrangement
++import androidx.compose.material.icons.Icons
++import androidx.compose.material.icons.outlined.Info
++import androidx.compose.material.icons.outlined.WarningAmber
++import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.Icon
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.PlainTooltip
++import androidx.compose.material3.Text
++import androidx.compose.material3.TooltipAnchorPosition
++import androidx.compose.material3.TooltipBox
++import androidx.compose.material3.TooltipDefaults
++import androidx.compose.material3.rememberTooltipState
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.semantics.Role
++import androidx.compose.ui.unit.dp
++import co.electriccoin.zcash.ui.design.util.getValue
++import kotlinx.coroutines.launch
++
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++internal fun PriceCheckNotice(state: PriceCheckNoticeState) {
++    val tooltip = rememberTooltipState(isPersistent = true)
++    val scope = rememberCoroutineScope()
++    val color = if (state.isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
++    TooltipBox(
++        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
++        state = tooltip,
++        tooltip = { PlainTooltip { Text(state.explanation.getValue(), style = MaterialTheme.typography.bodySmall) } },
++    ) {
++        Row(
++            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
++                .clickable(role = Role.Button) { scope.launch { tooltip.show() } },
++            verticalAlignment = Alignment.CenterVertically,
++            horizontalArrangement = Arrangement.spacedBy(8.dp),
++        ) {
++            Icon(
++                imageVector = if (state.isWarning) Icons.Outlined.WarningAmber else Icons.Outlined.Info,
++                contentDescription = null, tint = color, modifier = Modifier.size(18.dp),
++            )
++            Text(state.label.getValue(), color = color, style = MaterialTheme.typography.bodySmall)
++        }
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/QuoteValueComparison.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/QuoteValueComparison.kt
 new file mode 100644
 index 000000000..d89066e86
@@ -15195,86 +15463,223 @@ index 000000000..d89066e86
 +        .multiply(BigDecimal("100"))
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt
-index 2ceac399f..985329123 100644
+index 2ceac399f..a3720a9b3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt
-@@ -36,0 +37 @@ data class SwapQuoteInfoItem(
+@@ -20,0 +21 @@ internal sealed interface SwapQuoteState : ModalBottomSheetState {
++        val priceCheck: PriceCheckNoticeState? = null,
+@@ -36,0 +38,12 @@ data class SwapQuoteInfoItem(
 +    val layout: SwapQuoteInfoLayout = SwapQuoteInfoLayout.INLINE,
-@@ -37,0 +39,5 @@ data class SwapQuoteInfoItem(
++)
 +
 +enum class SwapQuoteInfoLayout {
 +    INLINE,
 +    STACKED
 +}
++
++internal data class PriceCheckNoticeState(
++    val label: StringResource,
++    val explanation: StringResource,
++    val isWarning: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
-index 9f37c1d93..61457e85a 100644
+index 9f37c1d93..e4ab3f2e1 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
-@@ -17,0 +18,4 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
+@@ -4,0 +5 @@ import androidx.lifecycle.viewModelScope
++import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
+@@ -15,0 +17 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
++import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
+@@ -17,0 +20,5 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotal
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalUsd
-@@ -30 +34 @@ import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.common.provider.IndependentPriceProvider
+@@ -30 +37 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 -import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 +import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
-@@ -55,0 +60,2 @@ internal class SwapQuoteVM(
+@@ -31,0 +39,4 @@ import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationArg
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.collectLatest
++import kotlinx.coroutines.flow.flow
+@@ -54,0 +66 @@ internal class SwapQuoteVM(
++    private val independentPrices: IndependentPriceProvider,
+@@ -55,0 +68,9 @@ internal class SwapQuoteVM(
 +    private var isClosing = false
++    private val priceCheck = MutableStateFlow<BoundPriceCheck?>(null)
++    private val clock = flow {
++        while (true) {
++            emit(Clock.System.now().toEpochMilliseconds())
++            delay(1_000)
++        }
++    }
 +
-@@ -80 +86 @@ internal class SwapQuoteVM(
+@@ -61 +82,3 @@ internal class SwapQuoteVM(
+-        ) { quote, proposal, account ->
++            priceCheck,
++            clock,
++        ) { quote, proposal, account, check, now ->
+@@ -65 +88 @@ internal class SwapQuoteVM(
+-                is SwapQuoteData.Success -> createState(proposal, quote, account)
++                is SwapQuoteData.Success -> createState(proposal, quote, account, check, now)
+@@ -73,0 +97,15 @@ internal class SwapQuoteVM(
++        viewModelScope.launch {
++            combine(swapRepository.quote, observeProposal.observeNullable()) { quote, proposal -> quote to proposal }
++                .collectLatest { (result, proposal) ->
++                    val quote = (result as? SwapQuoteData.Success)?.quote
++                    if (quote == null) {
++                        priceCheck.value = null
++                    } else {
++                        val fee = quote.getTotalFeesZatoshi((proposal as? SwapTransactionProposal)?.proposal)
++                            .convertZatoshiToZec()
++                        priceCheck.value = BoundPriceCheck(quote, fee, IndependentPriceCheck.Checking)
++                        val checked = independentPrices.check(quote, fee)
++                        priceCheck.value = BoundPriceCheck(quote, fee, checked)
++                    }
++                }
++        }
+@@ -80 +118 @@ internal class SwapQuoteVM(
 -                    cancelSwapQuote()
 +                    onBack()
-@@ -109 +115 @@ internal class SwapQuoteVM(
+@@ -88,3 +126,17 @@ internal class SwapQuoteVM(
+-        account: WalletAccount
+-    ): SwapQuoteState.Success =
+-        swapQuoteSuccessMapper.createState(
++        account: WalletAccount,
++        check: BoundPriceCheck?,
++        nowMillis: Long,
++    ): SwapQuoteState.Success {
++        val fee = quote.quote.getTotalFeesZatoshi((proposal as? SwapTransactionProposal)?.proposal)
++            .convertZatoshiToZec()
++        val assessment = check.current(quote.quote, fee, nowMillis)
++        fun reviewedAction(action: () -> Unit) {
++            val currentQuote = (swapRepository.quote.value as? SwapQuoteData.Success)?.quote
++            val current = priceCheck.value.current(quote.quote, fee, Clock.System.now().toEpochMilliseconds())
++            if (!isClosing && currentQuote === quote.quote && current == assessment &&
++                current != IndependentPriceCheck.Checking
++            ) {
++                action()
++            }
++        }
++        return swapQuoteSuccessMapper.createState(
+@@ -93,2 +145,3 @@ internal class SwapQuoteVM(
+-            onSubmitQuoteClick = ::onSubmitQuoteClick,
+-            onNavigateToOnRampSwap = ::onNavigateToOnRampSwap
++            onSubmitQuoteClick = { reviewedAction { onSubmitQuoteClick() } },
++            onNavigateToOnRampSwap = { reviewedAction { onNavigateToOnRampSwap() } },
++            priceCheck = assessment,
+@@ -95,0 +149 @@ internal class SwapQuoteVM(
++    }
+@@ -109 +163 @@ internal class SwapQuoteVM(
 -                        stringResByDynamicCurrencyNumber(
 +                        stringResByCurrencyNumber(
-@@ -111 +117,2 @@ internal class SwapQuoteVM(
+@@ -111 +165,2 @@ internal class SwapQuoteVM(
 -                            ticker = quote.exception.asset.tokenTicker
 +                            ticker = quote.exception.asset.tokenTicker,
 +                            minDecimals = 0,
-@@ -159 +166,3 @@ internal class SwapQuoteVM(
+@@ -159 +214 @@ internal class SwapQuoteVM(
 -    private fun onEditPaymentClick() = cancelSwapQuote()
 +    private fun onEditPaymentClick() = onBack()
-+
-+    private fun onBack() = closeQuote { cancelSwapQuote() }
-@@ -161 +170,5 @@ internal class SwapQuoteVM(
+@@ -161 +216 @@ internal class SwapQuoteVM(
 -    private fun onBack() = cancelSwapQuote()
++    private fun onBack() = closeQuote { cancelSwapQuote() }
+@@ -163 +218,7 @@ internal class SwapQuoteVM(
+-    private fun onBackDuringError() = cancelSwapQuote()
 +    private fun closeQuote(action: () -> Unit) {
 +        if (isClosing) return
 +        isClosing = true
 +        action()
 +    }
-@@ -163 +176 @@ internal class SwapQuoteVM(
--    private fun onBackDuringError() = cancelSwapQuote()
++
 +    private fun onBackDuringError() = onBack()
-@@ -167 +180 @@ internal class SwapQuoteVM(
+@@ -167 +228 @@ internal class SwapQuoteVM(
 -    private fun onCancelPaymentClick() = cancelSwap()
 +    private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
-@@ -177 +189,0 @@ internal data class SwapQuoteInternalState(
+@@ -177 +237,0 @@ internal data class SwapQuoteInternalState(
 -    val totalFees = quote.affiliateFee
+@@ -180,0 +241,16 @@ internal data class SwapQuoteInternalState(
++
++private data class BoundPriceCheck(
++    val quote: SwapQuote,
++    val feeZec: BigDecimal,
++    val assessment: IndependentPriceCheck,
++)
++
++private fun BoundPriceCheck?.current(quote: SwapQuote, fee: BigDecimal, nowMillis: Long): IndependentPriceCheck {
++    if (this == null || this.quote !== quote || feeZec.compareTo(fee) != 0) return IndependentPriceCheck.Checking
++    val checked = assessment
++    return if (checked is IndependentPriceCheck.Compared && checked.validUntilMillis <= nowMillis) {
++        IndependentPriceCheck.Unavailable
++    } else {
++        checked
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..3b15d6ef4 100644
+index 717411935..a54035640 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-@@ -11,0 +12 @@ import co.electriccoin.zcash.ui.design.component.SwapTokenAmountState
+@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
++import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
+@@ -11,0 +13 @@ import co.electriccoin.zcash.ui.design.component.SwapTokenAmountState
 +import co.electriccoin.zcash.ui.design.component.QuoteValueDifferenceState
-@@ -14,0 +16 @@ import co.electriccoin.zcash.ui.design.util.stringResByAddress
+@@ -14,0 +17 @@ import co.electriccoin.zcash.ui.design.util.stringResByAddress
 +import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
-@@ -16 +17,0 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
+@@ -16 +18,0 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 -import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
-@@ -23,0 +25,2 @@ import java.math.RoundingMode
+@@ -23,0 +26,2 @@ import java.math.RoundingMode
 +import kotlin.time.Clock
 +import kotlin.time.Duration.Companion.minutes
-@@ -65,0 +69,6 @@ internal class SwapQuoteVMMapper {
+@@ -31 +35,2 @@ internal class SwapQuoteVMMapper {
+-        onNavigateToOnRampSwap: () -> Unit
++        onNavigateToOnRampSwap: () -> Unit,
++        priceCheck: IndependentPriceCheck? = null,
+@@ -48,0 +54 @@ internal class SwapQuoteVMMapper {
++                priceCheck = priceCheck?.toNotice(),
+@@ -51 +57,7 @@ internal class SwapQuoteVMMapper {
+-                        text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm),
++                        text = when {
++                            priceCheck is IndependentPriceCheck.Compared && priceCheck.poor ->
++                                stringRes(if (quote.mode == EXACT_OUTPUT) R.string.private_pay_anyway
++                                else R.string.private_swap_anyway)
++                            else -> stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm)
++                        },
++                        isEnabled = priceCheck != IndependentPriceCheck.Checking,
+@@ -62,0 +75,23 @@ internal class SwapQuoteVMMapper {
++    private fun IndependentPriceCheck.toNotice(): PriceCheckNoticeState = when (this) {
++        IndependentPriceCheck.Checking -> PriceCheckNoticeState(
++            stringRes(R.string.private_price_checking), stringRes(R.string.private_price_check_details)
++        )
++        IndependentPriceCheck.Unavailable -> PriceCheckNoticeState(
++            stringRes(R.string.private_price_unavailable), stringRes(R.string.private_price_unavailable_details)
++        )
++        is IndependentPriceCheck.Compared -> PriceCheckNoticeState(
++            label = if (isPoor) {
++                stringRes(
++                    R.string.private_price_poor,
++                    differencePercent.abs().setScale(1, RoundingMode.HALF_UP).toPlainString(),
++                )
++            } else {
++                val rounded = differencePercent.setScale(2, RoundingMode.HALF_UP)
++                val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString()
++                stringRes(R.string.private_price_difference, signed)
++            },
++            explanation = stringRes(R.string.private_price_check_details),
++            isWarning = isPoor,
++        )
++    }
++
+@@ -65,0 +101,6 @@ internal class SwapQuoteVMMapper {
 +        val minimum = quote.minimumAmountOut?.let {
 +            stringRes(
 +                R.string.private_minimum_received,
 +                stringResByCurrencyNumber(it, quote.destinationAsset.tokenTicker, minDecimals = 0)
 +            )
 +        }
-@@ -67 +76 @@ internal class SwapQuoteVMMapper {
+@@ -67 +108 @@ internal class SwapQuoteVMMapper {
 -        return stringRes(
 +        return minimum ?: stringRes(
-@@ -96,7 +105,2 @@ internal class SwapQuoteVMMapper {
+@@ -96,7 +137,2 @@ internal class SwapQuoteVMMapper {
 -                description = stringRes(R.string.swapAndPay_totalFees),
 -                title =
 -                    if (quote.destinationAsset.isZCashAsset) {
@@ -15284,33 +15689,33 @@ index 717411935..3b15d6ef4 100644
 -                    }.withStyle(),
 +                description = stringRes(R.string.private_wallet_transaction_fee),
 +                title = stringRes(totalFeesZatoshi).withStyle(),
-@@ -107,0 +112,6 @@ internal class SwapQuoteVMMapper {
+@@ -107,0 +144,6 @@ internal class SwapQuoteVMMapper {
 +            ).takeIf { !quote.destinationAsset.isZCashAsset && totalFeesZatoshi.value > 0 },
 +            SwapQuoteInfoItem(
 +                description = stringRes(R.string.private_provider_costs),
 +                title = stringRes(R.string.private_provider_costs_included).withStyle(),
 +                subtitle = null,
 +                layout = SwapQuoteInfoLayout.STACKED
-@@ -111 +121,4 @@ internal class SwapQuoteVMMapper {
+@@ -111 +153,4 @@ internal class SwapQuoteVMMapper {
 -                val slippageUsd = quote.amountOutUsd.multiply(slippage)
 +                val allowance = quote.inputAllowance ?: quote.amountInFormatted.multiply(slippage)
 +                val slippageUsd = quote.amountInUsd
 +                    .divide(quote.amountInFormatted, MathContext.DECIMAL128)
 +                    .multiply(allowance)
-@@ -113,5 +126 @@ internal class SwapQuoteVMMapper {
+@@ -113,5 +158 @@ internal class SwapQuoteVMMapper {
 -                    quote.amountInFormatted
 -                        .multiply(
 -                            slippage,
 -                            MathContext.DECIMAL128
 -                        ).convertZecToZatoshi()
 +                    allowance.convertZecToZatoshi()
-@@ -122 +131 @@ internal class SwapQuoteVMMapper {
+@@ -122 +163 @@ internal class SwapQuoteVMMapper {
 -                            R.string.swapAndPay_maxSlippage,
 +                            R.string.private_included_input_allowance,
-@@ -127 +136 @@ internal class SwapQuoteVMMapper {
+@@ -127 +168 @@ internal class SwapQuoteVMMapper {
 -                        stringResByDynamicCurrencyNumber(slippageUsd, FiatCurrency.USD.symbol).withStyle()
 +                        quoteFiatAmount(slippageUsd, quote.amountInUsd.signum() > 0).withStyle()
-@@ -136,3 +145,8 @@ internal class SwapQuoteVMMapper {
+@@ -136,3 +177,8 @@ internal class SwapQuoteVMMapper {
 -            description = stringRes(R.string.swapAndPay_totalAmount),
 -            title = stringResByDynamicCurrencyNumber(total, quote.originAsset.tokenTicker).withStyle(),
 -            subtitle = stringResByDynamicCurrencyNumber(totalUsd, FiatCurrency.USD.symbol).withStyle()
@@ -15322,24 +15727,24 @@ index 717411935..3b15d6ef4 100644
 +                },
 +            title = stringResByCurrencyNumber(total, quote.originAsset.tokenTicker, minDecimals = 0).withStyle(),
 +            subtitle = quoteFiatAmount(totalUsd, quote.amountInUsd.signum() > 0).withStyle()
-@@ -145,2 +159,2 @@ internal class SwapQuoteVMMapper {
+@@ -145,2 +191,2 @@ internal class SwapQuoteVMMapper {
 -            amount = stringResByDynamicNumber(quote.amountInFormatted),
 -            fiatAmount = stringResByDynamicCurrencyNumber(quote.amountInUsd, FiatCurrency.USD.symbol),
 +            amount = stringResByNumber(quote.amountInFormatted, minDecimals = 0),
 +            fiatAmount = quoteFiatAmount(quote.amountInUsd),
-@@ -156 +170 @@ internal class SwapQuoteVMMapper {
+@@ -156 +202 @@ internal class SwapQuoteVMMapper {
 -                stringResByDynamicNumber(
 +                stringResByNumber(
-@@ -157,0 +172 @@ internal class SwapQuoteVMMapper {
+@@ -157,0 +204 @@ internal class SwapQuoteVMMapper {
 +                    minDecimals = 0,
-@@ -159 +174 @@ internal class SwapQuoteVMMapper {
+@@ -159 +206 @@ internal class SwapQuoteVMMapper {
 -            fiatAmount = stringResByDynamicCurrencyNumber(quote.amountOutUsd, FiatCurrency.USD.symbol),
 +            fiatAmount = quoteFiatAmount(quote.amountOutUsd),
-@@ -161 +176,2 @@ internal class SwapQuoteVMMapper {
+@@ -161 +208,24 @@ internal class SwapQuoteVMMapper {
 -            chain = quote.destinationAsset.chainName
 +            chain = quote.destinationAsset.chainName,
 +            valueDifference = createValueDifference(),
-@@ -162,0 +179,27 @@ internal class SwapQuoteVMMapper {
++        )
 +
 +    private fun SwapQuoteInternalState.createValueDifference(): QuoteValueDifferenceState? {
 +        val percentage = quoteValueDifference(
@@ -15361,22 +15766,27 @@ index 717411935..3b15d6ef4 100644
 +            explanation = stringRes(scope),
 +            isNegative = rounded.signum() < 0,
 +            validUntilMillis = minOf(quote.timestamp + 3.minutes, quote.deadline).toEpochMilliseconds(),
-+        )
+@@ -162,0 +233,5 @@ internal class SwapQuoteVMMapper {
 +    }
 +
 +    private fun quoteFiatAmount(usd: BigDecimal, available: Boolean = usd.signum() > 0): StringResource =
 +        if (available) stringResByDynamicCurrencyNumber(usd, FiatCurrency.USD.symbol)
 +        else stringRes(R.string.private_quote_estimate_unavailable)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
-index 1fa0df8d6..11d189a4b 100644
+index 1fa0df8d6..b6c1f15b9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
-@@ -243,0 +244,4 @@ fun SwapQuoteInfo(
+@@ -184,0 +185,4 @@ private fun Success(
++            state.priceCheck?.let {
++                Spacer(8.dp)
++                PriceCheckNotice(it)
++            }
+@@ -243,0 +248,4 @@ fun SwapQuoteInfo(
 +    if (item.layout == SwapQuoteInfoLayout.STACKED) {
 +        StackedSwapQuoteInfo(item, descriptionStyle, descriptionFontWeight, descriptionColor)
 +        return
 +    }
-@@ -277,0 +282,40 @@ fun SwapQuoteInfo(
+@@ -277,0 +286,40 @@ fun SwapQuoteInfo(
 +@Suppress("MagicNumber")
 +@Composable
 +private fun StackedSwapQuoteInfo(
@@ -15417,10 +15827,10 @@ index 1fa0df8d6..11d189a4b 100644
 +    }
 +}
 +
-@@ -307 +351 @@ private fun SuccessPreview() =
+@@ -307 +355 @@ private fun SuccessPreview() =
 -                                title = stringRes("Zodl").withStyle(),
 +                                title = stringRes("ZEC Private").withStyle(),
-@@ -316 +360 @@ private fun SuccessPreview() =
+@@ -316 +364 @@ private fun SuccessPreview() =
 -                                description = stringRes("ZEC transaction fee"),
 +                                description = stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
@@ -20672,6 +21082,23 @@ index 000000000..84b214fa3
 +    <string name="private_explorer_deposit">%1$s transaction</string>
 +    <string name="private_explorer_destination">%1$s payment</string>
 +</resources>
+diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml
+new file mode 100644
+index 000000000..6bb4e0cf3
+--- /dev/null
++++ b/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml
+@@ -0,0 +1,11 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="private_price_checking">Checking market price…</string>
++    <string name="private_price_unavailable">Price check unavailable</string>
++    <string name="private_price_unavailable_details">A fresh independent price is unavailable for this pair. Review the quoted amounts.</string>
++    <string name="private_price_check_details">Kraken spot reference, not an executable swap. Includes quoted costs and any known Zcash network fee; external sending fees may be extra.</string>
++    <string name="private_price_difference">Market difference: %1$s%%</string>
++    <string name="private_price_poor">%1$s%% below market reference</string>
++    <string name="private_swap_anyway">Swap anyway</string>
++    <string name="private_pay_anyway">Pay anyway</string>
++</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_quote_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_quote_strings.xml
 new file mode 100644
 index 000000000..151a03a40
@@ -21138,6 +21565,139 @@ index 3f54429cb..4c5470daa 100644
 -}
 +}
 \ No newline at end of file
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/IndependentPricePolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/IndependentPricePolicyTest.kt
+new file mode 100644
+index 000000000..643aa1b3c
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/IndependentPricePolicyTest.kt
+@@ -0,0 +1,127 @@
++package co.electriccoin.zcash.ui.common.model
++
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.verify
++import java.math.BigDecimal
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertNull
++import kotlin.test.assertTrue
++import kotlin.time.Instant
++
++class IndependentPricePolicyTest {
++    private val now = 1_800_000_000_000L
++    private fun asset(symbol: String, assetDecimals: Int) = mockk<SwapAsset> {
++        every { assetId } returns "nep141:$symbol.omft.near"
++        every { tokenTicker } returns symbol.uppercase()
++        every { chainTicker } returns symbol
++        every { decimals } returns assetDecimals
++    }
++    private val zec = asset("zec", 8)
++    private val btc = asset("btc", 8)
++    private fun quote() = mockk<SwapQuote> {
++        every { originAsset } returns zec
++        every { destinationAsset } returns btc
++        every { amountInFormatted } returns BigDecimal("100")
++        every { amountOutFormatted } returns BigDecimal("0.085")
++        every { timestamp } returns Instant.fromEpochMilliseconds(now)
++        every { deadline } returns Instant.fromEpochMilliseconds(now + 90_000)
++    }
++    private fun observations() = mapOf(
++        "ZECUSD" to MarketObservation("ZECUSD", BigDecimal("100"), BigDecimal("101"), now, now),
++        "XBTUSD" to MarketObservation("XBTUSD", BigDecimal("99000"), BigDecimal("100000"), now, now)
++    )
++
++    @Test
++    fun exactNativeIdentityRequired() {
++        assertEquals("ZECUSD", IndependentPricePolicy.market(zec))
++        assertEquals("XBTUSD", IndependentPricePolicy.market(btc))
++        assertEquals("ETHUSD", IndependentPricePolicy.market(asset("eth", 18)))
++        assertEquals("SOLUSD", IndependentPricePolicy.market(asset("sol", 9)))
++        every { zec.assetId } returns "nep141:wrapped-zec.near"
++        assertNull(IndependentPricePolicy.market(zec))
++        assertNull(IndependentPricePolicy.market(asset("eth", 8)))
++        every { btc.chainTicker } returns "eth"
++        assertNull(IndependentPricePolicy.market(btc))
++        every { zec.assetId } returns "unknown"
++        assertEquals(
++            IndependentPriceCheck.Unavailable,
++            IndependentPricePolicy.compare(quote(), BigDecimal.ZERO, observations(), now)
++        )
++    }
++
++    @Test
++    fun conservativeComparisonIncludesKnownOutgoingFee() {
++        val result =
++            IndependentPricePolicy.compare(quote(), BigDecimal.ZERO, observations(), now)
++                as IndependentPriceCheck.Compared
++        assertEquals(0, result.differencePercent.compareTo(BigDecimal("-15")))
++        assertTrue(result.poor)
++        assertEquals(now + 60_000, result.validUntilMillis)
++        val feeResult =
++            IndependentPricePolicy.compare(quote(), BigDecimal.ONE, observations(), now)
++                as IndependentPriceCheck.Compared
++        assertTrue(feeResult.differencePercent < result.differencePercent)
++        assertFalse(IndependentPriceCheck.Compared(BigDecimal("-14.999"), now).poor)
++    }
++
++    @Test
++    fun exactOutputAllowanceIsAlreadyIncludedInFormattedInput() {
++        val quote = quote()
++        every { quote.inputAllowance } returns BigDecimal("10")
++        val result = IndependentPricePolicy.compare(quote, BigDecimal.ZERO, observations(), now)
++            as IndependentPriceCheck.Compared
++        assertEquals(0, result.differencePercent.compareTo(BigDecimal("-15")))
++        verify(exactly = 0) { quote.inputAllowance }
++    }
++
++    @Test
++    fun incomingZecFeeIsIgnored() {
++        val quote = quote()
++        every { quote.originAsset } returns btc
++        every { quote.destinationAsset } returns zec
++        every { quote.amountInFormatted } returns BigDecimal("0.1")
++        every { quote.amountOutFormatted } returns BigDecimal("100")
++        val withoutFee = IndependentPricePolicy.compare(quote, BigDecimal.ZERO, observations(), now)
++        val withFee = IndependentPricePolicy.compare(quote, BigDecimal("999"), observations(), now)
++        assertEquals(withoutFee, withFee)
++        assertTrue(withFee is IndependentPriceCheck.Compared)
++    }
++
++    @Test
++    fun staleFutureWideAndUnsynchronizedBooksUnavailable() {
++        val books = observations()
++        val input = books.getValue("ZECUSD")
++        listOf(
++            input.copy(observedAtMillis = now - 120_000),
++            input.copy(receivedAtMillis = now - 60_000),
++            input.copy(observedAtMillis = now + 5_001),
++            input.copy(observedAtMillis = now - 30_001),
++            input.copy(ask = BigDecimal("103")),
++            input.copy(bid = BigDecimal.ZERO)
++        ).forEach { invalid ->
++            assertEquals(
++                IndependentPriceCheck.Unavailable,
++                IndependentPricePolicy.compare(quote(), BigDecimal.ZERO, books + ("ZECUSD" to invalid), now)
++            )
++        }
++    }
++
++    @Test
++    fun quoteExpiryAndNonpositiveAmountsUnavailable() {
++        val quote = quote()
++        every { quote.deadline } returns Instant.fromEpochMilliseconds(now)
++        assertEquals(
++            IndependentPriceCheck.Unavailable,
++            IndependentPricePolicy.compare(quote, BigDecimal.ZERO, observations(), now)
++        )
++        every { quote.deadline } returns Instant.fromEpochMilliseconds(now + 60_000)
++        every { quote.amountOutFormatted } returns BigDecimal.ZERO
++        assertEquals(
++            IndependentPriceCheck.Unavailable,
++            IndependentPricePolicy.compare(quote, BigDecimal.ZERO, observations(), now)
++        )
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicyTest.kt
 new file mode 100644
 index 000000000..3650f1216
@@ -21883,6 +22443,143 @@ index 000000000..2a71971b1
 +        } finally {
 +            unmockkObject(OkHttp)
 +        }
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt
+new file mode 100644
+index 000000000..2662daa63
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt
+@@ -0,0 +1,131 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
++import co.electriccoin.zcash.ui.common.model.SwapAsset
++import co.electriccoin.zcash.ui.common.model.SwapQuote
++import io.ktor.client.HttpClient
++import io.ktor.client.engine.mock.MockEngine
++import io.ktor.client.engine.mock.respond
++import io.ktor.http.HttpStatusCode
++import io.mockk.coEvery
++import io.mockk.coVerify
++import io.mockk.every
++import io.mockk.mockk
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.test.runTest
++import java.math.BigDecimal
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFails
++import kotlin.test.assertTrue
++import kotlin.time.Instant
++
++class KrakenPriceProviderTest {
++    private fun supportedQuote(): SwapQuote {
++        val asset = mockk<SwapAsset> {
++            every { assetId } returns "nep141:zec.omft.near"
++            every { tokenTicker } returns "ZEC"
++            every { chainTicker } returns "zec"
++            every { decimals } returns 8
++        }
++        return mockk {
++            every { originAsset } returns asset
++            every { destinationAsset } returns asset
++            every { amountInFormatted } returns BigDecimal.ONE
++            every { amountOutFormatted } returns BigDecimal.ONE
++            every { timestamp } returns Instant.fromEpochMilliseconds(System.currentTimeMillis())
++            every { deadline } returns Instant.fromEpochMilliseconds(System.currentTimeMillis() + 180_000)
++        }
++    }
++
++    @Test
++    fun successfulObservationIsReusedWithoutSecondHttpRequest() = runTest {
++        var calls = 0
++        val client = HttpClient(MockEngine { request ->
++            calls++
++            assertEquals("api.kraken.com", request.url.host)
++            assertEquals("ZECUSD", request.url.parameters["pair"])
++            val seconds = System.currentTimeMillis() / 1000
++            respond(
++                """{"error":[],"result":{"XZECZUSD":[[$seconds,"100","101"]],"last":$seconds}}""",
++                HttpStatusCode.OK
++            )
++        })
++        val clients = mockk<HttpClientProvider>()
++        coEvery { clients.createTor() } returns client
++        val provider = KrakenPriceProvider(clients)
++        repeat(2) {
++            assertTrue(provider.check(supportedQuote(), BigDecimal.ZERO) is IndependentPriceCheck.Compared)
++        }
++        assertEquals(1, calls)
++        coVerify(exactly = 1) { clients.createTor() }
++        coVerify(exactly = 0) { clients.create() }
++    }
++
++    @Test
++    fun malformedResponseTriggersBackoffWithoutSecondHttpRequest() = runTest {
++        var calls = 0
++        val client = HttpClient(MockEngine {
++            calls++
++            respond("""{"error":[],"result":{"unexpected":[]}}""", HttpStatusCode.OK)
++        })
++        val clients = mockk<HttpClientProvider>()
++        coEvery { clients.createTor() } returns client
++        val provider = KrakenPriceProvider(clients)
++        repeat(2) {
++            assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
++        }
++        assertEquals(1, calls)
++        coVerify(exactly = 1) { clients.createTor() }
++        coVerify(exactly = 0) { clients.create() }
++    }
++
++    @Test
++    fun transportFailureBacksOffAndNeverCreatesDirectClient() = runTest {
++        val clients = mockk<HttpClientProvider>()
++        coEvery { clients.createTor() } throws IllegalStateException("unavailable")
++        val provider = KrakenPriceProvider(clients)
++        repeat(2) {
++            assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
++        }
++        coVerify(exactly = 1) { clients.createTor() }
++        coVerify(exactly = 0) { clients.create() }
++    }
++
++    @Test
++    fun parentCancellationPropagates() = runTest {
++        val clients = mockk<HttpClientProvider>()
++        coEvery { clients.createTor() } throws CancellationException("cancelled")
++        var cancelled = false
++        try {
++            KrakenPriceProvider(clients).check(supportedQuote(), BigDecimal.ZERO)
++        } catch (_: CancellationException) {
++            cancelled = true
++        }
++        assertEquals(true, cancelled)
++        coVerify(exactly = 0) { clients.create() }
++    }
++
++    @Test
++    fun timestampComesFromNewestObservationAndNotCursor() {
++        val body = """{"error":[],"result":{"XZECZUSD": [
++            [100,"20","20.1"],[101,"21","21.1"],[101,"22","22.1"]],"last":999}}
++        """.trimIndent()
++        val result = parseKrakenObservation("ZECUSD", body, 102_000)
++        assertEquals(101_000L, result.observedAtMillis)
++        assertEquals(102_000L, result.receivedAtMillis)
++        assertEquals(BigDecimal("22"), result.bid)
++    }
++
++    @Test
++    fun rejectsErrorsUnexpectedMarketsEmptyAndInvalidPrices() {
++        listOf(
++            """{"error":["rate limited"],"result":{}}""",
++            """{"error":[],"result":{"XXBTZUSD":[[100,"20","21"]],"last":100}}""",
++            """{"error":[],"result":{"XZECZUSD":[],"last":100}}""",
++            """{"error":[],"result":{"XZECZUSD":[[100,"0","21"]],"last":100}}""",
++            """{"error":[],"result":{"XZECZUSD":[[100,"22","21"]],"last":100}}""",
++            " ".repeat(65_537)
++        ).forEach { body -> assertFails { parseKrakenObservation("ZECUSD", body, 100_000) } }
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt
@@ -25581,22 +26278,27 @@ index 38427672d..7256c0e4f 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
-index 3027e6cda..60dbff0cc 100644
+index 3027e6cda..e12dc3adf 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
 @@ -7,0 +8 @@ import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.datasource.QuoteLowAmountException
-@@ -21,0 +23,2 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
+@@ -21,0 +23,7 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
 +import co.electriccoin.zcash.ui.design.util.getString
++import io.mockk.coVerify
++import kotlinx.coroutines.CompletableDeferred
++import io.mockk.coEvery
++import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
++import co.electriccoin.zcash.ui.common.provider.IndependentPriceProvider
 +import io.mockk.verify
-@@ -36,0 +40 @@ import org.robolectric.RobolectricTestRunner
+@@ -36,0 +45 @@ import org.robolectric.RobolectricTestRunner
 +import org.robolectric.RuntimeEnvironment
-@@ -37,0 +42,2 @@ import org.robolectric.annotation.Config
+@@ -37,0 +47,2 @@ import org.robolectric.annotation.Config
 +import java.math.BigDecimal
 +import java.util.Locale
-@@ -42,0 +49 @@ import kotlin.test.assertNotNull
+@@ -42,0 +54 @@ import kotlin.test.assertNotNull
 +import kotlin.test.assertTrue
-@@ -96,0 +104,35 @@ class SwapQuoteVMTest {
+@@ -96,0 +109,89 @@ class SwapQuoteVMTest {
 +    @Test
 +    fun sheetDismissalCallbacksOnlyCancelOnce() =
 +        runTest {
@@ -25632,25 +26334,89 @@ index 3027e6cda..60dbff0cc 100644
 +            assertTrue(subtitle.contains("0.12283949 zec"), subtitle)
 +        }
 +
-@@ -105 +147,7 @@ class SwapQuoteVMTest {
++    @Test
++    fun checkingBlocksContinuationThenPoorQuoteUsesExplicitAction() = runTest {
++        val decision = CompletableDeferred<IndependentPriceCheck>()
++        val prices = mockk<IndependentPriceProvider> { coEvery { check(any(), any()) } coAnswers { decision.await() } }
++        val submit = mockk<SubmitProposalUseCase>(relaxed = true)
++        val vm = vm(zashi(), prices = prices, submit = submit)
++        collect(vm)
++        val checking = vm.state.value as SwapQuoteState.Success
++        assertTrue(!checking.primaryButton.isEnabled)
++        decision.complete(IndependentPriceCheck.Compared(BigDecimal("-20"), System.currentTimeMillis() + 60_000))
++        val poor = vm.state.value as SwapQuoteState.Success
++        assertTrue(poor.priceCheck?.isWarning == true)
++        assertEquals("Swap anyway", poor.primaryButton.text.getString(RuntimeEnvironment.getApplication(), Locale.US))
++        checking.primaryButton.onClick()
++        coVerify(exactly = 0) { submit() }
++        poor.primaryButton.onClick()
++        coVerify(exactly = 1) { submit() }
++    }
++
++    @Test
++    fun callbacksFromReplacedQuoteCannotProceed() = runTest {
++        val quotes = MutableStateFlow<SwapQuoteData?>(SwapQuoteData.Success(FakeSwapQuote(
++            destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT,
++        )))
++        val submit = mockk<SubmitProposalUseCase>(relaxed = true)
++        val vm = vm(zashi(), quotes = quotes, submit = submit)
++        collect(vm)
++        val old = vm.state.value as SwapQuoteState.Success
++        quotes.value = SwapQuoteData.Success(
++            FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
++        )
++        old.primaryButton.onClick()
++        coVerify(exactly = 0) { submit() }
++        (vm.state.value as SwapQuoteState.Success).primaryButton.onClick()
++        coVerify(exactly = 1) { submit() }
++    }
++
++    @Test
++    fun expiredReferenceBecomesUnavailableAndKeepsQuoteAvailable() = runTest {
++        val prices = mockk<IndependentPriceProvider> {
++            coEvery { check(any(), any()) } returns
++                IndependentPriceCheck.Compared(BigDecimal("-20"), System.currentTimeMillis() - 1)
++        }
++        val vm = vm(zashi(), prices = prices)
++        collect(vm)
++        val state = vm.state.value as SwapQuoteState.Success
++        assertTrue(state.primaryButton.isEnabled)
++        assertTrue(state.priceCheck?.isWarning == false)
++        assertEquals(
++            "Price check unavailable",
++            state.priceCheck!!.label.getString(RuntimeEnvironment.getApplication(), Locale.US),
++        )
++    }
++
+@@ -105 +206,12 @@ class SwapQuoteVMTest {
 -    private fun vm(account: WalletAccount) =
 +    private fun vm(
 +        account: WalletAccount,
 +        cancelQuote: CancelSwapQuoteUseCase = mockk(relaxed = true),
++        prices: IndependentPriceProvider = mockk {
++            coEvery { check(any(), any()) } returns IndependentPriceCheck.Unavailable
++        },
++        submit: SubmitProposalUseCase = mockk(relaxed = true),
++        quotes: MutableStateFlow<SwapQuoteData?>? = null,
 +        quoteData: SwapQuoteData = SwapQuoteData.Success(
 +            quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
 +        ),
 +    ) =
-@@ -122,5 +170 @@ class SwapQuoteVMTest {
+@@ -122,5 +234 @@ class SwapQuoteVMTest {
 -                        MutableStateFlow(
 -                            SwapQuoteData.Success(
 -                                quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
 -                            )
 -                        )
-+                        MutableStateFlow(quoteData)
-@@ -128 +172 @@ class SwapQuoteVMTest {
++                        (quotes ?: MutableStateFlow(quoteData))
+@@ -128 +236 @@ class SwapQuoteVMTest {
 -            cancelSwapQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true),
 +            cancelSwapQuote = cancelQuote,
+@@ -131 +239 @@ class SwapQuoteVMTest {
+-            submitProposal = mockk<SubmitProposalUseCase>(relaxed = true),
++            submitProposal = submit,
+@@ -132,0 +241 @@ class SwapQuoteVMTest {
++            independentPrices = prices,
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt
 new file mode 100644
 index 000000000..83383e97a
