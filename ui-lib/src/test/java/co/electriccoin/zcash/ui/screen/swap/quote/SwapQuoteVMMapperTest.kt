@@ -1,7 +1,6 @@
 package co.electriccoin.zcash.ui.screen.swap.quote
 
 import android.app.Application
-import co.electriccoin.zcash.ui.R
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
