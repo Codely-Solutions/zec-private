@@ -1,6 +1,6 @@
 <resources>
     <string name="private_recipient_invalid">Enter a valid %1$s address.</string>
-    <string name="private_recipient_network">Choose a %1$s recipient or change the asset.</string>
+    <string name="private_recipient_network">Choose a recipient on %1$s or change the asset.</string>
     <string name="private_recipient_asset">This payment request is for a different asset.</string>
     <string name="private_recipient_amount">Use an address without a requested payment amount.</string>
     <string name="private_recipient_uri">Unsupported payment request. Check its network and required details.</string>

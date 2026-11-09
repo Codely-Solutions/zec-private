@@ -20684,13 +20684,13 @@ index 813f56457..972dcc8f8 100644
 +    <string translatable="false" name="accounts_zashi">ZEC Private</string>
 diff --git a/ui-lib/src/main/res/ui/swap/values/recipient_strings.xml b/ui-lib/src/main/res/ui/swap/values/recipient_strings.xml
 new file mode 100644
-index 000000000..ad37d7293
+index 000000000..18b16fe28
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/swap/values/recipient_strings.xml
 @@ -0,0 +1,9 @@
 +<resources>
 +    <string name="private_recipient_invalid">Enter a valid %1$s address.</string>
-+    <string name="private_recipient_network">Choose a %1$s recipient or change the asset.</string>
++    <string name="private_recipient_network">Choose a recipient on %1$s or change the asset.</string>
 +    <string name="private_recipient_asset">This payment request is for a different asset.</string>
 +    <string name="private_recipient_amount">Use an address without a requested payment amount.</string>
 +    <string name="private_recipient_uri">Unsupported payment request. Check its network and required details.</string>
@@ -24442,7 +24442,7 @@ index 23393674d..6c082a48b 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
-index bf5467055..f4b2b5f08 100644
+index bf5467055..8fb6f6394 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
 @@ -30,0 +31 @@ import io.mockk.verify
@@ -24602,11 +24602,13 @@ index bf5467055..f4b2b5f08 100644
 @@ -520 +586 @@ class SwapVMTest {
 -    fun assetPickerIsFilteredBySelectedContactChain() =
 +    fun assetPickerRemainsEditableAfterSelectingContact() =
-@@ -533 +599,2 @@ class SwapVMTest {
+@@ -525,0 +592 @@ class SwapVMTest {
++                    preselect = eth,
+@@ -533 +600,2 @@ class SwapVMTest {
 -            coVerify { harness.navigateToSwapAssetPicker(onlyChainTicker = "eth") }
 +            coVerify { harness.navigateToSwapAssetPicker() }
-+            coVerify { harness.navigateToSelectSwapRecipient(network = "btc") }
-@@ -552,0 +620,86 @@ class SwapVMTest {
++            coVerify { harness.navigateToSelectSwapRecipient(network = "eth") }
+@@ -552,0 +621,86 @@ class SwapVMTest {
 +    @Test
 +    fun tokenNetworkChangeRetainsContactAndCorrectionQuotesWithoutLeavingForm() =
 +        runTest {
@@ -24693,20 +24695,20 @@ index bf5467055..f4b2b5f08 100644
 +            assertEquals(false, harness.capturedState.isRequestingQuote)
 +        }
 +
-@@ -558 +711,4 @@ class SwapVMTest {
+@@ -558 +712,4 @@ class SwapVMTest {
 -        mockk(relaxed = true) { every { blockchain } returns SwapAssetTestFixture.blockchain(chainTicker) }
 +        mockk(relaxed = true) {
 +            every { blockchain } returns SwapAssetTestFixture.blockchain(chainTicker)
 +            every { address } returns if (chainTicker == "btc") BTC_ADDRESS else ETH_ADDRESS
 +        }
-@@ -580 +736 @@ class SwapVMTest {
+@@ -580 +737 @@ class SwapVMTest {
 -            mockk<NavigateToSelectABSwapRecipientUseCase> { coEvery { this@mockk.invoke() } returns recipient }
 +            mockk<NavigateToSelectABSwapRecipientUseCase> { coEvery { this@mockk.invoke(any()) } returns recipient }
-@@ -615,0 +772 @@ class SwapVMTest {
+@@ -615,0 +773 @@ class SwapVMTest {
 +                navigateToSelectSwapRecipient = navigateToSelectSwapRecipient,
-@@ -666,0 +824 @@ class SwapVMTest {
+@@ -666,0 +825 @@ class SwapVMTest {
 +        val navigateToSelectSwapRecipient: NavigateToSelectABSwapRecipientUseCase,
-@@ -693 +851 @@ class SwapVMTest {
+@@ -693 +852 @@ class SwapVMTest {
 -                requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any())
 +                requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVMTest.kt
