@@ -46,6 +46,18 @@ class SelectSwapABRecipientVMTest {
     }
 
     @Test
+    fun scannedPaymentRequestKeepsRequiredFieldsForValidation() = runTest {
+        val raw = "zcash:decoded-address?memo=public-test-memo"
+        coEvery { scan() } returns ScanResult("decoded-address", null, rawInput = raw)
+        val vm = viewModel()
+
+        vm.state.value.scanButton.onClick()
+        runCurrent()
+
+        verify { navigation.replace(AddSwapABContactArgs(address = raw, network = "btc")) }
+    }
+
+    @Test
     fun manualEntryPushesContactFormAndPreservesPicker() {
         val vm = viewModel()
 

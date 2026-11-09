@@ -324,28 +324,43 @@ internal class PayVM(
      * update so the displayed fiat value always reflects the current asset's USD price — without an
      * observer feeding back into this same flow.
      */
-    private fun InternalStateImpl.withAsset(asset: SwapAsset?): InternalStateImpl =
-        if (amount.amount == null && fiatAmount.amount != null && asset?.usdPrice != null) {
+    private fun InternalStateImpl.withAsset(asset: SwapAsset?): InternalStateImpl {
+        val recipient =
+            if (asset?.assetId != this.asset?.assetId) {
+                validateSwapRecipient(
+                    selectedABContact?.address ?: address,
+                    asset?.chainTicker,
+                    asset?.tokenTicker,
+                    selectedABContact?.blockchain?.chainTicker
+                )
+            } else {
+                null
+            }
+        val requestedAmount = recipient?.input?.amount.takeIf { recipient?.isValid == true }
+        val amountState = requestedAmount?.let { NumberTextFieldInnerState.fromAmount(it) } ?: amount
+        return if (amountState.amount == null && fiatAmount.amount != null && asset?.usdPrice != null) {
             copy(
                 asset = asset,
                 amount =
                     exactOutputVMMapper.createAmountInnerState(
                         fiatInnerState = fiatAmount,
-                        amountInnerState = amount,
+                        amountInnerState = amountState,
                         asset = asset
                     )
             )
         } else {
             copy(
                 asset = asset,
+                amount = amountState,
                 fiatAmount =
                     exactOutputVMMapper.createFiatAmountInnerState(
-                        amountInnerState = amount,
+                        amountInnerState = amountState,
                         fiatInnerState = fiatAmount,
                         asset = asset
                     )
             )
         }
+    }
 }
 
 internal interface InternalState {

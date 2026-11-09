@@ -22,11 +22,19 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapRefundWarningUseCas
 import co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.ScanResult
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
+import co.electriccoin.zcash.ui.design.component.AssetCardState
+import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.component.IconButtonState
+import co.electriccoin.zcash.ui.design.component.NumberTextFieldState
+import co.electriccoin.zcash.ui.design.component.TextFieldState
+import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.styledStringResource
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import io.mockk.withInstanceFactory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -155,6 +163,64 @@ class PayVMTest {
             assertEquals(typedAmount, harness.capturedState.amount)
             assertEquals(typedFiat, harness.capturedState.fiatAmount)
             assertEquals(refreshedAsset, harness.capturedState.asset)
+        }
+
+    @Test
+    fun paymentUriAmountAppliesWhenAssetIsCorrected() =
+        runTest {
+            val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth", decimals = 18)
+            val harness = harness(assetResult = eth)
+            harness.collectState(this)
+            harness.onTextFieldChange(
+                NumberTextFieldInnerState.fromAmount(BigDecimal("0.5")),
+                NumberTextFieldInnerState()
+            )
+            harness.onAddressChange("ethereum:$ETH_ADDRESS@1?value=1e18")
+            assertEquals(BigDecimal("0.5"), harness.capturedState.amount.amount)
+
+            harness.onSwapAssetPickerClick()
+
+            assertEquals(eth, harness.capturedState.asset)
+            assertEquals(0, BigDecimal.ONE.compareTo(harness.capturedState.amount.amount))
+            assertEquals("ethereum:$ETH_ADDRESS@1?value=1e18", harness.capturedState.address)
+        }
+
+    @Test
+    fun priceRefreshDoesNotOverwriteEditedPaymentAmount() =
+        runTest {
+            val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth", decimals = 18)
+            val harness = harness(preselect = eth, assets = SwapAssetTestFixture.assetsData(data = listOf(eth)))
+            harness.collectState(this)
+            harness.onAddressChange("ethereum:$ETH_ADDRESS@1?value=1e18")
+            val editedAmount = NumberTextFieldInnerState.fromAmount(BigDecimal("2"))
+            harness.onTextFieldChange(editedAmount, NumberTextFieldInnerState())
+            val refreshedEth = SwapAssetTestFixture.asset(
+                tokenTicker = "eth",
+                chainTicker = "eth",
+                decimals = 18,
+                usdPrice = BigDecimal("2000")
+            )
+
+            harness.repositoryAssets.value = SwapAssetTestFixture.assetsData(data = listOf(refreshedEth))
+
+            assertEquals(refreshedEth, harness.capturedState.asset)
+            assertEquals(editedAmount, harness.capturedState.amount)
+            assertEquals("ethereum:$ETH_ADDRESS@1?value=1e18", harness.capturedState.address)
+        }
+
+    @Test
+    fun paymentUriAmountAppliesWhenFirstCompatibleAssetIsSelected() =
+        runTest {
+            val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth", decimals = 18)
+            val harness = harness(preselect = null, assetResult = eth)
+            harness.collectState(this)
+            harness.onAddressChange("ethereum:$ETH_ADDRESS@1?value=1e18")
+            assertNull(harness.capturedState.asset)
+
+            harness.onSwapAssetPickerClick()
+
+            assertEquals(eth, harness.capturedState.asset)
+            assertEquals(0, BigDecimal.ONE.compareTo(harness.capturedState.amount.amount))
         }
 
     @Test
@@ -561,18 +627,40 @@ class PayVMTest {
         // The VM exposes its callbacks only through ExactOutputVMMapper.createState; capture the
         // callbacks object and pull each handler out by name, so adding/reordering a callback can't
         // silently misroute the others.
-        every { mapper.createState(any(), any()) } answers {
-            val callbacks = arg<ExactOutputStateCallbacks>(1)
-            harness.capturedState = firstArg()
-            harness.onBack = callbacks.onBack
-            harness.onSwapAssetPickerClick = callbacks.onSwapAssetPickerClick
-            harness.onSlippageClick = callbacks.onSlippageClick
-            harness.onRequestSwapQuoteClick = callbacks.onRequestSwapQuoteClick
-            harness.onAddressChange = callbacks.onAddressChange
-            harness.onTextFieldChange = callbacks.onTextFieldChange
-            harness.onQrCodeScannerClick = callbacks.onQrCodeScannerClick
-            harness.onAddressBookClick = callbacks.onAddressBookClick
-            mockk()
+        val renderedState = PayState(
+            info = IconButtonState(0) {},
+            address = TextFieldState(stringRes("")) {},
+            addressPlaceholder = stringRes(""),
+            asset = AssetCardState.Data(
+                token = stringRes(""), bigIcon = null, smallIcon = null, isEnabled = true, onClick = {}
+            ),
+            abButton = IconButtonState(0) {},
+            qrButton = IconButtonState(0) {},
+            amount = NumberTextFieldState {},
+            amountFiat = NumberTextFieldState {},
+            zecAmount = styledStringResource(""),
+            slippage = ButtonState(stringRes("")),
+            infoFooter = null,
+            errorFooter = null,
+            primaryButton = null,
+            isABHintVisible = false,
+            onBack = {}
+        )
+        // Avoid instrumenting immutable UI values while MockK records the mapper return type.
+        withInstanceFactory({ renderedState }) {
+            every { mapper.createState(any(), any()) } answers {
+                val callbacks = arg<ExactOutputStateCallbacks>(1)
+                harness.capturedState = firstArg()
+                harness.onBack = callbacks.onBack
+                harness.onSwapAssetPickerClick = callbacks.onSwapAssetPickerClick
+                harness.onSlippageClick = callbacks.onSlippageClick
+                harness.onRequestSwapQuoteClick = callbacks.onRequestSwapQuoteClick
+                harness.onAddressChange = callbacks.onAddressChange
+                harness.onTextFieldChange = callbacks.onTextFieldChange
+                harness.onQrCodeScannerClick = callbacks.onQrCodeScannerClick
+                harness.onAddressBookClick = callbacks.onAddressBookClick
+                renderedState
+            }
         }
 
         harness.vm =
