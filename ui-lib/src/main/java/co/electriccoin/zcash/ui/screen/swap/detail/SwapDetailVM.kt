@@ -103,14 +103,14 @@ class SwapDetailVM(
                         co.electriccoin.zcash.ui.screen.transactiondetail.explorerLinks(
                             chain = status.originAsset.blockchain.chainTicker,
                             ids = status.originTransactionIds,
-                            label = stringRes(R.string.private_explorer_deposit),
+                            label = stringRes(R.string.private_explorer_deposit, status.originAsset.chainName),
                             testnet = testnet,
                             router = navigationRouter,
                             copy = copyToClipboard::invoke
                         ) + co.electriccoin.zcash.ui.screen.transactiondetail.explorerLinks(
                             chain = status.destinationAsset.blockchain.chainTicker,
                             ids = status.destinationTransactionIds,
-                            label = stringRes(R.string.private_explorer_destination),
+                            label = stringRes(R.string.private_explorer_destination, status.destinationAsset.chainName),
                             testnet = testnet,
                             router = navigationRouter,
                             copy = copyToClipboard::invoke

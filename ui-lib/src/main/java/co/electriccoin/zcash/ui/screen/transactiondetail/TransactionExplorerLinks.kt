@@ -58,10 +58,10 @@ fun TransactionExplorerLinks(links: List<TransactionExplorerLink>) {
                         }
                     }
                 } else {
-                    Text(
-                        text = stringResByTransactionId(link.transactionId, abbreviated = true).getValue(),
-                        modifier = Modifier.weight(1f),
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(link.label.getValue())
+                        Text(stringResByTransactionId(link.transactionId, abbreviated = true).getValue())
+                    }
                 }
                 IconButton(onClick = link.onCopy) {
                     Icon(painterResource(R.drawable.ic_transaction_detail_info_copy),
