@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector
@@ -21,7 +22,10 @@ class SaveABContactUseCase(
         chain: String?,
     ): ABContactSaveResult {
         if (GiftCardSecretDetector.mayContainGiftCardSecret(address)) return ABContactSaveResult.GiftCardLinkRefused
-        addressBookRepository.saveContact(name = name, address = address, chain = chain)
+        val recipient = chain?.let { validateSwapRecipient(address, it) }
+        if (recipient != null && !recipient.isValid) return ABContactSaveResult.InvalidAddress
+        val receivingAddress = recipient?.input?.address ?: address
+        addressBookRepository.saveContact(name = name, address = receivingAddress, chain = chain)
         navigationRouter.back()
         return ABContactSaveResult.Saved
     }
@@ -29,6 +33,8 @@ class SaveABContactUseCase(
 
 /** What [SaveABContactUseCase] or [UpdateABContactUseCase] did with a contact. */
 sealed interface ABContactSaveResult {
+    data object InvalidAddress : ABContactSaveResult
+
     /** The contact was saved, and the screen was left. */
     data object Saved : ABContactSaveResult
 

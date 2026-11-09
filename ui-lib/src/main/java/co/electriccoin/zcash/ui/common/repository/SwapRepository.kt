@@ -322,7 +322,11 @@ class SwapRepositoryImpl(
         slippage: BigDecimal
     ) {
         launchQuoteRequest { generation ->
-            val destinationAsset = assets.value.zecAsset ?: return@launchQuoteRequest
+            val destinationAsset = assets.value.zecAsset
+            if (destinationAsset == null) {
+                publishQuote(generation, SwapQuoteData.Error(FLEX_INPUT, SwapAssetsUnavailableException()))
+                return@launchQuoteRequest
+            }
             var receivedQuote: SwapQuote? = null
             try {
                 val result =
@@ -396,7 +400,11 @@ class SwapRepositoryImpl(
         slippage: BigDecimal
     ) {
         launchQuoteRequest { generation ->
-            val originAsset = assets.value.zecAsset ?: return@launchQuoteRequest
+            val originAsset = assets.value.zecAsset
+            if (originAsset == null) {
+                publishQuote(generation, SwapQuoteData.Error(mode, SwapAssetsUnavailableException()))
+                return@launchQuoteRequest
+            }
             var receivedQuote: SwapQuote? = null
             try {
                 val result =

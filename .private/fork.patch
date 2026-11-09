@@ -10088,6 +10088,14 @@ index 000000000..c15f95a55
 +            }
 +        }
 +    }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
+index 9c294ca9d..af5201d8c 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
+@@ -42,0 +43 @@ import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProviderImpl
++import co.electriccoin.zcash.ui.common.provider.QuoteRequestDiagnostics
+@@ -129,0 +131 @@ val providerModule =
++        single { QuoteRequestDiagnostics() }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/RepositoryModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/RepositoryModule.kt
 index 1c2a8787c..9a180202c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/RepositoryModule.kt
@@ -10415,6 +10423,356 @@ index befe3b652..3c6b6ef3a 100644
 @@ -119 +119 @@ class SwapSupportMapper {
 -                stringResByDynamicCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker)
 +                stringResByCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker, minDecimals = 0)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt
+new file mode 100644
+index 000000000..c5199a480
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt
+@@ -0,0 +1,344 @@
++package co.electriccoin.zcash.ui.common.model
++
++import java.math.BigDecimal
++import java.math.BigInteger
++import java.net.URI
++import java.net.URLDecoder
++import java.security.MessageDigest
++import java.util.Locale
++
++/**
++ * Local mainnet syntax/checksum checks. A valid result says nothing about account existence,
++ * ownership, exchange support or token acceptance. Raw EVM/Solana addresses do not identify a chain.
++ * Zcash unified/Sapling encodings additionally need SDK validation before use.
++ *
++ * Specifications: https://bips.dev/173/ and https://bips.dev/350/ (Wuille/Maxwell, BSD-2-Clause),
++ * https://bips.dev/21/, https://eips.ethereum.org/EIPS/eip-55,
++ * https://eips.ethereum.org/EIPS/eip-681,
++ * https://github.com/bitcoincashorg/bitcoincash.org/blob/master/spec/cashaddr.md,
++ * https://xrpl.org/docs/concepts/accounts/addresses,
++ * https://developers.tron.network/docs/account, https://solana.com/docs/core/accounts,
++ * https://nomicon.io/DataStructures/Account, https://docs.sui.io/concepts/sui-move-concepts/addresses.
++ * Algorithms below are independent implementations of these formats; no signing/key handling.
++ */
++// Protocol constants and validation branches follow the wire formats directly.
++@Suppress("TooManyFunctions")
++object RecipientAddressPolicy {
++    enum class Reason { INVALID_ADDRESS, UNSUPPORTED_NETWORK, UNSUPPORTED_URI, UNSUPPORTED_ROUTING }
++
++    sealed interface Validation {
++        data class Valid(val requiresZcashSdkValidation: Boolean = false) : Validation
++        data class Invalid(val reason: Reason) : Validation
++    }
++
++    data class RecipientInput(
++        val address: String,
++        val network: String? = null,
++        /** Native network ticker, or an explicit token contract for supported future URI formats. */
++        val asset: String? = null,
++        /** Decimal native-asset units, never base units. */
++        val amount: BigDecimal? = null,
++        val routing: Map<String, String> = emptyMap()
++    )
++
++    sealed interface ParseResult {
++        data class Parsed(val input: RecipientInput) : ParseResult
++        data class Invalid(val reason: Reason) : ParseResult
++    }
++
++    private val evmNetworks = setOf("arb", "avax", "base", "bsc", "eth", "pol")
++    private val chainIds = mapOf("1" to "eth", "56" to "bsc", "137" to "pol",
++        "8453" to "base", "42161" to "arb", "43114" to "avax")
++    private val uriNetworks = mapOf(
++        "bitcoin" to "btc", "litecoin" to "ltc", "bitcoincash" to "bch", "dash" to "dash", "zcash" to "zec"
++    )
++    private const val BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
++    private const val XRP58 = "rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz"
++    private const val BECH32 = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
++
++    fun validate(address: String, network: String): Validation {
++        if (address.isEmpty() || address.length > 512 || address.any { it.isWhitespace() || it.code < 33 }) {
++            return Validation.Invalid(Reason.INVALID_ADDRESS)
++        }
++        val valid = when (network) {
++            in evmNetworks -> evm(address)
++            "btc" -> checked58(address, listOf(byteArrayOf(0), byteArrayOf(5)), 20) || witness(address, "bc")
++            // M-prefixed P2SH is unambiguous. Legacy 3-prefixed Litecoin/BTC P2SH is shared.
++            "ltc" -> checked58(address, listOf(byteArrayOf(48), byteArrayOf(50), byteArrayOf(5)), 20) ||
++                witness(address, "ltc")
++            "dash" -> checked58(address, listOf(byteArrayOf(76), byteArrayOf(16)), 20)
++            "bch" -> cashAddress(address) || checked58(address, listOf(byteArrayOf(0), byteArrayOf(5)), 20)
++            "tron" -> checked58(address, listOf(byteArrayOf(65)), 20)
++            // Preserve an X-address intact: its tag is part of the checksummed payment destination.
++            "xrp" -> checked58(address, listOf(byteArrayOf(0)), 20, XRP58) || xAddress(address)
++            "sol" -> decode58(address)?.size == 32
++            "sui" -> address.matches(Regex("(?:0[xX])?[0-9a-fA-F]{1,64}"))
++            "near" -> address.length in 2..64 && address.matches(Regex("[a-z0-9]+(?:[._-][a-z0-9]+)*")) &&
++                !address.endsWith(".testnet")
++            "zec" -> zcash(address)
++            else -> return Validation.Invalid(Reason.UNSUPPORTED_NETWORK)
++        }
++        return if (valid) Validation.Valid(network == "zec" && !address.startsWith("t"))
++        else Validation.Invalid(Reason.INVALID_ADDRESS)
++    }
++
++    /** Canonical equivalent for a selected network; keep the original text in the editable form.
++     * Sui's SDK accepts short hex via normalizeSuiAddress. Provider requests use its full 32 bytes.
++     * https://github.com/MystenLabs/ts-sdks/blob/main/packages/sui/src/utils/sui-types.ts
++     */
++    fun normalize(address: String, network: String): String =
++        if (network == "sui" && address.matches(Regex("(?:0[xX])?[0-9a-fA-F]{1,64}"))) {
++            "0x" + address.removePrefix("0x").removePrefix("0X").lowercase(Locale.ROOT).padStart(64, '0')
++        } else address
++
++    /** Strict subset: simple BIP21-style/ZIP321 single-recipient native requests and EIP681 native transfers.
++     * Unknown parameters, token calls, memos and destination tags fail closed; nothing is stripped.
++     * Raw input remains byte-for-byte unchanged, including whitespace for subsequent validation.
++     */
++    fun parse(input: String): ParseResult {
++        if (input.length > 2048) return unsupported()
++        // A prefixed cashaddr is an address, not a payment URI.
++        if (input.startsWith("bitcoincash:", true) && !input.contains('?') && cashAddress(input)) {
++            return ParseResult.Parsed(RecipientInput(input, "bch", "bch"))
++        }
++        if (!input.contains(':')) return ParseResult.Parsed(RecipientInput(input))
++        return runCatching { parseUri(input) }.getOrElse { ParseResult.Invalid(Reason.UNSUPPORTED_URI) }
++    }
++
++    private fun parseUri(input: String): ParseResult {
++        val uri = URI(input)
++        if (uri.rawFragment != null || uri.rawSchemeSpecificPart.startsWith("//")) return unsupported()
++        val scheme = uri.scheme?.lowercase(Locale.ROOT) ?: return unsupported()
++        val body = uri.rawSchemeSpecificPart
++        val target = body.substringBefore('?')
++        val params = linkedMapOf<String, String>()
++        val query = body.substringAfter('?', "")
++        if (query.isNotEmpty()) {
++            for (part in query.split('&')) {
++                if (!part.contains('=')) return unsupported()
++                val key = decode(part.substringBefore('='))
++                val value = decode(part.substringAfter('='))
++                if (params.put(key, value) != null) return unsupported()
++            }
++        }
++        if (scheme == "ethereum") {
++            if (params.keys.any { it != "value" } || target.contains('/')) return unsupported()
++            val destination = target.removePrefix("pay-")
++            if (destination.count { it == '@' } > 1) return unsupported()
++            val explicitChain = destination.substringAfter('@', "")
++            // ERC681 defaults to the current chain when absent; retain this ambiguity for the selected network.
++            val network = if (explicitChain.isEmpty()) null else chainIds[explicitChain] ?: return unsupported()
++            if (network != null && network !in evmNetworks) return unsupported()
++            val address = destination.substringBefore('@')
++            if (!evm(address)) return ParseResult.Invalid(Reason.INVALID_ADDRESS)
++            val amount = params["value"]?.let {
++                if (!it.matches(Regex("[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")) || it.length > 100) {
++                    return unsupported()
++                }
++                val baseUnits = it.toBigDecimal()
++                if (baseUnits.scale() !in -78..78 ||
++                    baseUnits.scale() > 0 && baseUnits.stripTrailingZeros().scale() > 0 ||
++                    baseUnits.precision() > 78 || baseUnits.abs() >= BigDecimal(BigInteger.ONE.shiftLeft(256))
++                ) return unsupported()
++                baseUnits.movePointLeft(18)
++            }
++            // Polygon's native asset differs; all other curated EVM chains use ETH/BNB/AVAX.
++            val asset = when (network) { "pol" -> "pol"; "bsc" -> "bnb"; "avax" -> "avax"; else -> "eth" }
++            return ParseResult.Parsed(RecipientInput(address, network, asset, amount))
++        }
++        val network = uriNetworks[scheme] ?: return unsupported()
++        if (params.keys.any { it !in setOf("amount", "label", "message") }) return unsupported()
++        // Labels/messages have no payment effect, but retaining them prevents scanner data loss.
++        val metadata = params.filterKeys { it == "label" || it == "message" }
++        val decodedTarget = decode(target)
++        val address = if (network == "bch" && !checked58(decodedTarget, listOf(byteArrayOf(0), byteArrayOf(5)), 20)) {
++            val prefix = if (decodedTarget == decodedTarget.uppercase(Locale.ROOT)) "BITCOINCASH:" else "bitcoincash:"
++            prefix + decodedTarget
++        } else decodedTarget
++        if (validate(address, network) !is Validation.Valid) return ParseResult.Invalid(Reason.INVALID_ADDRESS)
++        val amount = params["amount"]?.let {
++            if (!it.matches(Regex("[0-9]+(?:\\.[0-9]{1,8})?")) || it.length > 32) return unsupported()
++            it.toBigDecimal()
++        }
++        return ParseResult.Parsed(RecipientInput(address, network, network, amount, metadata))
++    }
++
++    private fun unsupported() = ParseResult.Invalid(Reason.UNSUPPORTED_URI)
++    private fun decode(value: String): String = URLDecoder.decode(value.replace("+", "%2B"), "UTF-8")
++
++    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
++    private fun decode58(value: String, alphabet: String = BASE58): ByteArray? {
++        if (value.isEmpty() || value.length > 128) return null
++        var number = BigInteger.ZERO
++        for (char in value) {
++            val digit = alphabet.indexOf(char)
++            if (digit < 0) return null
++            number = number.multiply(BigInteger.valueOf(58)).add(BigInteger.valueOf(digit.toLong()))
++        }
++        val bytes = if (number == BigInteger.ZERO) byteArrayOf() else {
++            number.toByteArray().dropWhile { it == 0.toByte() }.toByteArray()
++        }
++        return ByteArray(value.takeWhile { it == alphabet[0] }.length) + bytes
++    }
++
++    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
++    private fun checked58(value: String, prefixes: List<ByteArray>, length: Int, alphabet: String = BASE58): Boolean {
++        val bytes = decode58(value, alphabet) ?: return false
++        return prefixes.any { prefix ->
++            bytes.size == prefix.size + length + 4 && bytes.take(prefix.size).toByteArray().contentEquals(prefix) &&
++                sha256(sha256(bytes.dropLast(4).toByteArray())).take(4).toByteArray()
++                    .contentEquals(bytes.takeLast(4).toByteArray())
++        }
++    }
++
++    private fun sha256(value: ByteArray) = MessageDigest.getInstance("SHA-256").digest(value)
++
++    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
++    private fun xAddress(value: String): Boolean {
++        // XRPLF codec: mainnet prefix, account ID, tag-present flag, uint32 LE tag, four reserved zeros.
++        // https://github.com/XRPLF/xrpl.js/blob/main/packages/ripple-address-codec/src/index.ts
++        if (!checked58(value, listOf(byteArrayOf(0x05, 0x44)), 29, XRP58)) return false
++        val bytes = decode58(value, XRP58) ?: return false
++        val flag = bytes[22].toInt()
++        if (flag !in 0..1 || bytes.slice(27..30).any { it != 0.toByte() }) return false
++        return flag == 1 || bytes.slice(23..26).all { it == 0.toByte() }
++    }
++
++    private data class Bech(val hrp: String, val data: List<Int>, val checksum: Int)
++
++    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
++    private fun bech(value: String, maxLength: Int = 90): Bech? {
++        if (value.length !in 8..maxLength || value.any { it.code !in 33..126 } ||
++            value != value.lowercase(Locale.ROOT) && value != value.uppercase(Locale.ROOT)) return null
++        val lower = value.lowercase(Locale.ROOT)
++        val separator = lower.lastIndexOf('1')
++        if (separator < 1 || separator + 7 > lower.length) return null
++        val hrp = lower.substring(0, separator)
++        val data = lower.substring(separator + 1).map { BECH32.indexOf(it) }
++        if (data.any { it < 0 }) return null
++        val expanded = hrp.map { it.code shr 5 } + listOf(0) + hrp.map { it.code and 31 }
++        var check = 1
++        val generators = intArrayOf(0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3)
++        for (v in expanded + data) {
++            val top = check ushr 25
++            check = ((check and 0x1ffffff) shl 5) xor v
++            for (i in 0..4) if ((top ushr i) and 1 != 0) check = check xor generators[i]
++        }
++        return Bech(hrp, data.dropLast(6), check)
++    }
++
++    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
++    private fun convertBits(data: List<Int>, from: Int, to: Int): ByteArray? {
++        var acc = 0
++        var bits = 0
++        val output = mutableListOf<Byte>()
++        for (value in data) {
++            acc = ((acc shl from) or value) and ((1 shl (from + to - 1)) - 1)
++            bits += from
++            while (bits >= to) { bits -= to; output += ((acc shr bits) and ((1 shl to) - 1)).toByte() }
++        }
++        if (bits >= from || ((acc shl (to - bits)) and ((1 shl to) - 1)) != 0) return null
++        return output.toByteArray()
++    }
++
++    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
++    private fun witness(value: String, hrp: String): Boolean {
++        val decoded = bech(value) ?: return false
++        if (decoded.hrp != hrp || decoded.data.isEmpty()) return false
++        val version = decoded.data.first()
++        val program = convertBits(decoded.data.drop(1), 5, 8) ?: return false
++        return version in 0..16 && program.size in 2..40 &&
++            if (version == 0) decoded.checksum == 1 && program.size in setOf(20, 32)
++            else decoded.checksum == 0x2bc830a3
++    }
++
++    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
++    private fun zcash(value: String): Boolean {
++        val transparentPrefixes = listOf(byteArrayOf(0x1c, 0xb8.toByte()), byteArrayOf(0x1c, 0xbd.toByte()))
++        if (checked58(value, transparentPrefixes, 20)) return true
++        val decoded = bech(value, 512) ?: return false
++        val bytes = convertBits(decoded.data, 5, 8) ?: return false
++        return when (decoded.hrp) {
++            "zs" -> decoded.checksum == 1 && bytes.size == 43
++            // ZIP316 F4Jumble, receiver rules and embedded HRP padding are checked by the SDK.
++            "u" -> decoded.checksum == 0x2bc830a3 && bytes.size in 48..300
++            else -> false
++        }
++    }
++
++    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
++    private fun cashAddress(value: String): Boolean {
++        if (value != value.lowercase(Locale.ROOT) && value != value.uppercase(Locale.ROOT)) return false
++        val lower = value.lowercase(Locale.ROOT)
++        if (lower.count { it == ':' } > 1) return false
++        val prefix = if (':' in lower) lower.substringBefore(':') else "bitcoincash"
++        if (prefix != "bitcoincash") return false
++        val data = lower.substringAfter(':', lower).map { BECH32.indexOf(it) }
++        if (data.size < 8 || data.any { it < 0 }) return false
++        var check = 1L
++        val generators = longArrayOf(0x98f2bc8e61, 0x79b76d99e2, 0xf33e5fb3c4, 0xae2eabe2a8, 0x1e4f43e470)
++        for (v in prefix.map { it.code and 31 } + listOf(0) + data) {
++            val top = check ushr 35
++            check = ((check and 0x07ffffffff) shl 5) xor v.toLong()
++            for (i in 0..4) if ((top ushr i) and 1L != 0L) check = check xor generators[i]
++        }
++        if (check != 1L) return false
++        val payload = convertBits(data.dropLast(8), 5, 8) ?: return false
++        if (payload.isEmpty()) return false
++        val version = payload[0].toInt() and 255
++        // Cashaddr size bits and currently defined types, including token-aware P2PKH/P2SH.
++        // Token awareness is a receiver capability, not a request to substitute a token for native BCH.
++        // https://github.com/bitjson/cashtokens/blob/master/readme.md#cashaddress-token-support
++        val sizes = intArrayOf(20, 24, 28, 32, 40, 48, 56, 64)
++        return version and 0x80 == 0 && (version ushr 3) in 0..3 &&
++            payload.size == sizes[version and 7] + 1
++    }
++
++    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
++    private fun evm(value: String): Boolean {
++        if (!value.matches(Regex("0x[0-9a-fA-F]{40}"))) return false
++        val hex = value.drop(2)
++        if (hex == hex.lowercase(Locale.ROOT) || hex == hex.uppercase(Locale.ROOT)) return true
++        val hash = keccak256(hex.lowercase(Locale.ROOT).toByteArray(Charsets.US_ASCII))
++        return hex.indices.all { i -> !hex[i].isLetter() || hex[i].isUpperCase() ==
++            (((hash[i / 2].toInt() ushr (if (i % 2 == 0) 4 else 0)) and 15) >= 8) }
++    }
++
++    /** Keccak-f[1600], legacy Keccak-256 domain 0x01 (EIP55; distinct from SHA3-256). */
++    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
++    private fun keccak256(input: ByteArray): ByteArray {
++        val state = LongArray(25)
++        val block = ByteArray(136)
++        input.copyInto(block)
++        block[input.size] = 1
++        block[135] = 0x80.toByte()
++        for (i in block.indices) state[i / 8] = state[i / 8] xor ((block[i].toLong() and 255) shl ((i % 8) * 8))
++        val rotations = intArrayOf(
++            0, 1, 62, 28, 27, 36, 44, 6, 55, 20, 3, 10, 43, 25, 39, 41, 45, 15, 21, 8, 18, 2, 61, 56, 14
++        )
++        val constants = arrayOf("0000000000000001", "0000000000008082", "800000000000808a", "8000000080008000",
++            "000000000000808b", "0000000080000001", "8000000080008081", "8000000000008009",
++            "000000000000008a", "0000000000000088", "0000000080008009", "000000008000000a",
++            "000000008000808b", "800000000000008b", "8000000000008089", "8000000000008003",
++            "8000000000008002", "8000000000000080", "000000000000800a", "800000008000000a",
++            "8000000080008081", "8000000000008080", "0000000080000001", "8000000080008008")
++        for (constant in constants) {
++            val c = LongArray(5) { x ->
++                state[x] xor state[x + 5] xor state[x + 10] xor state[x + 15] xor state[x + 20]
++            }
++            val d = LongArray(5) { x -> c[(x + 4) % 5] xor java.lang.Long.rotateLeft(c[(x + 1) % 5], 1) }
++            for (i in state.indices) state[i] = state[i] xor d[i % 5]
++            val b = LongArray(25)
++            for (x in 0..4) for (y in 0..4) {
++                b[y + 5 * ((2 * x + 3 * y) % 5)] =
++                    java.lang.Long.rotateLeft(state[x + 5 * y], rotations[x + 5 * y])
++            }
++            for (x in 0..4) for (y in 0..4) {
++                state[x + 5 * y] = b[x + 5 * y] xor
++                    (b[(x + 1) % 5 + 5 * y].inv() and b[(x + 2) % 5 + 5 * y])
++            }
++            state[0] = state[0] xor java.lang.Long.parseUnsignedLong(constant, 16)
++        }
++        return ByteArray(32) { (state[it / 8] ushr ((it % 8) * 8)).toByte() }
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
 index ab4d7ab5b..716dcab22 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
@@ -10449,6 +10807,83 @@ index b7f89d023..38be49b5a 100644
 +    val executedAmountOut: BigDecimal? get() = null
 +    val originTransactionIds: List<String> get() = emptyList()
 +    val destinationTransactionIds: List<String> get() = emptyList()
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapRecipientErrorText.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapRecipientErrorText.kt
+new file mode 100644
+index 000000000..0c4e95670
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapRecipientErrorText.kt
+@@ -0,0 +1,16 @@
++package co.electriccoin.zcash.ui.common.model
++
++import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.design.util.StringResource
++import co.electriccoin.zcash.ui.design.util.stringRes
++
++fun SwapRecipientValidation.errorText(network: String?): StringResource? =
++    when (error) {
++        SwapRecipientError.ADDRESS -> stringRes(R.string.private_recipient_invalid, network.orEmpty().uppercase())
++        SwapRecipientError.NETWORK -> stringRes(R.string.private_recipient_network, network.orEmpty().uppercase())
++        SwapRecipientError.ASSET -> stringRes(R.string.private_recipient_asset)
++        SwapRecipientError.PAYMENT_AMOUNT -> stringRes(R.string.private_recipient_amount)
++        SwapRecipientError.URI -> stringRes(R.string.private_recipient_uri)
++        SwapRecipientError.GIFT_LINK -> stringRes(R.string.swap_error_giftCardLink)
++        null -> null
++    }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapRecipientValidation.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapRecipientValidation.kt
+new file mode 100644
+index 000000000..7db9f101c
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapRecipientValidation.kt
+@@ -0,0 +1,49 @@
++package co.electriccoin.zcash.ui.common.model
++
++import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector
++
++enum class SwapRecipientError { ADDRESS, NETWORK, ASSET, URI, PAYMENT_AMOUNT, GIFT_LINK }
++
++data class SwapRecipientValidation(
++    val input: RecipientAddressPolicy.RecipientInput? = null,
++    val error: SwapRecipientError? = null,
++) {
++    val isValid: Boolean get() = input != null && error == null
++}
++
++/** One local policy for entry, saved contacts and the final quote boundary. */
++fun validateSwapRecipient(
++    value: String,
++    network: String?,
++    token: String? = null,
++    contactNetwork: String? = null,
++    allowPaymentAmount: Boolean = true,
++): SwapRecipientValidation {
++    if (GiftCardSecretDetector.mayContainGiftCardSecret(value)) {
++        return SwapRecipientValidation(error = SwapRecipientError.GIFT_LINK)
++    }
++    if (value.isEmpty() || network == null) return SwapRecipientValidation()
++    val parsed = RecipientAddressPolicy.parse(value.trim())
++    if (parsed !is RecipientAddressPolicy.ParseResult.Parsed) {
++        return SwapRecipientValidation(error = SwapRecipientError.URI)
++    }
++    val input = parsed.input
++    if (!allowPaymentAmount && input.amount != null) {
++        return SwapRecipientValidation(error = SwapRecipientError.PAYMENT_AMOUNT)
++    }
++    if ((contactNetwork != null && !contactNetwork.equals(network, ignoreCase = true)) ||
++        (input.network != null && !input.network.equals(network, ignoreCase = true))
++    ) {
++        return SwapRecipientValidation(error = SwapRecipientError.NETWORK)
++    }
++    if (token != null && input.asset != null && !input.asset.equals(token, ignoreCase = true)) {
++        return SwapRecipientValidation(error = SwapRecipientError.ASSET)
++    }
++    val syntax = RecipientAddressPolicy.validate(input.address, network.lowercase())
++    if (syntax !is RecipientAddressPolicy.Validation.Valid) {
++        return SwapRecipientValidation(error = SwapRecipientError.ADDRESS)
++    }
++    return SwapRecipientValidation(
++        input = input.copy(address = RecipientAddressPolicy.normalize(input.address, network.lowercase()))
++    )
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/TransactionExplorer.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/TransactionExplorer.kt
 new file mode 100644
 index 000000000..435cd453b
@@ -10905,6 +11340,72 @@ index 000000000..1ebd4391a
 +    val originUsdUnitPrice = amountInUsd.divide(amountInFormatted, MathContext.DECIMAL128)
 +    return originUsdUnitPrice.multiply(proposal.zecFee(), MathContext.DECIMAL128)
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/HttpClientProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/HttpClientProvider.kt
+index feef536f5..13ee1cfdf 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/HttpClientProvider.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/HttpClientProvider.kt
+@@ -4 +3,0 @@ import android.util.Log
+-import co.electriccoin.zcash.ui.BuildConfig
+@@ -95,3 +94,3 @@ class HttpClientProviderImpl(
+-            // MOB-1346: full request/response bodies (swap recipient + refund addresses + amounts,
+-            // voting payloads) must not reach logcat/bugreports in release. Bodies only in debug.
+-            level = if (BuildConfig.DEBUG) LogLevel.ALL else LogLevel.NONE
++            // Bodies and URL parameters carry wallet data in debug builds too. Quote lifecycle
++            // diagnostics record bounded stage metadata without exposing payloads or URLs.
++            level = LogLevel.NONE
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnostics.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnostics.kt
+new file mode 100644
+index 000000000..f0af2e0a1
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnostics.kt
+@@ -0,0 +1,47 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import android.util.Log
++import io.ktor.client.plugins.ResponseException
++
++enum class QuoteRequestStage {
++    FRESH_ADDRESS,
++    CLIENT_CREATE,
++    HTTP_REQUEST,
++    RESPONSE_DECODE,
++    CLIENT_CLOSE,
++    PROPOSAL
++}
++
++/** Records bounded lifecycle metadata only. Never pass request values or exception messages to the sink. */
++class QuoteRequestDiagnostics(
++    private val sink: (String) -> Unit = {
++        Log.i("SwapQuoteStage", it)
++        Unit
++    },
++    private val nanoTime: () -> Long = System::nanoTime
++) {
++    suspend fun <T> trace(stage: QuoteRequestStage, block: suspend () -> T): T {
++        val started = nanoTime()
++        var failure: Throwable? = null
++        try {
++            return block()
++        } catch (e: Throwable) {
++            failure = e
++            throw e
++        } finally {
++            val elapsedMillis = ((nanoTime() - started) / NANOS_PER_MILLISECOND).coerceAtLeast(0)
++            val status = (failure as? ResponseException)?.response?.status?.value
++            // A diagnostic backend must never change quote success, failure or cancellation.
++            runCatching {
++                sink(
++                    "stage=$stage elapsedMs=$elapsedMillis " +
++                        "exception=${failure?.javaClass?.simpleName ?: "none"} status=${status ?: "none"}"
++                )
++            }
++        }
++    }
++
++    private companion object {
++        const val NANOS_PER_MILLISECOND = 1_000_000L
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ConfigurationRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ConfigurationRepository.kt
 index 549fbf800..05d18dfb3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ConfigurationRepository.kt
@@ -11197,7 +11698,7 @@ index 000000000..15ea036e2
 +class UnsupportedSwapRecoveryException :
 +    IllegalArgumentException("This swap provider is not supported for recovery; the saved record has been preserved")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
-index 36d947b49..4bef6c4cf 100644
+index 36d947b49..ea8fe6565 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/SwapRepository.kt
 @@ -6 +5,0 @@ import co.electriccoin.zcash.crash.android.GlobalCrashReporter
@@ -11212,7 +11713,7 @@ index 36d947b49..4bef6c4cf 100644
 @@ -143,0 +148,2 @@ class SwapRepositoryImpl(
 +    private val quoteGeneration = RequestGeneration()
 +
-@@ -318,42 +324,13 @@ class SwapRepositoryImpl(
+@@ -318,42 +324,17 @@ class SwapRepositoryImpl(
 -        requestQuoteJob?.cancel()
 -        requestQuoteJob =
 -            scope.launch {
@@ -11256,7 +11757,11 @@ index 36d947b49..4bef6c4cf 100644
 -                        expected = refundAddress,
 -                        actual = result.refundAddress.address
 +        launchQuoteRequest { generation ->
-+            val destinationAsset = assets.value.zecAsset ?: return@launchQuoteRequest
++            val destinationAsset = assets.value.zecAsset
++            if (destinationAsset == null) {
++                publishQuote(generation, SwapQuoteData.Error(FLEX_INPUT, SwapAssetsUnavailableException()))
++                return@launchQuoteRequest
++            }
 +            var receivedQuote: SwapQuote? = null
 +            try {
 +                val result =
@@ -11268,7 +11773,7 @@ index 36d947b49..4bef6c4cf 100644
 +                        destinationAddress = destinationAddress,
 +                        destinationAsset = destinationAsset,
 +                        slippage = slippage
-@@ -361,5 +338,41 @@ class SwapRepositoryImpl(
+@@ -361,5 +342,41 @@ class SwapRepositoryImpl(
 -                    requireMatchingAddress(
 -                        name = "destinationAddress",
 -                        type = SwapQuoteMismatchType.RECIPIENT_ADDRESS,
@@ -11315,7 +11820,7 @@ index 36d947b49..4bef6c4cf 100644
 +                    SwapQuoteData.Error(
 +                        mode = FLEX_INPUT,
 +                        exception = e.withQuoteReportContext(receivedQuote, originAsset, destinationAsset)
-@@ -367,14 +380,5 @@ class SwapRepositoryImpl(
+@@ -367,14 +384,5 @@ class SwapRepositoryImpl(
 -                    quote.update { SwapQuoteData.Success(quote = result) }
 -                } catch (e: SwapQuoteMismatchException) {
 -                    GlobalCrashReporter.reportCaughtException(swapQuoteMismatchSignal(e))
@@ -11335,9 +11840,9 @@ index 36d947b49..4bef6c4cf 100644
 +                throw e
 +            } catch (e: Exception) {
 +                publishQuote(generation, SwapQuoteData.Error(FLEX_INPUT, e))
-@@ -381,0 +386 @@ class SwapRepositoryImpl(
+@@ -381,0 +390 @@ class SwapRepositoryImpl(
 +        }
-@@ -393,17 +398,23 @@ class SwapRepositoryImpl(
+@@ -393,17 +402,27 @@ class SwapRepositoryImpl(
 -        requestQuoteJob?.cancel()
 -        requestQuoteJob =
 -            scope.launch {
@@ -11356,7 +11861,11 @@ index 36d947b49..4bef6c4cf 100644
 -                            slippage = slippage,
 -                            affiliateAddress = AFFILIATE_ADDRESS
 +        launchQuoteRequest { generation ->
-+            val originAsset = assets.value.zecAsset ?: return@launchQuoteRequest
++            val originAsset = assets.value.zecAsset
++            if (originAsset == null) {
++                publishQuote(generation, SwapQuoteData.Error(mode, SwapAssetsUnavailableException()))
++                return@launchQuoteRequest
++            }
 +            var receivedQuote: SwapQuote? = null
 +            try {
 +                val result =
@@ -11378,7 +11887,7 @@ index 36d947b49..4bef6c4cf 100644
 +                            quoted = result.amountInFormatted,
 +                            requested = amount,
 +                            decimals = result.originAsset.decimals
-@@ -411,18 +421,0 @@ class SwapRepositoryImpl(
+@@ -411,18 +429,0 @@ class SwapRepositoryImpl(
 -                    receivedQuote = result
 -                    when (mode) {
 -                        EXACT_INPUT,
@@ -11397,7 +11906,7 @@ index 36d947b49..4bef6c4cf 100644
 -                                decimals = result.destinationAsset.decimals
 -                            )
 -                        }
-@@ -430,32 +423,6 @@ class SwapRepositoryImpl(
+@@ -430,32 +431,6 @@ class SwapRepositoryImpl(
 -                    requireExpectedAsset(
 -                        name = "originAsset",
 -                        type = SwapQuoteMismatchType.ORIGIN_ASSET,
@@ -11436,12 +11945,12 @@ index 36d947b49..4bef6c4cf 100644
 +                            quoted = result.amountOutFormatted,
 +                            requested = amount,
 +                            decimals = result.destinationAsset.decimals
-@@ -464,4 +430,0 @@ class SwapRepositoryImpl(
+@@ -464,4 +438,0 @@ class SwapRepositoryImpl(
 -                } catch (e: CancellationException) {
 -                    throw e
 -                } catch (e: Exception) {
 -                    quote.update { SwapQuoteData.Error(mode, e) }
-@@ -468,0 +432,40 @@ class SwapRepositoryImpl(
+@@ -468,0 +440,40 @@ class SwapRepositoryImpl(
 +                requireExpectedAsset(
 +                    name = "originAsset",
 +                    type = SwapQuoteMismatchType.ORIGIN_ASSET,
@@ -11482,14 +11991,14 @@ index 36d947b49..4bef6c4cf 100644
 +                throw e
 +            } catch (e: Exception) {
 +                publishQuote(generation, SwapQuoteData.Error(mode, e))
-@@ -469,0 +473 @@ class SwapRepositoryImpl(
+@@ -469,0 +481 @@ class SwapRepositoryImpl(
 +        }
-@@ -479,0 +484 @@ class SwapRepositoryImpl(
+@@ -479,0 +492 @@ class SwapRepositoryImpl(
 +        val recovery = swapMetadata.requireNearRecovery()
-@@ -482 +487 @@ class SwapRepositoryImpl(
+@@ -482 +495 @@ class SwapRepositoryImpl(
 -                depositAddress = swapMetadata.depositAddress,
 +                depositAddress = recovery.reference,
-@@ -532,0 +538,18 @@ class SwapRepositoryImpl(
+@@ -532,0 +546,18 @@ class SwapRepositoryImpl(
 +    /** Loading is visible before callers collect a result; old jobs cannot publish into a new request. */
 +    private fun launchQuoteRequest(block: suspend (RequestId) -> Unit) {
 +        val job =
@@ -11508,7 +12017,7 @@ index 36d947b49..4bef6c4cf 100644
 +        }
 +    }
 +
-@@ -534,3 +557,6 @@ class SwapRepositoryImpl(
+@@ -534,3 +565,6 @@ class SwapRepositoryImpl(
 -        requestQuoteJob?.cancel()
 -        requestQuoteJob = null
 -        quote.update { null }
@@ -11962,6 +12471,44 @@ index a33c847ad..f15858eba 100644
 +                        if (result.status == SwapStatus.SUCCESS) {
 +                            donationPreferences?.recordSuccessfulTransaction()
 +                        }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToScanGenericAddressUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToScanGenericAddressUseCase.kt
+index 3a33ec79d..49f8f0f53 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToScanGenericAddressUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToScanGenericAddressUseCase.kt
+@@ -20 +20,5 @@ class NavigateToScanGenericAddressUseCase(
+-            is ScanAddressPipelineResult.Scanned -> ScanResult(address = result.address, amount = result.amount)
++            is ScanAddressPipelineResult.Scanned -> ScanResult(
++                address = result.address,
++                amount = result.amount,
++                rawInput = result.rawInput
++            )
+@@ -40 +44,2 @@ class NavigateToScanGenericAddressUseCase(
+-        args: ScanGenericAddressArgs
++        args: ScanGenericAddressArgs,
++        rawInput: String? = null
+@@ -42 +47 @@ class NavigateToScanGenericAddressUseCase(
+-        pipeline.emit(ScanAddressPipelineResult.Scanned(address, amount, args))
++        pipeline.emit(ScanAddressPipelineResult.Scanned(address, amount, args, rawInput))
+@@ -56 +61,2 @@ private sealed interface ScanAddressPipelineResult {
+-        override val args: ScanGenericAddressArgs
++        override val args: ScanGenericAddressArgs,
++        val rawInput: String? = null
+@@ -62 +68,2 @@ data class ScanResult(
+-    val amount: BigDecimal?
++    val amount: BigDecimal?,
++    val rawInput: String? = null
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCase.kt
+index e9d94f210..20baea5b4 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCase.kt
+@@ -21 +21 @@ class NavigateToSelectABSwapRecipientUseCase(
+-    suspend operator fun invoke(): EnhancedABContact? =
++    suspend operator fun invoke(network: String? = null): EnhancedABContact? =
+@@ -32 +32 @@ class NavigateToSelectABSwapRecipientUseCase(
+-            val args = SelectABSwapRecipientArgs()
++            val args = SelectABSwapRecipientArgs(network = network)
+@@ -50,0 +51 @@ class NavigateToSelectABSwapRecipientUseCase(
++        if (args.network != null && !args.network.equals(contact.blockchain?.chainTicker, ignoreCase = true)) return
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
 index eab9cf9da..0c491fdc7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
@@ -11974,7 +12521,7 @@ index eab9cf9da..0c491fdc7 100644
 +            return
 +        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
-index 76c590a49..4ed8f617b 100644
+index 76c590a49..1ac2f6c1f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 @@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -11982,32 +12529,96 @@ index 76c590a49..4ed8f617b 100644
 @@ -20,0 +22,2 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
 +import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
 +import co.electriccoin.zcash.wallet.foundation.FundingCapability
-@@ -57 +60 @@ class RequestSwapQuoteUseCase(
+@@ -23,0 +27,4 @@ import co.electriccoin.zcash.ui.common.model.requireSpendable
++import co.electriccoin.zcash.ui.common.model.RecipientAddressPolicy
++import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
++import co.electriccoin.zcash.ui.common.provider.QuoteRequestDiagnostics
++import co.electriccoin.zcash.ui.common.provider.QuoteRequestStage
+@@ -35,0 +43 @@ import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.CancellationException
+@@ -48,0 +57 @@ class RequestSwapQuoteUseCase(
++    private val diagnostics: QuoteRequestDiagnostics = QuoteRequestDiagnostics(),
+@@ -55 +64,2 @@ class RequestSwapQuoteUseCase(
+-        canNavigateToSwapQuote: () -> Boolean
++        canNavigateToSwapQuote: () -> Boolean,
++        contactNetwork: String? = null
+@@ -57 +67,4 @@ class RequestSwapQuoteUseCase(
 -        val newAddress = accountDataSource.requestNextShieldedAddress()
++        val recipient = validatedRecipient(
++            address, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
++        ) ?: return
 +        val newAddress = requestFreshAddress() ?: return
-@@ -68 +71 @@ class RequestSwapQuoteUseCase(
+@@ -62 +75 @@ class RequestSwapQuoteUseCase(
+-                    address = address,
++                    address = recipient,
+@@ -68 +81 @@ class RequestSwapQuoteUseCase(
 -            createProposal = true,
 +            funding = ZecSwapComposition.funding(EXACT_INPUT),
-@@ -80 +83 @@ class RequestSwapQuoteUseCase(
+@@ -78 +91,2 @@ class RequestSwapQuoteUseCase(
+-        canNavigateToSwapQuote: () -> Boolean
++        canNavigateToSwapQuote: () -> Boolean,
++        contactNetwork: String? = null
+@@ -80 +94,2 @@ class RequestSwapQuoteUseCase(
 -        val newAddress = accountDataSource.requestNextShieldedAddress()
++        val recipient = validatedRecipient(address, selectedAsset, contactNetwork, canNavigateToSwapQuote) ?: return
 +        val newAddress = requestFreshAddress() ?: return
-@@ -91 +94 @@ class RequestSwapQuoteUseCase(
+@@ -85 +100 @@ class RequestSwapQuoteUseCase(
+-                    address = address,
++                    address = recipient,
+@@ -91 +106 @@ class RequestSwapQuoteUseCase(
 -            createProposal = true,
 +            funding = ZecSwapComposition.funding(EXACT_OUTPUT),
-@@ -103 +106 @@ class RequestSwapQuoteUseCase(
+@@ -101 +116,2 @@ class RequestSwapQuoteUseCase(
+-        canNavigateToSwapQuote: () -> Boolean
++        canNavigateToSwapQuote: () -> Boolean,
++        contactNetwork: String? = null
+@@ -103 +119,4 @@ class RequestSwapQuoteUseCase(
 -        val newAddress = accountDataSource.requestNextShieldedAddress()
++        val refund = validatedRecipient(
++            refundAddress, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
++        ) ?: return
 +        val newAddress = requestFreshAddress() ?: return
-@@ -115 +118 @@ class RequestSwapQuoteUseCase(
+@@ -109 +128 @@ class RequestSwapQuoteUseCase(
+-                        refundAddress = refundAddress,
++                        refundAddress = refund,
+@@ -115 +134 @@ class RequestSwapQuoteUseCase(
 -            createProposal = false,
 +            funding = ZecSwapComposition.funding(FLEX_INPUT),
-@@ -119,0 +123,25 @@ class RequestSwapQuoteUseCase(
+@@ -119,0 +139,52 @@ class RequestSwapQuoteUseCase(
 +    private suspend fun requestFreshAddress(): String? =
 +        try {
-+            accountDataSource.requestNextShieldedAddress(requireFresh = true)
++            diagnostics.trace(QuoteRequestStage.FRESH_ADDRESS) {
++                accountDataSource.requestNextShieldedAddress(requireFresh = true)
++            }
 +        } catch (e: FreshShieldedAddressUnavailableException) {
 +            navigateToErrorUseCase(ErrorArgs.General(e))
 +            null
 +        }
++
++    private suspend fun validatedRecipient(
++        value: String,
++        selectedAsset: SwapAsset,
++        contactNetwork: String?,
++        canNavigate: () -> Boolean,
++        allowPaymentAmount: Boolean = true
++    ): String? {
++        val validation = validateSwapRecipient(
++            value, selectedAsset.chainTicker, selectedAsset.tokenTicker, contactNetwork, allowPaymentAmount
++        )
++        val address = validation.input?.address
++        val syntax = address?.let { RecipientAddressPolicy.validate(it, selectedAsset.chainTicker.lowercase()) }
++        val needsSdk = (syntax as? RecipientAddressPolicy.Validation.Valid)?.requiresZcashSdkValidation == true
++        val sdkValid = !needsSdk || withContext(Dispatchers.Default) {
++            synchronizerProvider.getSynchronizer().validateAddress(address!!) !is AddressType.Invalid
++        }
++        if (validation.isValid && sdkValid) return address
++        if (canNavigate()) {
++            navigateToErrorUseCase(
++                ErrorArgs.General(IllegalArgumentException("Invalid swap recipient for selected asset"))
++            )
++        }
++        return null
++    }
 +
 +    private suspend fun rejectUnsupportedFunding(
 +        funding: FundingCapability,
@@ -12026,10 +12637,10 @@ index 76c590a49..4ed8f617b 100644
 +        return true
 +    }
 +
-@@ -123 +151 @@ class RequestSwapQuoteUseCase(
+@@ -123 +194 @@ class RequestSwapQuoteUseCase(
 -        createProposal: Boolean,
 +        funding: FundingCapability,
-@@ -139 +167,14 @@ class RequestSwapQuoteUseCase(
+@@ -139 +210,14 @@ class RequestSwapQuoteUseCase(
 -        if (result is SwapQuoteData.Success && createProposal) {
 +        if (result is SwapQuoteData.Success) {
 +            if (rejectUnsupportedFunding(funding, canNavigateToSwapQuote)) return@withContext
@@ -12045,6 +12656,26 @@ index 76c590a49..4ed8f617b 100644
 +        }
 +
 +        if (result is SwapQuoteData.Success && funding == FundingCapability.LOCAL_TRANSACTION) {
+@@ -141 +225,3 @@ class RequestSwapQuoteUseCase(
+-                createProposal(result.quote)
++                diagnostics.trace(QuoteRequestStage.PROPOSAL) { createProposal(result.quote) }
++            } catch (e: CancellationException) {
++                throw e
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SaveABContactUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SaveABContactUseCase.kt
+index 30515d3df..0b2440894 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SaveABContactUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SaveABContactUseCase.kt
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
++import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
+@@ -24 +25,4 @@ class SaveABContactUseCase(
+-        addressBookRepository.saveContact(name = name, address = address, chain = chain)
++        val recipient = chain?.let { validateSwapRecipient(address, it) }
++        if (recipient != null && !recipient.isValid) return ABContactSaveResult.InvalidAddress
++        val receivingAddress = recipient?.input?.address ?: address
++        addressBookRepository.saveContact(name = name, address = receivingAddress, chain = chain)
+@@ -31,0 +36,2 @@ sealed interface ABContactSaveResult {
++    data object InvalidAddress : ABContactSaveResult
++
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
 index 51caa9e19..8e640d823 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCase.kt
@@ -12115,6 +12746,31 @@ index b63a9a929..000000000
 -        )
 -    }
 -}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/UpdateABContactUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/UpdateABContactUseCase.kt
+index 4003797c4..a0421e8b5 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/UpdateABContactUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/UpdateABContactUseCase.kt
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
++import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
+@@ -26 +27,4 @@ class UpdateABContactUseCase(
+-        addressBookRepository.updateContact(contact = contact, name = name, address = address, chain = chain)
++        val recipient = chain?.let { validateSwapRecipient(address, it) }
++        if (recipient != null && !recipient.isValid) return ABContactSaveResult.InvalidAddress
++        val receivingAddress = recipient?.input?.address ?: address
++        addressBookRepository.updateContact(contact = contact, name = name, address = receivingAddress, chain = chain)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
+index 7bda1f0f5..3f0878a31 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
++import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
+@@ -20,0 +22,3 @@ class ValidateSwapABContactAddressUseCase(
++            blockchain == null || !validateSwapRecipient(address, blockchain.chainTicker).isValid ->
++                ContactAddressValidationResult.Invalid
++
+@@ -28 +32 @@ class ValidateSwapABContactAddressUseCase(
+-                    it.address == address.trim() &&
++                    it.address == validateSwapRecipient(address, blockchain?.chainTicker).input?.address &&
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt
 index 3e12c9c99..bd85a60d3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt
@@ -13778,23 +14434,136 @@ index 607e89dcb..e741d6aab 100644
 +    private fun onWhatsNewClick() =
 +        navigationRouter.forward(ExternalUrl("https://github.com/Codely-Solutions/zec-private/releases"))
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
-index b6549dd8b..077e63fa3 100644
+index b6549dd8b..d18b1d4cd 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
-@@ -34,0 +35 @@ import java.math.MathContext
+@@ -4,0 +5,2 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.model.errorText
++import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
+@@ -8 +9,0 @@ import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
+-import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector.mayContainGiftCardSecret
+@@ -34,0 +36 @@ import java.math.MathContext
 +import java.math.RoundingMode
-@@ -148 +149 @@ internal class ExactOutputVMMapper {
+@@ -148 +150 @@ internal class ExactOutputVMMapper {
 -                fiat.divide(asset.usdPrice, MathContext.DECIMAL128)
 +                fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
-@@ -155 +156 @@ internal class ExactOutputVMMapper {
+@@ -155 +157 @@ internal class ExactOutputVMMapper {
 -                            ?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) }
 +                            ?.let { stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false) }
-@@ -227 +228 @@ internal class ExactOutputVMMapper {
+@@ -227 +229 @@ internal class ExactOutputVMMapper {
 -                        fiat.divide(asset.usdPrice, MathContext.DECIMAL128)
 +                        fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
-@@ -235 +236 @@ internal class ExactOutputVMMapper {
+@@ -235 +237 @@ internal class ExactOutputVMMapper {
 -                                        stringResByDynamicNumber(it, includeGroupingSeparator = false)
 +                                        stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false)
+@@ -393 +395,6 @@ internal class ExactOutputVMMapper {
+-                            !mayContainGiftCardSecret(state.selectedABContact?.address ?: state.address) &&
++                            validateSwapRecipient(
++                                state.selectedABContact?.address ?: state.address,
++                                state.asset?.chainTicker,
++                                state.asset?.tokenTicker,
++                                state.selectedABContact?.blockchain?.chainTicker
++                            ).isValid &&
+@@ -411,6 +418,6 @@ internal class ExactOutputVMMapper {
+-                when {
+-                    text.isEmpty() -> null
+-                    text.isBlank() -> stringRes("")
+-                    mayContainGiftCardSecret(text) -> stringRes(R.string.swap_error_giftCardLink)
+-                    else -> null
+-                },
++                validateSwapRecipient(
++                    state.selectedABContact?.address ?: text,
++                    state.asset?.chainTicker,
++                    state.asset?.tokenTicker,
++                    state.selectedABContact?.blockchain?.chainTicker
++                ).errorText(state.asset?.chainTicker),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayVM.kt
+index 5cf20b207..add59a802 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayVM.kt
+@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
+@@ -87,0 +89 @@ internal class PayVM(
++    private var quoteActionInProgress = false
+@@ -198 +200 @@ internal class PayVM(
+-            val selected = navigateToSelectSwapRecipient()
++            val selected = navigateToSelectSwapRecipient(network = internalState.value.asset?.chainTicker)
+@@ -210,12 +212 @@ internal class PayVM(
+-                internalState.update {
+-                    it.copy(
+-                        selectedABContact = null,
+-                        address = result.address,
+-                        amount =
+-                            if (result.amount != null) {
+-                                NumberTextFieldInnerState.fromAmount(result.amount)
+-                            } else {
+-                                it.amount
+-                            }
+-                    )
+-                }
++                onAddressChange(result.rawInput ?: result.address)
+@@ -280,4 +271,27 @@ internal class PayVM(
+-            val asset = internalState.value.asset ?: return@launch
+-            val slippage = internalState.value.slippage
+-            if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = SwapMode.EXACT_OUTPUT)) {
+-                return@launch
++            val snapshot = internalState.value
++            if (snapshot.isRequestingQuote || quoteActionInProgress) return@launch
++            val asset = snapshot.asset ?: return@launch
++            val slippage = snapshot.slippage
++            val contactNetwork = snapshot.selectedABContact?.blockchain?.chainTicker
++            val currentAddress = snapshot.selectedABContact?.address ?: snapshot.address
++            if (currentAddress != address || !validateSwapRecipient(
++                    address, asset.chainTicker, asset.tokenTicker, contactNetwork
++                ).isValid
++            ) return@launch
++            quoteActionInProgress = true
++            try {
++                if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = SwapMode.EXACT_OUTPUT)) {
++                    return@launch
++                }
++                internalState.update { it.copy(isRequestingQuote = true) }
++                requestSwapQuote.requestExactOutput(
++                    amount = amount,
++                    address = address,
++                    selectedAsset = asset,
++                    slippage = slippage,
++                    canNavigateToSwapQuote = { !isCancelStateVisible.value },
++                    contactNetwork = contactNetwork
++                )
++            } finally {
++                quoteActionInProgress = false
++                internalState.update { it.copy(isRequestingQuote = false) }
+@@ -285,9 +298,0 @@ internal class PayVM(
+-            internalState.update { it.copy(isRequestingQuote = true) }
+-            requestSwapQuote.requestExactOutput(
+-                amount = amount,
+-                address = address,
+-                selectedAsset = asset,
+-                slippage = slippage,
+-                canNavigateToSwapQuote = { !isCancelStateVisible.value }
+-            )
+-            internalState.update { it.copy(isRequestingQuote = false) }
+@@ -299 +304,9 @@ internal class PayVM(
+-        internalState.update { it.copy(selectedABContact = null, address = new) }
++        internalState.update { state ->
++            val recipient = validateSwapRecipient(new, state.asset?.chainTicker, state.asset?.tokenTicker)
++            val requestedAmount = recipient.input?.amount.takeIf { recipient.isValid }
++            val edited = state.copy(selectedABContact = null, address = new)
++            if (requestedAmount == null) edited else edited.copy(
++                amount = NumberTextFieldInnerState.fromAmount(requestedAmount),
++                fiatAmount = NumberTextFieldInnerState()
++            ).withAsset(state.asset)
++        }
+@@ -303,7 +316 @@ internal class PayVM(
+-            val asset =
+-                navigateToSwapAssetPicker(
+-                    onlyChainTicker =
+-                        internalState.value.selectedABContact
+-                            ?.blockchain
+-                            ?.chainTicker
+-                )
++            val asset = navigateToSwapAssetPicker()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt
 index 330d59e33..2de22f527 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt
@@ -13856,6 +14625,29 @@ index 7db73b703..2698a3260 100644
 @@ -691 +691 @@ private fun Zip321Preview() =
 -                                title = stringRes(co.electriccoin.zcash.ui.R.string.send_feeSummary),
 +                                title = stringRes(co.electriccoin.zcash.ui.R.string.private_wallet_transaction_fee),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanGenericAddressVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanGenericAddressVM.kt
+index 7cbe1420c..ea6fb900d 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanGenericAddressVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/scan/ScanGenericAddressVM.kt
+@@ -42,2 +42,3 @@ internal class ScanGenericAddressVM(
+-                            is Zip321ParseUriValidation.Valid -> onZip321Scanned(zip321Result)
+-                            is Zip321ParseUriValidation.SingleAddress -> onZip321SingleAddressScanned(zip321Result)
++                            is Zip321ParseUriValidation.Valid -> onZip321Scanned(zip321Result, result)
++                            is Zip321ParseUriValidation.SingleAddress ->
++                                onZip321SingleAddressScanned(zip321Result, result)
+@@ -68 +69 @@ internal class ScanGenericAddressVM(
+-    private suspend fun onZip321SingleAddressScanned(result: Zip321ParseUriValidation.SingleAddress) {
++    private suspend fun onZip321SingleAddressScanned(result: Zip321ParseUriValidation.SingleAddress, raw: String) {
+@@ -73 +74,2 @@ internal class ScanGenericAddressVM(
+-            args = args
++            args = args,
++            rawInput = raw
+@@ -78 +80 @@ internal class ScanGenericAddressVM(
+-    private suspend fun onZip321Scanned(result: Zip321ParseUriValidation.Valid) {
++    private suspend fun onZip321Scanned(result: Zip321ParseUriValidation.Valid, raw: String) {
+@@ -88 +90 @@ internal class ScanGenericAddressVM(
+-        navigateToScanAddress.onScanned(address, amount, args)
++        navigateToScanAddress.onScanned(address, amount, args, rawInput = raw)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt
 index fd16f97b7..4177cec48 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt
@@ -13903,22 +14695,41 @@ index 4e17a4f74..3e24df8b9 100644
 @@ -813,0 +817 @@ fun SendFormMemoTextField(
 +            innerModifier = ZashiTextFieldDefaults.innerModifier.testTag(SendTag.SEND_MEMO_FIELD),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
-index 79f574053..d0207084f 100644
+index 79f574053..7ae0d9127 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVM.kt
-@@ -38,0 +39 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
+@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
+@@ -38,0 +40 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
 +import co.electriccoin.zcash.ui.design.util.stringResByNumber
-@@ -50,0 +52 @@ import java.math.BigDecimal
+@@ -50,0 +53 @@ import java.math.BigDecimal
 +import java.math.RoundingMode
-@@ -52,0 +55,2 @@ import kotlin.time.Duration.Companion.milliseconds
+@@ -52,0 +56,2 @@ import kotlin.time.Duration.Companion.milliseconds
 +private const val ZEC_DECIMALS = 8
 +
-@@ -330,4 +333,0 @@ internal class SwapVM(
+@@ -90,0 +96 @@ internal class SwapVM(
++    private var quoteActionInProgress = false
+@@ -236 +242 @@ internal class SwapVM(
+-            val selected = navigateToSelectSwapRecipient()
++            val selected = navigateToSelectSwapRecipient(network = internalState.value.swapAsset?.chainTicker)
+@@ -245 +251 @@ internal class SwapVM(
+-        if (internalState.value.swapDirection != SWAP_INTO_ZEC) return
++        if (internalState.value.swapAsset != null) return
+@@ -269,7 +275 @@ internal class SwapVM(
+-                        addressText = result.address,
+-                        amountTextState =
+-                            if (result.amount != null) {
+-                                NumberTextFieldInnerState.fromAmount(result.amount)
+-                            } else {
+-                                it.amountTextState
+-                            }
++                        addressText = result.rawInput ?: result.address
+@@ -330,4 +329,0 @@ internal class SwapVM(
 -        val value =
 -            newTextFieldAmount
 -                ?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) }
 -                ?: stringRes("")
-@@ -334,0 +335,16 @@ internal class SwapVM(
+@@ -334,0 +331,16 @@ internal class SwapVM(
 +            val isTokenInput = it.currencyType == CurrencyType.FIAT
 +            val decimals = if (it.swapDirection == SWAP_FROM_ZEC) ZEC_DECIMALS else it.swapAsset?.decimals
 +            val amount =
@@ -13935,18 +14746,218 @@ index 79f574053..d0207084f 100644
 +                        stringResByDynamicNumber(number, includeGroupingSeparator = false)
 +                    }
 +                } ?: stringRes("")
-@@ -339,2 +355,2 @@ internal class SwapVM(
+@@ -339,2 +351,2 @@ internal class SwapVM(
 -                        amount = newTextFieldAmount,
 -                        lastValidAmount = newTextFieldAmount
 +                        amount = amount,
 +                        lastValidAmount = amount
-@@ -342,5 +358 @@ internal class SwapVM(
+@@ -342,5 +354 @@ internal class SwapVM(
 -                currencyType =
 -                    when (it.currencyType) {
 -                        CurrencyType.TOKEN -> CurrencyType.FIAT
 -                        CurrencyType.FIAT -> CurrencyType.TOKEN
 -                    }
 +                currencyType = if (isTokenInput) CurrencyType.TOKEN else CurrencyType.FIAT
+@@ -357,16 +365,15 @@ internal class SwapVM(
+-            val asset = internalState.value.swapAsset ?: return@launch
+-            val slippage = internalState.value.slippage
+-            val direction = internalState.value.swapDirection.coerceFor(isSelectedAccountSpendable.value)
+-            if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = direction.toSwapMode())) {
+-                return@launch
+-            }
+-            internalState.update { it.copy(isRequestingQuote = true) }
+-            when (direction) {
+-                SWAP_FROM_ZEC -> {
+-                    requestSwapQuote.requestExactInput(
+-                        amount = amount,
+-                        address = address,
+-                        selectedAsset = asset,
+-                        slippage = slippage,
+-                        canNavigateToSwapQuote = { !isCancelStateVisible.value }
+-                    )
++            val snapshot = internalState.value
++            if (snapshot.isRequestingQuote || quoteActionInProgress) return@launch
++            val asset = snapshot.swapAsset ?: return@launch
++            val slippage = snapshot.slippage
++            val direction = snapshot.swapDirection.coerceFor(isSelectedAccountSpendable.value)
++            val contactNetwork = snapshot.selectedContact?.blockchain?.chainTicker
++            val currentAddress = snapshot.selectedContact?.address ?: snapshot.addressText
++            if (currentAddress != address || !validateSwapRecipient(
++                    address, asset.chainTicker, asset.tokenTicker, contactNetwork, allowPaymentAmount = false
++                ).isValid
++            ) return@launch
++            quoteActionInProgress = true
++            try {
++                if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = direction.toSwapMode())) {
++                    return@launch
+@@ -373,0 +381,12 @@ internal class SwapVM(
++                internalState.update { it.copy(isRequestingQuote = true) }
++                when (direction) {
++                    SWAP_FROM_ZEC -> {
++                        requestSwapQuote.requestExactInput(
++                            amount = amount,
++                            address = address,
++                            selectedAsset = asset,
++                            slippage = slippage,
++                            canNavigateToSwapQuote = { !isCancelStateVisible.value },
++                            contactNetwork = contactNetwork
++                        )
++                    }
+@@ -375,8 +394,10 @@ internal class SwapVM(
+-                SWAP_INTO_ZEC -> {
+-                    requestSwapQuote.requestFlexInputIntoZec(
+-                        amount = amount,
+-                        refundAddress = address,
+-                        selectedAsset = asset,
+-                        slippage = slippage,
+-                        canNavigateToSwapQuote = { !isCancelStateVisible.value }
+-                    )
++                    SWAP_INTO_ZEC -> {
++                        requestSwapQuote.requestFlexInputIntoZec(
++                            amount = amount,
++                            refundAddress = address,
++                            selectedAsset = asset,
++                            slippage = slippage,
++                            canNavigateToSwapQuote = { !isCancelStateVisible.value },
++                            contactNetwork = contactNetwork
++                        )
++                    }
+@@ -383,0 +405,3 @@ internal class SwapVM(
++            } finally {
++                quoteActionInProgress = false
++                internalState.update { it.copy(isRequestingQuote = false) }
+@@ -385 +408,0 @@ internal class SwapVM(
+-            internalState.update { it.copy(isRequestingQuote = false) }
+@@ -395,7 +418 @@ internal class SwapVM(
+-            val asset =
+-                navigateToSwapAssetPicker(
+-                    onlyChainTicker =
+-                        internalState.value.selectedContact
+-                            ?.blockchain
+-                            ?.chainTicker
+-                )
++            val asset = navigateToSwapAssetPicker()
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
+index d7080a80c..2a28154b3 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
+@@ -7,0 +8,2 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.model.errorText
++import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
+@@ -14 +15,0 @@ import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
+-import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector.mayContainGiftCardSecret
+@@ -501 +502,7 @@ internal class SwapVMMapper {
+-                            !mayContainGiftCardSecret(state.selectedContact?.address ?: state.addressText) &&
++                            validateSwapRecipient(
++                                state.selectedContact?.address ?: state.addressText,
++                                state.swapAsset?.chainTicker,
++                                state.swapAsset?.tokenTicker,
++                                state.selectedContact?.blockchain?.chainTicker,
++                                allowPaymentAmount = false
++                            ).isValid &&
+@@ -517,6 +524,7 @@ internal class SwapVMMapper {
+-                when {
+-                    text.isEmpty() -> null
+-                    text.isBlank() -> stringRes("")
+-                    mayContainGiftCardSecret(text) -> stringRes(R.string.swap_error_giftCardLink)
+-                    else -> null
+-                },
++                validateSwapRecipient(
++                    state.selectedContact?.address ?: text,
++                    state.swapAsset?.chainTicker,
++                    state.swapAsset?.tokenTicker,
++                    state.selectedContact?.blockchain?.chainTicker,
++                    allowPaymentAmount = false
++                ).errorText(state.swapAsset?.chainTicker),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactScreen.kt
+index b3aed2335..860b74202 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactScreen.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactScreen.kt
+@@ -43 +43,2 @@ data class AddSwapABContactArgs(
+-    val address: String?
++    val address: String?,
++    val network: String? = null
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactVM.kt
+index d615a4199..ab357d484 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/AddSwapABContactVM.kt
+@@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.model.SwapBlockchain
++import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
+@@ -34 +35 @@ class AddSwapABContactVM(
+-    args: AddSwapABContactArgs,
++    private val args: AddSwapABContactArgs,
+@@ -39 +40,2 @@ class AddSwapABContactVM(
+-    private val navigateToSelectSwapBlockchain: NavigateToSelectSwapBlockchainUseCase
++    private val navigateToSelectSwapBlockchain: NavigateToSelectSwapBlockchainUseCase,
++    simpleSwapAssetProvider: SimpleSwapAssetProvider
+@@ -43 +45,6 @@ class AddSwapABContactVM(
+-    private val selectedBlockchain = MutableStateFlow<SwapBlockchain?>(null)
++    private val selectedBlockchain =
++        MutableStateFlow<SwapBlockchain?>(
++            simpleSwapAssetProvider.getCuratedSwapAssets().firstOrNull {
++                args.network != null && args.network.equals(it.chainTicker, ignoreCase = true)
++            }?.blockchain
++        )
+@@ -55,0 +63 @@ class AddSwapABContactVM(
++                    isEnabled = args.network == null,
+@@ -183 +191,3 @@ class AddSwapABContactVM(
+-            if (result != null) {
++            if (result != null &&
++                (args.network == null || args.network.equals(result.chainTicker, ignoreCase = true))
++            ) {
+@@ -194,0 +205,5 @@ class AddSwapABContactVM(
++            if (args.network != null &&
++                !args.network.equals(selectedBlockchain.value?.chainTicker, ignoreCase = true)
++            ) {
++                return@launch
++            }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientScreen.kt
+index 8458fbd36..379cd2086 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientScreen.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientScreen.kt
+@@ -23 +23,2 @@ data class SelectABSwapRecipientArgs(
+-    val requestId: String = UUID.randomUUID().toString()
++    val requestId: String = UUID.randomUUID().toString(),
++    val network: String? = null
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVM.kt
+index 1ff62de27..82ccee3f2 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVM.kt
+@@ -39 +39,5 @@ class SelectSwapABRecipientVM(
+-                createState(contacts)
++                createState(
++                    contacts?.filter {
++                        args.network == null || args.network.equals(it.blockchain?.chainTicker, ignoreCase = true)
++                    }
++                )
+@@ -63 +67,14 @@ class SelectSwapABRecipientVM(
+-                    }.orEmpty(),
++                    }.orEmpty().let { items ->
++                        if (args.network == null || contacts == null || items.isNotEmpty()) {
++                            items
++                        } else {
++                            listOf(
++                                AddressBookItem.Title(
++                                    stringRes(
++                                        R.string.private_contacts_network_empty,
++                                        stringRes(args.network.uppercase())
++                                    )
++                                )
++                            ) + items
++                        }
++                    },
+@@ -75 +92,3 @@ class SelectSwapABRecipientVM(
+-            title = stringRes(R.string.addressBook_selectRecipient),
++            title =
++                args.network?.let { stringRes(R.string.private_contacts_network_title, stringRes(it.uppercase())) }
++                    ?: stringRes(R.string.addressBook_selectRecipient),
+@@ -97 +116,2 @@ class SelectSwapABRecipientVM(
+-                address = null
++                address = null,
++                network = args.network
+@@ -105 +125 @@ class SelectSwapABRecipientVM(
+-                navigationRouter.replace(AddSwapABContactArgs(address = contact.address))
++                navigationRouter.replace(AddSwapABContactArgs(address = contact.address, network = args.network))
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
 index 22fac8c3b..0e534cb3e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailState.kt
@@ -19661,6 +20672,21 @@ index 813f56457..972dcc8f8 100644
 @@ -7 +6 @@
 -    <string translatable="false" name="accounts_zashi">Zodl</string>
 +    <string translatable="false" name="accounts_zashi">ZEC Private</string>
+diff --git a/ui-lib/src/main/res/ui/swap/values/recipient_strings.xml b/ui-lib/src/main/res/ui/swap/values/recipient_strings.xml
+new file mode 100644
+index 000000000..ad37d7293
+--- /dev/null
++++ b/ui-lib/src/main/res/ui/swap/values/recipient_strings.xml
+@@ -0,0 +1,9 @@
++<resources>
++    <string name="private_recipient_invalid">Enter a valid %1$s address.</string>
++    <string name="private_recipient_network">Choose a %1$s recipient or change the asset.</string>
++    <string name="private_recipient_asset">This payment request is for a different asset.</string>
++    <string name="private_recipient_amount">Use an address without a requested payment amount.</string>
++    <string name="private_recipient_uri">Unsupported payment request. Check its network and required details.</string>
++    <string name="private_contacts_network_title">%1$s contacts</string>
++    <string name="private_contacts_network_empty">No contacts on %1$s. Scan an address or add a contact.</string>
++</resources>
 diff --git a/ui-lib/src/main/res/ui/theme_settings/values-es/strings.xml b/ui-lib/src/main/res/ui/theme_settings/values-es/strings.xml
 index 9ef26ee1d..a6247d1a7 100644
 --- a/ui-lib/src/main/res/ui/theme_settings/values-es/strings.xml
@@ -20034,6 +21060,319 @@ index 3f54429cb..4c5470daa 100644
 -}
 +}
 \ No newline at end of file
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicyTest.kt
+new file mode 100644
+index 000000000..3650f1216
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicyTest.kt
+@@ -0,0 +1,237 @@
++package co.electriccoin.zcash.ui.common.model
++
++import java.math.BigDecimal
++import java.math.BigInteger
++import java.security.MessageDigest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertIs
++
++@Suppress("MagicNumber", "MaxLineLength")
++class RecipientAddressPolicyTest {
++    private val policy = RecipientAddressPolicy
++
++    @Test
++    fun eip55VectorsAndSharedEvmNetworks() {
++        // ERC55 official test cases (https://eips.ethereum.org/EIPS/eip-55).
++        val vectors = listOf(
++            "0x52908400098527886E0F7030069857D2E4169EE7",
++            "0x8617E340B3D01FA5F11F306F4090FD50E238070D",
++            "0xde709f2102306220921060314715629080e2fb77",
++            "0x27b1fdb04752bbc536007a920d24acb045561c26",
++            "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
++            "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
++            "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
++            "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb"
++        )
++        for (network in listOf("arb", "avax", "base", "bsc", "eth", "pol")) {
++            for (address in vectors) valid(address, network)
++            invalid("0x5aEDA56215b167893e80B4fE645BA6d5Bab767DE", network)
++            invalid(vectors.first().dropLast(1), network)
++        }
++    }
++
++    @Test
++    fun bitcoinAndCashaddrPublishedVectors() {
++        // BIP173/BIP350 official Segwit vectors; cashaddr specification conversion example.
++        valid("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu", "btc")
++        valid("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", "btc")
++        valid("BC1QW508D6QEJXTDG4Y5R3ZARVARY0C5XW7KV8F3T4", "btc")
++        valid("bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqzk5jj0", "btc")
++        invalid("bc1p0xlxvlhemja6c4dqv22uapctqupfhlxm9h8z3k2e72q4k9hcz7vqh2y7hd", "btc")
++        invalid("bc1Qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4", "btc")
++        invalid("bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080", "btc")
++        valid("bitcoincash:qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx6a", "bch")
++        valid("qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx6a", "bch")
++        invalid("bchtest:qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx6a", "bch")
++        invalid("bitcoincash:qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx6q", "bch")
++    }
++
++    @Test
++    fun versionBytesAndChecksumsAreEnforced() {
++        // Deterministic synthetic public payloads. Version bytes from each maintained chainparams.cpp;
++        // these fixtures represent encoding only, with no associated key or funding.
++        val versions = listOf("btc" to byteArrayOf(0), "ltc" to byteArrayOf(48),
++            "dash" to byteArrayOf(76), "tron" to byteArrayOf(65), "zec" to byteArrayOf(0x1c, 0xb8.toByte()))
++        for ((network, prefix) in versions) {
++            val address = encodeCheck(prefix + ByteArray(20) { 7 })
++            valid(address, network)
++            invalid(address.dropLast(1) + if (address.last() == '1') "2" else "1", network)
++            if (network != "btc") invalid(address, "btc")
++        }
++        invalid(encodeCheck(byteArrayOf(111) + ByteArray(20)), "btc")
++        invalid(encodeCheck(byteArrayOf(0x1d, 0x25) + ByteArray(20)), "zec")
++        valid("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh", "xrp") // XRPL documentation example.
++        invalid("rHb9CJAWyB4rj91VRWn96DkukG4bwdtyT1", "xrp")
++    }
++
++    @Test
++    fun fixedWidthAndAccountNameFormats() {
++        valid("11111111111111111111111111111111", "sol") // Solana system program, 32 zero bytes.
++        invalid("1111111111111111111111111111111", "sol")
++        valid("0x" + "a".repeat(64), "sui")
++        valid("0x2", "sui")
++        valid("A".repeat(63), "sui")
++        assertEquals("0x" + "0".repeat(63) + "2", policy.normalize("0x2", "sui"))
++        assertEquals("0x" + "0" + "a".repeat(63), policy.normalize("A".repeat(63), "sui"))
++        invalid("0x" + "a".repeat(65), "sui")
++        invalid("0x", "sui")
++        invalid("0x0x2", "sui")
++        valid("alice.near", "near")
++        valid("a".repeat(64), "near")
++        for (address in listOf("Alice.near", "alice..near", "alice.testnet", "-alice", "a")) invalid(address, "near")
++        invalid(" alice.near", "near")
++        invalid("alice.near\n", "near")
++    }
++
++    @Test
++    fun allCashaddrHashSizesAndTokenAwareDestinationsArePreserved() {
++        // Official cashaddr specification's larger mainnet vectors, in size order 20..64 bytes.
++        val addresses = listOf(
++            "bitcoincash:qr6m7j9njldwwzlg9v7v53unlr4jkmx6eylep8ekg2",
++            "bitcoincash:q9adhakpwzztepkpwp5z0dq62m6u5v5xtyj7j3h2ws4mr9g0",
++            "bitcoincash:qgagf7w02x4wnz3mkwnchut2vxphjzccwxgjvvjmlsxqwkcw59jxxuz",
++            "bitcoincash:qvch8mmxy0rtfrlarg7ucrxxfzds5pamg73h7370aa87d80gyhqxq5nlegake",
++            "bitcoincash:qnq8zwpj8cq05n7pytfmskuk9r4gzzel8qtsvwz79zdskftrzxtar994cgutavfklv39gr3uvz",
++            "bitcoincash:qh3krj5607v3qlqh5c3wq3lrw3wnuxw0sp8dv0zugrrt5a3kj6ucysfz8kxwv2k53krr7n933jfsunqex2w82sl",
++            "bitcoincash:qmvl5lzvdm6km38lgga64ek5jhdl7e3aqd9895wu04fvhlnare5937w4ywkq57juxsrh" +
++                "vw8ym5d8qx7sz7zz0zvcypqscw8jd03f",
++            "bitcoincash:qlg0x333p4238k0qrc5ej7rzfw5g8e4a4r6vvzyrcy8j3s5k0en7calvclhw46hudk5f" +
++                "lttj6ydvjc0pv3nchp52amk97tqa5zygg96mtky5sv5w",
++            // CashTokens specification: token-aware P2PKH and 32-byte token-aware P2SH.
++            "bitcoincash:zr7fzmep8g7h7ymfxy74lgc0v950j3r295z4y4gq0v",
++            "bitcoincash:rvqqqqqqqqqqqqqqqqqqqqqqzg69v7ysqqqqqqqqqqqqqqqqqqqqqn9alsp2y"
++        )
++        for (address in addresses) {
++            valid(address, "bch")
++            assertEquals(address,
++                assertIs<RecipientAddressPolicy.ParseResult.Parsed>(policy.parse(address)).input.address)
++            invalid(address.dropLast(1) + if (address.last() == 'q') "p" else "q", "bch")
++        }
++        // Published checksum-only vector deliberately has an invalid payload.
++        invalid("bitcoincash:qpzry9x8gf2tvdw0s3jn54khce6mua7lcw20ayyn", "bch")
++        val uppercase = "BITCOINCASH:QPM2QSZNHKS23Z7629MMS6S4CWEF74VCWVY22GDX6A"
++        assertIs<RecipientAddressPolicy.ParseResult.Parsed>(policy.parse("$uppercase?amount=1"))
++        assertIs<RecipientAddressPolicy.ParseResult.Parsed>(
++            policy.parse("bitcoincash:1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu?amount=1")
++        )
++    }
++
++    @Test
++    fun xrpXAddressRetainsEncodedTagAndRejectsTestnetOrInvalidChecksum() {
++        // XRPLF ripple-address-codec official vectors: no tag, tag 1, tag uint32 max.
++        val mainnet = listOf(
++            "X7AcgcsBL6XDcUb289X4mJ8djcdyKaB5hJDWMArnXr61cqZ",
++            "X7AcgcsBL6XDcUb289X4mJ8djcdyKaGZMhc9YTE92ehJ2Fu",
++            "XVLhHMPHU98es4dbozjVtdWzVrDjtV18pX8yuPT7y4xaEHi"
++        )
++        for (address in mainnet) {
++            valid(address, "xrp")
++            assertEquals(address,
++                assertIs<RecipientAddressPolicy.ParseResult.Parsed>(policy.parse(address)).input.address)
++        }
++        invalid("T719a5UwUCnEs54UsxG9CJYYDhwmFCvbJNZbi37gBGkRkbE", "xrp")
++        invalid(mainnet.first().dropLast(1) + "r", "xrp")
++        invalid("r9cZA1mLK5R5Am25ArfXFmqgNwjZgnfk59:1", "xrp")
++        val xrpAlphabet = "rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz"
++        for (routing in listOf(
++            byteArrayOf(2) + ByteArray(8), // Undefined tag flag, even with a valid checksum.
++            byteArrayOf(0, 1) + ByteArray(7), // Tag bytes with the no-tag flag.
++            byteArrayOf(1) + ByteArray(7) + byteArrayOf(1) // Nonzero reserved byte.
++        )) {
++            invalid(encodeCheck(byteArrayOf(5, 68) + ByteArray(20) + routing, xrpAlphabet), "xrp")
++        }
++    }
++
++    @Test
++    fun unifiedZcashChecksumStillRequiresSdkReceiverValidation() {
++        // https://github.com/zcash/zcash-test-vectors/blob/master/test-vectors/json/unified_address.json row 0.
++        // Public address only; no private material copied.
++        val address = "u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c7q2su5lqfh23sp7fk" +
++            "f3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf"
++        assertEquals(true, assertIs<RecipientAddressPolicy.Validation.Valid>(policy.validate(address,
++            "zec")).requiresZcashSdkValidation)
++        invalid(address.dropLast(1) + "q", "zec")
++        invalid(address.replaceFirst("u1", "utest1"), "zec")
++        val parsed = assertIs<RecipientAddressPolicy.ParseResult.Parsed>(
++            policy.parse("zcash:$address?amount=1.25")
++        ).input
++        assertEquals("zec", parsed.network)
++        assertEquals("zec", parsed.asset)
++        assertEquals(BigDecimal("1.25"), parsed.amount)
++        for (query in listOf("memo=YWJj", "address.1=$address", "amount.1=2", "req-unknown=1")) {
++            assertIs<RecipientAddressPolicy.ParseResult.Invalid>(policy.parse("zcash:$address?$query"))
++        }
++    }
++
++    @Test
++    fun bip21RetainsNetworkAmountAndMetadata() {
++        val parsed = assertIs<RecipientAddressPolicy.ParseResult.Parsed>(
++            policy.parse("bitcoin:1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu?amount=0.25&label=Example%20recipient&message=a+b")
++        ).input
++        assertEquals("btc", parsed.network)
++        assertEquals("btc", parsed.asset)
++        assertEquals(BigDecimal("0.25"), parsed.amount)
++        assertEquals(mapOf("label" to "Example recipient", "message" to "a+b"), parsed.routing)
++        for (field in listOf("req-extra=1", "dt=1", "amount=1&amount=2", "amount=-1", "amount=1e4",
++            "amount=0.123456789", "lightning=anything")) {
++            assertIs<RecipientAddressPolicy.ParseResult.Invalid>(
++                policy.parse("bitcoin:1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu?$field")
++            )
++        }
++    }
++
++    @Test
++    fun eip681PreservesChainAndConvertsWei() {
++        val address = "0xde709f2102306220921060314715629080e2fb77"
++        val parsed = assertIs<RecipientAddressPolicy.ParseResult.Parsed>(
++            policy.parse("ethereum:$address@8453?value=2.014e18")
++        ).input
++        assertEquals("base", parsed.network)
++        assertEquals("eth", parsed.asset)
++        assertEquals(0, BigDecimal("2.014").compareTo(parsed.amount))
++        for (suffix in listOf("@11155111", "@1/transfer?address=$address&uint256=1", "@1?value=1.2",
++            "@1?value=1e99999999", "@1?gas=21000", "@1?value=1&value=2")) {
++            assertIs<RecipientAddressPolicy.ParseResult.Invalid>(policy.parse("ethereum:$address$suffix"))
++        }
++    }
++
++    @Test
++    fun unknownProtocolsAndRoutingFailClosedAndRawInputIsPreserved() {
++        for (input in listOf("solana:11111111111111111111111111111111?reference=x", "https://example.com/pay",
++            "xrpl:rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh?dt=1", "bitcoin://abc", "bitcoin:abc#ignored")) {
++            assertIs<RecipientAddressPolicy.ParseResult.Invalid>(policy.parse(input))
++        }
++        assertEquals(" alice.near ",
++            assertIs<RecipientAddressPolicy.ParseResult.Parsed>(policy.parse(" alice.near ")).input.address)
++        assertEquals("bch",
++            assertIs<RecipientAddressPolicy.ParseResult.Parsed>(
++                policy.parse("bitcoincash:qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx6a")
++            ).input.network
++        )
++    }
++
++    private fun valid(address: String, network: String) {
++        assertIs<RecipientAddressPolicy.Validation.Valid>(policy.validate(address, network), "$network: $address")
++    }
++
++    private fun invalid(address: String, network: String) {
++        assertIs<RecipientAddressPolicy.Validation.Invalid>(policy.validate(address, network), "$network: $address")
++    }
++
++    private fun encodeCheck(
++        payload: ByteArray,
++        alphabet: String = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
++    ): String {
++        val digest = MessageDigest.getInstance("SHA-256")
++        val bytes = payload + digest.digest(digest.digest(payload)).take(4).toByteArray()
++        var number = BigInteger(1, bytes)
++        var result = ""
++        while (number > BigInteger.ZERO) {
++            val division = number.divideAndRemainder(BigInteger.valueOf(58))
++            result = alphabet[division[1].toInt()] + result
++            number = division[0]
++        }
++        return alphabet.first().toString().repeat(bytes.takeWhile { it == 0.toByte() }.size) + result
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapRecipientValidationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapRecipientValidationTest.kt
+new file mode 100644
+index 000000000..57ac7cfd6
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapRecipientValidationTest.kt
+@@ -0,0 +1,64 @@
++package co.electriccoin.zcash.ui.common.model
++
++import java.math.BigDecimal
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++class SwapRecipientValidationTest {
++    private val btc = "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu"
++    private val evm = "0xde709f2102306220921060314715629080e2fb77"
++
++    @Test
++    fun rawEvmUsesSelectedNetworkAndTokenWithoutInferringEither() {
++        assertTrue(validateSwapRecipient(evm, "eth", "eth").isValid)
++        assertTrue(validateSwapRecipient(evm, "eth", "wbtc").isValid)
++        assertTrue(validateSwapRecipient(evm, "base", "usdc").isValid)
++        assertFalse(validateSwapRecipient(evm, "btc", "btc").isValid)
++    }
++
++    @Test
++    fun savedContactNetworkRemainsAuthoritativeAcrossSharedAddressFormats() {
++        val mismatch = validateSwapRecipient(evm, "base", "eth", contactNetwork = "eth")
++        assertEquals(SwapRecipientError.NETWORK, mismatch.error)
++        assertFalse(mismatch.isValid)
++        assertTrue(validateSwapRecipient(evm, "eth", "wbtc", contactNetwork = "eth").isValid)
++    }
++
++    @Test
++    fun uriRetainsNetworkAssetAndNativeAmount() {
++        val value = "bitcoin:$btc?amount=0.5"
++        assertEquals(SwapRecipientError.NETWORK, validateSwapRecipient(value, "eth", "eth").error)
++        assertEquals(SwapRecipientError.ASSET, validateSwapRecipient(value, "btc", "wbtc").error)
++        val valid = validateSwapRecipient(value, "btc", "btc")
++        assertTrue(valid.isValid)
++        assertEquals(btc, valid.input?.address)
++        assertEquals(BigDecimal("0.5"), valid.input?.amount)
++    }
++
++    @Test
++    fun unsupportedRequiredFieldsAndRoutingDisableQuote() {
++        for (query in listOf("req-extra=1", "dt=4", "amount.1=2")) {
++            val result = validateSwapRecipient("bitcoin:$btc?$query", "btc", "btc")
++            assertFalse(result.isValid)
++            assertEquals(SwapRecipientError.URI, result.error)
++        }
++    }
++
++    @Test
++    fun mismatchedInputRemainsInvalidUntilCorrectedInSameNetworkContext() {
++        assertFalse(validateSwapRecipient(evm, "btc", "btc", "eth").isValid)
++        assertTrue(validateSwapRecipient(evm, "eth", "wbtc", "eth").isValid)
++        assertTrue(validateSwapRecipient(btc, "btc", "btc").isValid)
++    }
++
++    @Test
++    fun paymentAmountRequiresFormWithMatchingOutputMeaning() {
++        val request = "bitcoin:$btc?amount=0.5"
++        val rejected = validateSwapRecipient(request, "btc", "btc", allowPaymentAmount = false)
++        assertFalse(rejected.isValid)
++        assertEquals(SwapRecipientError.PAYMENT_AMOUNT, rejected.error)
++        assertTrue(validateSwapRecipient(request, "btc", "btc", allowPaymentAmount = true).isValid)
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TransactionExplorerTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/TransactionExplorerTest.kt
 new file mode 100644
 index 000000000..0ecbe3d01
@@ -20469,7 +21808,7 @@ index 000000000..2a71971b1
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt
-index cffe4775f..d11822df2 100644
+index cffe4775f..58809a8cd 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KtorNearApiProviderTest.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.common.provider
@@ -20481,41 +21820,51 @@ index cffe4775f..d11822df2 100644
 +import kotlinx.serialization.json.jsonObject
 @@ -24 +25,0 @@ import kotlin.test.assertFalse
 -import kotlin.test.assertNotNull
-@@ -26 +26,0 @@ import kotlin.test.assertNull
--import kotlin.test.assertTrue
-@@ -31,2 +31 @@ import kotlin.time.Instant
+@@ -31,2 +32 @@ import kotlin.time.Instant
 - * privileged endpoints (quote, deposit submit, status) must carry the `Authorization: Bearer …`
 - * credential, the public token list must NOT, and a NEAR error body must be lifted into a typed
 + * swap endpoints and the public token list must omit Authorization, and a NEAR error body must be lifted into a typed
-@@ -63 +62 @@ class KtorNearApiProviderTest {
+@@ -45 +45,3 @@ class KtorNearApiProviderTest {
+-    private val provider = KtorNearApiProvider(RecordingHttpClientProvider())
++    private val diagnosticEvents = mutableListOf<String>()
++    private val provider =
++        KtorNearApiProvider(RecordingHttpClientProvider(), QuoteRequestDiagnostics(diagnosticEvents::add))
+@@ -63 +65 @@ class KtorNearApiProviderTest {
 -    fun requestQuoteSendsBearerAuthorizationHeader() =
 +    fun requestQuoteDoesNotSendAuthorizationHeader() =
-@@ -72 +71,4 @@ class KtorNearApiProviderTest {
+@@ -72 +74,4 @@ class KtorNearApiProviderTest {
 -            assertBearerAuthorization(request)
 +            val body = Json.parseToJsonElement((request.body as TextContent).text).jsonObject
 +            assertEquals("[]", body["appFees"].toString())
 +            assertNull(body["referral"])
 +            assertNoAuthorization(request)
-@@ -77 +79 @@ class KtorNearApiProviderTest {
+@@ -77 +82 @@ class KtorNearApiProviderTest {
 -    fun submitDepositTransactionSendsBearerAuthorizationHeader() =
 +    fun submitDepositTransactionDoesNotSendAuthorizationHeader() =
-@@ -86 +88 @@ class KtorNearApiProviderTest {
+@@ -86 +91 @@ class KtorNearApiProviderTest {
 -            assertBearerAuthorization(request)
 +            assertNoAuthorization(request)
-@@ -91 +93 @@ class KtorNearApiProviderTest {
+@@ -91 +96 @@ class KtorNearApiProviderTest {
 -    fun checkSwapStatusSendsBearerAuthorizationHeaderAndDepositAddressParameter() =
 +    fun checkSwapStatusDoesNotSendAuthorizationHeaderAndDepositAddressParameter() =
-@@ -100 +102 @@ class KtorNearApiProviderTest {
+@@ -100 +105 @@ class KtorNearApiProviderTest {
 -            assertBearerAuthorization(request)
 +            assertNoAuthorization(request)
-@@ -138,4 +140,2 @@ class KtorNearApiProviderTest {
+@@ -116,0 +122,6 @@ class KtorNearApiProviderTest {
++            assertEquals(3, diagnosticEvents.size)
++            assertTrue(diagnosticEvents[0].startsWith("stage=CLIENT_CREATE "))
++            assertTrue(diagnosticEvents[1].startsWith("stage=HTTP_REQUEST "))
++            assertTrue(diagnosticEvents[1].endsWith("status=400"))
++            assertTrue(diagnosticEvents[2].startsWith("stage=CLIENT_CLOSE "))
++            assertFalse(diagnosticEvents.any { "boom" in it || "recipient" in it || "refund" in it })
+@@ -138,4 +149,2 @@ class KtorNearApiProviderTest {
 -    private fun assertBearerAuthorization(request: HttpRequestData) {
 -        val authorization = request.headers[HttpHeaders.Authorization]
 -        assertNotNull(authorization, "Authorization header must be present")
 -        assertTrue(authorization.startsWith("Bearer "), "Authorization header must be a Bearer token")
 +    private fun assertNoAuthorization(request: HttpRequestData) {
 +        assertNull(request.headers[HttpHeaders.Authorization])
-@@ -155 +155 @@ class KtorNearApiProviderTest {
+@@ -155 +164 @@ class KtorNearApiProviderTest {
 -            appFees = listOf(AppFee(recipient = "affiliate", fee = 75))
 +            appFees = emptyList()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/OkHttpTlsRegressionTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/OkHttpTlsRegressionTest.kt
@@ -20713,16 +22062,67 @@ index 000000000..5faa36fb1
 +        generatePrivate(ECPrivateKeySpec(BigInteger("4"), secp384r1))
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnosticsTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnosticsTest.kt
+new file mode 100644
+index 000000000..11bcf733f
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnosticsTest.kt
+@@ -0,0 +1,44 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.test.runTest
++import java.io.IOException
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++import kotlin.test.assertFalse
++import kotlin.test.assertSame
++
++class QuoteRequestDiagnosticsTest {
++    @Test
++    fun recordsStageElapsedAndClassWithoutExceptionMessage() =
++        runTest {
++            val events = mutableListOf<String>()
++            var time = 0L
++            val diagnostics = QuoteRequestDiagnostics(events::add) { time }
++            val failure = IOException("private address and amount")
++
++            val thrown = assertFailsWith<IOException> {
++                diagnostics.trace(QuoteRequestStage.HTTP_REQUEST) {
++                    time = 3_000_000L
++                    throw failure
++                }
++            }
++
++            assertSame(failure, thrown)
++            assertEquals("stage=HTTP_REQUEST elapsedMs=3 exception=IOException status=none", events.single())
++            assertFalse(events.single().contains(failure.message!!))
++        }
++
++    @Test
++    fun preservesCancellationAndSuccessWhenSinkFails() =
++        runTest {
++            val diagnostics = QuoteRequestDiagnostics(sink = { error("unavailable diagnostic backend") })
++            assertEquals("result", diagnostics.trace(QuoteRequestStage.CLIENT_CREATE) { "result" })
++            val cancelled = CancellationException("private cancellation context")
++            val thrown = assertFailsWith<CancellationException> {
++                diagnostics.trace(QuoteRequestStage.HTTP_REQUEST) { throw cancelled }
++            }
++            assertSame(cancelled, thrown)
++        }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapQuoteLifecycleTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapQuoteLifecycleTest.kt
 new file mode 100644
-index 000000000..d8641f161
+index 000000000..6accdfc61
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapQuoteLifecycleTest.kt
-@@ -0,0 +1,202 @@
+@@ -0,0 +1,274 @@
 +package co.electriccoin.zcash.ui.common.repository
 +
 +import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 +import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
++import co.electriccoin.zcash.ui.common.model.SwapAsset
 +import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 +import co.electriccoin.zcash.ui.common.model.SwapMode
 +import co.electriccoin.zcash.ui.common.model.SwapQuote
@@ -20835,6 +22235,68 @@ index 000000000..d8641f161
 +        }
 +
 +    @Test
++    fun missingZecAssetEndsLoadingWithoutRequestingProvider() =
++        runTest {
++            val source = dataSourceReturning(flexQuote())
++            val repository = SwapRepositoryImpl(source, mockk(relaxed = true)).apply { scope = testScope }
++
++            requestIncoming(repository)
++            val incomingError = assertIs<SwapQuoteData.Error>(repository.quote.value)
++            assertEquals(SwapMode.FLEX_INPUT, incomingError.mode)
++            assertIs<SwapAssetsUnavailableException>(incomingError.exception)
++
++            requestOutgoing(repository, btc)
++            val outgoingError = assertIs<SwapQuoteData.Error>(repository.quote.value)
++            assertEquals(SwapMode.EXACT_INPUT, outgoingError.mode)
++            assertIs<SwapAssetsUnavailableException>(outgoingError.exception)
++            coVerify(exactly = 0) { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) }
++
++            repository.requestRefreshAssetsOnce()
++            requestIncoming(repository)
++            assertIs<SwapQuoteData.Success>(repository.quote.value)
++        }
++
++    @Test
++    fun failedOutgoingRequestUsesCorrectedAssetWithoutRestart() =
++        runTest {
++            val wbtc = SwapAssetTestFixture.asset(tokenTicker = "wbtc", chainTicker = "eth")
++            val source = dataSourceReturning(flexQuote())
++            coEvery { source.getSupportedTokens() } returns listOf(zec, btc, wbtc)
++            coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
++                val selectedAsset = arg<SwapAsset>(5)
++                if (selectedAsset == btc) throw IOException("Simulated timeout")
++                FakeSwapQuote(
++                    originAsset = zec,
++                    destinationAsset = selectedAsset,
++                    mode = SwapMode.EXACT_INPUT,
++                    amountIn = BigDecimal("2"),
++                    amountInFormatted = BigDecimal("2"),
++                    amountOutFormatted = BigDecimal.ONE,
++                    depositAddress = "deposit",
++                    destinationAddress = arg(4),
++                    refundAddress = arg(2)
++                )
++            }
++            val repository = loadedRepository(source)
++
++            requestOutgoing(repository, btc)
++            assertIs<SwapQuoteData.Error>(repository.quote.value)
++            repository.clearQuote()
++            requestOutgoing(repository, wbtc)
++
++            val result = assertIs<SwapQuoteData.Success>(repository.quote.value)
++            assertEquals(wbtc, result.quote.destinationAsset)
++            coVerify(exactly = 1) {
++                source.requestQuote(
++                    SwapMode.EXACT_INPUT, BigDecimal("2"), "refund", zec, "recipient", btc, BigDecimal("2")
++                )
++                source.requestQuote(
++                    SwapMode.EXACT_INPUT, BigDecimal("2"), "refund", zec, "recipient", wbtc, BigDecimal("2")
++                )
++            }
++        }
++
++    @Test
 +    fun dismissedRequestCannotPublishLateNetworkErrorOverNextQuote() =
 +        runTest {
 +            val finishOldRequest = CompletableDeferred<Unit>()
@@ -20894,6 +22356,15 @@ index 000000000..d8641f161
 +            refundAddress = "refund",
 +            destinationAddress = recipient,
 +            originAsset = btc,
++            slippage = BigDecimal("2")
++        )
++
++    private fun requestOutgoing(repository: SwapRepositoryImpl, destinationAsset: SwapAsset) =
++        repository.requestExactInputQuote(
++            amount = BigDecimal("2"),
++            address = "recipient",
++            refundAddress = "refund",
++            destinationAsset = destinationAsset,
 +            slippage = BigDecimal("2")
 +        )
 +
@@ -21452,6 +22923,82 @@ index 40bfe60a6..39059e4b6 100644
 +            coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved) }
 +        }
 +
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GiftCardContactGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GiftCardContactGuardTest.kt
+index b1db33a76..dd41ac17b 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GiftCardContactGuardTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GiftCardContactGuardTest.kt
+@@ -85,0 +86 @@ class GiftCardContactGuardTest {
++            assertEquals(ABContactSaveResult.GiftCardLinkRefused, save("Card", link, "btc"), name)
+@@ -117 +118 @@ class GiftCardContactGuardTest {
+-                address = "bc1qordinary",
++                address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+@@ -123 +124,35 @@ class GiftCardContactGuardTest {
+-        verify(exactly = 1) { addressBookRepository.updateContact(existing, "B", "bc1qordinary", "btc") }
++        verify(exactly = 1) {
++            addressBookRepository.updateContact(existing, "B", "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", "btc")
++        }
++        verify(exactly = 2) { navigationRouter.back() }
++    }
++
++    @Test
++    fun invalidNetworkAddressesCannotBeSavedOrUpdated() {
++        val save = SaveABContactUseCase(addressBookRepository, navigationRouter)
++        val update = UpdateABContactUseCase(addressBookRepository, navigationRouter)
++        listOf(
++            "invalid-address" to "btc",
++            "0x1111111111111111111111111111111111111111" to "btc",
++            "bitcoin:1BoatSLRHtKNngkdXEeobR76b53LETtpyT" to "eth",
++        ).forEach { (address, chain) ->
++            assertEquals(ABContactSaveResult.InvalidAddress, save("Synthetic", address, chain))
++            assertEquals(ABContactSaveResult.InvalidAddress, update(existing, "Synthetic", address, chain))
++        }
++        verify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
++        verify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
++        verify { navigationRouter wasNot Called }
++    }
++
++    @Test
++    fun savesAndUpdatesParsedPaymentUriAddresses() {
++        val btc = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
++        val evm = "0x1111111111111111111111111111111111111111"
++        assertEquals(ABContactSaveResult.Saved, SaveABContactUseCase(addressBookRepository, navigationRouter)(
++            "Synthetic BTC", " bitcoin:$btc ", "btc"
++        ))
++        assertEquals(ABContactSaveResult.Saved, UpdateABContactUseCase(addressBookRepository, navigationRouter)(
++            existing, "Synthetic EVM", "ethereum:$evm@1", "eth"
++        ))
++        verify(exactly = 1) { addressBookRepository.saveContact("Synthetic BTC", btc, "btc") }
++        verify(exactly = 1) { addressBookRepository.updateContact(existing, "Synthetic EVM", evm, "eth") }
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCaseTest.kt
+index 639d7ef33..00800531a 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCaseTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSelectABSwapRecipientUseCaseTest.kt
+@@ -4,0 +5 @@ import co.electriccoin.zcash.ui.common.model.AddressBookContact
++import co.electriccoin.zcash.ui.common.model.SwapBlockchain
+@@ -8,0 +10,2 @@ import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
++import co.electriccoin.zcash.ui.design.util.imageRes
++import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -50,0 +54,20 @@ class NavigateToSelectABSwapRecipientUseCaseTest {
++            verify(exactly = 1) { router.back() }
++        }
++
++    @Test
++    fun networkContextRejectsMismatchedContactAndAcceptsMatchingContact() =
++        runTest(UnconfinedTestDispatcher()) {
++            val result = async { useCase(network = "eth") }
++            val args = forwarded.single() as SelectABSwapRecipientArgs
++            assertEquals("eth", args.network)
++
++            useCase.onSelected(contact("Other network"), args)
++            assertTrue(result.isActive)
++            verify(exactly = 0) { router.back() }
++
++            val matching =
++                contact("Alice").copy(
++                    blockchain = SwapBlockchain("ETH", stringRes("Ethereum"), imageRes("E"))
++                )
++            useCase.onSelected(matching, args)
++            assertEquals(matching, result.await())
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardIntegrationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RecoveryClipboardIntegrationTest.kt
 new file mode 100644
 index 000000000..cd0439b55
@@ -21777,12 +23324,23 @@ index 000000000..bc0e490ee
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
-index c01988b65..8d44dda7f 100644
+index c01988b65..561c1375f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCaseTest.kt
 @@ -6,0 +7 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.datasource.FreshShieldedAddressUnavailableException
-@@ -404,0 +406,92 @@ class RequestSwapQuoteUseCaseTest {
+@@ -27,0 +29 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
++import co.electriccoin.zcash.ui.screen.error.ErrorArgs
+@@ -37,0 +40 @@ import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.CancellationException
+@@ -47,0 +51 @@ import kotlin.test.BeforeTest
++import kotlin.test.assertFailsWith
+@@ -71,0 +76 @@ class RequestSwapQuoteUseCaseTest {
++    private val synchronizer = mockk<Synchronizer>()
+@@ -361 +366 @@ class RequestSwapQuoteUseCaseTest {
+-                    address = "destination",
++                    address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+@@ -404,0 +410,92 @@ class RequestSwapQuoteUseCaseTest {
 +    @Test
 +    fun incomingQuotesUseIndependentShieldedRecipients() =
 +        runBlocking {
@@ -21794,7 +23352,7 @@ index c01988b65..8d44dda7f 100644
 +            coVerify(exactly = 1) {
 +                swapRepository.requestFlexInputIntoZec(
 +                    amount = BigDecimal("1"),
-+                    refundAddress = "refund",
++                    refundAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
 +                    destinationAddress = "shielded-first",
 +                    originAsset = btc,
 +                    slippage = BigDecimal("2")
@@ -21803,7 +23361,7 @@ index c01988b65..8d44dda7f 100644
 +            coVerify(exactly = 1) {
 +                swapRepository.requestFlexInputIntoZec(
 +                    amount = BigDecimal("1"),
-+                    refundAddress = "refund",
++                    refundAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
 +                    destinationAddress = "shielded-second",
 +                    originAsset = btc,
 +                    slippage = BigDecimal("2")
@@ -21822,7 +23380,7 @@ index c01988b65..8d44dda7f 100644
 +            coVerify(exactly = 1) {
 +                swapRepository.requestExactInputQuote(
 +                    amount = BigDecimal("1"),
-+                    address = "destination",
++                    address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
 +                    refundAddress = "refund-first",
 +                    destinationAsset = btc,
 +                    slippage = BigDecimal("2")
@@ -21831,7 +23389,7 @@ index c01988b65..8d44dda7f 100644
 +            coVerify(exactly = 1) {
 +                swapRepository.requestExactInputQuote(
 +                    amount = BigDecimal("1"),
-+                    address = "destination",
++                    address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
 +                    refundAddress = "refund-second",
 +                    destinationAsset = btc,
 +                    slippage = BigDecimal("2")
@@ -21863,7 +23421,7 @@ index c01988b65..8d44dda7f 100644
 +        }
 +        useCase(invalid).requestExactInput(
 +            amount = BigDecimal.ONE,
-+            address = "destination",
++            address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
 +            selectedAsset = btc,
 +            slippage = BigDecimal("2"),
 +            canNavigateToSwapQuote = { false }
@@ -21875,26 +23433,167 @@ index c01988b65..8d44dda7f 100644
 +        coVerify(exactly = 0) { zashiProposalRepository.createExactInputSwapProposal(any(), any()) }
 +    }
 +
-@@ -494 +587 @@ class RequestSwapQuoteUseCaseTest {
+@@ -406,0 +504,67 @@ class RequestSwapQuoteUseCaseTest {
++    @Test
++    fun invalidRecipientsStopEveryModeBeforeFreshAddressOrProvider() = runBlocking {
++        val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
++        instance.requestExactInput(BigDecimal.ONE, "invalid private value", btc, BigDecimal.ONE, { true })
++        instance.requestExactOutput(BigDecimal.ONE, "invalid private value", btc, BigDecimal.ONE, { true })
++        instance.requestFlexInputIntoZec(BigDecimal.ONE, "invalid private value", btc, BigDecimal.ONE, { true })
++        coVerify(exactly = 0) { accountDataSource.requestNextShieldedAddress(any()) }
++        verify(exactly = 0) {
++            swapRepository.requestExactInputQuote(any(), any(), any(), any(), any())
++            swapRepository.requestExactOutputQuote(any(), any(), any(), any(), any())
++            swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any())
++        }
++        verify(exactly = 3) {
++            navigateToError(
++                match<ErrorArgs.General> { it.exception.message == "Invalid swap recipient for selected asset" }, any()
++            )
++        }
++    }
++
++    @Test
++    fun contactNetworkMismatchStopsBeforeFreshAddress() = runBlocking {
++        val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
++        instance.requestExactInput(
++            BigDecimal.ONE, "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", btc, BigDecimal.ONE, { true },
++            contactNetwork = "eth"
++        )
++        coVerify(exactly = 0) { accountDataSource.requestNextShieldedAddress(any()) }
++        verify(exactly = 0) { swapRepository.requestExactInputQuote(any(), any(), any(), any(), any()) }
++        assertNavigatedToError()
++    }
++
++    @Test
++    fun paymentUriIsNormalizedBeforeQuoteRequest() = runBlocking {
++        val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
++        instance.requestExactInput(
++            BigDecimal.ONE, " bitcoin:1BoatSLRHtKNngkdXEeobR76b53LETtpyT ", btc, BigDecimal.ONE, { true }
++        )
++        verify {
++            swapRepository.requestExactInputQuote(
++                BigDecimal.ONE, "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", "deposit", btc, BigDecimal.ONE
++            )
++        }
++    }
++
++    @Test
++    fun proposalCancellationPropagatesWithoutErrorNavigation() = runBlocking {
++        coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any()) } throws CancellationException()
++        val instance = useCase(swapQuote(zec, btc))
++        assertFailsWith<CancellationException> { instance.exactInput() }
++        verify(exactly = 0) { navigateToError(any(), any()) }
++        verify(exactly = 0) { navigationRouter.forward(SwapQuoteArgs) }
++    }
++
++    @Test
++    fun invalidZcashSdkRecipientStopsBeforeFreshAddressOrQuote() = runBlocking {
++        val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
++        coEvery { synchronizer.validateAddress(any()) } returns AddressType.Invalid("private native reason")
++        val recipient =
++            "u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c7q2su5lqfh23sp7fkf3kt27ve" +
++                "5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf"
++        instance.requestExactInput(BigDecimal.ONE, recipient, zec, BigDecimal.ONE, { true })
++        coVerify(exactly = 1) { synchronizer.validateAddress(recipient) }
++        coVerify(exactly = 0) { accountDataSource.requestNextShieldedAddress(any()) }
++        verify(exactly = 0) { swapRepository.requestExactInputQuote(any(), any(), any(), any(), any()) }
++        assertNavigatedToError()
++    }
++
+@@ -454 +618 @@ class RequestSwapQuoteUseCaseTest {
+-            address = "destination",
++            address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+@@ -463 +627 @@ class RequestSwapQuoteUseCaseTest {
+-            address = "destination",
++            address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+@@ -472 +636 @@ class RequestSwapQuoteUseCaseTest {
+-            refundAddress = "refund",
++            refundAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+@@ -492 +656 @@ class RequestSwapQuoteUseCaseTest {
+-        val synchronizer = mockk<Synchronizer> { coEvery { validateAddress(any()) } returns AddressType.Unified }
++        coEvery { synchronizer.validateAddress(any()) } returns AddressType.Unified
+@@ -494 +658 @@ class RequestSwapQuoteUseCaseTest {
 -        coEvery { accountDataSource.requestNextShieldedAddress() } returns shieldedAddress
 +        coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returns shieldedAddress
+@@ -518 +682 @@ class RequestSwapQuoteUseCaseTest {
+-        destinationAddress: String = "destination",
++        destinationAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+@@ -541 +705 @@ class RequestSwapQuoteUseCaseTest {
+-        destinationAddress: String = "destination",
++        destinationAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+@@ -559 +723 @@ class RequestSwapQuoteUseCaseTest {
+-        refundAddress: String = "refund",
++        refundAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCaseTest.kt
+index 9e55e6f64..f78885bbb 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCaseTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCaseTest.kt
+@@ -9,0 +10 @@ import io.mockk.mockk
++import io.mockk.verify
+@@ -28 +29 @@ class ValidateSwapABContactAddressUseCaseTest {
+-                    address = "bc1qexisting",
++                    address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+@@ -48,0 +50 @@ class ValidateSwapABContactAddressUseCaseTest {
++            verify(exactly = 0) { addressBookRepository.contacts }
+@@ -54,2 +56,3 @@ class ValidateSwapABContactAddressUseCaseTest {
+-            assertEquals(ContactAddressValidationResult.Valid, validate("bc1qnew", btc))
+-            assertEquals(ContactAddressValidationResult.NotUnique, validate("bc1qexisting", btc))
++            assertEquals(ContactAddressValidationResult.Valid, validate("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", btc))
++            assertEquals(ContactAddressValidationResult.NotUnique, validate(existing.address, btc))
++            assertEquals(ContactAddressValidationResult.Valid, validate(existing.address, btc, exclude = existing))
+@@ -56,0 +60,27 @@ class ValidateSwapABContactAddressUseCaseTest {
++
++    @Test
++    fun invalidAddressAndMissingNetworkAreRejectedBeforeContactLookup() = runTest {
++        assertEquals(ContactAddressValidationResult.Invalid, validate("bc1qinvalid", btc))
++        assertEquals(ContactAddressValidationResult.Invalid, validate(existing.address, null))
++        assertEquals(
++            ContactAddressValidationResult.Invalid,
++            validate("ethereum:0x1111111111111111111111111111111111111111@1", btc)
++        )
++        verify(exactly = 0) { addressBookRepository.contacts }
++    }
++
++    @Test
++    fun paymentUriUsesParsedAddressForDuplicateCheck() = runTest {
++        assertEquals(ContactAddressValidationResult.NotUnique, validate("bitcoin:${existing.address}", btc))
++    }
++
++    @Test
++    fun invalidLegacyContactsRemainUnchangedDuringValidation() = runTest {
++        val legacy = existing.copy(contact = existing.contact.copy(address = "legacy-invalid-address"))
++        val contacts = MutableStateFlow(listOf(legacy))
++        every { addressBookRepository.contacts } returns contacts
++        assertEquals(ContactAddressValidationResult.Invalid, validate(legacy.address, btc))
++        assertEquals(listOf(legacy), contacts.value)
++        verify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
++        verify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
++    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
-index 1d445dd11..fa9d7d5aa 100644
+index 1d445dd11..709f46692 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
-@@ -75 +75 @@ class ViewOnlySpendGuardTest {
+@@ -11,0 +12 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
++import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
+@@ -75 +76 @@ class ViewOnlySpendGuardTest {
 -            coEvery { requestNextShieldedAddress() } returns "u"
 +            coEvery { requestNextShieldedAddress(requireFresh = true) } returns "u"
-@@ -126 +126,3 @@ class ViewOnlySpendGuardTest {
+@@ -126 +127,3 @@ class ViewOnlySpendGuardTest {
 -            useCase(Zip321ParseUriValidation.Valid("zcash:t1", mockk(relaxed = true)), ScanArgs(ScanFlow.HOMEPAGE))
 +            useCase(Zip321ParseUriValidation.Valid(
 +                "zcash:t1", mockk { every { payments } returns listOf(mockk()) }
 +            ), ScanArgs(ScanFlow.HOMEPAGE))
-@@ -146 +148,3 @@ class ViewOnlySpendGuardTest {
+@@ -146 +149,3 @@ class ViewOnlySpendGuardTest {
 -            useCase(Zip321ParseUriValidation.Valid("zcash:t1", mockk(relaxed = true)), ScanArgs(ScanFlow.SEND))
 +            useCase(Zip321ParseUriValidation.Valid(
 +                "zcash:t1", mockk { every { payments } returns listOf(mockk()) }
 +            ), ScanArgs(ScanFlow.SEND))
+@@ -173,2 +178,2 @@ class ViewOnlySpendGuardTest {
+-                address = "address",
+-                selectedAsset = mockk(relaxed = true),
++                address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
++                selectedAsset = SwapAssetTestFixture.asset(),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321PaymentCountTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321PaymentCountTest.kt
 new file mode 100644
 index 000000000..75b1a6427
@@ -22476,14 +24175,28 @@ index acc8741c2..430fc754d 100644
 -                    every { observe() } returns MutableStateFlow(Status.DISABLED)
 -                },
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt
-index d59e700c3..4a60acef4 100644
+index d59e700c3..c246efafa 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt
 @@ -12,0 +13 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.design.util.stringResByNumber
 @@ -23,0 +25 @@ import kotlin.test.assertNull
 +import kotlin.test.assertNotNull
-@@ -92,0 +95,38 @@ class ExactOutputVMMapperGiftCardLinkTest {
+@@ -64 +66 @@ class ExactOutputVMMapperGiftCardLinkTest {
+-        GiftCardSecretFixture.ordinaryAddresses.forEach { address ->
++        listOf("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4").forEach { address ->
+@@ -71,0 +74,10 @@ class ExactOutputVMMapperGiftCardLinkTest {
++    @Test
++    fun wrongNetworkShowsInlineErrorAndDisablesReview() {
++        val state = mapper.createState(
++            internalState(address = "0xde709f2102306220921060314715629080e2fb77"),
++            callbacks
++        )
++        assertNotNull(state.address.error)
++        assertFalse(state.primaryButton?.isEnabled ?: true)
++    }
++
+@@ -92,0 +105,39 @@ class ExactOutputVMMapperGiftCardLinkTest {
 +    @Test
 +    fun computedTokenInputMatchesRequestedAtomicAmount() {
 +        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 8)
@@ -22498,7 +24211,8 @@ index d59e700c3..4a60acef4 100644
 +
 +        var requested: BigDecimal? = null
 +        val state = mapper.createState(
-+            internalState("ordinary-address").copy(asset = asset, amount = computed, fiatAmount = fiat),
++            internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu").copy(asset = asset, amount = computed,
++                fiatAmount = fiat),
 +            callbacks.copy(onRequestSwapQuoteClick = { amount, _, _ -> requested = amount })
 +        )
 +        assertNotNull(state.primaryButton).onClick()
@@ -22510,7 +24224,7 @@ index d59e700c3..4a60acef4 100644
 +        val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 6)
 +        var updated: NumberTextFieldInnerState? = null
 +        val state = mapper.createState(
-+            internalState("ordinary-address").copy(asset = asset),
++            internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu").copy(asset = asset),
 +            callbacks.copy(onTextFieldChange = { amount, _ -> updated = amount })
 +        )
 +        state.amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499")))
@@ -22522,11 +24236,305 @@ index d59e700c3..4a60acef4 100644
 +        )
 +    }
 +
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayVMTest.kt
+index 73415ae6a..4b0201e73 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayVMTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayVMTest.kt
+@@ -29,0 +30 @@ import io.mockk.verify
++import kotlinx.coroutines.CancellationException
+@@ -59,0 +61,5 @@ class PayVMTest {
++    private companion object {
++        const val BTC_ADDRESS = "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu"
++        const val ETH_ADDRESS = "0xde709f2102306220921060314715629080e2fb77"
++    }
++
+@@ -173 +179,3 @@ class PayVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
++            harness.onAddressChange(BTC_ADDRESS)
++
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -178 +186 @@ class PayVMTest {
+-                    address = "destination-address",
++                    address = BTC_ADDRESS,
+@@ -181 +189,2 @@ class PayVMTest {
+-                    canNavigateToSwapQuote = any()
++                    canNavigateToSwapQuote = any(),
++                    contactNetwork = null
+@@ -194 +203,3 @@ class PayVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
++            harness.onAddressChange(BTC_ADDRESS)
++
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -198 +209 @@ class PayVMTest {
+-                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any())
++                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
+@@ -209 +220,3 @@ class PayVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
++            harness.onAddressChange(BTC_ADDRESS)
++
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -222 +235,3 @@ class PayVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), "destination-address")
++            harness.onAddressChange(BTC_ADDRESS)
++
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), BTC_ADDRESS)
+@@ -225 +240 @@ class PayVMTest {
+-                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any())
++                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
+@@ -236 +251,3 @@ class PayVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), "destination-address")
++            harness.onAddressChange(BTC_ADDRESS)
++
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), BTC_ADDRESS)
+@@ -265 +282,2 @@ class PayVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -278 +296,2 @@ class PayVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -294 +313,2 @@ class PayVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -313 +333,2 @@ class PayVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -330 +351 @@ class PayVMTest {
+-    fun scanResultAppliesAddressAndAmountAndClearsContact() =
++    fun scanResultPreservesCompatiblePaymentRequestAndClearsContact() =
+@@ -335 +356,5 @@ class PayVMTest {
+-                    scanResult = ScanResult(address = "scanned-address", amount = BigDecimal("2.5"))
++                    scanResult = ScanResult(
++                        address = BTC_ADDRESS,
++                        amount = BigDecimal("2.5"),
++                        rawInput = "bitcoin:$BTC_ADDRESS?amount=2.5"
++                    )
+@@ -342 +367 @@ class PayVMTest {
+-            assertEquals("scanned-address", harness.capturedState.address)
++            assertEquals("bitcoin:$BTC_ADDRESS?amount=2.5", harness.capturedState.address)
+@@ -376 +401 @@ class PayVMTest {
+-    fun assetPickerIsFilteredBySelectedContactChain() =
++    fun assetPickerRemainsEditableAfterSelectingContact() =
+@@ -384 +409,2 @@ class PayVMTest {
+-            coVerify { harness.navigateToSwapAssetPicker(onlyChainTicker = "eth") }
++            coVerify { harness.navigateToSwapAssetPicker() }
++            coVerify { harness.navigateToSelectSwapRecipient(network = "btc") }
+@@ -388,0 +415,66 @@ class PayVMTest {
++    @Test
++    fun tokenNetworkChangeRetainsContactAndCorrectionQuotesWithoutLeavingForm() =
++        runTest {
++            val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth")
++            val btc = SwapAssetTestFixture.asset()
++            val contact = contactOnChain("eth")
++            val harness = harness(preselect = eth, recipient = contact)
++            coEvery { harness.navigateToSwapAssetPicker(any()) } returnsMany listOf(btc, eth)
++            harness.collectState(this)
++            harness.onAddressBookClick()
++
++            harness.onSwapAssetPickerClick()
++            assertEquals(contact, harness.capturedState.selectedABContact)
++            assertEquals(btc, harness.capturedState.asset)
++            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, ETH_ADDRESS)
++            coVerify(exactly = 0) {
++                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
++            }
++
++            harness.onSwapAssetPickerClick()
++            assertEquals(contact, harness.capturedState.selectedABContact)
++            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, ETH_ADDRESS)
++            coVerify(exactly = 1) {
++                harness.requestSwapQuote.requestExactOutput(BigDecimal.ONE, ETH_ADDRESS, eth, BigDecimal("2"),
++                    any(), "eth")
++            }
++        }
++
++    @Test
++    fun callbackWithStaleAddressDoesNotRequestQuote() =
++        runTest {
++            val harness = harness()
++            harness.collectState(this)
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, "stale-address")
++            coVerify(exactly = 0) {
++                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
++            }
++        }
++
++    @Test
++    fun cancelledQuoteClearsLoadingAndAllowsCorrectedRetryInSameForm() =
++        runTest {
++            val harness = harness()
++            var attempts = 0
++            coEvery {
++                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
++            } coAnswers {
++                attempts++
++                if (attempts == 1) throw CancellationException("Controlled test cancellation")
++            }
++            harness.collectState(this)
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, BTC_ADDRESS)
++            assertEquals(false, harness.capturedState.isRequestingQuote)
++
++            val corrected = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
++            harness.onAddressChange(corrected)
++            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, corrected)
++            assertEquals(2, attempts)
++            assertEquals(false, harness.capturedState.isRequestingQuote)
++            coVerify(exactly = 1) {
++                harness.requestSwapQuote.requestExactOutput(any(), corrected, any(), any(), any(), null)
++            }
++        }
++
+@@ -390 +482,4 @@ class PayVMTest {
+-        mockk(relaxed = true) { every { blockchain } returns SwapAssetTestFixture.blockchain(chainTicker) }
++        mockk(relaxed = true) {
++            every { blockchain } returns SwapAssetTestFixture.blockchain(chainTicker)
++            every { address } returns if (chainTicker == "btc") BTC_ADDRESS else ETH_ADDRESS
++        }
+@@ -413 +508 @@ class PayVMTest {
+-            mockk<NavigateToSelectABSwapRecipientUseCase> { coEvery { this@mockk.invoke() } returns recipient }
++            mockk<NavigateToSelectABSwapRecipientUseCase> { coEvery { this@mockk.invoke(any()) } returns recipient }
+@@ -453,0 +549 @@ class PayVMTest {
++                navigateToSelectSwapRecipient = navigateToSelectSwapRecipient,
+@@ -503,0 +600 @@ class PayVMTest {
++        val navigateToSelectSwapRecipient: NavigateToSelectABSwapRecipientUseCase,
+@@ -529 +626 @@ class PayVMTest {
+-                requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any())
++                requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperGiftCardLinkTest.kt
+index 23393674d..6c082a48b 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperGiftCardLinkTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapperGiftCardLinkTest.kt
+@@ -24,0 +25 @@ import kotlin.test.assertNull
++import kotlin.test.assertNotNull
+@@ -69 +70,2 @@ class SwapVMMapperGiftCardLinkTest {
+-            GiftCardSecretFixture.ordinaryAddresses.forEach { address ->
++            listOf("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu",
++                "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4").forEach { address ->
+@@ -78,0 +81,12 @@ class SwapVMMapperGiftCardLinkTest {
++    @Test
++    fun wrongNetworkShowsInlineErrorAndDisablesQuoteInBothDirections() {
++        SwapDirection.entries.forEach { direction ->
++            val state = mapper.createState(
++                internalState(addressText = "0xde709f2102306220921060314715629080e2fb77", direction = direction),
++                callbacks
++            )
++            assertNotNull(state.address.error)
++            assertFalse(state.primaryButton?.isEnabled ?: true)
++        }
++    }
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
-index bf5467055..3b956901d 100644
+index bf5467055..f4b2b5f08 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/SwapVMTest.kt
-@@ -431,0 +432,36 @@ class SwapVMTest {
+@@ -30,0 +31 @@ import io.mockk.verify
++import kotlinx.coroutines.CancellationException
+@@ -59,0 +61,5 @@ class SwapVMTest {
++    private companion object {
++        const val BTC_ADDRESS = "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu"
++        const val ETH_ADDRESS = "0xde709f2102306220921060314715629080e2fb77"
++    }
++
+@@ -151,2 +157,4 @@ class SwapVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
+-            coVerify(exactly = 0) { harness.requestSwapQuote.requestExactInput(any(), any(), any(), any(), any()) }
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
++            coVerify(exactly = 0) { harness.requestSwapQuote.requestExactInput(any(), any(), any(), any(), any(),
++                any()) }
+@@ -154 +162 @@ class SwapVMTest {
+-                harness.requestSwapQuote.requestFlexInputIntoZec(any(), "refund-address", asset, any(), any())
++                harness.requestSwapQuote.requestFlexInputIntoZec(any(), BTC_ADDRESS, asset, any(), any(), null)
+@@ -178 +186,3 @@ class SwapVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
++            harness.onAddressChange(BTC_ADDRESS)
++
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -184 +194 @@ class SwapVMTest {
+-                    refundAddress = "refund-address",
++                    refundAddress = BTC_ADDRESS,
+@@ -187 +197,2 @@ class SwapVMTest {
+-                    canNavigateToSwapQuote = any()
++                    canNavigateToSwapQuote = any(),
++                    contactNetwork = null
+@@ -200 +211,2 @@ class SwapVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "destination-address")
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -205 +217 @@ class SwapVMTest {
+-                    address = "destination-address",
++                    address = BTC_ADDRESS,
+@@ -208 +220,2 @@ class SwapVMTest {
+-                    canNavigateToSwapQuote = any()
++                    canNavigateToSwapQuote = any(),
++                    contactNetwork = null
+@@ -230 +243 @@ class SwapVMTest {
+-    fun pickingAbContactOnNewChainWithSingleAssetSelectsThatAsset() =
++    fun pickingAbContactWithoutSelectedAssetSelectsOnlyCompatibleAsset() =
+@@ -235 +248 @@ class SwapVMTest {
+-                    preselect = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
++                    preselect = null,
+@@ -247 +260 @@ class SwapVMTest {
+-    fun pickingAbContactOnNewChainWithMultipleAssetsClearsSelection() =
++    fun pickingAbContactWithoutSelectedAssetKeepsMultipleAssetsExplicit() =
+@@ -251 +264 @@ class SwapVMTest {
+-                    preselect = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
++                    preselect = null,
+@@ -266 +279 @@ class SwapVMTest {
+-            // The chain has more than one asset, so the VM cannot disambiguate and clears the selection.
++            // The contact supplies the network; choosing between its compatible assets stays explicit.
+@@ -278 +291,3 @@ class SwapVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
++            harness.onAddressChange(BTC_ADDRESS)
++
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -282 +297 @@ class SwapVMTest {
+-                harness.requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any())
++                harness.requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
+@@ -293 +308,3 @@ class SwapVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
++            harness.onAddressChange(BTC_ADDRESS)
++
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -306 +323,3 @@ class SwapVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), "refund-address")
++            harness.onAddressChange(BTC_ADDRESS)
++
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), BTC_ADDRESS)
+@@ -309 +328 @@ class SwapVMTest {
+-                harness.requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any())
++                harness.requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
+@@ -320 +339,3 @@ class SwapVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), "refund-address")
++            harness.onAddressChange(BTC_ADDRESS)
++
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("100"), BTC_ADDRESS)
+@@ -326 +347,2 @@ class SwapVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("50"), "destination-address")
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), BigDecimal("50"), BTC_ADDRESS)
+@@ -354 +376,2 @@ class SwapVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -367 +390,2 @@ class SwapVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -383 +407,2 @@ class SwapVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -402 +427,2 @@ class SwapVMTest {
+-            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, "refund-address")
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal("1"), null, BTC_ADDRESS)
+@@ -431,0 +458,36 @@ class SwapVMTest {
 +    @Test
 +    fun computedTokenInputKeepsDisplayedAndStoredAmountIdentical() =
 +        runTest {
@@ -22563,6 +24571,219 @@ index bf5467055..3b956901d 100644
 +            assertEquals(0, BigDecimal("0.12345678").compareTo(harness.capturedState.amountTextState.amount))
 +        }
 +
+@@ -487 +549 @@ class SwapVMTest {
+-    fun scanResultAppliesAddressAndAmountAndClearsContact() =
++    fun scanResultPreservesRawRequestWithoutApplyingDestinationAmountToInput() =
+@@ -492 +554,5 @@ class SwapVMTest {
+-                    scanResult = ScanResult(address = "scanned-address", amount = BigDecimal("2.5"))
++                    scanResult = ScanResult(
++                        address = BTC_ADDRESS,
++                        amount = BigDecimal("2.5"),
++                        rawInput = "bitcoin:$BTC_ADDRESS?amount=2.5"
++                    )
+@@ -499,2 +565,2 @@ class SwapVMTest {
+-            assertEquals("scanned-address", harness.capturedState.addressText)
+-            assertEquals(0, BigDecimal("2.5").compareTo(harness.capturedState.amountTextState.amount))
++            assertEquals("bitcoin:$BTC_ADDRESS?amount=2.5", harness.capturedState.addressText)
++            assertNull(harness.capturedState.amountTextState.amount)
+@@ -520 +586 @@ class SwapVMTest {
+-    fun assetPickerIsFilteredBySelectedContactChain() =
++    fun assetPickerRemainsEditableAfterSelectingContact() =
+@@ -533 +599,2 @@ class SwapVMTest {
+-            coVerify { harness.navigateToSwapAssetPicker(onlyChainTicker = "eth") }
++            coVerify { harness.navigateToSwapAssetPicker() }
++            coVerify { harness.navigateToSelectSwapRecipient(network = "btc") }
+@@ -552,0 +620,86 @@ class SwapVMTest {
++    @Test
++    fun tokenNetworkChangeRetainsContactAndCorrectionQuotesWithoutLeavingForm() =
++        runTest {
++            val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth")
++            val btc = SwapAssetTestFixture.asset()
++            val contact = contactOnChain("eth")
++            val harness = harness(preselect = eth, recipient = contact)
++            coEvery { harness.navigateToSwapAssetPicker(any()) } returnsMany listOf(btc, eth)
++            harness.collectState(this)
++            harness.onChangeButtonClick()
++            harness.onAddressBookClick()
++
++            harness.onSwapAssetPickerClick()
++            assertEquals(contact, harness.capturedState.selectedContact)
++            assertEquals(btc, harness.capturedState.swapAsset)
++            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, ETH_ADDRESS)
++            coVerify(exactly = 0) {
++                harness.requestSwapQuote.requestExactInput(any(), any(), any(), any(), any(), any())
++            }
++
++            harness.onSwapAssetPickerClick()
++            assertEquals(contact, harness.capturedState.selectedContact)
++            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, ETH_ADDRESS)
++            coVerify(exactly = 1) {
++                harness.requestSwapQuote.requestExactInput(BigDecimal.ONE, ETH_ADDRESS, eth, BigDecimal("2"), any(),
++                    "eth")
++            }
++        }
++
++    @Test
++    fun callbackWithStaleAddressDoesNotRequestQuote() =
++        runTest {
++            val harness = harness()
++            harness.collectState(this)
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, "stale-address")
++            coVerify(exactly = 0) {
++                harness.requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
++            }
++        }
++
++    @Test
++    fun cancelledQuoteClearsLoadingAndAllowsCorrectedRetryInSameForm() =
++        runTest {
++            val harness = harness()
++            var attempts = 0
++            coEvery {
++                harness.requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
++            } coAnswers {
++                attempts++
++                if (attempts == 1) throw CancellationException("Controlled test cancellation")
++            }
++            harness.collectState(this)
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, BTC_ADDRESS)
++            assertEquals(false, harness.capturedState.isRequestingQuote)
++
++            val corrected = "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
++            harness.onAddressChange(corrected)
++            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, corrected)
++            assertEquals(2, attempts)
++            assertEquals(false, harness.capturedState.isRequestingQuote)
++            coVerify(exactly = 1) {
++                harness.requestSwapQuote.requestFlexInputIntoZec(any(), corrected, any(), any(), any(), null)
++            }
++        }
++
++    @Test
++    fun repeatedQuoteTapWhileRefundWarningPendingRequestsOnlyOnce() =
++        runTest {
++            val harness = harness()
++            val warning = CompletableDeferred<Boolean>()
++            coEvery { harness.navigateToSwapRefundWarning(any(), any()) } coAnswers { warning.await() }
++            harness.collectState(this)
++            harness.onAddressChange(BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, BTC_ADDRESS)
++            harness.onRequestSwapQuoteClick(BigDecimal.ONE, null, BTC_ADDRESS)
++            coVerify(exactly = 1) { harness.navigateToSwapRefundWarning(any(), any()) }
++
++            warning.complete(true)
++            coVerify(exactly = 1) {
++                harness.requestSwapQuote.requestFlexInputIntoZec(any(), BTC_ADDRESS, any(), any(), any(), null)
++            }
++            assertEquals(false, harness.capturedState.isRequestingQuote)
++        }
++
+@@ -558 +711,4 @@ class SwapVMTest {
+-        mockk(relaxed = true) { every { blockchain } returns SwapAssetTestFixture.blockchain(chainTicker) }
++        mockk(relaxed = true) {
++            every { blockchain } returns SwapAssetTestFixture.blockchain(chainTicker)
++            every { address } returns if (chainTicker == "btc") BTC_ADDRESS else ETH_ADDRESS
++        }
+@@ -580 +736 @@ class SwapVMTest {
+-            mockk<NavigateToSelectABSwapRecipientUseCase> { coEvery { this@mockk.invoke() } returns recipient }
++            mockk<NavigateToSelectABSwapRecipientUseCase> { coEvery { this@mockk.invoke(any()) } returns recipient }
+@@ -615,0 +772 @@ class SwapVMTest {
++                navigateToSelectSwapRecipient = navigateToSelectSwapRecipient,
+@@ -666,0 +824 @@ class SwapVMTest {
++        val navigateToSelectSwapRecipient: NavigateToSelectABSwapRecipientUseCase,
+@@ -693 +851 @@ class SwapVMTest {
+-                requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any())
++                requestSwapQuote.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVMTest.kt
+new file mode 100644
+index 000000000..3fc1b101a
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/ab/SelectSwapABRecipientVMTest.kt
+@@ -0,0 +1,82 @@
++package co.electriccoin.zcash.ui.screen.swap.ab
++
++import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
++import co.electriccoin.zcash.ui.common.usecase.GetABSwapContactsUseCase
++import co.electriccoin.zcash.ui.common.usecase.NavigateToScanGenericAddressUseCase
++import co.electriccoin.zcash.ui.common.usecase.ScanResult
++import io.mockk.coEvery
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.verify
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.test.UnconfinedTestDispatcher
++import kotlinx.coroutines.test.resetMain
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import kotlinx.coroutines.test.setMain
++import kotlin.test.AfterTest
++import kotlin.test.BeforeTest
++import kotlin.test.Test
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class SelectSwapABRecipientVMTest {
++    private val navigation = mockk<NavigationRouter>(relaxed = true)
++    private val scan = mockk<NavigateToScanGenericAddressUseCase>()
++
++    @BeforeTest
++    fun setUp() = Dispatchers.setMain(UnconfinedTestDispatcher())
++
++    @AfterTest
++    fun tearDown() = Dispatchers.resetMain()
++
++    @Test
++    fun scannedContactReplacesScannerAndPreservesNetwork() = runTest {
++        val address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
++        coEvery { scan() } returns ScanResult(address, null)
++        val vm = viewModel()
++
++        vm.state.value.scanButton.onClick()
++        runCurrent()
++
++        verify(exactly = 1) { navigation.replace(AddSwapABContactArgs(address = address, network = "btc")) }
++        verify(exactly = 0) { navigation.forward(ofType<AddSwapABContactArgs>()) }
++    }
++
++    @Test
++    fun manualEntryPushesContactFormAndPreservesPicker() {
++        val vm = viewModel()
++
++        vm.state.value.manualButton.onClick()
++
++        verify(exactly = 1) { navigation.forward(AddSwapABContactArgs(address = null, network = "btc")) }
++        verify(exactly = 0) { navigation.replace(ofType<AddSwapABContactArgs>()) }
++    }
++
++    @Test
++    fun cancelledScanLeavesNavigationToScannerOwner() = runTest {
++        coEvery { scan() } returns null
++        val vm = viewModel()
++
++        vm.state.value.scanButton.onClick()
++        runCurrent()
++
++        verify(exactly = 0) { navigation.replace(any()) }
++        verify(exactly = 0) { navigation.forward(any()) }
++    }
++
++    private fun viewModel(): SelectSwapABRecipientVM {
++        val contacts = mockk<GetABSwapContactsUseCase> {
++            every { observe() } returns MutableStateFlow<List<EnhancedABContact>?>(emptyList())
++        }
++        return SelectSwapABRecipientVM(
++            getAddressBookSwapContacts = contacts,
++            args = SelectABSwapRecipientArgs(network = "btc"),
++            navigateToSelectSwapRecipient = mockk(relaxed = true),
++            navigationRouter = navigation,
++            navigateToScanAddress = scan,
++        )
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt
 index bac1a53ce..a0a6d7a47 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/FakeSwapQuote.kt

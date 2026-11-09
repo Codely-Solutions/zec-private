@@ -2,10 +2,11 @@ package co.electriccoin.zcash.ui.screen.pay
 
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.errorText
+import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
-import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector.mayContainGiftCardSecret
 import co.electriccoin.zcash.ui.common.repository.SwapAssetsData
 import co.electriccoin.zcash.ui.design.component.AssetCardState
 import co.electriccoin.zcash.ui.design.component.ButtonState
@@ -391,7 +392,12 @@ internal class ExactOutputVMMapper {
                             amount != null &&
                             amount > BigDecimal(0) &&
                             (state.address.isNotBlank() || state.selectedABContact != null) &&
-                            !mayContainGiftCardSecret(state.selectedABContact?.address ?: state.address) &&
+                            validateSwapRecipient(
+                                state.selectedABContact?.address ?: state.address,
+                                state.asset?.chainTicker,
+                                state.asset?.tokenTicker,
+                                state.selectedABContact?.blockchain?.chainTicker
+                            ).isValid &&
                             !state.isRequestingQuote
                     }
                 },
@@ -409,12 +415,12 @@ internal class ExactOutputVMMapper {
         val text = state.address
         return TextFieldState(
             error =
-                when {
-                    text.isEmpty() -> null
-                    text.isBlank() -> stringRes("")
-                    mayContainGiftCardSecret(text) -> stringRes(R.string.swap_error_giftCardLink)
-                    else -> null
-                },
+                validateSwapRecipient(
+                    state.selectedABContact?.address ?: text,
+                    state.asset?.chainTicker,
+                    state.asset?.tokenTicker,
+                    state.selectedABContact?.blockchain?.chainTicker
+                ).errorText(state.asset?.chainTicker),
             value = stringRes(text),
             onValueChange = onAddressChange,
             isEnabled = !state.isRequestingQuote,

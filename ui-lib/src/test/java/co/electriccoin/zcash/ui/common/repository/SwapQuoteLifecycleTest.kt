@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.repository
 
 import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
+import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuote
@@ -114,6 +115,68 @@ class SwapQuoteLifecycleTest {
         }
 
     @Test
+    fun missingZecAssetEndsLoadingWithoutRequestingProvider() =
+        runTest {
+            val source = dataSourceReturning(flexQuote())
+            val repository = SwapRepositoryImpl(source, mockk(relaxed = true)).apply { scope = testScope }
+
+            requestIncoming(repository)
+            val incomingError = assertIs<SwapQuoteData.Error>(repository.quote.value)
+            assertEquals(SwapMode.FLEX_INPUT, incomingError.mode)
+            assertIs<SwapAssetsUnavailableException>(incomingError.exception)
+
+            requestOutgoing(repository, btc)
+            val outgoingError = assertIs<SwapQuoteData.Error>(repository.quote.value)
+            assertEquals(SwapMode.EXACT_INPUT, outgoingError.mode)
+            assertIs<SwapAssetsUnavailableException>(outgoingError.exception)
+            coVerify(exactly = 0) { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) }
+
+            repository.requestRefreshAssetsOnce()
+            requestIncoming(repository)
+            assertIs<SwapQuoteData.Success>(repository.quote.value)
+        }
+
+    @Test
+    fun failedOutgoingRequestUsesCorrectedAssetWithoutRestart() =
+        runTest {
+            val wbtc = SwapAssetTestFixture.asset(tokenTicker = "wbtc", chainTicker = "eth")
+            val source = dataSourceReturning(flexQuote())
+            coEvery { source.getSupportedTokens() } returns listOf(zec, btc, wbtc)
+            coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers {
+                val selectedAsset = arg<SwapAsset>(5)
+                if (selectedAsset == btc) throw IOException("Simulated timeout")
+                FakeSwapQuote(
+                    originAsset = zec,
+                    destinationAsset = selectedAsset,
+                    mode = SwapMode.EXACT_INPUT,
+                    amountIn = BigDecimal("2"),
+                    amountInFormatted = BigDecimal("2"),
+                    amountOutFormatted = BigDecimal.ONE,
+                    depositAddress = "deposit",
+                    destinationAddress = arg(4),
+                    refundAddress = arg(2)
+                )
+            }
+            val repository = loadedRepository(source)
+
+            requestOutgoing(repository, btc)
+            assertIs<SwapQuoteData.Error>(repository.quote.value)
+            repository.clearQuote()
+            requestOutgoing(repository, wbtc)
+
+            val result = assertIs<SwapQuoteData.Success>(repository.quote.value)
+            assertEquals(wbtc, result.quote.destinationAsset)
+            coVerify(exactly = 1) {
+                source.requestQuote(
+                    SwapMode.EXACT_INPUT, BigDecimal("2"), "refund", zec, "recipient", btc, BigDecimal("2")
+                )
+                source.requestQuote(
+                    SwapMode.EXACT_INPUT, BigDecimal("2"), "refund", zec, "recipient", wbtc, BigDecimal("2")
+                )
+            }
+        }
+
+    @Test
     fun dismissedRequestCannotPublishLateNetworkErrorOverNextQuote() =
         runTest {
             val finishOldRequest = CompletableDeferred<Unit>()
@@ -173,6 +236,15 @@ class SwapQuoteLifecycleTest {
             refundAddress = "refund",
             destinationAddress = recipient,
             originAsset = btc,
+            slippage = BigDecimal("2")
+        )
+
+    private fun requestOutgoing(repository: SwapRepositoryImpl, destinationAsset: SwapAsset) =
+        repository.requestExactInputQuote(
+            amount = BigDecimal("2"),
+            address = "recipient",
+            refundAddress = "refund",
+            destinationAsset = destinationAsset,
             slippage = BigDecimal("2")
         )
 

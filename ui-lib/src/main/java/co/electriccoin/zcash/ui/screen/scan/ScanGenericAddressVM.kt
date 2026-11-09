@@ -39,8 +39,9 @@ internal class ScanGenericAddressVM(
                     }
                     runCatching {
                         when (val zip321Result = parseZip321(result)) {
-                            is Zip321ParseUriValidation.Valid -> onZip321Scanned(zip321Result)
-                            is Zip321ParseUriValidation.SingleAddress -> onZip321SingleAddressScanned(zip321Result)
+                            is Zip321ParseUriValidation.Valid -> onZip321Scanned(zip321Result, result)
+                            is Zip321ParseUriValidation.SingleAddress ->
+                                onZip321SingleAddressScanned(zip321Result, result)
                             else -> onAddressScanned(result)
                         }
                     }
@@ -65,17 +66,18 @@ internal class ScanGenericAddressVM(
         hasBeenScannedSuccessfully = true
     }
 
-    private suspend fun onZip321SingleAddressScanned(result: Zip321ParseUriValidation.SingleAddress) {
+    private suspend fun onZip321SingleAddressScanned(result: Zip321ParseUriValidation.SingleAddress, raw: String) {
         state.update { ScanValidationState.VALID }
         navigateToScanAddress.onScanned(
             address = result.address,
             amount = null,
-            args = args
+            args = args,
+            rawInput = raw
         )
         hasBeenScannedSuccessfully = true
     }
 
-    private suspend fun onZip321Scanned(result: Zip321ParseUriValidation.Valid) {
+    private suspend fun onZip321Scanned(result: Zip321ParseUriValidation.Valid, raw: String) {
         state.update { ScanValidationState.VALID }
         val address =
             result.payment.payments[0]
@@ -85,7 +87,7 @@ internal class ScanGenericAddressVM(
                 .nonNegativeAmount
                 ?.toZecValueString()
                 ?.toBigDecimal() ?: BigDecimal.ZERO
-        navigateToScanAddress.onScanned(address, amount, args)
+        navigateToScanAddress.onScanned(address, amount, args, rawInput = raw)
         hasBeenScannedSuccessfully = true
     }
 

@@ -2,10 +2,13 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.AddressBookContact
+import co.electriccoin.zcash.ui.common.model.SwapBlockchain
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
+import co.electriccoin.zcash.ui.design.util.imageRes
+import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.swap.ab.SelectABSwapRecipientArgs
 import io.mockk.coEvery
 import io.mockk.every
@@ -48,6 +51,26 @@ class NavigateToSelectABSwapRecipientUseCaseTest {
             useCase.onSelected(contact, args)
 
             assertEquals(contact, result.await())
+            verify(exactly = 1) { router.back() }
+        }
+
+    @Test
+    fun networkContextRejectsMismatchedContactAndAcceptsMatchingContact() =
+        runTest(UnconfinedTestDispatcher()) {
+            val result = async { useCase(network = "eth") }
+            val args = forwarded.single() as SelectABSwapRecipientArgs
+            assertEquals("eth", args.network)
+
+            useCase.onSelected(contact("Other network"), args)
+            assertTrue(result.isActive)
+            verify(exactly = 0) { router.back() }
+
+            val matching =
+                contact("Alice").copy(
+                    blockchain = SwapBlockchain("ETH", stringRes("Ethereum"), imageRes("E"))
+                )
+            useCase.onSelected(matching, args)
+            assertEquals(matching, result.await())
             verify(exactly = 1) { router.back() }
         }
 

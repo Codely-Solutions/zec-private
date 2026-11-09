@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.repository.GiftCardSecretFixture
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -25,7 +26,7 @@ class ValidateSwapABContactAddressUseCaseTest {
             contact =
                 AddressBookContact(
                     name = "Existing",
-                    address = "bc1qexisting",
+                    address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
                     lastUpdated = Instant.fromEpochMilliseconds(0),
                     chain = "btc"
                 ),
@@ -46,12 +47,41 @@ class ValidateSwapABContactAddressUseCaseTest {
                 assertEquals(ContactAddressValidationResult.GiftCardLink, validate(link, btc), name)
                 assertEquals(ContactAddressValidationResult.GiftCardLink, validate(link, null), name)
             }
+            verify(exactly = 0) { addressBookRepository.contacts }
         }
 
     @Test
     fun ordinaryAddressesKeepTheUniquenessCheck() =
         runTest {
-            assertEquals(ContactAddressValidationResult.Valid, validate("bc1qnew", btc))
-            assertEquals(ContactAddressValidationResult.NotUnique, validate("bc1qexisting", btc))
+            assertEquals(ContactAddressValidationResult.Valid, validate("1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", btc))
+            assertEquals(ContactAddressValidationResult.NotUnique, validate(existing.address, btc))
+            assertEquals(ContactAddressValidationResult.Valid, validate(existing.address, btc, exclude = existing))
         }
+
+    @Test
+    fun invalidAddressAndMissingNetworkAreRejectedBeforeContactLookup() = runTest {
+        assertEquals(ContactAddressValidationResult.Invalid, validate("bc1qinvalid", btc))
+        assertEquals(ContactAddressValidationResult.Invalid, validate(existing.address, null))
+        assertEquals(
+            ContactAddressValidationResult.Invalid,
+            validate("ethereum:0x1111111111111111111111111111111111111111@1", btc)
+        )
+        verify(exactly = 0) { addressBookRepository.contacts }
+    }
+
+    @Test
+    fun paymentUriUsesParsedAddressForDuplicateCheck() = runTest {
+        assertEquals(ContactAddressValidationResult.NotUnique, validate("bitcoin:${existing.address}", btc))
+    }
+
+    @Test
+    fun invalidLegacyContactsRemainUnchangedDuringValidation() = runTest {
+        val legacy = existing.copy(contact = existing.contact.copy(address = "legacy-invalid-address"))
+        val contacts = MutableStateFlow(listOf(legacy))
+        every { addressBookRepository.contacts } returns contacts
+        assertEquals(ContactAddressValidationResult.Invalid, validate(legacy.address, btc))
+        assertEquals(listOf(legacy), contacts.value)
+        verify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
+        verify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
+    }
 }

@@ -36,7 +36,11 @@ class SelectSwapABRecipientVM(
         getAddressBookSwapContacts
             .observe()
             .map { contacts ->
-                createState(contacts)
+                createState(
+                    contacts?.filter {
+                        args.network == null || args.network.equals(it.blockchain?.chainTicker, ignoreCase = true)
+                    }
+                )
             }.flowOn(Dispatchers.Default)
             .stateIn(
                 scope = viewModelScope,
@@ -60,7 +64,20 @@ class SelectSwapABRecipientVM(
                                 onClick = { onContactClick(contact) },
                             )
                         )
-                    }.orEmpty(),
+                    }.orEmpty().let { items ->
+                        if (args.network == null || contacts == null || items.isNotEmpty()) {
+                            items
+                        } else {
+                            listOf(
+                                AddressBookItem.Title(
+                                    stringRes(
+                                        R.string.private_contacts_network_empty,
+                                        stringRes(args.network.uppercase())
+                                    )
+                                )
+                            ) + items
+                        }
+                    },
             onBack = ::onBack,
             manualButton =
                 ButtonState(
@@ -72,7 +89,9 @@ class SelectSwapABRecipientVM(
                     onClick = ::onScanContactClick,
                     text = stringRes(R.string.addressBook_scanAddress)
                 ),
-            title = stringRes(R.string.addressBook_selectRecipient),
+            title =
+                args.network?.let { stringRes(R.string.private_contacts_network_title, stringRes(it.uppercase())) }
+                    ?: stringRes(R.string.addressBook_selectRecipient),
             info = null
         )
 
@@ -94,7 +113,8 @@ class SelectSwapABRecipientVM(
     private fun onAddContactManuallyClick() =
         navigationRouter.forward(
             AddSwapABContactArgs(
-                address = null
+                address = null,
+                network = args.network
             )
         )
 
@@ -102,7 +122,7 @@ class SelectSwapABRecipientVM(
         viewModelScope.launch {
             val contact = navigateToScanAddress()
             if (contact != null) {
-                navigationRouter.replace(AddSwapABContactArgs(address = contact.address))
+                navigationRouter.replace(AddSwapABContactArgs(address = contact.address, network = args.network))
             }
         }
 }

@@ -17,7 +17,11 @@ class NavigateToScanGenericAddressUseCase(
         val result = pipeline.first { it.args.requestId == args.requestId }
         return when (result) {
             is ScanAddressPipelineResult.Cancelled -> null
-            is ScanAddressPipelineResult.Scanned -> ScanResult(address = result.address, amount = result.amount)
+            is ScanAddressPipelineResult.Scanned -> ScanResult(
+                address = result.address,
+                amount = result.amount,
+                rawInput = result.rawInput
+            )
         }
     }
 
@@ -37,9 +41,10 @@ class NavigateToScanGenericAddressUseCase(
     suspend fun onScanned(
         address: String,
         amount: BigDecimal?,
-        args: ScanGenericAddressArgs
+        args: ScanGenericAddressArgs,
+        rawInput: String? = null
     ) {
-        pipeline.emit(ScanAddressPipelineResult.Scanned(address, amount, args))
+        pipeline.emit(ScanAddressPipelineResult.Scanned(address, amount, args, rawInput))
     }
 }
 
@@ -53,11 +58,13 @@ private sealed interface ScanAddressPipelineResult {
     data class Scanned(
         val address: String,
         val amount: BigDecimal?,
-        override val args: ScanGenericAddressArgs
+        override val args: ScanGenericAddressArgs,
+        val rawInput: String? = null
     ) : ScanAddressPipelineResult
 }
 
 data class ScanResult(
     val address: String,
-    val amount: BigDecimal?
+    val amount: BigDecimal?,
+    val rawInput: String? = null
 )

@@ -42,7 +42,8 @@ class ResponseWithNearErrorException(
     )
 
 class KtorNearApiProvider(
-    private val httpClientProvider: HttpClientProvider
+    private val httpClientProvider: HttpClientProvider,
+    private val diagnostics: QuoteRequestDiagnostics = QuoteRequestDiagnostics()
 ) : NearApiProvider {
     override suspend fun getSupportedTokens(): GetNearSupportedTokensResponse =
         execute {
@@ -51,10 +52,13 @@ class KtorNearApiProvider(
 
     override suspend fun requestQuote(request: QuoteRequest): QuoteResponseDto =
         execute {
-            post("https://1click.chaindefuser.com/v0/quote") {
-                contentType(ContentType.Application.Json)
-                setBody(request)
-            }.body()
+            val response = diagnostics.trace(QuoteRequestStage.HTTP_REQUEST) {
+                post("https://1click.chaindefuser.com/v0/quote") {
+                    contentType(ContentType.Application.Json)
+                    setBody(request)
+                }
+            }
+            diagnostics.trace(QuoteRequestStage.RESPONSE_DECODE) { response.body() }
         }
 
     override suspend fun submitDepositTransaction(request: SubmitDepositTransactionRequest) {
@@ -80,9 +84,11 @@ class KtorNearApiProvider(
         crossinline block: suspend HttpClient.() -> T
     ): T =
         withContext(Dispatchers.IO) {
-            httpClientProvider.create().use {
+            val client = diagnostics.trace(QuoteRequestStage.CLIENT_CREATE) { httpClientProvider.create() }
+            var failure: Throwable? = null
+            try {
                 try {
-                    block(it)
+                    block(client)
                 } catch (e: ResponseException) {
                     val response = e.response
                     val error: ErrorDto? = runCatching { response.body<ErrorDto?>() }.getOrNull()
@@ -91,6 +97,16 @@ class KtorNearApiProvider(
                     } else {
                         throw e
                     }
+                }
+            } catch (e: Throwable) {
+                failure = e
+                throw e
+            } finally {
+                try {
+                    diagnostics.trace(QuoteRequestStage.CLIENT_CLOSE) { client.close() }
+                } catch (closeFailure: Throwable) {
+                    val primaryFailure = failure ?: throw closeFailure
+                    primaryFailure.addSuppressed(closeFailure)
                 }
             }
         }

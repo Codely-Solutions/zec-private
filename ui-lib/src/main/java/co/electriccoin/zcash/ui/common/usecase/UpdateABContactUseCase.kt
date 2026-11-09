@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
@@ -23,7 +24,10 @@ class UpdateABContactUseCase(
         chain: String?,
     ): ABContactSaveResult {
         if (GiftCardSecretDetector.mayContainGiftCardSecret(address)) return ABContactSaveResult.GiftCardLinkRefused
-        addressBookRepository.updateContact(contact = contact, name = name, address = address, chain = chain)
+        val recipient = chain?.let { validateSwapRecipient(address, it) }
+        if (recipient != null && !recipient.isValid) return ABContactSaveResult.InvalidAddress
+        val receivingAddress = recipient?.input?.address ?: address
+        addressBookRepository.updateContact(contact = contact, name = name, address = receivingAddress, chain = chain)
         navigationRouter.back()
         return ABContactSaveResult.Saved
     }

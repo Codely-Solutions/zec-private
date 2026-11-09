@@ -26,6 +26,7 @@ import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsArgs
 import co.electriccoin.zcash.ui.screen.swap.mismatch.SwapQuoteMismatchArgs
 import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteArgs
@@ -36,6 +37,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -46,6 +48,7 @@ import org.junit.Test
 import java.math.BigDecimal
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
+import kotlin.test.assertFailsWith
 
 /**
  * Coverage of [RequestSwapQuoteUseCase]'s orchestration: for each public request method, both account
@@ -70,6 +73,7 @@ class RequestSwapQuoteUseCaseTest {
     private val ledgerProposalPipeline = mockk<LedgerProposalPipeline>(relaxed = true)
     private val swapRepository = mockk<SwapRepository>(relaxed = true)
     private val accountDataSource = mockk<AccountDataSource>()
+    private val synchronizer = mockk<Synchronizer>()
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val dispatcher = StandardTestDispatcher()
@@ -359,7 +363,7 @@ class RequestSwapQuoteUseCaseTest {
             useCase(mismatchError(SwapMode.EXACT_INPUT, SwapQuoteMismatchType.SWAP_TYPE))
                 .requestExactInput(
                     amount = BigDecimal("1"),
-                    address = "destination",
+                    address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
                     selectedAsset = btc,
                     slippage = BigDecimal("2"),
                     canNavigateToSwapQuote = { false }
@@ -414,7 +418,7 @@ class RequestSwapQuoteUseCaseTest {
             coVerify(exactly = 1) {
                 swapRepository.requestFlexInputIntoZec(
                     amount = BigDecimal("1"),
-                    refundAddress = "refund",
+                    refundAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
                     destinationAddress = "shielded-first",
                     originAsset = btc,
                     slippage = BigDecimal("2")
@@ -423,7 +427,7 @@ class RequestSwapQuoteUseCaseTest {
             coVerify(exactly = 1) {
                 swapRepository.requestFlexInputIntoZec(
                     amount = BigDecimal("1"),
-                    refundAddress = "refund",
+                    refundAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
                     destinationAddress = "shielded-second",
                     originAsset = btc,
                     slippage = BigDecimal("2")
@@ -442,7 +446,7 @@ class RequestSwapQuoteUseCaseTest {
             coVerify(exactly = 1) {
                 swapRepository.requestExactInputQuote(
                     amount = BigDecimal("1"),
-                    address = "destination",
+                    address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
                     refundAddress = "refund-first",
                     destinationAsset = btc,
                     slippage = BigDecimal("2")
@@ -451,7 +455,7 @@ class RequestSwapQuoteUseCaseTest {
             coVerify(exactly = 1) {
                 swapRepository.requestExactInputQuote(
                     amount = BigDecimal("1"),
-                    address = "destination",
+                    address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
                     refundAddress = "refund-second",
                     destinationAsset = btc,
                     slippage = BigDecimal("2")
@@ -483,7 +487,7 @@ class RequestSwapQuoteUseCaseTest {
         }
         useCase(invalid).requestExactInput(
             amount = BigDecimal.ONE,
-            address = "destination",
+            address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
             selectedAsset = btc,
             slippage = BigDecimal("2"),
             canNavigateToSwapQuote = { false }
@@ -496,6 +500,73 @@ class RequestSwapQuoteUseCaseTest {
     }
 
     // region helpers
+
+    @Test
+    fun invalidRecipientsStopEveryModeBeforeFreshAddressOrProvider() = runBlocking {
+        val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
+        instance.requestExactInput(BigDecimal.ONE, "invalid private value", btc, BigDecimal.ONE, { true })
+        instance.requestExactOutput(BigDecimal.ONE, "invalid private value", btc, BigDecimal.ONE, { true })
+        instance.requestFlexInputIntoZec(BigDecimal.ONE, "invalid private value", btc, BigDecimal.ONE, { true })
+        coVerify(exactly = 0) { accountDataSource.requestNextShieldedAddress(any()) }
+        verify(exactly = 0) {
+            swapRepository.requestExactInputQuote(any(), any(), any(), any(), any())
+            swapRepository.requestExactOutputQuote(any(), any(), any(), any(), any())
+            swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any())
+        }
+        verify(exactly = 3) {
+            navigateToError(
+                match<ErrorArgs.General> { it.exception.message == "Invalid swap recipient for selected asset" }, any()
+            )
+        }
+    }
+
+    @Test
+    fun contactNetworkMismatchStopsBeforeFreshAddress() = runBlocking {
+        val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
+        instance.requestExactInput(
+            BigDecimal.ONE, "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", btc, BigDecimal.ONE, { true },
+            contactNetwork = "eth"
+        )
+        coVerify(exactly = 0) { accountDataSource.requestNextShieldedAddress(any()) }
+        verify(exactly = 0) { swapRepository.requestExactInputQuote(any(), any(), any(), any(), any()) }
+        assertNavigatedToError()
+    }
+
+    @Test
+    fun paymentUriIsNormalizedBeforeQuoteRequest() = runBlocking {
+        val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
+        instance.requestExactInput(
+            BigDecimal.ONE, " bitcoin:1BoatSLRHtKNngkdXEeobR76b53LETtpyT ", btc, BigDecimal.ONE, { true }
+        )
+        verify {
+            swapRepository.requestExactInputQuote(
+                BigDecimal.ONE, "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", "deposit", btc, BigDecimal.ONE
+            )
+        }
+    }
+
+    @Test
+    fun proposalCancellationPropagatesWithoutErrorNavigation() = runBlocking {
+        coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any()) } throws CancellationException()
+        val instance = useCase(swapQuote(zec, btc))
+        assertFailsWith<CancellationException> { instance.exactInput() }
+        verify(exactly = 0) { navigateToError(any(), any()) }
+        verify(exactly = 0) { navigationRouter.forward(SwapQuoteArgs) }
+    }
+
+    @Test
+    fun invalidZcashSdkRecipientStopsBeforeFreshAddressOrQuote() = runBlocking {
+        val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
+        coEvery { synchronizer.validateAddress(any()) } returns AddressType.Invalid("private native reason")
+        val recipient =
+            "u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c7q2su5lqfh23sp7fkf3kt27ve" +
+                "5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf"
+        instance.requestExactInput(BigDecimal.ONE, recipient, zec, BigDecimal.ONE, { true })
+        coVerify(exactly = 1) { synchronizer.validateAddress(recipient) }
+        coVerify(exactly = 0) { accountDataSource.requestNextShieldedAddress(any()) }
+        verify(exactly = 0) { swapRepository.requestExactInputQuote(any(), any(), any(), any(), any()) }
+        assertNavigatedToError()
+    }
 
     private fun mismatchError(
         mode: SwapMode,
@@ -544,7 +615,7 @@ class RequestSwapQuoteUseCaseTest {
     private suspend fun RequestSwapQuoteUseCase.exactInput(selectedAsset: SwapAsset = btc) =
         requestExactInput(
             amount = BigDecimal("1"),
-            address = "destination",
+            address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
             selectedAsset = selectedAsset,
             slippage = BigDecimal("2"),
             canNavigateToSwapQuote = { true }
@@ -553,7 +624,7 @@ class RequestSwapQuoteUseCaseTest {
     private suspend fun RequestSwapQuoteUseCase.exactOutput(selectedAsset: SwapAsset = btc) =
         requestExactOutput(
             amount = BigDecimal("1"),
-            address = "destination",
+            address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
             selectedAsset = selectedAsset,
             slippage = BigDecimal("2"),
             canNavigateToSwapQuote = { true }
@@ -562,7 +633,7 @@ class RequestSwapQuoteUseCaseTest {
     private suspend fun RequestSwapQuoteUseCase.flex(selectedAsset: SwapAsset = btc) =
         requestFlexInputIntoZec(
             amount = BigDecimal("1"),
-            refundAddress = "refund",
+            refundAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
             selectedAsset = selectedAsset,
             slippage = BigDecimal("2"),
             canNavigateToSwapQuote = { true }
@@ -582,7 +653,7 @@ class RequestSwapQuoteUseCaseTest {
             MutableStateFlow(SwapAssetsData(data = listOf(btc), zecAsset = zec))
 
         val shieldedAddress = "deposit"
-        val synchronizer = mockk<Synchronizer> { coEvery { validateAddress(any()) } returns AddressType.Unified }
+        coEvery { synchronizer.validateAddress(any()) } returns AddressType.Unified
         val synchronizerProvider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer }
         coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returns shieldedAddress
         coEvery { accountDataSource.getSelectedAccount() } returns selectedAccount
@@ -608,7 +679,7 @@ class RequestSwapQuoteUseCaseTest {
         amountIn: BigDecimal = BigDecimal("100"),
         mode: SwapMode = SwapMode.EXACT_INPUT,
         depositAddress: String = "deposit",
-        destinationAddress: String = "destination",
+        destinationAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
         refundAddress: String = "deposit"
     ): SwapQuote =
         // A hand-written fake, not a mock: mockk hangs when a stubbed member returns a @JvmInline
@@ -631,7 +702,7 @@ class RequestSwapQuoteUseCaseTest {
         destinationAsset: SwapAsset = btc,
         amountOutFormatted: BigDecimal = BigDecimal("1"),
         amountIn: BigDecimal = BigDecimal("100"),
-        destinationAddress: String = "destination",
+        destinationAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
         refundAddress: String = "deposit"
     ): SwapQuote =
         swapQuote(
@@ -649,7 +720,7 @@ class RequestSwapQuoteUseCaseTest {
         originAsset: SwapAsset = btc,
         destinationAsset: SwapAsset = zec,
         amountInFormatted: BigDecimal = BigDecimal("1"),
-        refundAddress: String = "refund",
+        refundAddress: String = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
         destinationAddress: String = "deposit"
     ): SwapQuote =
         swapQuote(

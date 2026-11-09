@@ -63,12 +63,22 @@ class ExactOutputVMMapperGiftCardLinkTest {
 
     @Test
     fun ordinaryAddressKeepsReviewEnabled() {
-        GiftCardSecretFixture.ordinaryAddresses.forEach { address ->
+        listOf("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu", "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4").forEach { address ->
             val state = mapper.createState(internalState(address = address), callbacks)
 
             assertNull(state.address.error, address)
             assertTrue(state.primaryButton?.isEnabled == true, address)
         }
+    }
+
+    @Test
+    fun wrongNetworkShowsInlineErrorAndDisablesReview() {
+        val state = mapper.createState(
+            internalState(address = "0xde709f2102306220921060314715629080e2fb77"),
+            callbacks
+        )
+        assertNotNull(state.address.error)
+        assertFalse(state.primaryButton?.isEnabled ?: true)
     }
 
     @Test
@@ -106,7 +116,8 @@ class ExactOutputVMMapperGiftCardLinkTest {
 
         var requested: BigDecimal? = null
         val state = mapper.createState(
-            internalState("ordinary-address").copy(asset = asset, amount = computed, fiatAmount = fiat),
+            internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu").copy(asset = asset, amount = computed,
+                fiatAmount = fiat),
             callbacks.copy(onRequestSwapQuoteClick = { amount, _, _ -> requested = amount })
         )
         assertNotNull(state.primaryButton).onClick()
@@ -118,7 +129,7 @@ class ExactOutputVMMapperGiftCardLinkTest {
         val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 6)
         var updated: NumberTextFieldInnerState? = null
         val state = mapper.createState(
-            internalState("ordinary-address").copy(asset = asset),
+            internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu").copy(asset = asset),
             callbacks.copy(onTextFieldChange = { amount, _ -> updated = amount })
         )
         state.amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499")))

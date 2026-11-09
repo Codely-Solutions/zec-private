@@ -20,5 +20,6 @@ fun SelectSwapABRecipientScreen(args: SelectABSwapRecipientArgs) {
 
 @Serializable
 data class SelectABSwapRecipientArgs(
-    val requestId: String = UUID.randomUUID().toString()
+    val requestId: String = UUID.randomUUID().toString(),
+    val network: String? = null
 )

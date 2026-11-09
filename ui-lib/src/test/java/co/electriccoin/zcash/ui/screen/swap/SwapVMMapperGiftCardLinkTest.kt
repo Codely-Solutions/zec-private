@@ -22,6 +22,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
@@ -66,13 +67,26 @@ class SwapVMMapperGiftCardLinkTest {
     @Test
     fun ordinaryAddressKeepsQuoteEnabled() {
         SwapDirection.entries.forEach { direction ->
-            GiftCardSecretFixture.ordinaryAddresses.forEach { address ->
+            listOf("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu",
+                "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4").forEach { address ->
                 val state =
                     mapper.createState(internalState(addressText = address, direction = direction), callbacks)
 
                 assertNull(state.address.error, address)
                 assertTrue(state.primaryButton?.isEnabled == true, address)
             }
+        }
+    }
+
+    @Test
+    fun wrongNetworkShowsInlineErrorAndDisablesQuoteInBothDirections() {
+        SwapDirection.entries.forEach { direction ->
+            val state = mapper.createState(
+                internalState(addressText = "0xde709f2102306220921060314715629080e2fb77", direction = direction),
+                callbacks
+            )
+            assertNotNull(state.address.error)
+            assertFalse(state.primaryButton?.isEnabled ?: true)
         }
     }
 

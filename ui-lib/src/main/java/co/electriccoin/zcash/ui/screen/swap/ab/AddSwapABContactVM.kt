@@ -7,6 +7,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.SwapBlockchain
+import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 import co.electriccoin.zcash.ui.common.usecase.ContactAddressValidationResult
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSelectSwapBlockchainUseCase
 import co.electriccoin.zcash.ui.common.usecase.SaveABContactUseCase
@@ -31,16 +32,22 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class AddSwapABContactVM(
-    args: AddSwapABContactArgs,
+    private val args: AddSwapABContactArgs,
     private val validateABSwapContactAddress: ValidateSwapABContactAddressUseCase,
     private val validateGenericABContactName: ValidateGenericABContactNameUseCase,
     private val saveABContact: SaveABContactUseCase,
     private val navigationRouter: NavigationRouter,
-    private val navigateToSelectSwapBlockchain: NavigateToSelectSwapBlockchainUseCase
+    private val navigateToSelectSwapBlockchain: NavigateToSelectSwapBlockchainUseCase,
+    simpleSwapAssetProvider: SimpleSwapAssetProvider
 ) : ViewModel() {
     private val contactAddress = MutableStateFlow(args.address.orEmpty())
     private val contactName = MutableStateFlow("")
-    private val selectedBlockchain = MutableStateFlow<SwapBlockchain?>(null)
+    private val selectedBlockchain =
+        MutableStateFlow<SwapBlockchain?>(
+            simpleSwapAssetProvider.getCuratedSwapAssets().firstOrNull {
+                args.network != null && args.network.equals(it.chainTicker, ignoreCase = true)
+            }?.blockchain
+        )
     private val isSavingContact = MutableStateFlow(false)
 
     private val refusedGiftCardLink = RefusedGiftCardLinkAddress()
@@ -53,6 +60,7 @@ class AddSwapABContactVM(
                     smallIcon = null,
                     text = it?.chainName,
                     placeholder = stringRes(co.electriccoin.zcash.ui.design.R.string.general_select),
+                    isEnabled = args.network == null,
                     onClick = ::onBlockchainClick
                 )
             }
@@ -180,7 +188,9 @@ class AddSwapABContactVM(
     private fun onBlockchainClick() =
         viewModelScope.launch {
             val result = navigateToSelectSwapBlockchain()
-            if (result != null) {
+            if (result != null &&
+                (args.network == null || args.network.equals(result.chainTicker, ignoreCase = true))
+            ) {
                 selectedBlockchain.update { result }
             }
         }
@@ -192,6 +202,11 @@ class AddSwapABContactVM(
     private fun onSaveButtonClick() =
         viewModelScope.launch {
             if (isSavingContact.value) return@launch
+            if (args.network != null &&
+                !args.network.equals(selectedBlockchain.value?.chainTicker, ignoreCase = true)
+            ) {
+                return@launch
+            }
             isSavingContact.update { true }
             val address = contactAddress.value
             val result =
