@@ -13,8 +13,9 @@ internal fun quoteValueDifference(
     deadline: Instant,
     now: Instant,
 ): BigDecimal? {
-    if (totalSpendUsd.signum() <= 0 || receivedUsd.signum() <= 0 ||
-        quotedAt > now || now >= deadline || now - quotedAt >= 3.minutes
+    val positiveValues = totalSpendUsd.signum() > 0 && receivedUsd.signum() > 0
+    val currentQuote = quotedAt <= now && now < deadline && now - quotedAt < 3.minutes
+    if (!positiveValues || !currentQuote
     ) {
         return null
     }

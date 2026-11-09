@@ -219,21 +219,7 @@ internal fun requireWithinSlippage(
         // https://docs.near-intents.org/integration/distribution-channels/1click-api/swap-types
         // Preserve the provider's integer floor; a stronger minimum (smaller allowance) is acceptable.
         SwapType.EXACT_OUTPUT -> {
-            if (slippageToleranceBps !in 0..10000) {
-                throw SwapQuoteMismatchException.Rejected(
-                    type = SwapQuoteMismatchType.SLIPPAGE_TOLERANCE,
-                    message = "Invalid swap slippage tolerance: $slippageToleranceBps bps"
-                )
-            }
-            if (amountIn.signum() <= 0 || minAmountIn.signum() <= 0 ||
-                amountIn.stripTrailingZeros().scale() > 0 || minAmountIn.stripTrailingZeros().scale() > 0 ||
-                minAmountIn > amountIn
-            ) {
-                throw SwapQuoteMismatchException.Rejected(
-                    type = SwapQuoteMismatchType.INPUT_AMOUNT,
-                    message = "Invalid exact-output input amounts: amountIn=$amountIn, minAmountIn=$minAmountIn"
-                )
-            }
+            requireExactOutputAmounts(amountIn, minAmountIn, slippageToleranceBps)
             val floor =
                 amountIn
                     .multiply(basisPointsDenominator.subtract(bps))
@@ -249,5 +235,24 @@ internal fun requireWithinSlippage(
         }
 
         null -> {}
+    }
+}
+
+private const val MAX_SLIPPAGE_BPS = 10000
+
+private fun BigDecimal.isPositiveAtomic() = signum() > 0 && stripTrailingZeros().scale() <= 0
+
+private fun requireExactOutputAmounts(amountIn: BigDecimal, minAmountIn: BigDecimal, slippageBps: Int) {
+    if (slippageBps !in 0..MAX_SLIPPAGE_BPS) {
+        throw SwapQuoteMismatchException.Rejected(
+            type = SwapQuoteMismatchType.SLIPPAGE_TOLERANCE,
+            message = "Invalid swap slippage tolerance: $slippageBps bps"
+        )
+    }
+    if (!amountIn.isPositiveAtomic() || !minAmountIn.isPositiveAtomic() || minAmountIn > amountIn) {
+        throw SwapQuoteMismatchException.Rejected(
+            type = SwapQuoteMismatchType.INPUT_AMOUNT,
+            message = "Invalid exact-output input amounts: amountIn=$amountIn, minAmountIn=$minAmountIn"
+        )
     }
 }
