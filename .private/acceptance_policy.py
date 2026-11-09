@@ -239,6 +239,8 @@ def validate_quotes(receipt, expected_inputs):
     if not all(receipt.get(key) is True for key in (
             'recipient_network_mismatch_blocked', 'corrected_without_leaving_form')):
         raise ValueError('Recipient mismatch and same-form correction not established')
+    if receipt.get('independent_comparisons', 0) < 1:
+        raise ValueError('No completed independent market comparison executed')
     if not re.fullmatch('[0-9a-f]{64}',str(receipt.get('executed_apk_sha256',''))):
         raise ValueError('Missing executed quote artifact digest')
     if not re.fullmatch('[0-9a-f]{40}',str(receipt.get('build_source_sha',''))):

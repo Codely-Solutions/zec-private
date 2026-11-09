@@ -339,10 +339,11 @@ class AcceptancePolicyTest(unittest.TestCase):
         receipt=dict(schema=1,input_fingerprint='inputs',evidence_class='real-app-production-quotes',
                      passed=True,tor_enabled=True,funds_transferred=False,personal_wallet_access=False,
                      quote_requests=3,quote_reviews=3,dismissals=3,executed_apk_sha256='a'*64,build_source_sha='b'*40,
-                     recipient_network_mismatch_blocked=True,corrected_without_leaving_form=True)
+                     recipient_network_mismatch_blocked=True,corrected_without_leaving_form=True,independent_comparisons=1)
         self.assertTrue(validate_quotes(receipt,'inputs'))
         for key,value in (('dismissals',2),('tor_enabled',False),('input_fingerprint','old'),('funds_transferred',True),
-                          ('recipient_network_mismatch_blocked',False),('corrected_without_leaving_form',False)):
+                          ('recipient_network_mismatch_blocked',False),('corrected_without_leaving_form',False),
+                          ('independent_comparisons',0)):
             bad=dict(receipt);bad[key]=value
             with self.subTest(key=key),self.assertRaises(ValueError):validate_quotes(bad,'inputs')
 

@@ -10541,7 +10541,7 @@ index 000000000..9685e469f
 +private const val MAX_MARKET_SCALE = 18
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt
 new file mode 100644
-index 000000000..b6e5e1221
+index 000000000..abe615b28
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/RecipientAddressPolicy.kt
 @@ -0,0 +1,373 @@
@@ -10704,9 +10704,9 @@ index 000000000..b6e5e1221
 +                return unsupported()
 +            }
 +            val baseUnits = it.toBigDecimal()
-+            if (baseUnits.scale() !in -MAX_EVM_AMOUNT_PRECISION..MAX_EVM_AMOUNT_PRECISION ||
-+                baseUnits.scale() > 0 && baseUnits.stripTrailingZeros().scale() > 0 ||
-+                baseUnits.precision() > MAX_EVM_AMOUNT_PRECISION ||
++            if (baseUnits.scale() !in -MAX_EVM_AMOUNT_PRECISION..MAX_EVM_AMOUNT_PRECISION) return unsupported()
++            if (baseUnits.scale() > 0 && baseUnits.stripTrailingZeros().scale() > 0) return unsupported()
++            if (baseUnits.precision() > MAX_EVM_AMOUNT_PRECISION ||
 +                baseUnits.abs() >= BigDecimal(BigInteger.ONE.shiftLeft(EVM_AMOUNT_BITS))
 +            ) return unsupported()
 +            baseUnits.movePointLeft(EVM_DECIMAL_PLACES)
@@ -11512,10 +11512,10 @@ index feef536f5..13ee1cfdf 100644
 +            level = LogLevel.NONE
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
 new file mode 100644
-index 000000000..ed0a85b75
+index 000000000..671c09f5a
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
-@@ -0,0 +1,129 @@
+@@ -0,0 +1,130 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import co.electriccoin.zcash.ui.common.model.boundedMarketNumber
@@ -11526,6 +11526,7 @@ index 000000000..ed0a85b75
 +import io.ktor.client.plugins.expectSuccess
 +import io.ktor.client.request.prepareGet
 +import io.ktor.client.statement.bodyAsChannel
++import io.ktor.http.HttpStatusCode
 +import io.ktor.utils.io.readBuffer
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.Dispatchers
@@ -11584,7 +11585,7 @@ index 000000000..ed0a85b75
 +                                    expectSuccess = false
 +                                    url { parameters.append("pair", pair) }
 +                                }.execute { response ->
-+                                    check(response.status.value == 200)
++                                    check(response.status.value == HttpStatusCode.OK.value)
 +                                    val bytes = response.bodyAsChannel()
 +                                        .readBuffer(MAX_RESPONSE_BYTES.toLong() + 1L).readByteArray()
 +                                    require(bytes.size <= MAX_RESPONSE_BYTES)

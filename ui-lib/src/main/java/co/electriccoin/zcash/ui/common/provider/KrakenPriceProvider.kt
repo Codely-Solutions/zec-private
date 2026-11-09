@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
 import io.ktor.client.plugins.expectSuccess
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.HttpStatusCode
 import io.ktor.utils.io.readBuffer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -66,7 +67,7 @@ class KrakenPriceProvider(private val httpClientProvider: HttpClientProvider) : 
                                     expectSuccess = false
                                     url { parameters.append("pair", pair) }
                                 }.execute { response ->
-                                    check(response.status.value == 200)
+                                    check(response.status.value == HttpStatusCode.OK.value)
                                     val bytes = response.bodyAsChannel()
                                         .readBuffer(MAX_RESPONSE_BYTES.toLong() + 1L).readByteArray()
                                     require(bytes.size <= MAX_RESPONSE_BYTES)
