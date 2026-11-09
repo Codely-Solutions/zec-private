@@ -52,10 +52,19 @@ object RecipientAddressPolicy {
     private val uriNetworks = mapOf(
         "bitcoin" to "btc", "litecoin" to "ltc", "bitcoincash" to "bch", "dash" to "dash", "zcash" to "zec"
     )
+    private const val SUI_HEX_LENGTH = 64
+    private const val MAX_INPUT_LENGTH = 2048
+    private const val MAX_EVM_AMOUNT_LENGTH = 100
+    private const val MAX_EVM_AMOUNT_PRECISION = 78
+    private const val EVM_AMOUNT_BITS = 256
+    private const val EVM_DECIMAL_PLACES = 18
+    private const val MAX_NATIVE_AMOUNT_LENGTH = 32
     private const val BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
     private const val XRP58 = "rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz"
     private const val BECH32 = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 
+    // Prefixes and payload lengths follow each network address wire format.
+    @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
     fun validate(address: String, network: String): Validation {
         if (address.isEmpty() || address.length > 512 || address.any { it.isWhitespace() || it.code < 33 }) {
             return Validation.Invalid(Reason.INVALID_ADDRESS)
@@ -88,15 +97,17 @@ object RecipientAddressPolicy {
      */
     fun normalize(address: String, network: String): String =
         if (network == "sui" && address.matches(Regex("(?:0[xX])?[0-9a-fA-F]{1,64}"))) {
-            "0x" + address.removePrefix("0x").removePrefix("0X").lowercase(Locale.ROOT).padStart(64, '0')
+            "0x" + address.removePrefix("0x").removePrefix("0X").lowercase(Locale.ROOT).padStart(SUI_HEX_LENGTH, '0')
         } else address
 
     /** Strict subset: simple BIP21-style/ZIP321 single-recipient native requests and EIP681 native transfers.
      * Unknown parameters, token calls, memos and destination tags fail closed; nothing is stripped.
      * Raw input remains byte-for-byte unchanged, including whitespace for subsequent validation.
      */
+    // Keep the ordered raw-address and URI rejection gates visible.
+    @Suppress("ReturnCount")
     fun parse(input: String): ParseResult {
-        if (input.length > 2048) return unsupported()
+        if (input.length > MAX_INPUT_LENGTH) return unsupported()
         // A prefixed cashaddr is an address, not a payment URI.
         if (input.startsWith("bitcoincash:", true) && !input.contains('?') && cashAddress(input)) {
             return ParseResult.Parsed(RecipientInput(input, "bch", "bch"))
@@ -105,6 +116,8 @@ object RecipientAddressPolicy {
         return runCatching { parseUri(input) }.getOrElse { ParseResult.Invalid(Reason.UNSUPPORTED_URI) }
     }
 
+    // Reject malformed structure and duplicate keys before scheme-specific parsing.
+    @Suppress("ReturnCount")
     private fun parseUri(input: String): ParseResult {
         val uri = URI(input)
         if (uri.rawFragment != null || uri.rawSchemeSpecificPart.startsWith("//")) return unsupported()
@@ -121,31 +134,42 @@ object RecipientAddressPolicy {
                 if (params.put(key, value) != null) return unsupported()
             }
         }
-        if (scheme == "ethereum") {
-            if (params.keys.any { it != "value" } || target.contains('/')) return unsupported()
-            val destination = target.removePrefix("pay-")
-            if (destination.count { it == '@' } > 1) return unsupported()
-            val explicitChain = destination.substringAfter('@', "")
-            // ERC681 defaults to the current chain when absent; retain this ambiguity for the selected network.
-            val network = if (explicitChain.isEmpty()) null else chainIds[explicitChain] ?: return unsupported()
-            if (network != null && network !in evmNetworks) return unsupported()
-            val address = destination.substringBefore('@')
-            if (!evm(address)) return ParseResult.Invalid(Reason.INVALID_ADDRESS)
-            val amount = params["value"]?.let {
-                if (!it.matches(Regex("[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")) || it.length > 100) {
-                    return unsupported()
-                }
-                val baseUnits = it.toBigDecimal()
-                if (baseUnits.scale() !in -78..78 ||
-                    baseUnits.scale() > 0 && baseUnits.stripTrailingZeros().scale() > 0 ||
-                    baseUnits.precision() > 78 || baseUnits.abs() >= BigDecimal(BigInteger.ONE.shiftLeft(256))
-                ) return unsupported()
-                baseUnits.movePointLeft(18)
+        return if (scheme == "ethereum") parseEthereumUri(target, params) else parseNativeUri(scheme, target, params)
+    }
+
+    // Reject unsupported calls, chain IDs and amounts at their field boundaries.
+    @Suppress("ReturnCount", "CyclomaticComplexMethod")
+    private fun parseEthereumUri(target: String, params: Map<String, String>): ParseResult {
+        if (params.keys.any { it != "value" } || target.contains('/')) return unsupported()
+        val destination = target.removePrefix("pay-")
+        if (destination.count { it == '@' } > 1) return unsupported()
+        val explicitChain = destination.substringAfter('@', "")
+        // ERC681 defaults to the current chain when absent; retain this ambiguity for the selected network.
+        val network = if (explicitChain.isEmpty()) null else chainIds[explicitChain] ?: return unsupported()
+        if (network != null && network !in evmNetworks) return unsupported()
+        val address = destination.substringBefore('@')
+        if (!evm(address)) return ParseResult.Invalid(Reason.INVALID_ADDRESS)
+        val amount = params["value"]?.let {
+            if (!it.matches(Regex("[0-9]+(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")) || it.length > MAX_EVM_AMOUNT_LENGTH) {
+                return unsupported()
             }
-            // Polygon's native asset differs; all other curated EVM chains use ETH/BNB/AVAX.
-            val asset = when (network) { "pol" -> "pol"; "bsc" -> "bnb"; "avax" -> "avax"; else -> "eth" }
-            return ParseResult.Parsed(RecipientInput(address, network, asset, amount))
+            val baseUnits = it.toBigDecimal()
+            if (baseUnits.scale() !in -MAX_EVM_AMOUNT_PRECISION..MAX_EVM_AMOUNT_PRECISION ||
+                baseUnits.scale() > 0 && baseUnits.stripTrailingZeros().scale() > 0 ||
+                baseUnits.precision() > MAX_EVM_AMOUNT_PRECISION ||
+                baseUnits.abs() >= BigDecimal(BigInteger.ONE.shiftLeft(EVM_AMOUNT_BITS))
+            ) return unsupported()
+            baseUnits.movePointLeft(EVM_DECIMAL_PLACES)
         }
+        // Polygon's native asset differs; all other curated EVM chains use ETH/BNB/AVAX.
+        val asset = when (network) { "pol" -> "pol"; "bsc" -> "bnb"; "avax" -> "avax"; else -> "eth" }
+        return ParseResult.Parsed(RecipientInput(address, network, asset, amount))
+    }
+
+    // Keep native URI rejection gates beside the field each validates.
+    // BCH legacy prefixes and payload lengths are wire-format constants.
+    @Suppress("ReturnCount", "MagicNumber")
+    private fun parseNativeUri(scheme: String, target: String, params: Map<String, String>): ParseResult {
         val network = uriNetworks[scheme] ?: return unsupported()
         if (params.keys.any { it !in setOf("amount", "label", "message") }) return unsupported()
         // Labels/messages have no payment effect, but retaining them prevents scanner data loss.
@@ -157,7 +181,7 @@ object RecipientAddressPolicy {
         } else decodedTarget
         if (validate(address, network) !is Validation.Valid) return ParseResult.Invalid(Reason.INVALID_ADDRESS)
         val amount = params["amount"]?.let {
-            if (!it.matches(Regex("[0-9]+(?:\\.[0-9]{1,8})?")) || it.length > 32) return unsupported()
+            if (!it.matches(Regex("[0-9]+(?:\\.[0-9]{1,8})?")) || it.length > MAX_NATIVE_AMOUNT_LENGTH) return unsupported()
             it.toBigDecimal()
         }
         return ParseResult.Parsed(RecipientInput(address, network, network, amount, metadata))

@@ -69,6 +69,7 @@ import kotlin.time.Instant
  * cancel-confirmation flow (back while requesting, then confirm/dismiss) drives the cancel sheet.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass") // Keep related quote/cancellation cases with their shared ViewModel fixture.
 class SwapVMTest {
     private val mainDispatcher = UnconfinedTestDispatcher()
 

@@ -17,6 +17,7 @@ class UpdateABContactUseCase(
     private val addressBookRepository: AddressBookRepository,
     private val navigationRouter: NavigationRouter
 ) {
+    @Suppress("ReturnCount") // Refusal exits precede all persistence and navigation.
     operator fun invoke(
         contact: EnhancedABContact,
         name: String,

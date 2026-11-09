@@ -21,6 +21,7 @@ class QuoteRequestDiagnostics(
     },
     private val nanoTime: () -> Long = System::nanoTime
 ) {
+    @Suppress("TooGenericExceptionCaught") // Observe and rethrow every failure, including cancellation.
     suspend fun <T> trace(stage: QuoteRequestStage, block: suspend () -> T): T {
         val started = nanoTime()
         var failure: Throwable? = null

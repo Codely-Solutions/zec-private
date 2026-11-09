@@ -12,6 +12,7 @@ data class SwapRecipientValidation(
 }
 
 /** One local policy for entry, saved contacts and the final quote boundary. */
+@Suppress("ReturnCount") // Fail-closed guards preserve the specific input error.
 fun validateSwapRecipient(
     value: String,
     network: String?,
@@ -28,12 +29,21 @@ fun validateSwapRecipient(
         return SwapRecipientValidation(error = SwapRecipientError.URI)
     }
     val input = parsed.input
+    return validateParsedRecipient(input, network, token, contactNetwork, allowPaymentAmount)
+}
+
+@Suppress("ReturnCount") // Independent validation failures retain their own error classification.
+private fun validateParsedRecipient(
+    input: RecipientAddressPolicy.RecipientInput,
+    network: String,
+    token: String?,
+    contactNetwork: String?,
+    allowPaymentAmount: Boolean,
+): SwapRecipientValidation {
     if (!allowPaymentAmount && input.amount != null) {
         return SwapRecipientValidation(error = SwapRecipientError.PAYMENT_AMOUNT)
     }
-    if ((contactNetwork != null && !contactNetwork.equals(network, ignoreCase = true)) ||
-        (input.network != null && !input.network.equals(network, ignoreCase = true))
-    ) {
+    if (!contactNetwork.matchesNetwork(network) || !input.network.matchesNetwork(network)) {
         return SwapRecipientValidation(error = SwapRecipientError.NETWORK)
     }
     if (token != null && input.asset != null && !input.asset.equals(token, ignoreCase = true)) {
@@ -47,3 +57,5 @@ fun validateSwapRecipient(
         input = input.copy(address = RecipientAddressPolicy.normalize(input.address, network.lowercase()))
     )
 }
+
+private fun String?.matchesNetwork(network: String): Boolean = this == null || equals(network, ignoreCase = true)
