@@ -42,5 +42,8 @@ class CaptureTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             with self.assertRaises(ValueError): capture_scenes(self.fake(),[dict(screen='x',theme='light',name='../x')],d)
             with self.assertRaises(RuntimeError): capture_scenes(self.fake(),[dict(screen='x',theme='dark',expected='Missing')],d,settle=lambda _:None)
+            self.assertTrue((Path(d)/'diagnostics/x-dark.xml').is_file())
+            self.assertTrue((Path(d)/'diagnostics/x-dark.png').read_bytes().startswith(b'\x89PNG'))
+            self.assertFalse((Path(d)/'captures.jsonl').exists())
 
 if __name__=='__main__':unittest.main()
