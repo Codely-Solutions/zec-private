@@ -45,20 +45,21 @@ class KrakenPriceProvider(private val httpClientProvider: HttpClientProvider) : 
                 ?: return@withContext IndependentPriceCheck.Unavailable
         ).distinct()
         try {
-            withTimeout(8_000L) {
+            withTimeout(CHECK_TIMEOUT_MILLIS) {
                 mutex.withLock {
                     val now = System.currentTimeMillis()
                     if (now < retryAfterMillis) return@withLock IndependentPriceCheck.Unavailable
                     val missing = pairs.filter { pair ->
                         cache[pair]?.let {
-                            now - it.receivedAtMillis in 0 until 60_000L &&
-                                now - it.observedAtMillis in -5_000L until 120_000L
+                            now - it.receivedAtMillis in 0 until RECEIPT_LIFETIME_MILLIS &&
+                                now - it.observedAtMillis in -FUTURE_TOLERANCE_MILLIS until OBSERVATION_LIFETIME_MILLIS
                         } != true
                     }
                     if (missing.isNotEmpty()) {
                         httpClientProvider.createTor().use { client ->
                             missing.forEach { pair ->
-                                val waitMillis = lastRequestStartedMillis + 1_000L - System.currentTimeMillis()
+                                val waitMillis =
+                                    lastRequestStartedMillis + REQUEST_INTERVAL_MILLIS - System.currentTimeMillis()
                                 delay(waitMillis.coerceAtLeast(0L))
                                 lastRequestStartedMillis = System.currentTimeMillis()
                                 cache[pair] = client.prepareGet("https://api.kraken.com/0/public/Spread") {
@@ -66,8 +67,9 @@ class KrakenPriceProvider(private val httpClientProvider: HttpClientProvider) : 
                                     url { parameters.append("pair", pair) }
                                 }.execute { response ->
                                     check(response.status.value == 200)
-                                    val bytes = response.bodyAsChannel().readBuffer(65_537L).readByteArray()
-                                    require(bytes.size <= 65_536)
+                                    val bytes = response.bodyAsChannel()
+                                        .readBuffer(MAX_RESPONSE_BYTES.toLong() + 1L).readByteArray()
+                                    require(bytes.size <= MAX_RESPONSE_BYTES)
                                     parseKrakenObservation(pair, bytes.decodeToString(), System.currentTimeMillis())
                                 }
                             }
@@ -77,19 +79,19 @@ class KrakenPriceProvider(private val httpClientProvider: HttpClientProvider) : 
                 }
             }
         } catch (_: TimeoutCancellationException) {
-            retryAfterMillis = System.currentTimeMillis() + 60_000L
+            retryAfterMillis = System.currentTimeMillis() + FAILURE_BACKOFF_MILLIS
             IndependentPriceCheck.Unavailable
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            retryAfterMillis = System.currentTimeMillis() + 60_000L
+            retryAfterMillis = System.currentTimeMillis() + FAILURE_BACKOFF_MILLIS
             IndependentPriceCheck.Unavailable
         }
     }
 }
 
 internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis: Long): MarketObservation {
-    require(body.length <= 65_536 && body.toByteArray(Charsets.UTF_8).size <= 65_536)
+    require(body.length <= MAX_RESPONSE_BYTES && body.toByteArray(Charsets.UTF_8).size <= MAX_RESPONSE_BYTES)
     val key = when (pair) {
         "XBTUSD" -> "XXBTZUSD"
         "ZECUSD" -> "XZECZUSD"
@@ -102,10 +104,10 @@ internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis
     val result = root.getValue("result").jsonObject
     require(result.keys == setOf(key, "last"))
     val rows = result.getValue(key).jsonArray
-    require(rows.isNotEmpty() && rows.size <= 1_000)
+    require(rows.isNotEmpty() && rows.size <= MAX_SPREAD_ROWS)
     return rows.reversed().map { element ->
         val row = element.jsonArray
-        require(row.size == 3)
+        require(row.size == SPREAD_ROW_FIELDS)
         val seconds = row[0].jsonPrimitive.content.toBigDecimal()
         val observedAtMillis = seconds.multiply(BigDecimal("1000")).longValueExact()
         val bid = row[1].jsonPrimitive.content.toBigDecimal()
@@ -115,3 +117,13 @@ internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis
         MarketObservation(pair, bid, ask, observedAtMillis, receivedAtMillis)
     }.maxBy { it.observedAtMillis }
 }
+
+private const val CHECK_TIMEOUT_MILLIS = 8_000L
+private const val RECEIPT_LIFETIME_MILLIS = 60_000L
+private const val FUTURE_TOLERANCE_MILLIS = 5_000L
+private const val OBSERVATION_LIFETIME_MILLIS = 120_000L
+private const val REQUEST_INTERVAL_MILLIS = 1_000L
+private const val FAILURE_BACKOFF_MILLIS = 60_000L
+private const val MAX_RESPONSE_BYTES = 65_536
+private const val MAX_SPREAD_ROWS = 1_000
+private const val SPREAD_ROW_FIELDS = 3

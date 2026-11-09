@@ -65,12 +65,16 @@ internal class SwapQuoteVM(
     private val navigationRouter: NavigationRouter,
     private val independentPrices: IndependentPriceProvider,
 ) : ViewModel() {
+    private companion object {
+        const val PRICE_CLOCK_INTERVAL_MILLIS = 1_000L
+    }
+
     private var isClosing = false
     private val priceCheck = MutableStateFlow<BoundPriceCheck?>(null)
     private val clock = flow {
         while (true) {
             emit(Clock.System.now().toEpochMilliseconds())
-            delay(1_000)
+            delay(PRICE_CLOCK_INTERVAL_MILLIS)
         }
     }
 
@@ -133,11 +137,9 @@ internal class SwapQuoteVM(
         fun reviewedAction(action: () -> Unit) {
             val currentQuote = (swapRepository.quote.value as? SwapQuoteData.Success)?.quote
             val current = priceCheck.value.current(quote.quote, fee, Clock.System.now().toEpochMilliseconds())
-            if (!isClosing && currentQuote === quote.quote && current == assessment &&
-                current != IndependentPriceCheck.Checking
-            ) {
-                action()
-            }
+            if (isClosing || currentQuote !== quote.quote) return
+            if (current != assessment || current == IndependentPriceCheck.Checking) return
+            action()
         }
         return swapQuoteSuccessMapper.createState(
             state = SwapQuoteInternalState(proposal as? SwapTransactionProposal, quote.quote, account),

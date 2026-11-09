@@ -78,7 +78,8 @@ class KtorNearApiProvider(
             }.body()
         }
 
-    @Suppress("TooGenericExceptionCaught")
+    // Cleanup preserves the primary failure; a close-only failure must still reach the caller.
+    @Suppress("TooGenericExceptionCaught", "ThrowingExceptionFromFinally")
     @Throws(ResponseException::class)
     private suspend inline fun <T> execute(
         crossinline block: suspend HttpClient.() -> T
