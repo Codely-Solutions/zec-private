@@ -3945,6 +3945,51 @@ index 703df121a..c44616fb3 100644
 -            res.setSrcDirs(
 +            res.directories.clear()
 +            res.directories.addAll(
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ExternalLinkRow.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ExternalLinkRow.kt
+new file mode 100644
+index 000000000..e0f3cfc9b
+--- /dev/null
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ExternalLinkRow.kt
+@@ -0,0 +1,39 @@
++package co.electriccoin.zcash.ui.design.component
++
++import androidx.compose.foundation.layout.PaddingValues
++import androidx.compose.foundation.layout.Spacer
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.heightIn
++import androidx.compose.foundation.layout.width
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.semantics.clearAndSetSemantics
++import androidx.compose.ui.text.style.TextAlign
++import androidx.compose.ui.unit.dp
++
++/** One external-navigation action; the trailing glyph is decorative. */
++@Composable
++fun ExternalLinkRow(
++    label: String,
++    onClick: () -> Unit,
++    modifier: Modifier = Modifier,
++    enabled: Boolean = true,
++) {
++    TextButton(
++        onClick = onClick,
++        enabled = enabled,
++        modifier = modifier.fillMaxWidth().heightIn(min = 48.dp),
++        contentPadding = PaddingValues(vertical = 12.dp),
++    ) {
++        Text(label, modifier = Modifier.weight(1f), textAlign = TextAlign.Start)
++        Spacer(Modifier.width(16.dp))
++        Text(
++            text = "↗",
++            modifier = Modifier.clearAndSetSemantics {},
++            style = MaterialTheme.typography.titleMedium,
++        )
++    }
++}
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/QuoteValueDifference.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/QuoteValueDifference.kt
 new file mode 100644
 index 000000000..f946d231b
@@ -12598,10 +12643,10 @@ index 000000000..a034246bc
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
 new file mode 100644
-index 000000000..8055774f0
+index 000000000..d17613519
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/donation/DonationView.kt
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,157 @@
 +package co.electriccoin.zcash.ui.screen.donation
 +
 +import androidx.activity.compose.BackHandler
@@ -12621,7 +12666,7 @@ index 000000000..8055774f0
 +import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
 +import co.electriccoin.zcash.ui.design.component.ZashiButton
 +import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
-+import co.electriccoin.zcash.ui.design.component.ZashiTextButton
++import co.electriccoin.zcash.ui.design.component.ExternalLinkRow
 +import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
 +import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarBackNavigation
 +import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
@@ -12706,13 +12751,12 @@ index 000000000..8055774f0
 +            if (state.unsupported) {
 +                DonationMessage(stringResource(R.string.private_support_software_only))
 +            }
-+            ZashiTextButton(
++            ExternalLinkRow(
++                label = stringResource(R.string.private_support_addresses),
 +                onClick = onExternalAddresses,
 +                enabled = !state.busy,
 +                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-+            ) {
-+                Text(stringResource(R.string.private_support_addresses))
-+            }
++            )
 +        }
 +    }
 +}
@@ -13916,7 +13960,7 @@ index 22fac8c3b..0e534cb3e 100644
 +    val refundedAmount: TransactionDetailInfoRowState? = null,
 +    val donationBasisZec: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
-index a874453ef..327ad599e 100644
+index a874453ef..79485b418 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -13926,7 +13970,7 @@ index a874453ef..327ad599e 100644
 @@ -77 +77 @@ class SwapDetailVM(
 -                    totalFees = createTotalFeesState(swapData),
 +                    totalFees = createQuotedOutputState(swapData),
-@@ -99,0 +100,30 @@ class SwapDetailVM(
+@@ -99,0 +100,28 @@ class SwapDetailVM(
 +                    explorerLinks = swapData.status?.let { status ->
 +                        val testnet = co.electriccoin.zcash.ui.common.model.VersionInfo.NETWORK ==
 +                            cash.z.ecc.android.sdk.model.ZcashNetwork.Testnet
@@ -13935,15 +13979,13 @@ index a874453ef..327ad599e 100644
 +                            ids = status.originTransactionIds,
 +                            label = stringRes(R.string.private_explorer_deposit, status.originAsset.chainName),
 +                            testnet = testnet,
-+                            router = navigationRouter,
-+                            copy = copyToClipboard::invoke
++                            router = navigationRouter
 +                        ) + co.electriccoin.zcash.ui.screen.transactiondetail.explorerLinks(
 +                            chain = status.destinationAsset.blockchain.chainTicker,
 +                            ids = status.destinationTransactionIds,
 +                            label = stringRes(R.string.private_explorer_destination, status.destinationAsset.chainName),
 +                            testnet = testnet,
-+                            router = navigationRouter,
-+                            copy = copyToClipboard::invoke
++                            router = navigationRouter
 +                        )
 +                    }.orEmpty(),
 +                    refundedAmount = swapData.status?.positiveRefund?.let { refund ->
@@ -13957,13 +13999,13 @@ index a874453ef..327ad599e 100644
 +                    donationBasisZec = swapData.status?.takeIf {
 +                        it.status == SUCCESS && it.destinationAsset.tokenTicker == "ZEC"
 +                    }?.executedAmountOut?.takeIf { it.signum() > 0 }?.toPlainString(),
-@@ -111 +141 @@ class SwapDetailVM(
+@@ -111 +139 @@ class SwapDetailVM(
 -    private fun createTotalFeesState(swapData: SwapData): TransactionDetailInfoRowState =
 +    private fun createQuotedOutputState(swapData: SwapData): TransactionDetailInfoRowState =
-@@ -113 +143 @@ class SwapDetailVM(
+@@ -113 +141 @@ class SwapDetailVM(
 -            title = stringRes(R.string.swapAndPay_totalFees),
 +            title = stringRes(R.string.private_quoted_output),
-@@ -115,13 +145,5 @@ class SwapDetailVM(
+@@ -115,13 +143,5 @@ class SwapDetailVM(
 -                if (swapData.status != null) {
 -                    val text =
 -                        stringResByCurrencyNumber(
@@ -13982,7 +14024,7 @@ index a874453ef..327ad599e 100644
 +                        amount = it.quotedAmountOut,
 +                        ticker = it.destinationAsset.tokenTicker
 +                    )
-@@ -199 +221,8 @@ class SwapDetailVM(
+@@ -199 +219,8 @@ class SwapDetailVM(
 -                    SUCCESS -> stringRes(R.string.swapStatus_swapped)
 +                    SUCCESS ->
 +                        stringRes(
@@ -13993,7 +14035,7 @@ index a874453ef..327ad599e 100644
 +                            }
 +                        )
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
-index 48d3039d5..3d1c2089a 100644
+index 48d3039d5..7ece59638 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
 @@ -71,0 +72 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionErrorFooter
@@ -14003,11 +14045,11 @@ index 48d3039d5..3d1c2089a 100644
 +                                    ZashiHorizontalDivider()
 +                                    TransactionDetailInfoRow(it)
 +                                }
-@@ -173,0 +179,4 @@ fun SwapDetailView(
-+                        if (state.explorerLinks.isNotEmpty()) {
-+                            ZashiHorizontalDivider()
-+                            TransactionExplorerLinks(state.explorerLinks)
-+                        }
+@@ -180,0 +186,4 @@ fun SwapDetailView(
++                    if (state.explorerLinks.isNotEmpty()) {
++                        Spacer(8.dp)
++                        TransactionExplorerLinks(state.explorerLinks)
++                    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
 index cd7555ecc..5b692645f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
@@ -14317,14 +14359,14 @@ index a7daa6d5b..fa86faf35 100644
 @@ -15,0 +16 @@ data class TransactionDetailState(
 +    val explorerLinks: List<TransactionExplorerLink> = emptyList(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-index 00fe60557..71a424360 100644
+index 00fe60557..9e9b09429 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 @@ -12,0 +13 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
 +import co.electriccoin.zcash.ui.common.model.positiveRefund
 @@ -96,0 +98 @@ class TransactionDetailVM(
 +                    explorerLinks = createExplorerLinks(transaction),
-@@ -161,0 +164,34 @@ class TransactionDetailVM(
+@@ -161,0 +164,31 @@ class TransactionDetailVM(
 +    private fun createExplorerLinks(data: DetailedTransactionData): List<TransactionExplorerLink> {
 +        val testnet = co.electriccoin.zcash.ui.common.model.VersionInfo.NETWORK ==
 +            cash.z.ecc.android.sdk.model.ZcashNetwork.Testnet
@@ -14335,8 +14377,7 @@ index 00fe60557..71a424360 100644
 +                if (data.swap == null) R.string.private_explorer_transaction else R.string.private_explorer_zec_deposit
 +            ),
 +            testnet = testnet,
-+            router = navigationRouter,
-+            copy = copyToClipboard::invoke
++            router = navigationRouter
 +        )
 +        val status = data.swap?.status ?: return deposit
 +        val otherOriginTransactions = explorerLinks(
@@ -14346,30 +14387,28 @@ index 00fe60557..71a424360 100644
 +            },
 +            label = stringRes(R.string.private_explorer_deposit, status.originAsset.chainName),
 +            testnet = testnet,
-+            router = navigationRouter,
-+            copy = copyToClipboard::invoke
++            router = navigationRouter
 +        )
 +        return deposit + otherOriginTransactions + explorerLinks(
 +            chain = status.destinationAsset.blockchain.chainTicker,
 +            ids = status.destinationTransactionIds,
 +            label = stringRes(R.string.private_explorer_destination, status.destinationAsset.chainName),
 +            testnet = testnet,
-+            router = navigationRouter,
-+            copy = copyToClipboard::invoke
++            router = navigationRouter
 +        )
 +    }
 +
-@@ -191,2 +227 @@ class TransactionDetailVM(
+@@ -191,2 +224 @@ class TransactionDetailVM(
 -                                transaction.metadata.swapMetadata
 -                                    ?.totalFees
 +                                transaction.transaction.fee
-@@ -202 +237 @@ class TransactionDetailVM(
+@@ -202 +234 @@ class TransactionDetailVM(
 -                                    ?.refundedFormatted
 +                                    ?.positiveRefund
-@@ -205,2 +239,0 @@ class TransactionDetailVM(
+@@ -205,2 +236,0 @@ class TransactionDetailVM(
 -                                    }?.takeIf {
 -                                        transaction.swap.status.status == REFUNDED
-@@ -227,0 +261,10 @@ class TransactionDetailVM(
+@@ -227,0 +258,10 @@ class TransactionDetailVM(
 +                            donationBasisZec = transaction.transaction.fee?.let { fee ->
 +                                (transaction.transaction.amount - fee).value
 +                                    .toBigDecimal().movePointLeft(ZEC_DECIMAL_PLACES)
@@ -14380,92 +14419,41 @@ index 00fe60557..71a424360 100644
 +                                            co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
 +                                    }?.toPlainString()
 +                            },
-@@ -630,0 +674,2 @@ class TransactionDetailVM(
+@@ -630,0 +671,2 @@ class TransactionDetailVM(
 +
 +private const val ZEC_DECIMAL_PLACES = 8
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt
-index 9c9ef5fc6..b6ad6016a 100644
+index 9c9ef5fc6..c94e4ae13 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt
-@@ -143 +143,2 @@ fun TransactionDetailView(
--                                state = state.info
-+                                state = state.info,
-+                                explorerLinks = state.explorerLinks,
-@@ -150 +151,2 @@ fun TransactionDetailView(
--                                state = state.info
-+                                state = state.info,
-+                                explorerLinks = state.explorerLinks,
-@@ -157 +159,2 @@ fun TransactionDetailView(
--                                state = state.info
-+                                state = state.info,
-+                                explorerLinks = state.explorerLinks,
-@@ -164 +167,2 @@ fun TransactionDetailView(
--                                state = state.info
-+                                state = state.info,
-+                                explorerLinks = state.explorerLinks,
-@@ -171 +175,2 @@ fun TransactionDetailView(
--                                state = state.info
-+                                state = state.info,
-+                                explorerLinks = state.explorerLinks,
-@@ -178 +183,2 @@ fun TransactionDetailView(
--                                state = state.info
-+                                state = state.info,
-+                                explorerLinks = state.explorerLinks,
+@@ -185,0 +186,4 @@ fun TransactionDetailView(
++                    if (state.explorerLinks.isNotEmpty()) {
++                        Spacer(8.dp)
++                        TransactionExplorerLinks(state.explorerLinks)
++                    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt
 new file mode 100644
-index 000000000..d0bcbdd03
+index 000000000..cb4d3db74
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinks.kt
-@@ -0,0 +1,171 @@
+@@ -0,0 +1,49 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
-+import androidx.compose.foundation.layout.Arrangement
-+import androidx.compose.foundation.clickable
-+import androidx.compose.foundation.layout.heightIn
-+import androidx.compose.foundation.layout.BoxWithConstraints
 +import androidx.compose.foundation.layout.Column
-+import androidx.compose.foundation.layout.PaddingValues
-+import androidx.compose.foundation.layout.Row
-+import androidx.compose.foundation.layout.Spacer
-+import androidx.compose.foundation.layout.fillMaxWidth
-+import androidx.compose.foundation.layout.size
-+import androidx.compose.foundation.layout.width
-+import androidx.compose.material3.Icon
-+import androidx.compose.material.icons.Icons
-+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
-+import androidx.compose.material3.IconButton
-+import androidx.compose.material3.Text
 +import androidx.compose.runtime.Composable
-+import androidx.compose.ui.Alignment
-+import androidx.compose.ui.Modifier
-+import androidx.compose.ui.res.painterResource
-+import androidx.compose.ui.semantics.Role
-+import androidx.compose.ui.platform.LocalDensity
-+import androidx.compose.ui.text.font.FontWeight
-+import androidx.compose.ui.text.style.TextAlign
-+import androidx.compose.ui.text.style.TextOverflow
-+import androidx.compose.ui.unit.dp
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.model.TransactionExplorer
-+import co.electriccoin.zcash.ui.design.component.ZashiHorizontalDivider
-+import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
-+import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
++import co.electriccoin.zcash.ui.design.component.ExternalLinkRow
 +import co.electriccoin.zcash.ui.design.util.StringResource
 +import co.electriccoin.zcash.ui.design.util.getValue
-+import co.electriccoin.zcash.ui.design.util.orHiddenString
 +import co.electriccoin.zcash.ui.design.util.stringRes
-+import co.electriccoin.zcash.ui.design.util.stringResByTransactionId
 +import co.electriccoin.zcash.ui.screen.ExternalUrl
-+import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRow
-+import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRowState
-+import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailRowSurface
 +
 +data class TransactionExplorerLink(
 +    val label: StringResource,
 +    val transactionId: String,
 +    val onOpen: (() -> Unit)?,
-+    val onCopy: () -> Unit,
 +)
 +
 +fun explorerLinks(
@@ -14474,247 +14462,62 @@ index 000000000..d0bcbdd03
 +    label: StringResource,
 +    testnet: Boolean,
 +    router: NavigationRouter,
-+    copy: (String) -> Unit,
 +): List<TransactionExplorerLink> = ids.filter { it.isNotBlank() }.distinct().map { id ->
 +    val open = TransactionExplorer.url(chain, id, testnet)?.let { url ->
 +        { router.forward(ExternalUrl(url)) }
 +    }
-+    TransactionExplorerLink(label, id, open, { copy(id) })
++    TransactionExplorerLink(label, id, open)
 +}
 +
 +@Composable
 +fun TransactionExplorerLinks(links: List<TransactionExplorerLink>) {
-+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-+        val stacked = maxWidth / LocalDensity.current.fontScale < 320.dp
-+        Column {
-+            links.forEachIndexed { index, link ->
-+                if (index > 0) ZashiHorizontalDivider(thickness = 2.dp)
-+                TransactionDetailRowSurface(
-+                    onClick = null,
-+                    modifier = Modifier
-+                        .fillMaxWidth()
-+                        .heightIn(min = 48.dp)
-+                        .clickable(
-+                            onClick = link.onCopy,
-+                            onClickLabel = stringRes(R.string.private_copy_explorer_id, link.label).getValue(),
-+                            role = Role.Button,
-+                        ),
-+                    contentPadding = PaddingValues(start = 20.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
-+                ) {
-+                    if (stacked) {
-+                        Column(modifier = Modifier.weight(1f)) {
-+                            ExplorerLabel(link)
-+                            ExplorerId(link, textAlign = TextAlign.Start)
-+                        }
-+                        Spacer(Modifier.width(12.dp))
-+                        ExplorerActions(link)
-+                    } else {
-+                        ExplorerLabel(link, modifier = Modifier.weight(1f))
-+                        Spacer(Modifier.width(12.dp))
-+                        Row(
-+                            modifier = Modifier.weight(1.7f),
-+                            verticalAlignment = Alignment.CenterVertically,
-+                            horizontalArrangement = Arrangement.End,
-+                        ) {
-+                            ExplorerId(link, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
-+                            ExplorerActions(link)
-+                        }
-+                    }
++    val destinations = links.filter { it.onOpen != null }.distinctBy { it.label to it.transactionId }
++    if (destinations.isEmpty()) return
++    Column {
++        destinations.groupBy { it.label }.forEach { (label, transactions) ->
++            transactions.forEachIndexed { index, link ->
++                val title = if (transactions.size == 1) {
++                    stringRes(R.string.private_view_in_explorer, label)
++                } else {
++                    stringRes(R.string.private_view_in_explorer_numbered, label, index + 1)
 +                }
++                ExternalLinkRow(label = title.getValue(), onClick = checkNotNull(link.onOpen))
 +            }
 +        }
 +    }
 +}
-+
-+@Composable
-+private fun ExplorerLabel(link: TransactionExplorerLink, modifier: Modifier = Modifier) {
-+    Text(
-+        modifier = modifier,
-+        text = link.label.getValue(),
-+        style = ZashiTypography.textSm,
-+        color = ZashiColors.Text.textTertiary,
-+    )
-+}
-+
-+@Composable
-+private fun ExplorerId(
-+    link: TransactionExplorerLink,
-+    textAlign: TextAlign,
-+    modifier: Modifier = Modifier,
-+) {
-+    Text(
-+        modifier = modifier,
-+        text = stringResByTransactionId(link.transactionId, abbreviated = true) orHiddenString
-+            stringRes(co.electriccoin.zcash.ui.design.R.string.general_hideBalancesMost),
-+        maxLines = 1,
-+        softWrap = false,
-+        overflow = TextOverflow.Ellipsis,
-+        style = ZashiTypography.textSm,
-+        fontWeight = FontWeight.Medium,
-+        textAlign = textAlign,
-+        color = ZashiColors.Text.textPrimary,
-+    )
-+}
-+
-+@Composable
-+private fun ExplorerActions(link: TransactionExplorerLink) {
-+    Spacer(Modifier.width(6.dp))
-+    Icon(
-+        modifier = Modifier.size(20.dp),
-+        painter = painterResource(R.drawable.ic_transaction_detail_info_copy),
-+        tint = ZashiColors.Text.textTertiary,
-+        contentDescription = null,
-+    )
-+    link.onOpen?.let { open ->
-+        Spacer(Modifier.width(4.dp))
-+        IconButton(onClick = open, modifier = Modifier.size(48.dp)) {
-+            Icon(
-+                imageVector = Icons.AutoMirrored.Outlined.OpenInNew,
-+                tint = ZashiColors.Text.textTertiary,
-+                contentDescription = stringRes(R.string.private_view_in_explorer, link.label).getValue(),
-+            )
-+        }
-+    }
-+}
-+
-+@Composable
-+fun TransactionDetailIdRows(
-+    links: List<TransactionExplorerLink>,
-+    fallback: TransactionDetailInfoRowState,
-+) {
-+    if (links.isEmpty()) {
-+        TransactionDetailInfoRow(state = fallback, modifier = Modifier.fillMaxWidth())
-+    } else {
-+        TransactionExplorerLinks(links)
-+    }
-+}
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/ReceiveShielded.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/ReceiveShielded.kt
-index 074898cf6..e03717b61 100644
---- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/ReceiveShielded.kt
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/ReceiveShielded.kt
-@@ -19,0 +20,2 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.ReceiveShieldedStateFix
-+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailIdRows
-+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLink
-@@ -32 +34,2 @@ fun ReceiveShielded(
--    modifier: Modifier = Modifier
-+    modifier: Modifier = Modifier,
-+    explorerLinks: List<TransactionExplorerLink> = emptyList(),
-@@ -57,3 +60,3 @@ fun ReceiveShielded(
--            TransactionDetailInfoRow(
--                modifier = Modifier.fillMaxWidth(),
--                state =
-+            TransactionDetailIdRows(
-+                links = explorerLinks,
-+                fallback =
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/ReceiveTransparent.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/ReceiveTransparent.kt
-index ce1446078..69ac7c11a 100644
---- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/ReceiveTransparent.kt
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/ReceiveTransparent.kt
-@@ -19,0 +20,2 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.ReceiveTransparentState
-+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailIdRows
-+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLink
-@@ -31 +33,2 @@ fun ReceiveTransparent(
--    modifier: Modifier = Modifier
-+    modifier: Modifier = Modifier,
-+    explorerLinks: List<TransactionExplorerLink> = emptyList(),
-@@ -45,3 +48,3 @@ fun ReceiveTransparent(
--            TransactionDetailInfoRow(
--                modifier = Modifier.fillMaxWidth(),
--                state =
-+            TransactionDetailIdRows(
-+                links = explorerLinks,
-+                fallback =
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt
-index 13b042bd7..e132e170f 100644
+index 13b042bd7..60b0df221 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendShielded.kt
-@@ -27,0 +28,2 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.SendShieldStateFixture
-+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailIdRows
-+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLink
-@@ -41 +43,2 @@ fun SendShielded(
--    modifier: Modifier = Modifier
-+    modifier: Modifier = Modifier,
-+    explorerLinks: List<TransactionExplorerLink> = emptyList(),
-@@ -77,3 +80,3 @@ fun SendShielded(
--                    TransactionDetailInfoRow(
--                        modifier = Modifier.fillMaxWidth(),
--                        state =
-+                    TransactionDetailIdRows(
-+                        links = explorerLinks,
-+                        fallback =
-@@ -93 +96 @@ fun SendShielded(
+@@ -93 +93 @@ fun SendShielded(
 -                                    stringRes(R.string.transactionDetail_feeSummary),
 +                                    stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
-index ad8bc8549..dc81cbbbc 100644
+index ad8bc8549..ef0012736 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendSwap.kt
-@@ -31,0 +32,2 @@ import co.electriccoin.zcash.ui.design.util.withStyle
-+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailIdRows
-+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLink
-@@ -42 +44,5 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDe
--fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
-+fun SendSwap(
-+    state: SendSwapState,
-+    modifier: Modifier = Modifier,
-+    explorerLinks: List<TransactionExplorerLink> = emptyList(),
-+) {
-@@ -83 +89 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+@@ -83 +83 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
 -                    if (state.status == SwapStatus.REFUNDED) {
 +                    if (state.refundedAmount != null) {
-@@ -90 +96 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+@@ -90 +90 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
 -                                    message = state.refundedAmount?.withStyle(),
 +                                    message = state.refundedAmount.withStyle(),
-@@ -108,3 +114,3 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
--                    TransactionDetailInfoRow(
--                        modifier = Modifier.fillMaxWidth(),
--                        state =
-+                    TransactionDetailIdRows(
-+                        links = explorerLinks,
-+                        fallback =
-@@ -123 +129 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
+@@ -123 +123 @@ fun SendSwap(state: SendSwapState, modifier: Modifier = Modifier) {
 -                                title = stringRes(R.string.swapAndPay_totalFees),
 +                                title = stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt
-index 4dc191b75..45e707aef 100644
+index 4dc191b75..c21b7c20a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/SendTransparent.kt
-@@ -27,0 +28,2 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.SendTransparentStateFix
-+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailIdRows
-+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLink
-@@ -38 +40,2 @@ fun SendTransparent(
--    modifier: Modifier = Modifier
-+    modifier: Modifier = Modifier,
-+    explorerLinks: List<TransactionExplorerLink> = emptyList(),
-@@ -75,3 +78,3 @@ fun SendTransparent(
--                    TransactionDetailInfoRow(
--                        modifier = Modifier.fillMaxWidth(),
--                        state =
-+                    TransactionDetailIdRows(
-+                        links = explorerLinks,
-+                        fallback =
-@@ -90 +93 @@ fun SendTransparent(
+@@ -90 +90 @@ fun SendTransparent(
 -                                title = stringRes(R.string.transactionDetail_feeSummary),
 +                                title = stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/Shielding.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/Shielding.kt
-index bf4730e36..08b0ee685 100644
+index bf4730e36..791e10475 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/Shielding.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/Shielding.kt
-@@ -19,0 +20,2 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.ShieldingStateFixture
-+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailIdRows
-+import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLink
-@@ -31 +33,2 @@ fun Shielding(
--    modifier: Modifier = Modifier
-+    modifier: Modifier = Modifier,
-+    explorerLinks: List<TransactionExplorerLink> = emptyList(),
-@@ -45,3 +48,3 @@ fun Shielding(
--            TransactionDetailInfoRow(
--                modifier = Modifier.fillMaxWidth(),
--                state =
-+            TransactionDetailIdRows(
-+                links = explorerLinks,
-+                fallback =
-@@ -60 +63 @@ fun Shielding(
+@@ -60 +60 @@ fun Shielding(
 -                        title = stringRes(R.string.transactionDetail_feeSummary),
 +                        title = stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/TransactionDetailInfoState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/TransactionDetailInfoState.kt
@@ -19768,14 +19571,14 @@ index 000000000..c1e6f124b
 \ No newline at end of file
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_explorer_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_explorer_strings.xml
 new file mode 100644
-index 000000000..d23c4a208
+index 000000000..84b214fa3
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_explorer_strings.xml
 @@ -0,0 +1,9 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
-+    <string name="private_view_in_explorer">Open %1$s in explorer</string>
-+    <string name="private_copy_explorer_id">Copy %1$s ID</string>
++    <string name="private_view_in_explorer">View %1$s</string>
++    <string name="private_view_in_explorer_numbered">View %1$s %2$d</string>
 +    <string name="private_explorer_transaction">Zcash transaction</string>
 +    <string name="private_explorer_zec_deposit">ZEC deposit</string>
 +    <string name="private_explorer_deposit">%1$s transaction</string>
@@ -19810,7 +19613,7 @@ index 000000000..bdaf3e5ab
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 new file mode 100644
-index 000000000..975ecdc5f
+index 000000000..cc9fef4ad
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml
 @@ -0,0 +1,36 @@
@@ -19824,7 +19627,7 @@ index 000000000..975ecdc5f
 +    <string name="private_estimated_output" translatable="false">Quoted output (execution unavailable)</string>
 +    <string name="private_total_zec_to_spend" translatable="false">Total ZEC to spend</string>
 +    <string name="private_support_title">Support development</string>
-+    <string name="private_support_addresses">Donation addresses ↗</string>
++    <string name="private_support_addresses">Donation addresses</string>
 +    <string name="private_support_amount">Donation amount</string>
 +    <string name="private_support_failed">Cannot prepare donation. Check shielded funds, synchronization and connection. Nothing was submitted.</string>
 +    <string name="private_support_software_only">In-app donations currently require a software wallet. Hardware and view-only accounts can use the published address in a compatible wallet.</string>
@@ -23155,18 +22958,12 @@ index 3027e6cda..60dbff0cc 100644
 +            cancelSwapQuote = cancelQuote,
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt
 new file mode 100644
-index 000000000..be5687b7c
+index 000000000..83383e97a
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt
-@@ -0,0 +1,110 @@
+@@ -0,0 +1,92 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
-+import androidx.compose.runtime.CompositionLocalProvider
-+import androidx.compose.ui.semantics.SemanticsActions
-+import androidx.compose.ui.test.SemanticsMatcher
-+import androidx.compose.ui.test.assert
-+import androidx.compose.ui.test.click
-+import androidx.compose.ui.test.performTouchInput
 +import androidx.compose.ui.test.assertCountEquals
 +import androidx.compose.ui.test.hasClickAction
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -23174,11 +22971,9 @@ index 000000000..be5687b7c
 +import androidx.compose.ui.test.onNodeWithText
 +import androidx.compose.ui.test.performClick
 +import co.electriccoin.zcash.ui.design.theme.ZcashTheme
-+import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
 +import co.electriccoin.zcash.ui.design.util.getString
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.design.util.stringResByTransactionId
-+import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoContainer
 +import org.junit.Rule
 +import org.junit.runner.RunWith
 +import org.robolectric.RobolectricTestRunner
@@ -23196,77 +22991,67 @@ index 000000000..be5687b7c
 +    val compose = createComposeRule()
 +
 +    @Test
-+    fun rowCopiesAndExplorerOpensWithoutCopyingAgain() {
-+        var copies = 0
++    fun wholeRowOpensExplorerWithoutDisplayingIdOrCopyAction() {
 +        var opens = 0
-+        showLink(onCopy = { copies++ }, onOpen = { opens++ })
++        showLinks(listOf(TransactionExplorerLink(stringRes("ZEC deposit"), TRANSACTION_ID, { opens++ })))
 +
-+        compose.onNodeWithText("ZEC deposit")
-+            .assert(hasCopyActionLabel())
-+            .performClick()
-+        compose.runOnIdle {
-+            assertEquals(1, copies)
-+            assertEquals(0, opens)
-+        }
-+
-+        compose.onNodeWithContentDescription("Open ZEC deposit in explorer").performTouchInput { click() }
-+        compose.runOnIdle {
-+            assertEquals(1, copies)
-+            assertEquals(1, opens)
-+        }
-+        // Only the row and explorer are actions; the copy glyph is decorative.
-+        compose.onAllNodes(hasClickAction(), useUnmergedTree = true).assertCountEquals(2)
-+    }
-+
-+    @Test
-+    fun unsupportedExplorerKeepsAccessibleRowCopyAndHidesIdWithBalances() {
-+        var copies = 0
-+        showLink(balancesAvailable = false, onCopy = { copies++ }, onOpen = null)
-+
++        compose.onNodeWithText("View ZEC deposit").performClick()
++        compose.runOnIdle { assertEquals(1, opens) }
++        compose.onAllNodes(hasClickAction(), useUnmergedTree = true).assertCountEquals(1)
++        compose.onNodeWithText(TRANSACTION_ID, useUnmergedTree = true).assertDoesNotExist()
 +        val abbreviatedId = stringResByTransactionId(TRANSACTION_ID, abbreviated = true)
 +            .getString(RuntimeEnvironment.getApplication())
 +        compose.onNodeWithText(abbreviatedId, useUnmergedTree = true).assertDoesNotExist()
-+        compose.onNodeWithText(TRANSACTION_ID, useUnmergedTree = true).assertDoesNotExist()
-+        compose.onNodeWithContentDescription("Open ZEC deposit in explorer").assertDoesNotExist()
-+        compose.onAllNodes(hasClickAction(), useUnmergedTree = true).assertCountEquals(1)
-+        compose.onNodeWithText("ZEC deposit")
-+            .assert(hasCopyActionLabel())
-+            .performClick()
-+        compose.runOnIdle { assertEquals(1, copies) }
++        compose.onNodeWithContentDescription("Copy ZEC deposit ID", useUnmergedTree = true).assertDoesNotExist()
++        compose.onNodeWithContentDescription("Open ZEC deposit in explorer", useUnmergedTree = true)
++            .assertDoesNotExist()
 +    }
 +
-+    private fun showLink(
-+        balancesAvailable: Boolean = true,
-+        onCopy: () -> Unit,
-+        onOpen: (() -> Unit)?,
-+    ) {
++    @Test
++    fun multipleIdsInSameLegAreNumberedAndDuplicatesAreExcluded() {
++        var firstOpens = 0
++        var secondOpens = 0
++        var duplicateOpens = 0
++        showLinks(
++            listOf(
++                TransactionExplorerLink(stringRes("Bitcoin payment"), TRANSACTION_ID, { firstOpens++ }),
++                TransactionExplorerLink(stringRes("Bitcoin payment"), SECOND_TRANSACTION_ID, { secondOpens++ }),
++                TransactionExplorerLink(stringRes("Bitcoin payment"), TRANSACTION_ID, { duplicateOpens++ }),
++            )
++        )
++
++        compose.onNodeWithText("View Bitcoin payment 1").assertExists()
++        compose.onNodeWithText("View Bitcoin payment 2").performClick()
++        compose.onNodeWithText("View Bitcoin payment 3").assertDoesNotExist()
++        compose.onAllNodes(hasClickAction(), useUnmergedTree = true).assertCountEquals(2)
++        compose.runOnIdle {
++            assertEquals(0, firstOpens)
++            assertEquals(1, secondOpens)
++            assertEquals(0, duplicateOpens)
++        }
++    }
++
++    @Test
++    fun unsupportedExplorerHasNoNavigationRowOrAction() {
++        showLinks(listOf(TransactionExplorerLink(stringRes("ZEC deposit"), TRANSACTION_ID, null)))
++
++        compose.onNodeWithText("View ZEC deposit").assertDoesNotExist()
++        compose.onNodeWithText("ZEC deposit").assertDoesNotExist()
++        compose.onNodeWithText(TRANSACTION_ID, useUnmergedTree = true).assertDoesNotExist()
++        compose.onAllNodes(hasClickAction(), useUnmergedTree = true).assertCountEquals(0)
++    }
++
++    private fun showLinks(links: List<TransactionExplorerLink>) {
 +        compose.setContent {
 +            ZcashTheme {
-+                CompositionLocalProvider(LocalBalancesAvailable provides balancesAvailable) {
-+                    TransactionDetailInfoContainer {
-+                        TransactionExplorerLinks(
-+                            listOf(
-+                                TransactionExplorerLink(
-+                                    label = stringRes("ZEC deposit"),
-+                                    transactionId = TRANSACTION_ID,
-+                                    onOpen = onOpen,
-+                                    onCopy = onCopy,
-+                                )
-+                            )
-+                        )
-+                    }
-+                }
++                TransactionExplorerLinks(links)
 +            }
 +        }
 +    }
 +
-+    private fun hasCopyActionLabel() = SemanticsMatcher("copy action describes the transaction leg") {
-+        it.config.contains(SemanticsActions.OnClick) &&
-+            it.config[SemanticsActions.OnClick].label == "Copy ZEC deposit ID"
-+    }
-+
 +    private companion object {
 +        const val TRANSACTION_ID = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
++        const val SECOND_TRANSACTION_ID = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt

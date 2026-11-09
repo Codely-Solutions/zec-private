@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="private_view_in_explorer">Open %1$s in explorer</string>
-    <string name="private_copy_explorer_id">Copy %1$s ID</string>
+    <string name="private_view_in_explorer">View %1$s</string>
+    <string name="private_view_in_explorer_numbered">View %1$s %2$d</string>
     <string name="private_explorer_transaction">Zcash transaction</string>
     <string name="private_explorer_zec_deposit">ZEC deposit</string>
     <string name="private_explorer_deposit">%1$s transaction</string>

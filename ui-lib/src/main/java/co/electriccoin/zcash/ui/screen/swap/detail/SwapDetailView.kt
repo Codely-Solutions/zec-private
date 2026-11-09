@@ -176,16 +176,16 @@ fun SwapDetailView(
                                 }
                             }
                         }
-                        if (state.explorerLinks.isNotEmpty()) {
-                            ZashiHorizontalDivider()
-                            TransactionExplorerLinks(state.explorerLinks)
-                        }
                         ZashiHorizontalDivider()
                         TransactionDetailInfoRow(state = state.timestamp)
                     }
                     state.message?.let {
                         Spacer(8.dp)
                         ZashiMessage(it)
+                    }
+                    if (state.explorerLinks.isNotEmpty()) {
+                        Spacer(8.dp)
+                        TransactionExplorerLinks(state.explorerLinks)
                     }
                 }
             }

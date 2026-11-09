@@ -80,7 +80,7 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                 onBack = onBack,
             ))
         }
-        "sprint-refund", "sprint-no-refund", "sprint-full-refund" -> {
+        "sprint-refund", "sprint-no-refund", "sprint-full-refund", "sprint-multiple-links" -> {
             val refunded = screen == "sprint-full-refund"
             TransactionDetailView(
                 state = TransactionDetailState(
@@ -89,7 +89,7 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                     info = SendSwapState(
                         status = if (refunded) SwapStatus.REFUNDED else SwapStatus.SUCCESS,
                         message = null, quoteHeader = SwapQuoteHeaderState(
-                            if (screen == "sprint-refund") zec.copy(amount = stringRes("0.0098"), fiatAmount = stringRes("$0.392")) else zec,
+                            if (screen == "sprint-refund" || screen == "sprint-multiple-links") zec.copy(amount = stringRes("0.0098"), fiatAmount = stringRes("$0.392")) else zec,
                             btc,
                         ),
                         depositAddress = stringRes("Synthetic deposit").withStyle(), totalFees = stringRes("0.0001 ZEC"),
@@ -100,8 +100,9 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                         isPending = false, completedTimestamp = stringRes("8 November 2026, 12:00"),
                     ),
                     errorFooter = null, infoFooter = null, primaryButton = null, secondaryButton = null,
-                    explorerLinks = listOf(TransactionExplorerLink(stringRes("ZEC deposit"), "ab".repeat(32), {}, {})) +
-                        if (refunded) emptyList() else listOf(TransactionExplorerLink(stringRes("Bitcoin payment"), "cd".repeat(32), {}, {})),
+                    explorerLinks = listOf(TransactionExplorerLink(stringRes("ZEC deposit"), "ab".repeat(32), {})) +
+                        (if (refunded) emptyList() else listOf(TransactionExplorerLink(stringRes("Bitcoin payment"), "cd".repeat(32), {}))) +
+                        if (screen == "sprint-multiple-links") listOf(TransactionExplorerLink(stringRes("Bitcoin payment"), "ef".repeat(32), {})) else emptyList(),
                 ), mainAppBarState = appBar,
             )
         }
@@ -111,7 +112,7 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                 header = TransactionDetailHeaderState(stringRes("Sent"), stringRes("0.01"), listOf(imageRes(R.drawable.ic_transaction_received))),
                 info = SendShieldStateFixture.new().copy(completedTimestamp = stringRes("8 November 2026, 12:00")),
                 errorFooter = null, infoFooter = null, primaryButton = null, secondaryButton = null,
-                explorerLinks = listOf(TransactionExplorerLink(stringRes("Zcash transaction"), "ab".repeat(32), {}, {})),
+                explorerLinks = listOf(TransactionExplorerLink(stringRes("Zcash transaction"), "ab".repeat(32), {})),
             ), mainAppBarState = appBar,
         )
         else -> return false
