@@ -1,14 +1,16 @@
 """Exercise release copy without importing the signing controller or calling GitHub."""
 import ast
 import json
+import re
 from pathlib import Path
 import unittest
 
 ROOT=Path(__file__).resolve().parents[1]
 tree=ast.parse((ROOT/'.private/publish.py').read_text())
-function=next(node for node in tree.body if isinstance(node,ast.FunctionDef) and node.name=='release_notes')
-namespace={'ROOT':ROOT,'REPO':'example/wallet','json':json}
-exec(compile(ast.Module(body=[function],type_ignores=[]),'release_notes','exec'),namespace)
+functions=[node for node in tree.body if isinstance(node,ast.FunctionDef)
+           and node.name in {'release_title','release_notes'}]
+namespace={'ROOT':ROOT,'REPO':'example/wallet','json':json,'re':re}
+exec(compile(ast.Module(body=functions,type_ignores=[]),'release_notes','exec'),namespace)
 
 
 class ReleaseNotesTest(unittest.TestCase):

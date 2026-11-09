@@ -20294,19 +20294,21 @@ index a3e430b3c..56993ca02 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteValidationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteValidationTest.kt
-index b8e862cdd..7b397daa8 100644
+index b8e862cdd..5e59b5613 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteValidationTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteValidationTest.kt
-@@ -126,4 +126,4 @@ class NearSwapQuoteValidationTest {
+@@ -126,4 +126,6 @@ class NearSwapQuoteValidationTest {
 -    fun requireWithinSlippage_inputFloating_passesAtAndBelowCeiling() {
 -        // 10% slippage, amountIn=100 -> ceiling=110. minAmountOut is the fixed side (== amountOut) and ignored here.
 -        requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal("110"), A_THOUSAND, BPS_10_PCT)
 -        requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal("105"), A_THOUSAND, BPS_10_PCT)
 +    fun requireWithinSlippage_inputFloating_acceptsMinimumAtFloorThroughDeposit() {
 +        listOf("90", "95", "100", "100.0").forEach { minimum ->
-+            requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal(minimum), A_THOUSAND, BPS_10_PCT)
++            requireWithinSlippage(
++                SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal(minimum), A_THOUSAND, BPS_10_PCT
++            )
 +        }
-@@ -133,4 +133,14 @@ class NearSwapQuoteValidationTest {
+@@ -133,4 +135,14 @@ class NearSwapQuoteValidationTest {
 -    fun requireWithinSlippage_inputFloating_throwsAboveCeiling() {
 -        val e =
 -            assertFailsWith<SwapQuoteMismatchException> {
@@ -20325,7 +20327,7 @@ index b8e862cdd..7b397daa8 100644
 +            "100" to "-1", "100.5" to "95", "100" to "95.5"
 +        ).forEach { (deposit, minimum) ->
 +            val e = assertFailsWith<SwapQuoteMismatchException> {
-@@ -138,6 +148 @@ class NearSwapQuoteValidationTest {
+@@ -138,6 +150 @@ class NearSwapQuoteValidationTest {
 -                    SwapType.EXACT_OUTPUT,
 -                    BigDecimal("100"),
 -                    A_THOUSAND,
@@ -20333,7 +20335,7 @@ index b8e862cdd..7b397daa8 100644
 -                    A_THOUSAND,
 -                    BPS_10_PCT
 +                    SwapType.EXACT_OUTPUT, BigDecimal(deposit), A_THOUSAND, BigDecimal(minimum), A_THOUSAND, BPS_10_PCT
-@@ -146 +151,20 @@ class NearSwapQuoteValidationTest {
+@@ -146 +153,20 @@ class NearSwapQuoteValidationTest {
 -        assertEquals(SwapQuoteMismatchType.SLIPPAGE_EXCEEDED, e.type)
 +            assertEquals(SwapQuoteMismatchType.INPUT_AMOUNT, e.type)
 +        }
@@ -20355,13 +20357,13 @@ index b8e862cdd..7b397daa8 100644
 +            }
 +            assertEquals(SwapQuoteMismatchType.SLIPPAGE_TOLERANCE, e.type)
 +        }
-@@ -185,3 +209,2 @@ class NearSwapQuoteValidationTest {
+@@ -185,3 +211,2 @@ class NearSwapQuoteValidationTest {
 -    fun requireWithinSlippage_inputFloating_acceptsServerIntegerRoundedCeiling() {
 -        // Symmetric case for EXACT_OUTPUT: amountIn=9897372 × 1.30 = 12866583.6; the server rounds
 -        // UP to 12866584 to keep its guarantee conservative. The wallet's ceiling rounds UP too.
 +    fun requireWithinSlippage_inputFloating_acceptsSanitizedProviderIntegerFloor() {
 +        // Sanitized completed quote: 906756 * 0.995 = 902222.22, truncated to 902222 zats.
-@@ -189,6 +212,2 @@ class NearSwapQuoteValidationTest {
+@@ -189,6 +214,2 @@ class NearSwapQuoteValidationTest {
 -            swapType = SwapType.EXACT_OUTPUT,
 -            amountIn = BigDecimal("9897372"),
 -            amountOut = BigDecimal("2245828"),
@@ -20370,13 +20372,13 @@ index b8e862cdd..7b397daa8 100644
 -            slippageToleranceBps = 3000
 +            SwapType.EXACT_OUTPUT, BigDecimal("906756"), BigDecimal("13157"),
 +            BigDecimal("902222"), BigDecimal("13157"), 50
-@@ -199,3 +218,2 @@ class NearSwapQuoteValidationTest {
+@@ -199,3 +220,2 @@ class NearSwapQuoteValidationTest {
 -    fun requireWithinSlippage_inputFloating_stillRejectsAboveIntegerCeiling() {
 -        // One base unit above the rounded-up integer ceiling is genuinely out of tolerance.
 -        assertFailsWith<IllegalArgumentException> {
 +    fun requireWithinSlippage_inputFloating_rejectsOneAtomicUnitBelowFloor() {
 +        val e = assertFailsWith<SwapQuoteMismatchException> {
-@@ -203,6 +221,2 @@ class NearSwapQuoteValidationTest {
+@@ -203,6 +223,2 @@ class NearSwapQuoteValidationTest {
 -                swapType = SwapType.EXACT_OUTPUT,
 -                amountIn = BigDecimal("9897372"),
 -                amountOut = BigDecimal("2245828"),
@@ -20385,7 +20387,7 @@ index b8e862cdd..7b397daa8 100644
 -                slippageToleranceBps = 3000
 +                SwapType.EXACT_OUTPUT, BigDecimal("906756"), BigDecimal("13157"),
 +                BigDecimal("902221"), BigDecimal("13157"), 50
-@@ -210,0 +225,9 @@ class NearSwapQuoteValidationTest {
+@@ -210,0 +227,9 @@ class NearSwapQuoteValidationTest {
 +        assertEquals(SwapQuoteMismatchType.SLIPPAGE_EXCEEDED, e.type)
 +    }
 +
@@ -22643,7 +22645,7 @@ index 000000000..91b204fd8
 +        quoteValueDifference(BigDecimal(input), BigDecimal(output), quoted, quoted + 5.minutes, now)
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-index 38427672d..fa995cca3 100644
+index 38427672d..7256c0e4f 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 @@ -2,0 +3,21 @@ package co.electriccoin.zcash.ui.screen.swap.quote
@@ -22689,7 +22691,7 @@ index 38427672d..fa995cca3 100644
 -@Config(sdk = [34])
 +@Config(sdk = [34], qualifiers = "w411dp-h891dp")
 +@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@@ -32,0 +68,71 @@ class SwapQuoteVMMapperTest {
+@@ -32,0 +68,77 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun freshQuoteShowsSignedDifferenceAndStaleQuoteDoesNot() {
 +        val now = kotlin.time.Clock.System.now()
@@ -22717,10 +22719,16 @@ index 38427672d..fa995cca3 100644
 +        kotlin.test.assertNull(map(quote.copy(timestamp = now - kotlin.time.Duration.parse("4m"))).to.valueDifference)
 +        val missingOutput = map(quote.copy(amountOutUsd = BigDecimal.ZERO))
 +        kotlin.test.assertNull(missingOutput.to.valueDifference)
-+        assertEquals(co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_quote_estimate_unavailable), missingOutput.to.fiatAmount)
++        assertEquals(
++            co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_quote_estimate_unavailable),
++            missingOutput.to.fiatAmount,
++        )
 +        val missingInput = map(quote.copy(amountInUsd = BigDecimal.ZERO))
 +        kotlin.test.assertNull(missingInput.to.valueDifference)
-+        assertEquals(co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_quote_estimate_unavailable), missingInput.from.fiatAmount)
++        assertEquals(
++            co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_quote_estimate_unavailable),
++            missingInput.from.fiatAmount,
++        )
 +        assertEquals(
 +            co.electriccoin.zcash.ui.design.util.stringRes(R.string.private_quote_estimate_unavailable).withStyle(),
 +            missingInput.amount.subtitle,
@@ -22761,7 +22769,7 @@ index 38427672d..fa995cca3 100644
 +    @get:Rule
 +    val composeTestRule = createComposeRule()
 +
-@@ -68,0 +175,124 @@ class SwapQuoteVMMapperTest {
+@@ -68,0 +181,124 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun incomingQuoteDoesNotInventAWalletTransactionFee() {
 +        val items = createItems(zashi(), SwapAssetTestFixture.zecAsset())

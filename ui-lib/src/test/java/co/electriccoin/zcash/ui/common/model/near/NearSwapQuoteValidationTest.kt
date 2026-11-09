@@ -125,7 +125,9 @@ class NearSwapQuoteValidationTest {
     @Test
     fun requireWithinSlippage_inputFloating_acceptsMinimumAtFloorThroughDeposit() {
         listOf("90", "95", "100", "100.0").forEach { minimum ->
-            requireWithinSlippage(SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal(minimum), A_THOUSAND, BPS_10_PCT)
+            requireWithinSlippage(
+                SwapType.EXACT_OUTPUT, HUNDRED, A_THOUSAND, BigDecimal(minimum), A_THOUSAND, BPS_10_PCT
+            )
         }
     }
 
