@@ -77,6 +77,8 @@ Notifications contain build/release information and GitHub links. The ntfy topic
 
 ## Public repository information
 
+The canonical repository is `Codely-Solutions/zec-private`. After an ownership change, update active app/API links, Obtainium JSON and encoded imports, security/funding links, maintenance download helpers and Git remotes together. Verify release/fixture IDs, Actions permissions and signing-secret names without reading secret values; preserve historical evidence. The updater deliberately requires canonical asset URLs, so an installed build pinned to an old owner can reject redirected metadata. Provide a manual/Obtainium update route until a signed build containing the new owner ships. Run control checks and disposable upstream integration before considering migration complete; metadata checks do not establish signing or installed-device execution.
+
 Keep the README product definition, GitHub About description and repository topics aligned with the shipping wallet. Use concrete user terms such as Zcash/ZEC wallet for Android, self-custody, shielded payments and cross-chain swaps, with accurate fee and privacy qualifications. Update GitHub metadata separately when capabilities change; source integration preserves the fork README and user guides.
 
 ## Release descriptions

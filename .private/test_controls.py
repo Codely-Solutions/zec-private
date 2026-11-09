@@ -19,11 +19,24 @@ def fixture_directory():
             yield temp
 
 class ControlsTest(unittest.TestCase):
+    def test_active_repository_references_follow_transfer(self):
+        legacy='Sammy'+'-Lastre/zec-private'
+        root=checks.ROOT
+        paths=[root/'README.md',root/'.private/release-notes.json']
+        for directory in ('.github','ui-lib/src','app/src'):
+            paths.extend(p for p in (root/directory).rglob('*')
+                         if p.is_file() and p.suffix in ('.kt','.md','.yml','.yaml'))
+        paths.extend((root/'docs'/name) for name in ('obtainium.json','WALLET-GUIDE.md'))
+        paths.extend((root/'.private').glob('*.py'))
+        for path in paths:
+            with self.subTest(path=path.relative_to(root).as_posix()):
+                self.assertNotIn(legacy,path.read_text())
+
     def test_obtainium_import_is_valid_and_selects_only_production_apk(self):
         config=json.loads((checks.ROOT/'docs/obtainium.json').read_text())
         settings=json.loads(config['additionalSettings'])
         self.assertEqual('com.personal.zecprivate.foss',config['id'])
-        self.assertEqual('https://github.com/Sammy-Lastre/zec-private',config['url'])
+        self.assertEqual('https://github.com/Codely-Solutions/zec-private',config['url'])
         for key in ('includePrereleases','includeDrafts','fallbackToOlderReleases','trackOnly'):
             self.assertIs(settings[key],False)
         pattern=re.compile(settings['apkFilterRegEx'])
@@ -31,12 +44,14 @@ class ControlsTest(unittest.TestCase):
         for name in ('TESTNET_UPGRADE_FIXTURE.zip','app-x86_64.apk','latest.apk',
                      'zec-private-latestXapk','zec-private-latest.apk.bak'):
             self.assertIsNone(pattern.fullmatch(name))
-        guide=(checks.ROOT/'docs/WALLET-GUIDE.md').read_text()
-        link=re.search(r'\[Add ZEC Private to Obtainium\]\((https://[^)]+)\)',guide).group(1)
-        uri=parse_qs(urlsplit(link).query)['r'][0]
-        prefix='obtainium://app/'
-        self.assertTrue(uri.startswith(prefix))
-        self.assertEqual(config,json.loads(unquote(uri[len(prefix):])))
+        for document in ('README.md','docs/WALLET-GUIDE.md'):
+            with self.subTest(document=document):
+                guide=(checks.ROOT/document).read_text()
+                link=re.search(r'\[Add ZEC Private to Obtainium\]\((https://[^)]+)\)',guide).group(1)
+                uri=parse_qs(urlsplit(link).query)['r'][0]
+                prefix='obtainium://app/'
+                self.assertTrue(uri.startswith(prefix))
+                self.assertEqual(config,json.loads(unquote(uri[len(prefix):])))
 
     def test_current_source(self):
         self.assertEqual([],checks.check())

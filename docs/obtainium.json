@@ -1,7 +1,7 @@
 {
   "id": "com.personal.zecprivate.foss",
-  "url": "https://github.com/Sammy-Lastre/zec-private",
-  "author": "Sammy-Lastre",
+  "url": "https://github.com/Codely-Solutions/zec-private",
+  "author": "Codely-Solutions",
   "name": "ZEC Private",
   "additionalSettings": "{\"includePrereleases\":false,\"includeDrafts\":false,\"fallbackToOlderReleases\":false,\"apkFilterRegEx\":\"^zec-private-latest[.]apk$\",\"autoApkFilterByArch\":true,\"trackOnly\":false}"
 }

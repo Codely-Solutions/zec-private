@@ -14,7 +14,7 @@ import org.zecdev.zip321.parser.ParserContext
 object DonationPolicy {
     const val RECIPIENT =
         "u16hcm5ln6c9yvj7snd3k2m9s5zlg2hntnqupzpl7r7xxqf23pf9dze7ja6782kjc454pu2kamk0xawul5zv9arugr797xfse385cgjmar"
-    const val DOCUMENT = "https://github.com/Sammy-Lastre/zec-private/blob/main/docs/DONATIONS.md"
+    const val DOCUMENT = "https://github.com/Codely-Solutions/zec-private/blob/main/docs/DONATIONS.md"
     const val COOLDOWN_MILLIS = 90L * 24 * 60 * 60 * 1000
 
     @Volatile private var isolatedTestnetRecipient: String? = null

@@ -23,4 +23,4 @@ Does it happen every time, occasionally, or only once?
 ## Evidence (optional)
 Include the error text or a cropped screenshot. Remove recovery phrases, keys, addresses, balances and transaction identifiers unless specifically needed for a private investigation.
 
-For a security vulnerability, use [private reporting](https://github.com/Sammy-Lastre/zec-private/security/advisories/new).
+For a security vulnerability, use [private reporting](https://github.com/Codely-Solutions/zec-private/security/advisories/new).

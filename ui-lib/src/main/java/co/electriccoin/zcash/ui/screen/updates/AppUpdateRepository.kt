@@ -132,7 +132,7 @@ class AppUpdateRepository(context: Context, private val httpClientProvider: Http
         }.toString()
 
     private companion object {
-        const val LATEST_RELEASE_URL = "https://api.github.com/repos/Sammy-Lastre/zec-private/releases/latest"
+        const val LATEST_RELEASE_URL = "https://api.github.com/repos/Codely-Solutions/zec-private/releases/latest"
         const val REQUEST_DEADLINE_MILLIS = 30_000L
         const val HTTP_OK = 200
     }

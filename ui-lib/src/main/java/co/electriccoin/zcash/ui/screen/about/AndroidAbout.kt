@@ -32,12 +32,12 @@ internal fun AboutScreen() {
         updates = { AndroidAppUpdates() },
         onPrivacyPolicy = {
             navigationRouter.forward(
-                ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/PRIVACY.md")
+                ExternalUrl("https://github.com/Codely-Solutions/zec-private/blob/main/docs/PRIVACY.md")
             )
         },
         onTermsOfUse = {
             navigationRouter.forward(
-                ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/USE.md")
+                ExternalUrl("https://github.com/Codely-Solutions/zec-private/blob/main/docs/USE.md")
             )
         }
     )

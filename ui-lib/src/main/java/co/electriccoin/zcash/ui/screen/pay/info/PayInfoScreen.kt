@@ -21,4 +21,4 @@ fun PayInfoScreen() {
 data object PayInfoArgs
 
 private const val LEARN_MORE_URL =
-    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#crosspay"
+    "https://github.com/Codely-Solutions/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#crosspay"
