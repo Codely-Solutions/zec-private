@@ -22788,7 +22788,7 @@ index 000000000..91b204fd8
 +        quoteValueDifference(BigDecimal(input), BigDecimal(output), quoted, quoted + 5.minutes, now)
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-index 38427672d..c84e916d4 100644
+index 38427672d..fa995cca3 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 @@ -2,0 +3,21 @@ package co.electriccoin.zcash.ui.screen.swap.quote
@@ -22834,7 +22834,7 @@ index 38427672d..c84e916d4 100644
 -@Config(sdk = [34])
 +@Config(sdk = [34], qualifiers = "w411dp-h891dp")
 +@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@@ -32,0 +68,75 @@ class SwapQuoteVMMapperTest {
+@@ -32,0 +68,71 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun freshQuoteShowsSignedDifferenceAndStaleQuoteDoesNot() {
 +        val now = kotlin.time.Clock.System.now()
@@ -22899,18 +22899,14 @@ index 38427672d..c84e916d4 100644
 +        val zeroAllowance = mapper.createState(
 +            SwapQuoteInternalState(null, quote.copy(inputAllowance = BigDecimal.ZERO), zashi()), {}, {}, {}
 +        ).items.last()
-+        assertEquals(
-+            co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber(
-+                BigDecimal.ZERO, cash.z.ecc.android.sdk.model.FiatCurrency.USD.symbol,
-+            ).withStyle(),
-+            zeroAllowance.subtitle,
-+        )
++        val zeroFiat = (zeroAllowance.subtitle as StyledStringResource.ByStringResource).resource
++        assertEquals("$0.00", zeroFiat.getString(RuntimeEnvironment.getApplication(), Locale.US))
 +    }
 +
 +    @get:Rule
 +    val composeTestRule = createComposeRule()
 +
-@@ -68,0 +179,124 @@ class SwapQuoteVMMapperTest {
+@@ -68,0 +175,124 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun incomingQuoteDoesNotInventAWalletTransactionFee() {
 +        val items = createItems(zashi(), SwapAssetTestFixture.zecAsset())

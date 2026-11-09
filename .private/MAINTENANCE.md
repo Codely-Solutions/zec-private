@@ -8,6 +8,7 @@ Use this entry for the checkout; local task state lives in the surrounding works
 
 | Task | Maintained entry | Readiness and scope |
 |---|---|---|
+| Design or change UI | [UI-STANDARDS.md](UI-STANDARDS.md) | Component choices, hierarchy, wording and accessibility defaults. |
 | Inspect UI / capture screenshots | [UI-REVIEW.md](UI-REVIEW.md) | Established capture/control components; artifact/state orchestration must match the current task. |
 | Select quick checks and release checks | Build section below; [core coverage](core-coverage.md) | Coverage records identify their executed revision; current evidence must match inputs. |
 | Run real wallet acceptance | [core coverage](core-coverage.md), [core_testnet_driver.py](core_testnet_driver.py), [acceptance_policy.py](acceptance_policy.py) | Requires a current prepared job, baseline and artifact bindings; not a screenshot prerequisite. |
