@@ -501,8 +501,8 @@ internal class SwapVMMapper {
                             (state.addressText.isNotBlank() || state.selectedContact != null) &&
                             validateSwapRecipient(
                                 state.selectedContact?.address ?: state.addressText,
-                                state.swapAsset?.chainTicker,
-                                state.swapAsset?.tokenTicker,
+                                state.swapAsset.chainTicker,
+                                state.swapAsset.tokenTicker,
                                 state.selectedContact?.blockchain?.chainTicker,
                                 allowPaymentAmount = false
                             ).isValid &&

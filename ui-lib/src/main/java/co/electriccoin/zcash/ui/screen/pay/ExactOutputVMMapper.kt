@@ -394,8 +394,8 @@ internal class ExactOutputVMMapper {
                             (state.address.isNotBlank() || state.selectedABContact != null) &&
                             validateSwapRecipient(
                                 state.selectedABContact?.address ?: state.address,
-                                state.asset?.chainTicker,
-                                state.asset?.tokenTicker,
+                                state.asset.chainTicker,
+                                state.asset.tokenTicker,
                                 state.selectedABContact?.blockchain?.chainTicker
                             ).isValid &&
                             !state.isRequestingQuote

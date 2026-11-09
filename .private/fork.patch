@@ -12528,7 +12528,7 @@ index eab9cf9da..0c491fdc7 100644
 +            return
 +        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
-index 76c590a49..1ac2f6c1f 100644
+index 76c590a49..6ee4e003f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 @@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -12616,7 +12616,7 @@ index 76c590a49..1ac2f6c1f 100644
 +        val syntax = address?.let { RecipientAddressPolicy.validate(it, selectedAsset.chainTicker.lowercase()) }
 +        val needsSdk = (syntax as? RecipientAddressPolicy.Validation.Valid)?.requiresZcashSdkValidation == true
 +        val sdkValid = !needsSdk || withContext(Dispatchers.Default) {
-+            synchronizerProvider.getSynchronizer().validateAddress(address!!) !is AddressType.Invalid
++            synchronizerProvider.getSynchronizer().validateAddress(address) !is AddressType.Invalid
 +        }
 +        if (validation.isValid && sdkValid) return address
 +        if (canNavigate()) {
@@ -12766,7 +12766,7 @@ index 4003797c4..a0421e8b5 100644
 +        val receivingAddress = recipient?.input?.address ?: address
 +        addressBookRepository.updateContact(contact = contact, name = name, address = receivingAddress, chain = chain)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
-index 7bda1f0f5..3f0878a31 100644
+index 7bda1f0f5..050beb840 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCase.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -12775,9 +12775,11 @@ index 7bda1f0f5..3f0878a31 100644
 +            blockchain == null || !validateSwapRecipient(address, blockchain.chainTicker).isValid ->
 +                ContactAddressValidationResult.Invalid
 +
-@@ -28 +32 @@ class ValidateSwapABContactAddressUseCase(
+@@ -28,2 +32,2 @@ class ValidateSwapABContactAddressUseCase(
 -                    it.address == address.trim() &&
-+                    it.address == validateSwapRecipient(address, blockchain?.chainTicker).input?.address &&
+-                        it.blockchain?.chainTicker?.lowercase() == blockchain?.chainTicker?.lowercase()
++                    it.address == validateSwapRecipient(address, blockchain.chainTicker).input?.address &&
++                        it.blockchain.chainTicker?.lowercase() == blockchain.chainTicker?.lowercase()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt
 index 3e12c9c99..bd85a60d3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/Zip321ParseUriValidationUseCase.kt
@@ -14441,7 +14443,7 @@ index 607e89dcb..e741d6aab 100644
 +    private fun onWhatsNewClick() =
 +        navigationRouter.forward(ExternalUrl("https://github.com/Codely-Solutions/zec-private/releases"))
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
-index b6549dd8b..d18b1d4cd 100644
+index b6549dd8b..afa009818 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
 @@ -4,0 +5,2 @@ import co.electriccoin.zcash.ui.R
@@ -14467,8 +14469,8 @@ index b6549dd8b..d18b1d4cd 100644
 -                            !mayContainGiftCardSecret(state.selectedABContact?.address ?: state.address) &&
 +                            validateSwapRecipient(
 +                                state.selectedABContact?.address ?: state.address,
-+                                state.asset?.chainTicker,
-+                                state.asset?.tokenTicker,
++                                state.asset.chainTicker,
++                                state.asset.tokenTicker,
 +                                state.selectedABContact?.blockchain?.chainTicker
 +                            ).isValid &&
 @@ -411,6 +418,6 @@ internal class ExactOutputVMMapper {
@@ -14845,7 +14847,7 @@ index 79f574053..7ae0d9127 100644
 -                )
 +            val asset = navigateToSwapAssetPicker()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
-index d7080a80c..2a28154b3 100644
+index d7080a80c..12946480d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/SwapVMMapper.kt
 @@ -7,0 +8,2 @@ import co.electriccoin.zcash.ui.R
@@ -14857,8 +14859,8 @@ index d7080a80c..2a28154b3 100644
 -                            !mayContainGiftCardSecret(state.selectedContact?.address ?: state.addressText) &&
 +                            validateSwapRecipient(
 +                                state.selectedContact?.address ?: state.addressText,
-+                                state.swapAsset?.chainTicker,
-+                                state.swapAsset?.tokenTicker,
++                                state.swapAsset.chainTicker,
++                                state.swapAsset.tokenTicker,
 +                                state.selectedContact?.blockchain?.chainTicker,
 +                                allowPaymentAmount = false
 +                            ).isValid &&
