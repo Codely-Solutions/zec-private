@@ -2,7 +2,9 @@
 
 ## Installation and updates
 
-Download the APK and `SHA256SUMS` from [Releases](https://github.com/Sammy-Lastre/zec-private/releases). Releases support ARM64 devices running Android 8.1 or later. Install updates over the existing app; avoid uninstalling or clearing its data without securing your recovery phrase and birthday.
+Download the APK and `SHA256SUMS` from [Releases](https://github.com/Codely-Solutions/zec-private/releases). Releases support ARM64 devices running Android 8.1 or later. Install updates over the existing app; avoid uninstalling or clearing its data without securing your recovery phrase and birthday.
+
+Releases 17–18 may fail their in-app update check after the repository moved to Codely-Solutions. Use Obtainium or the Releases link above for the next update; install it over the existing app.
 
 Check the APK against `SHA256SUMS`. To verify the signer, run Android SDK `apksigner verify --print-certs` and compare its certificate SHA-256 with:
 
@@ -14,7 +16,7 @@ The package is `com.personal.zecprivate.foss`, so it can coexist with the offici
 
 ### Automatic updates
 
-[Obtainium](https://obtainium.imranr.dev/) can check GitHub and install new releases. [Add ZEC Private to Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%257B%2522id%2522%253A%2522com.personal.zecprivate.foss%2522%252C%2522url%2522%253A%2522https%253A%252F%252Fgithub.com%252FSammy-Lastre%252Fzec-private%2522%252C%2522author%2522%253A%2522Sammy-Lastre%2522%252C%2522name%2522%253A%2522ZEC%2520Private%2522%252C%2522additionalSettings%2522%253A%2522%257B%255C%2522includePrereleases%255C%2522%253Afalse%252C%255C%2522includeDrafts%255C%2522%253Afalse%252C%255C%2522fallbackToOlderReleases%255C%2522%253Afalse%252C%255C%2522apkFilterRegEx%255C%2522%253A%255C%2522%255Ezec-private-latest%255B.%255Dapk%2524%255C%2522%252C%255C%2522autoApkFilterByArch%255C%2522%253Atrue%252C%255C%2522trackOnly%255C%2522%253Afalse%257D%2522%257D). Drafts, prereleases and non-production assets are excluded. Enable background updates in Obtainium; Android may require installation permission or confirmation.
+[Obtainium](https://obtainium.imranr.dev/) can check GitHub and install new releases. [Add ZEC Private to Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%257B%2522id%2522%253A%2522com.personal.zecprivate.foss%2522%252C%2522url%2522%253A%2522https%253A%252F%252Fgithub.com%252FCodely-Solutions%252Fzec-private%2522%252C%2522author%2522%253A%2522Codely-Solutions%2522%252C%2522name%2522%253A%2522ZEC%2520Private%2522%252C%2522additionalSettings%2522%253A%2522%257B%255C%2522includePrereleases%255C%2522%253Afalse%252C%255C%2522includeDrafts%255C%2522%253Afalse%252C%255C%2522fallbackToOlderReleases%255C%2522%253Afalse%252C%255C%2522apkFilterRegEx%255C%2522%253A%255C%2522%255Ezec-private-latest%255B.%255Dapk%2524%255C%2522%252C%255C%2522autoApkFilterByArch%255C%2522%253Atrue%252C%255C%2522trackOnly%255C%2522%253Afalse%257D%2522%257D). Drafts, prereleases and non-production assets are excluded. Enable background updates in Obtainium; Android may require installation permission or confirmation.
 
 The wallet also checks for updates while open, at most once a day. Use **About → Check for updates** to check sooner. Dismissing a home notice hides that version. Update links open Obtainium or your browser; those apps use their own connection settings. Install over the existing wallet to preserve its data.
 

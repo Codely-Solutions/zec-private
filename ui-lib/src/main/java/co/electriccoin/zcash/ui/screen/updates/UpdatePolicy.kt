@@ -15,7 +15,7 @@ data class AppUpdateRelease(val tag: String, val versionCode: Int, val size: Lon
     val downloadUrl: String get() = "$REPOSITORY_URL/releases/download/$tag/$APK_NAME"
 }
 
-internal const val REPOSITORY_URL = "https://github.com/Sammy-Lastre/zec-private"
+internal const val REPOSITORY_URL = "https://github.com/Codely-Solutions/zec-private"
 internal const val APK_NAME = "zec-private-latest.apk"
 internal const val UPDATE_INTERVAL_MILLIS = 24 * 60 * 60 * 1000L
 private const val MAX_APK_BYTES = 150 * 1024 * 1024L

@@ -228,7 +228,10 @@ private class UpdateTestClientProvider(var reply: suspend () -> String) : HttpCl
 
     override suspend fun create(): HttpClient = HttpClient(MockEngine { request ->
         requests++
-        assertEquals("https://api.github.com/repos/Sammy-Lastre/zec-private/releases/latest", request.url.toString())
+        assertEquals(
+            "https://api.github.com/repos/Codely-Solutions/zec-private/releases/latest",
+            request.url.toString()
+        )
         respond(reply(), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
     })
 

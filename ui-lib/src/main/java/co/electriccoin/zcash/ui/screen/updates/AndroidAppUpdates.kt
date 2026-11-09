@@ -68,4 +68,4 @@ internal fun AndroidAppUpdateNotice(release: AppUpdateRelease) {
 }
 
 private const val OBTAINIUM_GUIDE_URL =
-    "https://github.com/Sammy-Lastre/zec-private/blob/main/docs/WALLET-GUIDE.md#automatic-updates"
+    "https://github.com/Codely-Solutions/zec-private/blob/main/docs/WALLET-GUIDE.md#automatic-updates"

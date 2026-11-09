@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 private const val GUIDE_URL =
-    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#ironwood-migration"
+    "https://github.com/Codely-Solutions/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#ironwood-migration"
 
 /**
  * Marks the announcement as shown at display time, not at dismissal. Home forwards here from a

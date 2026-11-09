@@ -14,7 +14,7 @@ GH=r'C:\Program Files\GitHub CLI\gh.exe'
 
 
 def api(path):
-    return json.loads(subprocess.check_output([GH,'api','repos/Sammy-Lastre/zec-private/'+path],text=True))
+    return json.loads(subprocess.check_output([GH,'api','repos/Codely-Solutions/zec-private/'+path],text=True))
 
 
 parser=argparse.ArgumentParser(description=__doc__)

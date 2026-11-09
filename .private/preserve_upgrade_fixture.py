@@ -9,7 +9,7 @@ import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-REPO = 'Sammy-Lastre/zec-private'
+REPO = 'Codely-Solutions/zec-private'
 
 
 def gh(*args, **options):

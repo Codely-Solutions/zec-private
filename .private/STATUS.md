@@ -1,6 +1,6 @@
 # Last published release — revision 18
 
-[ZEC Private — Release18](https://github.com/Sammy-Lastre/zec-private/releases/tag/v3.19.0-private.18) is signed and independently verified against the validated unsigned payload, permanent certificate, package, ARM64-only packaging and 16-KiB ZIP alignment. Candidate `a300ecfb1a3c4334067739e18eee11db370088a4`, production/UI run `42623116892` and core run `42623123596` passed 1,786 tests, required release checks, real testnet acceptance, three unfunded Tor quote cycles and disposable upstream integration. Revision17 is the rollback; the next seedless app/instrumentation pair is preserved in the authenticated maintenance draft.
+[ZEC Private — Release18](https://github.com/Codely-Solutions/zec-private/releases/tag/v3.19.0-private.18) is signed and independently verified against the validated unsigned payload, permanent certificate, package, ARM64-only packaging and 16-KiB ZIP alignment. Candidate `a300ecfb1a3c4334067739e18eee11db370088a4`, production/UI run `42623116892` and core run `42623123596` passed 1,786 tests, required release checks, real testnet acceptance, three unfunded Tor quote cycles and disposable upstream integration. Revision17 is the rollback; the next seedless app/instrumentation pair is preserved in the authenticated maintenance draft.
 
 This sprint corrects EXACT_OUTPUT allowance validation, allowance/value figures and reported partial refunds, and adds explorer actions plus readable release titles. Independent market-price protection remains deferred.
 

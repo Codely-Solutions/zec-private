@@ -1584,15 +1584,17 @@ index 000000000..cdadb0a3b
 +See the [wallet guide](WALLET-GUIDE.md) for instructions and [privacy](PRIVACY.md) before sharing diagnostics.
 diff --git a/docs/WALLET-GUIDE.md b/docs/WALLET-GUIDE.md
 new file mode 100644
-index 000000000..cf1ffc1c8
+index 000000000..96226181e
 --- /dev/null
 +++ b/docs/WALLET-GUIDE.md
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,53 @@
 +# ZEC Private: Android Zcash wallet guide
 +
 +## Installation and updates
 +
-+Download the APK and `SHA256SUMS` from [Releases](https://github.com/Sammy-Lastre/zec-private/releases). Releases support ARM64 devices running Android 8.1 or later. Install updates over the existing app; avoid uninstalling or clearing its data without securing your recovery phrase and birthday.
++Download the APK and `SHA256SUMS` from [Releases](https://github.com/Codely-Solutions/zec-private/releases). Releases support ARM64 devices running Android 8.1 or later. Install updates over the existing app; avoid uninstalling or clearing its data without securing your recovery phrase and birthday.
++
++Releases 17–18 may fail their in-app update check after the repository moved to Codely-Solutions. Use Obtainium or the Releases link above for the next update; install it over the existing app.
 +
 +Check the APK against `SHA256SUMS`. To verify the signer, run Android SDK `apksigner verify --print-certs` and compare its certificate SHA-256 with:
 +
@@ -1604,7 +1606,7 @@ index 000000000..cf1ffc1c8
 +
 +### Automatic updates
 +
-+[Obtainium](https://obtainium.imranr.dev/) can check GitHub and install new releases. [Add ZEC Private to Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%257B%2522id%2522%253A%2522com.personal.zecprivate.foss%2522%252C%2522url%2522%253A%2522https%253A%252F%252Fgithub.com%252FSammy-Lastre%252Fzec-private%2522%252C%2522author%2522%253A%2522Sammy-Lastre%2522%252C%2522name%2522%253A%2522ZEC%2520Private%2522%252C%2522additionalSettings%2522%253A%2522%257B%255C%2522includePrereleases%255C%2522%253Afalse%252C%255C%2522includeDrafts%255C%2522%253Afalse%252C%255C%2522fallbackToOlderReleases%255C%2522%253Afalse%252C%255C%2522apkFilterRegEx%255C%2522%253A%255C%2522%255Ezec-private-latest%255B.%255Dapk%2524%255C%2522%252C%255C%2522autoApkFilterByArch%255C%2522%253Atrue%252C%255C%2522trackOnly%255C%2522%253Afalse%257D%2522%257D). Drafts, prereleases and non-production assets are excluded. Enable background updates in Obtainium; Android may require installation permission or confirmation.
++[Obtainium](https://obtainium.imranr.dev/) can check GitHub and install new releases. [Add ZEC Private to Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium%3A%2F%2Fapp%2F%257B%2522id%2522%253A%2522com.personal.zecprivate.foss%2522%252C%2522url%2522%253A%2522https%253A%252F%252Fgithub.com%252FCodely-Solutions%252Fzec-private%2522%252C%2522author%2522%253A%2522Codely-Solutions%2522%252C%2522name%2522%253A%2522ZEC%2520Private%2522%252C%2522additionalSettings%2522%253A%2522%257B%255C%2522includePrereleases%255C%2522%253Afalse%252C%255C%2522includeDrafts%255C%2522%253Afalse%252C%255C%2522fallbackToOlderReleases%255C%2522%253Afalse%252C%255C%2522apkFilterRegEx%255C%2522%253A%255C%2522%255Ezec-private-latest%255B.%255Dapk%2524%255C%2522%252C%255C%2522autoApkFilterByArch%255C%2522%253Atrue%252C%255C%2522trackOnly%255C%2522%253Afalse%257D%2522%257D). Drafts, prereleases and non-production assets are excluded. Enable background updates in Obtainium; Android may require installation permission or confirmation.
 +
 +The wallet also checks for updates while open, at most once a day. Use **About → Check for updates** to check sooner. Dismissing a home notice hides that version. Update links open Obtainium or your browser; those apps use their own connection settings. Install over the existing wallet to preserve its data.
 +
@@ -1702,14 +1704,14 @@ index 51ba3e27e..d6e7b93f9 100644
 +
 diff --git a/docs/obtainium.json b/docs/obtainium.json
 new file mode 100644
-index 000000000..44d82ef65
+index 000000000..3f44b4b07
 --- /dev/null
 +++ b/docs/obtainium.json
 @@ -0,0 +1,7 @@
 +{
 +  "id": "com.personal.zecprivate.foss",
-+  "url": "https://github.com/Sammy-Lastre/zec-private",
-+  "author": "Sammy-Lastre",
++  "url": "https://github.com/Codely-Solutions/zec-private",
++  "author": "Codely-Solutions",
 +  "name": "ZEC Private",
 +  "additionalSettings": "{\"includePrereleases\":false,\"includeDrafts\":false,\"fallbackToOlderReleases\":false,\"apkFilterRegEx\":\"^zec-private-latest[.]apk$\",\"autoApkFilterByArch\":true,\"trackOnly\":false}"
 +}
@@ -10775,7 +10777,7 @@ index f0ef84ad1..69f0b3d30 100644
 +    val destinationChainTxHashes: List<TransactionChainHash>? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
 new file mode 100644
-index 000000000..e44eb23d6
+index 000000000..8d69f7ee2
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/DonationPolicy.kt
 @@ -0,0 +1,88 @@
@@ -10795,7 +10797,7 @@ index 000000000..e44eb23d6
 +object DonationPolicy {
 +    const val RECIPIENT =
 +        "u16hcm5ln6c9yvj7snd3k2m9s5zlg2hntnqupzpl7r7xxqf23pf9dze7ja6782kjc454pu2kamk0xawul5zv9arugr797xfse385cgjmar"
-+    const val DOCUMENT = "https://github.com/Sammy-Lastre/zec-private/blob/main/docs/DONATIONS.md"
++    const val DOCUMENT = "https://github.com/Codely-Solutions/zec-private/blob/main/docs/DONATIONS.md"
 +    const val COOLDOWN_MILLIS = 90L * 24 * 60 * 60 * 1000
 +
 +    @Volatile private var isolatedTestnetRecipient: String? = null
@@ -12142,7 +12144,7 @@ index 5144be535..000000000
 -    val VOTING_SERVER_URL = StringConfigurationEntry(ConfigKey("voting_server_url"), "")
 -}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/about/AndroidAbout.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/about/AndroidAbout.kt
-index dcdbdb3cf..4972c071a 100644
+index dcdbdb3cf..44221f4c5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/about/AndroidAbout.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/about/AndroidAbout.kt
 @@ -16,0 +17 @@ import org.koin.compose.koinInject
@@ -12153,12 +12155,12 @@ index dcdbdb3cf..4972c071a 100644
 +        updates = { AndroidAppUpdates() },
 +        onPrivacyPolicy = {
 +            navigationRouter.forward(
-+                ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/PRIVACY.md")
++                ExternalUrl("https://github.com/Codely-Solutions/zec-private/blob/main/docs/PRIVACY.md")
 +            )
 +        },
 +        onTermsOfUse = {
 +            navigationRouter.forward(
-+                ExternalUrl("https://github.com/Sammy-Lastre/zec-private/blob/main/docs/USE.md")
++                ExternalUrl("https://github.com/Codely-Solutions/zec-private/blob/main/docs/USE.md")
 +            )
 +        }
 @@ -36,0 +47 @@ internal fun AboutScreen() {
@@ -13725,15 +13727,15 @@ index df410c53e..a33848695 100644
 +                                subtitle = stringRes(R.string.integrations_redeemGift),
 +                                bigIcon = imageRes(R.drawable.ic_integrations_gift),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/ironwood/IronwoodAnnouncementVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/ironwood/IronwoodAnnouncementVM.kt
-index c54f279c6..53d7491da 100644
+index c54f279c6..e3205bb55 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/ironwood/IronwoodAnnouncementVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/ironwood/IronwoodAnnouncementVM.kt
 @@ -14 +14,2 @@ import kotlinx.coroutines.launch
 -private const val GUIDE_URL = "https://support.zodl.com/article/42-moving-your-funds-to-ironwood"
 +private const val GUIDE_URL =
-+    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#ironwood-migration"
++    "https://github.com/Codely-Solutions/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#ironwood-migration"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt
-index 607e89dcb..fd6f24ef2 100644
+index 607e89dcb..e741d6aab 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt
 @@ -6 +5,0 @@ import co.electriccoin.zcash.ui.NavigationRouter
@@ -13774,7 +13776,7 @@ index 607e89dcb..fd6f24ef2 100644
 @@ -107 +95,2 @@ class MoreVM(
 -    private fun onWhatsNewClick() = navigationRouter.forward(WHATS_NEW)
 +    private fun onWhatsNewClick() =
-+        navigationRouter.forward(ExternalUrl("https://github.com/Sammy-Lastre/zec-private/releases"))
++        navigationRouter.forward(ExternalUrl("https://github.com/Codely-Solutions/zec-private/releases"))
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
 index b6549dd8b..077e63fa3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt
@@ -13794,13 +13796,13 @@ index b6549dd8b..077e63fa3 100644
 -                                        stringResByDynamicNumber(it, includeGroupingSeparator = false)
 +                                        stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt
-index 330d59e33..5ec469642 100644
+index 330d59e33..2de22f527 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/info/PayInfoScreen.kt
 @@ -23 +23,2 @@ data object PayInfoArgs
 -private const val LEARN_MORE_URL = "https://support.zodl.com/article/24-using-crosspay-to-spend-zec"
 +private const val LEARN_MORE_URL =
-+    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#crosspay"
++    "https://github.com/Codely-Solutions/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#crosspay"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveView.kt
 index 31b503b72..975cc45ea 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/receive/ReceiveView.kt
@@ -14045,13 +14047,13 @@ index 48d3039d5..7ece59638 100644
 +                        TransactionExplorerLinks(state.explorerLinks)
 +                    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
-index cd7555ecc..5b692645f 100644
+index cd7555ecc..5184429c6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/info/SwapInfoScreen.kt
 @@ -23 +23,2 @@ data object SwapInfoArgs
 -private const val LEARN_MORE_URL = "https://support.zodl.com/article/26-swapping-into-zec"
 +private const val LEARN_MORE_URL =
-+    "https://github.com/Sammy-Lastre/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#incoming-swaps"
++    "https://github.com/Codely-Solutions/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#incoming-swaps"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockVM.kt
 index a434f2e43..e9ef86b77 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/lock/EphemeralLockVM.kt
@@ -14536,7 +14538,7 @@ index b1f6403cd..30ee1cd5d 100644
 +                )
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AndroidAppUpdates.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AndroidAppUpdates.kt
 new file mode 100644
-index 000000000..34a779c79
+index 000000000..a4ea82fff
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AndroidAppUpdates.kt
 @@ -0,0 +1,71 @@
@@ -14610,7 +14612,7 @@ index 000000000..34a779c79
 +}
 +
 +private const val OBTAINIUM_GUIDE_URL =
-+    "https://github.com/Sammy-Lastre/zec-private/blob/main/docs/WALLET-GUIDE.md#automatic-updates"
++    "https://github.com/Codely-Solutions/zec-private/blob/main/docs/WALLET-GUIDE.md#automatic-updates"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateContent.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateContent.kt
 new file mode 100644
 index 000000000..fca45c2b2
@@ -14682,7 +14684,7 @@ index 000000000..fca45c2b2
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt
 new file mode 100644
-index 000000000..bc26bc791
+index 000000000..8fa64decc
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepository.kt
 @@ -0,0 +1,139 @@
@@ -14820,14 +14822,14 @@ index 000000000..bc26bc791
 +        }.toString()
 +
 +    private companion object {
-+        const val LATEST_RELEASE_URL = "https://api.github.com/repos/Sammy-Lastre/zec-private/releases/latest"
++        const val LATEST_RELEASE_URL = "https://api.github.com/repos/Codely-Solutions/zec-private/releases/latest"
 +        const val REQUEST_DEADLINE_MILLIS = 30_000L
 +        const val HTTP_OK = 200
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/UpdatePolicy.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/UpdatePolicy.kt
 new file mode 100644
-index 000000000..3f03bc2dd
+index 000000000..70b932a08
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/updates/UpdatePolicy.kt
 @@ -0,0 +1,79 @@
@@ -14848,7 +14850,7 @@ index 000000000..3f03bc2dd
 +    val downloadUrl: String get() = "$REPOSITORY_URL/releases/download/$tag/$APK_NAME"
 +}
 +
-+internal const val REPOSITORY_URL = "https://github.com/Sammy-Lastre/zec-private"
++internal const val REPOSITORY_URL = "https://github.com/Codely-Solutions/zec-private"
 +internal const val APK_NAME = "zec-private-latest.apk"
 +internal const val UPDATE_INTERVAL_MILLIS = 24 * 60 * 60 * 1000L
 +private const val MAX_APK_BYTES = 150 * 1024 * 1024L
@@ -23061,10 +23063,10 @@ index 000000000..83383e97a
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
 new file mode 100644
-index 000000000..2c5a64c06
+index 000000000..fcfc69b88
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt
-@@ -0,0 +1,245 @@
+@@ -0,0 +1,248 @@
 +package co.electriccoin.zcash.ui.screen.updates
 +
 +import android.content.Context
@@ -23295,7 +23297,10 @@ index 000000000..2c5a64c06
 +
 +    override suspend fun create(): HttpClient = HttpClient(MockEngine { request ->
 +        requests++
-+        assertEquals("https://api.github.com/repos/Sammy-Lastre/zec-private/releases/latest", request.url.toString())
++        assertEquals(
++            "https://api.github.com/repos/Codely-Solutions/zec-private/releases/latest",
++            request.url.toString()
++        )
 +        respond(reply(), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
 +    })
 +

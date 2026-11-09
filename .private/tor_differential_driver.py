@@ -12,10 +12,10 @@ def fetch_baseline(root, manifest, target_name="baseline-app.apk", instrumentati
         raise ValueError('Baseline instrumentation requires exact source and APK digest')
     archive=root/'baseline.zip'
     if manifest.get('release_asset_id'):
-        endpoint='repos/Sammy-Lastre/zec-private/releases/assets/'+str(int(manifest['release_asset_id']))
+        endpoint='repos/Codely-Solutions/zec-private/releases/assets/'+str(int(manifest['release_asset_id']))
         command=[r'C:\Program Files\GitHub CLI\gh.exe','api','-H','Accept: application/octet-stream',endpoint]
     else:
-        command=[r'C:\Program Files\GitHub CLI\gh.exe','api','repos/Sammy-Lastre/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip']
+        command=[r'C:\Program Files\GitHub CLI\gh.exe','api','repos/Codely-Solutions/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip']
     try:
         with archive.open('wb') as out:
             subprocess.run(command,stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)

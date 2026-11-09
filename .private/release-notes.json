@@ -14,7 +14,7 @@
   "v3.19.0-private.13": [
     "Add optional shielded donations with a zero-default saved suggestion and explicit approval for every payment.",
     "Reject unsupported multi-recipient payment requests and clarify Zcash network-fee labels.",
-    "[Support development](https://github.com/Sammy-Lastre/zec-private/blob/main/docs/DONATIONS.md)."
+    "[Support development](https://github.com/Codely-Solutions/zec-private/blob/main/docs/DONATIONS.md)."
   ],
   "v3.19.0-private.14": [
     "Add a home shortcut and dismissible invitation to support development.",
