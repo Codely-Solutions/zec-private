@@ -23,14 +23,20 @@ class FileShareUtilTest {
             withSyntheticFile(File(context.cacheDir, directory)) { file ->
                 val uri = FileProvider.getUriForFile(context, authority, file)
                 assertEquals("content", uri.scheme)
-                assertEquals("synthetic share fixture", context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() })
+                assertEquals(
+                    "synthetic share fixture",
+                    context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
+                )
             }
         }
     }
 
     @Test
     fun unrelated_private_files_cannot_obtain_share_uris() {
-        listOf(context.filesDir, context.noBackupFilesDir, context.cacheDir, File(context.cacheDir, "zodl_qr_images_other")).forEach { directory ->
+        val unrelated = listOf(
+            context.filesDir, context.noBackupFilesDir, context.cacheDir, File(context.cacheDir, "zodl_qr_images_other")
+        )
+        unrelated.forEach { directory ->
             withSyntheticFile(directory) { file ->
                 assertFailsWith<IllegalArgumentException> { FileProvider.getUriForFile(context, authority, file) }
             }
