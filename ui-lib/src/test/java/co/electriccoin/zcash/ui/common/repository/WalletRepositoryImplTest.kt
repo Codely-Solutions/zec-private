@@ -130,6 +130,19 @@ class WalletRepositoryImplTest {
         }
 
     @Test
+    fun repeatedCreateTriggersKeepTheFirstAcceptedWallet() =
+        runTest {
+            val (repository, harness) = newRepository(onboardingState = OnboardingState.NONE, initialWallet = null)
+            repository.useTestScope(testScheduler)
+
+            repeat(3) { repository.createNewWallet() }
+            advanceUntilIdle()
+
+            assertEquals(3, harness.events.count { it == "wallet" })
+            coVerify(exactly = 3) { PersistableWallet.new(any(), any(), any(), any()) }
+        }
+
+    @Test
     fun initResetsOnboardingAndErasesSdkDataWhenWalletIsMissing() =
         runTest {
             val (repository, harness) = newRepository(onboardingState = OnboardingState.READY, initialWallet = null)
