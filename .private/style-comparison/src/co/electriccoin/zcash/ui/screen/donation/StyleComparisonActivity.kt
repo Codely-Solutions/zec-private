@@ -118,6 +118,7 @@ private fun ComparisonScreens(requested: String) {
     var memoExpanded by remember { mutableStateOf(requested == "donation-message") }
     var invitationDismissed by remember { mutableStateOf(false) }
 
+    if (ReliabilityReviewScene(screen, account)) return
     if (RecipientReviewScene(screen, appBar, account, balanceState)) return
     if (AdditionalReviewScene(screen, { screen = "home" }, appBar)) return
     when (screen) {
