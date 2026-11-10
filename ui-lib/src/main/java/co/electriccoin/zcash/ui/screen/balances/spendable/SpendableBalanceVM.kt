@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LoadedAccountBalances
+import co.electriccoin.zcash.ui.common.model.SHIELDING_THRESHOLD_ZATOSHI
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.usecase.ShieldFundsUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
@@ -126,7 +127,11 @@ class SpendableBalanceVM(
             SpendableBalanceRowState(
                 title = stringRes(R.string.private_balance_transparent_row),
                 icon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_zec_unshielded),
-                value = stringRes(balances.totalTransparentBalance)
+                value = stringRes(balances.totalTransparentBalance),
+                info = stringRes(
+                    R.string.private_balance_transparent_help,
+                    stringRes(Zatoshi(SHIELDING_THRESHOLD_ZATOSHI))
+                ).takeUnless { balances.isShieldingAvailable }
             ).takeIf { balances.totalTransparentBalance > Zatoshi(0) },
             when {
                 balances.pendingShieldedBalance > Zatoshi(0) -> {

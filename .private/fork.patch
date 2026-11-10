@@ -21814,14 +21814,22 @@ index 000000000..435cd453b
 +
 +val SwapQuoteStatus.positiveRefund get() = refundedFormatted?.takeIf { it.signum() > 0 }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt
-index 01a2a6fa5..ee98e4cf6 100644
+index 01a2a6fa5..f8d45e6a7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/WalletAccount.kt
-@@ -16 +16,2 @@ sealed interface WalletAccount : Comparable<WalletAccount> {
+@@ -11,0 +12,2 @@ import co.electriccoin.zcash.ui.design.util.stringRes
++internal const val SHIELDING_THRESHOLD_ZATOSHI = 100_000L
++
+@@ -16 +18,2 @@ sealed interface WalletAccount : Comparable<WalletAccount> {
 -    val transparentAddress: String
 +    /** Absent when an imported viewing key has no transparent receiver. */
 +    val transparentAddress: String?
-@@ -396 +397 @@ data class ViewOnlyAccount(
+@@ -98 +100,0 @@ sealed interface WalletAccount : Comparable<WalletAccount> {
+-    @Suppress("MagicNumber")
+@@ -100 +102 @@ sealed interface WalletAccount : Comparable<WalletAccount> {
+-        get() = totalTransparentBalance?.let { it > Zatoshi(100000L) }
++        get() = totalTransparentBalance?.let { it > Zatoshi(SHIELDING_THRESHOLD_ZATOSHI) }
+@@ -396 +398 @@ data class ViewOnlyAccount(
 -    override val transparentAddress: String,
 +    override val transparentAddress: String?,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ZecSwapComposition.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/ZecSwapComposition.kt
@@ -24367,21 +24375,31 @@ index 9f381262b..6d970b7ba 100644
 -private val PromoMessage = Color(0xFFC0BFB1)
 -
 -private const val PROMO_FADE_START = 0.49f
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceState.kt
+index 6cd19d8e3..3e71a62f9 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceState.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceState.kt
+@@ -21 +21,2 @@ data class SpendableBalanceRowState(
+-    val value: StringResource
++    val value: StringResource,
++    val info: StringResource? = null
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVM.kt
-index 78177f057..010d26495 100644
+index 78177f057..c8580ee02 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVM.kt
-@@ -13,3 +12,0 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
+@@ -11,0 +12 @@ import co.electriccoin.zcash.ui.common.model.LoadedAccountBalances
++import co.electriccoin.zcash.ui.common.model.SHIELDING_THRESHOLD_ZATOSHI
+@@ -13,3 +13,0 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 -import co.electriccoin.zcash.ui.common.repository.isPending
 -import co.electriccoin.zcash.ui.common.usecase.GetTransactionsUseCase
 -import co.electriccoin.zcash.ui.common.usecase.ListTransactionData
-@@ -26 +22,0 @@ import kotlinx.coroutines.flow.WhileSubscribed
+@@ -26 +23,0 @@ import kotlinx.coroutines.flow.WhileSubscribed
 -import kotlinx.coroutines.flow.combine
-@@ -27,0 +24 @@ import kotlinx.coroutines.flow.filterNotNull
+@@ -27,0 +25 @@ import kotlinx.coroutines.flow.filterNotNull
 +import kotlinx.coroutines.flow.map
-@@ -32 +28,0 @@ class SpendableBalanceVM(
+@@ -32 +29,0 @@ class SpendableBalanceVM(
 -    getTransactions: GetTransactionsUseCase,
-@@ -37,5 +33,2 @@ class SpendableBalanceVM(
+@@ -37,5 +34,2 @@ class SpendableBalanceVM(
 -        combine(
 -            accountDataSource.selectedAccount,
 -            getTransactions.observe()
@@ -24389,27 +24407,27 @@ index 78177f057..010d26495 100644
 -            createState(account, transactions)
 +        accountDataSource.selectedAccount.map { account ->
 +            createState(account)
-@@ -51,2 +44 @@ class SpendableBalanceVM(
+@@ -51,2 +45 @@ class SpendableBalanceVM(
 -                                .firstOrNull { it.isSelected },
 -                        transactions = null
 +                                .firstOrNull { it.isSelected }
-@@ -57 +49 @@ class SpendableBalanceVM(
+@@ -57 +50 @@ class SpendableBalanceVM(
 -    private fun createState(account: WalletAccount?, transactions: List<ListTransactionData>?): SpendableBalanceState? {
 +    private fun createState(account: WalletAccount?): SpendableBalanceState? {
-@@ -63 +55 @@ class SpendableBalanceVM(
+@@ -63 +56 @@ class SpendableBalanceVM(
 -            message = createMessage(balances, transactions, canShield),
 +            message = createMessage(balances, canShield),
-@@ -66 +58 @@ class SpendableBalanceVM(
+@@ -66 +59 @@ class SpendableBalanceVM(
 -            rows = createInfoRows(balances, transactions),
 +            rows = createInfoRows(balances),
-@@ -73 +64,0 @@ class SpendableBalanceVM(
+@@ -73 +65,0 @@ class SpendableBalanceVM(
 -        transactions: List<ListTransactionData>?,
-@@ -78,2 +69,2 @@ class SpendableBalanceVM(
+@@ -78,2 +70,2 @@ class SpendableBalanceVM(
 -                balances.isAllShielded -> {
 -                    stringRes(R.string.balances_everythingDone)
 +                balances.pendingShieldedBalance > Zatoshi(0) -> {
 +                    stringRes(R.string.private_balance_pending_confirmations)
-@@ -82,3 +73,6 @@ class SpendableBalanceVM(
+@@ -82,3 +74,6 @@ class SpendableBalanceVM(
 -                balances.totalBalance > balances.spendableShieldedBalance &&
 -                    transactions.orEmpty().any { it.transaction.isPending } -> {
 -                    stringRes(R.string.balances_infoPending)
@@ -24419,46 +24437,110 @@ index 78177f057..010d26495 100644
 +
 +                balances.isAllShielded -> {
 +                    stringRes(R.string.balances_everythingDone)
-@@ -88 +82 @@ class SpendableBalanceVM(
+@@ -88 +83 @@ class SpendableBalanceVM(
 -                    stringRes(R.string.balances_infoSyncing)
 +                    stringRes(R.string.private_balance_not_yet_spendable)
-@@ -123,2 +117 @@ class SpendableBalanceVM(
+@@ -123,2 +118 @@ class SpendableBalanceVM(
 -        balances: LoadedAccountBalances,
 -        transactions: List<ListTransactionData>?
 +        balances: LoadedAccountBalances
-@@ -126 +118,0 @@ class SpendableBalanceVM(
+@@ -126 +119,0 @@ class SpendableBalanceVM(
 -        val hasPendingTransaction = transactions.orEmpty().any { it.transaction.isPending }
-@@ -133,0 +126,5 @@ class SpendableBalanceVM(
+@@ -133,0 +127,9 @@ class SpendableBalanceVM(
 +            SpendableBalanceRowState(
 +                title = stringRes(R.string.private_balance_transparent_row),
 +                icon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_zec_unshielded),
-+                value = stringRes(balances.totalTransparentBalance)
++                value = stringRes(balances.totalTransparentBalance),
++                info = stringRes(
++                    R.string.private_balance_transparent_help,
++                    stringRes(Zatoshi(SHIELDING_THRESHOLD_ZATOSHI))
++                ).takeUnless { balances.isShieldingAvailable }
 +            ).takeIf { balances.totalTransparentBalance > Zatoshi(0) },
-@@ -135,3 +132 @@ class SpendableBalanceVM(
+@@ -135,3 +137 @@ class SpendableBalanceVM(
 -                balances.totalShieldedBalance > balances.spendableShieldedBalance &&
 -                    balances.isShieldedPending &&
 -                    hasPendingTransaction -> {
 +                balances.pendingShieldedBalance > Zatoshi(0) -> {
-@@ -145 +140 @@ class SpendableBalanceVM(
+@@ -145 +145 @@ class SpendableBalanceVM(
 -                balances.totalShieldedBalance > balances.spendableShieldedBalance && hasPendingTransaction -> {
 +                balances.totalShieldedBalance > balances.spendableShieldedBalance -> {
-@@ -147 +142 @@ class SpendableBalanceVM(
+@@ -147 +147 @@ class SpendableBalanceVM(
 -                        title = stringRes(R.string.balances_pending),
 +                        title = stringRes(R.string.private_balance_unavailable_row),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt
-index aca66bfef..1fa3c47a2 100644
+index aca66bfef..aa209f08c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt
-@@ -142,0 +143 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
+@@ -14,0 +15 @@ import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.PlainTooltip
+@@ -16,0 +18 @@ import androidx.compose.material3.Text
++import androidx.compose.material3.rememberTooltipState
+@@ -20,0 +23 @@ import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
+@@ -31,0 +35 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.compose.ZashiTooltipBox
+@@ -32,0 +37 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
++import co.electriccoin.zcash.ui.design.component.IconButtonState
+@@ -38,0 +44 @@ import co.electriccoin.zcash.ui.design.component.ZashiFrostedSheetHeader
++import co.electriccoin.zcash.ui.design.component.ZashiIconButton
+@@ -53,0 +60 @@ import co.electriccoin.zcash.ui.design.util.stringRes
++import kotlinx.coroutines.launch
+@@ -142,0 +150 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
 +            modifier = Modifier.weight(1f),
-@@ -147 +148 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
+@@ -147,14 +155,2 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
 -        Spacer(1f)
+-        when (state.icon) {
+-            is ImageResource.ByDrawable, is ImageResource.Layered -> {
+-                state.icon.Compose(modifier = Modifier.size(20.dp))
+-            }
+-
+-            ImageResource.Loading -> {
+-                LottieProgress(modifier = Modifier.size(20.dp))
+-            }
+-
+-            is ImageResource.DisplayString -> {
+-                // do nothing
+-            }
+-        }
 +        Spacer(12.dp)
-@@ -174 +175,3 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
++        BalanceRowIcon(state)
+@@ -174 +170,3 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
 -                fontWeight = FontWeight.Medium
 +                fontWeight = FontWeight.Medium,
 +                maxLines = 1,
 +                softWrap = false
+@@ -179,0 +178,31 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++private fun BalanceRowIcon(state: SpendableBalanceRowState) {
++    val info = state.info
++    if (info != null) {
++        val tooltip = rememberTooltipState(isPersistent = true)
++        val scope = rememberCoroutineScope()
++        ZashiTooltipBox(
++            state = tooltip,
++            tooltip = { PlainTooltip { Text(info.getValue(), style = ZashiTypography.textSm) } },
++            anchor = {
++                ZashiIconButton(
++                    state = IconButtonState(
++                        icon = co.electriccoin.zcash.ui.design.R.drawable.ic_info,
++                        contentDescription = stringRes(R.string.private_balance_transparent_help_label),
++                        onClick = { scope.launch { tooltip.show() } }
++                    ),
++                    iconSize = 20.dp,
++                    iconTint = ZashiColors.Text.textTertiary
++                )
++            }
++        )
++    } else {
++        when (state.icon) {
++            is ImageResource.ByDrawable, is ImageResource.Layered -> state.icon.Compose(modifier = Modifier.size(20.dp))
++            ImageResource.Loading -> LottieProgress(modifier = Modifier.size(20.dp))
++            is ImageResource.DisplayString -> Unit
++        }
++    }
++}
++
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt
 index cc829b5e8..ae4e149f8 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt
@@ -31122,14 +31204,16 @@ index 000000000..49dbfd8e3
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/common/values-es/wallet_reliability_strings.xml b/ui-lib/src/main/res/ui/common/values-es/wallet_reliability_strings.xml
 new file mode 100644
-index 000000000..9a53ba711
+index 000000000..bd3fe04b1
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/common/values-es/wallet_reliability_strings.xml
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,12 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
 +    <string name="private_balance_transparent_remainder">Queda un pequeño saldo transparente sin proteger.</string>
 +    <string name="private_balance_transparent_row">Transparente (sin proteger)</string>
++    <string name="private_balance_transparent_help">Proteger fondos requiere una comisión de red de Zcash. La billetera lo permite para saldos transparentes superiores a %1$s.</string>
++    <string name="private_balance_transparent_help_label">Acerca de los fondos sin proteger</string>
 +    <string name="private_balance_pending_confirmations">Hay fondos protegidos pendientes. Espera la confirmación y mantén la billetera sincronizada.</string>
 +    <string name="private_balance_not_yet_spendable">Algunos fondos aún no se pueden gastar. Revisa la sincronización y las transacciones pendientes.</string>
 +    <string name="private_balance_unavailable_row">Aún no disponible para gastar</string>
@@ -31149,14 +31233,16 @@ index 000000000..6ef1c29ad
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/common/values/wallet_reliability_strings.xml b/ui-lib/src/main/res/ui/common/values/wallet_reliability_strings.xml
 new file mode 100644
-index 000000000..cc8075e51
+index 000000000..235bcd5a6
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/common/values/wallet_reliability_strings.xml
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,12 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
 +    <string name="private_balance_transparent_remainder">A small transparent balance remains unshielded.</string>
 +    <string name="private_balance_transparent_row">Transparent (unshielded)</string>
++    <string name="private_balance_transparent_help">Shielding requires a Zcash network fee. The wallet enables it for transparent balances above %1$s.</string>
++    <string name="private_balance_transparent_help_label">About unshielded funds</string>
 +    <string name="private_balance_pending_confirmations">Some shielded funds are pending. Wait for confirmation and keep your wallet synced.</string>
 +    <string name="private_balance_not_yet_spendable">Some funds are not yet spendable. Check synchronization and pending transactions.</string>
 +    <string name="private_balance_unavailable_row">Not yet spendable</string>
@@ -36937,15 +37023,17 @@ index 708658383..b6cff1756 100644
 @@ -500 +454,0 @@ class AccountListVMTest {
 -            assertNull(state.keystonePromo)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVMTest.kt
-index 32d01648d..b7db0fb6e 100644
+index 32d01648d..a9e4d875e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVMTest.kt
 @@ -4,0 +5 @@ import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
-@@ -8,2 +8,0 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
+@@ -6,0 +8 @@ import co.electriccoin.zcash.ui.common.model.LoadedAccountBalances
++import co.electriccoin.zcash.ui.common.model.SHIELDING_THRESHOLD_ZATOSHI
+@@ -8,2 +9,0 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 -import co.electriccoin.zcash.ui.common.usecase.GetTransactionsUseCase
 -import co.electriccoin.zcash.ui.common.usecase.ListTransactionData
-@@ -69,0 +69,53 @@ class SpendableBalanceVMTest {
+@@ -69,0 +70,57 @@ class SpendableBalanceVMTest {
 +    @Test
 +    fun sdkPendingBalanceIsShownWithoutRecoveredTransactionHistory() =
 +        runTest {
@@ -36997,19 +37085,23 @@ index 32d01648d..b7db0fb6e 100644
 +            assertEquals(2, state.rows.size)
 +            assertEquals(stringRes(R.string.private_balance_transparent_row), state.rows[1].title)
 +            assertEquals(stringRes(Zatoshi(1)), state.rows[1].value)
++            assertEquals(
++                stringRes(R.string.private_balance_transparent_help, stringRes(Zatoshi(SHIELDING_THRESHOLD_ZATOSHI))),
++                state.rows[1].info
++            )
 +        }
 +
-@@ -76,4 +127,0 @@ class SpendableBalanceVMTest {
+@@ -76,4 +132,0 @@ class SpendableBalanceVMTest {
 -        val getTransactions =
 -            mockk<GetTransactionsUseCase> {
 -                every { observe() } returns MutableStateFlow<List<ListTransactionData>?>(emptyList())
 -            }
-@@ -83 +130,0 @@ class SpendableBalanceVMTest {
+@@ -83 +135,0 @@ class SpendableBalanceVMTest {
 -                getTransactions = getTransactions,
-@@ -91 +138 @@ class SpendableBalanceVMTest {
+@@ -91 +143 @@ class SpendableBalanceVMTest {
 -    private fun account(isSpendable: Boolean): WalletAccount =
 +    private fun account(isSpendable: Boolean, balances: LoadedAccountBalances = BALANCES): WalletAccount =
-@@ -95 +142 @@ class SpendableBalanceVMTest {
+@@ -95 +147 @@ class SpendableBalanceVMTest {
 -            every { loadedBalances } returns BALANCES
 +            every { loadedBalances } returns balances
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerViewTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerViewTest.kt

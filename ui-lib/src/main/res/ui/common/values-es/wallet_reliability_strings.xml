@@ -2,6 +2,8 @@
 <resources>
     <string name="private_balance_transparent_remainder">Queda un pequeño saldo transparente sin proteger.</string>
     <string name="private_balance_transparent_row">Transparente (sin proteger)</string>
+    <string name="private_balance_transparent_help">Proteger fondos requiere una comisión de red de Zcash. La billetera lo permite para saldos transparentes superiores a %1$s.</string>
+    <string name="private_balance_transparent_help_label">Acerca de los fondos sin proteger</string>
     <string name="private_balance_pending_confirmations">Hay fondos protegidos pendientes. Espera la confirmación y mantén la billetera sincronizada.</string>
     <string name="private_balance_not_yet_spendable">Algunos fondos aún no se pueden gastar. Revisa la sincronización y las transacciones pendientes.</string>
     <string name="private_balance_unavailable_row">Aún no disponible para gastar</string>
