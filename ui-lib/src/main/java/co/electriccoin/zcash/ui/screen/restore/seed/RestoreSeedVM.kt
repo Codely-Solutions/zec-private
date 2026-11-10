@@ -167,6 +167,7 @@ class RestoreSeedVM(
 
     private fun onNextClicked() {
         viewModelScope.launch {
+            if (pasteError.value) return@launch
             val seed = validSeed.first() ?: return@launch
             navigationRouter.forward(RestoreHeight(seed.joinToString()))
         }

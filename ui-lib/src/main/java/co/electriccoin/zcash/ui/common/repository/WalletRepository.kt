@@ -117,7 +117,7 @@ class WalletRepositoryImpl(
     override val walletInitialization = initialization.asStateFlow()
 
     // Keep the accepted operation across failures, including failures after the wallet was stored.
-    private var acceptedInitialization: (suspend () -> Unit)? = null
+    private var acceptedInitialization: (suspend (PersistableWallet?) -> Unit)? = null
 
     /**
      * Scope the repository's fire-and-forget jobs run on. A test seam: unit tests replace it
@@ -342,7 +342,11 @@ class WalletRepositoryImpl(
 
     override fun createNewWallet() {
         var candidate: PersistableWallet? = null
-        initializeWallet {
+        initializeWallet { stored ->
+            if (candidate == null && stored != null) {
+                finishExistingWalletInitialization(stored)
+                return@initializeWallet
+            }
             val zcashNetwork = ZcashNetwork.fromResources(application)
             val newWallet =
                 candidate ?: PersistableWallet.new(
@@ -382,15 +386,21 @@ class WalletRepositoryImpl(
         seedPhrase: SeedPhrase,
         birthday: BlockHeight
     ) {
-        initializeWallet {
+        var candidate: PersistableWallet? = null
+        initializeWallet { stored ->
+            if (candidate == null && stored != null) {
+                finishExistingWalletInitialization(stored)
+                return@initializeWallet
+            }
             val restoredWallet =
-                PersistableWallet(
+                candidate ?: PersistableWallet(
                     network = network,
                     birthday = birthday,
                     endpoint = lightWalletEndpointProvider.getDefaultEndpoint(),
                     seedPhrase = seedPhrase,
                     walletInitMode = WalletInitMode.RestoreWallet,
                 )
+            candidate = restoredWallet
             persistWalletInternal(restoredWallet)
             walletRestoringStateProvider.store(WalletRestoringState.RESTORING)
             walletBackupFlagStorageProvider.store(true)
@@ -399,8 +409,17 @@ class WalletRepositoryImpl(
         }
     }
 
+    private suspend fun finishExistingWalletInitialization(wallet: PersistableWallet) {
+        // A process can stop between the encrypted wallet write and onboarding metadata. Its seed already owns
+        // this setup. Resume conservatively as a restore and preserve the existing backup flag.
+        persistWalletInternal(wallet.copy(walletInitMode = WalletInitMode.RestoreWallet))
+        walletRestoringStateProvider.store(WalletRestoringState.RESTORING)
+        restoreTimestampDataSource.getOrCreate()
+        persistOnboardingStateInternal(OnboardingState.READY)
+    }
+
     @Suppress("TooGenericExceptionCaught")
-    private fun initializeWallet(operation: suspend () -> Unit) {
+    private fun initializeWallet(operation: suspend (PersistableWallet?) -> Unit) {
         val previous = initialization.value
         if (previous == WalletInitializationState.RUNNING ||
             !initialization.compareAndSet(previous, WalletInitializationState.RUNNING)
@@ -411,10 +430,9 @@ class WalletRepositoryImpl(
         scope.launch {
             try {
                 walletMutation.withLock {
-                    if (onboardingState.first() != OnboardingState.READY ||
-                        persistableWalletProvider.getPersistableWallet() == null
-                    ) {
-                        accepted()
+                    val stored = persistableWalletProvider.getPersistableWallet()
+                    if (onboardingState.first() != OnboardingState.READY || stored == null) {
+                        accepted(stored)
                     }
                     acceptedInitialization = null
                 }

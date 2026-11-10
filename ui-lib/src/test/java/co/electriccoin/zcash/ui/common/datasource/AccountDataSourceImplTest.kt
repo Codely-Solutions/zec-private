@@ -106,6 +106,28 @@ class AccountDataSourceImplTest {
     }
 
     @Test
+    fun replacementAndUnavailableSnapshotsDoNotAccumulatePreviousBalances() = runBlocking {
+        val walletBalances = MutableStateFlow<Map<AccountUuid, AccountBalance>?>(null)
+        val source = dataSource(walletBalances)
+        val observed = source.allAccounts.filterNotNull()
+        val states = listOf(
+            accountBalance(available = 100L, unshielded = 5L) to 105L,
+            accountBalance(available = 40L, unshielded = 0L) to 40L,
+            null to null,
+            accountBalance(available = 40L, unshielded = 0L) to 40L,
+            accountBalance(available = 47L, unshielded = 0L) to 47L,
+        )
+
+        for ((snapshot, expected) in states) {
+            walletBalances.value = snapshot
+            val account = withTimeout(5_000) {
+                observed.first { accounts -> accounts.single().totalBalance?.value == expected }.single()
+            }
+            assertEquals(expected, account.totalBalance?.value)
+        }
+    }
+
+    @Test
     fun nullBalancesMapEmitsAccountWithNullBalancesRatherThanNoEmissionOrZeros() =
         runBlocking {
             val walletBalances = MutableStateFlow<Map<AccountUuid, AccountBalance>?>(null)

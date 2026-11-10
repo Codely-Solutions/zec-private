@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.setMain
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -32,6 +33,7 @@ class RestoreSeedPasteTest {
     private val words = List(24) { "fixture" }
     private val phrase = mockk<SeedPhrase>()
     private val validate = mockk<ValidateSeedUseCase>()
+    private val navigation = mockk<NavigationRouter>(relaxed = true)
 
     init {
         every { phrase.split } returns words
@@ -108,6 +110,22 @@ class RestoreSeedPasteTest {
     }
 
     @Test
+    fun aRetainedContinueActionCannotAcceptThePriorPhraseAfterInvalidPaste() = runTest {
+        every { readClipboard() } returns words.joinToString(" ")
+        val vm = vm()
+        vm.state.first { it != null }!!.pasteButton!!.onClick()
+        val accepted = vm.state.first { it?.nextButton != null }!!
+        every { readClipboard() } returns "invalid clipboard content"
+        accepted.pasteButton!!.onClick()
+        vm.state.first { it?.isPasteError == true }
+
+        accepted.nextButton!!.onClick()
+        advanceUntilIdle()
+
+        verify(exactly = 0) { navigation.forward(any()) }
+    }
+
+    @Test
     fun actualBip39ChecksumIsRequired() = runTest {
         // Generate a public test vector in memory; assertions never print phrase contents.
         val generated = Mnemonics.MnemonicCode(ByteArray(32)).words.map { it.concatToString() }
@@ -124,7 +142,7 @@ class RestoreSeedPasteTest {
     }
 
     private fun vm(validation: ValidateSeedUseCase = validate) = RestoreSeedVM(
-        navigationRouter = mockk<NavigationRouter>(relaxed = true),
+        navigationRouter = navigation,
         validateSeed = validation,
         readClipboardText = readClipboard,
         clearClipboard = clearClipboard
