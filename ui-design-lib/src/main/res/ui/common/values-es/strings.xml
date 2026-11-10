@@ -586,7 +586,9 @@
 
     <!-- ===== restore ===== -->
     <string name="restore_subtitle">Frase de Recuperación</string>
-    <string name="restoreWallet_info">Por favor, ingresa tu frase secreta de recuperación de 24 palabras en el orden correcto.</string>
+    <string name="restoreWallet_info">Ingresa tu frase secreta de recuperación de 24 palabras en orden o pega la frase completa.</string>
+    <string name="restore_seed_paste">Pegar frase de recuperación</string>
+    <string name="restore_seed_paste_error">Ingresa o pega una frase de recuperación válida de 24 palabras.</string>
     <string name="restore_dialog_message_1_bold_part">La Frase Secreta de Recuperación</string>
     <string name="restore_dialog_message_1">es un conjunto único de 24 palabras que aparecen en un orden preciso. Puede usarse para obtener control total de tus fondos desde cualquier dispositivo a través de cualquier app de billetera Zcash. Piénsala como la llave maestra de tu billetera. Está guardada en la Configuración Avanzada de ZEC Private.</string>
     <string name="restore_dialog_message_2_bold_part">La Altura de Cumpleaños de la Billetera</string>
