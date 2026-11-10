@@ -22,6 +22,22 @@ class SessionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'explicit JVM test task'):
             session.gradle(self.root, dict(tasks=[':detektAll'], tests=['Fixture*']), session.JDK)
 
+    def test_reports_belong_to_requested_test_tasks(self):
+        operation = self.operation(self.first)
+        operation['config']['tasks'] = [':ui-lib:testReleaseUnitTest']
+        def runner(command, cwd, seconds, root, name, **kwargs):
+            for module, task, suite in (
+                    ('ui-lib', 'testReleaseUnitTest', 'current'),
+                    ('ui-lib', 'testDebugUnitTest', 'other-variant'),
+                    ('feature-viewing-key', 'testReleaseUnitTest', 'other-module')):
+                report = root/'builds'/module/'test-results'/task/('TEST-'+suite+'.xml')
+                report.parent.mkdir(parents=True, exist_ok=True)
+                report.write_text('<testsuite name="'+suite+'"/>')
+            return dict(exitCode=0)
+        self.run_session([operation], runner)
+        receipt = json.loads((self.evidence/'0001.json').read_text())
+        self.assertEqual([Path(item['file']).name for item in receipt['reports']], ['TEST-current.xml'])
+
     def test_static_analysis_does_not_admit_production_assembly(self):
         command = session.gradle(self.root, dict(tasks=[':detektAll']), Path('verified-jdk'))
         self.assertIn(':detektAll', command)

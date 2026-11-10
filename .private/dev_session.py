@@ -46,6 +46,11 @@ def pin(source, commit):
     return commit
 
 
+def is_jvm_test_task(task):
+    return (isinstance(task, str) and bool(re.fullmatch(r':[\w:-]+', task)) and
+            (task.endswith('UnitTest') or task == ':wallet-foundation-lib:test'))
+
+
 def gradle(root, config, jdk):
     if set(config) - {'tasks', 'init_scripts', 'properties', 'tests', 'write_verification_metadata'}:
         raise ValueError('Unsupported Gradle configuration')
@@ -78,7 +83,7 @@ def gradle(root, config, jdk):
     for test in tests:
         if not isinstance(test, str) or not re.fullmatch(r'[\w.$*]+', test):
             raise ValueError('Invalid test filter')
-    unit_tasks = {task for task in tasks if task.endswith('UnitTest') or task == ':wallet-foundation-lib:test'}
+    unit_tasks = {task for task in tasks if is_jvm_test_task(task)}
     if tests and not unit_tasks:
         raise ValueError('Test filters require an explicit JVM test task')
     args += ['-P'+key+'='+value for key, value in sorted(properties.items())]
@@ -213,14 +218,22 @@ def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.s
                 receipt['log_sha256'] = hashlib.sha256(data).hexdigest()
                 (evidence/(name+'.log')).write_bytes(data[-1048576:])
                 receipt['task_outcomes'] = [line for line in data.decode(errors='replace').splitlines() if line.startswith('> Task ')][-1000:]
-            # Reports may describe cached/up-to-date tests; task_outcomes records that distinction.
+            # Keep other modules/variants' retained reports out of this operation's evidence.
+            # Requested reports may be cached/up-to-date; task_outcomes records that distinction.
             receipt['reports'] = []
-            for report in sorted((root/'builds').rglob('TEST-*.xml')):
-                relative = report.relative_to(root/'builds')
-                target = evidence/name/'reports'/relative
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(report, target)
-                receipt['reports'].append(dict(file=str(target.relative_to(evidence)), sha256=hashlib.sha256(target.read_bytes()).hexdigest()))
+            for task in dict.fromkeys(config.get('tasks', [])):
+                if not is_jvm_test_task(task):
+                    continue
+                parts = task.lstrip(':').split(':')
+                module = Path(*parts[:-1]) if len(parts) > 1 else Path('root')
+                results = root/'builds'/module/'test-results'/parts[-1]
+                for report in sorted(results.glob('TEST-*.xml')):
+                    relative = report.relative_to(root/'builds')
+                    target = evidence/name/'reports'/relative
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(report, target)
+                    receipt['reports'].append(dict(task=task, file=str(target.relative_to(evidence)),
+                        sha256=hashlib.sha256(target.read_bytes()).hexdigest()))
             for report in [src/'artifact/task-timing.jsonl']:
                 if report.is_file():
                     target = evidence/(name+'-'+report.name)
