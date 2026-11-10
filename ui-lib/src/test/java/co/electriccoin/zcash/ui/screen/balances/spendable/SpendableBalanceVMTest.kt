@@ -114,6 +114,9 @@ class SpendableBalanceVMTest {
             )
             val state = stateFor(account(isSpendable = true, balances = balances))
             assertEquals(stringRes(R.string.private_balance_transparent_remainder), state.message)
+            assertEquals(2, state.rows.size)
+            assertEquals(stringRes(R.string.private_balance_transparent_row), state.rows[1].title)
+            assertEquals(stringRes(Zatoshi(1)), state.rows[1].value)
         }
 
     private fun TestScope.stateFor(account: WalletAccount): SpendableBalanceState {
