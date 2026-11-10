@@ -72,7 +72,8 @@ class KrakenPriceProvider(
                                 val sinceRequest = lastRequestStartedMillis?.let { elapsed - it }
                                 require(elapsed >= 0L && (sinceRequest == null || sinceRequest >= 0L))
                                 requestDelay(
-                                    (REQUEST_INTERVAL_MILLIS - (sinceRequest ?: REQUEST_INTERVAL_MILLIS)).coerceAtLeast(0L)
+                                    (REQUEST_INTERVAL_MILLIS - (sinceRequest ?: REQUEST_INTERVAL_MILLIS))
+                                        .coerceAtLeast(0L)
                                 )
                                 lastRequestStartedMillis = elapsedTimeMillis()
                                 val observation = client.prepareGet("https://api.kraken.com/0/public/Spread") {
