@@ -22,7 +22,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -121,7 +120,6 @@ private fun OnboardingMainContent(
         Image(
             modifier = Modifier.size(203.dp, 164.dp),
             painter = painterResource(id = co.electriccoin.zcash.ui.design.R.drawable.app_logo),
-            colorFilter = ColorFilter.tint(color = ZcashTheme.colors.secondaryColor),
             contentDescription = stringResource(R.string.zcash_logo_content_description),
         )
 
