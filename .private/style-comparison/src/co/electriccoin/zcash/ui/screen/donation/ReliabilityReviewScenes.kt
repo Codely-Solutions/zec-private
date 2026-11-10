@@ -20,6 +20,7 @@ import co.electriccoin.zcash.ui.screen.balances.spendable.SpendableBalanceVM
 import co.electriccoin.zcash.ui.screen.balances.spendable.SpendableBalanceView
 import co.electriccoin.zcash.ui.screen.home.restoring.WalletRestoringMessage
 import co.electriccoin.zcash.ui.screen.home.restoring.WalletRestoringMessageState
+import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsState
 import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsView
 import co.electriccoin.zcash.ui.screen.onboarding.view.Onboarding
@@ -27,7 +28,6 @@ import co.electriccoin.zcash.ui.screen.receive.*
 import co.electriccoin.zcash.ui.screen.restore.seed.*
 import java.lang.reflect.Proxy
 import kotlinx.coroutines.flow.MutableStateFlow
-import org.koin.compose.koinInject
 
 /** Seedless layout fixtures. No wallet initialization, clipboard, network or payment action is invoked. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -77,7 +77,18 @@ internal fun ReliabilityReviewScene(screen: String, originalAccount: ZodlAccount
                 ))
             }
             val navigation = remember { reviewInterface<NavigationRouter>(emptyMap()) }
-            val shielding = koinInject<ShieldFundsUseCase>()
+            val shielding = remember(accounts, navigation) {
+                ShieldFundsUseCase(
+                    keystoneProposalRepository = reviewInterface(emptyMap()),
+                    ledgerProposalPipeline = reviewInterface(emptyMap()),
+                    ledgerNavigator = reviewInterface(emptyMap()),
+                    zashiProposalRepository = reviewInterface(emptyMap()),
+                    navigationRouter = navigation,
+                    accountDataSource = accounts,
+                    navigateToError = NavigateToErrorUseCase(navigation),
+                    messageAvailabilityDataSource = reviewInterface(emptyMap())
+                )
+            }
             // The real VM computes its initial state from the synthetic SDK balances. No flow is subscribed.
             val state = remember(account) {
                 SpendableBalanceVM(accounts, navigation, shielding).state.value
@@ -114,7 +125,7 @@ private inline fun <reified T> reviewInterface(values: Map<String, Any?>): T =
             method.name == "toString" -> "SyntheticReviewDependency"
             method.name == "hashCode" -> System.identityHashCode(proxy)
             method.name == "equals" -> proxy === args?.firstOrNull()
-            values.containsKey(method.name) -> values[method.name]
+            values.containsKey(method.name) && method.parameterCount == 0 -> values[method.name]
             method.returnType == Void.TYPE -> null
             else -> error("Unexpected review dependency: ${method.name}")
         }
