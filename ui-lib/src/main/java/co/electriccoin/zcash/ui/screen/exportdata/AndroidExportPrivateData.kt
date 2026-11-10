@@ -107,9 +107,9 @@ fun shareData(
                 directory.listFiles()?.forEach { check(it.delete()) }
                 File(directory, "${UUID.randomUUID()}_${source.name}").also {
                     exportFile = it
-                    source.copyTo(it, overwrite = true)
-                    // Register durable cleanup before granting the URI to a receiving app.
+                    // Register cleanup before writing so process death cannot leave an unscheduled sensitive copy.
                     DeleteDiagnosticExportWorker.schedule(context, it).result.get()
+                    source.copyTo(it, overwrite = true)
                 }
             }
             val shareIntent = FileShareUtil.newShareContentIntent(
