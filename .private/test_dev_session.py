@@ -1,8 +1,10 @@
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 import dev_session as session
 
 
@@ -12,6 +14,85 @@ class SessionTest(unittest.TestCase):
         self.assertIn(':detektAll', command)
         with self.assertRaises(ValueError):
             session.gradle(self.root, dict(tasks=[':app:assembleZcashmainnetFossRelease']), Path('verified-jdk'))
+
+    def test_verification_generation_accepts_only_sha256(self):
+        config = dict(tasks=[':app:assembleDebug'], write_verification_metadata=['sha256'])
+        command = session.gradle(self.root, config, session.JDK)
+        index = command.index('--write-verification-metadata')
+        self.assertEqual(command[index + 1], 'sha256')
+        self.assertLess(index, command.index(':app:assembleDebug'))
+        for value in ([], ['pgp'], ['sha256', 'pgp'], 'sha256', True):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                session.gradle(self.root, dict(config, write_verification_metadata=value), session.JDK)
+
+    def test_verification_export_preserves_bytes_and_restores_original_or_absence(self):
+        metadata = self.root/'src/gradle/verification-metadata.xml'
+        metadata.parent.mkdir(parents=True)
+        generated = b'generated\r\nmetadata\n'
+        for name, original in [('original', b'original\r\nbytes'), ('new', None)]:
+            metadata.write_bytes(generated)
+            result = session.export_verification_metadata(self.root/'src', self.evidence, name, original)
+            self.assertEqual((self.evidence/result['file']).read_bytes(), generated)
+            self.assertEqual(result['sha256'], hashlib.sha256(generated).hexdigest())
+            if original is None:
+                self.assertFalse(metadata.exists())
+            else:
+                self.assertEqual(metadata.read_bytes(), original)
+
+    def test_verification_export_failure_still_restores_original(self):
+        metadata = self.root/'src/gradle/verification-metadata.xml'
+        metadata.parent.mkdir(parents=True)
+        metadata.write_bytes(b'generated')
+        target = self.evidence/'collision/verification-metadata.xml'
+        target.parent.mkdir()
+        target.write_bytes(b'immutable evidence')
+        with self.assertRaises(FileExistsError):
+            session.export_verification_metadata(self.root/'src', self.evidence, 'collision', b'original')
+        self.assertEqual(metadata.read_bytes(), b'original')
+        self.assertEqual(target.read_bytes(), b'immutable evidence')
+
+    def test_verification_size_is_checked_before_open_and_restored_on_rejection(self):
+        metadata = self.root/'src/gradle/verification-metadata.xml'
+        metadata.parent.mkdir(parents=True)
+        with metadata.open('wb') as stream:
+            stream.truncate(session.VERIFICATION_METADATA_MAX_BYTES + 1)
+        with mock.patch.object(Path, 'open', side_effect=AssertionError('Must reject before reading')):
+            with self.assertRaisesRegex(ValueError, 'exceeds 4 MiB'):
+                session.read_verification_metadata(metadata)
+        with self.assertRaisesRegex(ValueError, 'exceeds 4 MiB'):
+            session.export_verification_metadata(self.root/'src', self.evidence, 'oversized', b'original')
+        self.assertEqual(metadata.read_bytes(), b'original')
+        self.assertFalse((self.evidence/'oversized/verification-metadata.xml').exists())
+
+    def test_verification_generation_keeps_reused_checkout_clean(self):
+        metadata = self.source/'gradle/verification-metadata.xml'
+        metadata.parent.mkdir()
+        metadata.write_bytes(b'original')
+        self.git('add', '.')
+        self.git('commit', '-qm', 'verification original')
+        commit = self.git('rev-parse', 'HEAD')
+        operation = self.operation(commit)
+        operation['config']['write_verification_metadata'] = ['sha256']
+        def runner(command, cwd, *args, **kwargs):
+            self.assertIn('--write-verification-metadata', command)
+            self.assertEqual((cwd/'gradle/verification-metadata.xml').read_bytes(), b'original')
+            (cwd/'gradle/verification-metadata.xml').write_bytes(b'generated\n')
+            return dict(exitCode=0)
+        self.run_session([operation, operation], runner)
+        for name in ['0001', '0002']:
+            receipt = json.loads((self.evidence/(name + '.json')).read_text())
+            self.assertTrue(receipt['accepted'])
+            self.assertEqual((self.evidence/receipt['verification_metadata']['file']).read_bytes(), b'generated\n')
+        self.assertEqual((self.root/'src/gradle/verification-metadata.xml').read_bytes(), b'original')
+
+    def test_missing_generated_metadata_fails_closed(self):
+        operation = self.operation(self.first)
+        operation['config']['write_verification_metadata'] = ['sha256']
+        with self.assertRaisesRegex(ValueError, 'did not generate'):
+            self.run_session([operation], lambda *args, **kwargs: dict(exitCode=0))
+        receipt = json.loads((self.evidence/'0001.json').read_text())
+        self.assertFalse(receipt['accepted'])
+        self.assertIsNone(receipt['verification_metadata'])
 
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

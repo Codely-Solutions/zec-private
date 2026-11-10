@@ -20,6 +20,7 @@ import time
 GUARDS = Path(r'C:\Users\User\.codex\workflow-guards')
 JDK = Path(r'C:\Users\User\.codex\cache\jdks\temurin-25.0.5+8')
 SDK = Path(r'C:\Android\Sdk')
+VERIFICATION_METADATA_MAX_BYTES = 4*1024**2
 
 
 def digest(value):
@@ -46,8 +47,10 @@ def pin(source, commit):
 
 
 def gradle(root, config, jdk):
-    if set(config) - {'tasks', 'init_scripts', 'properties', 'tests'}:
+    if set(config) - {'tasks', 'init_scripts', 'properties', 'tests', 'write_verification_metadata'}:
         raise ValueError('Unsupported Gradle configuration')
+    if 'write_verification_metadata' in config and config['write_verification_metadata'] != ['sha256']:
+        raise ValueError('Dependency verification generation accepts only [sha256]')
     tasks = config.get('tasks', [])
     if not tasks or any(not re.fullmatch(r':[\w:-]+', task) or not (
             'Debug' in task or task.endswith('UnitTest') or task in {':wallet-foundation-lib:test', ':detektAll'}
@@ -69,12 +72,44 @@ def gradle(root, config, jdk):
             '-Pkotlin.compiler.execution.strategy=in-process']
     for script in scripts:
         args += ['-I', script]
+    if 'write_verification_metadata' in config:
+        args += ['--write-verification-metadata', 'sha256']
     args += ['-P'+key+'='+value for key, value in sorted(properties.items())] + tasks
     for test in config.get('tests', []):
         if not isinstance(test, str) or not re.fullmatch(r'[\w.$*]+', test):
             raise ValueError('Invalid test filter')
         args += ['--tests', test]
     return args
+
+
+def read_verification_metadata(metadata):
+    if metadata.stat().st_size > VERIFICATION_METADATA_MAX_BYTES:
+        raise ValueError('Verification metadata exceeds 4 MiB')
+    with metadata.open('rb') as stream:
+        data = stream.read(VERIFICATION_METADATA_MAX_BYTES + 1)
+    if len(data) > VERIFICATION_METADATA_MAX_BYTES:
+        raise ValueError('Verification metadata exceeds 4 MiB')
+    return data
+
+
+def export_verification_metadata(src, evidence, name, original):
+    metadata = src/'gradle/verification-metadata.xml'
+    try:
+        if not metadata.is_file():
+            return None
+        data = read_verification_metadata(metadata)
+        target = evidence/name/'verification-metadata.xml'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open('xb') as stream:
+            stream.write(data)
+        return dict(file=str(target.relative_to(evidence)), sha256=hashlib.sha256(data).hexdigest(),
+                    original_sha256=hashlib.sha256(original).hexdigest() if original is not None else None)
+    finally:
+        if original is None:
+            metadata.unlink(missing_ok=True)
+        else:
+            metadata.parent.mkdir(parents=True, exist_ok=True)
+            metadata.write_bytes(original)
 
 
 def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.sleep):
@@ -144,11 +179,20 @@ def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.s
                 log = root/(name+'.log')
                 if log.exists() and log.stat().st_size > 1048576:
                     raise ValueError('Operation log budget exceeded')
-            result = runner(command, src, seconds, root, name, environment=env, monitor=check_log,
-                            memory_bytes=6*1024**3, process_limit=32)
-            receipt['process'] = result
+            writing_verification = 'write_verification_metadata' in config
+            metadata = src/'gradle/verification-metadata.xml'
+            original_metadata = read_verification_metadata(metadata) if writing_verification and metadata.is_file() else None
+            try:
+                result = runner(command, src, seconds, root, name, environment=env, monitor=check_log,
+                                memory_bytes=6*1024**3, process_limit=32)
+                receipt['process'] = result
+            finally:
+                if writing_verification:
+                    receipt['verification_metadata'] = export_verification_metadata(src, evidence, name, original_metadata)
             if result.get('exitCode') != 0 or any(result.get(k) for k in ('error', 'timedOut', 'ownedSurvivors', 'cleanupErrors')):
                 raise RuntimeError('Operation failed; session stops')
+            if writing_verification and receipt['verification_metadata'] is None:
+                raise ValueError('Gradle did not generate verification metadata')
             receipt['accepted'] = True
         except BaseException as error:
             receipt['error'] = f'{type(error).__name__}: {error}'
