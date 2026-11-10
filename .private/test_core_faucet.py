@@ -9,6 +9,71 @@ from pathlib import Path
 from unittest.mock import patch
 from core_faucet import TorHTTPS,FAUCET,verify_unavailable_proxy,bundle_archive
 import core_faucet
+from contextlib import contextmanager
+
+
+class ReadinessTest(unittest.TestCase):
+    ready=dict(network='testnet',healthy=True,auth='pow',spendableTaz=1,dripTaz=.1)
+
+    def test_status_only_and_safe_result(self):
+        with patch('core_faucet.request',return_value=(200,json.dumps({**self.ready,'secret':'private'}).encode())) as request:
+            result=core_faucet.status_readiness(object())
+        self.assertEqual(request.call_args.args[1:],('GET','/api/status'))
+        self.assertEqual(result['claim_requests'],0)
+        self.assertNotIn('private',json.dumps(result))
+
+    def test_malformed_unavailable_and_wrong_network_fail_before_claim(self):
+        values=[[],{**self.ready,'network':'mainnet'},{**self.ready,'healthy':False},
+                {**self.ready,'spendableTaz':'1'},{**self.ready,'spendableTaz':float('nan')},
+                {**self.ready,'spendableTaz':.1},{**self.ready,'dripTaz':True}]
+        for value in values:
+            with self.subTest(value=value),patch('core_faucet.request',return_value=(200,json.dumps(value).encode())),patch('core_faucet.claim') as claim:
+                with self.assertRaises((ValueError,RuntimeError)):core_faucet.status_readiness(object())
+                claim.assert_not_called()
+
+    def test_shared_tor_lifetime_and_no_claim_for_readiness(self):
+        events=[]
+        @contextmanager
+        def tor(root):
+            events.append('start')
+            try:yield 12345,True,dict(setup_seconds=1)
+            finally:events.append('stop')
+        with tempfile.TemporaryDirectory() as root,patch('core_faucet.owned_tor',tor),patch('core_faucet.TorHTTPS'),patch('core_faucet.status_readiness',return_value=dict(passed=True,claim_requests=0)),patch('core_faucet.claim',return_value={}) as claim:
+            core_faucet.readiness(root)
+            claim.assert_not_called()
+            self.assertEqual(events,['start','stop'])
+            events.clear()
+            with core_faucet.ready_session(root) as (_,fund):
+                self.assertEqual(events,['start'])
+                fund('utest1'+'a'*50)
+                self.assertEqual(events,['start'])
+            self.assertEqual(events,['start','stop'])
+            claim.assert_called_once()
+
+    def test_readiness_failure_scrubs_exception_and_suppresses_claim(self):
+        with tempfile.TemporaryDirectory() as root,patch('core_faucet.owned_tor',side_effect=ConnectionError('private seed address')),patch('core_faucet.claim') as claim:
+            with self.assertRaisesRegex(RuntimeError,'ConnectionError') as error:core_faucet.readiness(root)
+            record=(Path(root)/'faucet-readiness.json').read_text()
+            self.assertNotIn('private',record+str(error.exception))
+            self.assertEqual(json.loads(record)['exception_class'],'ConnectionError')
+            claim.assert_not_called()
+
+    def test_existing_ledger_stops_before_tor(self):
+        with tempfile.TemporaryDirectory() as root,patch.dict(os.environ,{},clear=True),patch('core_faucet.owned_tor') as tor:
+            ledger=Path(root)/'funding-claim-ledger.json'
+            ledger.write_text('prior uncertain claim')
+            with self.assertRaises(RuntimeError):core_faucet.readiness(root)
+            tor.assert_not_called()
+            self.assertEqual(ledger.read_text(),'prior uncertain claim')
+
+    def test_ready_funding_rejects_non_testnet_before_claim(self):
+        @contextmanager
+        def tor(root):yield 12345,True,{}
+        with tempfile.TemporaryDirectory() as root,patch('core_faucet.owned_tor',tor),patch('core_faucet.TorHTTPS'),patch('core_faucet.status_readiness',return_value=dict(passed=True,claim_requests=0)),patch('core_faucet.claim') as claim:
+            with core_faucet.ready_session(root) as (_,fund):
+                for address in ('u1'+'a'*50,'utest1short','utest1'+'A'*50,None):
+                    with self.subTest(address=address),self.assertRaises(ValueError):fund(address)
+            claim.assert_not_called()
 
 
 class ClaimTest(unittest.TestCase):

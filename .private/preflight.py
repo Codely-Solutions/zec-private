@@ -18,7 +18,7 @@ def git(root, *args):
 
 # Only current, maintained entry points: inherited/generated/history links have other semantics.
 ACTIVE_DOCS = ('README.md', '.private/MAINTENANCE.md', '.private/UI-REVIEW.md', '.private/DEVELOPMENT.md',
-               '.private/core-coverage.md', '.private/emulator-batch.md',
+               '.private/core-coverage.md', '.private/emulator-batch.md', '.private/RELEASE-WORKFLOW.md',
                'docs/DONATIONS.md', 'docs/WALLET-GUIDE.md', 'docs/FOUNDATION.md',
                'docs/PRIVACY.md', 'docs/USE.md', '.private/SWAP-AMOUNTS.md')
 

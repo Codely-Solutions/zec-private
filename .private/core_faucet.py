@@ -6,6 +6,7 @@ an external exit-IP service is not a dependency of wallet acceptance.
 The official Windows expert bundle is the latest stable prebuilt distribution
 verified 2026-11-05; its tor 0.4.9.15 trails source-only stable 0.4.9.16.
 """
+from contextlib import contextmanager
 import hashlib
 import http.client
 import json
@@ -150,7 +151,64 @@ def bundle_archive(root, supplied=None):
 # Verified server blob: 25e617b8f3f3010e1e5b2b17bc81b9661afadf16 (version 1.3.1).
 PARAMS=dict(parallelism=1,tagLength=32,memory=19456,passes=2)
 
+def status_readiness(client):
+    """Read public status only; never request a challenge or submit a claim."""
+    status,raw=request(client,'GET','/api/status')
+    value=json.loads(raw)
+    if not isinstance(value,dict):raise ValueError('Malformed faucet status')
+    if status!=200 or value.get('network')!='testnet' or value.get('healthy') is not True or value.get('auth')!='pow':
+        error=RuntimeError('Faucet status unavailable or incompatible; no claim')
+        error.http_status=status
+        code=value.get('code')
+        if isinstance(code,str) and re.fullmatch('[A-Z][A-Z0-9_]{0,47}',code):error.server_code=code
+        raise error
+    spendable=value.get('spendableTaz')
+    if type(spendable) not in (int,float) or not .1001<=spendable<float('inf') or type(value.get('dripTaz')) not in (int,float) or value['dripTaz']!=.1:
+        raise ValueError('Unexpected faucet funding posture')
+    return dict(passed=True,network='testnet',healthy=True,auth='pow',funding_posture='available',http_status=status,claim_requests=0)
+
+
+@contextmanager
+def ready_session(root):
+    """Reuse one owned Tor lifetime for pre-wallet status and the later sole claim."""
+    root=Path(root)
+    began=time.monotonic()
+    result=dict(stage='local_setup',claim_requests=0)
+    try:
+        ledger=Path(os.environ.get('CORE_FAUCET_LEDGER',str(root/'funding-claim-ledger.json')))
+        if ledger.exists():raise RuntimeError('Claim already attempted; preserve ledger, no resubmission')
+        with owned_tor(root) as (port,negative,metadata):
+            result['stage']='faucet_status'
+            client=TorHTTPS(FAUCET,port)
+            try:result.update(status_readiness(client))
+            finally:client.close()
+            result.update(metadata)
+            result['elapsed_seconds']=time.monotonic()-began
+            (root/'faucet-readiness.json').write_text(json.dumps(result,indent=2)+'\n')
+            def fund_ready(address):
+                if not isinstance(address,str) or not re.fullmatch('utest1[a-z0-9]{40,505}',address):
+                    raise ValueError('Only a testnet unified address may be funded')
+                funded=claim(address,root,port,negative)
+                funded.update(metadata)
+                return funded
+            yield result,fund_ready
+    except Exception as error:
+        if not result.get('passed'):
+            result.update(passed=False,exception_class=type(error).__name__,elapsed_seconds=time.monotonic()-began)
+            for key in ('http_status','server_code'):
+                if hasattr(error,key):result[key]=getattr(error,key)
+            (root/'faucet-readiness.json').write_text(json.dumps(result,indent=2)+'\n')
+            raise RuntimeError('Faucet readiness failed: '+type(error).__name__) from None
+        raise
+
+
+def readiness(root):
+    with ready_session(root) as (result,_):return result
+
+
 def claim(address,root,port,negative):
+    if not isinstance(address,str) or not re.fullmatch('utest1[a-z0-9]{40,505}',address):
+        raise ValueError('Only a testnet unified address may be funded')
     began=time.monotonic()
     ledger=Path(os.environ.get('CORE_FAUCET_LEDGER',str(Path(root)/'funding-claim-ledger.json')))
     if ledger.exists():raise RuntimeError('Claim already attempted; preserve ledger, no resubmission')
@@ -160,12 +218,7 @@ def claim(address,root,port,negative):
     def save():ledger.write_text(json.dumps(state,indent=2)+'\n')
     try:
         client.connect()
-        status,raw=request(client,'GET','/api/status')
-        ready=json.loads(raw)
-        if status!=200 or ready.get('network')!='testnet' or ready.get('healthy') is not True or ready.get('auth')!='pow':
-            raise RuntimeError('Faucet not ready: '+sanitized_error(ready)+'; no claim')
-        if float(ready.get('spendableTaz',0))<.1001 or ready.get('dripTaz')!=.1:
-            raise RuntimeError('Unexpected faucet funding posture')
+        status_readiness(client)
         status,raw=request(client,'GET','/api/challenge?address='+quote(address,safe=''))
         challenge=json.loads(raw)
         if status!=200 or challenge.get('ok') is not True:raise RuntimeError('Faucet challenge refused: '+sanitized_error(challenge)+'; no claim')
@@ -223,12 +276,9 @@ def claim(address,root,port,negative):
         raise
     finally:client.close()
 
-def fund(address,root):
-    if not re.fullmatch('utest1[a-z0-9]{40,505}',address):
-        raise ValueError('Only a testnet unified address may be funded')
+@contextmanager
+def owned_tor(root):
     root=Path(root)
-    ledger=Path(os.environ.get('CORE_FAUCET_LEDGER',str(root/'funding-claim-ledger.json')))
-    if ledger.exists():raise RuntimeError('Claim already attempted; preserve ledger, no resubmission')
     proxy_unavailable_failed_closed=verify_unavailable_proxy()
     setup_started=time.monotonic()
     supplied_bundle=os.environ.get('CORE_FAUCET_TOR_BUNDLE')
@@ -280,15 +330,26 @@ def fund(address,root):
             time.sleep(.5)
         else:raise RuntimeError('Task Tor bootstrap timed out; direct fallback forbidden')
         bootstrap_seconds=time.monotonic()-started
-        result=claim(address,root,port,proxy_unavailable_failed_closed)
-        result.update(bundle_sha256=BUNDLE_SHA256,download_bytes=total,bundle_cache_hit=supplied_bundle is not None,
+        metadata=dict(bundle_sha256=BUNDLE_SHA256,download_bytes=total,bundle_cache_hit=supplied_bundle is not None,
                       expanded_bytes=expanded,setup_seconds=setup_seconds,bootstrap_seconds=bootstrap_seconds,
-                      tor_binary_sha256=hashlib.sha256(tor.read_bytes()).hexdigest(),tor_version=version,
-                      seconds=time.monotonic()-setup_started)
-        return result
+                      tor_binary_sha256=hashlib.sha256(tor.read_bytes()).hexdigest(),tor_version=version)
+        yield port,proxy_unavailable_failed_closed,metadata
     finally:
         process.terminate()
         try:process.wait(timeout=10)
         except subprocess.TimeoutExpired:process.kill();process.wait(timeout=10)
         if process.poll() is None:raise RuntimeError('Task Tor did not exit')
         console_stream.close()
+
+
+def fund(address,root):
+    if not isinstance(address,str) or not re.fullmatch('utest1[a-z0-9]{40,505}',address):
+        raise ValueError('Only a testnet unified address may be funded')
+    root=Path(root)
+    ledger=Path(os.environ.get('CORE_FAUCET_LEDGER',str(root/'funding-claim-ledger.json')))
+    if ledger.exists():raise RuntimeError('Claim already attempted; preserve ledger, no resubmission')
+    began=time.monotonic()
+    with owned_tor(root) as (port,negative,metadata):
+        result=claim(address,root,port,negative)
+        result.update(metadata,seconds=time.monotonic()-began)
+        return result

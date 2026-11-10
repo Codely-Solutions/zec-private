@@ -14,7 +14,7 @@ GUARDS = Path(r'C:\Users\User\.codex\workflow-guards')
 sys.path.insert(0, str(GUARDS))
 import guard
 
-EVIDENCE = {'tor-probe-result.json', 'core-testnet-result.json', 'core-testnet-diagnostic.json',
+EVIDENCE = {'faucet-readiness.json', 'tor-probe-result.json', 'core-testnet-result.json', 'core-testnet-diagnostic.json',
     'core-testnet-progress.json', 'funding-claim-ledger.json', 'quote-stages.json', 'tor-ui-result.json', 'phase1-scenario-result.json',
     'phase1-scenario-error.json', 'swap-ui-artifact-verification.json', 'swap-live-presentation.json',
     'donation-ui-result.json', 'donation-capture-evidence.json', 'command.log', 'emulator.log',

@@ -11,6 +11,7 @@ Use this entry for the checkout; local task state lives in the surrounding works
 | Design or change UI | [UI-STANDARDS.md](UI-STANDARDS.md) | Component choices, hierarchy, wording and accessibility defaults. |
 | Inspect UI / capture screenshots | [UI-REVIEW.md](UI-REVIEW.md) | Established capture/control components; artifact/state orchestration must match the current task. |
 | Reuse local development state | [DEVELOPMENT.md](DEVELOPMENT.md), [dev_session.py](dev_session.py) | Related pinned checks in one bounded isolated workspace; no production release assembly. |
+| Prepare/admit/assemble release acceptance | [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md) | Verified producers, paired baseline, explicit ownership and selective execution; no signing. |
 | Select quick checks and release checks | Build section below; [core coverage](core-coverage.md) | Coverage records identify their executed revision; current evidence must match inputs. |
 | Maintain independent quote checks | [INDEPENDENT-PRICES.md](INDEPENDENT-PRICES.md) | Exact native-asset coverage, freshness, Tor behavior and advisory thresholds. |
 | Run real wallet acceptance | [core coverage](core-coverage.md), [core_testnet_driver.py](core_testnet_driver.py), [acceptance_policy.py](acceptance_policy.py) | Requires a current prepared job, baseline and artifact bindings. Use [development artifact reuse](DEVELOPMENT.md#reuse-artifacts-and-guest-state) and the funding procedure below. |
@@ -21,7 +22,7 @@ Use this entry for the checkout; local task state lives in the surrounding works
 | Clean Actions storage | [Actions artifact cleanup](actions_artifact_cleanup.py) (`--help`) | Inspect complete artifact references first; preserve required fixtures/evidence. |
 | Locate prior local orchestration | Surrounding workspace's `records/INDEX.md` and `tools/extract-records.py` | Local private archives; recover selected files for inspection, not blind execution. |
 
-`docs/Setup.md`, `docs/CI.md`, `docs/Deployment.md` and the upstream testing notes are inherited references, not this fork's release procedures. Parser-sensitive changelogs and attribution remain source inputs. [prepare_core_acceptance.py](prepare_core_acceptance.py) is a legacy preparer with a revision-6 baseline; the current baseline comes from [upgrade-baseline.json](upgrade-baseline.json) and [maintenance-assets.json](maintenance-assets.json). Single-worker admission helpers still expect root-level job files. Adapt those assumptions within an authorized task before use; their presence is not a claim that an old job remains runnable.
+`docs/Setup.md`, `docs/CI.md`, `docs/Deployment.md` and the upstream testing notes are inherited references, not this fork's release procedures. Parser-sensitive changelogs and attribution remain source inputs. Use [current preparation](RELEASE-WORKFLOW.md), which reads [upgrade-baseline.json](upgrade-baseline.json) and [maintenance-assets.json](maintenance-assets.json). The obsolete revision-6 preparer was retired; its source remains in Git history. Single-worker admission helpers still expect root-level job files. Adapt those assumptions within an authorized task before use; their presence is not a claim that an old job remains runnable.
 
 ## Reuse and cleanup
 
@@ -71,7 +72,7 @@ Synthetic layout capture is a separate claim from quote or transaction acceptanc
 
 ### Testnet funding and failed boundaries
 
-The maintained [funding helper](core_faucet.py) uses the documented shielded PoW faucet through pinned owned Tor; [faucet_pow.cjs](faucet_pow.cjs) requires an existing Node runtime with built-in Argon2 support (Node 24.7 or newer). It checks testnet, wallet health, spendable balance and reviewed work bounds before a single claim. No credential is needed. A successful status response alone does not prove a payout or wallet receipt.
+The maintained [funding helper](core_faucet.py) uses the documented shielded PoW faucet through pinned owned Tor; [faucet_pow.cjs](faucet_pow.cjs) requires an existing Node runtime with built-in Argon2 support (Node 24.7 or newer). The lifecycle checks testnet, wallet health and spendable balance before wallet creation, keeping the same owned Tor process for later funding. It rechecks status and reviewed work bounds before a single claim. No credential is needed. A successful status response alone does not prove a payout or wallet receipt.
 
 After changing that helper or its worker/runtime, run `test_core_faucet.py` with child environment `CORE_FAUCET_TEST_POW=1` for the quick local work check. Ordinary CI checks the transport and claim rules without requiring a newer Node than its build runner. Native core admission verifies Argon2 availability and binds the worker and Node executable before guest startup.
 
