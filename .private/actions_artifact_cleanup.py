@@ -14,7 +14,7 @@ import re
 import subprocess
 from pathlib import Path
 
-NAMES = {'validated-unsigned-apk', 'isolated-ui-repro-apk', 'core-testnet-candidate', 'core-testnet-baseline'}
+NAMES = {'validated-unsigned-apk', 'isolated-ui-repro-apk', 'core-testnet-candidate', 'core-testnet-baseline', 'dependency-metadata-proposal'}
 
 
 def gh(path, method='GET'):
