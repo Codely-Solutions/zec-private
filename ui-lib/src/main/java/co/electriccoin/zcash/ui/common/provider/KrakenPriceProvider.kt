@@ -58,13 +58,7 @@ class KrakenPriceProvider(
                     if (now < 0L || elapsedNow < 0L || failureAtMillis?.let {
                         elapsedNow - it < FAILURE_BACKOFF_MILLIS
                     } == true) return@withLock IndependentPriceCheck.Unavailable
-                    val missing = pairs.filter { pair ->
-                        cache[pair]?.let {
-                            elapsedNow - it.receivedAtElapsedMillis in 0 until RECEIPT_LIFETIME_MILLIS &&
-                                now - it.observation.observedAtMillis in
-                                -FUTURE_TOLERANCE_MILLIS until OBSERVATION_LIFETIME_MILLIS
-                        } != true
-                    }
+                    val missing = pairs.filterNot { isCacheFresh(it, now, elapsedNow) }
                     if (missing.isNotEmpty()) {
                         httpClientProvider.createTor().use { client ->
                             missing.forEach { pair ->
@@ -96,6 +90,13 @@ class KrakenPriceProvider(
             IndependentPriceCheck.Unavailable
         }
     }
+
+    private fun isCacheFresh(pair: String, now: Long, elapsedNow: Long): Boolean =
+        cache[pair]?.let {
+            elapsedNow - it.receivedAtElapsedMillis in 0 until RECEIPT_LIFETIME_MILLIS &&
+                now - it.observation.observedAtMillis in
+                -FUTURE_TOLERANCE_MILLIS until OBSERVATION_LIFETIME_MILLIS
+        } == true
 
     private suspend fun awaitRequestInterval() {
         val elapsed = elapsedTimeMillis()
