@@ -68,7 +68,7 @@ def relevant(path):
                 path.endswith(('.md', '.png', '.jpg', '.webp', '.svg')))
 
 
-def input_fingerprint(revision='HEAD', root=ROOT, profile='core-testnet'):
+def input_manifest(revision='HEAD', root=ROOT, profile='core-testnet'):
     # One bounded Git inventory. Blob IDs refer to canonical committed bytes,
     # independent of Windows checkout line endings; no subprocess per file.
     if profile not in PROFILES:
@@ -82,14 +82,7 @@ def input_fingerprint(revision='HEAD', root=ROOT, profile='core-testnet'):
         metadata, path = row.split('\t', 1)
         if path == CORE_TEST_SOURCE:
             test_source_metadata = metadata
-        selected=relevant(path)
-        if profile=='core-runtime' and path==CORE_TEST_SOURCE:
-            selected=False
-        if profile=='production-quotes' and path.startswith(('.private/','.github/')):
-            selected=False
-        if profile=='core-build' and path.startswith(('.private/','.github/')):
-            selected=path.startswith('.private/core-wallet/') or path in {
-                '.private/tor-ui-abi.gradle','.github/workflows/core-validation.yml'}
+        selected = profile_input(path, profile)
         if selected:
             entries[path] = metadata
     if profile=='core-runtime' and not (test_source_metadata or '').startswith('100644 blob '):
@@ -100,41 +93,62 @@ def input_fingerprint(revision='HEAD', root=ROOT, profile='core-testnet'):
         properties=git('show',f'{revision}:gradle.properties',root=root).decode().replace('\r\n','\n')
         properties='\n'.join(line for line in properties.splitlines() if not line.startswith(('ZCASH_VERSION_CODE=','ZCASH_VERSION_NAME=')))
         entries['gradle.properties']=hashlib.sha256(properties.encode()).hexdigest()
+    return entries
+
+
+def input_fingerprint(revision='HEAD', root=ROOT, profile='core-testnet'):
+    entries = input_manifest(revision, root=root, profile=profile)
     return hashlib.sha256(json.dumps(entries, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def profile_input(path, profile='core-testnet'):
+    """Share the v1 receipt boundary between hashing and selection.
+
+    Swap composition reaches wallet funding/navigation; both profiles remain
+    required until a narrower product boundary can be established.
+    """
+    if profile not in PROFILES:
+        raise ValueError('Unknown acceptance profile: '+profile)
+    selected = relevant(path)
+    if profile == 'core-runtime' and path == CORE_TEST_SOURCE:
+        return False
+    if profile == 'production-quotes' and path.startswith(('.private/', '.github/')):
+        return False
+    if profile == 'core-build' and path.startswith(('.private/', '.github/')):
+        return path.startswith('.private/core-wallet/') or path in {
+            '.private/tor-ui-abi.gradle', '.github/workflows/core-validation.yml'}
+    return selected
+
+
+def changed_inputs(previous, revision='HEAD', root=ROOT, profile='core-testnet'):
+    before = input_manifest(previous, root=root, profile=profile)
+    after = input_manifest(revision, root=root, profile=profile)
+    return sorted(path for path in before.keys() | after.keys()
+                  if before.get(path) != after.get(path))
 
 
 def requirements(paths):
     profiles = set()
     reasons = []
+    profile_reasons = {}
     for path in paths:
-        if path.startswith(('.private/', '.github/')):
-            if relevant(path) or path in {'.private/proof.py', '.private/publish.py', '.private/promotion.py'}:
-                profiles.add('core-testnet')
-                reasons.append(path)
-            continue
+        selected = [profile for profile in ('core-testnet', 'production-quotes')
+                    if profile_input(path, profile)]
         if '/src/test/' in path or '/src/androidTest/' in path:
-            profiles.add('deterministic-regressions')
+            selected.append('deterministic-regressions')
+        # Preserve the explicit signing-controller review gate.
+        if path in {'.private/proof.py', '.private/publish.py', '.private/promotion.py'}:
+            selected.append('core-testnet')
+        if selected:
             reasons.append(path)
-            continue
-        if not relevant(path):
-            continue
-        if '/src/main/res/' in path and path.endswith('.xml'):
-            # Resources affect navigation, validation and network flavor overlays.
-            profiles.add('core-testnet')
-        elif (path.startswith('wallet-foundation-lib/') or '/screen/swap/' in path or
-              any(word in path for word in ('Near', 'SwapQuote', 'SwapRepository', 'ZecSwapComposition'))):
-            profiles.add('production-quotes')
-            if path.startswith('wallet-foundation-lib/'):
-                profiles.add('core-testnet')
-        else:
-            profiles.add('core-testnet')
-        if any(word in path.lower() for word in ('tor', 'httpclient', 'synchronizer', '/di/', 'navigation')):
-            profiles.add('production-quotes')
-        reasons.append(path)
-    return {'policy_version': POLICY_VERSION, 'profiles': sorted(profiles), 'reasons': reasons}
+        for profile in selected:
+            profiles.add(profile)
+            profile_reasons.setdefault(profile, []).append(path)
+    return {'policy_version': POLICY_VERSION, 'profiles': sorted(profiles), 'reasons': reasons,
+            'profile_reasons': profile_reasons}
 
 
-def validate_core(receipt, expected_inputs):
+def validate_core(receipt, expected_inputs, root=ROOT):
     if receipt.get('schema') != POLICY_VERSION or receipt.get('input_fingerprint') != expected_inputs:
         raise ValueError('Core acceptance inputs/policy mismatch')
     if receipt.get('evidence_class') != 'real-app-testnet' or receipt.get('network') != 'zcash-testnet':
@@ -194,7 +208,7 @@ def validate_core(receipt, expected_inputs):
         raise ValueError('Missing relevant executed-build input fingerprint')
     if not re.fullmatch('[0-9a-f]{40}', str(receipt.get('build_source_sha', ''))):
         raise ValueError('Missing build source identity')
-    baseline = json.loads((ROOT / '.private/upgrade-baseline.json').read_text())
+    baseline = json.loads((Path(root) / '.private/upgrade-baseline.json').read_text())
     if (receipt.get('baseline_source_sha') != baseline['source_sha'] or
             receipt.get('baseline_version_code') != baseline['version_code']):
         raise ValueError('Unexpected migration baseline')
@@ -212,7 +226,7 @@ def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=
     # A controller-prepared upstream child instead owns its candidate app inputs,
     # preserving the existing separately gated upstream integration path.
     acceptance_revision = acceptance_revision or product_revision
-    validate_core(receipt, input_fingerprint(acceptance_revision, root=root))
+    validate_core(receipt, input_fingerprint(acceptance_revision, root=root), root=root)
     runtime = input_fingerprint(product_revision, root=root, profile='core-runtime')
     # Host/controller inputs still bind current acceptance to the product candidate.
     # The APK producer is checked separately against compiled inputs below: host

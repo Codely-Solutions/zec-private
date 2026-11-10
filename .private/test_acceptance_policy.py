@@ -1,15 +1,18 @@
 """Small negative cases for promotion evidence; no emulator or network."""
 import copy
 import hashlib
+import io
+import runpy
 import json
 import os
 import subprocess
 import stat
 import tempfile
-from contextlib import ExitStack
+from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 import unittest
-from acceptance_policy import input_fingerprint, requirements, validate_core, validate_quotes, validate_binding, verify_promotion_revision, CORE_STAGES, CORE_TEST_SOURCE, CORE_BINDING, validate_core_sources, BASELINE_INSTRUMENTATION_STAGES, CANDIDATE_INSTRUMENTATION_STAGES
+from unittest.mock import patch
+from acceptance_policy import profile_input, changed_inputs, input_fingerprint, requirements, validate_core, validate_quotes, validate_binding, verify_promotion_revision, CORE_STAGES, CORE_TEST_SOURCE, CORE_BINDING, validate_core_sources, BASELINE_INSTRUMENTATION_STAGES, CANDIDATE_INSTRUMENTATION_STAGES
 
 
 class AcceptancePolicyTest(unittest.TestCase):
@@ -163,14 +166,84 @@ class AcceptancePolicyTest(unittest.TestCase):
         for path in ('unknown/runtime.bin', 'gradle.properties', 'ui-lib/src/main/java/new/Thing.kt',
                      '.private/acceptance_policy.py', '.private/core-wallet/include.gradle'):
             self.assertIn('core-testnet', requirements([path])['profiles'])
-        self.assertEqual(['production-quotes'], requirements(['ui-lib/src/main/java/SwapRepository.kt'])['profiles'])
+        self.assertEqual(['core-testnet', 'production-quotes'], requirements(['ui-lib/src/main/java/SwapRepository.kt'])['profiles'])
         self.assertIn('production-quotes', requirements(['ui-lib/src/main/java/HttpClientProvider.kt'])['profiles'])
         self.assertEqual(['deterministic-regressions'],requirements(['ui-lib/src/test/java/WalletTest.kt'])['profiles'])
+
+    def test_status_import_is_quiet_and_reuse_preserves_artifact_identity(self):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            module = runpy.run_path(str(Path(__file__).with_name('acceptance_status.py')))
+        self.assertEqual('', output.getvalue())
+        receipt = {'build_source_sha': 'a'*40, 'candidate_apk_sha256': 'b'*64,
+                   'executed_apk_sha256': 'c'*64}
+        namespace = module['status'].__globals__
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(Path, 'read_bytes', return_value=json.dumps(receipt).encode()))
+            fingerprint = stack.enter_context(patch.dict(namespace, {
+                'input_fingerprint': lambda revision, **kwargs: 'same-inputs',
+                'validate_core_sources': lambda value, **kwargs: True,
+                'validate_quotes': lambda value, inputs: True,
+            }))
+            report = module['status'](root=Path(__file__).parents[1], revision='d'*40)
+        self.assertTrue(report['publication_permitted'])
+        core = report['reusable_acceptance']['core-testnet']
+        quote = report['reusable_acceptance']['production-quotes']
+        self.assertEqual('a'*40, core['build_source_sha'])
+        self.assertEqual('b'*64, core['executed_apk_sha256'])
+        self.assertEqual('c'*64, quote['executed_apk_sha256'])
+        self.assertEqual(hashlib.sha256(json.dumps(receipt).encode()).hexdigest(), core['receipt_sha256'])
+
+    def test_status_reports_required_profiles_and_changed_inputs(self):
+        receipt = json.dumps({'build_source_sha': 'a'*40})
+        with ExitStack() as stack:
+            stack.enter_context(patch.dict(os.environ, {'VALIDATION_ONLY': 'true'}))
+            stack.enter_context(patch.object(Path, 'read_bytes', return_value=receipt.encode()))
+            stack.enter_context(patch('acceptance_policy.input_fingerprint', return_value='current'))
+            stack.enter_context(patch('acceptance_policy.validate_core_sources', side_effect=ValueError('stale core')))
+            stack.enter_context(patch('acceptance_policy.validate_quotes', side_effect=ValueError('stale quotes')))
+            stack.enter_context(patch('acceptance_policy.changed_inputs', return_value=['shared/Runtime.kt']))
+            output = stack.enter_context(redirect_stdout(io.StringIO()))
+            runpy.run_path(str(Path(__file__).with_name('acceptance_status.py')), run_name='__main__')
+        status = json.loads(output.getvalue())
+        self.assertFalse(status['publication_permitted'])
+        self.assertEqual(['core-testnet', 'production-quotes'], status['pending_acceptance'])
+        for detail in status['acceptance_diagnostics'].values():
+            self.assertEqual(['shared/Runtime.kt'], detail['changed_inputs'])
+            self.assertEqual('a'*40, detail['compared_source_sha'])
+            self.assertIn('stale', detail['reason'])
+
+    def test_selection_matches_profile_boundaries(self):
+        cases = {
+            'ui-lib/src/main/java/SwapRepository.kt': {'core-testnet', 'production-quotes'},
+            'wallet-foundation-lib/src/main/kotlin/Storage.kt': {'core-testnet', 'production-quotes'},
+            'app/src/main/res/xml/network.xml': {'core-testnet', 'production-quotes'},
+            'build.gradle.kts': {'core-testnet', 'production-quotes'},
+            'unknown/runtime.bin': {'core-testnet', 'production-quotes'},
+            '.private/core_faucet.py': {'core-testnet'},
+            '.private/upgrade-baseline.json': {'core-testnet'},
+            CORE_TEST_SOURCE: {'core-testnet'},
+            'ui-lib/src/main/java/screen/theme/Colors.kt': set(),
+            'docs/release.md': set(),
+            'ui-lib/src/androidTest/java/WalletTest.kt': {'deterministic-regressions'},
+            'ui-lib/src/test/java/WalletTest.kt': {'deterministic-regressions'},
+        }
+        for path, expected in cases.items():
+            with self.subTest(path=path):
+                selection = requirements([path])
+                self.assertEqual(expected, set(selection['profiles']))
+                for profile in ('core-testnet', 'production-quotes'):
+                    self.assertEqual(profile in expected, profile_input(path, profile))
+                    if profile in expected:
+                        self.assertEqual([path], selection['profile_reasons'][profile])
 
     def test_fingerprints_track_shared_and_unknown_inputs_and_ignore_version_labels(self):
         # Exercise committed trees, including deletion/rename, rather than just path classifiers.
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
+            baseline_path = root / '.private/upgrade-baseline.json'
+            baseline_path.parent.mkdir(parents=True, exist_ok=True)
+            baseline_path.write_bytes((Path(__file__).parent / 'upgrade-baseline.json').read_bytes())
             def git(*args):
                 return subprocess.check_output(['git',*args],cwd=root,text=True,stderr=subprocess.DEVNULL).strip()
             git('init','-q')
@@ -201,6 +274,8 @@ class AcceptancePolicyTest(unittest.TestCase):
                     if name=='gradle.properties':path.write_text(fixture[name].replace('CODE=1','CODE=2'))
                     git('add','-A');tree=git('write-tree')
                     for profile in original:
+                        changed = changed_inputs(base, tree, root=root, profile=profile)
+                        self.assertEqual(profile_input(name, profile) and name != 'gradle.properties', name in changed)
                         expected=(name not in ('README.md','ui-lib/src/test/java/Test.kt','gradle.properties')
                                   and not (profile=='production-quotes' and name.startswith('.private/'))
                                   and not (profile=='core-build' and name in ('.private/upgrade-baseline.json',
@@ -223,13 +298,16 @@ class AcceptancePolicyTest(unittest.TestCase):
     def test_test_source_can_follow_candidate_without_changing_product_binding(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
+            baseline_path = root / '.private/upgrade-baseline.json'
+            baseline_path.parent.mkdir(parents=True, exist_ok=True)
+            baseline_path.write_bytes((Path(__file__).parent / 'upgrade-baseline.json').read_bytes())
             def git(*args):
                 return subprocess.check_output(['git',*args],cwd=root,text=True,stderr=subprocess.DEVNULL).strip()
             def commit():
                 git('add','-A');git('-c','user.name=Fixture','-c','user.email=test@example.invalid','commit','-qm','Fixture')
                 return git('rev-parse','HEAD')
             git('init','-q');(root/'app.kt').write_text('unchanged product')
-            harness=root/CORE_TEST_SOURCE;harness.parent.mkdir(parents=True);harness.write_text('old test')
+            harness=root/CORE_TEST_SOURCE;harness.parent.mkdir(parents=True,exist_ok=True);harness.write_text('old test')
             try:
                 candidate=commit();harness.write_text('test now waits for enabled control');accepted=commit()
                 self.assertTrue(verify_promotion_revision(candidate,accepted,root=root))
@@ -276,6 +354,9 @@ class AcceptancePolicyTest(unittest.TestCase):
     def test_fresh_host_acceptance_can_reuse_only_matching_compiled_inputs(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
+            baseline_path = root / '.private/upgrade-baseline.json'
+            baseline_path.parent.mkdir(parents=True, exist_ok=True)
+            baseline_path.write_bytes((Path(__file__).parent / 'upgrade-baseline.json').read_bytes())
             def git(*args):
                 return subprocess.check_output(['git',*args],cwd=root,text=True,stderr=subprocess.DEVNULL).strip()
             def commit():

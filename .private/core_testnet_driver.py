@@ -13,7 +13,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from core_faucet import fund as fund_testnet
+from core_faucet import ready_session as faucet_ready_session
 from acceptance_policy import BASELINE_INSTRUMENTATION_STAGES, CANDIDATE_INSTRUMENTATION_STAGES
 
 PACKAGE = 'com.personal.zecprivate.testnet.foss.debug'
@@ -303,16 +303,19 @@ def run(adb, root, apks, manifest):
             shell(binary+'-restore --noflush < '+remote)
             rule(binary,'-I','OUTPUT','1','-m','owner','--uid-owner',str(app_uid),'-j','CORE_ACCEPT')
         firewall = True
-        stage('recipient',240)
-        clear_wallet()
-        stage('sender',240)
-        private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15).stdout)
-        if private.get('claimAttempted'):raise RuntimeError('Funding was already attempted; automatic re-claim forbidden')
-        private['claimAttempted']=True
-        write_fixture(private)
-        current_stage='funding_setup'
-        # Only the public test address enters this helper; it never sees seeds.
-        report['funding_setup']=fund_testnet(private['senderAddress'],root)
+        current_stage='faucet_readiness'
+        with faucet_ready_session(root) as (readiness, fund_testnet):
+            report['faucet_readiness']=readiness
+            stage('recipient',240)
+            clear_wallet()
+            stage('sender',240)
+            private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15).stdout)
+            if private.get('claimAttempted'):raise RuntimeError('Funding was already attempted; automatic re-claim forbidden')
+            private['claimAttempted']=True
+            write_fixture(private)
+            current_stage='funding_setup'
+            # Only the public test address enters this helper; it never sees seeds.
+            report['funding_setup']=fund_testnet(private['senderAddress'])
         private.update(fundingTxId=report['funding_setup']['txid'],fundingProvider=report['funding_setup']['provider'])
         write_fixture(private)
         # App Tor must reconnect through the enforced relay set; refusal is safe.
