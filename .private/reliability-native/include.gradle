@@ -10,3 +10,9 @@ allprojects { app ->
         }
     }
 }
+// This procedural, opt-in instrumentation source never ships; keep production analysis unchanged.
+allprojects {
+    tasks.matching { it.name == 'detektAll' }.configureEach {
+        exclude('**/.private/reliability-native/**')
+    }
+}
