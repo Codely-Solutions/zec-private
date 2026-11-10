@@ -1,0 +1,12 @@
+// Opt-in instrumentation only; no production source set or manifest changes.
+allprojects { app ->
+    app.plugins.withId('com.android.application') {
+        if (app.path == ':app') {
+            app.android.sourceSets.getByName('androidTest').kotlin.directories.add(new File(app.rootProject.projectDir, '.private/reliability-native/src').path)
+            def libs = app.extensions.getByType(org.gradle.api.artifacts.VersionCatalogsExtension).named('libs')
+            app.dependencies.add('androidTestImplementation', libs.findLibrary('zcash-sdk').get())
+            app.dependencies.add('androidTestImplementation', libs.findLibrary('zcash-sdk-incubator').get())
+            app.dependencies.add('androidTestImplementation', 'com.zodl.android:zcash-android-sdk-slipstream:6.0.0')
+        }
+    }
+}
