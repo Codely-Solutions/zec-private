@@ -74,11 +74,19 @@ def gradle(root, config, jdk):
         args += ['-I', script]
     if 'write_verification_metadata' in config:
         args += ['--write-verification-metadata', 'sha256']
-    args += ['-P'+key+'='+value for key, value in sorted(properties.items())] + tasks
-    for test in config.get('tests', []):
+    tests = config.get('tests', [])
+    for test in tests:
         if not isinstance(test, str) or not re.fullmatch(r'[\w.$*]+', test):
             raise ValueError('Invalid test filter')
-        args += ['--tests', test]
+    unit_tasks = {task for task in tasks if task.endswith('UnitTest') or task == ':wallet-foundation-lib:test'}
+    if tests and not unit_tasks:
+        raise ValueError('Test filters require an explicit JVM test task')
+    args += ['-P'+key+'='+value for key, value in sorted(properties.items())]
+    for task in tasks:
+        args.append(task)
+        if task in unit_tasks:
+            for test in tests:
+                args += ['--tests', test]
     return args
 
 

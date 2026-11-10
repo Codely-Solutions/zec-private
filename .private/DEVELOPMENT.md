@@ -29,7 +29,7 @@ Run with the managed Python interpreter (or `python3` where configured):
 python3 -B .private/dev_session.py TASK/inputs.json --evidence TASK/checks
 ```
 
-The evidence directory must be new. Debug build tasks, unit tests and `:detektAll` analysis are accepted; production release assembly/signing is outside this helper. Optional `jdk`, `sdk` and `gradle_home` paths select existing reviewed installations. `--policy` selects a reviewed guard override; the project default caps memory at 8 GiB and transient storage at 18 GiB. Admission still checks host headroom.
+The evidence directory must be new. Debug build tasks, unit tests and `:detektAll` analysis are accepted; production release assembly/signing is outside this helper. `tests` filters apply to each explicitly requested JVM test task, directly after its task name; analysis and assembly tasks receive none. For production Detekt scope, include `.private/release-analysis.gradle`. Optional `jdk`, `sdk` and `gradle_home` paths select existing reviewed installations. `--policy` selects a reviewed guard override; the project default caps memory at 8 GiB and transient storage at 18 GiB. Admission still checks host headroom.
 
 For checks added while editing, set an absolute task-owned `inbox`. Atomically rename a complete operation JSON to `0001.json`, `0002.json`, etc., counting initial operations too. Pin a new commit for each source change. `finish.json` ends an idle session; the idle and total deadlines also end it. One controller owns each session.
 
