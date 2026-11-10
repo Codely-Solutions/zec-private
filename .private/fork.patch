@@ -1535,10 +1535,10 @@ index 000000000..7c8c641cb
 +Foundation runtime changes invalidate both real wallet and quote evidence. Fingerprints remain conservative across the complete runtime graph. Unit tests cover precision, flow incompatibility, stale publication, fee calculations and synthetic legacy persistence. Required real testnet and unfunded production quote acceptance remain separate. Production artifacts are promoted after acceptance without rebuilding; signing secrets remain outside build jobs.
 diff --git a/docs/PRIVACY.md b/docs/PRIVACY.md
 new file mode 100644
-index 000000000..af6f9077f
+index 000000000..93a8c8906
 --- /dev/null
 +++ b/docs/PRIVACY.md
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,17 @@
 +# ZEC Private privacy: shielded Zcash and Tor
 +
 +Software-wallet keys and databases are stored on your device. Keep your recovery information secure. The FOSS release does not enable Firebase collection.
@@ -1548,6 +1548,8 @@ index 000000000..af6f9077f
 +When Tor is enabled, sensitive wallet metadata, transaction and swap-provider requests use Tor and fail if it is unavailable. Public compact-block downloads and normal DNS use direct connections; Tor is not a device-wide tunnel.
 +
 +NEAR receives swap assets, amounts, recipient/refund addresses and timing. Public-chain transactions and amounts can be correlated. Incoming swaps use fresh shielded recipients, and outgoing swaps use fresh shielded refund addresses. Tor and fresh addresses reduce exposure but cannot erase provider records or guarantee anonymity.
++
++Independent swap-price checks send public trading-pair names to Kraken through Tor. Wallet addresses, amounts and provider quote data are excluded.
 +
 +Fiat conversion uses CoinMarketCap where enabled. Opening a browser or sharing data hands it to the application you select, under that application's policies.
 +
@@ -1584,10 +1586,10 @@ index 000000000..cdadb0a3b
 +See the [wallet guide](WALLET-GUIDE.md) for instructions and [privacy](PRIVACY.md) before sharing diagnostics.
 diff --git a/docs/WALLET-GUIDE.md b/docs/WALLET-GUIDE.md
 new file mode 100644
-index 000000000..96226181e
+index 000000000..7ac5b6f59
 --- /dev/null
 +++ b/docs/WALLET-GUIDE.md
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,57 @@
 +# ZEC Private: Android Zcash wallet guide
 +
 +## Installation and updates
@@ -1616,13 +1618,17 @@ index 000000000..96226181e
 +
 +For an incoming swap, choose the source asset/network, amount and refund address. Review the quote and minimum received. Dismissing the quote sends nothing. After accepting, follow its exact deposit instructions from your external wallet. Keep the swap record until settlement or refund completes.
 +
-+For CrossPay, choose the recipient asset/network, destination and target amount. Check any required memo or tag, then review the ZEC total before approving. Follow progress in Activity. If a response is delayed, check the existing transaction and swap status before sending again.
++For CrossPay, choose the recipient asset/network, destination and target amount. Confirm that the destination accepts the selected asset and network; separate destination memo/tag fields are not supported. Review the ZEC total before approving. Follow progress in Activity. If a response is delayed, check the existing transaction and swap status before sending again.
++
++Contacts are filtered by the selected network. Changing networks keeps your recipient visible; correct any inline mismatch before requesting a quote.
 +
 +ZEC Private adds no app or affiliate fee. Provider costs are included in the quote; the NEAR platform percentage is only part of those costs. See [NEAR's fee schedule](https://docs.near-intents.org/resources/fees) for its current terms.
 +
 +The **Zcash network fee** pays for sending ZEC from your wallet. **Total ZEC to spend** includes it. For incoming swaps funded from another wallet, that sending wallet may charge its own network fee.
 +
 +Quoted output is an estimate; execution can differ. Completed swap details show the provider's executed amount when available. Your wallet transaction shows the ZEC actually received.
++
++**Quote details** shows available independent Kraken comparisons for native BTC, ETH, SOL and ZEC. A rate at least 15% below that reference shows an inline warning with **Swap anyway** or **Pay anyway**. Unsupported, stale or failed checks show **Price check unavailable** and keep swaps available.
 +
 +## Recovery and migration
 +

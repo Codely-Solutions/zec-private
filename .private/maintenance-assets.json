@@ -130,6 +130,20 @@
         "digest": "sha256:5cb5e33d45ac9056ce9f4c59d9018596a71edb0a88e9dbed6bcebcf8fe01cfe9",
         "source_release": "v3.19.0-private.18"
       }
+    },
+    "v3.19.0-private.19": {
+      "TESTNET_UPGRADE_FIXTURE.zip": {
+        "release_asset_id": 730922065,
+        "size_in_bytes": 72188286,
+        "digest": "sha256:67d3d065edae6cbb9e18dca88fd703f3171f760b92b6231ccc3fa3a7a69002a9",
+        "source_release": "v3.19.0-private.19"
+      },
+      "TESTNET_UPGRADE_FIXTURE.json": {
+        "release_asset_id": 730922066,
+        "size_in_bytes": 792,
+        "digest": "sha256:bb6b0a0a01130491998cb37e4de0890efd4dcf6d5a1aae02d2a3888df53a7f96",
+        "source_release": "v3.19.0-private.19"
+      }
     }
   },
   "validation": {

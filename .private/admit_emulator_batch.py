@@ -15,7 +15,7 @@ sys.path.insert(0, str(GUARDS))
 import guard
 
 EVIDENCE = {'tor-probe-result.json', 'core-testnet-result.json', 'core-testnet-diagnostic.json',
-    'core-testnet-progress.json', 'tor-ui-result.json', 'phase1-scenario-result.json',
+    'core-testnet-progress.json', 'funding-claim-ledger.json', 'quote-stages.json', 'tor-ui-result.json', 'phase1-scenario-result.json',
     'phase1-scenario-error.json', 'swap-ui-artifact-verification.json', 'swap-live-presentation.json',
     'donation-ui-result.json', 'donation-capture-evidence.json', 'command.log', 'emulator.log',
     'smoke-result.json', 'smoke-observation.json', 'batch-result.json', 'batch-smoke-verification.json', 'manifest.json',
@@ -110,6 +110,9 @@ def main():
             kind = json.loads(raw).get('probeKind')
             if kind not in ('core-testnet', 'ui'):
                 raise ValueError('Only independent core-testnet/UI acceptance profiles supported')
+            if kind=='core-testnet':
+                from core_faucet import node_executable
+                sources += [str(ROOT/'.private/faucet_pow.cjs'),node_executable()]
             workers.append(dict(name=name, adapter=job['argv'][2], manifest=str(manifest_path),
                 manifest_sha256=hashlib.sha256(raw).hexdigest(), seconds=job['seconds']))
             sources += [str(job_path), str(manifest_path), job['argv'][2]]

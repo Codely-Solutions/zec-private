@@ -1,4 +1,4 @@
-"""One honest TAZ faucet claim over one persistent, task-owned Tor connection.
+"""One bounded TAZ faucet claim through task-owned Tor; preserve its claim ledger.
 
 No app keys enter this helper. Native SDK Tor remains enabled in the wallet.
 Funding uses pinned owned Tor and a real unavailable-proxy negative check;
@@ -19,10 +19,11 @@ import tarfile
 import time
 import urllib.request
 from pathlib import Path
+from urllib.parse import quote
 
 BUNDLE='https://archive.torproject.org/tor-package-archive/torbrowser/16.0/tor-expert-bundle-windows-x86_64-16.0.tar.gz'
 BUNDLE_SHA256='2ee123e9167318a3742778ff704e75f01d4780f05a14522d451fe011011077c4'
-FAUCET='zcashfaucet.jinolabs.xyz'
+FAUCET='zcash-faucet.vercel.app'
 
 
 def exact(sock,size):
@@ -61,21 +62,43 @@ class TorHTTPS(http.client.HTTPSConnection):
             sock.close();raise
 
 
-def response(connection,method,path,body=None):
-    payload=None if body is None else json.dumps(body,separators=(',',':')).encode()
-    headers={'Connection':'keep-alive','Cache-Control':'no-store','Accept':'application/json'}
-    if payload is not None:headers['Content-Type']='application/json'
-    connection.request(method,path,body=payload,headers=headers)
-    reply=connection.getresponse()
-    data=reply.read(65537)
-    if len(data)>65536:raise ValueError('Faucet response exceeded bound')
-    try:value=json.loads(data)
-    except ValueError:raise RuntimeError('Faucet returned non-JSON HTTP '+str(reply.status)) from None
-    if reply.status>=400:
-        reason=str(value.get('error',value.get('message','request refused')))
-        reason=re.sub(r'utest1[a-z0-9]+','[isolated test address]',reason)[:500]
-        raise RuntimeError('Faucet HTTP '+str(reply.status)+': '+reason)
-    return value
+def sanitized_error(value):
+    """Retain explicit errors, scrub addresses/hex and bound output."""
+    fields={key:value[key] for key in ('code','message','error') if key in value and isinstance(value[key],(str,int,float))}
+    text=json.dumps(fields,ensure_ascii=True)
+    text=re.sub(r'utest1[a-z0-9]+','[test address]',text,flags=re.I)
+    return re.sub(r'[0-9a-fA-F]{32,}','[hex]',text)[:400]
+
+
+def request(client,method,path,body=None):
+    payload=json.dumps(body,separators=(',',':')).encode() if body is not None else None
+    client.request(method,path,body=payload,headers={'Connection':'keep-alive','Content-Type':'application/json'})
+    reply=client.getresponse()
+    raw=reply.read(65537)
+    if len(raw)>65536:raise ValueError('Testnet funding response exceeds bound')
+    return reply.status,raw
+
+
+def node_executable():
+    installed=Path(r'C:\Program Files\nodejs\node.exe')
+    node=str(installed) if installed.is_file() else shutil.which('node')
+    if not node:raise RuntimeError('Existing Node runtime required for faucet work')
+    feature=subprocess.run([node,'-p',"typeof require('node:crypto').argon2Sync"],
+        capture_output=True,timeout=10,creationflags=0x08000000 if os.name=='nt' else 0)
+    if feature.returncode or feature.stdout.strip()!=b'function':
+        raise RuntimeError('Existing Node 24.7 or newer with built-in Argon2 is required')
+    return node
+
+
+def solve_work(challenge):
+    node=node_executable()
+    result=subprocess.run([node,str(Path(__file__).with_name('faucet_pow.cjs'))],
+        input=json.dumps({k:challenge[k] for k in ('seed','difficulty')}).encode(),capture_output=True,timeout=200,
+        creationflags=0x08000000 if os.name=='nt' else 0)
+    if result.returncode:raise RuntimeError('Bounded faucet work did not complete; no claim')
+    proof=json.loads(result.stdout)
+    if not re.fullmatch(r'\d{1,15}',str(proof.get('nonce',''))):raise ValueError('Invalid nonce')
+    return proof
 
 
 def verify_unavailable_proxy():
@@ -84,7 +107,7 @@ def verify_unavailable_proxy():
         reserved.bind(('127.0.0.1',0))
         client=TorHTTPS(FAUCET,reserved.getsockname()[1])
         try:
-            client.request('GET','/api/pow/challenge')
+            client.request('GET','/api/status')
         except ConnectionRefusedError:
             return True
         finally:
@@ -123,11 +146,90 @@ def bundle_archive(root, supplied=None):
         raise
 
 
+# Source: https://github.com/anukulpandey/zcash-faucet/blob/main/server/server.js
+# Verified server blob: 25e617b8f3f3010e1e5b2b17bc81b9661afadf16 (version 1.3.1).
+PARAMS=dict(parallelism=1,tagLength=32,memory=19456,passes=2)
+
+def claim(address,root,port,negative):
+    began=time.monotonic()
+    ledger=Path(os.environ.get('CORE_FAUCET_LEDGER',str(Path(root)/'funding-claim-ledger.json')))
+    if ledger.exists():raise RuntimeError('Claim already attempted; preserve ledger, no resubmission')
+    client=TorHTTPS(FAUCET,port)
+    state=None
+    owns_ledger=False
+    def save():ledger.write_text(json.dumps(state,indent=2)+'\n')
+    try:
+        client.connect()
+        status,raw=request(client,'GET','/api/status')
+        ready=json.loads(raw)
+        if status!=200 or ready.get('network')!='testnet' or ready.get('healthy') is not True or ready.get('auth')!='pow':
+            raise RuntimeError('Faucet not ready: '+sanitized_error(ready)+'; no claim')
+        if float(ready.get('spendableTaz',0))<.1001 or ready.get('dripTaz')!=.1:
+            raise RuntimeError('Unexpected faucet funding posture')
+        status,raw=request(client,'GET','/api/challenge?address='+quote(address,safe=''))
+        challenge=json.loads(raw)
+        if status!=200 or challenge.get('ok') is not True:raise RuntimeError('Faucet challenge refused: '+sanitized_error(challenge)+'; no claim')
+        if challenge.get('params')!=PARAMS or type(challenge.get('difficulty')) is not int or not 1<=challenge['difficulty']<=14:
+            raise ValueError('Faucet work exceeds reviewed bounds')
+        if not re.fullmatch('[0-9a-f]{32}',str(challenge.get('seed',''))) or not re.fullmatch('[0-9a-f]{64}',str(challenge.get('sig',''))):
+            raise ValueError('Invalid signed challenge')
+        if not time.time()+200<=challenge.get('exp',0)<=time.time()+905:raise ValueError('Challenge expiry')
+        # This faucet binds its signature to the address, not IP or TLS session.
+        # Close the challenge connection during CPU work; claim/poll share new TLS.
+        client.close()
+        proof=solve_work(challenge)
+        nonce=proof.get('nonce','')
+        if not re.fullmatch(r'\d{1,15}',nonce):raise ValueError('Invalid nonce')
+        client=TorHTTPS(FAUCET,port);client.connect();pinned=client.sock
+        if pinned is None:raise RuntimeError('Missing claim TLS connection; no claim')
+        state=dict(provider='argon-testnet',status='request-starting',created_at=time.time(),claim_requests=1,
+                   address_sha256=hashlib.sha256(address.encode()).hexdigest())
+        with ledger.open('x') as stream:
+            json.dump(state,stream);stream.flush();os.fsync(stream.fileno())
+        owns_ledger=True
+        payload=dict(address=address,pow={**{k:challenge[k] for k in ('seed','difficulty','exp','sig')},'nonce':nonce},**{'async':True})
+        status,raw=request(client,'POST','/api/claim',payload)
+        reply=json.loads(raw)
+        if status!=202 or reply.get('ok') is not True or reply.get('pending') is not True:
+            state.update(status='refused-or-unknown',http_status=status,server_error=sanitized_error(reply));save()
+            raise RuntimeError('Faucet sole POST refused or uncertain: '+sanitized_error(reply)+'; no resubmission')
+        claim_id=reply.get('id','')
+        if not re.fullmatch('[0-9a-f]{16}',claim_id):raise RuntimeError('Unknown claim identity; no resubmission')
+        state.update(status='pending',claim_id=claim_id);save()
+        stop=time.monotonic()+330
+        while time.monotonic()<stop:
+            if client.sock is not pinned:raise RuntimeError('Claim TLS changed; preserve outcome, no resubmission')
+            status,raw=request(client,'GET','/api/claim/'+claim_id)
+            reply=json.loads(raw)
+            if status!=200 or reply.get('ok') is not True:
+                state.update(status='failed-or-unknown',http_status=status,server_error=sanitized_error(reply));save()
+                raise RuntimeError('Claim failed or unknown: '+sanitized_error(reply)+'; no resubmission')
+            if reply.get('pending') is True:time.sleep(2);continue
+            txid=reply.get('txid','')
+            if not re.fullmatch('[0-9a-f]{64}',str(txid)):raise RuntimeError('Claim lacks txid; no resubmission')
+            if reply.get('amountZat')!=10000000:raise RuntimeError('Unexpected test funding amount')
+            state.update(status='broadcast',txid=txid);save()
+            return dict(provider='argon-testnet',txid=txid,claim_id=claim_id,claim_requests=1,
+                tor_transport_verified=True,proxy_unavailable_failed_closed=negative,persistent_tor_connection=True,
+                challenge_claim_same_tls=False,claim_poll_same_tls=True,challenge_ip_bound=False,
+                route_evidence='Pinned owned Tor; unavailable-proxy negative; validated TLS; sole claim and status polling share TLS',
+                bundle_sha256=BUNDLE_SHA256,source_blob='25e617b8f3f3010e1e5b2b17bc81b9661afadf16',
+                source_url='https://github.com/anukulpandey/zcash-faucet/blob/main/server/server.js',
+                proof_seconds=proof['seconds'],proof_workers=proof['workers'],seconds=time.monotonic()-began)
+        raise TimeoutError('Claim pending; preserve ledger and never resubmit')
+    except BaseException:
+        if owns_ledger and state['status'] in ('request-starting','pending'):
+            state['status']='outcome-uncertain';save()
+        raise
+    finally:client.close()
+
 def fund(address,root):
     if not re.fullmatch('utest1[a-z0-9]{40,505}',address):
         raise ValueError('Only a testnet unified address may be funded')
-    proxy_unavailable_failed_closed=verify_unavailable_proxy()
     root=Path(root)
+    ledger=Path(os.environ.get('CORE_FAUCET_LEDGER',str(root/'funding-claim-ledger.json')))
+    if ledger.exists():raise RuntimeError('Claim already attempted; preserve ledger, no resubmission')
+    proxy_unavailable_failed_closed=verify_unavailable_proxy()
     setup_started=time.monotonic()
     supplied_bundle=os.environ.get('CORE_FAUCET_TOR_BUNDLE')
     archive,total=bundle_archive(root,supplied_bundle)
@@ -178,40 +280,12 @@ def fund(address,root):
             time.sleep(.5)
         else:raise RuntimeError('Task Tor bootstrap timed out; direct fallback forbidden')
         bootstrap_seconds=time.monotonic()-started
-        client=TorHTTPS(FAUCET,port)
-        try:
-            # Strict custom SOCKS connection; the pinned owned Tor process is fully bootstrapped.
-            # An external exit-IP service is not required to establish this route.
-            client.connect()
-            route=dict(tor_transport_verified=True,proxy_unavailable_failed_closed=proxy_unavailable_failed_closed,
-                       tor_exit_verified=False,route_evidence='Pinned owned Tor SOCKS; unavailable-proxy negative; validated faucet TLS')
-            challenge=response(client,'GET','/api/pow/challenge')
-            pinned=client.sock
-            if pinned is None:raise RuntimeError('Faucet closed the IP-bound challenge connection')
-            difficulty=int(challenge['difficulty'])
-            if not 1<=difficulty<=22:raise RuntimeError('Faucet work exceeds bounded test budget')
-            proof_started=time.monotonic();nonce=0
-            while True:
-                value=hashlib.sha256((challenge['seed']+':'+str(nonce)).encode()).digest()
-                if int.from_bytes(value,'big') < (1 << (256-difficulty)):break
-                nonce+=1
-                if nonce%8192==0 and time.monotonic()-proof_started>30:raise RuntimeError('Faucet work time budget exhausted')
-            proof={key:challenge[key] for key in ('seed','difficulty','exp','sig')};proof['nonce']=str(nonce)
-            proof_seconds=time.monotonic()-proof_started
-            if client.sock is not pinned:raise RuntimeError('Faucet Tor connection changed before proof submission')
-            claim_started=time.monotonic()
-            claim=response(client,'POST','/api/faucet',dict(address=address,network='taz',pow=proof))
-            if not claim.get('ok') or not re.fullmatch('[0-9a-f]{64}',str(claim.get('txid',''))):
-                raise RuntimeError('Faucet did not establish a successful testnet payment; no retry')
-            return dict(**route,txid=claim['txid'],provider='jinolabs-testnet',
-                        persistent_tor_connection=True,bundle_sha256=BUNDLE_SHA256,
-                        download_bytes=total,bundle_cache_hit=supplied_bundle is not None,
-                        expanded_bytes=expanded,setup_seconds=setup_seconds,
-                        bootstrap_seconds=bootstrap_seconds,proof_compute_seconds=proof_seconds,
-                        claim_seconds=time.monotonic()-claim_started,
-                        tor_binary_sha256=hashlib.sha256(tor.read_bytes()).hexdigest(),tor_version=version,
-                        seconds=time.monotonic()-setup_started)
-        finally:client.close()
+        result=claim(address,root,port,proxy_unavailable_failed_closed)
+        result.update(bundle_sha256=BUNDLE_SHA256,download_bytes=total,bundle_cache_hit=supplied_bundle is not None,
+                      expanded_bytes=expanded,setup_seconds=setup_seconds,bootstrap_seconds=bootstrap_seconds,
+                      tor_binary_sha256=hashlib.sha256(tor.read_bytes()).hexdigest(),tor_version=version,
+                      seconds=time.monotonic()-setup_started)
+        return result
     finally:
         process.terminate()
         try:process.wait(timeout=10)

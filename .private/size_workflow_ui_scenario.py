@@ -89,7 +89,7 @@ def run(root, stop):
         state = wait('Choose a recipient on ETH or change the asset.')
         if 'phase1fixture' not in labels(state):
             raise RuntimeError('Network edit discarded the selected recipient')
-        quote_buttons = [n for n in state['nodes'] if n.get('text', '').casefold() == 'get a quote']
+        quote_buttons = [n for n in state['nodes'] if n.get('id') == 'SWAP_REVIEW_BUTTON']
         if not quote_buttons or any(n.get('enabled') for n in quote_buttons):
             raise RuntimeError('Incompatible recipient did not block quote action')
         click('ETH', 'Select Token')
@@ -146,14 +146,8 @@ def run(root, stop):
                 reference_states.append('warning')
             else:
                 raise RuntimeError('Independent price assessment did not finish')
-            title=next(n for n in state['nodes'] if n['text'].casefold()=='review quote')
-            title_top=int(title['bounds'].split()[1])
-            accept=next(n for n in state['nodes'] if n['text'].casefold()=='confirm')
-            accept_top=int(accept['bounds'].split()[1])
-            y1=title_top-53
-            y2=min(y1+905,accept_top-80)
-            action('swipe',x=540,y1=y1,y2=y2)
-            wait('Get a quote')
+            action('back')
+            wait('Get a quote',timeout=15)
         back('More')
         click('More','More...')
         click('More...','Address Book')
@@ -166,6 +160,7 @@ def run(root, stop):
         action('assert_text',text="What's New")
         result={'passed':True,'freshIsolatedWallet':True,'quotesReviewedAndDismissed':3,
                 'providerTimeouts':provider_errors,'excludedSettingsAbsent':True,'settingsLabels':sorted(current),
+                'dismissalAction':'Android back; return to same form verified',
                 'recipientNetworkMismatchBlocked':True,'correctedWithoutLeavingForm':True,'fundsTransferred':False}
         result.update(independentComparisons=independent_comparisons, referenceStates=reference_states)
         (root/'phase1-scenario-result.json').write_text(json.dumps(result,indent=2)+'\n')

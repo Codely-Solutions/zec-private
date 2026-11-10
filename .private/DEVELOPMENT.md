@@ -39,7 +39,7 @@ All checkout/build/guest scratch is removed when its guard ends. There is no lon
 
 ## Reuse artifacts and guest state
 
-Follow [UI review](UI-REVIEW.md). Reuse an exact prepared APK/receipt instead of downloading or preparing another copy. Keep the current candidate and required baseline until their final capture/acceptance consumer ends. Retain immutable release/upgrade evidence separately.
+Use [prepared_apks.py](prepared_apks.py) for verified original/prepared APK identities and [UI review](UI-REVIEW.md) for capture-specific setup. For a prepared receipt retained by its registered consumer, set `CODEX_EMULATOR_PREPARED_RECEIPT` to its absolute path and `CODEX_EMULATOR_PREPARED_SHA256` to its verified digest. The runner checks the entire manifest binding, original/prepared hashes, payload preservation, ABI and test-signing compatibility before reuse. Keep the manifest unchanged while reusing that receipt; changed configuration needs fresh preparation. Keep the current candidate and required baseline until their final capture/acceptance consumer ends, then retire the binaries and preserve immutable evidence separately.
 
 Use one existing `EmulatorSession` for compatible scenes/actions. Keep clean-wallet, recovery, network and identity boundaries explicit. Close guest/private ADB at session end or pause. The [two-worker runner](emulator-batch.md) remains available for independent required scenarios; shared state is not a reason to combine dependent or incompatible wallets.
 

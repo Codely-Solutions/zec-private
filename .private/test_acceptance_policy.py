@@ -14,7 +14,7 @@ from acceptance_policy import input_fingerprint, requirements, validate_core, va
 
 class AcceptancePolicyTest(unittest.TestCase):
     def test_emulator_reuse_helpers_invalidate_acceptance(self):
-        for path in ('.private/prepared_apks.py', '.private/ui_capture.py', '.private/ui_step.py'):
+        for path in ('.private/prepared_apks.py', '.private/ui_capture.py', '.private/ui_step.py', '.private/faucet_pow.cjs'):
             self.assertIn('core-testnet', requirements([path])['profiles'])
 
     def test_foundation_changes_invalidate_wallet_and_quote_acceptance(self):
@@ -186,6 +186,7 @@ class AcceptancePolicyTest(unittest.TestCase):
                 '.private/emulator_session.py':'session lifecycle',
                 '.private/emulator_batch.py':'batch scheduler',
                 '.private/admit_emulator_batch.py':'batch admission',
+                '.private/faucet_pow.cjs':'bounded funding work',
                 'README.md':'documentation',
                 'ui-lib/src/test/java/Test.kt':'test-only',
             }
@@ -204,7 +205,7 @@ class AcceptancePolicyTest(unittest.TestCase):
                                   and not (profile=='production-quotes' and name.startswith('.private/'))
                                   and not (profile=='core-build' and name in ('.private/upgrade-baseline.json',
                                       '.private/emulator_session.py', '.private/emulator_batch.py',
-                                      '.private/admit_emulator_batch.py'))
+                                      '.private/admit_emulator_batch.py', '.private/faucet_pow.cjs'))
                                   and not (profile=='core-runtime' and name==CORE_TEST_SOURCE))
                         with self.subTest(path=name,profile=profile):
                             self.assertEqual(expected,input_fingerprint(tree,root=root,profile=profile)!=original[profile])

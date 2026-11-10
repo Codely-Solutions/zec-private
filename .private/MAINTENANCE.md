@@ -13,7 +13,7 @@ Use this entry for the checkout; local task state lives in the surrounding works
 | Reuse local development state | [DEVELOPMENT.md](DEVELOPMENT.md), [dev_session.py](dev_session.py) | Related pinned checks in one bounded isolated workspace; no production release assembly. |
 | Select quick checks and release checks | Build section below; [core coverage](core-coverage.md) | Coverage records identify their executed revision; current evidence must match inputs. |
 | Maintain independent quote checks | [INDEPENDENT-PRICES.md](INDEPENDENT-PRICES.md) | Exact native-asset coverage, freshness, Tor behavior and advisory thresholds. |
-| Run real wallet acceptance | [core coverage](core-coverage.md), [core_testnet_driver.py](core_testnet_driver.py), [acceptance_policy.py](acceptance_policy.py) | Requires a current prepared job, baseline and artifact bindings; not a screenshot prerequisite. |
+| Run real wallet acceptance | [core coverage](core-coverage.md), [core_testnet_driver.py](core_testnet_driver.py), [acceptance_policy.py](acceptance_policy.py) | Requires a current prepared job, baseline and artifact bindings. Use [development artifact reuse](DEVELOPMENT.md#reuse-artifacts-and-guest-state) and the funding procedure below. |
 | Overlap independent emulator checks | [emulator-batch.md](emulator-batch.md) | Prepared jobs only; one shared guard and separate workers. |
 | Integrate upstream / refresh patch | Upstream integration below; [sync.py](sync.py), [refresh_source.py](refresh_source.py) | Discovery stays enabled; disposable integration and current acceptance remain gates. |
 | Preserve next update fixture | [preserve_upgrade_fixture.py](preserve_upgrade_fixture.py) | Run in the bounded resource guard with `--tag vX.Y.Z-private.N`; requires published bound execution evidence. Verifies the uploaded seedless APK by downloading it again. |
@@ -68,6 +68,16 @@ After a batch closes, require its accepted receipt, completed cleanup and zero o
 Independently verify a publication inside the resource guard: download the exact tag's APK/checksum and compare asset sizes/digests, checksum and `release-evidence/<tag>.json`. Resolve the original unsigned artifact from that evidence's producer run and verify its source/digest and embedded proof. Compare all signed/unsigned ZIP-entry contents except signing metadata. Run `apksigner verify --print-certs`, check the permanent certificate defined in `publish.py`, and inspect package/version, debuggability, ARM64-only contents and 16 KiB ZIP alignment. Remove the downloads after retaining compact results; preserve the executed update fixture with the maintained tool above.
 
 Synthetic layout capture is a separate claim from quote or transaction acceptance. A capture failure must retain its own diagnostic without relabeling a valid financial result. Keep only safe status/exception-class diagnostics when provider tracing is necessary; raw wallet/provider bodies are not public release evidence.
+
+### Testnet funding and failed boundaries
+
+The maintained [funding helper](core_faucet.py) uses the documented shielded PoW faucet through pinned owned Tor; [faucet_pow.cjs](faucet_pow.cjs) requires an existing Node runtime with built-in Argon2 support (Node 24.7 or newer). It checks testnet, wallet health, spendable balance and reviewed work bounds before a single claim. No credential is needed. A successful status response alone does not prove a payout or wallet receipt.
+
+After changing that helper or its worker/runtime, run `test_core_faucet.py` with child environment `CORE_FAUCET_TEST_POW=1` for the quick local work check. Ordinary CI checks the transport and claim rules without requiring a newer Node than its build runner. Native core admission verifies Argon2 availability and binds the worker and Node executable before guest startup.
+
+Assign `CORE_FAUCET_LEDGER` an absolute task-owned path when a claim must survive a session boundary. Otherwise the ledger lives in the guard output and the admission retains it as `funding-claim-ledger.json`. Preserve it after any POST, along with its claim ID or uncertain outcome. Poll the existing claim and reconcile wallet history; a missing transaction ID or failed request does not authorize another claim. Diagnose an unavailable or incompatible faucet before another lifecycle. Use a documented compatible alternative only after resolving the previous outcome; keep sensitive setup requests on Tor.
+
+SDK error 3200 is a wrapper, not a root cause: it also represents an explicit server rejection. Retain the safe stage, exception/cause, SDK code, elapsed time and any server rejection code. Separate the app graph from a public-only SDK/HTTP control before attributing failures to the app, SDK, emulator, VPN or endpoint. A request that succeeds later establishes changed readiness, not a retrospective diagnosis. Keep original assertions and distinguish diagnostics from passing acceptance.
 
 ## Upstream integration
 
