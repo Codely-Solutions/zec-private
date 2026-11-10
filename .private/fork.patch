@@ -24425,6 +24425,20 @@ index 78177f057..010d26495 100644
 @@ -147 +142 @@ class SpendableBalanceVM(
 -                        title = stringRes(R.string.balances_pending),
 +                        title = stringRes(R.string.private_balance_unavailable_row),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt
+index aca66bfef..1fa3c47a2 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt
+@@ -142,0 +143 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
++            modifier = Modifier.weight(1f),
+@@ -147 +148 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
+-        Spacer(1f)
++        Spacer(12.dp)
+@@ -174 +175,3 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
+-                fontWeight = FontWeight.Medium
++                fontWeight = FontWeight.Medium,
++                maxLines = 1,
++                softWrap = false
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt
 index cc829b5e8..ae4e149f8 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt

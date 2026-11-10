@@ -140,11 +140,12 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
+            modifier = Modifier.weight(1f),
             text = state.title.getValue(),
             color = ZashiColors.Text.textTertiary,
             style = ZashiTypography.textSm,
         )
-        Spacer(1f)
+        Spacer(12.dp)
         when (state.icon) {
             is ImageResource.ByDrawable, is ImageResource.Layered -> {
                 state.icon.Compose(modifier = Modifier.size(20.dp))
@@ -171,7 +172,9 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
                         ZashiColors.Text.textPrimary
                     },
                 style = ZashiTypography.textSm,
-                fontWeight = FontWeight.Medium
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                softWrap = false
             )
         }
     }

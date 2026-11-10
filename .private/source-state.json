@@ -1786,7 +1786,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceScreen.kt": "d4f9a0fd8895fafaf835af797ffb18d5658938e717dd91367810d3b0669f9dae",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceState.kt": "590f865c2fc48a790cd625bac34eddf7f0bc241de9fcdec61a7df2cc5a44c27e",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVM.kt": "59155f61cc320d800073c5addf7c181e61284cc14a2a843b289a6f911ce76968",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt": "16f4d0cf60684e7d86f0f86ffb230df7c0684fe0fc267fe192c9f6f260d63eff",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt": "748629625a6eb6003c2d36a15a5e7f463de2afa4ab2177a4631c1152c19015aa",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/choosehwwallet/ChooseHWWalletScreen.kt": "708b68300803b215c994206cf47d97e0bb882f3037552cb144f4393dac082ac2",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/choosehwwallet/ChooseHWWalletState.kt": "f5256495c41526d8282f54121975a28a1909a795f70c31ebe9e8838d94664718",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/choosehwwallet/ChooseHWWalletTag.kt": "ab6dbfc4eff0a48d5816111e70546ae8da488428951d69a34f3b20338c56adcf",
