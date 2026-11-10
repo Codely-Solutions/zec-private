@@ -8,6 +8,11 @@ on:
       - .github/dependabot.yml
       - .github/workflows/**
   workflow_dispatch:
+    inputs:
+      metadata_proposal:
+        description: Resolve dependency metadata and upload proposed checksums for review
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -18,7 +23,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.2
         with:
           persist-credentials: false
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
@@ -31,10 +36,66 @@ jobs:
       - name: Check update policy
         run: python3 -B .private/test_toolchain_policy.py
       - name: Configure the proposed build and expose deprecations
+        if: ${{ !inputs.metadata_proposal }}
         run: |
           chmod +x gradlew
           ./gradlew help --warning-mode all --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process
+      - name: Propose dependency verification metadata
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.metadata_proposal }}
+        run: |
+          chmod +x gradlew
+          mkdir -p metadata-proposal
+          set +e
+          ./gradlew -I .private/metadata-resolution.gradle metadataDependencyReports --write-verification-metadata sha256 --refresh-dependencies --warning-mode all --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process > metadata-proposal/resolve.log 2>&1
+          result=$?
+          python3 - "$result" <<'PY'
+          import hashlib, json, os, sys
+          from pathlib import Path
+          output = Path('metadata-proposal')
+          log = output / 'resolve.log'
+          failures = bytearray()
+          failure_lines = 0
+          with log.open('rb') as stream:
+              for line in stream:
+                  if any(marker in line for marker in (b'FAILED', b'Could not ', b'What went wrong:', b'failed verification')):
+                      failure_lines += 1
+                      remaining = 65536 - len(failures)
+                      if remaining > 0:
+                          failures.extend(line[:remaining])
+          with log.open('rb') as stream:
+              stream.seek(max(0, log.stat().st_size - 65536))
+              (output / 'diagnostics.txt').write_bytes(bytes(failures) + b'\n--- Final log bytes ---\n' + stream.read())
+          log.unlink()
+          metadata = Path('gradle/verification-metadata.xml')
+          raw = metadata.read_bytes()
+          if len(raw) > 4 * 1024 * 1024:
+              raise SystemExit('Proposed metadata exceeds 4 MiB limit')
+          (output / metadata.name).write_bytes(raw)
+          (output / 'summary.json').write_text(json.dumps({
+              'source_sha': os.environ['GITHUB_SHA'],
+              'run_id': os.environ['GITHUB_RUN_ID'],
+              'exit_code': int(sys.argv[1]),
+              'resolution_failure_lines': failure_lines,
+              'metadata_sha256': hashlib.sha256(raw).hexdigest(),
+              'scope': 'Dependency reports and checksum proposal; publisher review and strict validation required',
+              'acceptance': False
+          }, indent=2) + '\n')
+          PY
+          export_result=$?
+          if [ "$export_result" -ne 0 ]; then exit "$export_result"; fi
+          exit "$result"
+      - name: Upload bounded metadata proposal
+        if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.metadata_proposal }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dependency-metadata-proposal
+          path: |
+            metadata-proposal/verification-metadata.xml
+            metadata-proposal/summary.json
+            metadata-proposal/diagnostics.txt
+          if-no-files-found: error
+          retention-days: 3
       - name: State the boundary of this check
         if: always()
         run: |
-          echo 'Configuration smoke check only. Refresh fork patch/source-state and run required candidate acceptance before integration or signed publication.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Configuration smoke or opt-in checksum proposal only. Review publisher provenance before applying proposed metadata, refresh fork patch/source-state, and run strict candidate validation and acceptance before signed publication.' >> "$GITHUB_STEP_SUMMARY"

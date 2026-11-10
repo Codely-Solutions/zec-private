@@ -18,7 +18,8 @@ data class SpendableBalanceState(
 data class SpendableBalanceRowState(
     val title: StringResource,
     val icon: ImageResource,
-    val value: StringResource
+    val value: StringResource,
+    val info: StringResource? = null
 )
 
 data class SpendableBalanceShieldButtonState(

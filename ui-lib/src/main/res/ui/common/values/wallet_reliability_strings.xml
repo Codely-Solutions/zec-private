@@ -2,6 +2,8 @@
 <resources>
     <string name="private_balance_transparent_remainder">A small transparent balance remains unshielded.</string>
     <string name="private_balance_transparent_row">Transparent (unshielded)</string>
+    <string name="private_balance_transparent_help">Shielding requires a Zcash network fee. The wallet enables it for transparent balances above %1$s.</string>
+    <string name="private_balance_transparent_help_label">About unshielded funds</string>
     <string name="private_balance_pending_confirmations">Some shielded funds are pending. Wait for confirmation and keep your wallet synced.</string>
     <string name="private_balance_not_yet_spendable">Some funds are not yet spendable. Check synchronization and pending transactions.</string>
     <string name="private_balance_unavailable_row">Not yet spendable</string>

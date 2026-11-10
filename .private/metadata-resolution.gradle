@@ -1,0 +1,10 @@
+// Opt-in CI proposal: use Gradle's dependency report tasks across retained projects.
+// The generation flag resolves configuration artifacts; it does not attest their trust.
+gradle.projectsEvaluated {
+    def root = gradle.rootProject
+    root.tasks.register('metadataDependencyReports') {
+        group = 'help'
+        description = 'Reports retained project dependencies for reviewed checksum proposals'
+        dependsOn(root.allprojects.collect { it.tasks.named('dependencies') })
+    }
+}

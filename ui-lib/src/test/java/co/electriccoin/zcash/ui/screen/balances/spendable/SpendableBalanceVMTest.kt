@@ -5,6 +5,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LoadedAccountBalances
+import co.electriccoin.zcash.ui.common.model.SHIELDING_THRESHOLD_ZATOSHI
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.usecase.ShieldFundsUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -117,6 +118,10 @@ class SpendableBalanceVMTest {
             assertEquals(2, state.rows.size)
             assertEquals(stringRes(R.string.private_balance_transparent_row), state.rows[1].title)
             assertEquals(stringRes(Zatoshi(1)), state.rows[1].value)
+            assertEquals(
+                stringRes(R.string.private_balance_transparent_help, stringRes(Zatoshi(SHIELDING_THRESHOLD_ZATOSHI))),
+                state.rows[1].info
+            )
         }
 
     private fun TestScope.stateFor(account: WalletAccount): SpendableBalanceState {

@@ -9,6 +9,8 @@ import co.electriccoin.zcash.ui.design.R
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 
+internal const val SHIELDING_THRESHOLD_ZATOSHI = 100_000L
+
 sealed interface WalletAccount : Comparable<WalletAccount> {
     val sdkAccount: Account
 
@@ -96,9 +98,8 @@ sealed interface WalletAccount : Comparable<WalletAccount> {
     val isShieldedPending: Boolean?
         get() = pendingShieldedBalance?.let { it > Zatoshi(0) }
 
-    @Suppress("MagicNumber")
     val isShieldingAvailable: Boolean?
-        get() = totalTransparentBalance?.let { it > Zatoshi(100000L) }
+        get() = totalTransparentBalance?.let { it > Zatoshi(SHIELDING_THRESHOLD_ZATOSHI) }
 
     val isAllShielded: Boolean?
         get() {
