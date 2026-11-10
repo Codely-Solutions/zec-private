@@ -85,6 +85,8 @@ interface WalletRepository {
     fun refreshFastestServers()
 }
 
+// Initialization admission and interrupted-setup recovery share the same wallet mutation boundary.
+@Suppress("TooManyFunctions")
 class WalletRepositoryImpl(
     configurationRepository: ConfigurationRepository,
     private val application: Application,

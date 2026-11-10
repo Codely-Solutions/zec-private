@@ -679,6 +679,8 @@ private data class AccountSnapshot(
 private const val RETRY_DELAY = 3L
 
 /** Omit only a receiver the SDK confirms the view-only key does not contain. */
+// The public SDK has no typed missing-receiver exception; confirm the key components before omitting it.
+@Suppress("TooGenericExceptionCaught")
 internal suspend fun resolveTransparentReceiver(
     mayOmit: Boolean,
     readAddress: suspend () -> String,
