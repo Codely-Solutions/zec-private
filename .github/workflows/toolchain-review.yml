@@ -35,11 +35,11 @@ jobs:
           cache-read-only: true
       - name: Check update policy
         run: python3 -B .private/test_toolchain_policy.py
-      - name: Configure the proposed build and expose deprecations
+      - name: Configure the build and verify host resource tooling
         if: ${{ !inputs.metadata_proposal }}
         run: |
           chmod +x gradlew
-          ./gradlew help --warning-mode all --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process
+          ./gradlew help :feature-viewing-key:compileZcashmainnetFossDebugLibraryResources --warning-mode all --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process
       - name: Propose dependency verification metadata
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.metadata_proposal }}
         run: |
@@ -98,4 +98,4 @@ jobs:
       - name: State the boundary of this check
         if: always()
         run: |
-          echo 'Configuration smoke or opt-in checksum proposal only. Review publisher provenance before applying proposed metadata, refresh fork patch/source-state, and run strict candidate validation and acceptance before signed publication.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Configuration/resource-tool smoke or opt-in checksum proposal only. Review publisher provenance before applying proposed metadata, refresh fork patch/source-state, and run strict candidate validation and acceptance before signed publication.' >> "$GITHUB_STEP_SUMMARY"

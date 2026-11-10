@@ -6,5 +6,7 @@ gradle.projectsEvaluated {
         group = 'help'
         description = 'Reports retained project dependencies for reviewed checksum proposals'
         dependsOn(root.allprojects.collect { it.tasks.named('dependencies') })
+        // AAPT2's host classifier is resolved by resource execution, not dependency reports.
+        dependsOn(root.project(':feature-viewing-key').tasks.named('compileZcashmainnetFossDebugLibraryResources'))
     }
 }
