@@ -5,7 +5,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -70,7 +70,7 @@ fun ZashiSeedWordTextField(
             Box(
                 modifier =
                     Modifier
-                        .size(22.dp)
+                        .sizeIn(minWidth = 22.dp, minHeight = 22.dp)
                         .background(ZashiColors.Tags.tcCountBg, CircleShape)
                         .padding(end = 1.dp),
                 contentAlignment = Alignment.Center
@@ -79,7 +79,9 @@ fun ZashiSeedWordTextField(
                     text = prefix,
                     style = ZashiTypography.textSm,
                     color = ZashiColors.Tags.tcCountFg,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         },
