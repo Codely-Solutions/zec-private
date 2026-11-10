@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.restore.seed
 
+import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.bip39.Mnemonics
 import cash.z.ecc.android.sdk.model.SeedPhrase
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -11,6 +12,9 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -28,6 +32,7 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RestoreSeedPasteTest {
+    private val viewModels = mutableListOf<RestoreSeedVM>()
     private val readClipboard = mockk<ReadClipboardTextUseCase>()
     private val clearClipboard = mockk<ClearClipboardUseCase>(relaxed = true)
     private val words = List(24) { "fixture" }
@@ -47,7 +52,7 @@ class RestoreSeedPasteTest {
     fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun wholePhraseFieldPasteWorksInRelease() = runTest {
+    fun wholePhraseFieldPasteWorksInRelease() = runVmTest {
         val vm = vm()
         val initial = vm.state.first { it != null }!!
         initial.seed.values.first().onValueChange(SeedWordInnerTextFieldState(words.joinToString(" ")))
@@ -57,7 +62,7 @@ class RestoreSeedPasteTest {
     }
 
     @Test
-    fun explicitPasteNormalizesWhitespaceAndCaseThenClearsUnchangedClip() = runTest {
+    fun explicitPasteNormalizesWhitespaceAndCaseThenClearsUnchangedClip() = runVmTest {
         val pasted = " \n" + words.joinToString("\t\n\u00a0") { it.uppercase() } + " \r\n"
         every { readClipboard() } returns pasted
         val vm = vm()
@@ -69,7 +74,7 @@ class RestoreSeedPasteTest {
     }
 
     @Test
-    fun newerClipboardIsPreserved() = runTest {
+    fun newerClipboardIsPreserved() = runVmTest {
         every { readClipboard() } returnsMany listOf(words.joinToString(" "), "newer text")
         val vm = vm()
         vm.state.first { it != null }!!.pasteButton!!.onClick()
@@ -78,7 +83,7 @@ class RestoreSeedPasteTest {
     }
 
     @Test
-    fun invalidPasteKeepsManualWordsAndClipboard() = runTest {
+    fun invalidPasteKeepsManualWordsAndClipboard() = runVmTest {
         every { readClipboard() } returns List(24) { "invalid" }.joinToString(" ")
         val vm = vm()
         vm.state.first { it != null }!!.seed.values.first().onValueChange(SeedWordInnerTextFieldState("manual"))
@@ -89,7 +94,7 @@ class RestoreSeedPasteTest {
     }
 
     @Test
-    fun supportedBip39ShortPhraseCannotFillTwentyFourFields() = runTest {
+    fun supportedBip39ShortPhraseCannotFillTwentyFourFields() = runVmTest {
         val shortPhrase = Mnemonics.MnemonicCode(ByteArray(16)).words.map { it.concatToString() }
         every { readClipboard() } returns shortPhrase.joinToString(" ")
         val vm = vm(ValidateSeedUseCase())
@@ -100,7 +105,7 @@ class RestoreSeedPasteTest {
     }
 
     @Test
-    fun deniedClipboardReadLeavesFieldsUntouched() = runTest {
+    fun deniedClipboardReadLeavesFieldsUntouched() = runVmTest {
         every { readClipboard() } throws SecurityException()
         val vm = vm()
         vm.state.first { it != null }!!.pasteButton!!.onClick()
@@ -110,7 +115,7 @@ class RestoreSeedPasteTest {
     }
 
     @Test
-    fun aRetainedContinueActionCannotAcceptThePriorPhraseAfterInvalidPaste() = runTest {
+    fun aRetainedContinueActionCannotAcceptThePriorPhraseAfterInvalidPaste() = runVmTest {
         every { readClipboard() } returns words.joinToString(" ")
         val vm = vm()
         vm.state.first { it != null }!!.pasteButton!!.onClick()
@@ -126,7 +131,7 @@ class RestoreSeedPasteTest {
     }
 
     @Test
-    fun actualBip39ChecksumIsRequired() = runTest {
+    fun actualBip39ChecksumIsRequired() = runVmTest {
         // Generate a public test vector in memory; assertions never print phrase contents.
         val generated = Mnemonics.MnemonicCode(ByteArray(32)).words.map { it.concatToString() }
         every { readClipboard() } returns generated.joinToString(" ")
@@ -141,10 +146,21 @@ class RestoreSeedPasteTest {
         assertNull(rejected.nextButton)
     }
 
+    private fun runVmTest(block: suspend TestScope.() -> Unit) = runTest {
+        try {
+            block()
+        } finally {
+            val jobs = viewModels.mapNotNull { it.viewModelScope.coroutineContext[Job] }
+            jobs.forEach { it.cancel() }
+            jobs.joinAll()
+            viewModels.clear()
+        }
+    }
+
     private fun vm(validation: ValidateSeedUseCase = validate) = RestoreSeedVM(
         navigationRouter = navigation,
         validateSeed = validation,
         readClipboardText = readClipboard,
         clearClipboard = clearClipboard
-    )
+    ).also { viewModels += it }
 }
