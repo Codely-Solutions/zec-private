@@ -9,6 +9,7 @@ import androidx.test.filters.SmallTest
 import androidx.test.platform.app.InstrumentationRegistry
 import cash.z.ecc.android.sdk.CloseableSynchronizer
 import cash.z.ecc.android.sdk.WalletInitMode
+import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountImportSetup
 import cash.z.ecc.android.sdk.model.AccountPurpose
 import cash.z.ecc.android.sdk.model.BlockHeight
@@ -57,11 +58,12 @@ class ReliabilitySdkProbe {
                 check(initial.isEmpty()) { "Fresh isolated database must contain no software account" }
                 val imported = stage("public_ufvk_import") {
                     active.importAccountByUfvk(
-                        setup(NativePublicViewingKeys.MAINNET_WITHOUT_TRANSPARENT, AccountPurpose.ViewOnly, 2_000_000)
+                        setup(NativePublicViewingKeys.MAINNET_ORCHARD_ONLY, AccountPurpose.ViewOnly, 2_000_000)
                     )
                 }
                 check(stage("imported_accounts") { active.getAccounts().size } == 1)
                 check(stage("imported_address") { active.getUnifiedAddress(imported).startsWith("u1") })
+                stage("imported_transparent_absent") { checkTransparentAbsent(active, imported) }
                 active.close()
                 synchronizer = null
                 val reopened = stage("keyless_reopen") { open(context, alias) }
@@ -69,6 +71,7 @@ class ReliabilitySdkProbe {
                 val restored = stage("persisted_account") { reopened.getAccounts() }
                 check(restored.size == 1 && restored.single().accountUuid == imported.accountUuid)
                 check(stage("persisted_address") { reopened.getUnifiedAddress(restored.single()).startsWith("u1") })
+                stage("persisted_transparent_absent") { checkTransparentAbsent(reopened, restored.single()) }
             } finally {
                 synchronizer?.close()
             }
@@ -124,6 +127,17 @@ class ReliabilitySdkProbe {
         check(tool.deriveUnifiedAddress(viewingKey = key, network = ZcashNetwork.Mainnet).startsWith("u1"))
     }
 
+    private suspend fun checkTransparentAbsent(synchronizer: CloseableSynchronizer, account: Account) {
+        val address = try {
+            synchronizer.getTransparentAddress(account)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            report("transparent_address_rejected", safeClasses(failure), safeSdkCodes(failure))
+            null
+        }
+        check(address.isNullOrBlank()) { "Orchard-only account unexpectedly provided a transparent address" }
+    }
     private fun setup(key: String, purpose: AccountPurpose, birthday: Long) = AccountImportSetup(
         accountName = "Public SDK probe",
         keySource = "reliability_public_fixture",
