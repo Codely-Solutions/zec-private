@@ -24515,12 +24515,13 @@ index 78177f057..c8580ee02 100644
 -                        title = stringRes(R.string.balances_pending),
 +                        title = stringRes(R.string.private_balance_unavailable_row),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt
-index aca66bfef..697b29aae 100644
+index aca66bfef..a29e2ec18 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceView.kt
-@@ -11,0 +12,2 @@ import androidx.compose.foundation.rememberScrollState
-+import androidx.compose.foundation.text.InlineTextContent
-+import androidx.compose.foundation.text.appendInlineContent
+@@ -4,0 +5 @@ import androidx.compose.foundation.layout.Box
++import androidx.compose.foundation.layout.BoxWithConstraints
+@@ -10,0 +12 @@ import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.layout.width
 @@ -14,0 +17 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 +import androidx.compose.material3.PlainTooltip
 @@ -16,0 +20 @@ import androidx.compose.material3.Text
@@ -24529,20 +24530,20 @@ index aca66bfef..697b29aae 100644
 +import androidx.compose.runtime.rememberCoroutineScope
 @@ -24,0 +30 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 +import androidx.compose.ui.platform.LocalDensity
-@@ -27,0 +34,3 @@ import androidx.compose.ui.text.font.FontWeight
-+import androidx.compose.ui.text.Placeholder
-+import androidx.compose.ui.text.PlaceholderVerticalAlign
-+import androidx.compose.ui.text.buildAnnotatedString
-@@ -31,0 +41 @@ import co.electriccoin.zcash.ui.R
+@@ -27,0 +34,2 @@ import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.rememberTextMeasurer
++import androidx.compose.ui.unit.Constraints
+@@ -31,0 +40 @@ import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.compose.ZashiTooltipBox
-@@ -32,0 +43 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
+@@ -32,0 +42 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
 +import co.electriccoin.zcash.ui.design.component.IconButtonState
-@@ -38,0 +50 @@ import co.electriccoin.zcash.ui.design.component.ZashiFrostedSheetHeader
+@@ -38,0 +49 @@ import co.electriccoin.zcash.ui.design.component.ZashiFrostedSheetHeader
 +import co.electriccoin.zcash.ui.design.component.ZashiIconButton
-@@ -47,0 +60 @@ import co.electriccoin.zcash.ui.design.util.Compose
+@@ -47,0 +59 @@ import co.electriccoin.zcash.ui.design.util.Compose
 +import co.electriccoin.zcash.ui.design.util.StringResource
-@@ -53,0 +67 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -53,0 +66,2 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 +import kotlinx.coroutines.launch
++import kotlin.math.ceil
 @@ -142,18 +156,5 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
 -        Text(
 -            text = state.title.getValue(),
@@ -24574,29 +24575,35 @@ index aca66bfef..697b29aae 100644
 +                fontWeight = FontWeight.Medium,
 +                maxLines = 1,
 +                softWrap = false
-@@ -179,0 +182,55 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
+@@ -179,0 +182,61 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
 +@Composable
 +private fun BalanceRowLabel(state: SpendableBalanceRowState, modifier: Modifier) {
 +    val label = state.title.getValue()
 +    val info = state.info
-+    val targetSize = with(LocalDensity.current) { 48.dp.toSp() }
-+    Text(
-+        modifier = modifier,
-+        text = buildAnnotatedString {
-+            append(label)
-+            if (info != null) {
-+                append('\u00a0')
-+                appendInlineContent("info", " ")
++    val style = ZashiTypography.textSm
++    if (info == null) {
++        Text(modifier = modifier, text = label, color = ZashiColors.Text.textTertiary, style = style)
++    } else {
++        val measurer = rememberTextMeasurer()
++        val density = LocalDensity.current
++        BoxWithConstraints(modifier) {
++            val available = (constraints.maxWidth - with(density) { 48.dp.roundToPx() }).coerceAtLeast(1)
++            val measured = measurer.measure(label, style, constraints = Constraints(maxWidth = available))
++            // Text's paragraph box fills the wrapping width; keep the help beside its visible lines.
++            val labelWidth = ceil((0 until measured.lineCount).maxOf {
++                measured.getLineRight(it) - measured.getLineLeft(it)
++            }).toInt().coerceIn(1, available)
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                Text(
++                    modifier = Modifier.width(with(density) { labelWidth.toDp() }),
++                    text = label,
++                    color = ZashiColors.Text.textTertiary,
++                    style = style
++                )
++                BalanceRowInfo(info)
 +            }
-+        },
-+        inlineContent = if (info == null) emptyMap() else mapOf(
-+            "info" to InlineTextContent(
-+                Placeholder(targetSize, targetSize, PlaceholderVerticalAlign.TextCenter)
-+            ) { BalanceRowInfo(info) }
-+        ),
-+        color = ZashiColors.Text.textTertiary,
-+        style = ZashiTypography.textSm
-+    )
++        }
++    }
 +}
 +
 +@OptIn(ExperimentalMaterial3Api::class)
