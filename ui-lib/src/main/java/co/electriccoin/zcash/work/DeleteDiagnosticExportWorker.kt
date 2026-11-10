@@ -15,8 +15,8 @@ class DeleteDiagnosticExportWorker(
     parameters: WorkerParameters
 ) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result {
-        val name = inputData.getString(FILE_NAME) ?: return Result.failure()
-        if (name == "." || name == ".." || File(name).name != name) return Result.failure()
+        val name = inputData.getString(FILE_NAME)
+        if (name == null || name == "." || name == ".." || File(name).name != name) return Result.failure()
         val file = File(File(applicationContext.cacheDir, DIRECTORY), name)
         return if (!file.exists() || file.delete()) Result.success() else Result.retry()
     }
