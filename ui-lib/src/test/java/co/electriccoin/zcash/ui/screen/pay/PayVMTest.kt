@@ -166,6 +166,28 @@ class PayVMTest {
         }
 
     @Test
+    fun userAmountEditAfterBitcoinRequestSurvivesNetworkCorrection() =
+        runTest {
+            val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth", decimals = 18)
+            val btc = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc", decimals = 8)
+            val harness = harness(preselect = eth, assetResult = btc)
+            harness.collectState(this)
+            val request = "bitcoin:$BTC_ADDRESS?amount=0.5"
+            harness.onAddressChange(request)
+            val edited = NumberTextFieldInnerState.fromAmount(BigDecimal("0.75"))
+            harness.onTextFieldChange(edited, NumberTextFieldInnerState())
+
+            harness.onSwapAssetPickerClick()
+
+            assertEquals(btc, harness.capturedState.asset)
+            assertEquals(request, harness.capturedState.address)
+            assertEquals(0, BigDecimal("0.5").compareTo(harness.capturedState.amount.amount))
+            coVerify(exactly = 0) {
+                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
+            }
+        }
+
+    @Test
     fun paymentUriAmountAppliesWhenAssetIsCorrected() =
         runTest {
             val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth", decimals = 18)
