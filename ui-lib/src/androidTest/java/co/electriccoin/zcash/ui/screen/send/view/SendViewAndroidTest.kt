@@ -1,6 +1,6 @@
 package co.electriccoin.zcash.ui.screen.send.view
 
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.espresso.Espresso
 import androidx.test.filters.MediumTest
 import cash.z.ecc.android.sdk.model.ZecSend
