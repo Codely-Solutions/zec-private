@@ -8,7 +8,7 @@ Each network method uses the target process's UID-compatible context wrapped wit
 
 `NativePublicViewingKeys` copies the feature's public librustzcash fixtures. Its Orchard-only variant removes Sapling from the public no-transparent vector and re-encodes ZIP 316 using the retired parser's F4Jumble/Bech32m algorithm at source revision `5b9e1d7c9`; no seed is retained. The independent full vector is from [Zcash's public unified viewing key vectors](https://github.com/zcash/zcash-test-vectors/blob/master/test-vectors/json/unified_full_viewing_keys.json), the first entry containing all three known components. A local framing check established different component bytes from the hardware-shaped vector. No viewing key is printed by these probes.
 
-The keyless probe tests the candidate public route `SlipstreamSynchronizer.new(setup=null, ExistingWallet)` followed by UFVK import and reopen. Its availability is unproven until native execution. The shared-account probe uses view-only and hardware spending-purpose metadata with public viewing keys and historical birthday inputs; it does not create a software seed, complete a historical scan, spend, or establish hardware interoperability.
+The keyless probe tests the candidate public route `SlipstreamSynchronizer.new(setup=null, ExistingWallet)` followed by UFVK import and reopen. Native execution must bind the selected SDK, app/test artifacts, context setup and stage outcomes before establishing this route. The shared-account probe uses view-only and hardware spending-purpose metadata with public viewing keys and historical birthday inputs; it does not create a software seed, complete a historical scan, spend, or establish hardware interoperability.
 
 Source references for SDK 6.0.0:
 

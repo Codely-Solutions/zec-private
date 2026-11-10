@@ -9,6 +9,19 @@ import dev_session as session
 
 
 class SessionTest(unittest.TestCase):
+    def test_filters_bind_to_each_unit_task_before_other_task_options(self):
+        tasks = [':ui-lib:testReleaseUnitTest', ':app:assembleDebug', ':wallet-foundation-lib:test', ':detektAll']
+        command = session.gradle(self.root, dict(tasks=tasks, tests=['Fixture*']), session.JDK)
+        for task in (tasks[0], tasks[2]):
+            index = command.index(task)
+            self.assertEqual(command[index + 1:index + 3], ['--tests', 'Fixture*'])
+        self.assertEqual(command[-1], ':detektAll')
+        self.assertEqual(command.count('--tests'), 2)
+
+    def test_filters_require_a_unit_test_task(self):
+        with self.assertRaisesRegex(ValueError, 'explicit JVM test task'):
+            session.gradle(self.root, dict(tasks=[':detektAll'], tests=['Fixture*']), session.JDK)
+
     def test_static_analysis_does_not_admit_production_assembly(self):
         command = session.gradle(self.root, dict(tasks=[':detektAll']), Path('verified-jdk'))
         self.assertIn(':detektAll', command)
