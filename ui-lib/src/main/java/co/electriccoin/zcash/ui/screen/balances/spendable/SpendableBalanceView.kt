@@ -2,15 +2,15 @@ package co.electriccoin.zcash.ui.screen.balances.spendable
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.InlineTextContent
-import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -31,9 +31,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.Placeholder
-import androidx.compose.ui.text.PlaceholderVerticalAlign
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cash.z.ecc.android.sdk.model.Zatoshi
@@ -65,6 +64,7 @@ import co.electriccoin.zcash.ui.design.util.loadingImageRes
 import co.electriccoin.zcash.ui.design.util.orHiddenString
 import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -183,24 +183,30 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
 private fun BalanceRowLabel(state: SpendableBalanceRowState, modifier: Modifier) {
     val label = state.title.getValue()
     val info = state.info
-    val targetSize = with(LocalDensity.current) { 48.dp.toSp() }
-    Text(
-        modifier = modifier,
-        text = buildAnnotatedString {
-            append(label)
-            if (info != null) {
-                append('\u00a0')
-                appendInlineContent("info", " ")
+    val style = ZashiTypography.textSm
+    if (info == null) {
+        Text(modifier = modifier, text = label, color = ZashiColors.Text.textTertiary, style = style)
+    } else {
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        BoxWithConstraints(modifier) {
+            val available = (constraints.maxWidth - with(density) { 48.dp.roundToPx() }).coerceAtLeast(1)
+            val measured = measurer.measure(label, style, constraints = Constraints(maxWidth = available))
+            // Text's paragraph box fills the wrapping width; keep the help beside its visible lines.
+            val labelWidth = ceil((0 until measured.lineCount).maxOf {
+                measured.getLineRight(it) - measured.getLineLeft(it)
+            }).toInt().coerceIn(1, available)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    modifier = Modifier.width(with(density) { labelWidth.toDp() }),
+                    text = label,
+                    color = ZashiColors.Text.textTertiary,
+                    style = style
+                )
+                BalanceRowInfo(info)
             }
-        },
-        inlineContent = if (info == null) emptyMap() else mapOf(
-            "info" to InlineTextContent(
-                Placeholder(targetSize, targetSize, PlaceholderVerticalAlign.TextCenter)
-            ) { BalanceRowInfo(info) }
-        ),
-        color = ZashiColors.Text.textTertiary,
-        style = ZashiTypography.textSm
-    )
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
