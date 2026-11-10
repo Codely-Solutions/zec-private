@@ -35,7 +35,7 @@ class FakeMetadata:
 
 class ReleaseTests(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp(prefix='release-test-', dir=preparation.SOURCE.parent/'work/release-workflow'))
+        self.root = Path(tempfile.mkdtemp(prefix='release-preparation-test-', dir=preparation.SOURCE.parent/'work'))
         self.addCleanup(shutil.rmtree, self.root)
 
     def fake_git(self, source, *args):
