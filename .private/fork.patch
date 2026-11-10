@@ -2254,12 +2254,12 @@ index 3b9ca0b94..7607fb041 100644
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..bb188e210 100644
+index ec56161b5..c873411dd 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
 -ZCASH_VERSION_CODE=1
-+ZCASH_VERSION_CODE=3234019
++ZCASH_VERSION_CODE=3234020
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
 -ZCASH_RELEASE_APP_NAME=Zodl
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash
@@ -24348,7 +24348,7 @@ index 9f381262b..6d970b7ba 100644
 -
 -private const val PROMO_FADE_START = 0.49f
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVM.kt
-index 78177f057..8a8ea26cb 100644
+index 78177f057..010d26495 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVM.kt
 @@ -13,3 +12,0 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -24384,19 +24384,19 @@ index 78177f057..8a8ea26cb 100644
 +            rows = createInfoRows(balances),
 @@ -73 +64,0 @@ class SpendableBalanceVM(
 -        transactions: List<ListTransactionData>?,
-@@ -78,2 +69,6 @@ class SpendableBalanceVM(
+@@ -78,2 +69,2 @@ class SpendableBalanceVM(
 -                balances.isAllShielded -> {
 -                    stringRes(R.string.balances_everythingDone)
 +                balances.pendingShieldedBalance > Zatoshi(0) -> {
 +                    stringRes(R.string.private_balance_pending_confirmations)
-+                }
-+
-+                balances.isAllShielded && balances.totalTransparentBalance > Zatoshi(0) -> {
-+                    stringRes(R.string.private_balance_transparent_remainder)
-@@ -82,3 +77,2 @@ class SpendableBalanceVM(
+@@ -82,3 +73,6 @@ class SpendableBalanceVM(
 -                balances.totalBalance > balances.spendableShieldedBalance &&
 -                    transactions.orEmpty().any { it.transaction.isPending } -> {
 -                    stringRes(R.string.balances_infoPending)
++                balances.isAllShielded && balances.totalTransparentBalance > Zatoshi(0) -> {
++                    stringRes(R.string.private_balance_transparent_remainder)
++                }
++
 +                balances.isAllShielded -> {
 +                    stringRes(R.string.balances_everythingDone)
 @@ -88 +82 @@ class SpendableBalanceVM(
@@ -24408,15 +24408,21 @@ index 78177f057..8a8ea26cb 100644
 +        balances: LoadedAccountBalances
 @@ -126 +118,0 @@ class SpendableBalanceVM(
 -        val hasPendingTransaction = transactions.orEmpty().any { it.transaction.isPending }
-@@ -135,3 +127 @@ class SpendableBalanceVM(
+@@ -133,0 +126,5 @@ class SpendableBalanceVM(
++            SpendableBalanceRowState(
++                title = stringRes(R.string.private_balance_transparent_row),
++                icon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_zec_unshielded),
++                value = stringRes(balances.totalTransparentBalance)
++            ).takeIf { balances.totalTransparentBalance > Zatoshi(0) },
+@@ -135,3 +132 @@ class SpendableBalanceVM(
 -                balances.totalShieldedBalance > balances.spendableShieldedBalance &&
 -                    balances.isShieldedPending &&
 -                    hasPendingTransaction -> {
 +                balances.pendingShieldedBalance > Zatoshi(0) -> {
-@@ -145 +135 @@ class SpendableBalanceVM(
+@@ -145 +140 @@ class SpendableBalanceVM(
 -                balances.totalShieldedBalance > balances.spendableShieldedBalance && hasPendingTransaction -> {
 +                balances.totalShieldedBalance > balances.spendableShieldedBalance -> {
-@@ -147 +137 @@ class SpendableBalanceVM(
+@@ -147 +142 @@ class SpendableBalanceVM(
 -                        title = stringRes(R.string.balances_pending),
 +                        title = stringRes(R.string.private_balance_unavailable_row),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt
@@ -31082,18 +31088,19 @@ index 000000000..49dbfd8e3
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/common/values-es/wallet_reliability_strings.xml b/ui-lib/src/main/res/ui/common/values-es/wallet_reliability_strings.xml
 new file mode 100644
-index 000000000..a2876ff5a
+index 000000000..9a53ba711
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/common/values-es/wallet_reliability_strings.xml
-@@ -0,0 +1,9 @@
+@@ -0,0 +1,10 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
 +    <string name="private_balance_transparent_remainder">Queda un pequeño saldo transparente sin proteger.</string>
++    <string name="private_balance_transparent_row">Transparente (sin proteger)</string>
 +    <string name="private_balance_pending_confirmations">Hay fondos protegidos pendientes. Espera la confirmación y mantén la billetera sincronizada.</string>
 +    <string name="private_balance_not_yet_spendable">Algunos fondos aún no se pueden gastar. Revisa la sincronización y las transacciones pendientes.</string>
 +    <string name="private_balance_unavailable_row">Aún no disponible para gastar</string>
 +    <string name="private_restore_funds_available">Fondos disponibles. Recuperando el historial de transacciones.</string>
-+    <string name="private_insufficient_spendable_balance">Tu saldo disponible no cubre el monto y la comisión de red. Reduce el monto o espera a que los fondos pendientes estén disponibles.</string>
++    <string name="private_insufficient_spendable_balance">Tu saldo disponible no cubre el monto y la comisión de red de Zcash. Reduce el monto e inténtalo de nuevo.</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/common/values/wallet_initialization_strings.xml b/ui-lib/src/main/res/ui/common/values/wallet_initialization_strings.xml
 new file mode 100644
@@ -31108,18 +31115,19 @@ index 000000000..6ef1c29ad
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/common/values/wallet_reliability_strings.xml b/ui-lib/src/main/res/ui/common/values/wallet_reliability_strings.xml
 new file mode 100644
-index 000000000..1ccb983fc
+index 000000000..cc8075e51
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/common/values/wallet_reliability_strings.xml
-@@ -0,0 +1,9 @@
+@@ -0,0 +1,10 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
 +    <string name="private_balance_transparent_remainder">A small transparent balance remains unshielded.</string>
++    <string name="private_balance_transparent_row">Transparent (unshielded)</string>
 +    <string name="private_balance_pending_confirmations">Some shielded funds are pending. Wait for confirmation and keep your wallet synced.</string>
 +    <string name="private_balance_not_yet_spendable">Some funds are not yet spendable. Check synchronization and pending transactions.</string>
 +    <string name="private_balance_unavailable_row">Not yet spendable</string>
 +    <string name="private_restore_funds_available">Funds available. Recovering transaction history.</string>
-+    <string name="private_insufficient_spendable_balance">Your spendable balance cannot cover the amount and network fee. Lower the amount, or wait for pending funds to become spendable.</string>
++    <string name="private_insufficient_spendable_balance">Your spendable balance cannot cover the amount and Zcash network fee. Lower the amount and try again.</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/connect_ledger/values-es/strings.xml b/ui-lib/src/main/res/ui/connect_ledger/values-es/strings.xml
 index 377376d70..545ab74f8 100644
@@ -36895,7 +36903,7 @@ index 708658383..b6cff1756 100644
 @@ -500 +454,0 @@ class AccountListVMTest {
 -            assertNull(state.keystonePromo)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVMTest.kt
-index 32d01648d..9a9331deb 100644
+index 32d01648d..b7db0fb6e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVMTest.kt
 @@ -4,0 +5 @@ import co.electriccoin.zcash.ui.NavigationRouter
@@ -36903,7 +36911,7 @@ index 32d01648d..9a9331deb 100644
 @@ -8,2 +8,0 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 -import co.electriccoin.zcash.ui.common.usecase.GetTransactionsUseCase
 -import co.electriccoin.zcash.ui.common.usecase.ListTransactionData
-@@ -69,0 +69,50 @@ class SpendableBalanceVMTest {
+@@ -69,0 +69,53 @@ class SpendableBalanceVMTest {
 +    @Test
 +    fun sdkPendingBalanceIsShownWithoutRecoveredTransactionHistory() =
 +        runTest {
@@ -36952,19 +36960,22 @@ index 32d01648d..9a9331deb 100644
 +            )
 +            val state = stateFor(account(isSpendable = true, balances = balances))
 +            assertEquals(stringRes(R.string.private_balance_transparent_remainder), state.message)
++            assertEquals(2, state.rows.size)
++            assertEquals(stringRes(R.string.private_balance_transparent_row), state.rows[1].title)
++            assertEquals(stringRes(Zatoshi(1)), state.rows[1].value)
 +        }
 +
-@@ -76,4 +124,0 @@ class SpendableBalanceVMTest {
+@@ -76,4 +127,0 @@ class SpendableBalanceVMTest {
 -        val getTransactions =
 -            mockk<GetTransactionsUseCase> {
 -                every { observe() } returns MutableStateFlow<List<ListTransactionData>?>(emptyList())
 -            }
-@@ -83 +127,0 @@ class SpendableBalanceVMTest {
+@@ -83 +130,0 @@ class SpendableBalanceVMTest {
 -                getTransactions = getTransactions,
-@@ -91 +135 @@ class SpendableBalanceVMTest {
+@@ -91 +138 @@ class SpendableBalanceVMTest {
 -    private fun account(isSpendable: Boolean): WalletAccount =
 +    private fun account(isSpendable: Boolean, balances: LoadedAccountBalances = BALANCES): WalletAccount =
-@@ -95 +139 @@ class SpendableBalanceVMTest {
+@@ -95 +142 @@ class SpendableBalanceVMTest {
 -            every { loadedBalances } returns BALANCES
 +            every { loadedBalances } returns balances
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerViewTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerViewTest.kt
