@@ -34,6 +34,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -152,6 +155,22 @@ private fun Content(
             color = ZashiColors.Text.textPrimary
         )
         Spacer(Modifier.height(20.dp))
+        state.pasteButton?.let {
+            ZashiButton(
+                state = it,
+                modifier = Modifier.fillMaxWidth().testTag(RestoreSeedTag.PASTE)
+            )
+            Spacer(Modifier.height(16.dp))
+        }
+        if (state.isPasteError) {
+            Text(
+                text = stringResource(R.string.restore_seed_paste_error),
+                color = ZashiColors.Text.textError,
+                style = ZashiTypography.textSm,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+            )
+            Spacer(Modifier.height(12.dp))
+        }
         ZashiSeedTextField(
             state = state.seed,
             handle = handle,

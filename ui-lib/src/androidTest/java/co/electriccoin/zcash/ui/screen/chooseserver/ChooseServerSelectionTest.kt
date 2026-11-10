@@ -299,6 +299,8 @@ private class FakeWalletRepository(
     fastestEndpoint: LightWalletEndpoint,
     private val continueEndpointUpdate: CompletableDeferred<Unit>? = null,
 ) : WalletRepository {
+    override val walletInitialization =
+        MutableStateFlow(co.electriccoin.zcash.ui.common.repository.WalletInitializationState.IDLE)
     override val secretState = MutableStateFlow(SecretState.NONE)
     override val fastestEndpoints = MutableStateFlow(FastestServersState(listOf(fastestEndpoint), false))
     override val walletRestoringState = MutableStateFlow(WalletRestoringState.NONE)

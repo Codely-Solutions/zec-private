@@ -45,7 +45,7 @@ fun InsufficientFundsView(
         )
         Spacer(8.dp)
         Text(
-            text = stringResource(R.string.sheet_insufficientBalance_msg),
+            text = stringResource(R.string.private_insufficient_spendable_balance),
             color = ZashiColors.Text.textTertiary,
             style = ZashiTypography.textMd,
         )

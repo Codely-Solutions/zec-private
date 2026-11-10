@@ -125,19 +125,19 @@ class ValidateUfvkUseCaseTest {
         }
 
     @Test
-    fun aKeyWithoutATransparentP2pkhComponentIsRejected() =
+    fun aKeyWithoutATransparentP2pkhComponentIsAccepted() =
         runTest {
             sdkComponents = FULL_COMPONENTS.copy(hasP2pkh = false)
 
-            assertInvalid(useCase(UfvkFixtures.MAINNET_WITHOUT_TRANSPARENT, ZcashNetwork.Mainnet))
+            assertIs<UfvkValidation.Valid>(useCase(UfvkFixtures.MAINNET_WITHOUT_TRANSPARENT, ZcashNetwork.Mainnet))
         }
 
     @Test
-    fun aKeyWhoseOnlyTransparentComponentIsP2shIsRejected() =
+    fun anOrchardKeyWhoseOnlyTransparentComponentIsP2shIsAccepted() =
         runTest {
             sdkComponents = FULL_COMPONENTS.copy(hasP2pkh = false, hasP2sh = true)
 
-            assertInvalid(useCase(UfvkFixtures.MAINNET_FULL, ZcashNetwork.Mainnet))
+            assertIs<UfvkValidation.Valid>(useCase(UfvkFixtures.MAINNET_FULL, ZcashNetwork.Mainnet))
         }
 
     @Test

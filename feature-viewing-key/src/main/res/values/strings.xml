@@ -29,7 +29,7 @@
     <string name="view_only_paste_disclaimer">This Account will be view and receive only. You can track its balance and activity, but can\'t use it to spend funds.</string>
 
     <string name="view_only_invalid_key_title">This key doesn’t look right</string>
-    <string name="view_only_invalid_key_message">A Unified Full Viewing Key starts with “%1$s” and runs 300+ characters. Check for missing or extra characters, then paste it again.</string>
+    <string name="view_only_invalid_key_message">Enter a valid full viewing key for this network, starting with “%1$s” and containing an Orchard receiver.</string>
     <string name="view_only_invalid_key_scan">Scan QR code instead</string>
     <string name="view_only_invalid_key_edit">Edit key</string>
 

@@ -19,6 +19,13 @@ import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
 import co.electriccoin.zcash.ui.design.component.CircularScreenProgressIndicator
 import co.electriccoin.zcash.ui.screen.exportdata.view.ExportPrivateData
 import co.electriccoin.zcash.ui.util.FileShareUtil
+import co.electriccoin.zcash.work.DeleteDiagnosticExportWorker
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -87,24 +94,36 @@ fun shareData(
     snackbarHostState: SnackbarHostState,
 ): Flow<Boolean> =
     callbackFlow {
-        val shareIntent =
-            FileShareUtil.newShareContentIntent(
-                context = context,
-                // Example of the expected db file absolute path:
-                // /data/user/0/co.electriccoin.zcash/no_backup/co.electricoin.zcash/zcash_sdk_mainnet_data.sqlite3
-                dataFilePath =
+        var exportFile: File? = null
+        runCatching {
+            val preparedFile = withContext(Dispatchers.IO) {
+                val source = File(
                     synchronizer.getExistingDataDbFilePath(
                         context = context,
                         network = ZcashNetwork.fromResources(context)
-                    ),
+                    )
+                )
+                val directory = File(context.cacheDir, DeleteDiagnosticExportWorker.DIRECTORY).apply { mkdirs() }
+                directory.listFiles()?.forEach { check(it.delete()) }
+                File(directory, "${UUID.randomUUID()}_${source.name}").also {
+                    exportFile = it
+                    source.copyTo(it, overwrite = true)
+                    // Register durable cleanup before granting the URI to a receiving app.
+                    DeleteDiagnosticExportWorker.schedule(context, it).result.get()
+                }
+            }
+            val shareIntent = FileShareUtil.newShareContentIntent(
+                context = context,
+                file = preparedFile,
                 fileType = FileShareUtil.ZASHI_INTERNAL_DATA_MIME_TYPE,
                 sharePickerText = context.getString(R.string.export_data_export_data_chooser_title),
                 versionInfo = VersionInfo.new(context.applicationContext)
             )
-        runCatching {
             context.startActivity(shareIntent)
             trySend(true)
         }.onFailure {
+            withContext(NonCancellable + Dispatchers.IO) { exportFile?.delete() }
+            if (it is CancellationException) throw it
             snackbarHostState.showSnackbar(
                 message = context.getString(R.string.export_data_unable_to_share)
             )

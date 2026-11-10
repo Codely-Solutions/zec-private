@@ -533,6 +533,34 @@ class RequestSwapQuoteUseCaseTest {
     }
 
     @Test
+    fun bitcoinPaymentRequestUsesEditedOutputAmountAndNormalizedRecipient() = runBlocking {
+        val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_OUTPUT, TestException()))
+        instance.requestExactOutput(
+            BigDecimal("0.75"), "bitcoin:1BoatSLRHtKNngkdXEeobR76b53LETtpyT?amount=0.5", btc, BigDecimal.ONE, { true }
+        )
+        verify {
+            swapRepository.requestExactOutputQuote(
+                BigDecimal("0.75"), "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", "deposit", btc, BigDecimal.ONE
+            )
+        }
+    }
+
+    @Test
+    fun bitcoinRequiredFieldAndIncompatibleAmountModesStopBeforeProvider() = runBlocking {
+        val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_OUTPUT, TestException()))
+        val request = "bitcoin:1BoatSLRHtKNngkdXEeobR76b53LETtpyT?amount=0.5"
+        instance.requestExactOutput(BigDecimal.ONE, "$request&req-unsupported=1", btc, BigDecimal.ONE, { true })
+        instance.requestExactInput(BigDecimal.ONE, request, btc, BigDecimal.ONE, { true })
+        instance.requestFlexInputIntoZec(BigDecimal.ONE, request, btc, BigDecimal.ONE, { true })
+        coVerify(exactly = 0) { accountDataSource.requestNextShieldedAddress(any()) }
+        verify(exactly = 0) {
+            swapRepository.requestExactOutputQuote(any(), any(), any(), any(), any())
+            swapRepository.requestExactInputQuote(any(), any(), any(), any(), any())
+            swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any())
+        }
+    }
+
+    @Test
     fun paymentUriIsNormalizedBeforeQuoteRequest() = runBlocking {
         val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
         instance.requestExactInput(

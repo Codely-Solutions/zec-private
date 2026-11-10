@@ -12,6 +12,7 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.BlockHeight
 import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
 import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
+import cash.z.ecc.android.sdk.tool.DerivationTool
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -20,6 +21,7 @@ import co.electriccoin.zcash.ui.common.model.LedgerAccountBindingData
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccountAlreadyExistsException
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccountImportException
+import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
@@ -482,7 +484,7 @@ class AccountDataSourceImpl(
                 LedgerAccount(
                     sdkAccount = sdkAccount,
                     unifiedAddress = snapshot.unifiedAddress,
-                    transparentAddress = snapshot.transparentAddress,
+                    transparentAddress = requireNotNull(snapshot.transparentAddress),
                     orchardBalance = snapshot.balance?.orchard,
                     ironwoodBalance = snapshot.balance?.ironwood,
                     transparentBalance = snapshot.balance?.unshielded,
@@ -496,7 +498,7 @@ class AccountDataSourceImpl(
                 KeystoneAccount(
                     sdkAccount = sdkAccount,
                     unifiedAddress = snapshot.unifiedAddress,
-                    transparentAddress = snapshot.transparentAddress,
+                    transparentAddress = requireNotNull(snapshot.transparentAddress),
                     orchardBalance = snapshot.balance?.orchard,
                     ironwoodBalance = snapshot.balance?.ironwood,
                     transparentBalance = snapshot.balance?.unshielded,
@@ -525,7 +527,7 @@ class AccountDataSourceImpl(
                 ZodlAccount(
                     sdkAccount = sdkAccount,
                     unifiedAddress = snapshot.unifiedAddress,
-                    transparentAddress = snapshot.transparentAddress,
+                    transparentAddress = requireNotNull(snapshot.transparentAddress),
                     saplingAddress = snapshot.saplingAddress!!,
                     orchardBalance = snapshot.balance?.orchard,
                     saplingBalance = snapshot.balance?.sapling,
@@ -625,9 +627,20 @@ class AccountDataSourceImpl(
         synchronizer.walletBalances
             .map { balances -> balances?.get(sdkAccount.accountUuid) }
 
-    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String> =
+    private fun observeTransparentAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String?> =
         flow {
-            emit(synchronizer.getTransparentAddress(sdkAccount))
+            emit(resolveTransparentReceiver(
+                mayOmit = isViewOnlyAccount(sdkAccount),
+                readAddress = { synchronizer.getTransparentAddress(sdkAccount) },
+                hasTransparentReceiver = {
+                    val key = requireNotNull(sdkAccount.ufvk)
+                    val components = DerivationTool.getInstance().describeUnifiedFullViewingKey(
+                        UnifiedFullViewingKey(key), VersionInfo.NETWORK
+                    )
+                    check(components != null && components.hasOrchard)
+                    components.hasP2pkh
+                },
+            ))
         }.retryWhen { _, attempt ->
             delay(attempt.coerceAtMost(RETRY_DELAY).seconds)
             true
@@ -658,12 +671,25 @@ private data class AddressRequest(
 private data class AccountSnapshot(
     val balance: AccountBalance?,
     val unifiedAddress: String,
-    val transparentAddress: String,
+    val transparentAddress: String?,
     val saplingAddress: String?,
     val isSelected: Boolean,
 )
 
 private const val RETRY_DELAY = 3L
+
+/** Omit only a receiver the SDK confirms the view-only key does not contain. */
+internal suspend fun resolveTransparentReceiver(
+    mayOmit: Boolean,
+    readAddress: suspend () -> String,
+    hasTransparentReceiver: suspend () -> Boolean,
+): String? = try {
+    readAddress()
+} catch (cancelled: CancellationException) {
+    throw cancelled
+} catch (failure: Exception) {
+    if (mayOmit && !hasTransparentReceiver()) null else throw failure
+}
 
 /**
  * Upper bound on how long [AccountDataSourceImpl.requestNextShieldedAddress] waits for

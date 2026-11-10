@@ -22,21 +22,147 @@ import kotlin.time.Instant
 
 class KrakenPriceProviderTest {
     @Test
-    fun forwardWallClockJumpBypassesFailureBackoff() = runTest {
-        var now = 1_000_000L
+    fun wallClockJumpsDoNotChangeFailureBackoffExpiry() = runTest {
+        var now = 10_000_000L
+        var elapsed = 0L
         val clients = mockk<HttpClientProvider>()
         coEvery { clients.createTor() } throws IllegalStateException("unavailable")
-        val provider = KrakenPriceProvider(clients, wallTimeMillis = { now })
+        val provider = KrakenPriceProvider(clients, wallTimeMillis = { now }, elapsedTimeMillis = { elapsed })
 
         assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
         now += 3_600_000L
+        assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
+
+        now -= 7_200_000L
+        elapsed = 59_999L
+        assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
+        coVerify(exactly = 1) { clients.createTor() }
+
+        elapsed = 60_000L
         assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
 
         coVerify(exactly = 2) { clients.createTor() }
         coVerify(exactly = 0) { clients.create() }
     }
 
-    private fun supportedQuote(): SwapQuote {
+    @Test
+    fun receiptCacheUsesElapsedAgeAcrossBackwardWallClockJump() = runTest {
+        var wall = 10_000_000L
+        var elapsed = 0L
+        var calls = 0
+        val clients = mockk<HttpClientProvider>()
+        coEvery { clients.createTor() } coAnswers {
+            observationClient {
+                calls++
+                wall
+            }
+        }
+        val provider = KrakenPriceProvider(clients, { wall }, { elapsed })
+        val quote = supportedQuote(wall)
+        assertTrue(provider.check(quote, BigDecimal.ZERO) is IndependentPriceCheck.Compared)
+
+        wall -= 1_000L
+        elapsed = 1_000L
+        assertTrue(provider.check(quote, BigDecimal.ZERO) is IndependentPriceCheck.Compared)
+        assertEquals(1, calls)
+
+        elapsed = 60_000L
+        assertTrue(provider.check(quote, BigDecimal.ZERO) is IndependentPriceCheck.Compared)
+        assertEquals(2, calls)
+        coVerify(exactly = 0) { clients.create() }
+    }
+
+    @Test
+    fun requestIntervalUsesElapsedTimeAcrossBothWallClockDirections() = runTest {
+        var wall = 10_000_000L
+        var elapsed = 0L
+        val waits = mutableListOf<Long>()
+        val clients = mockk<HttpClientProvider>()
+        coEvery { clients.createTor() } coAnswers { observationClient { wall } }
+        val provider = KrakenPriceProvider(clients, { wall }, { elapsed }, { wait ->
+            waits += wait
+            elapsed += wait
+        })
+
+        assertTrue(provider.check(supportedQuote(wall), BigDecimal.ZERO) is IndependentPriceCheck.Compared)
+        elapsed += 100L
+        wall += 3_600_000L
+        assertTrue(provider.check(supportedQuote(wall), BigDecimal.ZERO) is IndependentPriceCheck.Compared)
+        elapsed += 100L
+        wall -= 7_200_000L
+        assertTrue(provider.check(supportedQuote(wall), BigDecimal.ZERO) is IndependentPriceCheck.Compared)
+
+        assertEquals(listOf(0L, 900L, 900L), waits)
+        coVerify(exactly = 3) { clients.createTor() }
+        coVerify(exactly = 0) { clients.create() }
+    }
+
+    @Test
+    fun wallClockJumpsKeepAbsoluteObservationAndQuoteChecks() = runTest {
+        var wall = 10_000_000L
+        var elapsed = 0L
+        val observedAt = wall
+        val clients = mockk<HttpClientProvider>()
+        coEvery { clients.createTor() } coAnswers { observationClient { observedAt } }
+        val provider = KrakenPriceProvider(clients, { wall }, { elapsed }, { elapsed += it })
+        val quote = supportedQuote(wall)
+        assertTrue(provider.check(quote, BigDecimal.ZERO) is IndependentPriceCheck.Compared)
+
+        wall += 180_001L
+        elapsed += 1_000L
+        assertEquals(IndependentPriceCheck.Unavailable, provider.check(quote, BigDecimal.ZERO))
+
+        wall = observedAt - 5_001L
+        elapsed += 1_000L
+        assertEquals(IndependentPriceCheck.Unavailable, provider.check(quote, BigDecimal.ZERO))
+        coVerify(exactly = 0) { clients.create() }
+    }
+
+    @Test
+    fun cancelledRequestDoesNotStartFailureBackoff() = runTest {
+        val wall = 10_000_000L
+        var requests = 0
+        val clients = mockk<HttpClientProvider>()
+        coEvery { clients.createTor() } coAnswers {
+            requests++
+            if (requests == 1) throw CancellationException("cancelled")
+            observationClient { wall }
+        }
+        val provider = KrakenPriceProvider(clients, { wall }, { 0L })
+        try {
+            provider.check(supportedQuote(wall), BigDecimal.ZERO)
+            error("Expected cancellation")
+        } catch (_: CancellationException) {
+            // The next request remains eligible immediately.
+        }
+        assertTrue(provider.check(supportedQuote(wall), BigDecimal.ZERO) is IndependentPriceCheck.Compared)
+        assertEquals(2, requests)
+        coVerify(exactly = 0) { clients.create() }
+    }
+
+    @Test
+    fun freshObservationDoesNotMakeAnExpiredQuoteComparable() = runTest {
+        val wall = 10_000_000L
+        val clients = mockk<HttpClientProvider>()
+        coEvery { clients.createTor() } coAnswers { observationClient { wall } }
+        val provider = KrakenPriceProvider(clients, { wall }, { 0L })
+
+        assertEquals(
+            IndependentPriceCheck.Unavailable,
+            provider.check(supportedQuote(wall - 180_001L), BigDecimal.ZERO)
+        )
+        coVerify(exactly = 0) { clients.create() }
+    }
+
+    private fun observationClient(observedAt: () -> Long) = HttpClient(MockEngine {
+        val seconds = observedAt() / 1000L
+        respond(
+            """{"error":[],"result":{"XZECZUSD":[[$seconds,"100","101"]],"last":$seconds}}""",
+            HttpStatusCode.OK
+        )
+    })
+
+    private fun supportedQuote(now: Long = System.currentTimeMillis()): SwapQuote {
         val asset = mockk<SwapAsset> {
             every { assetId } returns "nep141:zec.omft.near"
             every { tokenTicker } returns "ZEC"
@@ -48,8 +174,8 @@ class KrakenPriceProviderTest {
             every { destinationAsset } returns asset
             every { amountInFormatted } returns BigDecimal.ONE
             every { amountOutFormatted } returns BigDecimal.ONE
-            every { timestamp } returns Instant.fromEpochMilliseconds(System.currentTimeMillis())
-            every { deadline } returns Instant.fromEpochMilliseconds(System.currentTimeMillis() + 180_000)
+            every { timestamp } returns Instant.fromEpochMilliseconds(now)
+            every { deadline } returns Instant.fromEpochMilliseconds(now + 180_000)
         }
     }
 

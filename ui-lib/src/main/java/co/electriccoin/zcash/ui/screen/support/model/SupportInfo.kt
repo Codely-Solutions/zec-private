@@ -78,7 +78,7 @@ data class SupportInfo(
             val packageInfo = applicationContext.packageManager.getPackageInfoCompatSuspend(context.packageName, 0L)
 
             return SupportInfo(
-                TimeInfo.new(packageInfo),
+                TimeInfo.new(),
                 AppInfo.new(packageInfo, applicationContext),
                 ConfigInfo.new(androidConfigurationProvider),
                 OperatingSystemInfo.new(),

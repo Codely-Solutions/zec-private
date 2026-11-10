@@ -266,7 +266,7 @@ internal class PayVM(
     }
 
     private fun onTextFieldChange(amount: NumberTextFieldInnerState, fiat: NumberTextFieldInnerState) {
-        internalState.update { it.copy(amount = amount, fiatAmount = fiat) }
+        internalState.update { it.copy(amount = amount, fiatAmount = fiat, hasEditedRequestAmount = true) }
     }
 
     /** Gates the quote request behind the refund warning before the CTA starts spinning. */
@@ -307,8 +307,12 @@ internal class PayVM(
     private fun onAddressChange(new: String) =
         internalState.update { state ->
             val recipient = validateSwapRecipient(new, state.asset?.chainTicker, state.asset?.tokenTicker)
-            val requestedAmount = recipient.input?.amount.takeIf { recipient.isValid }
-            val edited = state.copy(selectedABContact = null, address = new)
+            val edited = state.copy(
+                selectedABContact = null,
+                address = new,
+                hasEditedRequestAmount = state.hasEditedRequestAmount && new == state.address
+            )
+            val requestedAmount = recipient.input?.amount.takeIf { recipient.isValid && !edited.hasEditedRequestAmount }
             if (requestedAmount == null) edited else edited.copy(
                 amount = NumberTextFieldInnerState.fromAmount(requestedAmount),
                 fiatAmount = NumberTextFieldInnerState()
@@ -330,7 +334,7 @@ internal class PayVM(
      */
     private fun InternalStateImpl.withAsset(asset: SwapAsset?): InternalStateImpl {
         val recipient =
-            if (asset?.assetId != this.asset?.assetId) {
+            if (!hasEditedRequestAmount && asset?.assetId != this.asset?.assetId) {
                 validateSwapRecipient(
                     selectedABContact?.address ?: address,
                     asset?.chainTicker,
@@ -399,5 +403,7 @@ internal data class InternalStateImpl(
     override val isRequestingQuote: Boolean,
     override val account: WalletAccount?,
     override val swapAssets: SwapAssetsData,
-    override val isEphemeralAddressLocked: Boolean
+    override val isEphemeralAddressLocked: Boolean,
+    // A pending URI amount may prefill after asset selection until the user edits either amount field.
+    val hasEditedRequestAmount: Boolean = false
 ) : InternalState

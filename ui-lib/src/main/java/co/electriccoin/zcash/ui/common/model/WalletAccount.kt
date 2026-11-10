@@ -13,7 +13,8 @@ sealed interface WalletAccount : Comparable<WalletAccount> {
     val sdkAccount: Account
 
     val unifiedAddress: String
-    val transparentAddress: String
+    /** Absent when an imported viewing key has no transparent receiver. */
+    val transparentAddress: String?
     val saplingAddress: String?
 
     /**
@@ -393,7 +394,7 @@ data class LedgerAccount(
 data class ViewOnlyAccount(
     override val sdkAccount: Account,
     override val unifiedAddress: String,
-    override val transparentAddress: String,
+    override val transparentAddress: String?,
     override val orchardBalance: WalletBalance?,
     override val saplingBalance: WalletBalance?,
     override val ironwoodBalance: WalletBalance?,

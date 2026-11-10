@@ -14,12 +14,9 @@ import kotlinx.coroutines.withContext
  * import as a view-only account.
  *
  * Accepted is only a key for the wallet's own network (`uview1` on mainnet, `uviewtest1` on
- * testnet) that the SDK decodes as valid for that network and that carries both an Orchard and a
- * transparent P2PKH component. An incoming viewing key (`uivk`), any other text, a key for the
- * other network and a key missing either component are rejected: the account list combines one
- * address flow per account and waits for every one of them, and the Orchard or transparent address
- * of a key without that component would never arrive, which would stall every account in the
- * wallet.
+ * testnet) that the SDK decodes as valid for that network and that carries an Orchard component.
+ * Accounts omit receive actions for components their key does not contain. Incoming viewing keys
+ * (`uivk`), wrong-network keys and keys without Orchard are rejected.
  *
  * Every whitespace character in the input, line breaks and zero-width spaces included, is dropped
  * first, since a key copied from an email or a PDF is often broken across lines. What remains has
@@ -52,7 +49,7 @@ internal class ValidateUfvkUseCase(
             } else {
                 null
             }
-        val isValid = components != null && components.hasOrchard && components.hasP2pkh
+        val isValid = components != null && components.hasOrchard
         return if (isValid) UfvkValidation.Valid(candidate) else UfvkValidation.Invalid
     }
 

@@ -6,8 +6,6 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LoadedAccountBalances
 import co.electriccoin.zcash.ui.common.model.WalletAccount
-import co.electriccoin.zcash.ui.common.usecase.GetTransactionsUseCase
-import co.electriccoin.zcash.ui.common.usecase.ListTransactionData
 import co.electriccoin.zcash.ui.common.usecase.ShieldFundsUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
 import io.mockk.every
@@ -69,7 +67,7 @@ class SpendableBalanceVMTest {
         }
 
     @Test
-    fun sdkPendingBalanceWithoutHistoryCurrentlyClaimsSyncingAndOmitsPendingRow() =
+    fun sdkPendingBalanceIsShownWithoutRecoveredTransactionHistory() =
         runTest {
             val balances = BALANCES.copy(
                 totalBalance = Zatoshi(1_200_000),
@@ -81,12 +79,31 @@ class SpendableBalanceVMTest {
                 transparentBalance = Zatoshi(0)
             )
             val state = stateFor(account(isSpendable = true, balances = balances))
-            assertEquals(stringRes(R.string.balances_infoSyncing), state.message)
-            assertEquals(1, state.rows.size)
+            assertEquals(stringRes(R.string.private_balance_pending_confirmations), state.message)
+            assertEquals(2, state.rows.size)
+            assertEquals(stringRes(R.string.balances_pending), state.rows[1].title)
+            assertEquals(stringRes(Zatoshi(200_000)), state.rows[1].value)
         }
 
     @Test
-    fun unshieldableTransparentRemainderCurrentlyClaimsAllFundsSpendable() =
+    fun unavailableShieldedBalanceDoesNotInferSyncingOrPendingCause() =
+        runTest {
+            val balances = BALANCES.copy(
+                totalBalance = Zatoshi(1_200_000),
+                totalShieldedBalance = Zatoshi(1_200_000),
+                isShieldingAvailable = false,
+                totalTransparentBalance = Zatoshi(0),
+                transparentBalance = Zatoshi(0)
+            )
+            val state = stateFor(account(isSpendable = true, balances = balances))
+            assertEquals(stringRes(R.string.private_balance_not_yet_spendable), state.message)
+            assertEquals(2, state.rows.size)
+            assertEquals(stringRes(R.string.private_balance_unavailable_row), state.rows[1].title)
+            assertEquals(stringRes(Zatoshi(200_000)), state.rows[1].value)
+        }
+
+    @Test
+    fun unshieldableTransparentRemainderIsDescribedAsUnshielded() =
         runTest {
             val balances = BALANCES.copy(
                 isAllShielded = true,
@@ -96,7 +113,7 @@ class SpendableBalanceVMTest {
                 isShieldingAvailable = false
             )
             val state = stateFor(account(isSpendable = true, balances = balances))
-            assertEquals(stringRes(R.string.balances_everythingDone), state.message)
+            assertEquals(stringRes(R.string.private_balance_transparent_remainder), state.message)
         }
 
     private fun TestScope.stateFor(account: WalletAccount): SpendableBalanceState {
@@ -105,14 +122,9 @@ class SpendableBalanceVMTest {
                 every { selectedAccount } returns MutableStateFlow(account)
                 every { allAccounts } returns MutableStateFlow(listOf(account))
             }
-        val getTransactions =
-            mockk<GetTransactionsUseCase> {
-                every { observe() } returns MutableStateFlow<List<ListTransactionData>?>(emptyList())
-            }
         val vm =
             SpendableBalanceVM(
                 accountDataSource = accountDataSource,
-                getTransactions = getTransactions,
                 navigationRouter = mockk<NavigationRouter>(relaxed = true),
                 shieldFunds = mockk<ShieldFundsUseCase>(relaxed = true)
             )

@@ -51,6 +51,14 @@ class ReceiveVMTest {
     }
 
     @Test
+    fun anOrchardOnlyViewingAccountHasNoTransparentReceiveAction() = runTest {
+        val items = items(EditAccountFixtures.viewOnly().copy(transparentAddress = null))
+
+        assertEquals(1, items.size)
+        assertEquals(VIEW_ONLY_SHIELDED, items.single().title)
+    }
+
+    @Test
     fun aViewOnlyAccountReceivesWithItsColoredIconAndViewOnlyTitles() =
         runTest {
             allMetadata.value = mapOf(EditAccountFixtures.viewOnlyUuid to AccountIconFixtures.metadata(Color(PICKED)))

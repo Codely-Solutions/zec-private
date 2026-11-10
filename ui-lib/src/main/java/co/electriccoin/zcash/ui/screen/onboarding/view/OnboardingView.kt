@@ -30,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.repository.WalletInitializationState
 import co.electriccoin.zcash.ui.design.MINIMAL_WEIGHT
 import co.electriccoin.zcash.ui.design.component.ZashiButton
 import co.electriccoin.zcash.ui.design.component.ZashiButtonDefaults
@@ -59,7 +60,8 @@ private fun OnboardingComposablePreview() {
 @Composable
 fun Onboarding(
     onImportWallet: () -> Unit,
-    onCreateWallet: () -> Unit
+    onCreateWallet: () -> Unit,
+    initialization: WalletInitializationState = WalletInitializationState.IDLE
 ) {
     Scaffold { paddingValues ->
         Box(
@@ -83,6 +85,7 @@ fun Onboarding(
                 )
         ) {
             OnboardingMainContent(
+                initialization = initialization,
                 onImportWallet = onImportWallet,
                 onCreateWallet = onCreateWallet,
                 modifier =
@@ -102,6 +105,7 @@ fun Onboarding(
 private fun OnboardingMainContent(
     onImportWallet: () -> Unit,
     onCreateWallet: () -> Unit,
+    initialization: WalletInitializationState,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -142,10 +146,21 @@ private fun OnboardingMainContent(
                     .weight(MINIMAL_WEIGHT)
         )
 
+        if (initialization == WalletInitializationState.FAILED) {
+            Text(
+                text = stringResource(R.string.wallet_initialization_failed),
+                style = ZashiTypography.textSm,
+                color = ZashiColors.Text.textSecondary,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(ZashiDimensions.Spacing.spacingMd))
+        }
+
         ZashiButton(
             modifier = Modifier.fillMaxWidth().testTag(OnboardingTags.RESTORE_EXISTING_WALLET),
             text = stringResource(R.string.plainOnboarding_button_restoreWallet),
             onClick = onImportWallet,
+            enabled = initialization == WalletInitializationState.IDLE,
             colors = ZashiButtonDefaults.tertiaryColors()
         )
 
@@ -153,7 +168,14 @@ private fun OnboardingMainContent(
 
         ZashiButton(
             onClick = onCreateWallet,
-            text = stringResource(R.string.plainOnboarding_button_createNewWallet),
+            isLoading = initialization == WalletInitializationState.RUNNING,
+            text = stringResource(
+                if (initialization == WalletInitializationState.FAILED) {
+                    R.string.wallet_initialization_retry
+                } else {
+                    R.string.plainOnboarding_button_createNewWallet
+                }
+            ),
             modifier = Modifier.fillMaxWidth().testTag(OnboardingTags.CREATE_NEW_WALLET),
             hapticFeedbackType = HapticFeedbackType.Confirm
         )

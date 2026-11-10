@@ -36,7 +36,7 @@ class SharePCZTUseCase(
         }
 
     private fun getOrCreateFile(): File {
-        val file = File(context.filesDir, "pczt")
+        val file = File(File(context.cacheDir, "pczt_exports").apply { mkdirs() }, "pczt")
         if (!file.exists()) {
             file.createNewFile()
         }

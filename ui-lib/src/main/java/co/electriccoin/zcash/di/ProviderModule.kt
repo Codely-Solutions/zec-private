@@ -138,7 +138,9 @@ val providerModule =
         factoryOf(::IsKeepScreenOnDuringRestoreProviderImpl) bind IsKeepScreenOnDuringRestoreProvider::class
         factoryOf(::KeepScreenOnSyncSessionProviderImpl) bind KeepScreenOnSyncSessionProvider::class
         singleOf(::EphemeralAddressStorageProviderImpl) bind EphemeralAddressStorageProvider::class
-        single { KrakenPriceProvider(get()) } bind IndependentPriceProvider::class
+        single {
+            KrakenPriceProvider(get(), elapsedTimeMillis = get<GetMonotonicTimeProvider>()::invoke)
+        } bind IndependentPriceProvider::class
         singleOf(::CMCApiProviderImpl) bind CMCApiProvider::class
         factoryOf(::KeystoneSDKProviderImpl) bind KeystoneSDKProvider::class
         singleOf(::LastNetworkActivityStorageProviderImpl) bind LastNetworkActivityStorageProvider::class

@@ -29,7 +29,7 @@
     <string name="view_only_paste_disclaimer">Esta cuenta solo podrá ver y recibir. Podrás seguir su saldo y su actividad, pero no podrás usarla para gastar fondos.</string>
 
     <string name="view_only_invalid_key_title">Esta clave no parece correcta</string>
-    <string name="view_only_invalid_key_message">Una clave de visualización completa unificada empieza por “%1$s” y tiene más de 300 caracteres. Comprueba que no falten ni sobren caracteres y vuelve a pegarla.</string>
+    <string name="view_only_invalid_key_message">Introduce una clave de visualización completa válida para esta red, que empiece por “%1$s” y contenga un receptor Orchard.</string>
     <string name="view_only_invalid_key_scan">Escanear código QR en su lugar</string>
     <string name="view_only_invalid_key_edit">Editar clave</string>
 
