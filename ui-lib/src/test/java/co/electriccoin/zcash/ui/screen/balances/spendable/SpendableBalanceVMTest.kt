@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.balances.spendable
 
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LoadedAccountBalances
 import co.electriccoin.zcash.ui.common.model.WalletAccount
@@ -67,6 +68,37 @@ class SpendableBalanceVMTest {
             assertEquals(stringRes(co.electriccoin.zcash.ui.design.R.string.general_ok), state.positive.text)
         }
 
+    @Test
+    fun sdkPendingBalanceWithoutHistoryCurrentlyClaimsSyncingAndOmitsPendingRow() =
+        runTest {
+            val balances = BALANCES.copy(
+                totalBalance = Zatoshi(1_200_000),
+                totalShieldedBalance = Zatoshi(1_200_000),
+                pendingShieldedBalance = Zatoshi(200_000),
+                isShieldedPending = true,
+                isShieldingAvailable = false,
+                totalTransparentBalance = Zatoshi(0),
+                transparentBalance = Zatoshi(0)
+            )
+            val state = stateFor(account(isSpendable = true, balances = balances))
+            assertEquals(stringRes(R.string.balances_infoSyncing), state.message)
+            assertEquals(1, state.rows.size)
+        }
+
+    @Test
+    fun unshieldableTransparentRemainderCurrentlyClaimsAllFundsSpendable() =
+        runTest {
+            val balances = BALANCES.copy(
+                isAllShielded = true,
+                totalBalance = Zatoshi(1_000_001),
+                totalTransparentBalance = Zatoshi(1),
+                transparentBalance = Zatoshi(1),
+                isShieldingAvailable = false
+            )
+            val state = stateFor(account(isSpendable = true, balances = balances))
+            assertEquals(stringRes(R.string.balances_everythingDone), state.message)
+        }
+
     private fun TestScope.stateFor(account: WalletAccount): SpendableBalanceState {
         val accountDataSource =
             mockk<AccountDataSource> {
@@ -88,11 +120,11 @@ class SpendableBalanceVMTest {
         return checkNotNull(vm.state.value)
     }
 
-    private fun account(isSpendable: Boolean): WalletAccount =
+    private fun account(isSpendable: Boolean, balances: LoadedAccountBalances = BALANCES): WalletAccount =
         mockk(relaxed = true) {
             every { isSelected } returns true
             every { this@mockk.isSpendable } returns isSpendable
-            every { loadedBalances } returns BALANCES
+            every { loadedBalances } returns balances
         }
 
     private companion object {
