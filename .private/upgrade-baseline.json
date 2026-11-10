@@ -1,23 +1,23 @@
 {
   "schema": 1,
-  "release": "v3.19.0-private.18",
-  "source_sha": "a300ecfb1a3c4334067739e18eee11db370088a4",
-  "version_code": 3234018,
+  "release": "v3.19.0-private.19",
+  "source_sha": "9bfeda5fa029710403342d9e619ac767c2b9a27a",
+  "version_code": 3234019,
   "package": "com.personal.zecprivate.testnet.foss.debug",
   "artifact": {
-    "release_asset_id": 727683270,
-    "size_in_bytes": 72120100,
-    "digest": "sha256:200635a7bc2db601793e874770ce4ea75625581d70f65c2581de7de55222a684"
+    "release_asset_id": 730922065,
+    "size_in_bytes": 72188286,
+    "digest": "sha256:67d3d065edae6cbb9e18dca88fd703f3171f760b92b6231ccc3fa3a7a69002a9"
   },
-  "next_use": "Version-matched revision18 baseline for the combined recipient and price-protection release19",
+  "next_use": "Paired revision19 baseline for next installed-update acceptance; revision18 remains rollback",
   "instrumentation": {
     "artifact": {
-      "release_asset_id": 727683270,
-      "size_in_bytes": 72120100,
-      "digest": "sha256:200635a7bc2db601793e874770ce4ea75625581d70f65c2581de7de55222a684",
-      "source_release": "v3.19.0-private.18",
-      "source_sha": "a300ecfb1a3c4334067739e18eee11db370088a4"
+      "release_asset_id": 730922065,
+      "size_in_bytes": 72188286,
+      "digest": "sha256:67d3d065edae6cbb9e18dca88fd703f3171f760b92b6231ccc3fa3a7a69002a9",
+      "source_release": "v3.19.0-private.19",
+      "source_sha": "9bfeda5fa029710403342d9e619ac767c2b9a27a"
     },
-    "apk_sha256": "44df59f6ec0ed7ac3748f2d2166963f1b6413ee8057393e4e467c97d0cbd533d"
+    "apk_sha256": "73cfbf3111ce214ef68d5c8b8d8b74e656851af945137c70a4838cb8c6719287"
   }
 }

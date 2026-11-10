@@ -13,6 +13,8 @@ PROJECT=Path(__file__).resolve().parents[1]
 PARENT=PROJECT.parent
 spec=guard.read(PARENT/'core-emulator-job.json')
 spec['sources'].append(str(Path(__file__).resolve()))
+from core_faucet import node_executable
+spec['sources'] += [str(PROJECT/'.private/faucet_pow.cjs'),node_executable()]
 for name in ('core-testnet-result.json','core-testnet-diagnostic.json','core-testnet-progress.json','core-command.log','core-emulator.log','core-tor-probe-result.json'):
     # Only disposable outputs owned by this adapter; prior attempts are copied
     # to named evidence before rerun. Never let stale diagnostics describe it.
@@ -21,7 +23,7 @@ for name in ('core-testnet-result.json','core-testnet-diagnostic.json','core-tes
 
 def retain(root):
     retained={}
-    for name in ('tor-probe-result.json','core-testnet-result.json','core-testnet-diagnostic.json','core-testnet-progress.json','command.log','emulator.log'):
+    for name in ('tor-probe-result.json','core-testnet-result.json','core-testnet-diagnostic.json','core-testnet-progress.json','funding-claim-ledger.json','command.log','emulator.log'):
         path=root/name
         if path.exists():
             data=path.read_bytes()

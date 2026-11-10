@@ -126,13 +126,14 @@ def run(adb, root, apks, manifest):
                         assertions.append({'text':command['text'],'passed':passed,'sequence':last})
                         if not passed:state['error']='Expected UI text not present';(root/'ui-state.json').write_text(json.dumps(state))
                     else:
+                        dismissing_quote = action=='back' and bool(trace) and 'Review Quote' in trace[-1].get('labels',[])
                         try:state=capture({k:v for k,v in command.items() if k!='sequence'})
                         except (OSError,ValueError) as error:
                             state={'sequence':last,'nodes':[],'error':type(error).__name__};(root/'ui-state.json').write_text(json.dumps(state))
                     if not state.get('error'):
                         if action=='click_text' and command.get('text')=='Opt in':tor_opted_in=True
                         if action=='click_text' and command.get('text','').lower() in ('get quote','get a quote'):quote_requests+=1
-                        if action=='swipe':dismissals+=1
+                        if action=='back' and dismissing_quote and any(n.get('text')=='Get a quote' for n in state.get('nodes',[])):dismissals+=1
                     trace.append({'sequence':last,'action':action,'requestedText':command.get('text'),'labels':[n['text'] for n in state.get('nodes',[]) if n['text']][:24],'error':state.get('error')})
                     while len(json.dumps(trace))>6500:trace.pop(0)
             time.sleep(.15)
@@ -151,3 +152,11 @@ def run(adb, root, apks, manifest):
         watcher_log.close()
         try:adb('forward','--remove','tcp:'+str(bridge_port),timeout=10,check=False)
         except (OSError,subprocess.TimeoutExpired):pass
+        try:
+            observed=adb('shell','logcat','-d','-v','raw','-t','3000','SwapQuoteStage:I','*:S',timeout=15,check=False)
+            lines=[line for line in observed.stdout.decode(errors='replace').splitlines() if re.fullmatch(
+                r'stage=[A-Z_]+ elapsedMs=\d+ exception=[A-Za-z0-9_$]+ status=(?:none|\d{3})',line)]
+            diagnostic=dict(lines=lines[-80:])
+        except (OSError,subprocess.SubprocessError) as error:
+            diagnostic=dict(diagnostic_error_class=type(error).__name__)
+        (root/'quote-stages.json').write_text(json.dumps(diagnostic)+'\n')

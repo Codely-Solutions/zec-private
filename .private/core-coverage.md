@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision 19 passed required deterministic, live quote and testnet acceptance and awaits signed publication. Revision 18 remains published and is the selected paired upgrade baseline. `core-validation-summary.json` binds execution; the signed release record will bind publication.
+Status: revision 19 is signed and independently verified, with revision 18 retained as rollback. The verified original revision-19 app/instrumentation pair is selected for the next update check. Release-19 acceptance used the revision-18 baseline; its historical receipts remain unchanged. `core-validation-summary.json` binds execution; `release-evidence/v3.19.0-private.19.json` binds publication.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
@@ -46,13 +46,13 @@ The bounded sandbox review is recorded in `core-provider-review.json`. Tidepool 
 
 Production Detekt retains its rules and existing baseline. Its release-only init excludes the procedural private instrumentation source, which is outside the shipped source sets and separately compiled by the core producer. That harness is checked through exact source/APK bindings, review and real execution. This does not exempt production Kotlin or the ordinary unit tests from analysis.
 
-## Current candidate evidence
+## Current release evidence
 
 Revision 19 executed confirmed testnet receipt, revision-18 installed-update preservation, controlled native Tor interruption/recovery, one shielded manual donation/send, restart and clean recipient seed/birthday restoration. The 0.01-TAZ payment and reviewed memo were recovered at mined height 4,604,225; the recipient's app state was Pending, not fully confirmed. The incoming funding transaction reached Confirmed before spending. Send accounting included its 0.0001-TAZ network fee. Review/cancel produced no submission; one approval submitted once. Clipboard ownership checks and unsupported multi-recipient rejection passed.
 
 Three current unfunded Tor quote/review/Back-dismiss cycles and three Kraken comparisons passed. A retained network mismatch blocked quoting and was corrected without leaving the form. All 1,856 reported release-variant tests passed. Source and APK identities are in `core-validation-summary.json`; approved synthetic frames establish presentation separately.
 
-Explorer browser callback/navigation evidence is reused from revision 18 because that route is unchanged; the current vector rendering and click semantics were reviewed/tested. This does not claim a current physical transaction-detail tap or a loaded explorer page. Actual Obtainium discovery of revision 19 remains a post-publication check.
+Explorer browser callback/navigation evidence is reused from revision 18 because that route is unchanged; the current vector rendering and click semantics were reviewed/tested. This does not claim a current physical transaction-detail tap or a loaded explorer page. Actual Obtainium import, canonical Codely-Solutions release discovery and the production APK selection passed in a fresh seedless guest; no wallet APK was installed.
 
 Physical ARM/authentication execution, clipboard cleanup after process death, funded cross-chain settlement and live provider refunds remain unexecuted. The testnet/x86_64 wallet lifecycle and production ARM64 packaging inspection are distinct claims.
 
@@ -63,5 +63,3 @@ The unchanged SDK 6.0.0 pinned source lock has known Rustls, h2, constant-time a
 Fixed upstream OkHttp 5.5.1 is resolved through Ktor 3.6.1. TLS regression tests allow a valid connection and reject a wrong hostname and compromised emSign chain before HTTP data reaches the test server. This establishes the OkHttp path, not the native SDK's separate TLS implementation. The older revision-16 Maven advisory query does not clear the upgraded graph or native dependencies; retain the scoped findings in [maintenance guidance](MAINTENANCE.md).
 
 The [consolidation security review](native-security-review.json) binds the published ARM64 binary and narrows two suspected secret-operation paths. It confirms affected-version markers for five native dependencies, while advisory-specific reachability and full native build provenance remain unresolved. Inspected wallet HMAC derivation does not invoke the cited ctutils comparison methods; inspected Tor SSH features do not establish P256 activation. Neither finding clears other consumers. No supported SDK newer than 6.0.0 was found on 8 November 2026.
-
-
