@@ -2104,6 +2104,52 @@ index 334eef98c..795262fae 100644
 -        kotlinCompilerExtensionVersion = libs.androidx.compose.compiler.get().versionConstraint.displayName
 +        getByName("test").kotlin.directories.add("src/sharedTest/java")
 +        getByName("androidTest").kotlin.directories.add("src/sharedTest/java")
+diff --git a/feature-viewing-key/src/androidTest/java/co/electriccoin/zcash/ui/common/usecase/TransparentAndOrchardKeySdkTest.kt b/feature-viewing-key/src/androidTest/java/co/electriccoin/zcash/ui/common/usecase/TransparentAndOrchardKeySdkTest.kt
+index 4f0cf7924..5e2925ccb 100644
+--- a/feature-viewing-key/src/androidTest/java/co/electriccoin/zcash/ui/common/usecase/TransparentAndOrchardKeySdkTest.kt
++++ b/feature-viewing-key/src/androidTest/java/co/electriccoin/zcash/ui/common/usecase/TransparentAndOrchardKeySdkTest.kt
+@@ -16,5 +16,3 @@ import kotlin.test.assertTrue
+- * The view-only import accepts only a key with an Orchard and a transparent component, and a key
+- * exported from a hardware wallet carries no Sapling component at all. The JVM tests fake the SDK,
+- * so this runs the real native [DerivationTool] on a device against such a key: the transparent and
+- * Orchard items of librustzcash's public mainnet test vector, stored re-encoded without its Sapling
+- * item. No one's wallet key is involved.
++ * The JVM tests fake the SDK, so these tests run the native [DerivationTool] against public
++ * librustzcash viewing-key vectors. Orchard keys can omit transparent and Sapling components;
++ * hardware-wallet exports can omit Sapling. No one's wallet key is involved.
+@@ -59,0 +58,32 @@ class TransparentAndOrchardKeySdkTest {
++    @Test
++    @SmallTest
++    fun theSdkDescribesAnOrchardOnlyKey() =
++        runBlocking {
++            val components =
++                assertNotNull(
++                    DerivationTool
++                        .getInstance()
++                        .describeUnifiedFullViewingKey(
++                            UnifiedFullViewingKey(UfvkFixtures.MAINNET_ORCHARD_ONLY),
++                            ZcashNetwork.Mainnet
++                        )
++                )
++
++            assertTrue(components.hasOrchard)
++            assertFalse(components.hasP2pkh)
++            assertFalse(components.hasSapling)
++        }
++
++    @Test
++    @SmallTest
++    fun theSdkDerivesAUnifiedAddressFromAnOrchardOnlyKey() =
++        runBlocking {
++            val address =
++                DerivationTool.getInstance().deriveUnifiedAddress(
++                    viewingKey = UfvkFixtures.MAINNET_ORCHARD_ONLY,
++                    network = ZcashNetwork.Mainnet
++                )
++
++            assertTrue(address.startsWith(MAINNET_ADDRESS_PREFIX))
++        }
++
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCase.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCase.kt
 index 044df4acb..650040217 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCase.kt
@@ -2167,6 +2213,23 @@ index 96a911cd4..8be92243b 100644
 @@ -63 +63 @@
 -    <string name="view_only_remove_message">Removing this account clears its data from Zodl on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
 +    <string name="view_only_remove_message">Removing this account clears its data from ZEC Private on this device, but your address book contacts and other account metadata are kept. Removing the account does not remove the on-chain history. You can bring it back anytime by re-adding the account.</string>
+diff --git a/feature-viewing-key/src/sharedTest/java/co/electriccoin/zcash/ui/common/model/ufvk/UfvkFixtures.kt b/feature-viewing-key/src/sharedTest/java/co/electriccoin/zcash/ui/common/model/ufvk/UfvkFixtures.kt
+index 0aa3a0379..596f81efe 100644
+--- a/feature-viewing-key/src/sharedTest/java/co/electriccoin/zcash/ui/common/model/ufvk/UfvkFixtures.kt
++++ b/feature-viewing-key/src/sharedTest/java/co/electriccoin/zcash/ui/common/model/ufvk/UfvkFixtures.kt
+@@ -5 +5 @@ package co.electriccoin.zcash.ui.common.model.ufvk
+- * tests), derived there from a fixed test seed, and one variant of them. They are no one's wallet
++ * tests), derived there from a fixed test seed, and variants of them. They are no one's wallet
+@@ -47,0 +48,9 @@ internal object UfvkFixtures {
++
++    /**
++     * [MAINNET_WITHOUT_TRANSPARENT] with its Sapling item removed: only the public Orchard
++     * component, re-encoded per ZIP 316 using the retired parser at `5b9e1d7c9`.
++     */
++    const val MAINNET_ORCHARD_ONLY =
++        "uview1y3433aj9aw2zkfepkah7gmwwr8lj452zfkqasf5sv0sc5fdhvnvqqj9fjp0s0lkxfnxt89qnrcjyprvgqzsyesnuvt" +
++            "pnqej5wzj6ereyfe4nej4nm6um766vtlyqyygnu8cp02h7dwv0l4d6zz9m0e0x0ue29edhdkctp04h6wzx93jmyl7dgpqfpf" +
++            "a85"
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCaseTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCaseTest.kt
 index a9300de58..9b8c05014 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCaseTest.kt
@@ -14640,6 +14703,21 @@ index 2d38073f4..3dea5aa4d 100644
 -        contentDescription = state.text.getValue(),
 -    )
 +    ZashiSelectionIndicator(isChecked = true, isEnabled = state.isEnabled, circular = true)
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSeedWordTextField.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSeedWordTextField.kt
+index 9326ee95b..e373a6720 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSeedWordTextField.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSeedWordTextField.kt
+@@ -8 +8 @@ import androidx.compose.foundation.layout.padding
+-import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.layout.sizeIn
+@@ -73 +73 @@ fun ZashiSeedWordTextField(
+-                        .size(22.dp)
++                        .sizeIn(minWidth = 22.dp, minHeight = 22.dp)
+@@ -82 +82,3 @@ fun ZashiSeedWordTextField(
+-                    fontWeight = FontWeight.Medium
++                    fontWeight = FontWeight.Medium,
++                    maxLines = 1,
++                    softWrap = false
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSelectionIndicator.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiSelectionIndicator.kt
 new file mode 100644
 index 000000000..44a181099
@@ -19009,7 +19087,7 @@ index 000000000..43d6ffd95
 +<resources xmlns:tools="http://schemas.android.com/tools"
 +    tools:keep="@drawable/ic_token_*,@drawable/ic_chain_*" />
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..3a7d0af99 100644
+index 7b9af8bf7..2ad76b40b 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -73 +73 @@
@@ -19209,139 +19287,144 @@ index 7b9af8bf7..3a7d0af99 100644
 @@ -603 +585 @@
 -        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
 +        https://github.com/Sammy-Lastre/zec-private/releases</string>
-@@ -609 +591 @@
+@@ -607 +589,3 @@
+-    <string name="restoreWallet_info">Por favor, ingresa tu frase secreta de recuperación de 24 palabras en el orden correcto.</string>
++    <string name="restoreWallet_info">Ingresa tu frase secreta de recuperación de 24 palabras en orden o pega la frase completa.</string>
++    <string name="restore_seed_paste">Pegar frase de recuperación</string>
++    <string name="restore_seed_paste_error">Ingresa o pega una frase de recuperación válida de 24 palabras.</string>
+@@ -609 +593 @@
 -    <string name="restore_dialog_message_1">es un conjunto único de 24 palabras que aparecen en un orden preciso. Puede usarse para obtener control total de tus fondos desde cualquier dispositivo a través de cualquier app de billetera Zcash. Piénsala como la llave maestra de tu billetera. Está guardada en la Configuración Avanzada de Zodl.</string>
 +    <string name="restore_dialog_message_1">es un conjunto único de 24 palabras que aparecen en un orden preciso. Puede usarse para obtener control total de tus fondos desde cualquier dispositivo a través de cualquier app de billetera Zcash. Piénsala como la llave maestra de tu billetera. Está guardada en la Configuración Avanzada de ZEC Private.</string>
-@@ -611 +593 @@
+@@ -611 +595 @@
 -    <string name="restore_dialog_message_2">es la altura de bloque (número de bloque en la cadena de bloques) en la que se creó tu billetera. Si alguna vez pierdes acceso a tu app de Zodl y necesitas recuperar tus fondos, proporcionar esta altura junto con tu frase de recuperación puede acelerar significativamente el proceso.</string>
 +    <string name="restore_dialog_message_2">es la altura de bloque (número de bloque en la cadena de bloques) en la que se creó tu billetera. Si alguna vez pierdes acceso a tu app de ZEC Private y necesitas recuperar tus fondos, proporcionar esta altura junto con tu frase de recuperación puede acelerar significativamente el proceso.</string>
-@@ -613 +595 @@
+@@ -613 +597 @@
 -    <string name="firstWalletTransactionSubtitleRestore">Decide hasta dónde debe escanear Zodl. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
 +    <string name="firstWalletTransactionSubtitleRestore">Decide hasta dónde debe escanear ZEC Private. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
-@@ -618,2 +600,2 @@
+@@ -618,2 +602,2 @@
 -    <string name="firstWalletTransactionSubtitleResync">Decide hasta dónde debe resincronizarse Zodl. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
 -    <string name="resync_bd_estimation_message">Tu billetera se resincronizará desde %1$s (%2$s bloques). Zodl escaneará y recuperará todas las transacciones realizadas después del siguiente número de bloque.</string>
 +    <string name="firstWalletTransactionSubtitleResync">Decide hasta dónde debe resincronizarse ZEC Private. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
 +    <string name="resync_bd_estimation_message">Tu billetera se resincronizará desde %1$s (%2$s bloques). ZEC Private escaneará y recuperará todas las transacciones realizadas después del siguiente número de bloque.</string>
-@@ -622 +604 @@
+@@ -622 +606 @@
 -    <string name="resyncWallet_dateInfo">A menos que especifiques lo contrario a continuación, Zodl se resincronizará desde la fecha mostrada.</string>
 +    <string name="resyncWallet_dateInfo">A menos que especifiques lo contrario a continuación, ZEC Private se resincronizará desde la fecha mostrada.</string>
-@@ -635 +617 @@
+@@ -635 +619 @@
 -    <string name="scan_cameraSettings">La cámara no está autorizada. Por favor, ve a la configuración del sistema de Zodl y actívala.</string>
 +    <string name="scan_cameraSettings">La cámara no está autorizada. Por favor, ve a la configuración del sistema de ZEC Private y actívala.</string>
-@@ -645,2 +627,2 @@
+@@ -645,2 +629,2 @@
 -    <string name="deeplinkWarning_desc">Para mayor seguridad y protección, vuelve a escanear el código QR con Zodl.</string>
 -    <string name="deeplinkWarning_cta">Reescanear en Zodl</string>
 +    <string name="deeplinkWarning_desc">Para mayor seguridad y protección, vuelve a escanear el código QR con ZEC Private.</string>
 +    <string name="deeplinkWarning_cta">Reescanear en ZEC Private</string>
-@@ -654 +636 @@
+@@ -654 +638 @@
 -        Zodl y actívala.</string>
 +        ZEC Private y actívala.</string>
-@@ -736 +718 @@
+@@ -736 +720 @@
 -    <string name="send_confirmation_failure_grpc_subtitle">Zodl encontró problemas de conexión al enviar la transacción. Reintentará en los próximos minutos.</string>
 +    <string name="send_confirmation_failure_grpc_subtitle">ZEC Private encontró problemas de conexión al enviar la transacción. Reintentará en los próximos minutos.</string>
-@@ -742 +724 @@
+@@ -742 +726 @@
 -    <string name="send_confirmation_multiple_report_text">Hola, equipo de Zodl.\n\nAl enviar una transacción a una dirección TEX, encontré un error. Me comunico para recibir orientación sobre cómo recuperar mis fondos.\n\nGracias.</string>
 +    <string name="send_confirmation_multiple_report_text">Hola, equipo de ZEC Private.\n\nAl enviar una transacción a una dirección TEX, encontré un error. Me comunico para recibir orientación sobre cómo recuperar mis fondos.\n\nGracias.</string>
-@@ -810 +792 @@
+@@ -810 +794 @@
 -    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de Zodl.</string>
 +    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de ZEC Private.</string>
-@@ -816 +798 @@
+@@ -816 +800 @@
 -    <string name="pay_slippage_info">Podrías pagar hasta %s más, además de las comisiones de transacción.</string>
 +    <string name="pay_slippage_info">Podrías pagar hasta %s más si cambia el precio. Las comisiones de red de Zcash son adicionales.</string>
-@@ -846 +828 @@
+@@ -846 +830 @@
 -    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %s menos según el deslizamiento %s que configuraste.</string>
 +    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %1$s menos según el deslizamiento %2$s que configuraste.</string>
-@@ -853,2 +835,2 @@
+@@ -853,2 +837,2 @@
 -    <string name="swapToZec_info2">%s en %s</string>
 -    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en Zodl</string>
 +    <string name="swapToZec_info2">%1$s en %2$s</string>
 +    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en ZEC Private</string>
-@@ -884 +866 @@
+@@ -884 +868 @@
 -    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="Zodl" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
 +    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="ZEC Private" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
-@@ -894,2 +876,2 @@
+@@ -894,2 +878,2 @@
 -    <string name="texKeystone_step1_title">Envía primero a Zodl</string>
 -    <string name="texKeystone_step1_desc">Transfiere ZEC a tu dirección protegida de Zodl</string>
 +    <string name="texKeystone_step1_title">Envía primero a ZEC Private</string>
 +    <string name="texKeystone_step1_desc">Transfiere ZEC a tu dirección protegida de ZEC Private</string>
-@@ -897,2 +879,2 @@
+@@ -897,2 +881,2 @@
 -    <string name="texKeystone_step2_title">Envía desde Zodl a la dirección TEX</string>
 -    <string name="texKeystone_step2_desc">Una vez recibido en Zodl, envía los tokens a tu dirección TEX de destino final</string>
 +    <string name="texKeystone_step2_title">Envía desde ZEC Private a la dirección TEX</string>
 +    <string name="texKeystone_step2_desc">Una vez recibido en ZEC Private, envía los tokens a tu dirección TEX de destino final</string>
-@@ -948 +930 @@
+@@ -948 +932 @@
 -    <string name="swapAndPay_refundInfo">Tu depósito fue detectado pero el swap no pudo completarse. Tus fondos han sido devueltos, descontando las comisiones de transacción. Si aún no los recibiste, contacta al equipo de soporte de Zodl.</string>
 +    <string name="swapAndPay_refundInfo">Se detectó tu depósito, pero el swap no pudo completarse. El proveedor indica un reembolso, menos las comisiones. Si no llegó, conserva los detalles y consulta su estado con el proveedor.</string>
-@@ -951 +933 @@
+@@ -951 +935 @@
 -    <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos y no recibiste tu swap, contacta a soporte para que podamos resolverlo.</string>
 +    <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos, conserva los detalles y revisa su estado o reembolso con el proveedor antes de enviar de nuevo.</string>
-@@ -953 +935 @@
+@@ -953 +937 @@
 -    <string name="swapAndPay_expiredMsg">Este swap venció tras su ventana de validez de 24 horas. Si no enviaste fondos, no es necesario hacer nada. Si enviaste fondos, contacta a soporte para que podamos ayudarte.</string>
 +    <string name="swapAndPay_expiredMsg">Este swap caducó. Si no enviaste fondos, no debes hacer nada. Si enviaste, conserva los detalles y revisa su estado o reembolso con el proveedor.</string>
-@@ -957 +939 @@
+@@ -957 +941 @@
 -    <string name="reportSwap_msg">Al tocar el botón de abajo, se enviarán detalles de este swap (como la dirección de depósito y el activo destino) al equipo de soporte de Zodl para que puedan ayudarte a resolver tu problema. La información de la transacción se incluye automáticamente.</string>
 +    <string name="reportSwap_msg">Exporta detalles de este swap, como la dirección de depósito y el activo destino. Elige el destinatario y revisa el contenido antes de compartirlo. No se envía ningún informe automáticamente.</string>
-@@ -962 +944 @@
+@@ -962 +946 @@
 -    <string name="swap_mismatch_msg_2">Te agradeceríamos que nos lo reportaras para que podamos investigarlo con el proveedor de swap.</string>
 +    <string name="swap_mismatch_msg_2">Puedes exportar detalles de diagnóstico para investigar el problema. Revísalos antes de elegir un destinatario.</string>
-@@ -965,2 +947,2 @@
+@@ -965,2 +949,2 @@
 -    <string name="swap_mismatch_support_email_subject">Zodl Swap: discrepancia en la API</string>
 -    <string name="swap_mismatch_support_email_body">Zodl detectó el siguiente error en la respuesta de la API del proveedor de swap. Proporcionar estos detalles nos permite plantearlo con ellos para investigarlo. No compartiremos tus datos personales con el proveedor de swap. Puedes enviarlo tal cual o incluir una nota para nosotros. Gracias de antemano.\n\nProveedor de swap: %1$s\nTipo de swap: %2$s\nTipo de discrepancia: %3$s\nID de cotización: %4$s</string>
 +    <string name="swap_mismatch_support_email_subject">ZEC Private Swap: discrepancia en la API</string>
 +    <string name="swap_mismatch_support_email_body">ZEC Private rechazó una respuesta del proveedor que no coincidía con la solicitud. Revisa estos detalles antes de compartirlos.\n\nProveedor: %1$s\nTipo de swap: %2$s\nDiscrepancia: %3$s\nID de cotización: %4$s</string>
-@@ -1051 +1033 @@
+@@ -1051 +1035 @@
 -    <string name="update_title_available">Zodl aquí.</string>
 +    <string name="update_title_available">ZEC Private aquí.</string>
-@@ -1054 +1036 @@
+@@ -1054 +1038 @@
 -        Hay una actualización requerida para Zodl que realiza importantes mejoras en el rendimiento y/o la seguridad.
 +        Hay una actualización requerida para ZEC Private que realiza importantes mejoras en el rendimiento y/o la seguridad.
-@@ -1057 +1039 @@
+@@ -1057 +1041 @@
 -        Hay una nueva versión de Zodl que realiza actualizaciones menores para mejorar el rendimiento y/o la seguridad.\n\nPor favor, toma un momento para actualizar a la última versión.
 +        Hay una nueva versión de ZEC Private que realiza actualizaciones menores para mejorar el rendimiento y/o la seguridad.\n\nPor favor, toma un momento para actualizar a la última versión.
-@@ -1069 +1051 @@
+@@ -1069 +1053 @@
 -    <string name="notEnoughFreeSpace_messagePre">Zodl requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
 +    <string name="notEnoughFreeSpace_messagePre">ZEC Private requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
-@@ -1091 +1073 @@
+@@ -1091 +1075 @@
 -    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre Zodl para resolverlo.</string>
 +    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre ZEC Private para resolverlo.</string>
-@@ -1093,2 +1075,2 @@
+@@ -1093,2 +1077,2 @@
 -    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre Zodl para revisar los detalles.</string>
 -    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre Zodl para continuar tu migración.</string>
 +    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre ZEC Private para revisar los detalles.</string>
 +    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre ZEC Private para continuar tu migración.</string>
-@@ -1106 +1088 @@
+@@ -1106 +1090 @@
 -    <string name="restartMigration_support">Si reiniciar no resuelve el problema, contacta al soporte de Zodl a través de Enviar comentarios.</string>
 +    <string name="restartMigration_support">Si reiniciar no resuelve el problema, conserva tus datos de recuperación y exporta el diagnóstico desde la pantalla de error. Nunca compartas tu frase de recuperación.</string>
-@@ -1179 +1161 @@
+@@ -1179 +1163 @@
 -    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras Zodl. Recibe avisos sobre:</string>
 +    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras ZEC Private. Recibe avisos sobre:</string>
-@@ -1186 +1168 @@
+@@ -1186 +1170 @@
 -    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir Zodl para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
 +    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir ZEC Private para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
-@@ -1215 +1197 @@
+@@ -1215 +1199 @@
 -    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de Zodl/Keystone.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de ZEC Private/Keystone.</string>
-@@ -1248 +1230 @@
+@@ -1248 +1232 @@
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
-@@ -1262 +1244 @@
+@@ -1262 +1246 @@
 -    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, Zodl te avisará la próxima vez que abras la app.</string>
 +    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, ZEC Private te avisará la próxima vez que abras la app.</string>
-@@ -1277 +1259 @@
+@@ -1277 +1261 @@
 -    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, Zodl necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para Zodl en la configuración de tu dispositivo.</string>
 +    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, ZEC Private necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para ZEC Private en la configuración de tu dispositivo.</string>
-@@ -1279 +1261 @@
+@@ -1279 +1263 @@
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
-@@ -1283,2 +1265,2 @@
+@@ -1283,2 +1267,2 @@
 -    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir Zodl manualmente en cada horario programado para enviar.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir ZEC Private manualmente en cada horario programado para enviar.</string>
-@@ -1306 +1287,0 @@
+@@ -1306 +1289,0 @@
 -    <string name="coinVote_confirmSubmission_detailExcludedWeight">Excluido de esta votación</string>
-@@ -1312,2 +1293,2 @@
+@@ -1312,2 +1295,2 @@
 -    <string name="migrationTipUnavailable_title">Zodl sigue sincronizando</string>
 -    <string name="migrationTipUnavailable_message">Zodl debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private sigue sincronizando</string>
@@ -19386,7 +19469,7 @@ index 5ece3f5f9..000000000
 -</resources>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..bb44f2cfb 100644
+index f41234151..c7ce2e06a 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -19602,7 +19685,7 @@ index f41234151..bb44f2cfb 100644
 -    <string name="restoreWallet_info">Please type in your 24-word secret recovery phrase in the correct order.</string>
 +    <string name="restoreWallet_info">Enter your 24-word secret recovery phrase in order, or paste the complete phrase.</string>
 +    <string name="restore_seed_paste">Paste recovery phrase</string>
-+    <string name="restore_seed_paste_error">Copy a valid 24-word recovery phrase, then tap Paste recovery phrase. You can also enter the words below.</string>
++    <string name="restore_seed_paste_error">Enter or paste a valid 24-word recovery phrase.</string>
 @@ -647 +630 @@
 -        Think of it as the master key to your wallet. It is stored in Zodl’s Advanced Settings.</string>
 +        Think of it as the master key to your wallet. It is stored in ZEC Private’s Advanced Settings.</string>
@@ -20157,7 +20240,7 @@ index d6a43b29c..106938208 100644
 +    override val walletInitialization =
 +        MutableStateFlow(co.electriccoin.zcash.ui.common.repository.WalletInitializationState.IDLE)
 diff --git a/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/exportdata/util/FileShareUtilTest.kt b/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/exportdata/util/FileShareUtilTest.kt
-index b14bb83b2..6c6e56554 100644
+index b14bb83b2..091bffd84 100644
 --- a/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/exportdata/util/FileShareUtilTest.kt
 +++ b/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/exportdata/util/FileShareUtilTest.kt
 @@ -3,0 +4,2 @@ import android.content.Intent
@@ -20186,7 +20269,7 @@ index b14bb83b2..6c6e56554 100644
 +    private val context = InstrumentationRegistry.getInstrumentation().context
 +    private val authority = "co.electriccoin.zcash.provider_test"
 +
-@@ -19,15 +21,28 @@ class FileShareUtilTest {
+@@ -19,20 +21,17 @@ class FileShareUtilTest {
 -    @SmallTest
 -    fun check_intent_for_private_data_file_sharing() {
 -        val tempFilePath =
@@ -20202,19 +20285,31 @@ index b14bb83b2..6c6e56554 100644
 -                shareText = null,
 -                sharePickerText = "Test Picker Title",
 -                versionInfo = VersionInfoFixture.new()
+-            )
+-        assertEquals(intent.action, Intent.ACTION_VIEW)
+-        assertEquals(
+-            FileShareUtil.SHARE_OUTSIDE_THE_APP_FLAGS or FileShareUtil.SHARE_CONTENT_PERMISSION_FLAGS,
+-            intent.flags
 +    fun approved_share_roots_can_be_read_through_provider() {
 +        listOf("zodl_qr_images", "tax_exports", "pczt_exports", "diagnostic_exports").forEach { directory ->
 +            withSyntheticFile(File(context.cacheDir, directory)) { file ->
 +                val uri = FileProvider.getUriForFile(context, authority, file)
 +                assertEquals("content", uri.scheme)
-+                assertEquals("synthetic share fixture", context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() })
++                assertEquals(
++                    "synthetic share fixture",
++                    context.contentResolver.openInputStream(uri)!!.bufferedReader().use { it.readText() }
++                )
 +            }
 +        }
 +    }
 +
 +    @Test
 +    fun unrelated_private_files_cannot_obtain_share_uris() {
-+        listOf(context.filesDir, context.noBackupFilesDir, context.cacheDir, File(context.cacheDir, "zodl_qr_images_other")).forEach { directory ->
++        val unrelated = listOf(
++            context.filesDir, context.noBackupFilesDir, context.cacheDir, File(context.cacheDir, "zodl_qr_images_other")
+@@ -40 +39,42 @@ class FileShareUtilTest {
+-        assertContains(FileShareUtil.ZASHI_INTERNAL_DATA_AUTHORITY, intent.data.toString())
++        unrelated.forEach { directory ->
 +            withSyntheticFile(directory) { file ->
 +                assertFailsWith<IllegalArgumentException> { FileProvider.getUriForFile(context, authority, file) }
 +            }
@@ -20230,13 +20325,7 @@ index b14bb83b2..6c6e56554 100644
 +                fileType = FileShareUtil.ZASHI_QR_CODE_MIME_TYPE,
 +                shareText = "Synthetic request",
 +                sharePickerText = "Share fixture"
-@@ -35,6 +50,25 @@ class FileShareUtilTest {
--        assertEquals(intent.action, Intent.ACTION_VIEW)
--        assertEquals(
--            FileShareUtil.SHARE_OUTSIDE_THE_APP_FLAGS or FileShareUtil.SHARE_CONTENT_PERMISSION_FLAGS,
--            intent.flags
--        )
--        assertContains(FileShareUtil.ZASHI_INTERNAL_DATA_AUTHORITY, intent.data.toString())
++            )
 +            @Suppress("DEPRECATION")
 +            val payload = chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)!!
 +            @Suppress("DEPRECATION")
@@ -20871,7 +20960,7 @@ index a6896cfd7..61a711eb6 100644
 -                    color = ZashiColors.Text.textLightSupport,
 +                    color = ZashiColors.HintTooltips.defaultFg,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
-index 4d388e80f..c7bb19046 100644
+index 4d388e80f..aa9e205ae 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/AccountDataSource.kt
 @@ -14,0 +15 @@ import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
@@ -20920,8 +21009,10 @@ index 4d388e80f..c7bb19046 100644
 @@ -659 +674 @@ private data class AccountSnapshot(
 -    val transparentAddress: String,
 +    val transparentAddress: String?,
-@@ -665,0 +681,13 @@ private const val RETRY_DELAY = 3L
+@@ -665,0 +681,15 @@ private const val RETRY_DELAY = 3L
 +/** Omit only a receiver the SDK confirms the view-only key does not contain. */
++// The public SDK has no typed missing-receiver exception; confirm the key components before omitting it.
++@Suppress("TooGenericExceptionCaught")
 +internal suspend fun resolveTransparentReceiver(
 +    mayOmit: Boolean,
 +    readAddress: suspend () -> String,
@@ -20934,7 +21025,7 @@ index 4d388e80f..c7bb19046 100644
 +    if (mayOmit && !hasTransparentReceiver()) null else throw failure
 +}
 +
-@@ -720,0 +749,3 @@ class AccountDeletionException(
+@@ -720,0 +751,3 @@ class AccountDeletionException(
 +
 +class FreshShieldedAddressUnavailableException :
 +    IllegalStateException("A fresh shielded address is unavailable. Wait for wallet synchronization and retry.")
@@ -22149,10 +22240,10 @@ index feef536f5..13ee1cfdf 100644
 +            level = LogLevel.NONE
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
 new file mode 100644
-index 000000000..7e277d83f
+index 000000000..a01bffc60
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,170 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import co.electriccoin.zcash.ui.common.model.boundedMarketNumber
@@ -22213,24 +22304,11 @@ index 000000000..7e277d83f
 +                    if (now < 0L || elapsedNow < 0L || failureAtMillis?.let {
 +                        elapsedNow - it < FAILURE_BACKOFF_MILLIS
 +                    } == true) return@withLock IndependentPriceCheck.Unavailable
-+                    val missing = pairs.filter { pair ->
-+                        cache[pair]?.let {
-+                            elapsedNow - it.receivedAtElapsedMillis in 0 until RECEIPT_LIFETIME_MILLIS &&
-+                                now - it.observation.observedAtMillis in
-+                                -FUTURE_TOLERANCE_MILLIS until OBSERVATION_LIFETIME_MILLIS
-+                        } != true
-+                    }
++                    val missing = pairs.filterNot { isCacheFresh(it, now, elapsedNow) }
 +                    if (missing.isNotEmpty()) {
 +                        httpClientProvider.createTor().use { client ->
 +                            missing.forEach { pair ->
-+                                val elapsed = elapsedTimeMillis()
-+                                val sinceRequest = lastRequestStartedMillis?.let { elapsed - it }
-+                                require(elapsed >= 0L && (sinceRequest == null || sinceRequest >= 0L))
-+                                requestDelay(
-+                                    (REQUEST_INTERVAL_MILLIS - (sinceRequest ?: REQUEST_INTERVAL_MILLIS))
-+                                        .coerceAtLeast(0L)
-+                                )
-+                                lastRequestStartedMillis = elapsedTimeMillis()
++                                awaitRequestInterval()
 +                                val observation = client.prepareGet("https://api.kraken.com/0/public/Spread") {
 +                                    expectSuccess = false
 +                                    url { parameters.append("pair", pair) }
@@ -22245,19 +22323,7 @@ index 000000000..7e277d83f
 +                            }
 +                        }
 +                    }
-+                    val comparisonTime = wallTimeMillis()
-+                    val comparisonElapsed = elapsedTimeMillis()
-+                    val observations = pairs.associateWith { pair ->
-+                        val cached = cache.getValue(pair)
-+                        val age = comparisonElapsed - cached.receivedAtElapsedMillis
-+                        if (comparisonTime < 0L || comparisonElapsed < 0L || age !in 0 until RECEIPT_LIFETIME_MILLIS) {
-+                            return@withLock IndependentPriceCheck.Unavailable
-+                        }
-+                        // The policy uses absolute expiry timestamps. Preserve the local receipt's elapsed age
-+                        // while leaving the provider observation and quote timestamps unchanged.
-+                        cached.observation.copy(receivedAtMillis = comparisonTime - age)
-+                    }
-+                    IndependentPricePolicy.compare(quote, networkFeeZec, observations, comparisonTime)
++                    compareCached(pairs, quote, networkFeeZec)
 +                }
 +            }
 +        } catch (_: TimeoutCancellationException) {
@@ -22269,6 +22335,43 @@ index 000000000..7e277d83f
 +            failureAtMillis = elapsedTimeMillis()
 +            IndependentPriceCheck.Unavailable
 +        }
++    }
++
++    private fun isCacheFresh(pair: String, now: Long, elapsedNow: Long): Boolean =
++        cache[pair]?.let {
++            elapsedNow - it.receivedAtElapsedMillis in 0 until RECEIPT_LIFETIME_MILLIS &&
++                now - it.observation.observedAtMillis in
++                -FUTURE_TOLERANCE_MILLIS until OBSERVATION_LIFETIME_MILLIS
++        } == true
++
++    private suspend fun awaitRequestInterval() {
++        val elapsed = elapsedTimeMillis()
++        val sinceRequest = lastRequestStartedMillis?.let { elapsed - it }
++        require(elapsed >= 0L && (sinceRequest == null || sinceRequest >= 0L))
++        requestDelay(
++            (REQUEST_INTERVAL_MILLIS - (sinceRequest ?: REQUEST_INTERVAL_MILLIS)).coerceAtLeast(0L)
++        )
++        lastRequestStartedMillis = elapsedTimeMillis()
++    }
++
++    private fun compareCached(
++        pairs: List<String>,
++        quote: SwapQuote,
++        networkFeeZec: BigDecimal
++    ): IndependentPriceCheck {
++        val comparisonTime = wallTimeMillis()
++        val comparisonElapsed = elapsedTimeMillis()
++        val observations = pairs.associateWith { pair ->
++            val cached = cache.getValue(pair)
++            val age = comparisonElapsed - cached.receivedAtElapsedMillis
++            if (comparisonTime < 0L || comparisonElapsed < 0L || age !in 0 until RECEIPT_LIFETIME_MILLIS) {
++                return IndependentPriceCheck.Unavailable
++            }
++            // The policy uses absolute expiry timestamps. Preserve the local receipt's elapsed age
++            // while leaving the provider observation and quote timestamps unchanged.
++            cached.observation.copy(receivedAtMillis = comparisonTime - age)
++        }
++        return IndependentPricePolicy.compare(quote, networkFeeZec, observations, comparisonTime)
 +    }
 +
 +    private data class CachedObservation(val observation: MarketObservation, val receivedAtElapsedMillis: Long)
@@ -23023,7 +23126,7 @@ index 26bf877f4..db3df438d 100644
 +                                                    }
 +                                                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
-index fa652b038..5d823d8a1 100644
+index fa652b038..aa5c3e71c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 @@ -32,0 +33 @@ import kotlinx.coroutines.CoroutineScope
@@ -23034,14 +23137,17 @@ index fa652b038..5d823d8a1 100644
 @@ -57,0 +61,2 @@ interface WalletRepository {
 +    val walletInitialization: StateFlow<WalletInitializationState>
 +
-@@ -110,0 +116,6 @@ class WalletRepositoryImpl(
+@@ -82,0 +88,2 @@ interface WalletRepository {
++// Initialization admission and interrupted-setup recovery share the same wallet mutation boundary.
++@Suppress("TooManyFunctions")
+@@ -110,0 +118,6 @@ class WalletRepositoryImpl(
 +    private val initialization = MutableStateFlow(WalletInitializationState.IDLE)
 +    override val walletInitialization = initialization.asStateFlow()
 +
 +    // Keep the accepted operation across failures, including failures after the wallet was stored.
 +    private var acceptedInitialization: (suspend (PersistableWallet?) -> Unit)? = null
 +
-@@ -333,13 +344,5 @@ class WalletRepositoryImpl(
+@@ -333,13 +346,5 @@ class WalletRepositoryImpl(
 -        scope.launch {
 -            walletMutation.withLock {
 -                val zcashNetwork = ZcashNetwork.fromResources(application)
@@ -23060,7 +23166,7 @@ index fa652b038..5d823d8a1 100644
 +            if (candidate == null && stored != null) {
 +                finishExistingWalletInitialization(stored)
 +                return@initializeWallet
-@@ -346,0 +350,12 @@ class WalletRepositoryImpl(
+@@ -346,0 +352,12 @@ class WalletRepositoryImpl(
 +            val zcashNetwork = ZcashNetwork.fromResources(application)
 +            val newWallet =
 +                candidate ?: PersistableWallet.new(
@@ -23073,7 +23179,7 @@ index fa652b038..5d823d8a1 100644
 +            persistWalletInternal(newWallet)
 +            walletRestoringStateProvider.store(WalletRestoringState.INITIATING)
 +            persistOnboardingStateInternal(OnboardingState.READY)
-@@ -373,0 +389,41 @@ class WalletRepositoryImpl(
+@@ -373,0 +391,41 @@ class WalletRepositoryImpl(
 +        var candidate: PersistableWallet? = null
 +        initializeWallet { stored ->
 +            if (candidate == null && stored != null) {
@@ -23115,7 +23221,7 @@ index fa652b038..5d823d8a1 100644
 +
 +        val accepted = acceptedInitialization ?: operation.also { acceptedInitialization = it }
 +        var failed = false
-@@ -375,14 +431,14 @@ class WalletRepositoryImpl(
+@@ -375,14 +433,14 @@ class WalletRepositoryImpl(
 -            walletMutation.withLock {
 -                val restoredWallet =
 -                    PersistableWallet(
@@ -23144,12 +23250,12 @@ index fa652b038..5d823d8a1 100644
 +                // SDK/storage exceptions can contain sensitive material; expose only a generic failure.
 +                Twig.error { "Wallet initialization failed; the accepted operation can be retried" }
 +                failed = true
-@@ -389,0 +446,4 @@ class WalletRepositoryImpl(
+@@ -389,0 +448,4 @@ class WalletRepositoryImpl(
 +        }.invokeOnCompletion {
 +            // Also releases admission when the scope was cancelled before the coroutine started.
 +            initialization.value =
 +                if (failed || it != null) WalletInitializationState.FAILED else WalletInitializationState.IDLE
-@@ -393,0 +454,6 @@ class WalletRepositoryImpl(
+@@ -393,0 +456,6 @@ class WalletRepositoryImpl(
 +enum class WalletInitializationState {
 +    IDLE,
 +    RUNNING,
@@ -25777,20 +25883,24 @@ index 607e89dcb..e741d6aab 100644
 +    private fun onWhatsNewClick() =
 +        navigationRouter.forward(ExternalUrl("https://github.com/Codely-Solutions/zec-private/releases"))
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/onboarding/view/OnboardingView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/onboarding/view/OnboardingView.kt
-index fc469c300..08c89700a 100644
+index fc469c300..da65e7671 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/onboarding/view/OnboardingView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/onboarding/view/OnboardingView.kt
-@@ -32,0 +33 @@ import co.electriccoin.zcash.ui.R
+@@ -25 +24,0 @@ import androidx.compose.ui.graphics.Brush
+-import androidx.compose.ui.graphics.ColorFilter
+@@ -32,0 +32 @@ import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.repository.WalletInitializationState
-@@ -62 +63,2 @@ fun Onboarding(
+@@ -62 +62,2 @@ fun Onboarding(
 -    onCreateWallet: () -> Unit
 +    onCreateWallet: () -> Unit,
 +    initialization: WalletInitializationState = WalletInitializationState.IDLE
-@@ -85,0 +88 @@ fun Onboarding(
+@@ -85,0 +87 @@ fun Onboarding(
 +                initialization = initialization,
-@@ -104,0 +108 @@ private fun OnboardingMainContent(
+@@ -104,0 +107 @@ private fun OnboardingMainContent(
 +    initialization: WalletInitializationState,
-@@ -144,0 +149,10 @@ private fun OnboardingMainContent(
+@@ -120 +122,0 @@ private fun OnboardingMainContent(
+-            colorFilter = ColorFilter.tint(color = ZcashTheme.colors.secondaryColor),
+@@ -144,0 +147,10 @@ private fun OnboardingMainContent(
 +        if (initialization == WalletInitializationState.FAILED) {
 +            Text(
 +                text = stringResource(R.string.wallet_initialization_failed),
@@ -25801,9 +25911,9 @@ index fc469c300..08c89700a 100644
 +            Spacer(modifier = Modifier.height(ZashiDimensions.Spacing.spacingMd))
 +        }
 +
-@@ -148,0 +163 @@ private fun OnboardingMainContent(
+@@ -148,0 +161 @@ private fun OnboardingMainContent(
 +            enabled = initialization == WalletInitializationState.IDLE,
-@@ -156 +171,8 @@ private fun OnboardingMainContent(
+@@ -156 +169,8 @@ private fun OnboardingMainContent(
 -            text = stringResource(R.string.plainOnboarding_button_createNewWallet),
 +            isLoading = initialization == WalletInitializationState.RUNNING,
 +            text = stringResource(
@@ -28438,10 +28548,10 @@ index df8c09607..878ddddc2 100644
 +                addFlags(SHARE_CONTENT_PERMISSION_FLAGS)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/work/DeleteDiagnosticExportWorker.kt b/ui-lib/src/main/java/co/electriccoin/zcash/work/DeleteDiagnosticExportWorker.kt
 new file mode 100644
-index 000000000..a93acbc89
+index 000000000..e7dc8549d
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/work/DeleteDiagnosticExportWorker.kt
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,38 @@
 +package co.electriccoin.zcash.work
 +
 +import android.content.Context
@@ -28459,8 +28569,9 @@ index 000000000..a93acbc89
 +    parameters: WorkerParameters
 +) : CoroutineWorker(context, parameters) {
 +    override suspend fun doWork(): Result {
-+        val name = inputData.getString(FILE_NAME) ?: return Result.failure()
-+        if (name == "." || name == ".." || File(name).name != name) return Result.failure()
++        val name = inputData.getString(FILE_NAME)?.takeIf {
++            it != "." && it != ".." && File(it).name == it
++        } ?: return Result.failure()
 +        val file = File(File(applicationContext.cacheDir, DIRECTORY), name)
 +        return if (!file.exists() || file.delete()) Result.success() else Result.retry()
 +    }
