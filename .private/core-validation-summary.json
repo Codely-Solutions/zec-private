@@ -1,80 +1,38 @@
 {
   "status": "accepted-awaiting-signing",
-  "scope": "Swap confidence and clarity release18",
-  "source_sha": "a300ecfb1a3c4334067739e18eee11db370088a4",
-  "acceptance_source_sha": "a300ecfb1a3c4334067739e18eee11db370088a4",
-  "core_build_source_sha": "a300ecfb1a3c4334067739e18eee11db370088a4",
-  "ui_source_sha": "a300ecfb1a3c4334067739e18eee11db370088a4",
-  "ui_run": 42623116892,
-  "candidate_run": 42623116892,
-  "core_run": 42623123596,
-  "baseline": "v3.19.0-private.17",
+  "scope": "Recipient consistency and independent-price combined release19",
+  "source_sha": "9bfeda5fa029710403342d9e619ac767c2b9a27a",
+  "acceptance_source_sha": "9bfeda5fa029710403342d9e619ac767c2b9a27a",
+  "core_build_source_sha": "9bfeda5fa029710403342d9e619ac767c2b9a27a",
+  "ui_source_sha": "9bfeda5fa029710403342d9e619ac767c2b9a27a",
+  "ui_run": 42706229441,
+  "candidate_run": 42706229441,
+  "core_run": 42706236084,
+  "baseline": "v3.19.0-private.18",
   "profiles": {
     "core": {
-      "guard_job": "13e231519ae34339bf9bfe45f0151bd7",
-      "guard_receipt_sha256": "ac5069dff17a38046b472bccb4ccff2cfabf426db1601a1aed12bd4a5ed2cd40",
+      "guard_job": "881c91b83bf341bb93fc9d41cc0ba2eb",
+      "guard_receipt_sha256": "8637438aab0a369121bca5bfa241803e6f9bb91d05355ff7f752a64f31270d91",
       "worker": "core"
     },
     "quotes": {
-      "guard_job": "13e231519ae34339bf9bfe45f0151bd7",
-      "guard_receipt_sha256": "ac5069dff17a38046b472bccb4ccff2cfabf426db1601a1aed12bd4a5ed2cd40",
+      "guard_job": "a2ed0b0b18304f9d9f93c3a7850aa9b1",
+      "guard_receipt_sha256": "d7793a52c4d966b813b3bcafc9728f0585226b777ed646e4a1c82b80e65b228e",
       "worker": "quotes"
-    },
-    "handoff": {
-      "guard_job": "bedcf9d547ea4c3a8554710270b45b0c",
-      "guard_receipt_sha256": "478bd752845784f921f92584213ebd8562fa212fdbd62916a3bc728602eda670",
-      "worker": "handoff"
     }
   },
-  "core_seconds": 776.2243220000018,
+  "core_seconds": 874.8361642999953,
   "quote_cycles": 3,
   "production_arm_executed": false,
   "physical_biometric_ui_executed": false,
   "explorer_handoff": {
-    "passed": true,
-    "synthetic": false,
-    "isolated_testnet": true,
-    "personal_wallet_access": false,
-    "financial_actions": 0,
-    "chain": "zec",
-    "network": "testnet",
-    "page_load_claimed": false,
-    "build_source_sha": "a300ecfb1a3c4334067739e18eee11db370088a4",
-    "artifact_id": 13676798729,
-    "artifact_digest": "sha256:dfaa5d331078df5c3a1076b43a40a7ea99e934c085e5fb83c2548cce60610e64",
-    "original_app_sha256": "891b0b44ab7266df8d21a245810d997c58d107bd18e14fce780fe1b820ca505a",
-    "apk_preparation": {
-      "candidate.apk": {
-        "originalSha256": "891b0b44ab7266df8d21a245810d997c58d107bd18e14fce780fe1b820ca505a",
-        "testedSha256": "ff886c6cae9df421f79434cac10c9da1860e1dd2edeef8e814797beb6098a402",
-        "preservedExecutionEntries": 34,
-        "executionEntriesDigest": "3daa556ad2d8c46fa2b1b39c5c2a5110042fd3f2ef9726aa083ba4fedb5e587d",
-        "executionEntriesUnchanged": true,
-        "abi": "x86_64",
-        "signing": "ephemeral test key; not release key"
-      },
-      "explorer-androidTest.apk": {
-        "originalSha256": "b71d8328baba1421bea32aba2908be6ff1f6f3a97618258de08b2e39bf18bd04",
-        "testedSha256": "56827430fd5393ddffc40ea82c973642ae07562d28d029b3783559cc5892ec05",
-        "preservedExecutionEntries": 6,
-        "executionEntriesDigest": "ee61f54f7236a0bd992f68c8590c769958294c7e713e8cb5a98267279fa176d7",
-        "executionEntriesUnchanged": true,
-        "abi": "x86_64",
-        "signing": "ephemeral test key; not release key"
-      }
-    },
-    "input_state": "Real lifecycle transaction ID in a fresh seedless app; actual production callback invoked",
-    "physical_detail_row_tap": false,
-    "browser_package": "org.chromium.webview_shell",
-    "url_verified": true,
-    "transaction_id_matches_restored_history": true,
-    "android_view_handoff": true,
-    "production_callback_invoked": true,
-    "returned_to_wallet": true
+    "reused": true,
+    "source_release": "v3.19.0-private.18",
+    "scope": "Prior native browser callback evidence; current glyph rendering/semantics separately reviewed"
   },
   "production_unsigned_artifact": {
-    "id": 13678686175,
-    "digest": "sha256:c0738c8d5e64998e54d57ab7be40db009e869f9742d65d3ec2a2ff99b832e2f5",
-    "size_in_bytes": 31293939
+    "id": 13715575000,
+    "digest": "sha256:5093829587b9fb3aeb12963fd2a468cb53baf84a4886bf7d7628e8f5ea10c04e",
+    "size_in_bytes": 31314774
   }
 }

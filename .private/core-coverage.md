@@ -1,6 +1,6 @@
 # Core acceptance coverage
 
-Status: revision18 is signed and independently verified, with revision17 as rollback. The verified revision18 seedless app/instrumentation fixture is preserved for the next update check. `core-validation-summary.json` binds the executed source/APKs; `release-evidence/v3.19.0-private.18.json` binds publication. The next version-matched app/instrumentation fixture is preserved in the maintenance draft.
+Status: revision 19 passed required deterministic, live quote and testnet acceptance and awaits signed publication. Revision 18 remains published and is the selected paired upgrade baseline. `core-validation-summary.json` binds execution; the signed release record will bind publication.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
@@ -20,9 +20,7 @@ The executed-build fingerprint and host-harness binding are separate. A host dri
 
 Candidate builds may finish while real acceptance is pending. Signing can attach a later controller-owned receipt only when the intervening Git diff contains the explicit receipt/document allowlist. Runtime source, build files, workflow and controller changes require a new candidate. The sole additional late-source exception is the explicitly bound private instrumentation Kotlin file, validated against matching runtime inputs and its new compiled APK. Both promotion and signing check that boundary; the signed release records the original build revision and the attesting controller revision. This permits overlap of required acceptance and release preparation without another APK build or access to signing secrets from build work.
 
-Funding currently uses the Jino Labs TAZ faucet's documented proof-of-work flow, bounded to 30 seconds and difficulty 22. Its IP-bound challenge and claim share one TLS connection through a task-owned Tor SOCKS client. The app retains its separate native Tor path. The latest official stable Windows expert bundle is pinned to 16.0 (Tor 0.4.9.15); the newer 0.4.9.16 release was source-only on the official platform page at selection. No persistent installation or PATH change is needed.
-
-The initially evaluated Valar faucet returned `failed: the wallet cannot pay this address` for the generated shielded address. No payment is automatically retried after an unknown result. Confirmation/spendability uses the wallet's normal policy; recipient recovery requires a mined transaction and records its actual app state, without waiting again for spendability that this recipient does not use.
+Funding for this candidate used the [documented shielded PoW faucet](https://github.com/anukulpandey/zcash-faucet), after verified testnet/health/spendability checks through pinned owned Tor. One claim funded 0.1 TAZ. Argon2id work used two workers for 28.7 seconds; a failed or uncertain claim is never resubmitted. Its address-bound challenge is not IP-bound: challenge TLS was closed during computation, while the sole claim and status polling shared a new validated TLS connection through the same owned Tor process. A real unavailable-proxy negative check established fail-closed setup. The original app-native Tor path remained separate. Faucet failure diagnostics and transport controls remain in the local release record; faucet readiness is not proof that a particular payout will succeed.
 
 Relevant ordinary test changes select deterministic regression checks and upstream review. They do not automatically require a fresh live transaction when the app and core acceptance producer remain unchanged. The private live producer itself is included in its receipt fingerprint.
 
@@ -48,13 +46,15 @@ The bounded sandbox review is recorded in `core-provider-review.json`. Tidepool 
 
 Production Detekt retains its rules and existing baseline. Its release-only init excludes the procedural private instrumentation source, which is outside the shipped source sets and separately compiled by the core producer. That harness is checked through exact source/APK bindings, review and real execution. This does not exempt production Kotlin or the ordinary unit tests from analysis.
 
-## Current release evidence
+## Current candidate evidence
 
-Revision18 executed real testnet receive/confirmation, revision17 installed-update preservation, controlled native Tor interruption/recovery, one shielded send, restart and clean recipient seed/birthday restoration. The same transaction established the received amount, memo and mined history, with manual donation review/cancel, one approval, clipboard ownership checks and rejection of unsupported multi-recipient review. Three unfunded Tor quote/dismiss/requote cycles passed without provider timeouts. All 1,786 reported release-variant tests passed, including updater, TLS, quote, explorer and theme checks.
+Revision 19 executed confirmed testnet receipt, revision-18 installed-update preservation, controlled native Tor interruption/recovery, one shielded manual donation/send, restart and clean recipient seed/birthday restoration. The 0.01-TAZ payment and reviewed memo were recovered at mined height 4,604,225; the recipient's app state was Pending, not fully confirmed. The incoming funding transaction reached Confirmed before spending. Send accounting included its 0.0001-TAZ network fee. Review/cancel produced no submission; one approval submitted once. Clipboard ownership checks and unsupported multi-recipient rejection passed.
 
-The post-lifecycle explorer UI dump failed before reaching a transaction-detail action; that failed attempt remains separate. A fresh seedless guest then invoked the candidate's actual explorer-link callback through the real app router, opened the exact real testnet transaction URL in Android's browser, and returned with Back. App executable payloads matched the lifecycle candidate. Row semantics and callback dispatch are covered separately by Compose/Robolectric tests; the native probe does not claim that tap or a loaded explorer page. Approved synthetic theme/large-text captures retain their original source bindings. No additional funded lifecycle was used for browser diagnosis.
+Three current unfunded Tor quote/review/Back-dismiss cycles and three Kraken comparisons passed. A retained network mismatch blocked quoting and was corrected without leaving the form. All 1,856 reported release-variant tests passed. Source and APK identities are in `core-validation-summary.json`; approved synthetic frames establish presentation separately.
 
-Existing Obtainium import/release-discovery execution retains its revision17 scope; release18 preserves the technical tag, APK filter and version-code marker. Physical authentication and clipboard process-death cleanup remain unexecuted.
+Explorer browser callback/navigation evidence is reused from revision 18 because that route is unchanged; the current vector rendering and click semantics were reviewed/tested. This does not claim a current physical transaction-detail tap or a loaded explorer page. Actual Obtainium discovery of revision 19 remains a post-publication check.
+
+Physical ARM/authentication execution, clipboard cleanup after process death, funded cross-chain settlement and live provider refunds remain unexecuted. The testnet/x86_64 wallet lifecycle and production ARM64 packaging inspection are distinct claims.
 
 ## Retained dependency-security work
 
@@ -63,3 +63,5 @@ The unchanged SDK 6.0.0 pinned source lock has known Rustls, h2, constant-time a
 Fixed upstream OkHttp 5.5.1 is resolved through Ktor 3.6.1. TLS regression tests allow a valid connection and reject a wrong hostname and compromised emSign chain before HTTP data reaches the test server. This establishes the OkHttp path, not the native SDK's separate TLS implementation. The older revision-16 Maven advisory query does not clear the upgraded graph or native dependencies; retain the scoped findings in [maintenance guidance](MAINTENANCE.md).
 
 The [consolidation security review](native-security-review.json) binds the published ARM64 binary and narrows two suspected secret-operation paths. It confirms affected-version markers for five native dependencies, while advisory-specific reachability and full native build provenance remain unresolved. Inspected wallet HMAC derivation does not invoke the cited ctutils comparison methods; inspected Tor SSH features do not establish P256 activation. Neither finding clears other consumers. No supported SDK newer than 6.0.0 was found on 8 November 2026.
+
+
