@@ -2,7 +2,7 @@ package co.electriccoin.zcash.ui.common.model.ufvk
 
 /**
  * Public test vectors from librustzcash (`zcash_keys/src/keys.rs`, the UFVK and UIVK encoding
- * tests), derived there from a fixed test seed, and one variant of them. They are no one's wallet
+ * tests), derived there from a fixed test seed, and variants of them. They are no one's wallet
  * keys.
  */
 internal object UfvkFixtures {
@@ -45,4 +45,13 @@ internal object UfvkFixtures {
             "kktkfa73ylev92k905uzszsdpaw5xnpepqtts9xmkts7gnl7a6w3yq8n4y4s2xyjggxz9huxhkfp3xnd9x2qwldkyy" +
             "tz2mu7apmj4g75wxdjhs3ks57h2chrpa4t8ha5ekhrxr8hcrztmtrgt0ryq6hrj98xrdu82gvvzcp392q9uxa7hcuw" +
             "um7jtl7907rumvtnackt0hns0guark6x"
+
+    /**
+     * [MAINNET_WITHOUT_TRANSPARENT] with its Sapling item removed: only the public Orchard
+     * component, re-encoded per ZIP 316 using the retired parser at `5b9e1d7c9`.
+     */
+    const val MAINNET_ORCHARD_ONLY =
+        "uview1y3433aj9aw2zkfepkah7gmwwr8lj452zfkqasf5sv0sc5fdhvnvqqj9fjp0s0lkxfnxt89qnrcjyprvgqzsyesnuvt" +
+            "pnqej5wzj6ereyfe4nej4nm6um766vtlyqyygnu8cp02h7dwv0l4d6zz9m0e0x0ue29edhdkctp04h6wzx93jmyl7dgpqfpf" +
+            "a85"
 }

@@ -13,11 +13,9 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * The view-only import accepts only a key with an Orchard and a transparent component, and a key
- * exported from a hardware wallet carries no Sapling component at all. The JVM tests fake the SDK,
- * so this runs the real native [DerivationTool] on a device against such a key: the transparent and
- * Orchard items of librustzcash's public mainnet test vector, stored re-encoded without its Sapling
- * item. No one's wallet key is involved.
+ * The JVM tests fake the SDK, so these tests run the native [DerivationTool] against public
+ * librustzcash viewing-key vectors. Orchard keys can omit transparent and Sapling components;
+ * hardware-wallet exports can omit Sapling. No one's wallet key is involved.
  */
 class TransparentAndOrchardKeySdkTest {
     private val key = UfvkFixtures.MAINNET_TRANSPARENT_AND_ORCHARD
@@ -55,6 +53,38 @@ class TransparentAndOrchardKeySdkTest {
             val result = ValidateUfvkUseCase(SdkUfvkDescriber())(key, ZcashNetwork.Mainnet)
 
             assertIs<UfvkValidation.Valid>(result)
+        }
+
+    @Test
+    @SmallTest
+    fun theSdkDescribesAnOrchardOnlyKey() =
+        runBlocking {
+            val components =
+                assertNotNull(
+                    DerivationTool
+                        .getInstance()
+                        .describeUnifiedFullViewingKey(
+                            UnifiedFullViewingKey(UfvkFixtures.MAINNET_ORCHARD_ONLY),
+                            ZcashNetwork.Mainnet
+                        )
+                )
+
+            assertTrue(components.hasOrchard)
+            assertFalse(components.hasP2pkh)
+            assertFalse(components.hasSapling)
+        }
+
+    @Test
+    @SmallTest
+    fun theSdkDerivesAUnifiedAddressFromAnOrchardOnlyKey() =
+        runBlocking {
+            val address =
+                DerivationTool.getInstance().deriveUnifiedAddress(
+                    viewingKey = UfvkFixtures.MAINNET_ORCHARD_ONLY,
+                    network = ZcashNetwork.Mainnet
+                )
+
+            assertTrue(address.startsWith(MAINNET_ADDRESS_PREFIX))
         }
 
     private companion object {
