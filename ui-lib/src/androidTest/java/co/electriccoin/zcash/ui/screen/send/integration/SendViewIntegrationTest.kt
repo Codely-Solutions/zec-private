@@ -1,7 +1,7 @@
 package co.electriccoin.zcash.ui.screen.send.integration
 
 import androidx.compose.ui.test.junit4.StateRestorationTester
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.filters.MediumTest
 import cash.z.ecc.sdk.fixture.ZecSendFixture
