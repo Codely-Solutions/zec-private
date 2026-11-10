@@ -54,7 +54,9 @@ internal fun ReliabilityReviewScene(screen: String, originalAccount: ZodlAccount
                 onBack = {},
                 dialogButton = IconButtonState(R.drawable.ic_help) {},
                 nextButton = null,
-                pasteButton = ButtonState(stringRes(R.string.restore_seed_paste), onClick = {}),
+                pasteButton = ButtonState(
+                    stringRes(R.string.restore_seed_paste), style = ButtonStyle.SECONDARY, onClick = {}
+                ),
                 isPasteError = screen == "reliability-restore-paste-error"
             ),
             suggestionsState = RestoreSeedSuggestionsState(isVisible = false, suggestions = emptyList())
