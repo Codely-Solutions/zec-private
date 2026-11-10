@@ -29,7 +29,10 @@ interface IndependentPriceProvider {
     suspend fun check(quote: SwapQuote, networkFeeZec: BigDecimal): IndependentPriceCheck
 }
 
-class KrakenPriceProvider(private val httpClientProvider: HttpClientProvider) : IndependentPriceProvider {
+class KrakenPriceProvider(
+    private val httpClientProvider: HttpClientProvider,
+    private val wallTimeMillis: () -> Long = System::currentTimeMillis,
+) : IndependentPriceProvider {
     private val mutex = Mutex()
     private val cache = mutableMapOf<String, MarketObservation>()
     @Volatile
@@ -48,7 +51,7 @@ class KrakenPriceProvider(private val httpClientProvider: HttpClientProvider) : 
         try {
             withTimeout(CHECK_TIMEOUT_MILLIS) {
                 mutex.withLock {
-                    val now = System.currentTimeMillis()
+                    val now = wallTimeMillis()
                     if (now < retryAfterMillis) return@withLock IndependentPriceCheck.Unavailable
                     val missing = pairs.filter { pair ->
                         cache[pair]?.let {
@@ -60,9 +63,9 @@ class KrakenPriceProvider(private val httpClientProvider: HttpClientProvider) : 
                         httpClientProvider.createTor().use { client ->
                             missing.forEach { pair ->
                                 val waitMillis =
-                                    lastRequestStartedMillis + REQUEST_INTERVAL_MILLIS - System.currentTimeMillis()
+                                    lastRequestStartedMillis + REQUEST_INTERVAL_MILLIS - wallTimeMillis()
                                 delay(waitMillis.coerceAtLeast(0L))
-                                lastRequestStartedMillis = System.currentTimeMillis()
+                                lastRequestStartedMillis = wallTimeMillis()
                                 cache[pair] = client.prepareGet("https://api.kraken.com/0/public/Spread") {
                                     expectSuccess = false
                                     url { parameters.append("pair", pair) }
@@ -71,21 +74,21 @@ class KrakenPriceProvider(private val httpClientProvider: HttpClientProvider) : 
                                     val bytes = response.bodyAsChannel()
                                         .readBuffer(MAX_RESPONSE_BYTES.toLong() + 1L).readByteArray()
                                     require(bytes.size <= MAX_RESPONSE_BYTES)
-                                    parseKrakenObservation(pair, bytes.decodeToString(), System.currentTimeMillis())
+                                    parseKrakenObservation(pair, bytes.decodeToString(), wallTimeMillis())
                                 }
                             }
                         }
                     }
-                    IndependentPricePolicy.compare(quote, networkFeeZec, cache, System.currentTimeMillis())
+                    IndependentPricePolicy.compare(quote, networkFeeZec, cache, wallTimeMillis())
                 }
             }
         } catch (_: TimeoutCancellationException) {
-            retryAfterMillis = System.currentTimeMillis() + FAILURE_BACKOFF_MILLIS
+            retryAfterMillis = wallTimeMillis() + FAILURE_BACKOFF_MILLIS
             IndependentPriceCheck.Unavailable
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            retryAfterMillis = System.currentTimeMillis() + FAILURE_BACKOFF_MILLIS
+            retryAfterMillis = wallTimeMillis() + FAILURE_BACKOFF_MILLIS
             IndependentPriceCheck.Unavailable
         }
     }

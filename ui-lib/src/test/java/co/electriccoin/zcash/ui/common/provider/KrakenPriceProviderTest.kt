@@ -21,6 +21,21 @@ import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 class KrakenPriceProviderTest {
+    @Test
+    fun forwardWallClockJumpBypassesFailureBackoff() = runTest {
+        var now = 1_000_000L
+        val clients = mockk<HttpClientProvider>()
+        coEvery { clients.createTor() } throws IllegalStateException("unavailable")
+        val provider = KrakenPriceProvider(clients, wallTimeMillis = { now })
+
+        assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
+        now += 3_600_000L
+        assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
+
+        coVerify(exactly = 2) { clients.createTor() }
+        coVerify(exactly = 0) { clients.create() }
+    }
+
     private fun supportedQuote(): SwapQuote {
         val asset = mockk<SwapAsset> {
             every { assetId } returns "nep141:zec.omft.near"
