@@ -50,7 +50,7 @@ class ExportTaxUseCase(
 
             val outputFile =
                 File(
-                    context.cacheDir,
+                    File(context.cacheDir, "tax_exports").apply { mkdirs() },
                     when (accountDataSource.getSelectedAccount()) {
                         is KeystoneAccount -> {
                             "Keystone_Transaction_History_$previousYear.csv"

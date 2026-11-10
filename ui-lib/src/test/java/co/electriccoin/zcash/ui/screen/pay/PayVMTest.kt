@@ -181,7 +181,27 @@ class PayVMTest {
 
             assertEquals(btc, harness.capturedState.asset)
             assertEquals(request, harness.capturedState.address)
-            assertEquals(0, BigDecimal("0.5").compareTo(harness.capturedState.amount.amount))
+            assertEquals(edited, harness.capturedState.amount)
+            coVerify(exactly = 0) {
+                harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
+            }
+        }
+
+    @Test
+    fun repeatedBitcoinRequestTextPreservesUserAmountAndNewRequestPrefills() =
+        runTest {
+            val harness = harness()
+            harness.collectState(this)
+            val request = "bitcoin:$BTC_ADDRESS?amount=0.5"
+            harness.onAddressChange(request)
+            val edited = NumberTextFieldInnerState.fromAmount(BigDecimal("0.75"))
+            harness.onTextFieldChange(edited, NumberTextFieldInnerState())
+
+            harness.onAddressChange(request)
+            assertEquals(edited, harness.capturedState.amount)
+
+            harness.onAddressChange("bitcoin:$BTC_ADDRESS?amount=0.25")
+            assertEquals(0, BigDecimal("0.25").compareTo(harness.capturedState.amount.amount))
             coVerify(exactly = 0) {
                 harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
             }

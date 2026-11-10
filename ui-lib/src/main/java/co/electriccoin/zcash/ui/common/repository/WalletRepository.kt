@@ -30,11 +30,14 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
@@ -55,6 +58,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 interface WalletRepository {
+    val walletInitialization: StateFlow<WalletInitializationState>
+
     val secretState: StateFlow<SecretState>
 
     val isIronwoodAnnouncementShown: StateFlow<Boolean?>
@@ -107,6 +112,12 @@ class WalletRepositoryImpl(
      * the middle of storing.
      */
     private val walletMutation = Mutex()
+
+    private val initialization = MutableStateFlow(WalletInitializationState.IDLE)
+    override val walletInitialization = initialization.asStateFlow()
+
+    // Keep the accepted operation across failures, including failures after the wallet was stored.
+    private var acceptedInitialization: (suspend () -> Unit)? = null
 
     /**
      * Scope the repository's fire-and-forget jobs run on. A test seam: unit tests replace it
@@ -330,20 +341,20 @@ class WalletRepositoryImpl(
     }
 
     override fun createNewWallet() {
-        scope.launch {
-            walletMutation.withLock {
-                val zcashNetwork = ZcashNetwork.fromResources(application)
-                val newWallet =
-                    PersistableWallet.new(
-                        application = application,
-                        zcashNetwork = zcashNetwork,
-                        endpoint = lightWalletEndpointProvider.getDefaultEndpoint(),
-                        walletInitMode = WalletInitMode.NewWallet,
-                    )
-                persistWalletInternal(newWallet)
-                walletRestoringStateProvider.store(WalletRestoringState.INITIATING)
-                persistOnboardingStateInternal(OnboardingState.READY)
-            }
+        var candidate: PersistableWallet? = null
+        initializeWallet {
+            val zcashNetwork = ZcashNetwork.fromResources(application)
+            val newWallet =
+                candidate ?: PersistableWallet.new(
+                    application = application,
+                    zcashNetwork = zcashNetwork,
+                    endpoint = lightWalletEndpointProvider.getDefaultEndpoint(),
+                    walletInitMode = WalletInitMode.NewWallet,
+                )
+            candidate = newWallet
+            persistWalletInternal(newWallet)
+            walletRestoringStateProvider.store(WalletRestoringState.INITIATING)
+            persistOnboardingStateInternal(OnboardingState.READY)
         }
     }
 
@@ -371,24 +382,61 @@ class WalletRepositoryImpl(
         seedPhrase: SeedPhrase,
         birthday: BlockHeight
     ) {
-        scope.launch {
-            walletMutation.withLock {
-                val restoredWallet =
-                    PersistableWallet(
-                        network = network,
-                        birthday = birthday,
-                        endpoint = lightWalletEndpointProvider.getDefaultEndpoint(),
-                        seedPhrase = seedPhrase,
-                        walletInitMode = WalletInitMode.RestoreWallet,
-                    )
-                persistWalletInternal(restoredWallet)
-                walletRestoringStateProvider.store(WalletRestoringState.RESTORING)
-                walletBackupFlagStorageProvider.store(true)
-                restoreTimestampDataSource.getOrCreate()
-                persistOnboardingStateInternal(OnboardingState.READY)
-            }
+        initializeWallet {
+            val restoredWallet =
+                PersistableWallet(
+                    network = network,
+                    birthday = birthday,
+                    endpoint = lightWalletEndpointProvider.getDefaultEndpoint(),
+                    seedPhrase = seedPhrase,
+                    walletInitMode = WalletInitMode.RestoreWallet,
+                )
+            persistWalletInternal(restoredWallet)
+            walletRestoringStateProvider.store(WalletRestoringState.RESTORING)
+            walletBackupFlagStorageProvider.store(true)
+            restoreTimestampDataSource.getOrCreate()
+            persistOnboardingStateInternal(OnboardingState.READY)
         }
     }
+
+    @Suppress("TooGenericExceptionCaught")
+    private fun initializeWallet(operation: suspend () -> Unit) {
+        val previous = initialization.value
+        if (previous == WalletInitializationState.RUNNING ||
+            !initialization.compareAndSet(previous, WalletInitializationState.RUNNING)
+        ) return
+
+        val accepted = acceptedInitialization ?: operation.also { acceptedInitialization = it }
+        var failed = false
+        scope.launch {
+            try {
+                walletMutation.withLock {
+                    if (onboardingState.first() != OnboardingState.READY ||
+                        persistableWalletProvider.getPersistableWallet() == null
+                    ) {
+                        accepted()
+                    }
+                    acceptedInitialization = null
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // SDK/storage exceptions can contain sensitive material; expose only a generic failure.
+                Twig.error { "Wallet initialization failed; the accepted operation can be retried" }
+                failed = true
+            }
+        }.invokeOnCompletion {
+            // Also releases admission when the scope was cancelled before the coroutine started.
+            initialization.value =
+                if (failed || it != null) WalletInitializationState.FAILED else WalletInitializationState.IDLE
+        }
+    }
+}
+
+enum class WalletInitializationState {
+    IDLE,
+    RUNNING,
+    FAILED
 }
 
 /**

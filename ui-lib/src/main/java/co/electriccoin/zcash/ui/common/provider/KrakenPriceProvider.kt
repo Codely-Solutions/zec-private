@@ -32,12 +32,14 @@ interface IndependentPriceProvider {
 class KrakenPriceProvider(
     private val httpClientProvider: HttpClientProvider,
     private val wallTimeMillis: () -> Long = System::currentTimeMillis,
+    private val elapsedTimeMillis: () -> Long = GetMonotonicTimeProvider()::invoke,
+    private val requestDelay: suspend (Long) -> Unit = { delay(it) },
 ) : IndependentPriceProvider {
     private val mutex = Mutex()
-    private val cache = mutableMapOf<String, MarketObservation>()
+    private val cache = mutableMapOf<String, CachedObservation>()
     @Volatile
-    private var retryAfterMillis = 0L
-    private var lastRequestStartedMillis = 0L
+    private var failureAtMillis: Long? = null
+    private var lastRequestStartedMillis: Long? = null
 
     override suspend fun check(
         quote: SwapQuote,
@@ -52,21 +54,28 @@ class KrakenPriceProvider(
             withTimeout(CHECK_TIMEOUT_MILLIS) {
                 mutex.withLock {
                     val now = wallTimeMillis()
-                    if (now < retryAfterMillis) return@withLock IndependentPriceCheck.Unavailable
+                    val elapsedNow = elapsedTimeMillis()
+                    if (now < 0L || elapsedNow < 0L || failureAtMillis?.let {
+                        elapsedNow - it < FAILURE_BACKOFF_MILLIS
+                    } == true) return@withLock IndependentPriceCheck.Unavailable
                     val missing = pairs.filter { pair ->
                         cache[pair]?.let {
-                            now - it.receivedAtMillis in 0 until RECEIPT_LIFETIME_MILLIS &&
-                                now - it.observedAtMillis in -FUTURE_TOLERANCE_MILLIS until OBSERVATION_LIFETIME_MILLIS
+                            elapsedNow - it.receivedAtElapsedMillis in 0 until RECEIPT_LIFETIME_MILLIS &&
+                                now - it.observation.observedAtMillis in
+                                -FUTURE_TOLERANCE_MILLIS until OBSERVATION_LIFETIME_MILLIS
                         } != true
                     }
                     if (missing.isNotEmpty()) {
                         httpClientProvider.createTor().use { client ->
                             missing.forEach { pair ->
-                                val waitMillis =
-                                    lastRequestStartedMillis + REQUEST_INTERVAL_MILLIS - wallTimeMillis()
-                                delay(waitMillis.coerceAtLeast(0L))
-                                lastRequestStartedMillis = wallTimeMillis()
-                                cache[pair] = client.prepareGet("https://api.kraken.com/0/public/Spread") {
+                                val elapsed = elapsedTimeMillis()
+                                val sinceRequest = lastRequestStartedMillis?.let { elapsed - it }
+                                require(elapsed >= 0L && (sinceRequest == null || sinceRequest >= 0L))
+                                requestDelay(
+                                    (REQUEST_INTERVAL_MILLIS - (sinceRequest ?: REQUEST_INTERVAL_MILLIS)).coerceAtLeast(0L)
+                                )
+                                lastRequestStartedMillis = elapsedTimeMillis()
+                                val observation = client.prepareGet("https://api.kraken.com/0/public/Spread") {
                                     expectSuccess = false
                                     url { parameters.append("pair", pair) }
                                 }.execute { response ->
@@ -76,22 +85,37 @@ class KrakenPriceProvider(
                                     require(bytes.size <= MAX_RESPONSE_BYTES)
                                     parseKrakenObservation(pair, bytes.decodeToString(), wallTimeMillis())
                                 }
+                                cache[pair] = CachedObservation(observation, elapsedTimeMillis())
                             }
                         }
                     }
-                    IndependentPricePolicy.compare(quote, networkFeeZec, cache, wallTimeMillis())
+                    val comparisonTime = wallTimeMillis()
+                    val comparisonElapsed = elapsedTimeMillis()
+                    val observations = pairs.associateWith { pair ->
+                        val cached = cache.getValue(pair)
+                        val age = comparisonElapsed - cached.receivedAtElapsedMillis
+                        if (comparisonTime < 0L || comparisonElapsed < 0L || age !in 0 until RECEIPT_LIFETIME_MILLIS) {
+                            return@withLock IndependentPriceCheck.Unavailable
+                        }
+                        // The policy uses absolute expiry timestamps. Preserve the local receipt's elapsed age
+                        // while leaving the provider observation and quote timestamps unchanged.
+                        cached.observation.copy(receivedAtMillis = comparisonTime - age)
+                    }
+                    IndependentPricePolicy.compare(quote, networkFeeZec, observations, comparisonTime)
                 }
             }
         } catch (_: TimeoutCancellationException) {
-            retryAfterMillis = wallTimeMillis() + FAILURE_BACKOFF_MILLIS
+            failureAtMillis = elapsedTimeMillis()
             IndependentPriceCheck.Unavailable
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {
-            retryAfterMillis = wallTimeMillis() + FAILURE_BACKOFF_MILLIS
+            failureAtMillis = elapsedTimeMillis()
             IndependentPriceCheck.Unavailable
         }
     }
+
+    private data class CachedObservation(val observation: MarketObservation, val receivedAtElapsedMillis: Long)
 }
 
 internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis: Long): MarketObservation {

@@ -5,11 +5,13 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.bip39.Mnemonics
 import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
-import co.electriccoin.zcash.ui.BuildConfig
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
+import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
 import co.electriccoin.zcash.ui.common.usecase.ValidateSeedUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.component.SeedTextFieldState
 import co.electriccoin.zcash.ui.design.component.SeedWordInnerTextFieldState
@@ -36,8 +38,12 @@ import java.util.Locale
 
 class RestoreSeedVM(
     private val navigationRouter: NavigationRouter,
-    private val validateSeed: ValidateSeedUseCase
+    private val validateSeed: ValidateSeedUseCase,
+    private val readClipboardText: ReadClipboardTextUseCase,
+    private val clearClipboard: ClearClipboardUseCase
 ) : ViewModel() {
+    private val pasteError = MutableStateFlow(false)
+
     private val suggestions =
         flow {
             val result = withContext(Dispatchers.IO) { Mnemonics.getCachedWords(Locale.ENGLISH.language) }
@@ -93,8 +99,8 @@ class RestoreSeedVM(
             }
 
     val state: StateFlow<RestoreSeedState?> =
-        combine(seedWords, seedValidations, validSeed) { words, seedValidations, validation ->
-            createState(words, seedValidations, validation)
+        combine(seedWords, seedValidations, validSeed, pasteError) { words, seedValidations, validation, pasteError ->
+            createState(words, seedValidations, validation.takeUnless { pasteError }).copy(isPasteError = pasteError)
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
@@ -133,6 +139,12 @@ class RestoreSeedVM(
                         }
             ),
         onBack = ::onBack,
+        pasteButton =
+            ButtonState(
+                text = stringRes(R.string.restore_seed_paste),
+                style = ButtonStyle.SECONDARY,
+                onClick = ::onPasteClicked
+            ),
         dialogButton =
             IconButtonState(
                 icon = R.drawable.ic_help,
@@ -164,16 +176,40 @@ class RestoreSeedVM(
         index: Int,
         state: SeedWordInnerTextFieldState
     ) {
-        if (BuildConfig.DEBUG) {
-            val seed = validateSeed(state.value.trim().split(" "))
-            if (seed != null) {
-                prefillSeed(seed)
-            } else {
-                updateSeedWord(index, state)
-            }
+        pasteError.value = false
+        if (state.value.trim().any { it.isWhitespace() }) {
+            pasteSeed(state.value)
         } else {
             updateSeedWord(index, state)
         }
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private fun onPasteClicked() {
+        val text =
+            try {
+                readClipboardText()
+            } catch (_: RuntimeException) {
+                null
+            }
+        if (text == null || !pasteSeed(text)) {
+            pasteError.value = true
+            return
+        }
+        // Clear only the clip that supplied this phrase; a newer clip belongs to the user.
+        try {
+            if (readClipboardText() == text) clearClipboard()
+        } catch (_: RuntimeException) {
+            // Android can deny a second clipboard read. Keep the accepted phrase and newer clipboard content.
+        }
+    }
+
+    private fun pasteSeed(text: String): Boolean {
+        val words = text.trim().split(Regex("[\\s\\p{Z}]+")).map { it.lowercase(Locale.ROOT) }
+        val seed = words.takeIf { it.size == SEED_WORD_COUNT }?.let(validateSeed::invoke)
+        pasteError.value = seed == null
+        if (seed != null) prefillSeed(seed)
+        return seed != null
     }
 
     private fun updateSeedWord(
@@ -196,5 +232,9 @@ class RestoreSeedVM(
             }
             newSeedWords.toList()
         }
+    }
+
+    private companion object {
+        const val SEED_WORD_COUNT = 24
     }
 }

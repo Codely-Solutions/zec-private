@@ -1,7 +1,9 @@
 package co.electriccoin.zcash.ui.util
 
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import androidx.core.content.FileProvider
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.zcash.ui.common.model.DistributionDimension
@@ -76,6 +78,15 @@ object FileShareUtil {
                 file
             )
 
+        return newShareContentIntent(fileUri, shareText, sharePickerText, fileType)
+    }
+
+    internal fun newShareContentIntent(
+        fileUri: Uri,
+        shareText: String? = null,
+        sharePickerText: String,
+        fileType: String = ZASHI_INTERNAL_DATA_MIME_TYPE,
+    ): Intent {
         val dataIntent: Intent =
             Intent().apply {
                 action = Intent.ACTION_SEND
@@ -84,6 +95,8 @@ object FileShareUtil {
                     putExtra(Intent.EXTRA_TEXT, shareText)
                 }
                 type = fileType
+                clipData = ClipData.newRawUri("Shared file", fileUri)
+                addFlags(SHARE_CONTENT_PERMISSION_FLAGS)
             }
 
         val shareDataIntent =

@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.navigation
@@ -42,7 +44,9 @@ fun NavGraphBuilder.onboardingNavGraph(
         startDestination = Onboarding,
     ) {
         composable<Onboarding> {
+            val initialization by walletViewModel.walletInitialization.collectAsStateWithLifecycle()
             Onboarding(
+                initialization = initialization,
                 onImportWallet = {
                     if (FirebaseTestLabUtil.isFirebaseTestLab(activity.applicationContext)) {
                         persistExistingWalletWithSeedPhrase(

@@ -3,6 +3,9 @@ package co.electriccoin.zcash.ui.common.repository
 import android.app.Application
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.model.PersistableWallet
+import cash.z.ecc.android.sdk.fixture.WalletFixture
+import cash.z.ecc.android.sdk.model.SeedPhrase
+import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.configuration.model.map.Configuration
 import co.electriccoin.zcash.crash.android.GlobalCrashReporter
@@ -29,6 +32,7 @@ import io.mockk.mockkObject
 import io.mockk.unmockkAll
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
@@ -41,10 +45,12 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.runCurrent
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
 
 /**
  * Regression coverage for MOB-1836: the onboarding flag ([OnboardingState]) and the stored wallet
@@ -138,9 +144,159 @@ class WalletRepositoryImplTest {
             repeat(3) { repository.createNewWallet() }
             advanceUntilIdle()
 
-            assertEquals(3, harness.events.count { it == "wallet" })
-            coVerify(exactly = 3) { PersistableWallet.new(any(), any(), any(), any()) }
+            assertEquals(1, harness.events.count { it == "wallet" })
+            coVerify(exactly = 1) { PersistableWallet.new(any(), any(), any(), any()) }
         }
+
+    @Test
+    fun repositoryRecreationWithUnfinishedOnboardingReplacesTheStoredWallet() =
+        runTest {
+            val storedWallet = mockk<PersistableWallet>(relaxed = true)
+            val (repository, harness) = newRepository(OnboardingState.NONE, storedWallet)
+            repository.useTestScope(testScheduler)
+
+            repository.createNewWallet()
+            advanceUntilIdle()
+
+            assertNotEquals(storedWallet, harness.walletProvider.getPersistableWallet())
+            coVerify(exactly = 1) { PersistableWallet.new(any(), any(), any(), any()) }
+        }
+
+    @Test
+    fun competingCreateAndRestoreKeepTheFirstAcceptedOperation() =
+        runTest {
+            val (repository, harness) = newRepository(OnboardingState.NONE, null)
+            repository.useTestScope(testScheduler)
+
+            repository.createNewWallet()
+            repository.restoreFixture()
+            advanceUntilIdle()
+            repository.restoreFixture()
+            advanceUntilIdle()
+
+            assertEquals(listOf("wallet", "restoring=INITIATING", "onboarding=3"), harness.events)
+            coVerify(exactly = 1) { PersistableWallet.new(any(), any(), any(), any()) }
+        }
+
+    @Test
+    fun repeatedRestoreTriggersDoNotQueueAnotherWallet() =
+        runTest {
+            val (repository, harness) = newRepository(OnboardingState.NONE, null)
+            repository.useTestScope(testScheduler)
+
+            repository.restoreFixture()
+            repository.createNewWallet()
+            repository.restoreFixture()
+            advanceUntilIdle()
+
+            assertEquals(listOf("wallet", "restoring=RESTORING", "onboarding=3"), harness.events)
+            coVerify(exactly = 0) { PersistableWallet.new(any(), any(), any(), any()) }
+        }
+
+    @Test
+    fun failedMetadataWriteRetriesTheAcceptedWallet() =
+        runTest {
+            val (repository, harness) = newRepository(OnboardingState.NONE, null)
+            repository.useTestScope(testScheduler)
+            coEvery { harness.restoringProvider.store(any()) } throws IllegalStateException("test failure")
+
+            repository.createNewWallet()
+            advanceUntilIdle()
+            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+            val accepted = harness.walletProvider.getPersistableWallet()
+
+            coEvery { harness.restoringProvider.store(any()) } returns Unit
+            repository.restoreFixture()
+            advanceUntilIdle()
+
+            assertEquals(accepted, harness.walletProvider.getPersistableWallet())
+            assertEquals("3", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
+            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            coVerify(exactly = 1) { PersistableWallet.new(any(), any(), any(), any()) }
+            coVerify { harness.restoringProvider.store(WalletRestoringState.INITIATING) }
+            coVerify(exactly = 0) { harness.restoringProvider.store(WalletRestoringState.RESTORING) }
+        }
+
+    @Test
+    fun cancellationBeforeLaunchReleasesAdmissionForRetry() =
+        runTest {
+            val (repository, harness) = newRepository(OnboardingState.NONE, null)
+            repository.useTestScope(testScheduler)
+            repository.scope.cancel()
+
+            repository.createNewWallet()
+            advanceUntilIdle()
+            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+            assertEquals(emptyList(), harness.events)
+
+            repository.useTestScope(testScheduler)
+            repository.createNewWallet()
+            advanceUntilIdle()
+            assertEquals(1, harness.events.count { it == "wallet" })
+            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+        }
+
+    @Test
+    fun cancellationAfterWalletWriteRetriesWithoutGeneratingAReplacement() =
+        runTest {
+            val (repository, harness) = newRepository(OnboardingState.NONE, null)
+            val metadataStarted = CompletableDeferred<Unit>()
+            coEvery { harness.restoringProvider.store(any()) } coAnswers {
+                metadataStarted.complete(Unit)
+                CompletableDeferred<Unit>().await()
+            }
+            repository.useTestScope(testScheduler)
+            repository.createNewWallet()
+            runCurrent()
+            metadataStarted.await()
+            val accepted = harness.walletProvider.getPersistableWallet()
+
+            repository.scope.cancel()
+            advanceUntilIdle()
+            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+
+            coEvery { harness.restoringProvider.store(any()) } returns Unit
+            repository.useTestScope(testScheduler)
+            repository.createNewWallet()
+            advanceUntilIdle()
+            assertEquals(accepted, harness.walletProvider.getPersistableWallet())
+            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            coVerify(exactly = 1) { PersistableWallet.new(any(), any(), any(), any()) }
+        }
+
+    @Test
+    fun pendingCreationWaitsForStartupRecoveryWithoutQueueingDuplicates() =
+        runTest {
+            val recoveryStarted = CompletableDeferred<Unit>()
+            val finishRecovery = CompletableDeferred<Unit>()
+            val (repository, harness) = newRepository(OnboardingState.READY, null)
+            coEvery { harness.recoveryProvider.ensureReadable() } coAnswers {
+                recoveryStarted.complete(Unit)
+                finishRecovery.await()
+            }
+            repository.useTestScope(testScheduler)
+            repository.init()
+            runCurrent()
+            recoveryStarted.await()
+
+            repeat(3) { repository.createNewWallet() }
+            runCurrent()
+            assertEquals(WalletInitializationState.RUNNING, repository.walletInitialization.value)
+            assertEquals(0, harness.events.count { it == "wallet" })
+
+            finishRecovery.complete(Unit)
+            advanceUntilIdle()
+            assertEquals(
+                listOf("onboarding=0", "erase", "wallet", "restoring=INITIATING", "onboarding=3"), harness.events
+            )
+        }
+
+    private fun WalletRepositoryImpl.restoreFixture() =
+        restoreWallet(
+            ZcashNetwork.Testnet,
+            SeedPhrase.new(WalletFixture.Alice.seedPhrase),
+            WalletFixture.Alice.getBirthday(ZcashNetwork.Testnet)
+        )
 
     @Test
     fun initResetsOnboardingAndErasesSdkDataWhenWalletIsMissing() =
@@ -313,7 +469,8 @@ class WalletRepositoryImplTest {
                 every { observe() } returns flowOf(null)
             }
 
-        val sdkEncryptedPreferenceRecoveryProvider = FakeSdkEncryptedPreferenceRecoveryProvider(events)
+        val sdkEncryptedPreferenceRecoveryProvider = mockk<SdkEncryptedPreferenceRecoveryProvider>()
+        coEvery { sdkEncryptedPreferenceRecoveryProvider.ensureReadable() } coAnswers { events += "sdkRepair" }
 
         val repository =
             WalletRepositoryImpl(
@@ -335,25 +492,18 @@ class WalletRepositoryImplTest {
         scopes += repository.scope
         scopes += repository.sharingScope
 
-        return repository to TestHarness(events, fakePrefs)
+        return repository to TestHarness(
+            events, fakePrefs, persistableWalletProvider, walletRestoringStateProvider, sdkEncryptedPreferenceRecoveryProvider
+        )
     }
 
     private data class TestHarness(
         val events: List<String>,
         val fakePrefs: RecordingPreferenceProvider,
+        val walletProvider: PersistableWalletProvider,
+        val restoringProvider: WalletRestoringStateProvider,
+        val recoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
     )
-}
-
-/**
- * Records `"sdkRepair"` into the shared events list, so tests can assert where the SDK secret
- * store repair lands relative to the onboarding-flag write and the SDK data erase.
- */
-private class FakeSdkEncryptedPreferenceRecoveryProvider(
-    private val events: MutableList<String>
-) : SdkEncryptedPreferenceRecoveryProvider {
-    override suspend fun ensureReadable() {
-        events += "sdkRepair"
-    }
 }
 
 /**

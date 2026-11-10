@@ -3,14 +3,10 @@ package co.electriccoin.zcash.ui.common.usecase
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.AddressBookContact
 import co.electriccoin.zcash.ui.common.model.SwapBlockchain
-import co.electriccoin.zcash.ui.common.repository.BiometricRepository
-import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
-import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.swap.ab.SelectABSwapRecipientArgs
-import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -24,11 +20,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
-/**
- * [NavigateToSelectABSwapRecipientUseCase] gates the address-book picker behind a biometric prompt:
- * only on success does it navigate and suspend for a result. A failed/cancelled biometric, and a
- * dismissed picker, all resolve to null — and a biometric failure must never navigate.
- */
+/** Contact selection runs inside the app-access gate and preserves picker cancellation and request matching. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class NavigateToSelectABSwapRecipientUseCaseTest {
     private val forwarded = mutableListOf<Any>()
@@ -38,8 +30,7 @@ class NavigateToSelectABSwapRecipientUseCaseTest {
                 (args[0] as Array<*>).filterNotNull().forEach { forwarded.add(it) }
             }
         }
-    private val biometricRepository = mockk<BiometricRepository>(relaxed = true)
-    private val useCase = NavigateToSelectABSwapRecipientUseCase(router, biometricRepository)
+    private val useCase = NavigateToSelectABSwapRecipientUseCase(router)
 
     @Test
     fun selectionResolvesToContactAndPopsBack() =
@@ -84,26 +75,6 @@ class NavigateToSelectABSwapRecipientUseCaseTest {
 
             assertNull(result.await())
             verify(exactly = 1) { router.back() }
-        }
-
-    @Test
-    fun biometricsFailureResolvesToNullWithoutNavigating() =
-        runTest(UnconfinedTestDispatcher()) {
-            coEvery { biometricRepository.requestBiometrics(any()) } throws BiometricsFailureException()
-
-            assertNull(useCase())
-            assertTrue(forwarded.isEmpty())
-            verify(exactly = 0) { router.forward(*anyVararg()) }
-        }
-
-    @Test
-    fun biometricsCancellationResolvesToNullWithoutNavigating() =
-        runTest(UnconfinedTestDispatcher()) {
-            coEvery { biometricRepository.requestBiometrics(any()) } throws BiometricsCancelledException()
-
-            assertNull(useCase())
-            assertTrue(forwarded.isEmpty())
-            verify(exactly = 0) { router.forward(*anyVararg()) }
         }
 
     @Test

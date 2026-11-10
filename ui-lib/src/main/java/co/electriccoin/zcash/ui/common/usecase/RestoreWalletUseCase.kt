@@ -6,7 +6,9 @@ import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.repository.WalletInitializationState
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
+import kotlinx.coroutines.flow.first
 
 class RestoreWalletUseCase(
     private val walletRepository: WalletRepository,
@@ -26,5 +28,7 @@ class RestoreWalletUseCase(
             seedPhrase = seedPhrase,
             birthday = birthday
         )
+        val result = walletRepository.walletInitialization.first { it != WalletInitializationState.RUNNING }
+        check(result != WalletInitializationState.FAILED) { "Wallet initialization failed" }
     }
 }

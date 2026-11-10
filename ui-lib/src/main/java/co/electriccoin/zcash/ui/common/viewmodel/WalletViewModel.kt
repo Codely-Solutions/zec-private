@@ -29,6 +29,7 @@ class WalletViewModel(
     val synchronizer = synchronizerProvider.synchronizer
 
     val secretState: StateFlow<SecretState> = walletRepository.secretState
+    val walletInitialization = walletRepository.walletInitialization
 
     /**
      * Emits `true` once — on the first launch that satisfies all Ironwood-announcement conditions:

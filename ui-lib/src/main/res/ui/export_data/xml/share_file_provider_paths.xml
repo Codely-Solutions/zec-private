@@ -1,14 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <files-path
-        name="no_backup"
-        path="../no_backup/" />
-
-    <files-path
-        name="files"
-        path="."/>
-
-    <cache-path
-        name="cache"
-        path="."/>
+    <cache-path name="qr_images" path="zodl_qr_images/" />
+    <cache-path name="tax_exports" path="tax_exports/" />
+    <cache-path name="pczt_exports" path="pczt_exports/" />
+    <cache-path name="diagnostic_exports" path="diagnostic_exports/" />
 </paths>

@@ -31,7 +31,9 @@ class RestoreTorVM(
     val state: StateFlow<LceState<RestoreTorState>> =
         combine(isChecked, restoreLce.state) { checked, restore ->
             createState(checked, restore.loading)
-        }.withLce(restoreLce, errorStateMapper::mapToState)
+        }.withLce(restoreLce) {
+            errorStateMapper.mapToState(it, message = stringRes(R.string.wallet_initialization_failed))
+        }
             .stateIn(this, LceState(content = createState(isChecked.value, false)))
 
     private fun createState(isChecked: Boolean, isLoading: Boolean): RestoreTorState =
@@ -41,7 +43,7 @@ class RestoreTorVM(
                     title = stringRes(R.string.torSettingsSheet_title),
                     subtitle = stringRes(R.string.torSettingsSheet_desc),
                     isChecked = isChecked,
-                    onClick = { this.isChecked.update { !it } }
+                    onClick = { if (!restoreLce.state.value.loading) this.isChecked.update { !it } }
                 ),
             primary =
                 ButtonState(
@@ -52,19 +54,22 @@ class RestoreTorVM(
             secondary =
                 ButtonState(
                     text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_cancel),
+                    isEnabled = !isLoading,
                     onClick = ::onBack,
                 ),
             onBack = ::onBack
         )
 
-    private fun onBack() = navigationRouter.back()
+    private fun onBack() {
+        if (!restoreLce.state.value.loading) navigationRouter.back()
+    }
 
     private fun onRestoreWalletClick(isChecked: Boolean) =
-        restoreLce.execute {
+        if (!restoreLce.state.value.loading) restoreLce.execute {
             restoreWallet(
                 seedPhrase = SeedPhrase.new(args.seed.trim()),
                 enableTor = isChecked,
                 birthday = BlockHeight.new(args.blockHeight)
             )
-        }
+        } else Unit
 }

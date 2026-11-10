@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="private_balance_transparent_remainder">Queda un pequeño saldo transparente sin proteger.</string>
+    <string name="private_balance_pending_confirmations">Hay fondos protegidos pendientes. Espera la confirmación y mantén la billetera sincronizada.</string>
+    <string name="private_balance_not_yet_spendable">Algunos fondos aún no se pueden gastar. Revisa la sincronización y las transacciones pendientes.</string>
+    <string name="private_balance_unavailable_row">Aún no disponible para gastar</string>
+    <string name="private_restore_funds_available">Fondos disponibles. Recuperando el historial de transacciones.</string>
+    <string name="private_insufficient_spendable_balance">Tu saldo disponible no cubre el monto y la comisión de red. Reduce el monto o espera a que los fondos pendientes estén disponibles.</string>
+</resources>

@@ -66,17 +66,17 @@ class ReceiveVM(
                             icon = icon,
                             address = account.unifiedAddress,
                             type = Unified,
-                            isExpanded = expandedIndex == 0,
+                            isExpanded = expandedIndex == 0 || account.transparentAddress == null,
                             onClick = { onAddressClick(0) }
                         ),
-                        createAddressState(
+                        account.transparentAddress?.let { address -> createAddressState(
                             account = account,
                             icon = icon,
-                            address = account.transparentAddress,
+                            address = address,
                             type = Transparent,
                             isExpanded = expandedIndex == 1,
                             onClick = { onAddressClick(1) }
-                        ),
+                        ) },
                     ),
                 isLoading = false,
                 onBack = ::onBack

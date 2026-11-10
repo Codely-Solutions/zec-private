@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="wallet_initialization_failed">No se pudo terminar la configuración de la billetera. Inténtalo de nuevo para continuar con la misma configuración.</string>
+    <string name="wallet_initialization_retry">Intentar de nuevo</string>
+</resources>

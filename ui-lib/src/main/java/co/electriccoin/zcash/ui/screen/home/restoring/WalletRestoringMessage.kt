@@ -44,7 +44,7 @@ fun WalletRestoringMessage(
             Text(
                 text =
                     if (state.isSpendable) {
-                        stringResource(R.string.smartBanner_content_restore_infoSpendable)
+                        stringResource(R.string.private_restore_funds_available)
                     } else {
                         stringResource(R.string.smartBanner_content_restore_info)
                     },

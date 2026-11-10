@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="wallet_initialization_failed">Wallet setup could not finish. Try again to continue the same setup.</string>
+    <string name="wallet_initialization_retry">Try again</string>
+</resources>

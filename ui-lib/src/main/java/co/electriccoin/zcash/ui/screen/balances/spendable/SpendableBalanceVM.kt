@@ -10,9 +10,6 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.LoadedAccountBalances
 import co.electriccoin.zcash.ui.common.model.WalletAccount
-import co.electriccoin.zcash.ui.common.repository.isPending
-import co.electriccoin.zcash.ui.common.usecase.GetTransactionsUseCase
-import co.electriccoin.zcash.ui.common.usecase.ListTransactionData
 import co.electriccoin.zcash.ui.common.usecase.ShieldFundsUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.StringResource
@@ -23,22 +20,18 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 class SpendableBalanceVM(
     accountDataSource: AccountDataSource,
-    getTransactions: GetTransactionsUseCase,
     private val navigationRouter: NavigationRouter,
     private val shieldFunds: ShieldFundsUseCase,
 ) : ViewModel() {
     val state =
-        combine(
-            accountDataSource.selectedAccount,
-            getTransactions.observe()
-        ) { account, transactions ->
-            createState(account, transactions)
+        accountDataSource.selectedAccount.map { account ->
+            createState(account)
         }.filterNotNull()
             .stateIn(
                 scope = viewModelScope,
@@ -48,44 +41,45 @@ class SpendableBalanceVM(
                         account =
                             accountDataSource.allAccounts.value
                                 .orEmpty()
-                                .firstOrNull { it.isSelected },
-                        transactions = null
+                                .firstOrNull { it.isSelected }
                     )
             )
 
     @Suppress("ReturnCount")
-    private fun createState(account: WalletAccount?, transactions: List<ListTransactionData>?): SpendableBalanceState? {
+    private fun createState(account: WalletAccount?): SpendableBalanceState? {
         if (account == null) return null
         val balances = account.loadedBalances ?: return null
         val canShield = account.isSpendable && balances.isShieldingAvailable
         return SpendableBalanceState(
             title = stringRes(R.string.balances_spendableBalance_title),
-            message = createMessage(balances, transactions, canShield),
+            message = createMessage(balances, canShield),
             positive = createPositiveButton(canShield),
             onBack = ::onBack,
-            rows = createInfoRows(balances, transactions),
+            rows = createInfoRows(balances),
             shieldButton = createShieldButtonState(balances, canShield)
         )
     }
 
     private fun createMessage(
         balances: LoadedAccountBalances,
-        transactions: List<ListTransactionData>?,
         canShield: Boolean
     ): StringResource {
         val pending =
             when {
+                balances.pendingShieldedBalance > Zatoshi(0) -> {
+                    stringRes(R.string.private_balance_pending_confirmations)
+                }
+
+                balances.isAllShielded && balances.totalTransparentBalance > Zatoshi(0) -> {
+                    stringRes(R.string.private_balance_transparent_remainder)
+                }
+
                 balances.isAllShielded -> {
                     stringRes(R.string.balances_everythingDone)
                 }
 
-                balances.totalBalance > balances.spendableShieldedBalance &&
-                    transactions.orEmpty().any { it.transaction.isPending } -> {
-                    stringRes(R.string.balances_infoPending)
-                }
-
                 balances.totalBalance > balances.spendableShieldedBalance -> {
-                    stringRes(R.string.balances_infoSyncing)
+                    stringRes(R.string.private_balance_not_yet_spendable)
                 }
 
                 else -> {
@@ -120,10 +114,8 @@ class SpendableBalanceVM(
         )
 
     private fun createInfoRows(
-        balances: LoadedAccountBalances,
-        transactions: List<ListTransactionData>?
+        balances: LoadedAccountBalances
     ): List<SpendableBalanceRowState> {
-        val hasPendingTransaction = transactions.orEmpty().any { it.transaction.isPending }
         return listOfNotNull(
             SpendableBalanceRowState(
                 title = stringRes(R.string.balances_spendableBalance),
@@ -132,9 +124,7 @@ class SpendableBalanceVM(
                     stringRes(balances.spendableShieldedBalance)
             ),
             when {
-                balances.totalShieldedBalance > balances.spendableShieldedBalance &&
-                    balances.isShieldedPending &&
-                    hasPendingTransaction -> {
+                balances.pendingShieldedBalance > Zatoshi(0) -> {
                     SpendableBalanceRowState(
                         title = stringRes(R.string.balances_pending),
                         icon = loadingImageRes(),
@@ -142,9 +132,9 @@ class SpendableBalanceVM(
                     )
                 }
 
-                balances.totalShieldedBalance > balances.spendableShieldedBalance && hasPendingTransaction -> {
+                balances.totalShieldedBalance > balances.spendableShieldedBalance -> {
                     SpendableBalanceRowState(
-                        title = stringRes(R.string.balances_pending),
+                        title = stringRes(R.string.private_balance_unavailable_row),
                         icon = loadingImageRes(),
                         value =
                             stringRes(balances.totalShieldedBalance - balances.spendableShieldedBalance)
