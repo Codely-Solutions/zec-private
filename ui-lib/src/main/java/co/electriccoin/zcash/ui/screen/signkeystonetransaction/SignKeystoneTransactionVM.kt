@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.BuildConfig
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.usecase.CancelProposalFlowUseCase
 import co.electriccoin.zcash.ui.common.usecase.CreateKeystoneProposalPCZTEncoderUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
@@ -75,6 +76,7 @@ class SignKeystoneTransactionVM(
             observeSelectedWalletAccount.require(),
             currentQrPart
         ) { proposal, wallet, qrData ->
+            if (wallet !is KeystoneAccount) return@combine null
             SignKeystoneTransactionState(
                 barTitle = stringRes(R.string.keystone_signWith_signTransaction),
                 title = stringRes(R.string.keystone_signWith_title),
