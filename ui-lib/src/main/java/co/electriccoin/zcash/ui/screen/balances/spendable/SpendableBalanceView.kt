@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -25,9 +27,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.Placeholder
+import androidx.compose.ui.text.PlaceholderVerticalAlign
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cash.z.ecc.android.sdk.model.Zatoshi
@@ -51,6 +57,7 @@ import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 import co.electriccoin.zcash.ui.design.util.Compose
+import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.ImageResource
 import co.electriccoin.zcash.ui.design.util.getValue
 import co.electriccoin.zcash.ui.design.util.imageRes
@@ -146,15 +153,12 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
     Row(
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            modifier = Modifier.weight(1f),
-            text = state.title.getValue(),
-            color = ZashiColors.Text.textTertiary,
-            style = ZashiTypography.textSm,
-        )
+        BalanceRowLabel(state, Modifier.weight(1f))
         Spacer(12.dp)
-        BalanceRowIcon(state)
-        Spacer(8.dp)
+        if (state.info == null) {
+            BalanceRowIcon(state.icon)
+            Spacer(8.dp)
+        }
         SelectionContainer {
             Text(
                 text =
@@ -175,34 +179,58 @@ private fun BalanceActionRow(state: SpendableBalanceRowState) {
     }
 }
 
+@Composable
+private fun BalanceRowLabel(state: SpendableBalanceRowState, modifier: Modifier) {
+    val label = state.title.getValue()
+    val info = state.info
+    val targetSize = with(LocalDensity.current) { 48.dp.toSp() }
+    Text(
+        modifier = modifier,
+        text = buildAnnotatedString {
+            append(label)
+            if (info != null) {
+                append('\u00a0')
+                appendInlineContent("info", " ")
+            }
+        },
+        inlineContent = if (info == null) emptyMap() else mapOf(
+            "info" to InlineTextContent(
+                Placeholder(targetSize, targetSize, PlaceholderVerticalAlign.TextCenter)
+            ) { BalanceRowInfo(info) }
+        ),
+        color = ZashiColors.Text.textTertiary,
+        style = ZashiTypography.textSm
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BalanceRowIcon(state: SpendableBalanceRowState) {
-    val info = state.info
-    if (info != null) {
-        val tooltip = rememberTooltipState(isPersistent = true)
-        val scope = rememberCoroutineScope()
-        ZashiTooltipBox(
-            state = tooltip,
-            tooltip = { PlainTooltip { Text(info.getValue(), style = ZashiTypography.textSm) } },
-            anchor = {
-                ZashiIconButton(
-                    state = IconButtonState(
-                        icon = co.electriccoin.zcash.ui.design.R.drawable.ic_info,
-                        contentDescription = stringRes(R.string.private_balance_transparent_help_label),
-                        onClick = { scope.launch { tooltip.show() } }
-                    ),
-                    iconSize = 20.dp,
-                    iconTint = ZashiColors.Text.textTertiary
-                )
-            }
-        )
-    } else {
-        when (state.icon) {
-            is ImageResource.ByDrawable, is ImageResource.Layered -> state.icon.Compose(modifier = Modifier.size(20.dp))
-            ImageResource.Loading -> LottieProgress(modifier = Modifier.size(20.dp))
-            is ImageResource.DisplayString -> Unit
+private fun BalanceRowInfo(info: StringResource) {
+    val tooltip = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    ZashiTooltipBox(
+        state = tooltip,
+        tooltip = { PlainTooltip { Text(info.getValue(), style = ZashiTypography.textSm) } },
+        anchor = {
+            ZashiIconButton(
+                state = IconButtonState(
+                    icon = co.electriccoin.zcash.ui.design.R.drawable.ic_info,
+                    contentDescription = stringRes(R.string.private_balance_transparent_help_label),
+                    onClick = { scope.launch { tooltip.show() } }
+                ),
+                iconSize = 20.dp,
+                iconTint = ZashiColors.Text.textTertiary
+            )
         }
+    )
+}
+
+@Composable
+private fun BalanceRowIcon(icon: ImageResource) {
+    when (icon) {
+        is ImageResource.ByDrawable, is ImageResource.Layered -> icon.Compose(modifier = Modifier.size(20.dp))
+        ImageResource.Loading -> LottieProgress(modifier = Modifier.size(20.dp))
+        is ImageResource.DisplayString -> Unit
     }
 }
 
