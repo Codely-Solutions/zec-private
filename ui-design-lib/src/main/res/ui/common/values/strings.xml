@@ -623,7 +623,7 @@
     <string name="restore_subtitle">Seed Recovery Phrase</string>
     <string name="restoreWallet_info">Enter your 24-word secret recovery phrase in order, or paste the complete phrase.</string>
     <string name="restore_seed_paste">Paste recovery phrase</string>
-    <string name="restore_seed_paste_error">Copy a valid 24-word recovery phrase, then tap Paste recovery phrase. You can also enter the words below.</string>
+    <string name="restore_seed_paste_error">Enter or paste a valid 24-word recovery phrase.</string>
     <string name="restore_dialog_message_1_bold_part">The Secret Recovery Phrase</string>
     <string name="restore_dialog_message_1">is a unique set of 24 words, appearing in a
         precise order. It can be used to gain full control of your funds from any device via any Zcash wallet app.
