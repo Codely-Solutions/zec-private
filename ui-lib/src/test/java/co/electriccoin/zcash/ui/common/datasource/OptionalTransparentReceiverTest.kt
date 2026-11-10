@@ -11,7 +11,10 @@ import kotlin.test.assertSame
 class OptionalTransparentReceiverTest {
     @Test
     fun anAvailableAddressDoesNotNeedAnotherKeyDecode() = runTest {
-        assertEquals("synthetic-address", resolveTransparentReceiver(true, { "synthetic-address" }, { error("unused") }))
+        assertEquals(
+            "synthetic-address",
+            resolveTransparentReceiver(true, { "synthetic-address" }, { error("unused") })
+        )
     }
 
     @Test
