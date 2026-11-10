@@ -11,6 +11,7 @@ Use this guide when changing screens or shared controls. Material 3 and Android 
 - Keep routine action labels short and naturally single-line. Allow wrapping when translation, narrow space or larger text requires it; preserve the complete action and a comfortable target. Place supporting explanation beside the control. A two-line information label remains ordinary text.
 - Give a navigation row one action across its full width, with leading-aligned text and a trailing decorative glyph that shares that action. Keep the glyph separate from the localized label and omit redundant accessibility text. Use a separate control when a second action is necessary to the reader's task. Style standalone secondary links for their local form hierarchy; use consistent list alignment for repeated navigation rows with the same purpose.
 - Present data in aligned label/value rows and keep copy affordances with the values they copy. Place external-navigation links in their navigation context. Show identifiers when readers need to inspect, copy or distinguish them; a destination label is sufficient for a single explorer link. Number genuinely multiple transactions within the same leg and preserve their distinct targets.
+- Group contextual help with its label, keeping a consistent visual gap and an accessible target. Center the icon beside the complete label when it wraps; align the separate value column independently.
 
 ## Make information useful
 
