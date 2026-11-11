@@ -54,12 +54,14 @@ class HostedReleaseTests(unittest.TestCase):
             raise AssertionError(path)
 
         metadata.api.side_effect = respond
-        self.assertEqual(hosted_claim.rehearsal_version(VERSION - 1, CONTROLLER, metadata, followup=True), VERSION + 1)
+        self.assertEqual(hosted_claim.rehearsal_version(VERSION - 1, CONTROLLER, metadata, number=2), VERSION + 1)
         with self.assertRaisesRegex(ValueError, 'earlier controller'):
-            hosted_claim.rehearsal_version(VERSION - 1, SOURCE, metadata, followup=True)
+            hosted_claim.rehearsal_version(VERSION - 1, SOURCE, metadata, number=2)
         outcome['conclusion'] = 'success'
         with self.assertRaisesRegex(ValueError, 'completed with a failure'):
-            hosted_claim.rehearsal_version(VERSION - 1, CONTROLLER, metadata, followup=True)
+            hosted_claim.rehearsal_version(VERSION - 1, CONTROLLER, metadata, number=2)
+        with self.assertRaisesRegex(ValueError, 'bounded'):
+            hosted_claim.rehearsal_version(VERSION - 1, CONTROLLER, metadata, number=4)
 
     def test_artifact_rejects_wrong_run_controller_role_or_digest(self):
         metadata = Mock()
