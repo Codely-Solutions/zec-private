@@ -44,6 +44,13 @@ dependencies {
     implementation(libs.bundles.androidx.test)
     implementation(libs.androidx.test.macrobenchmark)
 
+    constraints {
+        // Benchmark 1.5.0 uses Wire 6.4.0, before the oversized-length decoder fix.
+        val wireVersion = "6.4.7"
+        implementation("com.squareup.wire:wire-runtime:$wireVersion")
+        implementation("com.squareup.wire:wire-runtime-jvm:$wireVersion")
+    }
+
     androidTestUtil(libs.androidx.test.services) {
         artifact {
             type = "apk"

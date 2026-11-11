@@ -10,6 +10,12 @@ dependencies {
             attribute(Bundling.BUNDLING_ATTRIBUTE, objects.named<Bundling>(Bundling.EXTERNAL))
         }
     }
+    constraints {
+        // ktlint 1.8.0 brings Logback 1.3.16. Keep the CLI's SLF4J provider and core aligned.
+        val logbackVersion = "1.5.38"
+        add(ktlint.name, "ch.qos.logback:logback-classic:$logbackVersion")
+        add(ktlint.name, "ch.qos.logback:logback-core:$logbackVersion")
+    }
 }
 
 tasks {

@@ -22,6 +22,26 @@ dependencyLocking {
 dependencies {
     val rootProperties = getRootProperties()
 
+    constraints {
+        // AGP uses these together for host-side certificate and archive handling.
+        val bouncyCastleVersion = "1.87"
+        implementation("org.bouncycastle:bcprov-jdk18on:$bouncyCastleVersion") {
+            because("Fix certificate name-constraint bypass and ASN.1 nesting limits")
+        }
+        implementation("org.bouncycastle:bcpkix-jdk18on:$bouncyCastleVersion")
+        implementation("org.bouncycastle:bcutil-jdk18on:$bouncyCastleVersion")
+
+        // Keep host-tool fixes on the convention plugin classpath.
+        implementation("com.google.guava:guava:33.8.0-jre")
+        implementation("org.apache.commons:commons-compress:1.28.0")
+        implementation("org.apache.commons:commons-lang3:3.21.0")
+        implementation("org.bitbucket.b_c:jose4j:0.9.7")
+        implementation("org.jdom:jdom2:2.0.6.1")
+
+        // Kover's IntelliJ coverage reporter still requests FreeMarker 2.3.32.
+        implementation("org.freemarker:freemarker:2.3.35")
+    }
+
     implementation("com.android.tools.build:gradle:${rootProperties.getProperty("ANDROID_GRADLE_PLUGIN_VERSION")}")
     implementation("com.google.apis:google-api-services-androidpublisher:${rootProperties.getProperty
          ("PLAY_PUBLISHER_API_VERSION")}")
