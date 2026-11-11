@@ -7,7 +7,7 @@ if [[ ! -x "$ANDROID_HOME/emulator/emulator" ]]; then
   timeout 180 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator
 fi
 "$ANDROID_HOME/emulator/emulator" -accel-check
-"$ANDROID_HOME/emulator/emulator" -version | head -n 2
+sed -n '/^Pkg.Revision/p' "$ANDROID_HOME/emulator/source.properties"
 scratch=$(mktemp -d "$RUNNER_TEMP/zec-hosted-probe.XXXXXX")
 namespace="zec-probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
 created=false
@@ -34,11 +34,13 @@ trap cleanup EXIT
 image=$(PYTHONPATH=.private python3 -B -c 'import sys; from emulator_session import prepare_image; print(prepare_image(sys.argv[1], environ={}))' "$scratch/image-input" | tail -n1)
 test -f "$image/system.img"
 transport=${ZEC_HOSTED_TRANSPORT_PROBE:-false}
+quotes=${ZEC_HOSTED_QUOTE_DIR:-}
 execution=()
-if [[ "$transport" == true ]]; then
-  # Live work runs only on an ephemeral GitHub-hosted VM. The existing
-  # testnet driver enforces its app-UID egress policy before creating a wallet.
-  [[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_ENVIRONMENT:-}" == github-hosted && -n "${ZEC_HOSTED_FIXTURE_DIR:-}" ]]
+if [[ "$transport" == true || -n "$quotes" ]]; then
+  # Live work uses an ephemeral hosted VM and the maintained app Tor scenarios.
+  [[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_ENVIRONMENT:-}" == github-hosted ]]
+  [[ "$transport" != true || -n "${ZEC_HOSTED_FIXTURE_DIR:-}" ]]
+  [[ "$transport" != true || -z "$quotes" ]]
 else
   sudo ip netns add "$namespace"
   created=true
@@ -50,6 +52,7 @@ fi
 "${execution[@]}" env \
   ANDROID_HOME="$ANDROID_HOME" JAVA_HOME="${JAVA_HOME:-/usr}" CODEX_GUARD_OUTPUT="$scratch" CODEX_EMULATOR_IMAGE="$image" \
   ZEC_HOSTED_FIXTURE_DIR="${ZEC_HOSTED_FIXTURE_DIR:-}" ZEC_HOSTED_TRANSPORT_PROBE="$transport" \
+  ZEC_HOSTED_QUOTE_DIR="$quotes" \
   PYTHONPATH=.private python3 -B - <<'PY'
 import os
 from pathlib import Path
@@ -60,6 +63,10 @@ transport = os.environ['ZEC_HOSTED_TRANSPORT_PROBE'] == 'true'
 with EmulatorSession(root / 'session', guest_memory=3072 if transport else 1536) as session:
     assert session.adb('shell', 'getprop', 'ro.product.cpu.abi').stdout.strip() == b'x86_64'
     assert session.adb('shell', 'getprop', 'ro.build.version.sdk').stdout.strip() == b'35'
+    quotes = os.environ['ZEC_HOSTED_QUOTE_DIR']
+    if quotes:
+        from hosted_quote_probe import run as run_quotes
+        run_quotes(session, root, Path(quotes))
     fixture = os.environ['ZEC_HOSTED_FIXTURE_DIR']
     if fixture:
         import json

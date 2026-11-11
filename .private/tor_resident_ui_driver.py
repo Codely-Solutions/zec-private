@@ -1,5 +1,5 @@
 """One resident UiAutomation instrumentation session; no repeated UI-dump JVMs."""
-import socket,json,time,re,subprocess,threading
+import os,socket,json,time,re,subprocess,threading
 
 def run(adb, root, apks, manifest):
     if manifest['package']!='com.personal.zecprivate.foss.debug':
@@ -15,7 +15,10 @@ def run(adb, root, apks, manifest):
     bridge_port=getattr(adb,'bridge_port',8877)
     adb('forward','tcp:'+str(bridge_port),'tcp:8777',timeout=15)
     watcher_log=(root/'ui-instrumentation.log').open('wb')
-    watcher=subprocess.Popen(adb.command_base+['shell','am','instrument','-w','-r','zec.uibridge/zec.uibridge.Bridge'],env=adb.environment,stdout=watcher_log,stderr=watcher_log,creationflags=0x08000000)
+    def start_watcher():
+        return subprocess.Popen(adb.command_base+['shell','am','instrument','-w','-r','zec.uibridge/zec.uibridge.Bridge'],
+            env=adb.environment,stdout=watcher_log,stderr=watcher_log,creationflags=0x08000000 if os.name=='nt' else 0)
+    watcher=start_watcher()
     def request(command):
         with socket.create_connection(('127.0.0.1',bridge_port),timeout=10) as conn:
             conn.settimeout(20);conn.sendall((json.dumps(command)+'\n').encode());data=b''
@@ -111,7 +114,7 @@ def run(adb, root, apks, manifest):
                         upgrade={'passed':True,'fromVersionCode':old_version,'toVersionCode':version,
                                  'storedPreferencesByteIdenticalBeforeStartup':True,'preferenceFiles':len(before),
                                  'signing':'same ephemeral test certificate; production signature checked separately'}
-                        watcher=subprocess.Popen(adb.command_base+['shell','am','instrument','-w','-r','zec.uibridge/zec.uibridge.Bridge'],env=adb.environment,stdout=watcher_log,stderr=watcher_log,creationflags=0x08000000)
+                        watcher=start_watcher()
                         ready=time.monotonic()+90
                         while True:
                             try:state=capture({'action':'snapshot'});break
