@@ -13,6 +13,24 @@ with patch.dict(os.environ,{'GITHUB_REPOSITORY':'example/zec-private'}):
 
 
 class PublishMetadataTest(unittest.TestCase):
+    def test_signing_requires_current_main_controller(self):
+        controller = 'a' * 40
+        for ref, local, remote, allowed in (
+            ('refs/heads/main', controller, controller, True),
+            ('refs/heads/candidate', controller, controller, False),
+            ('refs/tags/main', controller, controller, False),
+            ('refs/heads/main', 'b' * 40, controller, False),
+            ('refs/heads/main', controller, 'b' * 40, False),
+        ):
+            with self.subTest(ref=ref, local=local, remote=remote), \
+                    patch.dict(os.environ, {'GITHUB_REF': ref}), \
+                    patch.object(publish, 'run', side_effect=(local, remote)):
+                if allowed:
+                    publish.require_current_controller(controller)
+                else:
+                    with self.assertRaises(RuntimeError):
+                        publish.require_current_controller(controller)
+
     def test_title_uses_private_revision(self):
         self.assertEqual('ZEC Private — Release 18',publish.release_title('v2.3.4-private.18'))
         self.assertEqual('ZEC Private — Release 120',publish.release_title('v9.10.11-private.120'))

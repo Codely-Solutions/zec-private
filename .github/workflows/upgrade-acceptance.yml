@@ -92,7 +92,9 @@ jobs:
           path: artifact/
           retention-days: 1
   sign:
+    if: github.ref == 'refs/heads/main'
     needs: [prepare, unsigned]
+    environment: production-signing
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

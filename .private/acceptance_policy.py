@@ -279,6 +279,7 @@ def validate_binding(proof, profile, expected_inputs, trusted_bytes, artifact_by
 
 ATTESTATION_PATHS={'.private/core-acceptance.json','.private/quote-acceptance.json',
                    '.private/core-validation-summary.json','.private/core-coverage.md','.private/STATUS.md'}
+UPSTREAM_CANDIDATE_RECORDS = {'.private/candidate.json', '.private/source-state.json'}
 
 
 def validate_attestation_changes(paths):
@@ -294,7 +295,12 @@ def verify_promotion_revision(candidate, controller, root=ROOT):
     # the existing update path, independently gated by current real receipts.
     child=subprocess.run(['git','merge-base','--is-ancestor',controller,candidate],cwd=root,
                          stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    if child.returncode==0:return False
+    if child.returncode == 0:
+        protected_changes = git('diff', '--no-renames', '--name-only', '-z', controller, candidate,
+                                '--', '.github', '.private', 'LICENSE', root=root).decode().split('\0')
+        if set(filter(None, protected_changes)) - UPSTREAM_CANDIDATE_RECORDS:
+            raise ValueError('Upstream candidate changed controller-owned files')
+        return False
     subprocess.run(['git','merge-base','--is-ancestor',candidate,controller],cwd=root,check=True,
                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     paths=git('diff','--no-renames','--name-only',candidate,controller,root=root).decode().splitlines()

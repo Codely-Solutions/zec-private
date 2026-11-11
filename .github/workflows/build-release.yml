@@ -20,12 +20,6 @@ on:
         type: string
         required: true
     secrets:
-      RELEASE_KEYSTORE_BASE64:
-        required: true
-      RELEASE_STORE_PASSWORD:
-        required: true
-      RELEASE_KEY_PASSWORD:
-        required: true
       NTFY_URL:
         required: false
 permissions: {}
@@ -69,6 +63,7 @@ jobs:
           python3 -B .private/test_preflight.py
           python3 -B .private/test_actions_artifact_cleanup.py
           python3 -B .private/test_acceptance_policy.py
+          python3 -B .private/test_publish.py
           python3 -B .private/test_core_faucet.py
           python3 -B .private/test_sync.py
           python3 -B .private/test_release_notes.py
@@ -164,7 +159,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
   promotion:
-    if: ${{ inputs.candidate_run }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.candidate_run }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -182,8 +177,9 @@ jobs:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: python3 .private/promotion.py
   publish:
-    if: ${{ always() && !cancelled() && !inputs.validation_only && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))) }}
+    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && !inputs.validation_only && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))) }}
     needs: [unsigned, emulator, promotion]
+    environment: production-signing
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -223,7 +219,7 @@ jobs:
           release_tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
           python3 .private/notify.py "ZEC Private $release_tag is ready. APK built and signed. $release_url"
   failed:
-    if: ${{ always() && (needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.publish.result == 'failure' || needs.promotion.result == 'failure') }}
+    if: ${{ always() && github.ref == 'refs/heads/main' && (needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.publish.result == 'failure' || needs.promotion.result == 'failure') }}
     needs: [unsigned, emulator, promotion, publish]
     runs-on: ubuntu-24.04
     permissions:
