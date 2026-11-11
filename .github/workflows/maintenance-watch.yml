@@ -2,6 +2,9 @@ name: Watch maintenance discovery
 on:
   schedule:
     - cron: '47 */6 * * *'
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 permissions:
   actions: read
@@ -12,12 +15,13 @@ concurrency:
   cancel-in-progress: true
 jobs:
   watch:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'pull_request_target' || github.event.pull_request.user.login == 'dependabot[bot]')
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ github.sha }}
           persist-credentials: false
       - name: Classify proposals without executing their code
         env:
