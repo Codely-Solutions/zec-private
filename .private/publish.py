@@ -19,6 +19,28 @@ def require_current_controller(controller):
     if remote != controller:
         raise RuntimeError('Main changed since validation began; resolve a new promotion')
 
+def verify_release_identity(proof, source):
+    properties = run('git', 'show', f'{source}:gradle.properties')
+    codes = re.findall(r'^ZCASH_VERSION_CODE=([0-9]+)$', properties, re.MULTILINE)
+    names = re.findall(r'^ZCASH_VERSION_NAME=([0-9]+\.[0-9]+\.[0-9]+)$', properties, re.MULTILINE)
+    revision = json.loads(run('git', 'show', f'{source}:.private/release-revision.json'))['private_revision']
+    metadata = '.private/candidate.json'
+    if not run('git', 'ls-tree', '--name-only', source, '--', metadata):
+        metadata = '.private/upstream.json'
+    upstream = json.loads(run('git', 'show', f'{source}:{metadata}'))
+    version = re.fullmatch(r'([0-9]+\.[0-9]+\.[0-9]+)-[0-9]+', upstream['tag'])
+    if (len(codes) != 1 or len(names) != 1 or type(revision) is not int or not 1 <= revision <= 999
+            or not version or version[1] != names[0]):
+        raise RuntimeError('Invalid source release identity')
+    expected = {
+        'versionCode': int(codes[0]), 'versionName': names[0],
+        'release_tag': f'v{version[1]}-private.{revision}',
+        'upstream': dict(upstream, versionCode=int(codes[0])),
+    }
+    if any(proof.get(field) != value for field, value in expected.items()):
+        raise RuntimeError('Artifact release identity differs from immutable source')
+
+
 def release_title(tag):
     match=re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-private\.([0-9]+)',tag) if isinstance(tag,str) else None
     if match is None: raise RuntimeError('Invalid private release tag')
@@ -96,6 +118,7 @@ def main():
     late_attestation=verify_promotion_revision(expected,controller)
     if proof['source_sha']!=expected or proof['apk_sha256']!=hashlib.sha256(apk.read_bytes()).hexdigest():
         raise RuntimeError('Artifact identity/digest mismatch')
+    verify_release_identity(proof, expected)
     if proof['package']!='com.personal.zecprivate.foss' or proof['debuggable']:
         raise RuntimeError('Unexpected APK manifest identity')
     if proof.get('validation')!='unit-lint-detekt-live-ui-fork-v3':

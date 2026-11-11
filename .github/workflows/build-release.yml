@@ -64,6 +64,7 @@ jobs:
           python3 -B .private/test_actions_artifact_cleanup.py
           python3 -B .private/test_acceptance_policy.py
           python3 -B .private/test_publish.py
+          python3 -B .private/test_maintenance_watch.py
           python3 -B .private/test_core_faucet.py
           python3 -B .private/test_sync.py
           python3 -B .private/test_release_notes.py

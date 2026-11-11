@@ -1,5 +1,16 @@
 name: Submit resolved Gradle dependencies
 on:
+  push:
+    branches: [main]
+    paths:
+      - '**/*.gradle.kts'
+      - '**/*.gradle'
+      - '**/gradle.lockfile'
+      - buildSrc/**
+      - gradle/**
+      - gradle.properties
+      - gradlew
+      - gradlew.bat
   workflow_dispatch:
 permissions: {}
 concurrency:
