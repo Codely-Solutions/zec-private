@@ -195,7 +195,7 @@ def ready_session(root):
     except Exception as error:
         if not result.get('passed'):
             result.update(passed=False,exception_class=type(error).__name__,elapsed_seconds=time.monotonic()-began)
-            for key in ('http_status','server_code'):
+            for key in ('http_status','server_code','bootstrap_percent'):
                 if hasattr(error,key):result[key]=getattr(error,key)
             (root/'faucet-readiness.json').write_text(json.dumps(result,indent=2)+'\n')
             raise RuntimeError('Faucet readiness failed: '+type(error).__name__) from None
@@ -326,41 +326,47 @@ def owned_tor(root):
                                     env=environment).splitlines()[0]
     if os.name == 'nt' and 'Tor version 0.4.9.15' not in version:
         raise ValueError('Unexpected stable Tor binary version')
-    with socket.socket() as listener:
-        listener.bind(('127.0.0.1',0));port=listener.getsockname()[1]
     torrc=root/'faucet-torrc'
     torrc.write_bytes(b'')
-    console=root/'faucet-tor-console.log'
-    log=console
-    console_stream=console.open('wb')
-    process=subprocess.Popen([str(tor),'-f',str(torrc),'--ClientOnly','1','--DataDirectory',str(root/'faucet-tor-data'),
-                              '--SocksPort','127.0.0.1:'+str(port),'--AvoidDiskWrites','1',
-                              '--Log','notice stdout'],
-                             stdout=console_stream,stderr=subprocess.STDOUT,creationflags=flags,env=environment)
-    started=time.monotonic()
-    setup_seconds=started-setup_started
-    try:
-        deadline=started+180
-        while time.monotonic()<deadline:
-            if process.poll() is not None:
-                detail=log.read_text(errors='replace')[-1800:] if log.exists() else console.read_text(errors='replace')[-1800:]
-                raise RuntimeError('Task Tor exited before bootstrap: '+detail)
-            if log.exists():
-                if log.stat().st_size>131072:raise RuntimeError('Task Tor log exceeded bound')
-                if 'Bootstrapped 100%' in log.read_text(errors='replace'):break
-            if console.stat().st_size>131072:raise RuntimeError('Task Tor console exceeded bound')
-            time.sleep(.5)
-        else:raise RuntimeError('Task Tor bootstrap timed out; direct fallback forbidden')
-        bootstrap_seconds=time.monotonic()-started
-        metadata.update(setup_seconds=setup_seconds,bootstrap_seconds=bootstrap_seconds,
-                        tor_binary_sha256=hashlib.sha256(tor.read_bytes()).hexdigest(),tor_version=version)
-        yield port,proxy_unavailable_failed_closed,metadata
-    finally:
-        process.terminate()
-        try:process.wait(timeout=10)
-        except subprocess.TimeoutExpired:process.kill();process.wait(timeout=10)
-        if process.poll() is None:raise RuntimeError('Task Tor did not exit')
-        console_stream.close()
+    setup_seconds=time.monotonic()-setup_started
+    bootstrap_started=time.monotonic()
+    progress=0
+    # Retry only a stuck bootstrap, while the caller has no proxy and cannot
+    # issue a request. A fresh private directory avoids reusing stuck guards.
+    for attempt in (1, 2):
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1',0));port=listener.getsockname()[1]
+        console=root/f'faucet-tor-{attempt}.log'
+        with console.open('wb') as console_stream:
+            process=subprocess.Popen([str(tor),'-f',str(torrc),'--ClientOnly','1',
+                                      '--DataDirectory',str(root/f'faucet-tor-data-{attempt}'),
+                                      '--SocksPort','127.0.0.1:'+str(port),'--AvoidDiskWrites','1',
+                                      '--Log','notice stdout'], stdout=console_stream,
+                                     stderr=subprocess.STDOUT,creationflags=flags,env=environment)
+            try:
+                deadline=time.monotonic()+90
+                while time.monotonic()<deadline:
+                    if process.poll() is not None:
+                        raise RuntimeError('Task Tor exited before bootstrap')
+                    if console.stat().st_size>131072:
+                        raise RuntimeError('Task Tor log exceeded bound')
+                    percentages=re.findall(r'\bBootstrapped (\d{1,3})%', console.read_text(errors='replace'))
+                    progress=int(percentages[-1]) if percentages else 0
+                    if progress==100:
+                        metadata.update(setup_seconds=setup_seconds,bootstrap_seconds=time.monotonic()-bootstrap_started,
+                                        tor_start_attempts=attempt,tor_binary_sha256=hashlib.sha256(tor.read_bytes()).hexdigest(),
+                                        tor_version=version)
+                        yield port,proxy_unavailable_failed_closed,metadata
+                        return
+                    time.sleep(.5)
+            finally:
+                process.terminate()
+                try:process.wait(timeout=10)
+                except subprocess.TimeoutExpired:process.kill();process.wait(timeout=10)
+                if process.poll() is None:raise RuntimeError('Task Tor did not exit')
+    error=TimeoutError('Task Tor bootstrap timed out before any faucet request')
+    error.bootstrap_percent=progress
+    raise error
 
 
 def fund(address,root):

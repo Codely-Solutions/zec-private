@@ -105,6 +105,13 @@ def run(session, root, fixture, candidate, result):
                 keys = ('phase', 'elapsed_ms', 'probe_only', 'exception_class', 'status', 'error_type', 'cause_class')
                 data = [{key: item[key] for key in keys if key in item} for item in sync]
                 print('Hosted synchronization markers ' + json.dumps(data), flush=True)
+        readiness = root / 'faucet-readiness.json'
+        if readiness.is_file():
+            status = json.loads(readiness.read_text())
+            if status.get('passed') is False:
+                keys = ('stage', 'exception_class', 'http_status', 'server_code', 'bootstrap_percent', 'claim_requests')
+                print('Hosted faucet readiness ' + json.dumps({key: status[key] for key in keys if key in status}),
+                      flush=True)
         raise
     report = json.loads((root / 'core-testnet-result.json').read_text())
     if upgrade_probe:

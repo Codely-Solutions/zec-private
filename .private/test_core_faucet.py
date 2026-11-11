@@ -2,11 +2,12 @@
 import unittest
 import hashlib
 import io
+from itertools import count
 import tempfile
 import json
 import os
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, Mock, patch
 from core_faucet import TorHTTPS,FAUCET,verify_unavailable_proxy,bundle_archive
 import core_faucet
 from contextlib import contextmanager
@@ -65,6 +66,38 @@ class ReadinessTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):core_faucet.readiness(root)
             tor.assert_not_called()
             self.assertEqual(ledger.read_text(),'prior uncertain claim')
+
+    def test_stuck_bootstrap_restarts_before_exposing_a_proxy(self):
+        starts = []
+        listener = MagicMock()
+        listener.__enter__.return_value.getsockname.side_effect = [('127.0.0.1', 12345), ('127.0.0.1', 12346)]
+
+        def start(command, *, stdout, **_):
+            if starts:
+                starts[0].terminate.assert_called_once()
+                stdout.write(b'Bootstrapped 100%: Done\n')
+                stdout.flush()
+            process = Mock()
+            process.poll.return_value = None
+            process.terminate.side_effect = lambda: setattr(process.poll, 'return_value', 0)
+            starts.append(process)
+            return process
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            binary = root / 'tor-test'
+            binary.write_bytes(b'isolated test binary')
+            with patch('core_faucet.tor_binary', return_value=(binary, {})), \
+                    patch('core_faucet.verify_unavailable_proxy', return_value=True), \
+                    patch('core_faucet.subprocess.check_output', return_value='Tor version 0.4.9.15\n'), \
+                    patch('core_faucet.subprocess.Popen', side_effect=start), \
+                    patch('core_faucet.socket.socket', return_value=listener), \
+                    patch('core_faucet.time.monotonic', side_effect=count(0, 45)), patch('core_faucet.time.sleep'):
+                with core_faucet.owned_tor(root) as (port, _, evidence):
+                    self.assertEqual(port, 12346)
+                    self.assertEqual(evidence['tor_start_attempts'], 2)
+                    starts[1].terminate.assert_not_called()
+                starts[1].terminate.assert_called_once()
 
     def test_ready_funding_rejects_non_testnet_before_claim(self):
         @contextmanager
