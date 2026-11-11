@@ -318,7 +318,15 @@ class CoreWalletAcceptance {
                     save(state.put("restoreMinedHeight",checkNotNull(transaction.overview.minedHeight).value)
                         .put("restoreTransactionState",transaction.overview.transactionState.toString()))
                 }
-                "transport", "transportProbe" -> runTransport(probeOnly = stage == "transportProbe")
+                "transport", "transportProbe" -> try {
+                    runTransport(probeOnly = stage == "transportProbe")
+                } catch (error: Exception) {
+                    println("CORE_SYNC_DIAGNOSTIC " + JSONObject()
+                        .put("phase", "transport_exception")
+                        .put("exception_class", error.javaClass.simpleName)
+                        .put("cause_class", error.cause?.javaClass?.simpleName ?: "none"))
+                    throw error
+                }
                 "rpcProbe" -> {
                     check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
                     val tor = createPublicProbeTor()

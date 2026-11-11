@@ -2,10 +2,11 @@ name: Hosted testnet lifecycle
 on:
   workflow_dispatch:
     inputs:
-      restore_probe:
-        description: Exercise installed upgrade and seed restore without a faucet claim
-        type: boolean
-        default: false
+      upgrade_probe:
+        description: Run the funded lifecycle or isolate one unfunded boundary after an upgrade
+        type: choice
+        options: [funded, restore, transport]
+        default: funded
       rehearsal_number:
         description: Test-only reservation number. Use a later one only after diagnosing prior failed rehearsals.
         type: number
@@ -27,7 +28,7 @@ on:
 permissions: {}
 jobs:
   provision-tor:
-    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && !inputs.restore_probe
+    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && (!inputs.upgrade_probe || inputs.upgrade_probe == 'funded')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -50,7 +51,7 @@ jobs:
         run: rm -rf -- "$RUNNER_TEMP/zec-tor-runtime"
   reserve:
     needs: provision-tor
-    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && !inputs.restore_probe
+    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && (!inputs.upgrade_probe || inputs.upgrade_probe == 'funded')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -78,7 +79,7 @@ jobs:
           python3 -B .private/hosted_claim.py
   wallet:
     needs: [provision-tor, reserve]
-    if: ${{ !cancelled() && (needs.reserve.result == 'success' || (inputs.restore_probe && github.event_name == 'workflow_dispatch' && github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1)) }}
+    if: ${{ !cancelled() && (needs.reserve.result == 'success' || ((inputs.upgrade_probe == 'restore' || inputs.upgrade_probe == 'transport') && github.event_name == 'workflow_dispatch' && github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 44
     permissions:
@@ -92,14 +93,14 @@ jobs:
       ZEC_CORE_VERSION: ${{ needs.reserve.outputs.version }}
       ZEC_CORE_RESERVATION: ${{ needs.reserve.outputs.reservation }}
       ZEC_CORE_REHEARSAL: ${{ inputs.source_sha == '' }}
-      ZEC_CORE_RESTORE_PROBE: ${{ inputs.restore_probe || false }}
+      ZEC_CORE_UPGRADE_PROBE: ${{ inputs.upgrade_probe != 'funded' && inputs.upgrade_probe || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 0
       - name: Verify one-use reservation
-        if: '!inputs.restore_probe'
+        if: '!env.ZEC_CORE_UPGRADE_PROBE'
         env:
           GH_TOKEN: ${{ github.token }}
         run: PYTHONPATH=.private python3 -B -c 'from hosted_core import verify_reservation; verify_reservation()'
@@ -112,13 +113,13 @@ jobs:
           node-version: '24.22.2'
           package-manager-cache: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        if: '!inputs.restore_probe'
+        if: '!env.ZEC_CORE_UPGRADE_PROBE'
         with:
           artifact-ids: ${{ needs.provision-tor.outputs.bundle_id }}
           path: ${{ runner.temp }}/zec-tor-runtime
           digest-mismatch: error
       - name: Verify and run the staged Tor binary without a download
-        if: '!inputs.restore_probe'
+        if: '!env.ZEC_CORE_UPGRADE_PROBE'
         run: bash .private/run_tor_ci.sh --install-bundle
       - uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63
         with:
@@ -135,7 +136,7 @@ jobs:
         if: inputs.source_sha == ''
         timeout-minutes: 16
         run: |
-          if [[ "$ZEC_CORE_RESTORE_PROBE" == true ]]; then
+          if [[ -n "$ZEC_CORE_UPGRADE_PROBE" ]]; then
             ZEC_CORE_VERSION=$(jq -er '.version_code + 1' .private/hosted-fixture.json)
             echo "ZEC_CORE_VERSION=$ZEC_CORE_VERSION" >> "$GITHUB_ENV"
           fi
@@ -166,7 +167,7 @@ jobs:
           fi
           ZEC_CORE_RESULT="$RUNNER_TEMP/hosted-core.json" ZEC_HOSTED_CORE_DIR="$PWD/core-artifact" ZEC_HOSTED_FIXTURE_DIR="$RUNNER_TEMP/zec-hosted-pair" bash .private/hosted_emulator_smoke.sh
       - id: receipt
-        if: '!inputs.restore_probe'
+        if: '!env.ZEC_CORE_UPGRADE_PROBE'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: hosted-core-receipt

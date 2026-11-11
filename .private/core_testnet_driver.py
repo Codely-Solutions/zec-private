@@ -61,11 +61,11 @@ def verify_instrumentation_pair(adb, expected_version, expected_hash):
     return dict(app_version_code=expected_version, executed_sha256=installed_hash, installed_hash_verified=True)
 
 
-def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False, restore_probe=False):
+def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False, upgrade_probe=None):
     started = time.monotonic()
-    if restore_probe and (not transport_only or repeat_cold_start):
-        raise ValueError('The restore probe requires its own unfunded advancing APK pair')
-    if transport_only and not restore_probe:
+    if upgrade_probe and (upgrade_probe not in ('restore', 'transport') or not transport_only or repeat_cold_start):
+        raise ValueError('The upgrade probe requires its own unfunded advancing APK pair')
+    if transport_only and not upgrade_probe:
         baseline, baseline_test = apks
         candidate, test = baseline, baseline_test
         if manifest['candidate_version_code'] != manifest['baseline_version_code']:
@@ -143,7 +143,7 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             # Keep only class/line locations and explicit safe assertions; never raw test output.
             safe = [line[:240] for line in output.splitlines() if re.search(r'CoreWalletAcceptance.kt:\d+|^java\.lang\.|^kotlinx\.coroutines\.|Faucet claim HTTP \d+', line)]
             diagnostic=dict(stage=name,lines=safe[-12:])
-            diagnostic['sync']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_SYNC_DIAGNOSTIC ')][-1:]
+            diagnostic['sync']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_SYNC_DIAGNOSTIC ')][-8:]
             diagnostic['native_errors']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_NATIVE_ERROR ')][-3:]
             diagnostic['submission']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_SEND_DIAGNOSTIC ')][-1:]
             diagnostic['accounting']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_ACCOUNTING_DIAGNOSTIC ')][-6:]
@@ -344,16 +344,17 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             stage('sender',240)
             check_denials('sender')
             report['faucet_claims'] = 0
-            if restore_probe:
+            if upgrade_probe:
                 shell('am','force-stop',PACKAGE)
                 adb('install','-r',str(candidate),timeout=90)
                 adb('install','-r','-t',str(test),timeout=90)
                 if uid()!=app_uid or version()!=manifest['candidate_version_code']:
                     raise RuntimeError('Installed restore probe identity/version mismatch')
-                clear_wallet()
-                stage('restoreProbe',240)
-                finish_network_check('restore-probe', transport_exercised=False)
-                return
+                if upgrade_probe == 'restore':
+                    clear_wallet()
+                    stage('restoreProbe',240)
+                    finish_network_check('restore-probe', transport_exercised=False)
+                    return
         else:
             current_stage='faucet_readiness'
             with faucet_ready_session(root) as (readiness, fund_testnet):
@@ -423,6 +424,8 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 active_drops.remove(binary)
             worker.join(timeout=200)
             if worker.is_alive() or not outcome.get('passed') or blocked==0:
+                report['transport_failure'] = dict(worker_active=worker.is_alive(),
+                    worker_error=outcome.get('error'), blocked_packets=blocked)
                 raise RuntimeError('Tor interruption/recovery not established')
             recovery=json.loads(shell('run-as',PACKAGE,'cat','files/core-sync-result.json'))
             required = ['sync_restarted', 'synced', 'balance_preserved', 'update_metadata_valid_before',
