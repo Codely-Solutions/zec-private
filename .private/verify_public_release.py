@@ -13,7 +13,7 @@ from urllib.request import Request, urlopen
 import zipfile
 
 from apk_architecture import check_apk
-from publish import CERT, REPO
+from publish import CERT, REPO, read_attestation
 
 
 APK = 'zec-private-latest.apk'
@@ -125,8 +125,15 @@ def main():
     sha = digest(signed)
     checksum = published_asset(tag, assets[CHECKSUM], 1024)
     require(checksum.decode().strip() == f'{sha}  {APK}', 'Public checksum file mismatch')
-    response = gh(f'contents/.private/release-evidence/{tag}.json?ref=main')
-    evidence = json.loads(base64.b64decode(response['content']))
+    attestation_digest = os.environ.get('ATTESTATION_DIGEST')
+    if attestation_digest:
+        evidence = read_attestation(Path(os.environ['RUNNER_TEMP']) / 'publication/release-attestation.json',
+                                    attestation_digest)
+        require(evidence['release_tag'] == tag and evidence['controller_sha'] == os.environ['GITHUB_SHA'],
+                'Publication attestation does not match the current controller')
+    else:
+        response = gh(f'contents/.private/release-evidence/{tag}.json?ref=main')
+        evidence = json.loads(base64.b64decode(response['content']))
     require(evidence['apk_sha256'] == sha, 'Public APK does not match trusted release evidence')
     ref = gh(f'git/ref/tags/{tag}')['object']
     for _ in range(4):
