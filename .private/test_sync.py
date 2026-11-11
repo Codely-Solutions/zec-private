@@ -60,7 +60,22 @@ class SyncTests(unittest.TestCase):
         self.state=json.loads((sync.ROOT/'.private/upstream.json').read_text())
         self.before=(sync.ROOT/'.private/upstream.json').read_bytes()
         major,minor,patch_version,build=sync.version(self.state['tag'])
-        self.next_tag=f'{major}.{minor}.{patch_version+1}-{build+1}'
+        self.next_tag=f'{major}.{minor}.{patch_version}-{build+1}'
+        versions = patch.object(sync, 'fork_release_versions', return_value=[(20, 3234020), (21, 3234021)])
+        versions.start()
+        self.addCleanup(versions.stop)
+
+    def test_version_allocation_uses_all_pages_and_prevents_downgrades(self):
+        from release_metadata import next_release_version, wallet_release_versions
+
+        versions = wallet_release_versions([
+            [{'tag_name': 'maintenance-fixtures', 'body': ''},
+             {'tag_name': 'v3.19.0-private.21', 'body': 'Android versionCode: 3234021\n'}],
+            [{'tag_name': 'v3.18.0-private.23', 'body': 'Android versionCode: 4000000\n'}],
+        ])
+        self.assertEqual(next_release_version(versions, 21, 3234021, 1), (24, 4000001))
+        with self.assertRaisesRegex(ValueError, 'outside reviewed bounds'):
+            next_release_version(versions, 999, 3234021, 1)
 
     def release(self,tag,published='2026-11-04T00:00:00Z',**extra):
         return dict(tag_name=tag,published_at=published,draft=False,prerelease=False,
@@ -140,6 +155,11 @@ class SyncTests(unittest.TestCase):
                 new_file=upstream/'feature-voting/upstream-only-change.txt'
                 new_file.write_text('Disposable excluded feature change\n')
                 original('git','add',str(new_file),cwd=upstream)
+                properties = upstream/'gradle.properties'
+                text = properties.read_text()
+                self.assertIn('ZCASH_VERSION_CODE=1\n', text)
+                properties.write_text(text.replace('ZCASH_VERSION_CODE=1\n', 'ZCASH_VERSION_CODE=2\n'))
+                original('git', 'add', 'gradle.properties', cwd=upstream)
                 original('git','-c','user.name=Excluded feature test','-c',
                          'user.email=zec-private@users.noreply.github.com','commit','-m',
                          'Disposable upstream voting-only change',cwd=upstream)
@@ -179,7 +199,8 @@ class SyncTests(unittest.TestCase):
             with patch.dict(os.environ,{'RUNNER_TEMP':temp}),patch.object(sync,'gh',return_value=[self.release(self.next_tag)]),patch.object(sync,'run',side_effect=commands),patch.object(sync,'output') as output:
                 sync.main()
                 self.assertEqual('true',output.call_args.kwargs['changed'])
-                self.assertEqual('updates/'+self.next_tag,output.call_args.kwargs['branch'])
+                self.assertEqual('updates/'+self.next_tag+'-'+original('git','rev-parse','HEAD')[:12],
+                                 output.call_args.kwargs['branch'])
                 self.assertEqual(1,len(writes))
                 tree=original('git','ls-tree','-r','--name-only',output.call_args.kwargs['source_sha']).splitlines()
                 self.assertFalse(any('__pycache__' in name or name.endswith('.pyc') for name in tree))
@@ -195,6 +216,10 @@ class SyncTests(unittest.TestCase):
                     self.assertEqual(original('git','show',output.call_args.kwargs['source_sha']+':'+name),
                                      (sync.ROOT/name).read_text().strip())
                 self.assertIn('app/src/main/java/co/electriccoin/zcash/app/ZecPrivateProductModule.kt', tree)
+                sha = output.call_args.kwargs['source_sha']
+                self.assertEqual(22, json.loads(original('git','show',sha+':.private/release-revision.json'))['private_revision'])
+                patch_text = original('git','show',sha+':.private/fork.patch')
+                self.assertNotIn('+ZCASH_VERSION_CODE=', patch_text)
             self.assertFalse((Path(temp)/'candidate').exists())
         self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
 

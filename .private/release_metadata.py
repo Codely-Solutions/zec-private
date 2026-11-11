@@ -5,6 +5,26 @@ def require(condition, message):
     if not condition:
         raise ValueError(message)
 
+
+def wallet_release_versions(pages):
+    versions = []
+    for release in (item for page in pages for item in page):
+        match = re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-private\.([1-9][0-9]*)', release['tag_name'])
+        if not match:
+            continue
+        codes = re.findall(r'^Android versionCode: ([1-9][0-9]*)[ \t]*\r?$', release.get('body') or '', re.M)
+        require(len(codes) <= 1, 'Ambiguous published Android versionCode')
+        versions.append((int(match[1]), int(codes[0]) if codes else 0))
+    return versions
+
+
+def next_release_version(versions, current_revision, current_code, upstream_build):
+    revision = max([current_revision] + [item[0] for item in versions]) + 1
+    code = max(max([current_code] + [item[1] for item in versions]) + 1, upstream_build * 1000 + revision)
+    require(1 <= revision <= 999 and 1 <= code <= 2_100_000_000, 'Release version outside reviewed bounds')
+    return revision, code
+
+
 class Metadata:
     def __init__(self, repo="Codely-Solutions/zec-private", gh=GH, seconds=180):
         require(re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo), "Invalid repository")

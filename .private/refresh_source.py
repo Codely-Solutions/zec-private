@@ -14,16 +14,19 @@ def generate_patch(root,upstream,paths):
         raise RuntimeError('Stage reviewed source changes before refreshing the canonical fork patch')
     unstaged.check_returncode()
     return subprocess.check_output(['git','diff','--cached','--no-ext-diff','--no-textconv',
-        '--binary','--unified=0',upstream,'--',*paths],cwd=root,timeout=30)
+        '--binary','--unified=0','-I','^ZCASH_VERSION_(CODE|NAME)=',upstream,'--',*paths],cwd=root,timeout=30)
+
+
+def patch_paths(excluded):
+    return ['.',':(exclude).private',':(exclude).github',':(exclude)README.md',
+            ':(exclude)ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/NearApiProvider.kt',
+            ':(exclude)docs/UPSTREAM-README.md',':(exclude)docs/UPSTREAM-dependabot.yml',
+            *[':(exclude)'+project for project in excluded]]
 
 
 def main():
     upstream=json.loads((ROOT/'.private/upstream.json').read_text())['sha']
-    paths=['.',':(exclude).private',':(exclude).github',':(exclude)README.md',
-           ':(exclude)ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/NearApiProvider.kt',
-           ':(exclude)docs/UPSTREAM-README.md',':(exclude)docs/UPSTREAM-dependabot.yml']
-    paths += [':(exclude)'+project for project in sync.excluded_projects()]
-    patch=generate_patch(ROOT,upstream,paths)
+    patch=generate_patch(ROOT,upstream,patch_paths(sync.excluded_projects()))
     (ROOT/'.private/fork.patch').write_bytes(patch)
     (ROOT/'.private/source-state.json').write_text(json.dumps(sync.source_state(ROOT),indent=2)+'\n')
     print('Refreshed reviewed fork delta and normalized source inventory. Build and acceptance remain required.')

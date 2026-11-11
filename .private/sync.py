@@ -2,6 +2,7 @@
 import hashlib, json, os, re, shutil, subprocess, sys
 from pathlib import Path
 from acceptance_policy import requirements
+from release_metadata import Metadata, next_release_version, wallet_release_versions
 
 ROOT=Path(__file__).resolve().parents[1]
 OFFICIAL='zodl-inc/zodl-android'
@@ -15,6 +16,10 @@ def run(*args,cwd=ROOT):
         args=(sys.executable,*args[1:])
     return subprocess.check_output(args,cwd=cwd,text=True).strip()
 def gh(path): return json.loads(run('gh','api',path))
+def fork_release_versions():
+    return wallet_release_versions(Metadata().api('/releases?per_page=100', paginated=True))
+
+
 def version(tag):
     match=re.fullmatch(r'(\d+)\.(\d+)\.(\d+)-(\d+)',tag)
     if not match: raise RuntimeError('Unsupported upstream version format; review required')
@@ -137,7 +142,10 @@ def main():
         normalize=lambda text: re.sub(r'^ZCASH_VERSION_(?:CODE|NAME)=.*$','',text,flags=re.M)
         if normalize(old)!=normalize(new): unsafe.append('gradle.properties (dependencies or security configuration)')
     if unsafe: raise RuntimeError('Critical upstream changes require review: '+', '.join(unsafe[:25]))
-    branch='updates/'+tag
+    controller=run('git','rev-parse','HEAD')
+    branch=f'updates/{tag}-{controller[:12]}'
+    current_revision=json.loads((ROOT/'.private/release-revision.json').read_text())['private_revision']
+    revision,code=next_release_version(fork_release_versions(),current_revision,state['versionCode'],version(tag)[3])
     # A fresh detached worktree prevents upstream workflows from replacing the controller.
     candidate=Path(os.environ['RUNNER_TEMP'])/'candidate'
     run('git','worktree','add','--detach',str(candidate),commit)
@@ -151,20 +159,22 @@ def main():
         shutil.copy2(ROOT/'README.md',candidate/'README.md')
         for path in ('docs/UPSTREAM-README.md','docs/UPSTREAM-dependabot.yml'):
             shutil.copy2(ROOT/path,candidate/path)
-        revision=int(json.loads((ROOT/'.private/release-revision.json').read_text())['private_revision'])
-        if revision<1 or revision>999: raise RuntimeError('Invalid private revision')
-        code=max(int(state.get('versionCode',0))+1,version(tag)[3]*1000+revision)
         props=candidate/'gradle.properties'
-        props.write_text(re.sub(r'^ZCASH_VERSION_CODE=\d+$',f'ZCASH_VERSION_CODE={code}',props.read_text(),flags=re.M))
+        properties, count=re.subn(r'^ZCASH_VERSION_CODE=\d+$',f'ZCASH_VERSION_CODE={code}',props.read_text(),flags=re.M)
+        if count!=1 or re.findall(r'^ZCASH_VERSION_NAME=(.+)$',properties,re.M)!=[tag.rsplit('-',1)[0]]:
+            raise RuntimeError('Upstream Gradle release coordinates disagree with the stable tag')
+        props.write_text(properties)
+        (candidate/'.private/release-revision.json').write_text(json.dumps({'private_revision':revision})+'\n')
         (candidate/'.private/candidate.json').write_text(json.dumps({'tag':tag,'sha':commit,'published_at':latest['published_at'],'versionCode':code,'acceptance':requirements(changes)},indent=2)+'\n')
         run('python3','-B','.private/check.py',cwd=candidate)
         run('python3','-B','.private/foundation_architecture.py',cwd=candidate)
         run('git','add','-A',cwd=candidate)
+        from refresh_source import generate_patch, patch_paths
+        (candidate/'.private/fork.patch').write_bytes(generate_patch(candidate,commit,patch_paths(excluded_projects())))
         (candidate/'.private/source-state.json').write_text(json.dumps(source_state(candidate),indent=2)+'\n')
-        run('git','add','.private/source-state.json',cwd=candidate)
+        run('git','add','.private/source-state.json','.private/fork.patch',cwd=candidate)
         run('git','-c','user.name=ZEC Private automation','-c','user.email=zec-private@users.noreply.github.com','commit','-m',f'Prepare upstream {tag} with private fork changes',cwd=candidate)
         tree=run('git','rev-parse','HEAD^{tree}',cwd=candidate)
-        controller=run('git','rev-parse','HEAD')
         # The validated tree descends from the controller, allowing a normal
         # fast-forward integration while recording the exact upstream parent.
         sha=run('git','-c','user.name=ZEC Private automation','-c',

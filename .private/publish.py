@@ -5,6 +5,7 @@ from pathlib import Path
 from apk_architecture import check_apk
 from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_binding, verify_promotion_revision, validate_core_sources, CORE_BINDING
 from foundation_architecture import validate_graph_binding
+from release_metadata import Metadata, wallet_release_versions
 
 ROOT=Path(__file__).resolve().parents[1]
 REPO=os.environ['GITHUB_REPOSITORY']
@@ -170,9 +171,9 @@ def main():
     existing=subprocess.run(['gh','release','view',tag,'--repo',REPO],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     if existing.returncode==0:
         raise RuntimeError('Release tag already exists; refusing to replace immutable assets')
-    releases=json.loads(run('gh','api',f'repos/{REPO}/releases?per_page=100'))
-    previous=[int(r['body'].split('Android versionCode: ')[1].split()[0]) for r in releases if not r['draft'] and 'Android versionCode: ' in (r['body'] or '')]
-    if previous and proof['versionCode']<=max(previous): raise RuntimeError('Android versionCode must increase')
+    history=wallet_release_versions(Metadata(repo=REPO).api('/releases?per_page=100', paginated=True))
+    if history and proof['versionCode']<=max(code for _, code in history):
+        raise RuntimeError('Android versionCode must increase')
     if proof.get('architecture') != check_apk(apk):
         raise RuntimeError('Release architecture evidence mismatch')
     tools=Path(os.environ['ANDROID_HOME'])/'build-tools/36.0.0'
