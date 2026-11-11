@@ -29,9 +29,12 @@ jobs:
         run: |
           gh auth setup-git
           python3 .private/sync.py
+      - name: Report a prepared candidate waiting for signing setup
+        if: steps.sync.outputs.changed == 'true' && vars.PRODUCTION_SIGNING_READY != 'true'
+        run: echo '::warning::Upstream candidate prepared. Publication is waiting for verified signing environment setup.'
   build:
     needs: prepare
-    if: needs.prepare.outputs.changed == 'true'
+    if: needs.prepare.outputs.changed == 'true' && vars.PRODUCTION_SIGNING_READY == 'true'
     permissions:
       contents: write
       issues: write
