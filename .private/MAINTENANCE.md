@@ -14,7 +14,7 @@ Use this entry for the checkout; local task state lives in the surrounding works
 | Prepare/admit/assemble release acceptance | [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md) | Verified producers, paired baseline, explicit ownership and selective execution; no signing. |
 | Hold, check or publish a custom change | [Hosted custom releases](RELEASE-WORKFLOW.md#hosted-custom-releases) | Explicit approval for the exact candidate, shared hosted acceptance and recovery. |
 | Select quick checks and release checks | Build section below; [core coverage](core-coverage.md) | Coverage records identify their executed revision; current evidence must match inputs. |
-| Maintain independent quote checks | [INDEPENDENT-PRICES.md](INDEPENDENT-PRICES.md) | Exact native-asset coverage, freshness, Tor behavior and advisory thresholds. |
+| Maintain independent quote checks | [INDEPENDENT-PRICES.md](INDEPENDENT-PRICES.md) | Market identity and coverage, freshness, transport settings and advisory thresholds. |
 | Run real wallet acceptance | [core coverage](core-coverage.md), [core_testnet_driver.py](core_testnet_driver.py), [acceptance_policy.py](acceptance_policy.py) | Requires a current prepared job, baseline and artifact bindings. Use [development artifact reuse](DEVELOPMENT.md#reuse-artifacts-and-guest-state) and the funding procedure below. |
 | Overlap independent emulator checks | [emulator-batch.md](emulator-batch.md) | Prepared jobs only; one shared guard and separate workers. |
 | Integrate upstream / refresh patch | Upstream integration below; [sync.py](sync.py), [refresh_source.py](refresh_source.py) | Discovery stays enabled; disposable integration and current acceptance remain gates. |
