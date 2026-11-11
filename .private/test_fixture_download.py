@@ -119,6 +119,28 @@ class FixtureDownloadTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Unexpected fixture entries'):
                 verify_pair(first, core, prepared=True)
 
+    def test_scheduled_fixture_recovery_selects_only_an_unpreserved_recorded_pair(self):
+        from hosted_fixture import pending_pair
+        from release_metadata import Metadata
+
+        tag = 'v3.19.0-private.22'
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            records = root / '.private/release-evidence'
+            records.mkdir(parents=True)
+            selected = root / '.private/hosted-fixture.json'
+            selected.write_text(json.dumps(dict(release='v3.19.0-private.21', version_code=21)))
+            with patch('hosted_fixture.Metadata.api', return_value={'tag_name': tag}):
+                metadata = Metadata()
+                self.assertEqual(pending_pair(metadata, root), '')
+                record = records / (tag + '.json')
+                record.write_text(json.dumps(dict(versionCode=22, core=dict(candidate_version_code=21))))
+                self.assertEqual(pending_pair(metadata, root), '')
+                record.write_text(json.dumps(dict(versionCode=22, core=dict(candidate_version_code=22))))
+                self.assertEqual(pending_pair(metadata, root), tag)
+                selected.write_text(json.dumps(dict(release=tag, version_code=22)))
+                self.assertEqual(pending_pair(metadata, root), '')
+
     def test_hosted_binding_record_refuses_replacement_and_downgrade(self):
         from hosted_fixture import REGISTRY, record
 
