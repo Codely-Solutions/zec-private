@@ -179,6 +179,13 @@ def validate_core(receipt, expected_inputs, root=ROOT, *, baseline=None):
                                                     'metadata_blocked','direct_bulk_reachable','metadata_recovered')) or
             recovery.get('blocked_packets',0)<=0 or recovery.get('scanned_height',0)<=0):
         raise ValueError('Actual wallet synchronization interruption/recovery required')
+    if 'update_http_status_after' in recovery:
+        status = recovery['update_http_status_after']
+        after = ((status == 200 and recovery.get('update_metadata_valid_after') is True) or
+                 (status in (403, 429) and recovery.get('update_rate_limited_after') is True
+                  and recovery.get('update_metadata_valid_after') is False))
+        if not after or recovery.get('update_metadata_valid_before') is not True:
+            raise ValueError('Updater recovery requires parsed metadata and a verified post-outage response')
     if (not re.fullmatch('[0-9a-f]{64}',str(stages['fund'].get('funding_txid',''))) or
             stages['fund'].get('balance_zatoshi',0)<=0 or stages['send'].get('fee_zatoshi',0)<=0 or
             stages['restore'].get('mined_height',0)<=0 or stages['restore'].get('amount_zatoshi')!=1000000):

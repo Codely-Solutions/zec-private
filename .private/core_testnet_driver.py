@@ -443,10 +443,14 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 raise RuntimeError('Tor interruption/recovery not established')
             recovery=json.loads(shell('run-as',PACKAGE,'cat','files/core-sync-result.json'))
             required = ['sync_restarted', 'synced', 'balance_preserved', 'update_metadata_valid_before',
-                        'update_metadata_valid_after', 'update_blocked_during_outage']
+                        'update_blocked_during_outage']
             required.append('probe_only' if transport_only else 'history_preserved')
-            if not all(recovery.get(key) is True for key in required):
+            updater_reachable = recovery.get('update_metadata_valid_after') is True or (
+                recovery.get('update_rate_limited_after') is True and recovery.get('update_http_status_after') in (403,429))
+            if not all(recovery.get(key) is True for key in required) or not updater_reachable:
                 raise RuntimeError('Wallet synchronization recovery not established')
+            print('CORE_UPDATER_RECOVERY ' + json.dumps(dict(metadata_valid=recovery['update_metadata_valid_after'],
+                http_status=recovery.get('update_http_status_after', 200))), flush=True)
             stages['interruption']=dict(passed=True,metadata_blocked=True,direct_bulk_reachable=True,metadata_recovered=True,blocked_packets=blocked,seconds=time.monotonic()-before,**recovery)
         finally:
             cleanup_errors=[]

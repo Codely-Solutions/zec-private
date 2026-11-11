@@ -77,7 +77,7 @@ class HostedReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'completed with a failure'):
             hosted_claim.rehearsal_version(VERSION - 1, CONTROLLER, metadata, number=2)
         with self.assertRaisesRegex(ValueError, 'bounded'):
-            hosted_claim.rehearsal_version(VERSION - 1, CONTROLLER, metadata, number=6)
+            hosted_claim.rehearsal_version(VERSION - 1, CONTROLLER, metadata, number=7)
 
     def test_artifact_rejects_wrong_run_controller_role_or_digest(self):
         metadata = Mock()

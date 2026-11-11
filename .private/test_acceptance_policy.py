@@ -148,6 +148,23 @@ class AcceptancePolicyTest(unittest.TestCase):
         bad['funding_setup']=dict(tor_exit_verified=True,persistent_tor_connection=True,txid='c'*64)
         with self.assertRaises(ValueError):validate_core(bad,'inputs')
 
+    def test_updater_transport_distinguishes_quota_from_metadata_success(self):
+        for status in (200, 403, 429):
+            receipt = self.receipt()
+            receipt['stages']['interruption'].update(
+                update_metadata_valid_before=True, update_http_status_after=status,
+                update_metadata_valid_after=status == 200, update_rate_limited_after=status != 200)
+            self.assertTrue(validate_core(receipt, 'inputs'))
+        for change in ({'update_http_status_after': 404}, {'update_rate_limited_after': False},
+                       {'update_metadata_valid_before': False}, {'update_metadata_valid_after': True}):
+            bad = self.receipt()
+            recovery = dict(update_metadata_valid_before=True, update_http_status_after=403,
+                            update_metadata_valid_after=False, update_rate_limited_after=True)
+            recovery.update(change)
+            bad['stages']['interruption'].update(recovery)
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'Updater recovery'):
+                validate_core(bad, 'inputs')
+
     def test_rejects_wrong_baseline_instrumentation_hash_and_stage_pair(self):
         bad = self.receipt(); bad['baseline_instrumentation_apk_sha256'] = 'f'*64
         with self.assertRaises(ValueError): validate_core(bad, 'inputs')
