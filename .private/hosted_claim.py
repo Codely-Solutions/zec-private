@@ -52,6 +52,24 @@ def verify(value, commit, metadata):
             'Claim reservation is missing its update and deletion protections')
 
 
+def rehearsal_version(base, controller, metadata, *, followup):
+    first = base + 1
+    if not followup:
+        return first
+    prior_ref = ref_for({'rehearsal': True, 'version': first})
+    marker = metadata.api('/git/ref/' + prior_ref.removeprefix('refs/'))['object']['sha']
+    prior = json.loads(metadata.api('/git/commits/' + marker)['message'])
+    require(prior.get('rehearsal') is True and prior.get('version') == first
+            and prior.get('source') == prior.get('controller') and prior['controller'] != controller,
+            'A follow-up requires a protected first rehearsal on an earlier controller')
+    verify(prior, marker, metadata)
+    run = metadata.api(f"/actions/runs/{prior['run']}")
+    require(run['path'] == '.github/workflows/hosted-core.yml' and run['head_sha'] == prior['controller']
+            and run['event'] == 'workflow_dispatch' and run['status'] == 'completed'
+            and run['conclusion'] == 'failure', 'First rehearsal has not completed with a failure')
+    return first + 1
+
+
 def main():
     from acceptance_policy import ROOT, verify_promotion_revision
     from release_inputs import version_code
@@ -60,6 +78,8 @@ def main():
             'Only the initial trusted main run may reserve funding')
     controller = os.environ['GITHUB_SHA']
     rehearsal = os.environ['REHEARSAL'] == 'true'
+    followup = os.environ.get('FOLLOWUP_REHEARSAL') == 'true'
+    require(not followup or rehearsal, 'Follow-up reservation is exclusive to testnet rehearsals')
     if rehearsal:
         require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch' and
                 os.environ['GITHUB_WORKFLOW_REF'].endswith('/.github/workflows/hosted-core.yml@refs/heads/main'),
@@ -67,10 +87,11 @@ def main():
     source = os.environ.get('SOURCE_SHA') or controller
     verify_promotion_revision(source, controller, ROOT)
     base = json.loads((ROOT / '.private/hosted-fixture.json').read_text())['version_code']
-    version = base + 1 if rehearsal else version_code(ROOT, source)
+    metadata = Metadata(repo=os.environ['GITHUB_REPOSITORY'])
+    version = (rehearsal_version(base, controller, metadata, followup=followup)
+               if rehearsal else version_code(ROOT, source))
     require(version > base and (not rehearsal or source == controller), 'Expected an advancing testnet candidate')
     value = binding(source, controller, version, int(os.environ['GITHUB_RUN_ID']), rehearsal)
-    metadata = Metadata(repo=os.environ['GITHUB_REPOSITORY'])
 
     def post(path, data):
         return json.loads(subprocess.check_output(

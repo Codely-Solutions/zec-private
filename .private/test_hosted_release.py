@@ -35,6 +35,32 @@ class HostedReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'different inputs'):
             hosted_claim.verify(changed, marker, metadata)
 
+    def test_followup_rehearsal_preserves_original_reservation(self):
+        prior = hosted_claim.binding(SOURCE, SOURCE, VERSION, RUN, True)
+        marker = 'd' * 40
+        metadata = Mock()
+        outcome = dict(path='.github/workflows/hosted-core.yml', head_sha=SOURCE,
+                       event='workflow_dispatch', status='completed', conclusion='failure')
+
+        def respond(path):
+            if path.startswith('/git/ref/'):
+                return {'object': {'sha': marker}}
+            if path == '/git/commits/' + marker:
+                return {'message': json.dumps(prior)}
+            if path.startswith('/rules/branches/'):
+                return [{'type': 'update'}, {'type': 'deletion'}]
+            if path == f'/actions/runs/{RUN}':
+                return outcome
+            raise AssertionError(path)
+
+        metadata.api.side_effect = respond
+        self.assertEqual(hosted_claim.rehearsal_version(VERSION - 1, CONTROLLER, metadata, followup=True), VERSION + 1)
+        with self.assertRaisesRegex(ValueError, 'earlier controller'):
+            hosted_claim.rehearsal_version(VERSION - 1, SOURCE, metadata, followup=True)
+        outcome['conclusion'] = 'success'
+        with self.assertRaisesRegex(ValueError, 'completed with a failure'):
+            hosted_claim.rehearsal_version(VERSION - 1, CONTROLLER, metadata, followup=True)
+
     def test_artifact_rejects_wrong_run_controller_role_or_digest(self):
         metadata = Mock()
         identity = dict(id=23, digest='sha256:'+'f'*64, size_in_bytes=100)

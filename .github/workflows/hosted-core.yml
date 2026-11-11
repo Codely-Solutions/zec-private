@@ -6,6 +6,10 @@ on:
         description: Exercise installed upgrade and seed restore without a faucet claim
         type: boolean
         default: false
+      followup_rehearsal:
+        description: Reserve a distinct rehearsal after diagnosing a completed first rehearsal
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       source_sha:
@@ -28,6 +32,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
+      actions: read
     outputs:
       reservation: ${{ steps.claim.outputs.reservation }}
       version: ${{ steps.claim.outputs.version }}
@@ -41,6 +46,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           REHEARSAL: ${{ inputs.source_sha == '' }}
+          FOLLOWUP_REHEARSAL: ${{ inputs.followup_rehearsal || false }}
         run: |
           if [[ -n "$SOURCE_SHA" ]]; then
             [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
