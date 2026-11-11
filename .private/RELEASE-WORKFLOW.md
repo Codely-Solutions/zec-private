@@ -8,7 +8,7 @@ The [hosted core workflow](../.github/workflows/hosted-core.yml) verifies the pi
 
 The main-only signing job fetches the unsigned APK and the two receipts by artifact ID and rechecks their digests, source, test APK producers, acceptance fingerprints and claim reservation. Independent public verification rechecks the same unsigned artifact. Fixture preservation publishes the original testnet pair to the private registry and updates the hosted baseline after a separate read-back. Its timer can recover a missing fixture from the verified release record and original Actions artifact while that artifact is live.
 
-A manual dispatch of `hosted-core.yml` runs a testnet-only rehearsal from the selected fixture. It uses a separate reservation and cannot supply a release receipt. Use `restore_probe=true` to exercise the installed upgrade and seed restore without reserving or claiming funds. A later `rehearsal_number` requires diagnosed prior failures and a newer trusted controller. Prior reservations stay protected.
+A manual dispatch of `hosted-core.yml` runs a testnet-only rehearsal from the selected fixture. It uses a separate reservation and cannot supply a release receipt. Use `upgrade_probe=restore` or `upgrade_probe=transport` to isolate that boundary after an installed upgrade without reserving or claiming funds. A later `rehearsal_number` requires diagnosed prior failures and a newer trusted controller. Prior reservations stay protected.
 
 ## Guarded local acceptance
 
