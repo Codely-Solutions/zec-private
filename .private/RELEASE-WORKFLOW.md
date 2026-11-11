@@ -1,5 +1,17 @@
 # Prepare and validate a release candidate
 
+## Hosted maintenance releases
+
+The [upstream discovery workflow](../.github/workflows/sync-upstream.yml) supplies the exact prepared upstream or Gradle candidate to [release validation](../.github/workflows/build-release.yml). Admission checks the candidate, current private fixture, outstanding claim reservation and Actions storage headroom. Secretless jobs build each APK once. Separate hosted guests run the funded testnet lifecycle and unfunded production quote checks.
+
+The [hosted core workflow](../.github/workflows/hosted-core.yml) creates a protected `testnet-claims/release-<versionCode>` ref before execution. The ref binds the controller, candidate and run. A duplicate ref, ambiguous create response or subsequent attempt cannot authorize another claim. Keep the reservation if funding is uncertain. After a successful wallet job, recover a failed signing job using the original run and live artifacts. An already public release uses [publication reconciliation](MAINTENANCE.md#signing).
+
+The main-only signing job fetches the unsigned APK and the two receipts by artifact ID and rechecks their digests, source, test APK producers, acceptance fingerprints and claim reservation. Independent public verification rechecks the same unsigned artifact. Fixture preservation publishes the original testnet pair to the private registry and updates the hosted baseline after a separate read-back.
+
+A manual dispatch of `hosted-core.yml` runs one testnet-only rehearsal from the selected fixture. It uses a separate reservation and cannot supply a release receipt.
+
+## Guarded local acceptance
+
 Use these maintained tools from the selected checkout. They prepare or validate acceptance; they do not dispatch a build, sign or publish. Obtain publication authorization separately. Read [resource lifetimes](MAINTENANCE.md#reuse-and-cleanup) before starting workers.
 
 1. Commit the reviewed candidate and select its verified paired upgrade baseline. Run `acceptance_status.py` with child environment `VALIDATION_ONLY=true` to see pending profiles and changed-input reasons. A pending result is not acceptance.
