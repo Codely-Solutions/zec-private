@@ -1439,6 +1439,36 @@ index 66cc3760c..5935d66eb 100644
 @@ -0,0 +1,2 @@
 +> Upstream reference. Some tools, integrations and deployment instructions here are retired in ZEC Private. Use [fork maintainer guidance](../.private/MAINTENANCE.md) for current commands and [foundation boundaries](../docs/FOUNDATION.md) for the fork architecture.
 +
+diff --git a/docs/Build integrity.md b/docs/Build integrity.md
+index 2e50defbd..2eb7c805a 100644
+--- a/docs/Build integrity.md	
++++ b/docs/Build integrity.md	
+@@ -1,13 +1 @@
+-# Build Integrity
+-Multiple tools can be put in place to enhance build integrity and reduce the risk of supply chain issues. These tools include:
+- * Policy — We minimize third party dependencies, especially when they are not provided by Google and JetBrains. We also try to minimize the number of Gradle plugins.
+- * Checklists — Our [pull request checklist](../.github/pull_request_template.md) specifies only running code from contributors after reviewing the changes first. Our [dependency update checklist](../.github/ISSUE_TEMPLATE/dependency.md) specifies verifying lock file changes during dependency updates.
+- * Fixed dependency versions — For our dependency declarations, we use exact dependency versions in gradle.properties instead of version ranges.
+- * GitHub Actions versions use SHA instead of tags
+- * Dependency locking
+-     * Gradle buildscript (e.g. plugins) dependencies are locked
+-     * Kotlin Multiplatform modules have dependency locking enabled
+- * Dependency hash or signature verification
+-     * Gradle — The SHA256 for Gradle is stored in [gradle/wrapper/gradle-wrapper.properties](../gradle/wrapper/gradle-wrapper.properties) which is verified when Gradle is downloaded for the first time
+-     * Gradle Wrapper — The SHA256 for the Gradle Wrapper is verified on the continuous integration server
+-     * Dependencies — Verification is NOT currently enabled for buildscript or compile dependencies
++# Build integrity
+@@ -15,4 +3 @@ Multiple tools can be put in place to enhance build integrity and reduce the ris
+-# Dependency locking
+-## Buildscript
+-To update build script dependency locks:
+-`./gradlew dependencies --write-locks`
++The build pins dependency versions, verifies downloaded dependencies with [Gradle SHA-256 metadata](../gradle/verification-metadata.xml), and locks selected Gradle configurations. The [wrapper distribution](../gradle/wrapper/gradle-wrapper.properties) has its own SHA-256 pin. GitHub Actions use immutable commit references.
+@@ -20,3 +5 @@ To update build script dependency locks:
+-## Kotlin modules
+-To update Kotlin module dependency locks:
+-`./gradlew resolveAndLockAll --write-locks`
++Use the [maintenance procedure](../.private/MAINTENANCE.md#dependency-update-policy) to review version, lock and checksum changes before running candidate acceptance. Dependency graph submission provides advisory coverage for resolved packages. Embedded native SDK dependencies require separate review.
 diff --git a/docs/CI.md b/docs/CI.md
 index 98f902023..7bd1ee8c0 100644
 --- a/docs/CI.md

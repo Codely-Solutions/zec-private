@@ -5,6 +5,12 @@ on:
       - gradle/wrapper/**
       - gradlew
       - gradlew.bat
+      - gradle.properties
+      - gradle/verification-metadata.xml
+      - '**/gradle.lockfile'
+      - '**/build.gradle.kts'
+      - settings.gradle.kts
+      - buildSrc/**
       - .github/dependabot.yml
       - .github/workflows/**
   workflow_dispatch:
