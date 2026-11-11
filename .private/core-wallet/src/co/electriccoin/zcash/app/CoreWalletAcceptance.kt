@@ -96,13 +96,14 @@ class CoreWalletAcceptance {
         val started = System.nanoTime()
         withTimeout(900_000) {
             dependency<IsTorEnabledStorageProvider>().store(true)
-            if (stage !in listOf("networkTargets", "rpcProbe")) {
+            if (stage !in listOf("networkTargets", "rpcProbe", "receiptProbe")) {
                 val intent = checkNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 instrumentation.startActivitySync(intent)
                 withTimeout(15_000) { dependency<ApplicationStateProvider>().isInForeground.first { it } }
             }
             when (stage) {
+                "receiptProbe" -> check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
                 "recipient" -> createWallet("recipient")
                 "sender" -> createWallet("sender")
                 "fund" -> {
@@ -436,8 +437,11 @@ class CoreWalletAcceptance {
             .put("amount_zatoshi",1_000_000L).put("app_transaction_state",fixture().getString("restoreTransactionState"))
             .put("reviewed_memo_verified",true)
 
-        // No exception messages, seeds, addresses, HTTP bodies or private fixture are printed.
-        println("CORE_RESULT $receipt")
+        // Deliver the bounded receipt on the instrumentation channel so a busy
+        // wallet log buffer cannot discard the outcome before the host reads it.
+        instrumentation.sendStatus(1000, android.os.Bundle().apply {
+            putString("zec_core_receipt", receipt.toString())
+        })
     }
 
     /** Test-only: the host restores DROP independently after receiving requested.json. */

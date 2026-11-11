@@ -23,7 +23,7 @@ RUNNER = PACKAGE + '.test/co.electriccoin.zcash.test.ZcashUiTestRunner'
 def instrumentation_role(stage):
     if stage in BASELINE_INSTRUMENTATION_STAGES:
         return 'baseline'
-    if stage in CANDIDATE_INSTRUMENTATION_STAGES or stage in ('transportProbe', 'restoreProbe'):
+    if stage in CANDIDATE_INSTRUMENTATION_STAGES or stage in ('transportProbe', 'restoreProbe', 'receiptProbe'):
         return 'candidate'
     raise ValueError('Unknown version-paired instrumentation stage: ' + stage)
 
@@ -138,11 +138,16 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         application_pids.update(int(match[1]) for match in re.finditer(r'^\S+\s+\S+\s+(\d+)\s+\d+\s+[A-Z]\s+',thread_logs,re.M))
         if sum(map(len,markers))>8192:raise RuntimeError('Safe core markers exceed bound')
         output+='\n'+'\n'.join(markers)
-        rows = [json.loads(line.split('CORE_RESULT ', 1)[1]) for line in output.splitlines() if 'CORE_RESULT {' in line]
-        if 'OK (1 test)' not in output or len(rows) != 1 or rows[0].get('stage') != name or rows[0].get('passed') is not True:
+        direct = re.findall(r'^INSTRUMENTATION_STATUS: zec_core_receipt=(\{[^\r\n]+\})\s*$', output, re.MULTILINE)
+        # Published upgrade fixtures predate the instrumentation receipt channel.
+        legacy = [line.split('CORE_RESULT ', 1)[1] for line in output.splitlines() if 'CORE_RESULT {' in line]
+        rows = [json.loads(row) for row in (direct or legacy)]
+        if result.returncode or 'OK (1 test)' not in output or len(rows) != 1 or rows[0].get('stage') != name or rows[0].get('passed') is not True:
             # Keep only class/line locations and explicit safe assertions; never raw test output.
             safe = [line[:240] for line in output.splitlines() if re.search(r'CoreWalletAcceptance.kt:\d+|^java\.lang\.|^kotlinx\.coroutines\.|Faucet claim HTTP \d+', line)]
-            diagnostic=dict(stage=name,lines=safe[-12:])
+            diagnostic=dict(stage=name,lines=safe[-12:], result_channel=dict(
+                exit_code=result.returncode, junit_passed='OK (1 test)' in output,
+                direct_receipts=len(direct), legacy_receipts=len(legacy)))
             diagnostic['sync']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_SYNC_DIAGNOSTIC ')][-8:]
             diagnostic['native_errors']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_NATIVE_ERROR ')][-3:]
             diagnostic['submission']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_SEND_DIAGNOSTIC ')][-1:]
@@ -245,6 +250,15 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         adb('wait-for-device', timeout=30)
         if shell('id').find('uid=0') < 0:
             raise RuntimeError('Blank AOSP guest root required for network enforcement')
+        if not transport_only or upgrade_probe:
+            adb('install', '-r', str(candidate), timeout=90)
+            adb('install', '-r', '-t', str(test), timeout=90)
+            stage('receiptProbe', 50)
+            adb('uninstall', PACKAGE + '.test', timeout=30)
+            adb('uninstall', PACKAGE, timeout=30)
+            # Probe provenance is useful in progress logs. The release receipt
+            # records only the exact required funded baseline/candidate stages.
+            pairing['stages'].pop('receiptProbe')
         adb('install', '-r', str(baseline), timeout=90)
         adb('install', '-r', '-t', str(baseline_test), timeout=90)
         if version() != manifest['baseline_version_code']:
