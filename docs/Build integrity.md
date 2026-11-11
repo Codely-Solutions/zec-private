@@ -1,22 +1,5 @@
-# Build Integrity
-Multiple tools can be put in place to enhance build integrity and reduce the risk of supply chain issues. These tools include:
- * Policy — We minimize third party dependencies, especially when they are not provided by Google and JetBrains. We also try to minimize the number of Gradle plugins.
- * Checklists — Our [pull request checklist](../.github/pull_request_template.md) specifies only running code from contributors after reviewing the changes first. Our [dependency update checklist](../.github/ISSUE_TEMPLATE/dependency.md) specifies verifying lock file changes during dependency updates.
- * Fixed dependency versions — For our dependency declarations, we use exact dependency versions in gradle.properties instead of version ranges.
- * GitHub Actions versions use SHA instead of tags
- * Dependency locking
-     * Gradle buildscript (e.g. plugins) dependencies are locked
-     * Kotlin Multiplatform modules have dependency locking enabled
- * Dependency hash or signature verification
-     * Gradle — The SHA256 for Gradle is stored in [gradle/wrapper/gradle-wrapper.properties](../gradle/wrapper/gradle-wrapper.properties) which is verified when Gradle is downloaded for the first time
-     * Gradle Wrapper — The SHA256 for the Gradle Wrapper is verified on the continuous integration server
-     * Dependencies — Verification is NOT currently enabled for buildscript or compile dependencies
+# Build integrity
 
-# Dependency locking
-## Buildscript
-To update build script dependency locks:
-`./gradlew dependencies --write-locks`
+The build pins dependency versions, verifies downloaded dependencies with [Gradle SHA-256 metadata](../gradle/verification-metadata.xml), and locks selected Gradle configurations. The [wrapper distribution](../gradle/wrapper/gradle-wrapper.properties) has its own SHA-256 pin. GitHub Actions use immutable commit references.
 
-## Kotlin modules
-To update Kotlin module dependency locks:
-`./gradlew resolveAndLockAll --write-locks`
+Use the [maintenance procedure](../.private/MAINTENANCE.md#dependency-update-policy) to review version, lock and checksum changes before running candidate acceptance. Dependency graph submission provides advisory coverage for resolved packages. Embedded native SDK dependencies require separate review.
