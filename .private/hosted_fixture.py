@@ -27,6 +27,31 @@ def recorded_pair(tag):
     return evidence, core
 
 
+def added_release(before, after, root=ROOT):
+    require(all(re.fullmatch(r'[0-9a-f]{40}', value) and value != '0'*40 for value in (before, after)),
+            'Exact existing main revisions required')
+    subprocess.run(['git', 'merge-base', '--is-ancestor', before, after], cwd=root, check=True, timeout=30)
+    paths = subprocess.check_output(['git', 'diff', '--diff-filter=A', '--no-renames', '--name-only', '-z',
+        before, after, '--', '.private/release-evidence/'], cwd=root, timeout=30).decode().split('\0')
+    tags = [match[1] for path in paths if (match := re.fullmatch(
+        r'\.private/release-evidence/(v\d+\.\d+\.\d+-private\.\d+)\.json', path))]
+    require(len(tags) <= 1, 'Expected at most one newly verified release per integration')
+    return tags[0] if tags else ''
+
+
+def select(tag, before):
+    if not tag:
+        tag = added_release(before, os.environ['GITHUB_SHA'])
+        if not tag:
+            return ''
+        evidence = json.loads((ROOT / '.private/release-evidence' / (tag + '.json')).read_text())
+        # Reused core evidence keeps its existing version-paired baseline.
+        if (evidence.get('core') or {}).get('candidate_version_code') != evidence.get('versionCode'):
+            return ''
+    recorded_pair(tag)
+    return tag
+
+
 def verify_pair(path, core, *, prepared):
     require(0 < path.stat().st_size <= MAX_ARCHIVE, 'Fixture archive size outside budget')
     with zipfile.ZipFile(path) as archive:
@@ -89,11 +114,15 @@ def verify(tag, path, archive_digest, oci_digest, *, extract=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('prepare', 'verify'))
-    parser.add_argument('--directory', type=Path, required=True)
-    parser.add_argument('--tag', required=True)
+    parser.add_argument('operation', choices=('select', 'prepare', 'verify'))
+    parser.add_argument('--directory', type=Path)
+    parser.add_argument('--tag', default='')
     parser.add_argument('--extract', action='store_true', help='Extract verified app and instrumentation')
     args = parser.parse_args()
+    if args.operation == 'select':
+        print('tag=' + select(args.tag, os.environ.get('PREVIOUS_MAIN', '')))
+        return
+    require(args.directory is not None and args.directory.is_dir(), 'Fixture output directory required')
     out = args.directory / 'fixture.zip'
     if args.operation == 'prepare':
         prepare(args.tag, args.directory / 'producer.zip', out, Metadata())

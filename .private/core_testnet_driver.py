@@ -61,9 +61,15 @@ def verify_instrumentation_pair(adb, expected_version, expected_hash):
     return dict(app_version_code=expected_version, executed_sha256=installed_hash, installed_hash_verified=True)
 
 
-def run(adb, root, apks, manifest):
+def run(adb, root, apks, manifest, *, transport_only=False):
     started = time.monotonic()
-    baseline, baseline_test, candidate, test = select_apk_roles(apks)
+    if transport_only:
+        baseline, baseline_test = apks
+        candidate, test = baseline, baseline_test
+        if manifest['candidate_version_code'] != manifest['baseline_version_code']:
+            raise ValueError('Unfunded transport probe requires the same recorded app/test pair')
+    else:
+        baseline, baseline_test, candidate, test = select_apk_roles(apks)
     descriptor = manifest['upgradeBaselineInstrumentation']
     if (descriptor['source_sha'] != manifest['baseline_source_sha'] or
             descriptor['apk_sha256'] != manifest['baseline_instrumentation_apk_sha256']):
@@ -78,7 +84,9 @@ def run(adb, root, apks, manifest):
                              source_sha=source, app_version_code=version_code)
     stages = {}
     application_pids=set()
-    report = dict(schema=1, passed=False, evidence_class='real-app-testnet', network='zcash-testnet',
+    report = dict(schema=1, passed=False,
+                  evidence_class='unfunded-app-transport-probe' if transport_only else 'real-app-testnet',
+                  network='zcash-testnet',
                   clearnet_fallback=False, direct_bulk_downloads=True,personal_wallet_access=False, real_funds_used=False,
                   stages=stages, instrumentation_pairing=pairing, input_fingerprint=manifest['input_fingerprint'],
                   runtime_input_fingerprint=manifest['runtime_input_fingerprint'],
@@ -303,35 +311,40 @@ def run(adb, root, apks, manifest):
             shell(binary+'-restore --noflush < '+remote)
             rule(binary,'-I','OUTPUT','1','-m','owner','--uid-owner',str(app_uid),'-j','CORE_ACCEPT')
         firewall = True
-        current_stage='faucet_readiness'
-        with faucet_ready_session(root) as (readiness, fund_testnet):
-            report['faucet_readiness']=readiness
-            stage('recipient',240)
-            clear_wallet()
+        if transport_only:
             stage('sender',240)
-            private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15).stdout)
-            if private.get('claimAttempted'):raise RuntimeError('Funding was already attempted; automatic re-claim forbidden')
-            private['claimAttempted']=True
+            report['faucet_claims'] = 0
+        else:
+            current_stage='faucet_readiness'
+            with faucet_ready_session(root) as (readiness, fund_testnet):
+                report['faucet_readiness']=readiness
+                stage('recipient',240)
+                clear_wallet()
+                stage('sender',240)
+                private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15).stdout)
+                if private.get('claimAttempted'):raise RuntimeError('Funding was already attempted; automatic re-claim forbidden')
+                private['claimAttempted']=True
+                write_fixture(private)
+                current_stage='funding_setup'
+                # Only the public test address enters this helper; it never sees seeds.
+                report['funding_setup']=fund_testnet(private['senderAddress'])
+            private.update(fundingTxId=report['funding_setup']['txid'],fundingProvider=report['funding_setup']['provider'])
             write_fixture(private)
-            current_stage='funding_setup'
-            # Only the public test address enters this helper; it never sees seeds.
-            report['funding_setup']=fund_testnet(private['senderAddress'])
-        private.update(fundingTxId=report['funding_setup']['txid'],fundingProvider=report['funding_setup']['provider'])
-        write_fixture(private)
-        # App Tor must reconnect through the enforced relay set; refusal is safe.
-        stage('fund',950)
-        shell('am','force-stop',PACKAGE)
-        adb('install','-r',str(candidate),timeout=90)
-        adb('install','-r','-t',str(test),timeout=90)
-        if uid()!=app_uid or version()!=manifest['candidate_version_code']:
-            raise RuntimeError('Installed update identity/version mismatch')
-        stage('upgrade',240)
+            # App Tor must reconnect through the enforced relay set; refusal is safe.
+            stage('fund',950)
+            shell('am','force-stop',PACKAGE)
+            adb('install','-r',str(candidate),timeout=90)
+            adb('install','-r','-t',str(test),timeout=90)
+            if uid()!=app_uid or version()!=manifest['candidate_version_code']:
+                raise RuntimeError('Installed update identity/version mismatch')
+            stage('upgrade',240)
         # Start the normal wallet resync path, then interrupt its actual native
         # synchronizer before broadcast. Require fresh sync and intact history.
         before = time.monotonic()
         outcome = {}
+        transport_stage = 'transportProbe' if transport_only else 'transport'
         def interrupted_request():
-            try: stage('transport',420);outcome['passed']=True
+            try: stage(transport_stage,420);outcome['passed']=True
             except Exception as error: outcome['error']=type(error).__name__
         worker = threading.Thread(target=interrupted_request)
         worker.start()
@@ -368,9 +381,10 @@ def run(adb, root, apks, manifest):
             if worker.is_alive() or not outcome.get('passed') or blocked==0:
                 raise RuntimeError('Tor interruption/recovery not established')
             recovery=json.loads(shell('run-as',PACKAGE,'cat','files/core-sync-result.json'))
-            if not all(recovery.get(key) is True for key in ('sync_restarted','synced','balance_preserved','history_preserved',
-                                                          'update_metadata_valid_before','update_metadata_valid_after',
-                                                          'update_blocked_during_outage')):
+            required = ['sync_restarted', 'synced', 'balance_preserved', 'update_metadata_valid_before',
+                        'update_metadata_valid_after', 'update_blocked_during_outage']
+            required.append('probe_only' if transport_only else 'history_preserved')
+            if not all(recovery.get(key) is True for key in required):
                 raise RuntimeError('Wallet synchronization recovery not established')
             stages['interruption']=dict(passed=True,metadata_blocked=True,direct_bulk_reachable=True,metadata_recovered=True,blocked_packets=blocked,seconds=time.monotonic()-before,**recovery)
         finally:
@@ -381,7 +395,7 @@ def run(adb, root, apks, manifest):
             if worker.is_alive():
                 try:adb('shell','am','force-stop',PACKAGE,timeout=15,check=False)
                 except Exception as error:cleanup_errors.append(type(error).__name__)
-                with operation_lock:operation=active_instrumentation.get('transport')
+                with operation_lock:operation=active_instrumentation.get(transport_stage)
                 if operation is not None and operation.poll() is None:
                     operation.terminate()
                     try:operation.wait(timeout=10)
@@ -389,11 +403,12 @@ def run(adb, root, apks, manifest):
                 worker.join(timeout=100)
             if worker.is_alive():raise RuntimeError('Interruption instrumentation worker did not exit')
             if cleanup_errors:raise RuntimeError('Tor outage cleanup failed: '+','.join(cleanup_errors))
-        stage('send')
-        shell('am','force-stop',PACKAGE)
-        stage('restart',240)
-        clear_wallet()
-        stage('restore')
+        if not transport_only:
+            stage('send')
+            shell('am','force-stop',PACKAGE)
+            stage('restart',240)
+            clear_wallet()
+            stage('restore')
         denied=0
         for binary in ('iptables','ip6tables'):
             rows=(rule(binary,'-L','CORE_TOR','-n','-v','-x')+'\n'+rule(binary,'-L','CORE_ACCEPT','-n','-v','-x')).splitlines()

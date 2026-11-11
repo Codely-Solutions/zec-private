@@ -10,6 +10,10 @@ on:
         description: Verify the private fixture and install its exact APK pair without a wallet
         type: boolean
         default: false
+      test_transport:
+        description: Run the unfunded native Tor interruption and recovery check on the verified pair
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -17,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   blank-guest:
-    if: github.ref == 'refs/heads/main' && !inputs.prerequisites && !inputs.install_baseline
+    if: github.ref == 'refs/heads/main' && !inputs.prerequisites && !inputs.install_baseline && !inputs.test_transport
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -53,9 +57,9 @@ jobs:
               print(f"Testnet faucet healthy through Tor. Claims issued: {receipt['claim_requests']}.")
           PY
   installed-pair:
-    if: github.ref == 'refs/heads/main' && inputs.install_baseline
+    if: github.ref == 'refs/heads/main' && (inputs.install_baseline || inputs.test_transport)
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
+    timeout-minutes: 21
     permissions:
       contents: read
       packages: read
@@ -90,7 +94,9 @@ jobs:
           oras pull --registry-config "$fixture/auth.json" --output "$fixture" "$reference"
           python3 -B .private/hosted_fixture.py verify --tag "$tag" --directory "$fixture" --extract
           diff <(jq -S . "$selected") <(jq -S . "$fixture/fixture-binding.json")
-      - name: Install the verified app and instrumentation in an isolated guest
+      - name: Execute the selected verification in an isolated guest
+        env:
+          ZEC_HOSTED_TRANSPORT_PROBE: ${{ inputs.test_transport }}
         run: |
           if [[ ! -x "$ANDROID_HOME/build-tools/36.0.0/zipalign" ]]; then
             timeout 180 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'build-tools;36.0.0'
