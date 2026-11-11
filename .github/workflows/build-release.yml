@@ -422,8 +422,8 @@ jobs:
           RELEASE_TAG: ${{ needs.publish.outputs.release_tag || needs.reconcile.outputs.release_tag }}
         run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
   failed:
-    if: ${{ always() && github.ref == 'refs/heads/main' && (needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.testnet_apk.result == 'failure' || needs.hosted_core.result == 'failure' || needs.hosted_quotes.result == 'failure' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
-    needs: [unsigned, emulator, testnet_apk, hosted_core, hosted_quotes, promotion, publish, reconcile, verify_publication, record_integration]
+    if: ${{ always() && github.ref == 'refs/heads/main' && (needs.admit_hosted.result == 'failure' || needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.testnet_apk.result == 'failure' || needs.hosted_core.result == 'failure' || needs.hosted_quotes.result == 'failure' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
+    needs: [admit_hosted, unsigned, emulator, testnet_apk, hosted_core, hosted_quotes, promotion, publish, reconcile, verify_publication, record_integration]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -439,11 +439,14 @@ jobs:
           MAKE_ISSUE: 'true'
           PUBLIC_VERIFICATION: ${{ needs.verify_publication.result }}
           INTEGRATION: ${{ needs.record_integration.result }}
+          HOSTED_ADMISSION: ${{ needs.admit_hosted.result }}
         run: |
           if [[ "$PUBLIC_VERIFICATION" == failure ]]; then
             python3 .private/notify.py "ZEC Private publication needs reconciliation. Independent public verification failed."
           elif [[ "$INTEGRATION" == failure ]]; then
             python3 .private/notify.py "ZEC Private publication needs reconciliation. The verified release was published, but recording integration failed."
+          elif [[ "$HOSTED_ADMISSION" == failure ]]; then
+            python3 .private/notify.py "ZEC Private update stopped before building. See the hosted admission check for the blocking prerequisite."
           else
             python3 .private/notify.py "ZEC Private update blocked by a build or release check."
           fi
