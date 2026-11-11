@@ -31,8 +31,7 @@ def publisher_job(run, jobs, run_id, repository):
     return publishers[0]
 
 
-def main():
-    run_id = os.environ['RECONCILIATION_RUN']
+def resolve(run_id):
     require(re.fullmatch(r'[1-9][0-9]*', run_id), 'Invalid signing run ID')
     run = gh(f'actions/runs/{run_id}')
     jobs = gh(f'actions/runs/{run_id}/attempts/{run["run_attempt"]}/jobs?per_page=100')['jobs']
@@ -63,9 +62,14 @@ def main():
             and len(live['assets']) == 2 and set(assets) == {'zec-private-latest.apk', 'SHA256SUMS'}
             and assets['zec-private-latest.apk']['digest'] == 'sha256:' + attestation['apk_sha256'],
             'Complete matching publication required; recovery never changes public assets')
+    return dict(release_tag=tag, attestation_id=artifact['id'],
+                attestation_digest=digest(data), controller_sha=run['head_sha'])
+
+
+def main():
+    proof = resolve(os.environ['RECONCILIATION_RUN'])
     with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
-        output.write(f'release_tag={tag}\nattestation_id={artifact["id"]}\n'
-                     f'attestation_digest={digest(data)}\ncontroller_sha={run["head_sha"]}\n')
+        output.writelines(f'{key}={value}\n' for key, value in proof.items())
 
 
 if __name__ == '__main__':

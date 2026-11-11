@@ -15,6 +15,7 @@ DEPENDENCY_FILES = {'gradle.properties', 'gradle/verification-metadata.xml',
                     'gradle/wrapper/gradle-wrapper.properties', 'gradle/wrapper/gradle-wrapper.jar'}
 WRAPPER_PROPERTIES = 'gradle/wrapper/gradle-wrapper.properties'
 WRAPPER_VERSION = r'([1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
+RELEASE_EVIDENCE = Path(__file__).resolve().parent / 'release-evidence'
 
 
 def trusted_proposal(pr, repository_id):
@@ -110,6 +111,38 @@ def verified_wrapper(prefix, number, base, head, repository_id):
     return version, proposed
 
 
+def pending_recovery(prefix, evidence_dir=RELEASE_EVIDENCE, resolve=None):
+    latest = api(f'{prefix}/releases/latest')
+    tag = latest['tag_name']
+    if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-private\.[1-9][0-9]*', tag):
+        raise ValueError('Unexpected latest wallet release identity')
+    record = evidence_dir / (tag + '.json')
+    if record.is_file():
+        digest = json.loads(record.read_text())['apk_sha256']
+        apks = [asset for asset in latest['assets'] if asset['name'] == 'zec-private-latest.apk']
+        if len(apks) != 1 or apks[0]['digest'] != 'sha256:' + digest:
+            raise ValueError('Public APK differs from its trusted integration record')
+        return None
+    if resolve is None:
+        from reconcile_release import resolve
+    runs = []
+    for workflow in ('build-release.yml', 'sync-upstream.yml'):
+        runs.extend(api(f'{prefix}/actions/workflows/{workflow}/runs?branch=main&status=completed&per_page=8')
+                    ['workflow_runs'])
+    released_at = dt.datetime.fromisoformat(latest['published_at'])
+    earliest = released_at - dt.timedelta(days=2)
+    recent = sorted((run for run in runs if dt.datetime.fromisoformat(run['created_at']) >= earliest),
+                    key=lambda run: run['created_at'], reverse=True)[:8]
+    for run in recent:
+        try:
+            proof = resolve(str(run['id']))
+        except (ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            continue
+        if proof['release_tag'] == tag:
+            return run['id']
+    raise ValueError('Latest wallet release is unrecorded and no live matching publication proof was found')
+
+
 def main():
     prefix = f'repos/{REPOSITORY}'
     repository = api(prefix)
@@ -123,6 +156,13 @@ def main():
     ready = repository['has_pull_requests'] and repository['pull_request_creation_policy'] == 'collaborators_only'
     if not ready:
         raise RuntimeError('Expected collaborator-only maintenance proposals')
+    recovery = pending_recovery(prefix)
+    if recovery:
+        with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as stream:
+            stream.write(f'reconciliation_run={recovery}\n')
+        with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as stream:
+            stream.write(f'Existing public release is awaiting reconciliation from run {recovery}.\n')
+        return
     proposals = api(f'{prefix}/pulls?state=open&base=main&per_page=30')
     if len(proposals) == 30:
         messages.append('- Proposal listing capped at 30 pull requests.')

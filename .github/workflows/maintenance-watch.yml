@@ -1,6 +1,10 @@
 name: Watch maintenance discovery
 on:
   workflow_call:
+    outputs:
+      reconciliation_run:
+        description: Exact trusted run for an existing public release awaiting verification
+        value: ${{ jobs.watch.outputs.reconciliation_run }}
   pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
@@ -20,6 +24,7 @@ jobs:
     outputs:
       proposal: ${{ steps.classify.outputs.proposal }}
       head: ${{ steps.classify.outputs.proposal_head }}
+      reconciliation_run: ${{ steps.classify.outputs.reconciliation_run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

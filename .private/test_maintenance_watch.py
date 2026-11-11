@@ -6,7 +6,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from maintenance_watch import WRAPPER_PROPERTIES, classify_paths, trusted_proposal, verified_wrapper, wrapper_patch
+from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, pending_recovery, trusted_proposal,
+                               verified_wrapper, wrapper_patch)
 
 
 class MaintenanceWatchTest(unittest.TestCase):
@@ -151,6 +152,27 @@ class MaintenanceWatchTest(unittest.TestCase):
                            'commit-tree', git('write-tree'), '-p', base, '-m', 'candidate with extra source')
             with self.assertRaisesRegex(ValueError, 'outside the exact wrapper update'):
                 verify_promotion_revision(modified, base, root=root)
+
+    def test_automatic_recovery_requires_the_latest_exact_attestation(self):
+        tag = 'v3.19.0-private.21'
+        digest = 'a'*64
+        latest = dict(tag_name=tag, published_at='2026-11-11T12:00:00Z',
+                      assets=[dict(name='zec-private-latest.apk', digest='sha256:'+digest)])
+        run = dict(id=4, created_at='2026-11-11T11:00:00Z')
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            with patch('maintenance_watch.api', side_effect=[latest, {'workflow_runs': [run]},
+                                                            {'workflow_runs': []}]):
+                self.assertEqual(4, pending_recovery('repos/fork/wallet', directory,
+                                                      lambda _: {'release_tag': tag}))
+            with patch('maintenance_watch.api', side_effect=[latest, {'workflow_runs': [run]},
+                                                            {'workflow_runs': []}]):
+                with self.assertRaisesRegex(ValueError, 'no live matching publication proof'):
+                    pending_recovery('repos/fork/wallet', directory,
+                                     lambda _: {'release_tag': 'v3.19.0-private.20'})
+            (directory/(tag+'.json')).write_text(json.dumps({'apk_sha256': digest}))
+            with patch('maintenance_watch.api', return_value=latest):
+                self.assertIsNone(pending_recovery('repos/fork/wallet', directory))
 
 
 if __name__ == '__main__':
