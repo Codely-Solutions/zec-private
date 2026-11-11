@@ -96,12 +96,15 @@ with EmulatorSession(root / 'session', guest_memory=3072 if transport or core el
                 upgradeBaselineInstrumentation=dict(source_sha=binding['source_sha'],
                                                     apk_sha256=binding['instrumentation_apk_sha256']))
             try:
-                run(session.adb, root, (app, test), manifest, transport_only=True)
+                run(session.adb, root, (app, test), manifest, transport_only=True,
+                    repeat_cold_start=os.environ.get('ZEC_REPEAT_COLD_START') == 'true')
             except Exception:
                 result_path = root / 'core-testnet-result.json'
                 if result_path.is_file():
                     result = json.loads(result_path.read_text())
                     print('Hosted core stage:', result['last_stage'], result['failure']['type'], flush=True)
+                    from hosted_core import egress_diagnostics
+                    egress_diagnostics(result)
                 print('Hosted emulator process exit code:', session.process.poll(), flush=True)
                 # QEMU host diagnostics only. Android app logs and guest files stay private.
                 lines = (root / 'session' / 'emulator.log').read_text(errors='replace').splitlines()

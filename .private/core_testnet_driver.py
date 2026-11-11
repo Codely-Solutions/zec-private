@@ -61,7 +61,7 @@ def verify_instrumentation_pair(adb, expected_version, expected_hash):
     return dict(app_version_code=expected_version, executed_sha256=installed_hash, installed_hash_verified=True)
 
 
-def run(adb, root, apks, manifest, *, transport_only=False):
+def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False):
     started = time.monotonic()
     if transport_only:
         baseline, baseline_test = apks
@@ -197,6 +197,18 @@ def run(adb, root, apks, manifest, *, transport_only=False):
     def rule(binary, *args):
         return shell(binary, *args)
 
+    def denied_rows(binary):
+        rows = (rule(binary, '-L', 'CORE_TOR', '-n', '-v', '-x') + '\n' +
+                rule(binary, '-L', 'CORE_ACCEPT', '-n', '-v', '-x')).splitlines()
+        return [line for line in rows if len(line.split()) > 2 and line.split()[2] == 'REJECT']
+
+    def check_denials(stage_name):
+        rejected = {binary: denied_rows(binary) for binary in ('iptables', 'ip6tables')}
+        report.update({binary+'_denials': lines for binary, lines in rejected.items()})
+        if any(int(line.split()[0]) for lines in rejected.values() for line in lines):
+            report['egress_denial_stage'] = stage_name
+            raise RuntimeError('Unexpected app egress attempts blocked; inspect exact destinations')
+
     def clear_wallet():
         private=adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15).stdout
         if len(private)>16384:
@@ -313,16 +325,20 @@ def run(adb, root, apks, manifest, *, transport_only=False):
         firewall = True
         if transport_only:
             stage('recipient',240)
+            check_denials('recipient')
             clear_wallet()
             stage('sender',240)
+            check_denials('sender')
             report['faucet_claims'] = 0
         else:
             current_stage='faucet_readiness'
             with faucet_ready_session(root) as (readiness, fund_testnet):
                 report['faucet_readiness']=readiness
                 stage('recipient',240)
+                check_denials('recipient')
                 clear_wallet()
                 stage('sender',240)
+                check_denials('sender')
                 private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15).stdout)
                 if private.get('claimAttempted'):raise RuntimeError('Funding was already attempted; automatic re-claim forbidden')
                 private['claimAttempted']=True
@@ -334,12 +350,14 @@ def run(adb, root, apks, manifest, *, transport_only=False):
             write_fixture(private)
             # App Tor must reconnect through the enforced relay set; refusal is safe.
             stage('fund',950)
+            check_denials('fund')
             shell('am','force-stop',PACKAGE)
             adb('install','-r',str(candidate),timeout=90)
             adb('install','-r','-t',str(test),timeout=90)
             if uid()!=app_uid or version()!=manifest['candidate_version_code']:
                 raise RuntimeError('Installed update identity/version mismatch')
             stage('upgrade',240)
+            check_denials('upgrade')
         # Start the normal wallet resync path, then interrupt its actual native
         # synchronizer before broadcast. Require fresh sync and intact history.
         before = time.monotonic()
@@ -406,19 +424,22 @@ def run(adb, root, apks, manifest, *, transport_only=False):
             if worker.is_alive():raise RuntimeError('Interruption instrumentation worker did not exit')
             if cleanup_errors:raise RuntimeError('Tor outage cleanup failed: '+','.join(cleanup_errors))
         if not transport_only:
+            check_denials('transport')
             stage('send')
+            check_denials('send')
             shell('am','force-stop',PACKAGE)
             stage('restart',240)
+            check_denials('restart')
             clear_wallet()
             stage('restore')
-        denied=0
-        for binary in ('iptables','ip6tables'):
-            rows=(rule(binary,'-L','CORE_TOR','-n','-v','-x')+'\n'+rule(binary,'-L','CORE_ACCEPT','-n','-v','-x')).splitlines()
-            rejected=[line for line in rows if len(line.split())>2 and line.split()[2]=='REJECT']
-            report[binary+'_denials']=rejected
-            denied+=sum(int(line.split()[0]) for line in rejected)
-        if denied:
-            raise RuntimeError('Unexpected app egress attempts blocked; inspect exact destinations')
+        if repeat_cold_start:
+            if not transport_only:
+                raise ValueError('Cold-start diagnostics must be unfunded')
+            for cycle in range(2):
+                clear_wallet()
+                stage('sender', 240)
+                check_denials(f'cold-start-{cycle + 1}')
+        check_denials('transport-probe' if transport_only else 'restore')
         report['network_enforcement']=dict(passed=True,mode='direct public bulk endpoint TCP443 plus Tor relay allowlist; sensitive provider direct egress denied; metadata outage assertion',
                                            allowed_relay_peers=len(allowed),embedded_bootstrap_pairs=len(bootstrap_peers),sensitive_targets=len(targets),direct_bulk_targets=sorted(bulk_targets),metadata_no_direct_fallback_observed=True,metadata_rpc_scope=['getServerInfo','getLatestBlockHeight'],sdk_transport_policy='published SDK6.0.0 source inspected; bulk direct, sensitive calls Tor')
         report['passed']=True
@@ -450,6 +471,14 @@ def run(adb, root, apks, manifest, *, transport_only=False):
                 report['application_pids']=sorted(application_pids)
                 report['connection_destinations']=[dict(address=address,port=port) for address,port in sorted(connections)[:100]]
                 report['connection_destinations_truncated']=len(connections)>100
+                if 'egress_denial_stage' in report:
+                    report['unclassified_connections'] = [
+                        dict(address=address, port=port)
+                        for address, port in sorted(connections)
+                        if address not in allowed and (address, port) not in bootstrap_peers
+                        and (address not in bulk_targets or port != 443)
+                        and not ipaddress.ip_address(address).is_loopback
+                    ][:20]
             except (RuntimeError, subprocess.SubprocessError) as error:
                 report['connection_trace_error']=type(error).__name__
         if firewall:

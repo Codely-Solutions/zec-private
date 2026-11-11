@@ -37,6 +37,16 @@ def verify_reservation():
     return value
 
 
+def egress_diagnostics(report):
+    if not report.get('egress_denial_stage'):
+        return
+    data = {key: report.get(key) for key in ('egress_denial_stage', 'unclassified_connections',
+            'connection_trace_error')}
+    for family in ('iptables', 'ip6tables'):
+        data[family] = [line for line in report.get(family+'_denials', []) if int(line.split()[0])][:12]
+    print('Hosted egress evidence ' + json.dumps(data), flush=True)
+
+
 def run(session, root, fixture, candidate, result):
     require(os.environ['GITHUB_RUN_ATTEMPT'] == '1', 'Hosted funded reruns are forbidden')
     require(not os.environ.get('GH_TOKEN') and not os.environ.get('GITHUB_TOKEN'),
@@ -72,6 +82,7 @@ def run(session, root, fixture, candidate, result):
             ledger = root / 'funding-claim-ledger.json'
             state = json.loads(ledger.read_text())['status'] if ledger.exists() else 'no-POST'
             print(f'Hosted lifecycle failed at {value["last_stage"]}, claim state {state}', flush=True)
+            egress_diagnostics(value)
         raise
     report = json.loads((root / 'core-testnet-result.json').read_text())
     report.update(apk_preparation=prepared, hosted_fixture=selected,
