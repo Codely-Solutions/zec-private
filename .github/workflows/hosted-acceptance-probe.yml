@@ -14,6 +14,10 @@ on:
         description: Run the unfunded native Tor interruption and recovery check on the verified pair
         type: boolean
         default: false
+      quote_release:
+        description: Exercise real unfunded quotes using the existing accepted APK for this release tag
+        type: string
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -21,7 +25,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   blank-guest:
-    if: github.ref == 'refs/heads/main' && !inputs.prerequisites && !inputs.install_baseline && !inputs.test_transport
+    if: github.ref == 'refs/heads/main' && !inputs.prerequisites && !inputs.install_baseline && !inputs.test_transport && !inputs.quote_release
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -103,3 +107,48 @@ jobs:
           ZEC_HOSTED_FIXTURE_DIR="$RUNNER_TEMP/zec-hosted-pair" bash .private/hosted_emulator_smoke.sh
       - if: always()
         run: rm -rf -- "$RUNNER_TEMP/zec-hosted-pair"
+  quote-cycles:
+    if: github.ref == 'refs/heads/main' && inputs.quote_release != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Download the exact executed emulator quote APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.quote_release }}
+          PYTHONPATH: .private
+        run: |
+          mkdir -m 700 "$RUNNER_TEMP/zec-hosted-quotes"
+          python3 -B - <<'PY'
+          import os
+          from pathlib import Path
+          from hosted_quote_probe import stage_quote_apk
+          stage_quote_apk(Path(os.environ['RUNNER_TEMP'])/'zec-hosted-quotes', os.environ['RELEASE_TAG'])
+          PY
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
+        with:
+          distribution: temurin
+          java-version: '25.0.5+8'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+        with:
+          cache-read-only: true
+      - name: Build the small isolated UI bridge
+        timeout-minutes: 6
+        run: |
+          chmod +x gradlew
+          ./gradlew -p .private/ui-bridge --no-daemon --no-watch-fs assembleDebug
+          cp .private/ui-bridge/build/outputs/apk/debug/*.apk "$RUNNER_TEMP/zec-hosted-quotes/ui-bridge.apk"
+      - name: Exercise unfunded production quotes over app Tor
+        run: |
+          if [[ ! -x "$ANDROID_HOME/build-tools/36.0.0/zipalign" ]]; then
+            timeout 180 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'build-tools;36.0.0'
+          fi
+          ZEC_HOSTED_QUOTE_DIR="$RUNNER_TEMP/zec-hosted-quotes" bash .private/hosted_emulator_smoke.sh
+      - if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zec-hosted-quotes"
