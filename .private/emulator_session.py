@@ -9,17 +9,23 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 import time
 import urllib.request
 import zipfile
 from dataclasses import dataclass
 
-SDK = Path(r"C:\Users\User\AppData\Local\Android\Sdk")
+SDK = (Path(os.environ.get("ANDROID_HOME", "/opt/android/sdk")) if sys.platform.startswith("linux")
+       else Path(r"C:\Users\User\AppData\Local\Android\Sdk"))
 IMAGE_URL = "https://dl.google.com/android/repository/sys-img/android/x86_64-35_r02.zip"
 IMAGE_SIZE = 782404023
 IMAGE_SHA1 = "2d857d170c0d1b827149565da34b3383e5306f7f"
 IMAGE_EXPANDED_LIMIT = 4 * 1024**3
 IMAGE_MARKER = ".codex-system-image.json"
+
+
+def sdk_binary(sdk, directory, name):
+    return Path(sdk) / directory / (name + (".exe" if os.name == "nt" else ""))
 
 
 @dataclass(frozen=True)
@@ -155,7 +161,7 @@ def prepare_image(root, environ=None):
 
 class PrivateAdb:
     def __init__(self, sdk, ports, environment):
-        self.command_base = [str(Path(sdk) / "platform-tools/adb.exe"),
+        self.command_base = [str(sdk_binary(sdk, "platform-tools", "adb")),
                              "-P", str(ports.adb), "-s", ports.serial]
         self.environment = environment
         self.emulator = None
@@ -191,6 +197,7 @@ class EmulatorSession:
         self.slot = resolve_slot(slot, self.base_environment)
         self.ports = session_ports(self.slot)
         self.sdk = Path(sdk)
+        self.gpu = "swiftshader_indirect" if sys.platform.startswith("linux") else "host"
         self.system = Path(system).resolve() if system else None
         self.avd_name = "CodexTorProbe" if self.slot == 0 else "CodexTorProbeSlot1"
         home = self.root / "android"
@@ -209,10 +216,10 @@ class EmulatorSession:
         self._closed = False
 
     def command(self):
-        return [str(self.sdk / "emulator/emulator.exe"), "-avd", self.avd_name,
+        return [str(sdk_binary(self.sdk, "emulator", "emulator")), "-avd", self.avd_name,
             "-port", str(self.ports.console), "-grpc", str(self.ports.grpc), "-no-window",
             "-partition-size", "2047", "-feature", "-QuickbootFileBacked,-Vulkan", "-no-snapshot",
-            "-no-boot-anim", "-no-audio", "-memory", str(self.guest_memory), "-cores", "2", "-gpu", "host",
+            "-no-boot-anim", "-no-audio", "-memory", str(self.guest_memory), "-cores", "2", "-gpu", self.gpu,
             "-data", str(self.root / "userdata.img"), "-cache", str(self.root / "cache.img")]
 
     def __enter__(self):
@@ -230,7 +237,7 @@ class EmulatorSession:
             avd.mkdir(parents=True)
             config = {"abi.type": "x86_64", "hw.cpu.arch": "x86_64", "image.sysdir.1": str(self.system),
                 "tag.id": "default", "hw.lcd.width": "1080", "hw.lcd.height": "1920", "hw.lcd.density": "420",
-                "hw.gpu.enabled": "yes", "hw.gpu.mode": "host", "disk.cachePartition": "yes",
+                "hw.gpu.enabled": "yes", "hw.gpu.mode": self.gpu, "disk.cachePartition": "yes",
                 "avd.id": self.avd_name, "avd.name": self.avd_name, "hw.ramSize": str(self.guest_memory),
                 "hw.cpu.ncore": "2", "hw.sdCard": "no", "hw.camera.back": "none", "hw.camera.front": "none",
                 "hw.keyboard": "yes", "fastboot.forceColdBoot": "yes", "fastboot.forceFastBoot": "no",
@@ -242,7 +249,7 @@ class EmulatorSession:
                 f"avd.ini.encoding=UTF-8\npath={avd}\ntarget=android-35\n")
             self.log = (self.root / "emulator.log").open("wb")
             self.adb_started = True
-            subprocess.run([str(self.sdk / "platform-tools/adb.exe"), "-P", str(self.ports.adb), "start-server"],
+            subprocess.run([str(sdk_binary(self.sdk, "platform-tools", "adb")), "-P", str(self.ports.adb), "start-server"],
                 env=self.environment, capture_output=True, check=True, timeout=15)
             command = self.command()
             self.process = subprocess.Popen(command, env=self.environment, stdout=self.log, stderr=self.log,
@@ -291,7 +298,7 @@ class EmulatorSession:
             try:
                 if self.adb_started:
                     try:
-                        subprocess.run([str(self.sdk / "platform-tools/adb.exe"), "-P", str(self.ports.adb), "kill-server"],
+                        subprocess.run([str(sdk_binary(self.sdk, "platform-tools", "adb")), "-P", str(self.ports.adb), "kill-server"],
                             env=self.environment, capture_output=True, timeout=10)
                     except (subprocess.TimeoutExpired, OSError):
                         pass
