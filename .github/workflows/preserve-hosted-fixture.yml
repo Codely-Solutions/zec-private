@@ -3,6 +3,8 @@ on:
   push:
     branches: [main]
     paths: ['.private/release-evidence/v*-private.*.json']
+  schedule:
+    - cron: '47 */6 * * *'
   workflow_dispatch:
     inputs:
       release_tag:
@@ -31,6 +33,7 @@ jobs:
           fetch-depth: 0
       - id: select
         env:
+          GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           PREVIOUS_MAIN: ${{ github.event.before }}
         run: python3 -B .private/hosted_fixture.py select --tag "$RELEASE_TAG" >> "$GITHUB_OUTPUT"

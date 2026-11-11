@@ -52,6 +52,23 @@ def select(tag, before):
     return tag
 
 
+def pending_pair(metadata, root=ROOT):
+    latest = metadata.api('/releases/latest')
+    tag = latest['tag_name']
+    require(re.fullmatch(r'v\d+\.\d+\.\d+-private\.\d+', tag), 'Exact public release tag required')
+    selected = json.loads((root / '.private/hosted-fixture.json').read_text())
+    record = root / '.private/release-evidence' / (tag + '.json')
+    if selected['release'] == tag or not record.is_file():
+        return ''
+    evidence = json.loads(record.read_text())
+    # An already integrated release with a new real pair can be recovered from
+    # its original artifact. Public verification remains required in prepare().
+    if (evidence.get('core') or {}).get('candidate_version_code') != evidence['versionCode']:
+        return ''
+    require(evidence['versionCode'] > selected['version_code'], 'Refusing to recover an older fixture')
+    return tag
+
+
 def verify_pair(path, core, *, prepared):
     require(0 < path.stat().st_size <= MAX_ARCHIVE, 'Fixture archive size outside budget')
     with zipfile.ZipFile(path) as archive:
@@ -147,7 +164,9 @@ def main():
     parser.add_argument('--extract', action='store_true', help='Extract verified app and instrumentation')
     args = parser.parse_args()
     if args.operation == 'select':
-        print('tag=' + select(args.tag, os.environ.get('PREVIOUS_MAIN', '')))
+        tag = (pending_pair(Metadata()) if os.environ.get('GITHUB_EVENT_NAME') == 'schedule'
+               else select(args.tag, os.environ.get('PREVIOUS_MAIN', '')))
+        print('tag=' + tag)
         return
     if args.operation == 'record':
         updated = record(json.loads(os.environ['FIXTURE_BINDING']), Metadata())
