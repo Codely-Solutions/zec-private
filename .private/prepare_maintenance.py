@@ -69,7 +69,10 @@ def prepare(number, head, controller):
         subprocess.run(['gh', 'auth', 'setup-git', '--hostname', 'github.com'], check=True, timeout=15)
         git('push', 'origin', f'{source}:refs/heads/{branch}')
     print(json.dumps(dict(identity, source_sha=source, branch=branch)))
+    return source
 
 
 if __name__ == '__main__':
-    prepare(os.environ['PROPOSAL'], os.environ['PROPOSAL_HEAD'], os.environ['GITHUB_SHA'])
+    source = prepare(os.environ['PROPOSAL'], os.environ['PROPOSAL_HEAD'], os.environ['GITHUB_SHA'])
+    with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as stream:
+        stream.write(f'source_sha={source}\n')

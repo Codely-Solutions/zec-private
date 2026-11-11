@@ -103,6 +103,10 @@ def unsigned_proof(evidence):
     require(asset['workflow_run']['id'] == int(run_id) and asset['workflow_run']['head_sha'] == run['head_sha']
             and 0 < asset['size_in_bytes'] <= 64 * MIB,
             'Unsigned artifact run or size mismatch')
+    if 'production_artifact' in evidence:
+        require(all(asset[key] == evidence['production_artifact'][key]
+                    for key in ('id', 'digest', 'size_in_bytes')),
+                'Public verification did not resolve the accepted unsigned artifact')
     data = subprocess.check_output(['gh', 'api', f'{API}/actions/artifacts/{asset["id"]}/zip'], timeout=90)
     require(len(data) == asset['size_in_bytes'] and asset['digest'] == 'sha256:' + digest(data),
             'Unsigned artifact digest or size mismatch')

@@ -110,6 +110,9 @@ def profile_input(path, profile='core-testnet'):
     """
     if profile not in PROFILES:
         raise ValueError('Unknown acceptance profile: '+profile)
+    if path in {'.private/hosted_core.py', '.private/hosted_claim.py', '.private/hosted_release.py',
+                '.private/pull_hosted_fixture.sh', '.private/hosted-fixture.json', '.github/workflows/hosted-core.yml'}:
+        return profile == 'core-testnet'
     selected = relevant(path)
     if profile == 'core-runtime' and path == CORE_TEST_SOURCE:
         return False

@@ -61,7 +61,8 @@ class SyncTests(unittest.TestCase):
         self.before=(sync.ROOT/'.private/upstream.json').read_bytes()
         major,minor,patch_version,build=sync.version(self.state['tag'])
         self.next_tag=f'{major}.{minor}.{patch_version}-{build+1}'
-        versions = patch.object(sync, 'fork_release_versions', return_value=[(20, 3234020), (21, 3234021)])
+        self.revision = json.loads((sync.ROOT/'.private/release-revision.json').read_text())['private_revision']
+        versions = patch.object(sync, 'fork_release_versions', return_value=[(self.revision, self.state['versionCode'])])
         versions.start()
         self.addCleanup(versions.stop)
 
@@ -217,7 +218,8 @@ class SyncTests(unittest.TestCase):
                                      (sync.ROOT/name).read_text().strip())
                 self.assertIn('app/src/main/java/co/electriccoin/zcash/app/ZecPrivateProductModule.kt', tree)
                 sha = output.call_args.kwargs['source_sha']
-                self.assertEqual(22, json.loads(original('git','show',sha+':.private/release-revision.json'))['private_revision'])
+                self.assertEqual(self.revision + 1,
+                                 json.loads(original('git','show',sha+':.private/release-revision.json'))['private_revision'])
                 patch_text = original('git','show',sha+':.private/fork.patch')
                 self.assertNotIn('+ZCASH_VERSION_CODE=', patch_text)
                 from acceptance_policy import verify_promotion_revision

@@ -9,6 +9,9 @@ on:
       artifact_id:
         type: string
         required: true
+      production_id:
+        type: string
+        required: true
     outputs:
       receipt_id:
         value: ${{ jobs.wallet.outputs.receipt_id }}
@@ -86,11 +89,24 @@ jobs:
         if: inputs.source_sha == ''
         timeout-minutes: 16
         run: bash .private/build_core_pair.sh "-PZCASH_VERSION_CODE=$ZEC_CORE_VERSION"
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+      - name: Fetch bound testnet pair
         if: inputs.source_sha != ''
-        with:
-          artifact-ids: ${{ inputs.artifact_id }}
-          path: core-artifact/
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CORE_ID: ${{ inputs.artifact_id }}
+          PRODUCTION_ID: ${{ inputs.production_id }}
+        run: |
+          PYTHONPATH=.private python3 -B - <<'PY'
+          import json, os
+          from pathlib import Path
+          from hosted_release import artifact, stage
+          from release_metadata import Metadata
+          path = Path('core-artifact')
+          stage(path, os.environ['CORE_ID'], 'core-testnet-candidate')
+          product = artifact(Metadata(), os.environ['PRODUCTION_ID'], 'validated-unsigned-apk',
+                             os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_SHA'])
+          (path/'production.json').write_text(json.dumps(product))
+          PY
       - name: Run isolated funded testnet lifecycle
         run: |
           git cat-file -e "$ZEC_CORE_SOURCE^{commit}" 2>/dev/null || git fetch --no-tags origin "$ZEC_CORE_SOURCE"
