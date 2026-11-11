@@ -80,8 +80,15 @@ with EmulatorSession(root / 'session') as session:
                 instrumentation_apk_sha256=binding['instrumentation_apk_sha256'],
                 upgradeBaselineInstrumentation=dict(source_sha=binding['source_sha'],
                                                     apk_sha256=binding['instrumentation_apk_sha256']))
-            run(session.adb, root, (app, test), manifest, transport_only=True)
-            print('Native Tor interruption and recovery passed with zero claims and submissions.')
+            try:
+                run(session.adb, root, (app, test), manifest, transport_only=True)
+            except Exception:
+                result_path = root / 'core-testnet-result.json'
+                if result_path.is_file():
+                    result = json.loads(result_path.read_text())
+                    print('Hosted core stage:', result['last_stage'], result['failure']['type'], flush=True)
+                raise
+            print('Native Tor interruption and recovery passed with zero faucet claims or valid transaction submissions.')
         else:
             session.adb('install', '-r', str(app), timeout=90)
             session.adb('install', '-r', '-t', str(test), timeout=90)

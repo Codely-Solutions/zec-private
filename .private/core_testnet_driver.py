@@ -312,6 +312,8 @@ def run(adb, root, apks, manifest, *, transport_only=False):
             rule(binary,'-I','OUTPUT','1','-m','owner','--uid-owner',str(app_uid),'-j','CORE_ACCEPT')
         firewall = True
         if transport_only:
+            stage('recipient',240)
+            clear_wallet()
             stage('sender',240)
             report['faucet_claims'] = 0
         else:
