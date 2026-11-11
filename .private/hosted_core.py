@@ -51,6 +51,10 @@ def run(session, root, fixture, candidate, result):
     require(os.environ['GITHUB_RUN_ATTEMPT'] == '1', 'Hosted funded reruns are forbidden')
     require(not os.environ.get('GH_TOKEN') and not os.environ.get('GITHUB_TOKEN'),
             'Wallet runner must not receive a repository token')
+    restore_probe = os.environ.get('ZEC_CORE_RESTORE_PROBE') == 'true'
+    require(not restore_probe or (os.environ['ZEC_CORE_REHEARSAL'] == 'true'
+            and not os.environ['ZEC_CORE_RESERVATION'] and os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch'),
+            'An unfunded restore probe must use the dedicated rehearsal workflow without a reservation')
     selected = json.loads(Path('.private/hosted-fixture.json').read_text())
     require(json.loads((fixture / 'fixture-binding.json').read_text()) == selected,
             'Downloaded baseline differs from protected selection')
@@ -74,7 +78,7 @@ def run(session, root, fixture, candidate, result):
         build_input_fingerprint=input_fingerprint(source, profile='core-build'))
     prepared = prepare(apks, root, SDK)
     try:
-        lifecycle(session.adb, root, apks, manifest)
+        lifecycle(session.adb, root, apks, manifest, transport_only=restore_probe, restore_probe=restore_probe)
     except Exception:
         report = root / 'core-testnet-result.json'
         if report.exists():
@@ -85,6 +89,10 @@ def run(session, root, fixture, candidate, result):
             egress_diagnostics(value)
         raise
     report = json.loads((root / 'core-testnet-result.json').read_text())
+    if restore_probe:
+        require(report['passed'] and report['faucet_claims'] == 0, 'Unfunded restore probe failed')
+        print('Hosted unfunded installed upgrade, Tor recovery and seed restore passed.', flush=True)
+        return
     report.update(apk_preparation=prepared, hosted_fixture=selected,
                   hosted_reservation=os.environ['ZEC_CORE_RESERVATION'],
                   rehearsal=os.environ['ZEC_CORE_REHEARSAL'] == 'true',

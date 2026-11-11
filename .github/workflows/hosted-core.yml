@@ -1,6 +1,11 @@
 name: Hosted testnet lifecycle
 on:
   workflow_dispatch:
+    inputs:
+      restore_probe:
+        description: Exercise installed upgrade and seed restore without a faucet claim
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       source_sha:
@@ -18,7 +23,7 @@ on:
 permissions: {}
 jobs:
   reserve:
-    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && !inputs.restore_probe
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -44,6 +49,7 @@ jobs:
           python3 -B .private/hosted_claim.py
   wallet:
     needs: reserve
+    if: ${{ !cancelled() && (needs.reserve.result == 'success' || (inputs.restore_probe && github.event_name == 'workflow_dispatch' && github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1)) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 44
     permissions:
@@ -57,12 +63,14 @@ jobs:
       ZEC_CORE_VERSION: ${{ needs.reserve.outputs.version }}
       ZEC_CORE_RESERVATION: ${{ needs.reserve.outputs.reservation }}
       ZEC_CORE_REHEARSAL: ${{ inputs.source_sha == '' }}
+      ZEC_CORE_RESTORE_PROBE: ${{ inputs.restore_probe || false }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 0
       - name: Verify one-use reservation
+        if: '!inputs.restore_probe'
         env:
           GH_TOKEN: ${{ github.token }}
         run: PYTHONPATH=.private python3 -B -c 'from hosted_core import verify_reservation; verify_reservation()'
@@ -88,7 +96,12 @@ jobs:
       - name: Compile testnet-only rehearsal pair
         if: inputs.source_sha == ''
         timeout-minutes: 16
-        run: bash .private/build_core_pair.sh "-PZCASH_VERSION_CODE=$ZEC_CORE_VERSION"
+        run: |
+          if [[ "$ZEC_CORE_RESTORE_PROBE" == true ]]; then
+            ZEC_CORE_VERSION=$(jq -er '.version_code + 1' .private/hosted-fixture.json)
+            echo "ZEC_CORE_VERSION=$ZEC_CORE_VERSION" >> "$GITHUB_ENV"
+          fi
+          bash .private/build_core_pair.sh "-PZCASH_VERSION_CODE=$ZEC_CORE_VERSION"
       - name: Fetch bound testnet pair
         if: inputs.source_sha != ''
         env:
@@ -107,15 +120,18 @@ jobs:
                              os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_SHA'])
           (path/'production.json').write_text(json.dumps(product))
           PY
-      - name: Run isolated funded testnet lifecycle
+      - name: Run isolated testnet acceptance
         run: |
           git cat-file -e "$ZEC_CORE_SOURCE^{commit}" 2>/dev/null || git fetch --no-tags origin "$ZEC_CORE_SOURCE"
-          bash .private/run_tor_ci.sh --install-only
+          if [[ "$ZEC_CORE_RESTORE_PROBE" != true ]]; then
+            bash .private/run_tor_ci.sh --install-only
+          fi
           if [[ ! -x "$ANDROID_HOME/build-tools/36.0.0/zipalign" ]]; then
             timeout 180 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'build-tools;36.0.0'
           fi
           ZEC_CORE_RESULT="$RUNNER_TEMP/hosted-core.json" ZEC_HOSTED_CORE_DIR="$PWD/core-artifact" ZEC_HOSTED_FIXTURE_DIR="$RUNNER_TEMP/zec-hosted-pair" bash .private/hosted_emulator_smoke.sh
       - id: receipt
+        if: '!inputs.restore_probe'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: hosted-core-receipt
