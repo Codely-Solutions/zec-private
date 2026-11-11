@@ -112,15 +112,44 @@ def verify(tag, path, archive_digest, oci_digest, *, extract=False):
     return binding
 
 
+def record(binding, metadata, root=ROOT):
+    tag = binding['release']
+    evidence, core = recorded_pair(tag)
+    require(binding['source_sha'] == core['build_source_sha']
+            and binding['version_code'] == core['candidate_version_code']
+            and binding['candidate_apk_sha256'] == core['candidate_apk_sha256']
+            and binding['instrumentation_apk_sha256'] == core['instrumentation_apk_sha256']
+            and re.fullmatch(re.escape(REGISTRY) + r'@sha256:[0-9a-f]{64}', binding['reference'])
+            and re.fullmatch(r'sha256:[0-9a-f]{64}', binding['digest'])
+            and 0 < binding['size_in_bytes'] <= MAX_ARCHIVE,
+            'Hosted verifier output differs from the released testnet pair')
+    live = metadata.api('/releases/latest')
+    apks = [asset for asset in live['assets'] if asset['name'] == 'zec-private-latest.apk']
+    require(live['tag_name'] == tag and len(apks) == 1
+            and apks[0]['digest'] == 'sha256:' + evidence['apk_sha256'],
+            'Only the currently published verified release may advance the hosted fixture')
+    path = root / '.private/hosted-fixture.json'
+    previous = json.loads(path.read_text())
+    if previous == binding:
+        return False
+    require(previous['version_code'] < binding['version_code'], 'Refusing to replace or downgrade the selected fixture')
+    path.write_text(json.dumps(binding, indent=2) + '\n')
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('operation', choices=('select', 'prepare', 'verify'))
+    parser.add_argument('operation', choices=('select', 'prepare', 'verify', 'record'))
     parser.add_argument('--directory', type=Path)
     parser.add_argument('--tag', default='')
     parser.add_argument('--extract', action='store_true', help='Extract verified app and instrumentation')
     args = parser.parse_args()
     if args.operation == 'select':
         print('tag=' + select(args.tag, os.environ.get('PREVIOUS_MAIN', '')))
+        return
+    if args.operation == 'record':
+        updated = record(json.loads(os.environ['FIXTURE_BINDING']), Metadata())
+        print('updated=' + ('true' if updated else 'false'))
         return
     require(args.directory is not None and args.directory.is_dir(), 'Fixture output directory required')
     out = args.directory / 'fixture.zip'

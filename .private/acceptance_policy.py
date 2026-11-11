@@ -280,11 +280,37 @@ def validate_binding(proof, profile, expected_inputs, trusted_bytes, artifact_by
 ATTESTATION_PATHS={'.private/core-acceptance.json','.private/quote-acceptance.json',
                    '.private/core-validation-summary.json','.private/core-coverage.md','.private/STATUS.md'}
 UPSTREAM_CANDIDATE_RECORDS = {'.private/candidate.json', '.private/source-state.json'}
+DERIVED_UPSTREAM_RECORDS = {'.private/fork.patch', '.private/release-revision.json'}
 
 
 def validate_attestation_changes(paths):
     if set(paths)-(ATTESTATION_PATHS | {CORE_TEST_SOURCE}):
         raise ValueError('Candidate or controller changed after validation; rebuild required')
+
+
+def verify_derived_upstream_records(candidate, controller, root):
+    from refresh_source import patch_paths
+
+    def read(path):
+        return git('show', f'{candidate}:{path}', root=root)
+
+    record = json.loads(read('.private/candidate.json'))
+    upstream = record['sha']
+    parents = git('rev-list', '--parents', '-n', '1', candidate, root=root).decode().split()
+    if (not re.fullmatch(r'[0-9a-f]{40}', upstream) or parents != [candidate, controller, upstream]
+            or not re.fullmatch(r'\d+\.\d+\.\d+-\d+', record['tag'])):
+        raise ValueError('Upstream records require an exact controller and upstream parent')
+    recorded_revision = json.loads(read('.private/release-revision.json'))
+    revision = recorded_revision.get('private_revision')
+    old = json.loads(git('show', f'{controller}:.private/release-revision.json', root=root))['private_revision']
+    if set(recorded_revision) != {'private_revision'} or type(revision) is not int or not old < revision <= 999:
+        raise ValueError('Upstream release revision must advance')
+    exclusions = json.loads(git('show', f'{controller}:.private/excluded-features.json', root=root))['forbidden_projects']
+    patch = git('diff', '--no-ext-diff', '--no-textconv', '--binary', '--unified=0',
+                '-I', '^ZCASH_VERSION_(CODE|NAME)=', upstream, candidate, '--',
+                *patch_paths(exclusions), root=root)
+    if patch != read('.private/fork.patch'):
+        raise ValueError('Upstream fork patch differs from the canonical candidate delta')
 
 
 def verify_promotion_revision(candidate, controller, root=ROOT):
@@ -298,8 +324,11 @@ def verify_promotion_revision(candidate, controller, root=ROOT):
     if child.returncode == 0:
         protected_changes = git('diff', '--no-renames', '--name-only', '-z', controller, candidate,
                                 '--', '.github', '.private', 'LICENSE', root=root).decode().split('\0')
-        if set(filter(None, protected_changes)) - UPSTREAM_CANDIDATE_RECORDS:
+        protected = set(filter(None, protected_changes))
+        if protected - UPSTREAM_CANDIDATE_RECORDS - DERIVED_UPSTREAM_RECORDS:
             raise ValueError('Upstream candidate changed controller-owned files')
+        if protected & DERIVED_UPSTREAM_RECORDS:
+            verify_derived_upstream_records(candidate, controller, root)
         return False
     subprocess.run(['git','merge-base','--is-ancestor',candidate,controller],cwd=root,check=True,
                    stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
