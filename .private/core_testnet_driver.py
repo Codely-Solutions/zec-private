@@ -23,7 +23,7 @@ RUNNER = PACKAGE + '.test/co.electriccoin.zcash.test.ZcashUiTestRunner'
 def instrumentation_role(stage):
     if stage in BASELINE_INSTRUMENTATION_STAGES:
         return 'baseline'
-    if stage in CANDIDATE_INSTRUMENTATION_STAGES or stage == 'transportProbe':
+    if stage in CANDIDATE_INSTRUMENTATION_STAGES or stage in ('transportProbe', 'restoreProbe'):
         return 'candidate'
     raise ValueError('Unknown version-paired instrumentation stage: ' + stage)
 
@@ -61,9 +61,11 @@ def verify_instrumentation_pair(adb, expected_version, expected_hash):
     return dict(app_version_code=expected_version, executed_sha256=installed_hash, installed_hash_verified=True)
 
 
-def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False):
+def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False, restore_probe=False):
     started = time.monotonic()
-    if transport_only:
+    if restore_probe and (not transport_only or repeat_cold_start):
+        raise ValueError('The restore probe requires its own unfunded advancing APK pair')
+    if transport_only and not restore_probe:
         baseline, baseline_test = apks
         candidate, test = baseline, baseline_test
         if manifest['candidate_version_code'] != manifest['baseline_version_code']:
@@ -330,6 +332,12 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             stage('sender',240)
             check_denials('sender')
             report['faucet_claims'] = 0
+            if restore_probe:
+                shell('am','force-stop',PACKAGE)
+                adb('install','-r',str(candidate),timeout=90)
+                adb('install','-r','-t',str(test),timeout=90)
+                if uid()!=app_uid or version()!=manifest['candidate_version_code']:
+                    raise RuntimeError('Installed restore probe identity/version mismatch')
         else:
             current_stage='faucet_readiness'
             with faucet_ready_session(root) as (readiness, fund_testnet):
@@ -432,6 +440,11 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             check_denials('restart')
             clear_wallet()
             stage('restore')
+        check_denials('transport-probe' if transport_only else 'restore')
+        if restore_probe:
+            clear_wallet()
+            stage('restoreProbe',240)
+            check_denials('restore-probe')
         if repeat_cold_start:
             if not transport_only:
                 raise ValueError('Cold-start diagnostics must be unfunded')
@@ -439,7 +452,6 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 clear_wallet()
                 stage('sender', 240)
                 check_denials(f'cold-start-{cycle + 1}')
-        check_denials('transport-probe' if transport_only else 'restore')
         report['network_enforcement']=dict(passed=True,mode='direct public bulk endpoint TCP443 plus Tor relay allowlist; sensitive provider direct egress denied; metadata outage assertion',
                                            allowed_relay_peers=len(allowed),embedded_bootstrap_pairs=len(bootstrap_peers),sensitive_targets=len(targets),direct_bulk_targets=sorted(bulk_targets),metadata_no_direct_fallback_observed=True,metadata_rpc_scope=['getServerInfo','getLatestBlockHeight'],sdk_transport_policy='published SDK6.0.0 source inspected; bulk direct, sensitive calls Tor')
         report['passed']=True

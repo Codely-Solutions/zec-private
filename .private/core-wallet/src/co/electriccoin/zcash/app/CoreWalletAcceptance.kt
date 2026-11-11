@@ -291,7 +291,7 @@ class CoreWalletAcceptance {
                     checkSent()
                     finishClipboardCheck()
                 }
-                "restore" -> {
+                "restore", "restoreProbe" -> {
                     val state = fixture()
                     check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
                     dependency<RestoreWalletUseCase>()(
@@ -300,6 +300,13 @@ class CoreWalletAcceptance {
                     )
                     dependency<PersistableWalletProvider>().persistableWallet.filterNotNull().first()
                     checkWallet("recipient")
+                    if (stage == "restoreProbe") {
+                        val sync = dependency<SynchronizerProvider>().getSynchronizer()
+                        requireEndpointReady(sync, "restore_probe")
+                        withTimeout(120_000) { sync.status.first { it == Synchronizer.Status.SYNCED } }
+                        check(balance() == 0L)
+                        return@withTimeout
+                    }
                     val transaction = withTimeout(600_000) {
                         dependency<TransactionRepository>().observeTransaction(state.getString("txId"))
                             .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight!=null }
