@@ -27,6 +27,17 @@ import kotlin.test.assertFailsWith
  */
 class NearSwapQuoteTest {
     @Test
+    fun flexibleInputMinimumUsesExactOriginPrecision() {
+        val minimum = BigDecimal("99999999")
+        val flex = nearSwapQuote(quoteResponse(swapType = SwapType.FLEX_INPUT, minAmountIn = minimum))
+
+        assertEquals(BigDecimal("0.99999999"), flex.minimumAmountIn)
+        assertEquals(null, nearSwapQuote(quoteResponse(minAmountIn = minimum)).minimumAmountIn)
+        val invalid = nearSwapQuote(quoteResponse(swapType = SwapType.FLEX_INPUT, minAmountIn = BigDecimal("0.5")))
+        assertEquals(null, invalid.minimumAmountIn)
+    }
+
+    @Test
     fun externallyFundedQuoteAddsNoWalletFee() {
         val quote = nearSwapQuote(quoteResponse())
 

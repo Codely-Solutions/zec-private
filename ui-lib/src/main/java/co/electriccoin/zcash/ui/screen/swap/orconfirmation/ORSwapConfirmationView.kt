@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.swap.orconfirmation
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteInfo
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -96,6 +97,12 @@ fun ORSwapConfirmationView(state: ORSwapConfirmationState) {
                         .scaffoldPadding(it)
             ) {
                 Header(state)
+                state.minimumDeposit?.let { minimum ->
+                    Spacer(8.dp)
+                    Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+                        SwapQuoteInfo(minimum)
+                    }
+                }
                 Spacer(12.dp)
                 ZashiQr(
                     modifier = Modifier.align(CenterHorizontally),

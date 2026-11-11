@@ -98,6 +98,11 @@ data class NearSwapQuote(
     override val amountOut: BigDecimal = response.quote.amountOut
     override val amountOutUsd: BigDecimal = response.quote.amountOutUsd
     override val amountOutFormatted: BigDecimal = response.quote.amountOutFormatted
+    override val minimumAmountIn: BigDecimal?
+        get() = response.quote.minAmountIn.takeIf {
+            mode == SwapMode.FLEX_INPUT && it.isPositiveAtomic() && it <= amountIn
+        }?.movePointLeft(originAsset.decimals)
+
     override val minimumAmountOut: BigDecimal = response.quote.minAmountOut.movePointLeft(destinationAsset.decimals)
     override val inputAllowance: BigDecimal?
         get() =

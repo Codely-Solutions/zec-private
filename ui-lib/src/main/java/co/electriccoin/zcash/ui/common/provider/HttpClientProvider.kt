@@ -19,7 +19,7 @@ interface HttpClientProvider {
 
     /**
      * Returns a client that always routes over Tor, regardless of the user's Tor preference. Used for
-     * requests that must never touch clearnet (e.g. exchange-rate fetching, MOB-1378).
+     * documented feature-specific exceptions, such as the CMC conversion feed (MOB-1378).
      */
     suspend fun createTor(): HttpClient
 

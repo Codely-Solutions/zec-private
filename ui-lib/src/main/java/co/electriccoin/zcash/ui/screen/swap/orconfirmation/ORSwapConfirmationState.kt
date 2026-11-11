@@ -6,6 +6,7 @@ import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.util.ImageResource
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
+import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteInfoItem
 
 data class ORSwapConfirmationState(
     val info: IconButtonState,
@@ -20,5 +21,6 @@ data class ORSwapConfirmationState(
     val shareButton: BigIconButtonState,
     val footer: StyledStringResource,
     val primaryButton: ButtonState,
-    val onBack: () -> Unit
+    val onBack: () -> Unit,
+    val minimumDeposit: SwapQuoteInfoItem? = null,
 )

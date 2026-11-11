@@ -13,6 +13,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.runtime.rememberCoroutineScope
+import co.electriccoin.zcash.ui.design.component.IconButtonState
+import co.electriccoin.zcash.ui.design.component.ZashiIconButton
+import co.electriccoin.zcash.ui.design.component.ZashiTooltipBox
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
@@ -214,9 +221,10 @@ private fun Success(
                 descriptionFontWeight = FontWeight.Medium,
                 descriptionColor = ZashiColors.Text.textPrimary
             )
-            state.priceCheck?.takeUnless { it.showInline }?.let {
+            val priceDetails = state.priceCheck?.takeUnless { it.showInline }
+            if (priceDetails != null || state.minimumDeposit != null) {
                 Spacer(8.dp)
-                QuotePriceDetails(it)
+                QuoteDetails(priceDetails, state.minimumDeposit)
             }
             if (state.infoText != null) {
                 Spacer(48.dp)
@@ -255,7 +263,7 @@ private fun Success(
 }
 
 @Composable
-private fun QuotePriceDetails(state: PriceCheckNoticeState) {
+private fun QuoteDetails(state: PriceCheckNoticeState?, minimumDeposit: SwapQuoteInfoItem?) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     val description = stringResource(
         if (expanded) R.string.private_quote_details_expanded else R.string.private_quote_details_collapsed
@@ -275,13 +283,16 @@ private fun QuotePriceDetails(state: PriceCheckNoticeState) {
                 contentDescription = null, modifier = Modifier.size(24.dp),
             )
         }
-        if (state.detailItems.isEmpty()) {
+        if (state != null && state.detailItems.isEmpty()) {
             Text(
                 state.label.getValue(), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         if (expanded) {
+            minimumDeposit?.let { SwapQuoteInfo(it) }
+        }
+        if (expanded && state != null) {
             state.detailItems.forEach { item ->
                 Spacer(8.dp)
                 SwapQuoteInfo(item)
@@ -295,6 +306,29 @@ private fun QuotePriceDetails(state: PriceCheckNoticeState) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun QuoteFieldHelp(item: SwapQuoteInfoItem, tint: Color) {
+    val help = item.help ?: return
+    val tooltip = rememberTooltipState(isPersistent = true)
+    val scope = rememberCoroutineScope()
+    ZashiTooltipBox(
+        state = tooltip,
+        tooltip = { PlainTooltip { Text(help.getValue(), style = ZashiTypography.textSm) } },
+        anchor = {
+            ZashiIconButton(
+                state = IconButtonState(
+                    icon = co.electriccoin.zcash.ui.design.R.drawable.ic_info,
+                    contentDescription = stringRes(R.string.private_minimum_deposit_help_label),
+                    onClick = { scope.launch { tooltip.show() } },
+                ),
+                iconSize = 20.dp,
+                iconTint = tint,
+            )
+        },
+    )
+}
+
 @Composable
 fun SwapQuoteInfo(
     item: SwapQuoteInfoItem,
@@ -306,14 +340,17 @@ fun SwapQuoteInfo(
         StackedSwapQuoteInfo(item, descriptionStyle, descriptionFontWeight, descriptionColor)
         return
     }
-    Row {
-        Text(
-            modifier = Modifier.weight(1f),
-            text = item.description.getValue(),
-            style = descriptionStyle,
-            fontWeight = descriptionFontWeight,
-            color = descriptionColor
-        )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                modifier = Modifier.weight(1f, fill = false),
+                text = item.description.getValue(),
+                style = descriptionStyle,
+                fontWeight = descriptionFontWeight,
+                color = descriptionColor
+            )
+            item.help?.let { QuoteFieldHelp(item, descriptionColor) }
+        }
         Column(
             horizontalAlignment = Alignment.End
         ) {

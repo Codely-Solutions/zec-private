@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.swap.orconfirmation
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.ViewModel
+import co.electriccoin.zcash.ui.screen.swap.quote.minimumDepositInfo
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
@@ -66,6 +67,7 @@ class ORSwapConfirmationVM(
                     amount = stringResByNumber(quote.amountInFormatted),
                     amountFiat = stringResByDynamicCurrencyNumber(quote.amountInUsd, FiatCurrency.USD.symbol),
                     onAmountClick = { onAmountClick(quote.amountInFormatted) },
+                    minimumDeposit = quote.minimumDepositInfo(),
                     qr = quote.depositAddress.address,
                     address = stringResByAddress(quote.depositAddress.address),
                     copyButton =
