@@ -1,0 +1,90 @@
+name: Probe private upgrade fixture registry
+on:
+  workflow_dispatch:
+permissions: {}
+concurrency:
+  group: fixture-registry-probe
+  cancel-in-progress: false
+env:
+  FIXTURE_PACKAGE: zec-private-fixture-probe
+  FIXTURE_REGISTRY: ghcr.io/codely-solutions/zec-private-fixture-probe
+jobs:
+  write:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      packages: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63 # v2.0.3
+        with:
+          version: '1.3.6'
+      - id: push
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          trap 'rm -f -- fixture-probe.txt fixture-write-auth.json' EXIT
+          printf '%s\n' "$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT" > fixture-probe.txt
+          printf '%s' "$REGISTRY_TOKEN" | oras login ghcr.io --username "$GITHUB_ACTOR" --password-stdin --registry-config fixture-write-auth.json
+          unset REGISTRY_TOKEN
+          digest=$(oras push --registry-config fixture-write-auth.json \
+            --annotation "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            "$FIXTURE_REGISTRY:probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" fixture-probe.txt:text/plain \
+            --format go-template='{{.digest}}')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+  read:
+    needs: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      packages: read
+    steps:
+      - uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63 # v2.0.3
+        with:
+          version: '1.3.6'
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          OCI_DIGEST: ${{ needs.write.outputs.digest }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          trap 'rm -f -- fixture-probe.txt fixture-read-auth.json fixture-anonymous-auth.json' EXIT
+          gh api "orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/$FIXTURE_PACKAGE" \
+            --jq '.visibility' | grep -Fx private
+          [[ "$OCI_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          printf '{}\n' > fixture-anonymous-auth.json
+          if oras manifest fetch --registry-config fixture-anonymous-auth.json "$FIXTURE_REGISTRY@$OCI_DIGEST" >/dev/null 2>&1; then
+            echo 'Anonymous registry access unexpectedly succeeded' >&2
+            exit 1
+          fi
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io --username "$GITHUB_ACTOR" --password-stdin --registry-config fixture-read-auth.json
+          unset GH_TOKEN
+          oras pull --registry-config fixture-read-auth.json "$FIXTURE_REGISTRY@$OCI_DIGEST"
+          cmp fixture-probe.txt <(printf '%s\n' "$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT")
+          echo 'Private fixture bytes verified by digest with a packages-read token.'
+  cleanup:
+    if: always() && needs.write.result == 'success'
+    needs: [write, read]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      packages: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          OCI_DIGEST: ${{ needs.write.outputs.digest }}
+        run: |
+          set -euo pipefail
+          endpoint="orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/$FIXTURE_PACKAGE/versions"
+          export EXPECTED_TAG="probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          version=$(gh api --paginate "$endpoint?per_page=100" --jq \
+            '.[] | select(.name == env.OCI_DIGEST and .metadata.container.tags == [env.EXPECTED_TAG]) | .id')
+          [[ "$version" =~ ^[0-9]+$ ]]
+          gh api --method DELETE "$endpoint/$version"
+          [[ -z "$(gh api --paginate "$endpoint?per_page=100" --jq '.[] | select(.name == env.OCI_DIGEST) | .id')" ]]
+          echo 'Verified removal of the exact disposable probe version.'
