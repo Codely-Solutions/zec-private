@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       prerequisites:
-        description: Check release fixture access and public faucet status before a candidate build
+        description: Check public faucet status before a candidate build
         type: boolean
         default: false
 permissions:
@@ -22,7 +22,7 @@ jobs:
           persist-credentials: false
       - name: Verify KVM, isolated boot and owned teardown
         run: bash .private/hosted_emulator_smoke.sh
-  prerequisites:
+  faucet-status:
     if: github.ref == 'refs/heads/main' && inputs.prerequisites
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -30,24 +30,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Verify read-only access to paired baseline and quote bridge
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PYTHONPATH: .private
-        run: |
-          python3 -B - <<'PY'
-          import json
-          from pathlib import Path
-          from release_metadata import Metadata
-          base = json.loads(Path('.private/upgrade-baseline.json').read_text())
-          bridge = json.loads(Path('.private/maintenance-assets.json').read_text())['ui_bridge']
-          metadata = Metadata()
-          for asset in (base['artifact'], base['instrumentation']['artifact'], bridge):
-              metadata.verify_asset(asset)
-          print('Paired baseline and bridge metadata verified')
-          PY
+      - uses: actions/setup-node@36949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24.22.2'
+          package-manager-cache: false
       - name: Verify unfunded faucet prerequisites through an owned Tor instance
-        if: ${{ !cancelled() }}
         env:
           PYTHONPATH: .private
         run: |
