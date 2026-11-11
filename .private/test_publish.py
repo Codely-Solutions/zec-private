@@ -1,8 +1,11 @@
 """Release display metadata checks; no signing, build or publication."""
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -10,9 +13,52 @@ spec=importlib.util.spec_from_file_location('private_publish',Path(__file__).wit
 publish=importlib.util.module_from_spec(spec)
 with patch.dict(os.environ,{'GITHUB_REPOSITORY':'example/zec-private'}):
     spec.loader.exec_module(publish)
+    from integrate_release import state_commit
 
 
 class PublishMetadataTest(unittest.TestCase):
+    def test_attestation_requires_exact_bytes(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            path = Path(scratch) / 'release-attestation.json'
+            data = b'{"release_tag":"v3.19.0-private.21"}'
+            digest = hashlib.sha256(data).hexdigest()
+            path.write_bytes(data)
+            self.assertEqual(publish.read_attestation(path, digest), json.loads(data))
+            path.write_bytes(data + b'\n')
+            with self.assertRaisesRegex(RuntimeError, 'digest or size mismatch'):
+                publish.read_attestation(path, digest)
+
+    def test_state_commit_changes_only_release_metadata_without_checking_out_candidate(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch) / 'repo'
+            root.mkdir()
+
+            def git(*args):
+                return subprocess.check_output(['git', *args], cwd=root, text=True).strip()
+
+            git('init', '-q')
+            git('config', 'user.name', 'Test')
+            git('config', 'user.email', 'test@example.invalid')
+            git('commit', '--allow-empty', '-qm', 'controller')
+            controller = git('rev-parse', 'HEAD')
+            (root / 'candidate.txt').write_text('test payload')
+            git('add', 'candidate.txt')
+            git('commit', '-qm', 'candidate')
+            candidate = git('rev-parse', 'HEAD')
+            git('checkout', '-q', '--detach', controller)
+            tag = 'v3.19.0-private.21'
+            path = f'.private/release-evidence/{tag}.json'
+            proof = dict(release_tag=tag, upstream={'tag': '3.19.0-3235'})
+            commit = state_commit(candidate, proof, Path(scratch), root)
+            self.assertEqual(git('rev-parse', 'HEAD'), controller)
+            self.assertEqual(git('status', '--porcelain'), '')
+            self.assertEqual(git('rev-parse', commit + '^'), candidate)
+            self.assertEqual(git('diff', '--name-only', candidate, commit).splitlines(),
+                             [path, '.private/upstream.json'])
+            self.assertEqual(json.loads(git('show', f'{commit}:{path}')), proof)
+            with self.assertRaisesRegex(RuntimeError, 'existing release evidence'):
+                state_commit(commit, proof, Path(scratch), root)
+
     def test_artifact_release_identity_is_bound_to_the_source(self):
         source = 'a' * 40
         metadata = '.private/candidate.json'

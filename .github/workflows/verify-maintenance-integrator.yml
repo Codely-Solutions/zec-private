@@ -1,0 +1,30 @@
+name: Verify maintenance integration identity
+on: workflow_dispatch
+permissions: {}
+jobs:
+  verify:
+    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main'
+    environment: maintenance-integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: integrator
+        with:
+          client-id: Iv23lik3K6p93iDL148Q
+          private-key: ${{ secrets.MAINTENANCE_APP_PRIVATE_KEY }}
+          owner: Codely-Solutions
+          repositories: zec-private
+          permission-contents: write
+      - name: Check App token scope without a user session
+        env:
+          GH_TOKEN: ${{ steps.integrator.outputs.token }}
+        run: |
+          gh api /installation/repositories | jq -e --arg repo "$GITHUB_REPOSITORY" \
+            '.total_count == 1 and [.repositories[].full_name] == [$repo]'
+          if gh api --silent "repos/$GITHUB_REPOSITORY/actions/secrets" 2> "$RUNNER_TEMP/access"; then
+            echo 'Unexpected permission to administer repository secrets' >&2
+            exit 1
+          fi
+          grep -q 'HTTP 403' "$RUNNER_TEMP/access"
+          echo 'The production integration App authenticated with repository-only scope and no secret administration.'

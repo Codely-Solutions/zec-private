@@ -19,6 +19,14 @@ def require_current_controller(controller):
     if remote != controller:
         raise RuntimeError('Main changed since validation began; resolve a new promotion')
 
+
+def read_attestation(path, expected_digest):
+    with path.open('rb') as stream:
+        data = stream.read(256 * 1024 + 1)
+    if len(data) > 256 * 1024 or hashlib.sha256(data).hexdigest() != expected_digest:
+        raise RuntimeError('Publication attestation digest or size mismatch')
+    return json.loads(data)
+
 def verify_release_identity(proof, source):
     properties = run('git', 'show', f'{source}:gradle.properties')
     codes = re.findall(r'^ZCASH_VERSION_CODE=([0-9]+)$', properties, re.MULTILINE)
@@ -157,7 +165,7 @@ def main():
         raise RuntimeError('Invalid runtime graph binding')
     validate_graph_binding((artifact/'foundation-runtime.json').read_bytes(),proof,expected)
     tag=proof['release_tag']
-    title=release_title(tag)
+    release_title(tag)
     # Existing published tags/assets are immutable, including duplicate polling.
     existing=subprocess.run(['gh','release','view',tag,'--repo',REPO],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     if existing.returncode==0:
@@ -203,30 +211,30 @@ def main():
             signed.unlink(missing_ok=True)
         print('Removed signed test APK after its final verification.')
         return
-    # Release publication occurs only after all verification. No upstream code runs here.
-    validation=dist/'VALIDATION.json'
-    validation.write_text(json.dumps(dict(source_sha=expected,controller_sha=controller,artifact_run_id=proof['workflow_run_id'],
-        apk_sha256=digest,core=core,production_quotes=quote,production_arm_executed=False,real_funds_used=False),indent=2)+'\n')
-    validation_bytes=validation.read_bytes()
-    require_current_controller(controller)
-    run('gh','release','create',tag,str(signed),str(checksum),'--repo',REPO,'--target',expected,'--title',title,'--notes-file',str(notes))
-    # Advance the integrated state only after publication. Candidate is already a full patched tree.
-    run('git','fetch','origin',expected)
-    run('git','checkout','--detach',controller if late_attestation else expected)
-    record_integration(ROOT/'.private/upstream.json',proof['upstream'])
-    evidence=ROOT/'.private/release-evidence'/f'{tag}.json'
-    evidence.parent.mkdir(exist_ok=True)
-    if evidence.exists():
-        raise RuntimeError('Refusing to replace an existing release evidence record')
-    evidence.write_bytes(validation_bytes)
-    run('git','add','.private/upstream.json',str(evidence.relative_to(ROOT)))
-    run('git','-c','user.name=ZEC Private automation','-c','user.email=zec-private@users.noreply.github.com','commit','--allow-empty','-m','Record verified release '+tag)
-    new=run('git','rev-parse','HEAD')
-    # Candidate trees retain the controller as a parent. Normal fast-forward
-    # pushes preserve history and reject concurrent source/control modifications.
-    run('git','push','origin',new+':refs/heads/main')
+    attestation = dict(release_tag=tag, versionCode=proof['versionCode'], versionName=proof['versionName'],
+                       upstream=proof['upstream'], source_sha=expected, controller_sha=controller,
+                       artifact_run_id=proof['workflow_run_id'], apk_sha256=digest, core=core,
+                       production_quotes=quote, production_arm_executed=False, real_funds_used=False)
+    data = (json.dumps(attestation, indent=2) + '\n').encode()
+    if len(data) > 256 * 1024:
+        raise RuntimeError('Publication attestation exceeds its size budget')
+    (dist/'release-attestation.json').write_bytes(data)
     with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
-        output.write(f'release_tag={tag}\n')
-    print('Published signed release '+tag+' SHA256 '+digest)
+        output.write(f'release_tag={tag}\nattestation_digest={hashlib.sha256(data).hexdigest()}\n')
 
-if __name__=='__main__': main()
+
+def publish_release():
+    dist = ROOT / 'dist'
+    proof = read_attestation(dist / 'release-attestation.json', os.environ['ATTESTATION_DIGEST'])
+    require_current_controller(proof['controller_sha'])
+    tag = proof['release_tag']
+    run('gh', 'release', 'create', tag, str(dist / 'zec-private-latest.apk'), str(dist / 'SHA256SUMS'),
+        '--repo', REPO, '--target', proof['source_sha'], '--title', release_title(tag),
+        '--notes-file', str(dist / 'release-notes.md'))
+    print('Published signed release ' + tag + ' SHA256 ' + proof['apk_sha256'])
+
+if __name__=='__main__':
+    if os.environ.get('PUBLISH_SIGNED_RELEASE') == 'true':
+        publish_release()
+    else:
+        main()
