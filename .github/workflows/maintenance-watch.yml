@@ -18,12 +18,36 @@ jobs:
     if: github.ref == 'refs/heads/main' && (github.event_name != 'pull_request_target' || github.event.pull_request.user.login == 'dependabot[bot]')
     runs-on: ubuntu-24.04
     timeout-minutes: 4
+    outputs:
+      proposal: ${{ steps.classify.outputs.proposal }}
+      head: ${{ steps.classify.outputs.proposal_head }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
       - name: Classify proposals without executing their code
+        id: classify
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 -B .private/maintenance_watch.py
+  prepare:
+    needs: watch
+    if: needs.watch.outputs.proposal != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prepare a candidate branch from verified coordinates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROPOSAL: ${{ needs.watch.outputs.proposal }}
+          PROPOSAL_HEAD: ${{ needs.watch.outputs.head }}
+        run: python3 -B .private/prepare_maintenance.py
