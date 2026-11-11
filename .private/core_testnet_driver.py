@@ -491,6 +491,9 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         if failure:report['failure']=dict(type=type(failure).__name__,message=str(failure)[:1600])
         report['seconds']=time.monotonic()-started
         report['last_stage']=current_stage
+        if failure and firewall and 'egress_denial_stage' not in report:
+            try:check_denials(current_stage)
+            except (RuntimeError, subprocess.SubprocessError):pass
         if report.get('connection_tracing'):
             try:
                 shell('echo 0 > /sys/kernel/tracing/tracing_on')

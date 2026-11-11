@@ -106,6 +106,17 @@ def run(session, root, fixture, candidate, result):
                         'http_status')
                 data = [{key: item[key] for key in keys if key in item} for item in sync]
                 print('Hosted synchronization markers ' + json.dumps(data), flush=True)
+            submission = stage_error.get('submission', [])
+            if submission:
+                item = submission[-1]
+                keys = ('type', 'code', 'reason', 'cause_class', 'manual_resubmissions')
+                data = {key: item[key] for key in keys if key in item}
+                data['tx_id_count'] = len(item.get('tx_ids', []))
+                rpc = item.get('rpc_failure', {})
+                safe_rpc = ('native_rejection_code', 'height_preflight_failed', 'sdk_submit_failure_logged',
+                            'raw_submit_results_logged', 'capture_failure_class')
+                data['rpc'] = {key: rpc[key] for key in safe_rpc if key in rpc}
+                print('Hosted submission evidence ' + json.dumps(data), flush=True)
         readiness = root / 'faucet-readiness.json'
         if readiness.is_file():
             status = json.loads(readiness.read_text())

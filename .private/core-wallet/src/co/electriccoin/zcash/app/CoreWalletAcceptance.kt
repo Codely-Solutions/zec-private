@@ -278,7 +278,7 @@ class CoreWalletAcceptance {
                         is SubmitResult.Error -> diagnostic.put("cause_class",result.cause.javaClass.simpleName)
                         is SubmitResult.Success -> Unit
                     }
-                    if (result is SubmitResult.GrpcFailure) {
+                    if (result !is SubmitResult.Success) {
                         diagnostic.put("rpc_failure", submissionRpcDiagnostic(approvalBoundary))
                     }
                     println("CORE_SEND_DIAGNOSTIC $diagnostic")
