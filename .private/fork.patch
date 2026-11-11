@@ -27551,37 +27551,6 @@ index 3341e70f0..649f37619 100644
 +                    "ZEC Private uses temporary addresses during swaps and payments to protect your privacy. " +
 +                        "If too many " +
 +                        "remain unused, ZEC Private hits a limit and can’t create new ones.",
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationState.kt
-index 0a91712e5..f4e424171 100644
---- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationState.kt
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationState.kt
-@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
-+import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteInfoItem
-@@ -23 +24,2 @@ data class ORSwapConfirmationState(
--    val onBack: () -> Unit
-+    val onBack: () -> Unit,
-+    val minimumDeposit: SwapQuoteInfoItem? = null,
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVM.kt
-index f13816997..549e74f0a 100644
---- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVM.kt
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationVM.kt
-@@ -5,0 +6 @@ import androidx.lifecycle.ViewModel
-+import co.electriccoin.zcash.ui.screen.swap.quote.minimumDepositInfo
-@@ -68,0 +70 @@ class ORSwapConfirmationVM(
-+                    minimumDeposit = quote.minimumDepositInfo(),
-diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationView.kt
-index 9a10fcfcb..c15e6b81d 100644
---- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationView.kt
-+++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/orconfirmation/ORSwapConfirmationView.kt
-@@ -4,0 +5 @@ import androidx.compose.foundation.Image
-+import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteInfo
-@@ -98,0 +100,6 @@ fun ORSwapConfirmationView(state: ORSwapConfirmationState) {
-+                state.minimumDeposit?.let { minimum ->
-+                    Spacer(8.dp)
-+                    Box(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
-+                        SwapQuoteInfo(minimum)
-+                    }
-+                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/MinimumDeposit.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/MinimumDeposit.kt
 new file mode 100644
 index 000000000..339016426

@@ -1,8 +1,5 @@
 package co.electriccoin.zcash.ui.screen.donation
 
-import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationView
-import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationState
-import co.electriccoin.zcash.ui.design.component.BigIconButtonState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -236,24 +233,6 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                     else -> null
                 },
                 infoText = stringRes("Synthetic review only. No payment can be submitted."), onBack = onBack,
-            )
-        )
-        "minimum-deposit-address" -> ORSwapConfirmationView(
-            ORSwapConfirmationState(
-                info = IconButtonState(co.electriccoin.zcash.ui.design.R.drawable.ic_info, onClick = {}),
-                bigIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc),
-                smallIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc),
-                amount = stringRes("0.00100000"),
-                amountFiat = stringRes(""),
-                onAmountClick = {},
-                qr = "Synthetic deposit address",
-                address = styledStringResource("Synthetic deposit address"),
-                copyButton = BigIconButtonState(stringRes("Copy"), R.drawable.ic_copy, onClick = {}),
-                shareButton = BigIconButtonState(stringRes("Share"), R.drawable.ic_qr_code_other, onClick = {}),
-                footer = styledStringResource("Synthetic review"),
-                primaryButton = ButtonState(stringRes("Done"), onClick = {}),
-                onBack = onBack,
-                minimumDeposit = reviewMinimumDeposit(),
             )
         )
         else -> return SwapSprintScene(screen, onBack, appBar)
