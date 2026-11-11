@@ -2,6 +2,8 @@
 
 The quote is an estimate of output. Its minimum output is the provider's base-unit guarantee converted using the destination asset's decimals. Token amounts, deposit totals and that minimum retain exact asset precision; compact fiat formatting is not suitable for a token guarantee because it may round upward. The review shows the minimum for floating-output swaps.
 
+For incoming FLEX_INPUT, **Minimum deposit** shows the provider's positive atomic `minAmountIn` at origin asset precision in **Quote details** and on the deposit screen. The suggested deposit still comes from `amountIn` and is the copy action's value. The minimum is the net amount that must reach the deposit address after sending fees.
+
 For EXACT_OUTPUT, `amountIn` is the deposit including the input allowance; `minAmountIn` is the minimum input, not a maximum. Both must be positive integer atomic amounts, with `minAmountIn <= amountIn` and `minAmountIn >= floor(amountIn × (10000 − requestedBps) / 10000)`. The included allowance is their difference. Its ZEC and fiat values share the quote's input valuation; the explanatory row never increases the funded total. Fund the exact amount reviewed. See the provider's [quote contract](https://docs.near-intents.org/api-reference/oneclick/get-quote).
 
 Status output comes from the provider's settled amount when available, including raw base-unit output when the formatted field is absent. Otherwise the displayed value remains explicitly quoted. Provider output is not an independently measured wallet credit. The wallet's received transaction records its own scanned net value. A provider/bridge reporting difference must not be silently corrected with a guessed constant.

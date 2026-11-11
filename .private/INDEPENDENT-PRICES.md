@@ -1,6 +1,6 @@
 # Independent quote reference
 
-`KrakenPriceProvider` uses Kraken's public [Spread API](https://docs.kraken.com/api-reference/market-data/get-recent-spreads). The shipped implementation maps native BTC, ETH, SOL and ZEC and always uses Tor. It needs no credentials, extra library or SDK modification.
+`KrakenPriceProvider` uses Kraken's public [Spread API](https://docs.kraken.com/api-reference/market-data/get-recent-spreads) without credentials. The current branch maps native ZEC, BTC, ETH, SOL, LTC, TRX, BNB, AVAX, XRP, DASH and BCH, plus Ethereum WBTC via its own `WBTCUSD` market.
 
 ## Coverage and routing policy
 
@@ -8,15 +8,17 @@
 - Follow the wallet's Tor setting for independent swap checks. Use Tor without direct fallback when enabled and the normal connection when disabled. The existing Tor-only currency-conversion feed is a separate feature with its own privacy commitment.
 - Send only public market identifiers. Keep amounts, addresses and quote data local. Verify both setting states and confirm that a failed Tor request cannot switch routes.
 
+The catalog review found Kraken USD markets for USDC, USDT, DAI and NEAR. Confirm the exact on-chain or wrapped identity before mapping each catalog entry. USDT0, BTC on NEAR, ZEC on Solana/NEAR and ETH on Base/Arbitrum need a verified match or an explicitly supported treatment of the network variant. A second source is most useful if it can price those exact identities with fresh independent data.
+
 ## Comparison and interaction
 
 Value the reviewed input at the reference bid and the output at the ask. Add the separately known Zcash network fee for outgoing native ZEC. The reviewed quote input already includes any EXACT_OUTPUT allowance; quoted costs are counted once. Provider fiat estimates remain separate from this reference.
 
-A difference of −15% or worse produces an inline warning and changes the existing action to **Swap anyway** or **Pay anyway**. Ordinary results stay in collapsed **Quote details** below the total, using the existing label/value layout for the reference and difference. The shipped UI shows **Price check unavailable** for both missing market matches and failed checks. Distinguish those states in **Quote details** when updating coverage and keep the quote usable in both cases. Small transfers can legitimately have large percentage costs, so the threshold is an advisory.
+A difference of −15% or worse produces an inline warning and changes the existing action to **Swap anyway** or **Pay anyway**. Ordinary results stay in collapsed **Quote details** below the total. **No market reference for this asset** signals an unmapped asset. **Price check unavailable** signals a failed or rejected comparison. Both leave the quote usable. Small transfers can legitimately have large percentage costs, so the threshold is an advisory.
 
 ## Network and freshness
 
-- The current check has an eight-second deadline. It coalesces concurrent work, caches observations for 60 seconds, spaces cold requests by at least one second, and backs off failures for 60 seconds. Shared Tor exits can still encounter rate limits. See Kraken's [rate policy](https://support.kraken.com/articles/206548367-what-are-the-api-rate-limits-).
+- A pending check delays confirmation for up to eight seconds so the poor-rate warning can appear before approval. The provider serializes work, caches observations for 60 seconds, spaces cold requests by at least one second, and backs off failed requests for 60 seconds. Fresh cached comparisons can still run during backoff. Logs include bounded failure categories. See Kraken's [rate policy](https://support.kraken.com/articles/206548367-what-are-the-api-rate-limits-).
 - Use timestamps from spread rows, not the response cursor. Accept observations younger than 120 seconds, received within 60 seconds, at most five seconds in the future and within 30 seconds of each other. Reject spreads over 2%, malformed identities and unbounded numeric/body inputs.
 - Bind results and continuation callbacks to the exact quote and known fee. Cancel replaced checks and expire displayed comparisons. Source failures preserve ordinary payment review and authentication.
 
