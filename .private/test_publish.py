@@ -13,6 +13,28 @@ with patch.dict(os.environ,{'GITHUB_REPOSITORY':'example/zec-private'}):
 
 
 class PublishMetadataTest(unittest.TestCase):
+    def test_artifact_release_identity_is_bound_to_the_source(self):
+        source = 'a' * 40
+        metadata = '.private/candidate.json'
+        upstream = {'tag': '3.19.1-3235', 'sha': 'b' * 40, 'versionCode': 3235021}
+        proof = {'upstream': upstream, 'release_tag': 'v3.19.1-private.21',
+                 'versionCode': 3235021, 'versionName': '3.19.1'}
+        objects = {
+            ('git', 'show', f'{source}:gradle.properties'):
+                'ZCASH_VERSION_CODE=3235021\nZCASH_VERSION_NAME=3.19.1',
+            ('git', 'show', f'{source}:.private/release-revision.json'): '{"private_revision": 21}',
+            ('git', 'ls-tree', '--name-only', source, '--', metadata): metadata,
+            ('git', 'show', f'{source}:{metadata}'): json.dumps(upstream),
+        }
+        with patch.object(publish, 'run', side_effect=lambda *args: objects[args]):
+            publish.verify_release_identity(proof, source)
+            for field, value in (('versionCode', 3235022), ('versionName', '3.20.0'),
+                                 ('release_tag', 'v3.19.1-private.22'),
+                                 ('upstream', dict(upstream, sha='c' * 40))):
+                with self.subTest(field=field), self.assertRaisesRegex(
+                        RuntimeError, 'differs from immutable source'):
+                    publish.verify_release_identity(dict(proof, **{field: value}), source)
+
     def test_signing_requires_current_main_controller(self):
         controller = 'a' * 40
         for ref, local, remote, allowed in (

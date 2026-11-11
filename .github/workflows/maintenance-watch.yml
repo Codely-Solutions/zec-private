@@ -1,0 +1,25 @@
+name: Watch maintenance discovery
+on:
+  schedule:
+    - cron: '47 */6 * * *'
+  workflow_dispatch:
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+concurrency:
+  group: maintenance-watch
+  cancel-in-progress: true
+jobs:
+  watch:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Classify proposals without executing their code
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B .private/maintenance_watch.py
