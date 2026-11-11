@@ -68,6 +68,8 @@ After a batch closes, require its accepted receipt, completed cleanup and zero o
 
 Independently verify a publication inside the resource guard: download the exact tag's APK/checksum and compare asset sizes/digests, checksum and `release-evidence/<tag>.json`. Resolve the original unsigned artifact from that evidence's producer run and verify its source/digest and embedded proof. Compare all signed/unsigned ZIP-entry contents except signing metadata. Run `apksigner verify --print-certs`, check the permanent certificate defined in `publish.py`, and inspect package/version, debuggability, ARM64-only contents and 16 KiB ZIP alignment. Remove the downloads after retaining compact results; preserve the executed update fixture with the maintained tool above.
 
+The release workflow runs `verify-public-release.yml` in a fresh read-only job before notifying subscribers. It checks the unauthenticated latest-release endpoint and matches the public APK against its recorded source and original unsigned artifact. Run it manually while the original artifact remains available when independently reconciling a publication.
+
 Synthetic layout capture is a separate claim from quote or transaction acceptance. A capture failure must retain its own diagnostic without relabeling a valid financial result. Keep only safe status/exception-class diagnostics when provider tracing is necessary; raw wallet/provider bodies are not public release evidence.
 
 ### Testnet funding and failed boundaries

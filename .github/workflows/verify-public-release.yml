@@ -1,0 +1,30 @@
+name: Verify public release independently
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      release_tag:
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: read
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Download and verify the public APK and latest-release response
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFY_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: python3 -B .private/verify_public_release.py | tee -a "$GITHUB_STEP_SUMMARY"

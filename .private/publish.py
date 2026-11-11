@@ -225,6 +225,8 @@ def main():
     # Candidate trees retain the controller as a parent. Normal fast-forward
     # pushes preserve history and reject concurrent source/control modifications.
     run('git','push','origin',new+':refs/heads/main')
+    with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
+        output.write(f'release_tag={tag}\n')
     print('Published signed release '+tag+' SHA256 '+digest)
 
 if __name__=='__main__': main()
