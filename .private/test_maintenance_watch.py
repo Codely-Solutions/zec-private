@@ -81,10 +81,17 @@ class MaintenanceWatchTest(unittest.TestCase):
             git('init', '-q')
             (root/'.private').mkdir()
             (root/WRAPPER_PROPERTIES).parent.mkdir(parents=True)
-            (root/WRAPPER_PROPERTIES).write_text('old')
+            old_properties = ('distributionUrl=https\\://services.gradle.org/distributions/gradle-9.9.1-bin.zip\n'
+                              'distributionSha256Sum=' + 'a'*64 + '\n')
+            new_properties = old_properties.replace('9.9.1', '9.9.2').replace('a'*64, 'b'*64)
+            (root/WRAPPER_PROPERTIES).write_text(old_properties)
             (root/'gradle.properties').write_text('ZCASH_VERSION_CODE=3234021\nZCASH_VERSION_NAME=3.19.0\n')
+            git('add', '.')
+            git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'upstream')
+            upstream = git('rev-parse', 'HEAD')
             (root/'.private/release-revision.json').write_text('{"private_revision":21}')
-            (root/'.private/upstream.json').write_text('{"tag":"3.19.0-3234","versionCode":3234021}')
+            (root/'.private/upstream.json').write_text(json.dumps(dict(tag='3.19.0-3234', versionCode=3234021, sha=upstream)))
+            (root/'.private/excluded-features.json').write_text('{"forbidden_projects":[]}')
             (root/'.private/fork.patch').touch()
             (root/'.private/source-state.json').touch()
             git('add', '.')
@@ -106,14 +113,18 @@ class MaintenanceWatchTest(unittest.TestCase):
                     return ''
                 return git(*args)
 
+            def refresh():
+                from refresh_source import generate_patch, patch_paths
+                (root/'.private/fork.patch').write_bytes(generate_patch(root, upstream, patch_paths([])))
+
             with patch.dict(os.environ, environment), patch.object(prepare, 'ROOT', root), \
                     patch.object(prepare, 'git', side_effect=remote_git), \
                     patch.object(prepare.Metadata, 'api', side_effect=lambda path, **_: (
                         {'id': 7} if not path else [[{'tag_name': 'v3.19.0-private.21'}]])), \
-                    patch.object(prepare, 'verified_wrapper', return_value=('9.9.2', 'verified wrapper')), \
+                    patch.object(prepare, 'verified_wrapper', return_value=('9.9.2', new_properties)), \
                     patch.object(prepare, 'api', side_effect=lambda path: (
                         {'state': 'open', 'head': {'sha': head}} if '/pulls/' in path else {'sha': base})), \
-                    patch.object(prepare, 'refresh_source'), patch('builtins.print') as output:
+                    patch.object(prepare, 'refresh_source', side_effect=refresh), patch('builtins.print') as output:
                 original_run = subprocess.run
 
                 def run(command, *args, **kwargs):
@@ -129,8 +140,17 @@ class MaintenanceWatchTest(unittest.TestCase):
                     self.assertEqual(first, json.loads(output.call_args.args[0]))
             sha = first['source_sha']
             self.assertEqual(base, git('rev-parse', sha+'^'))
-            self.assertEqual('verified wrapper', git('show', f'{sha}:{WRAPPER_PROPERTIES}'))
+            self.assertEqual(new_properties.strip(), git('show', f'{sha}:{WRAPPER_PROPERTIES}'))
             self.assertEqual(3234022, first['version_code'])
+            from acceptance_policy import verify_promotion_revision
+            with patch('maintenance_watch.official_checksum', return_value='b'*64):
+                self.assertFalse(verify_promotion_revision(sha, base, root=root))
+            (root/'candidate-code.kt').touch()
+            git('add', 'candidate-code.kt')
+            modified = git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
+                           'commit-tree', git('write-tree'), '-p', base, '-m', 'candidate with extra source')
+            with self.assertRaisesRegex(ValueError, 'outside the exact wrapper update'):
+                verify_promotion_revision(modified, base, root=root)
 
 
 if __name__ == '__main__':
