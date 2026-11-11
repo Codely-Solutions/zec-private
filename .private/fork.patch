@@ -28038,7 +28038,7 @@ index 717411935..5c7df7c0a 100644
 +        if (available) stringResByDynamicCurrencyNumber(usd, FiatCurrency.USD.symbol)
 +        else stringRes(R.string.private_quote_estimate_unavailable)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
-index 1fa0df8d6..d80216d4d 100644
+index 1fa0df8d6..2a61311fa 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 @@ -8,0 +9,2 @@ import androidx.compose.foundation.layout.fillMaxWidth
@@ -28050,7 +28050,7 @@ index 1fa0df8d6..d80216d4d 100644
 +import androidx.compose.runtime.rememberCoroutineScope
 +import co.electriccoin.zcash.ui.design.component.IconButtonState
 +import co.electriccoin.zcash.ui.design.component.ZashiIconButton
-+import co.electriccoin.zcash.ui.design.component.ZashiTooltipBox
++import co.electriccoin.zcash.ui.common.compose.ZashiTooltipBox
 +import kotlinx.coroutines.launch
 @@ -14,0 +24,6 @@ import androidx.compose.material3.Text
 +import androidx.compose.material3.TextButton

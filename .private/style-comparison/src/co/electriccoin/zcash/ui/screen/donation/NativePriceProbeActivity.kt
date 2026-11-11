@@ -45,20 +45,23 @@ class NativePriceProbeActivity : ComponentActivity() {
             try {
                 withTimeout(360_000L) {
                     check(persisted.getPersistableWallet() == null)
-                    tor.store(true)
+                    val useTor = intent.getBooleanExtra("tor", true)
+                    tor.store(useTor)
                     record("creating_isolated_wallet")
                     wallets.createNewWallet()
                     withTimeout(90_000L) {
                         while (accounts.getSelectedAccount().totalBalance == null) delay(250)
                     }
-                    check(accounts.getSelectedAccount().totalBalance?.value == 0L && tor.get() == true)
-                    record("isolated_zero_balance_ready")
+                    check(accounts.getSelectedAccount().totalBalance?.value == 0L && tor.get() == useTor)
+                    record("isolated_zero_balance_ready", JSONObject().put("tor", useTor))
                     val ownAddress = accounts.requestNextShieldedAddress(requireFresh = true)
                     val assets = swaps.getSupportedTokens()
                     val zec = assets.single { it.assetId == "nep141:zec.omft.near" }
                     data class Case(val name: String, val symbol: String, val amount: String, val incoming: Boolean = false,
                                     val exactOutput: Boolean = false)
-                    val cases = listOf(
+                    val cases = if (intent.getBooleanExtra("minimumAndWbtc", false)) {
+                        listOf(Case("btc_in", "btc", "0.001", incoming = true), Case("wbtc_out", "wbtc", "0.1"))
+                    } else listOf(
                         Case("btc_in", "btc", "0.001", incoming = true),
                         Case("btc_out", "btc", "0.1"),
                         Case("btc_out_small", "btc", "0.01"),
@@ -71,11 +74,15 @@ class NativePriceProbeActivity : ComponentActivity() {
                     for (case in cases.drop(caseStart)) {
                         record("request_begin", JSONObject().put("case", case.name))
                         try {
-                        check(accounts.getSelectedAccount().totalBalance?.value == 0L && tor.get() == true)
-                        val asset = assets.single { it.assetId == "nep141:${case.symbol}.omft.near" }
+                        check(accounts.getSelectedAccount().totalBalance?.value == 0L && tor.get() == useTor)
+                        val asset = if (case.symbol == "wbtc") {
+                            assets.single {
+                                it.assetId == "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near"
+                            }
+                        } else assets.single { it.assetId == "nep141:${case.symbol}.omft.near" }
                         val fixture = when (case.symbol) {
                             "btc" -> "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
-                            "eth" -> "0x1111111111111111111111111111111111111111"
+                            "eth", "wbtc" -> "0x1111111111111111111111111111111111111111"
                             // RFC 8032 section 7.1 public-key vector encoded as base58; not a program account.
                             else -> "FVen3X669xLzsi6N2V91DoiyzHzg1uAgqiT8jZ9nS96Z"
                         }
@@ -98,6 +105,8 @@ class NativePriceProbeActivity : ComponentActivity() {
                             .put("origin", quote.originAsset.tokenTicker).put("destination", quote.destinationAsset.tokenTicker)
                             .put("amountIn", quote.amountInFormatted.toPlainString())
                             .put("amountOut", quote.amountOutFormatted.toPlainString())
+                            .put("minimumDeposit", quote.minimumAmountIn?.toPlainString())
+                            .put("tor", useTor)
                             .put("checkMs", SystemClock.elapsedRealtime() - began)
                             .put("priceCheck", checked.javaClass.simpleName)
                             .put("knownNetworkFee", "0; no funded proposal created")

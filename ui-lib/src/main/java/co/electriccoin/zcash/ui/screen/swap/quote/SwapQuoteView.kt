@@ -18,7 +18,7 @@ import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.rememberCoroutineScope
 import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.component.ZashiIconButton
-import co.electriccoin.zcash.ui.design.component.ZashiTooltipBox
+import co.electriccoin.zcash.ui.common.compose.ZashiTooltipBox
 import kotlinx.coroutines.launch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
