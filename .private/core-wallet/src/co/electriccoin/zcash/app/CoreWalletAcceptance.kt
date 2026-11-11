@@ -50,6 +50,7 @@ import co.electriccoin.zcash.ui.common.usecase.RestoreWalletUseCase
 import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
 import io.ktor.client.request.get
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.statement.bodyAsText
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -325,6 +326,7 @@ class CoreWalletAcceptance {
                     println("CORE_SYNC_DIAGNOSTIC " + JSONObject()
                         .put("phase", "transport_exception")
                         .put("exception_class", error.javaClass.simpleName)
+                        .put("http_status", (error as? ClientRequestException)?.response?.status?.value)
                         .put("cause_class", error.cause?.javaClass?.simpleName ?: "none"))
                     throw error
                 }
@@ -585,11 +587,26 @@ class CoreWalletAcceptance {
             requireEndpointReady(recovered, "after_outage")
         }
         mark("wallet_recovered")
-        val updateAfter = updates.readLatestRelease()
-        mark("update_after_valid")
+        var updateStatusAfter = 200
+        val updateValidAfter = try {
+            check(updates.readLatestRelease().versionCode > 0)
+            mark("update_after_valid")
+            true
+        } catch (error: ClientRequestException) {
+            // A confirmed quota response proves the post-outage HTTPS path
+            // worked. The earlier parsed release establishes usable metadata.
+            updateStatusAfter = error.response.status.value
+            val headers = error.response.headers
+            val throttled = updateStatusAfter == 429 || (updateStatusAfter == 403 &&
+                (headers["X-RateLimit-Remaining"] == "0" || headers["Retry-After"] != null))
+            if (!throttled) throw error
+            mark("update_after_rate_limited")
+            false
+        }
         val result = JSONObject().put("sync_restarted", true).put("synced", true).put("balance_preserved", true)
             .put("update_metadata_valid_before", updateBefore.versionCode > 0)
-            .put("update_metadata_valid_after", updateAfter.versionCode > 0).put("update_blocked_during_outage", true)
+            .put("update_metadata_valid_after", updateValidAfter).put("update_blocked_during_outage", true)
+            .put("update_http_status_after", updateStatusAfter).put("update_rate_limited_after", !updateValidAfter)
             .put("probe_only", probeOnly).put("scanned_height", recovered.fullyScannedHeight.value?.value)
             .put("outage_marker_ms", requestedMs).put("outage_observed_ms", requestedMs - dropMs)
             .put("metadata_finished_ms", metadataFinishedMs.get())

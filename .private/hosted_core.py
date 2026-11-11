@@ -102,7 +102,8 @@ def run(session, root, fixture, candidate, result):
             print('Hosted result channel ' + json.dumps(stage_error.get('result_channel')), flush=True)
             sync = stage_error.get('sync', [])
             if sync:
-                keys = ('phase', 'elapsed_ms', 'probe_only', 'exception_class', 'status', 'error_type', 'cause_class')
+                keys = ('phase', 'elapsed_ms', 'probe_only', 'exception_class', 'status', 'error_type', 'cause_class',
+                        'http_status')
                 data = [{key: item[key] for key in keys if key in item} for item in sync]
                 print('Hosted synchronization markers ' + json.dumps(data), flush=True)
         readiness = root / 'faucet-readiness.json'
