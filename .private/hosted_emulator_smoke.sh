@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Hosted admission probe only. No wallet, APK or external guest network.
+# Check an empty hosted Android guest or install an already verified testnet pair.
 set -euo pipefail
 test -c /dev/kvm
 sudo setfacl -m "u:$(id -un):rw" /dev/kvm
@@ -38,15 +38,33 @@ sudo ip netns exec "$namespace" ip link set lo up
 test -z "$(sudo ip -n "$namespace" route show default)"
 test -z "$(sudo ip -n "$namespace" -6 route show default)"
 sudo ip netns exec "$namespace" runuser -u "$(id -un)" -- env \
-  ANDROID_HOME="$ANDROID_HOME" CODEX_GUARD_OUTPUT="$scratch" CODEX_EMULATOR_IMAGE="$image" \
+  ANDROID_HOME="$ANDROID_HOME" JAVA_HOME="${JAVA_HOME:-/usr}" CODEX_GUARD_OUTPUT="$scratch" CODEX_EMULATOR_IMAGE="$image" \
+  ZEC_HOSTED_FIXTURE_DIR="${ZEC_HOSTED_FIXTURE_DIR:-}" \
   PYTHONPATH=.private python3 -B - <<'PY'
 import os
 from pathlib import Path
-from emulator_session import EmulatorSession
+from emulator_session import EmulatorSession, SDK
+from core_testnet_driver import verify_instrumentation_pair
+from strip_emulator_apk import prepare
 
-with EmulatorSession(Path(os.environ['CODEX_GUARD_OUTPUT']) / 'session') as session:
+root = Path(os.environ['CODEX_GUARD_OUTPUT'])
+with EmulatorSession(root / 'session') as session:
     assert session.adb('shell', 'getprop', 'ro.product.cpu.abi').stdout.strip() == b'x86_64'
     assert session.adb('shell', 'getprop', 'ro.build.version.sdk').stdout.strip() == b'35'
+    fixture = os.environ['ZEC_HOSTED_FIXTURE_DIR']
+    if fixture:
+        import json
+        import shutil
+
+        source = Path(fixture)
+        version = json.loads((source / 'fixture-binding.json').read_text())['version_code']
+        app, test = [Path(shutil.copyfile(source / name, root / name))
+                     for name in ('baseline-ui.apk', 'baseline-androidTest.apk')]
+        prepared = prepare((app, test), root, SDK)
+        session.adb('install', '-r', str(app), timeout=90)
+        session.adb('install', '-r', '-t', str(test), timeout=90)
+        verify_instrumentation_pair(session.adb, version, prepared[test.name]['testedSha256'])
+        print('Installed verified x86_64 testnet app and instrumentation. No wallet or funds created.')
 assert session.cleanup == {'emulatorExited': True, 'privatePortsClosed': True}
 print('API 35 x86_64 booted in a namespace without routes and closed all owned ports.')
 PY
