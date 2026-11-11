@@ -87,7 +87,7 @@ SDK error 3200 is a wrapper, not a root cause: it also represents an explicit se
 
 ## Upstream integration
 
-`sync-upstream.yml` discovers official stable releases every six hours and supports manual dispatch. Drafts and prereleases are excluded. `fork.patch` carries the reviewed source delta; `.private/` and trusted workflows are overlaid separately. Read [sync.py](sync.py) and [excluded-features.json](excluded-features.json) before regenerating the patch: separately sanitized provider content and removed project trees must stay out of it.
+`sync-upstream.yml` requests stable-release discovery every three hours and supports manual dispatch. The watcher reports overdue timers while continuing candidate checks. Drafts and prereleases are excluded. `fork.patch` carries the reviewed source delta; `.private/` and trusted workflows are overlaid separately. Read [sync.py](sync.py) and [excluded-features.json](excluded-features.json) before regenerating the patch: separately sanitized provider content and removed project trees must stay out of it.
 
 The controller resolves the exact upstream commit, checks critical differences, checks patch applicability and prepares an update branch. Relevant wallet, recovery, signing, swap, privacy and build-trust changes require review. Conflicts and failed acceptance preserve the last release. A reusable workflow explicitly chains build, validation, signing and publication.
 
@@ -115,7 +115,7 @@ Wallet releases contain the signed APK and its checksum. Detailed validation JSO
 
 Hosted jobs read the selected [private registry fixture](hosted-fixture.json) by OCI digest. The binding also records the ZIP and original APK digests. The preservation workflow selects newly integrated release evidence with an exact executed testnet pair and verifies it in a separate job. Keep the authenticated draft pair for local acceptance and rollback. An accepted release that reuses earlier core evidence keeps that earlier pair.
 
-The [maintenance watcher](../.github/workflows/maintenance-watch.yml) runs through the upstream discovery timer and on eligible Dependabot PR events. Its preparation job accepts a same-series Gradle patch whose only change is the wrapper properties, verifies the official distribution hash and stages an isolated branch from the exact main revision. Controller and wider dependency changes need their own review. Standing signing stays gated while hosted release acceptance is being connected.
+The [maintenance watcher](../.github/workflows/maintenance-watch.yml) runs through the upstream discovery timer and on eligible Dependabot PR events. Its preparation job accepts a same-series Gradle patch whose only change is the wrapper properties, verifies the official distribution hash and stages an isolated branch from the exact main revision. Controller and wider dependency changes need their own review. The [hosted release procedure](RELEASE-WORKFLOW.md#hosted-maintenance-releases) requires bound candidate evidence before standing signing can publish.
 
 For a new revision of the same upstream version, increase `private_revision` and `ZCASH_VERSION_CODE`, refresh patch/source-state metadata, and run the release workflow. Preserve the existing signing key. Rebuilding a published version refuses replacement. Normal stable upstream integration uses the discovery workflow.
 
