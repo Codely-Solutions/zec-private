@@ -7,6 +7,7 @@ by shared admission. This adapter is specific to this credential-free probe.
 import os,subprocess,json,zipfile,hashlib
 from pathlib import Path
 from emulator_session import EmulatorSession, SDK, load_manifest
+from release_metadata import GH
 ROOT=Path(os.environ["CODEX_GUARD_OUTPUT"])
 PROJECT=Path(__file__).resolve().parents[1]
 manifest=load_manifest(PROJECT)
@@ -21,7 +22,7 @@ if local_receipt:
 else:
     artifact=ROOT/'probe.zip'
     with artifact.open('wb') as out:
-        subprocess.run([r'C:\Program Files\GitHub CLI\gh.exe','api','repos/Codely-Solutions/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip'],stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)
+        subprocess.run([GH,'api','repos/Codely-Solutions/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip'],stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)
     if artifact.stat().st_size>manifest['size_in_bytes']+1048576: raise ValueError('Probe archive exceeds declared size')
     if 'digest' in manifest and manifest['digest'] and 'sha256:'+hashlib.sha256(artifact.read_bytes()).hexdigest()!=manifest['digest']: raise ValueError('Probe artifact digest mismatch')
     apks=ROOT/'apks';apks.mkdir();apk_paths=[]

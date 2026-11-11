@@ -1,6 +1,6 @@
 """Bounded read-only verification of release producer and fixture identities."""
-import json,re,subprocess,time
-GH=r"C:\Program Files\GitHub CLI\gh.exe"
+import json,os,re,subprocess,time
+GH=r"C:\Program Files\GitHub CLI\gh.exe" if os.name == 'nt' else 'gh'
 def require(condition, message):
     if not condition:
         raise ValueError(message)

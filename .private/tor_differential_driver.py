@@ -1,6 +1,7 @@
 """Run one real-native cancellation test against old and fixed app DEX."""
 import json,hashlib,subprocess,zipfile,re
 from pathlib import Path
+from release_metadata import GH
 
 def fetch_baseline(root, manifest, target_name="baseline-app.apk", instrumentation=False,
                    expected_apk_sha256=None):
@@ -13,9 +14,9 @@ def fetch_baseline(root, manifest, target_name="baseline-app.apk", instrumentati
     archive=root/'baseline.zip'
     if manifest.get('release_asset_id'):
         endpoint='repos/Codely-Solutions/zec-private/releases/assets/'+str(int(manifest['release_asset_id']))
-        command=[r'C:\Program Files\GitHub CLI\gh.exe','api','-H','Accept: application/octet-stream',endpoint]
+        command=[GH,'api','-H','Accept: application/octet-stream',endpoint]
     else:
-        command=[r'C:\Program Files\GitHub CLI\gh.exe','api','repos/Codely-Solutions/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip']
+        command=[GH,'api','repos/Codely-Solutions/zec-private/actions/artifacts/'+str(manifest['id'])+'/zip']
     try:
         with archive.open('wb') as out:
             subprocess.run(command,stdout=out,stderr=subprocess.PIPE,check=True,timeout=120)
