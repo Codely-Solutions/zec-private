@@ -1,0 +1,59 @@
+name: Hosted custom release
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact reviewed custom candidate commit
+        type: string
+        required: true
+      operation:
+        description: Check admission or authorize publication after acceptance
+        type: choice
+        options: [check, publish]
+        default: check
+permissions: {}
+jobs:
+  review:
+    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git fetch --no-tags origin "$SOURCE_SHA"
+          PYTHONPATH=.private python3 -B - <<'PY'
+          import os
+          from acceptance_policy import ROOT
+          from custom_release import require_dispatch, verify_custom_child
+          from release_metadata import Metadata
+
+          source, controller = os.environ['SOURCE_SHA'], os.environ['GITHUB_SHA']
+          require_dispatch(source, controller, Metadata(), publish=os.environ['OPERATION'] == 'publish')
+          verify_custom_child(source, controller, ROOT)
+          print('Exact custom candidate and dispatch verified.')
+          PY
+  build:
+    needs: review
+    if: inputs.operation == 'publish' && vars.PRODUCTION_SIGNING_READY == 'true'
+    permissions:
+      actions: read
+      contents: write
+      issues: write
+      packages: read
+    uses: ./.github/workflows/build-release.yml
+    with:
+      hosted: true
+      source_sha: ${{ inputs.source_sha }}
+    secrets:
+      NTFY_URL: ${{ secrets.NTFY_URL }}

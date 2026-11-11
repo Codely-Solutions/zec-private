@@ -70,14 +70,14 @@ class CadenceTest(unittest.TestCase):
     def test_routine_admission_rejects_a_post_cutoff_candidate(self):
         upstream = {'published_at': '2026-12-02T09:00:00Z'}
         with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'schedule'}), \
-                patch('maintenance_cadence.changed_marker', side_effect=[{}, upstream]), \
+                patch('maintenance_cadence.changed_marker', side_effect=[{}, {}, upstream]), \
                 patch('maintenance_cadence.routine_window', return_value=cadence.FIRST_WINDOW):
             with self.assertRaisesRegex(ValueError, 'after the monthly cutoff'):
                 cadence.admit_cadence(Path('.'), SHA, SHA, Mock(), Mock())
 
     def test_review_push_cannot_admit_routine_maintenance(self):
         with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'push'}), \
-                patch('maintenance_cadence.changed_marker', return_value={'kind': 'gradle-wrapper-patch'}), \
+                patch('maintenance_cadence.changed_marker', side_effect=[{}, {'kind': 'gradle-wrapper-patch'}]), \
                 patch('maintenance_cadence.routine_window') as window:
             with self.assertRaisesRegex(ValueError, 'cannot admit routine'):
                 cadence.admit_cadence(Path('.'), SHA, SHA, Mock(), Mock())
@@ -113,7 +113,7 @@ class CadenceTest(unittest.TestCase):
 
     def test_security_bypasses_calendar_only_with_live_matching_review(self):
         marker = {'kind': 'security', 'advisory': ADVISORY}
-        with patch('maintenance_cadence.changed_marker', return_value=marker), \
+        with patch('maintenance_cadence.changed_marker', side_effect=[{}, marker, {}, marker]), \
                 patch('maintenance_cadence.security_review', return_value=marker) as review, \
                 patch('maintenance_cadence.routine_window') as window:
             cadence.admit_cadence(Path('.'), SHA, SHA, Mock(), Mock())

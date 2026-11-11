@@ -1,5 +1,20 @@
 # Prepare and validate a release candidate
 
+## Hosted custom releases
+
+Keep held work on its branch. Run targeted development checks there. When ready, prepare one reviewed commit directly on the current protected `main`, advance the private revision and Android version code, and add `.private/custom-candidate.json` with `kind: custom` and `controller` set to the full parent SHA. Remove any inherited `.private/candidate.json`, stage the reviewed changes and refresh the canonical fork patch and source state with `python -B .private/refresh_source.py`. Push the prepared commit to its candidate branch. Keep controller and signing changes in their separate trusted review path.
+
+Use the [custom workflow](../.github/workflows/custom-release.yml) on `main`. Its `check` operation confirms candidate and dispatcher identity on GitHub without building APKs, reserving funds or signing. It complements targeted development checks.
+
+```sh
+gh workflow run custom-release.yml --ref main -f operation=check -f source_sha=FULL_REVIEWED_SHA
+gh workflow run custom-release.yml --ref main -f operation=publish -f source_sha=FULL_REVIEWED_SHA
+```
+
+Use `publish` only with explicit authorization for that SHA. The trusted dispatcher must be the allowlisted GitHub account. An authorized dispatch runs the shared hosted build and wallet/quote acceptance, then signs and publishes if all gates pass. The custom path runs outside the monthly cadence and leaves the routine slot available. If `main` advances before signing, prepare a new child and obtain approval for its new SHA.
+
+For a pre-publication failure, diagnose the affected job and recover the original run where its artifacts are still live and its controller is current. Preserve the claim reservation if funding occurred or is uncertain. For a public APK awaiting verification or recording, use [publication reconciliation](MAINTENANCE.md#signing-and-publication) with the original run ID. Fixture preservation uses the original hosted test pair.
+
 ## Hosted maintenance releases
 
 The [upstream discovery workflow](../.github/workflows/sync-upstream.yml) polls every three hours. The routine release window opens on the first of each month at 09:00 UTC, starting December 1, 2026. It selects the latest stable upstream release and highest compatible verified Gradle patch available by that cutoff. Upstream releases and open Dependabot proposals are the queue. A missed poll can catch up within the window, and later arrivals roll into the next batch. The first verified routine publication in a window closes it. An empty window produces no APKs. A failed batch keeps its inputs queued. Keep any existing claim reservation and use the original run for recovery.

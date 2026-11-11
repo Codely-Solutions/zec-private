@@ -151,6 +151,10 @@ def main():
                                     production_id=os.environ['PRODUCTION_ID'], core_id=os.environ['CORE_ID'],
                                     quote_id=os.environ['QUOTE_ID'])
     else:
+        from custom_release import MARKER as CUSTOM_MARKER
+
+        if run('git', 'ls-tree', '--name-only', expected, '--', CUSTOM_MARKER):
+            raise RuntimeError('Custom releases require hosted acceptance and explicit dispatch')
         core_bytes=(ROOT/'.private/core-acceptance.json').read_bytes()
         core=json.loads(core_bytes)
         acceptance_revision=controller if late_attestation else expected
@@ -236,6 +240,10 @@ def main():
 
         maintenance = changed_marker(ROOT, expected, controller, MARKER)
         attestation['maintenance'] = maintenance if maintenance.get('kind') == 'security' else {'kind': 'routine'}
+        from custom_release import MARKER as CUSTOM_MARKER
+
+        if changed_marker(ROOT, expected, controller, CUSTOM_MARKER):
+            attestation['maintenance'] = {'kind': 'custom'}
     data = (json.dumps(attestation, indent=2) + '\n').encode()
     if len(data) > 256 * 1024:
         raise RuntimeError('Publication attestation exceeds its size budget')

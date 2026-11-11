@@ -57,19 +57,22 @@ class PublishMetadataTest(unittest.TestCase):
             git('commit', '--allow-empty', '-qm', 'controller')
             controller = git('rev-parse', 'HEAD')
             (root / 'candidate.txt').write_text('test payload')
-            git('add', 'candidate.txt')
+            (root / '.private').mkdir()
+            marker = '.private/custom-candidate.json'
+            (root / marker).write_text('{}')
+            git('add', 'candidate.txt', marker)
             git('commit', '-qm', 'candidate')
             candidate = git('rev-parse', 'HEAD')
             git('checkout', '-q', '--detach', controller)
             tag = 'v3.19.0-private.21'
             path = f'.private/release-evidence/{tag}.json'
-            proof = dict(release_tag=tag, upstream={'tag': '3.19.0-3235'})
+            proof = dict(release_tag=tag, upstream={'tag': '3.19.0-3235'}, maintenance={'kind': 'custom'})
             commit = state_commit(candidate, proof, Path(scratch), root)
             self.assertEqual(git('rev-parse', 'HEAD'), controller)
             self.assertEqual(git('status', '--porcelain'), '')
             self.assertEqual(git('rev-parse', commit + '^'), candidate)
             self.assertEqual(git('diff', '--name-only', candidate, commit).splitlines(),
-                             [path, '.private/upstream.json'])
+                             [marker, path, '.private/upstream.json'])
             self.assertEqual(json.loads(git('show', f'{commit}:{path}')), proof)
             with self.assertRaisesRegex(RuntimeError, 'existing release evidence'):
                 state_commit(commit, proof, Path(scratch), root)
@@ -129,6 +132,10 @@ class PublishMetadataTest(unittest.TestCase):
                    status='completed', conclusion='failure')
         self.assertEqual(publisher_job(run, [job], 7, repo), job)
         self.assertEqual(publisher_job(dict(run, event='push'), [job], 7, repo), job)
+        custom = dict(run, path='.github/workflows/custom-release.yml', event='workflow_dispatch')
+        self.assertEqual(publisher_job(custom, [job], 7, repo), job)
+        with self.assertRaisesRegex(ValueError, 'trusted main'):
+            publisher_job(dict(custom, event='schedule'), [job], 7, repo)
         for change in ({'event': 'pull_request'}, {'head_branch': 'candidate'},
                        {'head_repository': {'full_name': 'fork/zec-private'}}, {'id': 8}):
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'trusted main'):

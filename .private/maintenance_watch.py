@@ -128,7 +128,7 @@ def pending_recovery(prefix, evidence_dir=RELEASE_EVIDENCE, resolve=None):
     if resolve is None:
         from reconcile_release import resolve
     runs = []
-    for workflow in ('build-release.yml', 'sync-upstream.yml'):
+    for workflow in ('build-release.yml', 'sync-upstream.yml', 'custom-release.yml'):
         runs.extend(api(f'{prefix}/actions/workflows/{workflow}/runs?branch=main&status=completed&per_page=8')
                     ['workflow_runs'])
     released_at = dt.datetime.fromisoformat(latest['published_at'])

@@ -82,6 +82,8 @@ def payload(data):
 
 
 def unsigned_proof(evidence):
+    from custom_release import WORKFLOW as CUSTOM_WORKFLOW
+
     run_id, source = str(evidence['artifact_run_id']), evidence['source_sha']
     require(re.fullmatch(r'[1-9][0-9]*', run_id) and re.fullmatch(r'[0-9a-f]{40}', source),
             'Invalid producer identity')
@@ -92,7 +94,9 @@ def unsigned_proof(evidence):
                     (run['event'] == 'push' and evidence.get('maintenance', {}).get('kind') == 'security'))
     upstream = (run['path'] == '.github/workflows/sync-upstream.yml' and hosted_event
                 and run['head_sha'] == evidence['controller_sha'])
-    require(run['head_branch'] == 'main' and (direct or upstream),
+    custom = (run['path'] == CUSTOM_WORKFLOW and run['event'] == 'workflow_dispatch'
+              and run['head_sha'] == evidence['controller_sha'] and evidence.get('maintenance', {}).get('kind') == 'custom')
+    require(run['head_branch'] == 'main' and (direct or upstream or custom),
             'Expected a main-branch release producer')
     jobs = gh(f'actions/runs/{run_id}/jobs?per_page=100')['jobs']
     successful = [job for job in jobs if job['name'].rsplit(' / ', 1)[-1] == 'unsigned'

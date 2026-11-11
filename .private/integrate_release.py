@@ -45,6 +45,10 @@ def state_commit(base, attestation, scratch, root):
     if git('ls-tree', '--name-only', base, '--', evidence):
         raise RuntimeError('Refusing to replace an existing release evidence record')
     git('read-tree', base)
+    if attestation.get('maintenance', {}).get('kind') == 'custom':
+        from custom_release import MARKER
+
+        git('update-index', '--force-remove', '--', MARKER)
     for path, value in ((evidence, attestation), ('.private/upstream.json', attestation['upstream'])):
         blob = git('hash-object', '-w', '--stdin', data=(json.dumps(value, indent=2) + '\n').encode())
         git('update-index', '--add', '--cacheinfo', f'100644,{blob},{path}')

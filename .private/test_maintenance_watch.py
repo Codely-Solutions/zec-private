@@ -175,11 +175,11 @@ class MaintenanceWatchTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
             with patch('maintenance_watch.api', side_effect=[latest, {'workflow_runs': [run]},
-                                                            {'workflow_runs': []}]):
+                                                            {'workflow_runs': []}, {'workflow_runs': []}]):
                 self.assertEqual(4, pending_recovery('repos/fork/wallet', directory,
                                                       lambda _: {'release_tag': tag}))
             with patch('maintenance_watch.api', side_effect=[latest, {'workflow_runs': [run]},
-                                                            {'workflow_runs': []}]):
+                                                            {'workflow_runs': []}, {'workflow_runs': []}]):
                 with self.assertRaisesRegex(ValueError, 'no live matching publication proof'):
                     pending_recovery('repos/fork/wallet', directory,
                                      lambda _: {'release_tag': 'v3.19.0-private.20'})

@@ -41,7 +41,7 @@ def routine_window(root, metadata, now=None):
         if evidence.is_file():
             record = json.loads(evidence.read_bytes())
             apks = [asset for asset in release['assets'] if asset['name'] == 'zec-private-latest.apk']
-            if (record.get('maintenance', {}).get('kind') == 'security' and len(apks) == 1
+            if (record.get('maintenance', {}).get('kind') in ('security', 'custom') and len(apks) == 1
                     and apks[0].get('digest') == 'sha256:' + record['apk_sha256']):
                 continue
         return None
@@ -141,6 +141,11 @@ def changed_marker(root, source, controller, path):
 
 
 def admit_cadence(root, source, controller, metadata, advisory_api):
+    from custom_release import MARKER as CUSTOM_MARKER, require_dispatch
+
+    if changed_marker(root, source, controller, CUSTOM_MARKER):
+        require_dispatch(source, controller, metadata, publish=True)
+        return
     maintenance = changed_marker(root, source, controller, MARKER)
     if maintenance.get('kind') == 'security':
         review = security_review(root, metadata, advisory_api)
