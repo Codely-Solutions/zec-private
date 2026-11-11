@@ -450,16 +450,21 @@ def run(adb, root, apks, manifest, *, transport_only=False):
                 report['application_pids']=sorted(application_pids)
                 report['connection_destinations']=[dict(address=address,port=port) for address,port in sorted(connections)[:100]]
                 report['connection_destinations_truncated']=len(connections)>100
-            except RuntimeError as error:report['connection_trace_error']=str(error)[:500]
+            except (RuntimeError, subprocess.SubprocessError) as error:
+                report['connection_trace_error']=type(error).__name__
         if firewall:
             for binary in ('iptables','ip6tables'):
                 # Retain counter totals only; guard-owned guest disappears next.
                 try:
                     rows=(rule(binary,'-L','CORE_TOR','-n','-v','-x')+'\n'+rule(binary,'-L','CORE_ACCEPT','-n','-v','-x')).splitlines()
                     report[binary+'_counters']=[line for line in rows if len(line.split())>2 and line.split()[2] in ('REJECT','DROP')]
-                except subprocess.SubprocessError: pass
-            kernel=adb('shell','dmesg',timeout=15,check=False).stdout.decode(errors='replace')
-            report['blocked_connection_diagnostics']=[line[:350] for line in kernel.splitlines() if 'CORE_EGRESS:' in line][-30:]
+                except (RuntimeError, subprocess.SubprocessError) as error:
+                    report[binary+'_diagnostic_error']=type(error).__name__
+            try:
+                kernel=adb('shell','dmesg',timeout=15,check=False).stdout.decode(errors='replace')
+                report['blocked_connection_diagnostics']=[line[:350] for line in kernel.splitlines() if 'CORE_EGRESS:' in line][-30:]
+            except (RuntimeError, subprocess.SubprocessError) as error:
+                report['guest_diagnostic_error']=type(error).__name__
         try:
             private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15,check=False).stdout)
             allowed_fields=('claimId','fundingTxId','fundingProvider','fundedBalance','balanceBeforeSend','feeZatoshi','senderConfirmedBalance','restoreMinedHeight','restoreTransactionState','candidateTxIds','initialSubmitType')

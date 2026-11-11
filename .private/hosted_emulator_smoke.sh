@@ -55,7 +55,8 @@ from pathlib import Path
 from emulator_session import EmulatorSession, SDK
 
 root = Path(os.environ['CODEX_GUARD_OUTPUT'])
-with EmulatorSession(root / 'session') as session:
+transport = os.environ['ZEC_HOSTED_TRANSPORT_PROBE'] == 'true'
+with EmulatorSession(root / 'session', guest_memory=3072 if transport else 1536) as session:
     assert session.adb('shell', 'getprop', 'ro.product.cpu.abi').stdout.strip() == b'x86_64'
     assert session.adb('shell', 'getprop', 'ro.build.version.sdk').stdout.strip() == b'35'
     fixture = os.environ['ZEC_HOSTED_FIXTURE_DIR']
@@ -71,7 +72,7 @@ with EmulatorSession(root / 'session') as session:
         app, test = [Path(shutil.copyfile(source / name, root / name))
                      for name in ('baseline-ui.apk', 'baseline-androidTest.apk')]
         prepared = prepare((app, test), root, SDK)
-        if os.environ['ZEC_HOSTED_TRANSPORT_PROBE'] == 'true':
+        if transport:
             manifest = dict(input_fingerprint=None, runtime_input_fingerprint=None, build_input_fingerprint=None,
                 baseline_source_sha=binding['source_sha'], build_source_sha=binding['source_sha'],
                 baseline_version_code=version, candidate_version_code=version,
@@ -87,6 +88,7 @@ with EmulatorSession(root / 'session') as session:
                 if result_path.is_file():
                     result = json.loads(result_path.read_text())
                     print('Hosted core stage:', result['last_stage'], result['failure']['type'], flush=True)
+                print('Hosted emulator process exit code:', session.process.poll(), flush=True)
                 raise
             print('Native Tor interruption and recovery passed with zero faucet claims or valid transaction submissions.')
         else:
