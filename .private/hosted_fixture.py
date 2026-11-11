@@ -66,16 +66,25 @@ def prepare(tag, archive, out, metadata):
     verify_pair(out, core, prepared=True)
 
 
-def verify(tag, path, archive_digest, oci_digest):
+def verify(tag, path, archive_digest, oci_digest, *, extract=False):
     _, core = recorded_pair(tag)
     require(re.fullmatch(r'sha256:[0-9a-f]{64}', archive_digest) and digest(path) == archive_digest,
             'Registry fixture differs from the prepared archive')
     require(re.fullmatch(r'sha256:[0-9a-f]{64}', oci_digest), 'Exact OCI manifest digest required')
-    verify_pair(path, core, prepared=True)
-    return dict(release=tag, reference=REGISTRY + '@' + oci_digest, digest=archive_digest,
-                size_in_bytes=path.stat().st_size, source_sha=core['build_source_sha'],
-                candidate_apk_sha256=core['candidate_apk_sha256'],
-                instrumentation_apk_sha256=core['instrumentation_apk_sha256'])
+    payloads = verify_pair(path, core, prepared=True)
+    binding = dict(release=tag, reference=REGISTRY + '@' + oci_digest, digest=archive_digest,
+                   size_in_bytes=path.stat().st_size, source_sha=core['build_source_sha'],
+                   version_code=core['candidate_version_code'],
+                   candidate_apk_sha256=core['candidate_apk_sha256'],
+                   instrumentation_apk_sha256=core['instrumentation_apk_sha256'])
+    if extract:
+        for name, data in payloads.items():
+            target = 'baseline-androidTest.apk' if 'androidTest' in name else 'baseline-ui.apk'
+            with path.with_name(target).open('xb') as stream:
+                stream.write(data)
+        with path.with_name('fixture-binding.json').open('x') as stream:
+            json.dump(binding, stream)
+    return binding
 
 
 def main():
@@ -83,13 +92,15 @@ def main():
     parser.add_argument('operation', choices=('prepare', 'verify'))
     parser.add_argument('--directory', type=Path, required=True)
     parser.add_argument('--tag', required=True)
+    parser.add_argument('--extract', action='store_true', help='Extract verified app and instrumentation')
     args = parser.parse_args()
     out = args.directory / 'fixture.zip'
     if args.operation == 'prepare':
         prepare(args.tag, args.directory / 'producer.zip', out, Metadata())
         print(f'archive_digest={digest(out)}')
     else:
-        print(json.dumps(verify(args.tag, out, os.environ['ARCHIVE_DIGEST'], os.environ['OCI_DIGEST'])))
+        print(json.dumps(verify(args.tag, out, os.environ['ARCHIVE_DIGEST'], os.environ['OCI_DIGEST'],
+                                extract=args.extract)))
 
 
 if __name__ == '__main__':
