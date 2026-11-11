@@ -40,8 +40,8 @@ jobs:
         if: steps.sync.outputs.changed == 'true' && vars.PRODUCTION_SIGNING_READY != 'true'
         run: echo '::warning::Upstream candidate prepared. Publication is waiting for verified signing environment setup.'
   build:
-    needs: prepare
-    if: needs.prepare.outputs.changed == 'true' && vars.PRODUCTION_SIGNING_READY == 'true'
+    needs: [prepare, maintenance]
+    if: ${{ always() && !cancelled() && needs.maintenance.result == 'success' && (needs.maintenance.outputs.reconciliation_run != '' || (needs.prepare.result == 'success' && needs.prepare.outputs.changed == 'true' && vars.PRODUCTION_SIGNING_READY == 'true')) }}
     permissions:
       contents: write
       issues: write
@@ -49,6 +49,7 @@ jobs:
     uses: ./.github/workflows/build-release.yml
     with:
       source_sha: ${{ needs.prepare.outputs.source_sha }}
+      reconciliation_run: ${{ needs.maintenance.outputs.reconciliation_run }}
     secrets:
       NTFY_URL: ${{ secrets.NTFY_URL }}
   blocked:
