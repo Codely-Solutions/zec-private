@@ -13,10 +13,25 @@ spec=importlib.util.spec_from_file_location('private_publish',Path(__file__).wit
 publish=importlib.util.module_from_spec(spec)
 with patch.dict(os.environ,{'GITHUB_REPOSITORY':'example/zec-private'}):
     spec.loader.exec_module(publish)
+    import integrate_release
     from integrate_release import state_commit
 
 
 class PublishMetadataTest(unittest.TestCase):
+    def test_publication_recovery_requires_original_ancestry_and_control_only_changes(self):
+        candidate, original, controller = ('a' * 40, 'b' * 40, 'c' * 40)
+        root = Path.cwd()
+        with patch.object(integrate_release, 'verify_promotion_revision', return_value=True) as verify:
+            self.assertEqual(integrate_release.integration_base(candidate, original, original, root), original)
+            with patch.object(integrate_release.subprocess, 'check_output', side_effect=(
+                    b'', b'', b'.private/reconcile_release.py\0.github/workflows/build-release.yml\0')):
+                self.assertEqual(integrate_release.integration_base(candidate, controller, original, root), controller)
+            with patch.object(integrate_release.subprocess, 'check_output', side_effect=(
+                    b'', b'', b'gradle.properties\0')):
+                with self.assertRaisesRegex(RuntimeError, 'outside publication recovery controls'):
+                    integrate_release.integration_base(candidate, controller, original, root)
+            verify.assert_called_with(candidate, original, root)
+
     def test_attestation_requires_exact_bytes(self):
         with tempfile.TemporaryDirectory() as scratch:
             path = Path(scratch) / 'release-attestation.json'

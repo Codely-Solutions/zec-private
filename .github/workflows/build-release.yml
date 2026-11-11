@@ -14,6 +14,10 @@ on:
         description: Promote a successful validation run without rebuilding
         type: string
         default: ''
+      reconciliation_run:
+        description: Verify and record an already published release from its original signing run
+        type: string
+        default: ''
   workflow_call:
     inputs:
       source_sha:
@@ -28,7 +32,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   unsigned:
-    if: ${{ !inputs.candidate_run }}
+    if: ${{ !inputs.candidate_run && !inputs.reconciliation_run }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     permissions:
@@ -118,7 +122,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
   emulator:
-    if: ${{ !inputs.candidate_run && inputs.build_emulator }}
+    if: ${{ !inputs.candidate_run && !inputs.reconciliation_run && inputs.build_emulator }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     permissions:
@@ -160,7 +164,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
   promotion:
-    if: ${{ github.ref == 'refs/heads/main' && inputs.candidate_run }}
+    if: ${{ github.ref == 'refs/heads/main' && inputs.candidate_run && !inputs.reconciliation_run }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -178,7 +182,7 @@ jobs:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: python3 .private/promotion.py
   publish:
-    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))) }}
+    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))) }}
     needs: [unsigned, emulator, promotion]
     environment: production-signing
     runs-on: ubuntu-24.04
@@ -227,19 +231,44 @@ jobs:
           ATTESTATION_DIGEST: ${{ steps.publication.outputs.attestation_digest }}
           PUBLISH_SIGNED_RELEASE: 'true'
         run: python3 -B .private/publish.py
+  reconcile:
+    if: github.ref == 'refs/heads/main' && inputs.reconciliation_run && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      release_tag: ${{ steps.resolve.outputs.release_tag }}
+      attestation_id: ${{ steps.resolve.outputs.attestation_id }}
+      attestation_digest: ${{ steps.resolve.outputs.attestation_digest }}
+      controller_sha: ${{ steps.resolve.outputs.controller_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Resolve the original successful publisher and attestation
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECONCILIATION_RUN: ${{ inputs.reconciliation_run }}
+        run: python3 -B .private/reconcile_release.py
   verify_publication:
-    needs: publish
+    if: ${{ always() && !cancelled() && (needs.publish.result == 'success' || needs.reconcile.result == 'success') }}
+    needs: [publish, reconcile]
     permissions:
       actions: read
       contents: read
     uses: ./.github/workflows/verify-public-release.yml
     with:
-      release_tag: ${{ needs.publish.outputs.release_tag }}
-      attestation_id: ${{ needs.publish.outputs.attestation_id }}
-      attestation_digest: ${{ needs.publish.outputs.attestation_digest }}
+      release_tag: ${{ needs.publish.outputs.release_tag || needs.reconcile.outputs.release_tag }}
+      attestation_id: ${{ needs.publish.outputs.attestation_id || needs.reconcile.outputs.attestation_id }}
+      attestation_digest: ${{ needs.publish.outputs.attestation_digest || needs.reconcile.outputs.attestation_digest }}
+      attestation_run: ${{ inputs.reconciliation_run || github.run_id }}
+      attestation_controller: ${{ needs.reconcile.outputs.controller_sha || github.sha }}
   record_integration:
-    if: github.ref == 'refs/heads/main'
-    needs: [publish, verify_publication]
+    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && needs.verify_publication.result == 'success' }}
+    needs: [publish, reconcile, verify_publication]
     environment: maintenance-integration
     runs-on: ubuntu-24.04
     timeout-minutes: 6
@@ -254,13 +283,16 @@ jobs:
           fetch-depth: 0
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          artifact-ids: ${{ needs.publish.outputs.attestation_id }}
+          artifact-ids: ${{ needs.publish.outputs.attestation_id || needs.reconcile.outputs.attestation_id }}
           path: ${{ runner.temp }}/publication
+          run-id: ${{ inputs.reconciliation_run || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Prepare the exact integration commit using trusted controller code
         id: integration
         env:
           GH_TOKEN: ${{ github.token }}
-          ATTESTATION_DIGEST: ${{ needs.publish.outputs.attestation_digest }}
+          ATTESTATION_DIGEST: ${{ needs.publish.outputs.attestation_digest || needs.reconcile.outputs.attestation_digest }}
+          ATTESTATION_CONTROLLER: ${{ needs.reconcile.outputs.controller_sha || github.sha }}
         run: python3 -B .private/integrate_release.py
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: integrator
@@ -279,7 +311,8 @@ jobs:
           gh auth setup-git
           git push origin "$INTEGRATION_COMMIT:refs/heads/main"
   notify:
-    needs: [publish, record_integration]
+    if: ${{ always() && !cancelled() && needs.record_integration.result == 'success' }}
+    needs: [publish, reconcile, record_integration]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -291,11 +324,11 @@ jobs:
         continue-on-error: true
         env:
           NTFY_URL: ${{ secrets.NTFY_URL }}
-          RELEASE_TAG: ${{ needs.publish.outputs.release_tag }}
+          RELEASE_TAG: ${{ needs.publish.outputs.release_tag || needs.reconcile.outputs.release_tag }}
         run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
   failed:
-    if: ${{ always() && github.ref == 'refs/heads/main' && (needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
-    needs: [unsigned, emulator, promotion, publish, verify_publication, record_integration]
+    if: ${{ always() && github.ref == 'refs/heads/main' && (needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
+    needs: [unsigned, emulator, promotion, publish, reconcile, verify_publication, record_integration]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

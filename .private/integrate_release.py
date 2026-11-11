@@ -8,6 +8,30 @@ import tempfile
 from acceptance_policy import verify_promotion_revision
 from publish import read_attestation, release_title, require_current_controller, verify_release_identity
 
+RECOVERY_CONTROLS = {
+    '.github/workflows/build-release.yml', '.github/workflows/verify-public-release.yml',
+    '.private/integrate_release.py', '.private/reconcile_release.py',
+    '.private/verify_public_release.py', '.private/test_publish.py', '.private/MAINTENANCE.md',
+}
+
+
+def integration_base(candidate, controller, original, root):
+    late = verify_promotion_revision(candidate, original, root)
+    if original == controller:
+        return controller if late else candidate
+
+    def git(*args):
+        return subprocess.check_output(['git', *args], cwd=root, timeout=30)
+
+    # A published candidate already present on main can be recorded after an
+    # explicitly reviewed recovery-only controller update.
+    git('merge-base', '--is-ancestor', candidate, original)
+    git('merge-base', '--is-ancestor', original, controller)
+    changes = git('diff', '--no-renames', '--name-only', '-z', original, controller)
+    if set(filter(None, changes.decode().split('\0'))) - RECOVERY_CONTROLS:
+        raise RuntimeError('Main changed outside publication recovery controls')
+    return controller
+
 
 def state_commit(base, attestation, scratch, root):
     tag = attestation['release_tag']
@@ -33,15 +57,16 @@ def main():
     runner_temp = Path(os.environ['RUNNER_TEMP'])
     proof = read_attestation(runner_temp / 'publication/release-attestation.json', os.environ['ATTESTATION_DIGEST'])
     controller = os.environ['GITHUB_SHA']
-    if proof['controller_sha'] != controller:
+    original = os.environ['ATTESTATION_CONTROLLER']
+    if proof['controller_sha'] != original:
         raise RuntimeError('Publication attestation belongs to a different controller')
     require_current_controller(controller)
     candidate = proof['source_sha']
     root = Path(__file__).resolve().parents[1]
-    late = verify_promotion_revision(candidate, controller, root)
+    base = integration_base(candidate, controller, original, root)
     verify_release_identity(proof, candidate)
     with tempfile.TemporaryDirectory(dir=runner_temp) as scratch:
-        commit = state_commit(controller if late else candidate, proof, Path(scratch), root)
+        commit = state_commit(base, proof, Path(scratch), root)
     with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
         output.write(f'commit={commit}\n')
 
