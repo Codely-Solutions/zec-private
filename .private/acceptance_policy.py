@@ -393,6 +393,11 @@ def verify_promotion_revision(candidate, controller, root=ROOT):
         protected_changes = git('diff', '--no-renames', '--name-only', '-z', controller, candidate,
                                 '--', '.github', '.private', 'LICENSE', root=root).decode().split('\0')
         protected = set(filter(None, protected_changes))
+        from custom_release import MARKER as CUSTOM_MARKER, verify_custom_child
+
+        if CUSTOM_MARKER in protected:
+            verify_custom_child(candidate, controller, root)
+            return False
         if MAINTENANCE_CANDIDATE in protected:
             from maintenance_cadence import changed_marker, verify_security_child
 

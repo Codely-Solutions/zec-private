@@ -7,11 +7,13 @@ import subprocess
 
 from publish import release_title
 from verify_public_release import API, bounded_zip, digest, gh, require
+from custom_release import WORKFLOW as CUSTOM_WORKFLOW
 
 
 PUBLISHERS = {
     '.github/workflows/build-release.yml': ({'workflow_dispatch'}, 'publish'),
     '.github/workflows/sync-upstream.yml': ({'workflow_dispatch', 'schedule', 'push'}, 'build / publish'),
+    CUSTOM_WORKFLOW: ({'workflow_dispatch'}, 'build / publish'),
 }
 
 
@@ -51,6 +53,8 @@ def resolve(run_id):
         require(archive.namelist() == ['release-attestation.json'], 'Unexpected publisher archive entries')
         data = archive.read('release-attestation.json')
     attestation = json.loads(data)
+    if run['path'] == CUSTOM_WORKFLOW:
+        require(attestation.get('maintenance', {}).get('kind') == 'custom', 'Expected a custom release attestation')
     require(attestation['controller_sha'] == run['head_sha'], 'Attestation controller differs from the signing run')
     if run['event'] == 'push':
         require(attestation.get('maintenance', {}).get('kind') == 'security',

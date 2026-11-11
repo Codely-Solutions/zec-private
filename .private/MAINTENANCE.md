@@ -12,6 +12,7 @@ Use this entry for the checkout; local task state lives in the surrounding works
 | Inspect UI / capture screenshots | [UI-REVIEW.md](UI-REVIEW.md) | Established capture/control components; artifact/state orchestration must match the current task. |
 | Reuse local development state | [DEVELOPMENT.md](DEVELOPMENT.md), [dev_session.py](dev_session.py) | Related pinned checks in one bounded isolated workspace; no production release assembly. |
 | Prepare/admit/assemble release acceptance | [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md) | Verified producers, paired baseline, explicit ownership and selective execution; no signing. |
+| Hold, check or publish a custom change | [Hosted custom releases](RELEASE-WORKFLOW.md#hosted-custom-releases) | Explicit approval for the exact candidate, shared hosted acceptance and recovery. |
 | Select quick checks and release checks | Build section below; [core coverage](core-coverage.md) | Coverage records identify their executed revision; current evidence must match inputs. |
 | Maintain independent quote checks | [INDEPENDENT-PRICES.md](INDEPENDENT-PRICES.md) | Exact native-asset coverage, freshness, Tor behavior and advisory thresholds. |
 | Run real wallet acceptance | [core coverage](core-coverage.md), [core_testnet_driver.py](core_testnet_driver.py), [acceptance_policy.py](acceptance_policy.py) | Requires a current prepared job, baseline and artifact bindings. Use [development artifact reuse](DEVELOPMENT.md#reuse-artifacts-and-guest-state) and the funding procedure below. |
@@ -117,7 +118,7 @@ Hosted jobs read the selected [private registry fixture](hosted-fixture.json) by
 
 The [maintenance watcher](../.github/workflows/maintenance-watch.yml) runs through the upstream discovery timer and on eligible Dependabot PR events. It verifies same-series Gradle wrapper patches against official distribution hashes. The [hosted release controller](RELEASE-WORKFLOW.md#hosted-maintenance-releases) stages the monthly batch or reviewed security fix and requires bound candidate evidence before signing. Controller and wider dependency changes need their own review.
 
-For a new revision of the same upstream version, increase `private_revision` and `ZCASH_VERSION_CODE`, refresh patch/source-state metadata, and run the release workflow. Preserve the existing signing key. Rebuilding a published version refuses replacement. Normal stable upstream integration uses the discovery workflow.
+For a custom revision, use the [hosted custom release procedure](RELEASE-WORKFLOW.md#hosted-custom-releases). Rebuilding a published version refuses replacement. Normal stable upstream integration uses the discovery workflow.
 
 Keep signing custody and notification credentials outside the repository. Routine updates require the existing keystore and alias `zec-private`; a replacement key needs a separate Android update-compatibility plan. Keep an encrypted offline backup independent of the working drive. Wallet seeds and spending keys must never become CI inputs.
 
