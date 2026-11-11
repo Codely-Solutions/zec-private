@@ -118,6 +118,24 @@ class PublishMetadataTest(unittest.TestCase):
         self.assertEqual('ZEC Private — Release 18',publish.release_title('v2.3.4-private.18'))
         self.assertEqual('ZEC Private — Release 120',publish.release_title('v9.10.11-private.120'))
 
+    def test_recovery_only_accepts_the_matching_main_publisher(self):
+        from reconcile_release import publisher_job
+
+        repo = 'Codely-Solutions/zec-private'
+        run = dict(id=7, path='.github/workflows/sync-upstream.yml', event='schedule',
+                   head_branch='main', head_repository={'full_name': repo}, status='completed',
+                   head_sha='a'*40)
+        job = dict(name='build / publish', run_id=7, head_sha=run['head_sha'],
+                   status='completed', conclusion='failure')
+        self.assertEqual(publisher_job(run, [job], 7, repo), job)
+        for change in ({'event': 'pull_request'}, {'head_branch': 'candidate'},
+                       {'head_repository': {'full_name': 'fork/zec-private'}}, {'id': 8}):
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'trusted main'):
+                publisher_job(dict(run, **change), [job], 7, repo)
+        for change in ({'name': 'publish'}, {'conclusion': 'skipped'}, {'head_sha': 'b'*40}):
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'publisher job'):
+                publisher_job(run, [dict(job, **change)], 7, repo)
+
     def test_title_rejects_invalid_tags(self):
         for tag in (None,18,'v2.3.4','v2.3.4-private.18-extra','v2.3.4-private.18\n',
                     'v2.3.4-private.-1','v2.3.4-private.１８','v2.3.4-private.18; command'):
