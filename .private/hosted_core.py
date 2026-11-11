@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 
 from acceptance_policy import input_fingerprint, validate_core_sources
@@ -87,11 +88,17 @@ def run(session, root, fixture, candidate, result):
             state = json.loads(ledger.read_text())['status'] if ledger.exists() else 'no-POST'
             print(f'Hosted lifecycle failed at {value["last_stage"]}, claim state {state}', flush=True)
             egress_diagnostics(value)
+        diagnostic = root / 'core-testnet-diagnostic.json'
+        if diagnostic.is_file():
+            stage_error = json.loads(diagnostic.read_text())
+            markers = sorted(set(re.findall(r'CoreWalletAcceptance\.kt:\d+|^(?:java\.lang|kotlinx\.coroutines)\.\w+',
+                                             '\n'.join(stage_error.get('lines', [])), re.MULTILINE)))
+            print('Hosted instrumentation markers ' + json.dumps(markers[:16]), flush=True)
         raise
     report = json.loads((root / 'core-testnet-result.json').read_text())
     if restore_probe:
         require(report['passed'] and report['faucet_claims'] == 0, 'Unfunded restore probe failed')
-        print('Hosted unfunded installed upgrade, Tor recovery and seed restore passed.', flush=True)
+        print('Hosted unfunded installed upgrade and seed restore passed with the Tor firewall enabled.', flush=True)
         return
     report.update(apk_preparation=prepared, hosted_fixture=selected,
                   hosted_reservation=os.environ['ZEC_CORE_RESERVATION'],
