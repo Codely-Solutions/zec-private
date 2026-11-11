@@ -186,6 +186,8 @@ jobs:
     permissions:
       actions: read
       contents: write
+    outputs:
+      release_tag: ${{ steps.publication.outputs.release_tag }}
     steps:
       - name: Checkout trusted controller revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -200,6 +202,7 @@ jobs:
           run-id: ${{ inputs.candidate_run || github.run_id }}
           github-token: ${{ github.token }}
       - name: Sign, verify, publish and record successful integration
+        id: publication
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.promotion.outputs.source_sha || needs.unsigned.outputs.source_sha }}
@@ -211,17 +214,32 @@ jobs:
         run: |
           gh auth setup-git
           python3 .private/publish.py
-      - name: Notify signed APK ready
+  verify_publication:
+    needs: publish
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/verify-public-release.yml
+    with:
+      release_tag: ${{ needs.publish.outputs.release_tag }}
+  notify:
+    needs: [publish, verify_publication]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Notify independently verified publication
+        continue-on-error: true
         env:
           NTFY_URL: ${{ secrets.NTFY_URL }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          release_url=$(gh release view --repo "$GITHUB_REPOSITORY" --json url --jq .url)
-          release_tag=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
-          python3 .private/notify.py "ZEC Private $release_tag is ready. APK built and signed. $release_url"
+          RELEASE_TAG: ${{ needs.publish.outputs.release_tag }}
+        run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
   failed:
-    if: ${{ always() && github.ref == 'refs/heads/main' && (needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.publish.result == 'failure' || needs.promotion.result == 'failure') }}
-    needs: [unsigned, emulator, promotion, publish]
+    if: ${{ always() && github.ref == 'refs/heads/main' && (needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.verify_publication.result == 'failure') }}
+    needs: [unsigned, emulator, promotion, publish, verify_publication]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -235,4 +253,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NTFY_URL: ${{ secrets.NTFY_URL }}
           MAKE_ISSUE: 'true'
-        run: python3 .private/notify.py "ZEC Private update blocked by a build or release check. Last working release remains available."
+          PUBLIC_VERIFICATION: ${{ needs.verify_publication.result }}
+        run: |
+          if [[ "$PUBLIC_VERIFICATION" == failure ]]; then
+            python3 .private/notify.py "ZEC Private publication needs reconciliation. Independent public verification failed."
+          else
+            python3 .private/notify.py "ZEC Private update blocked by a build or release check."
+          fi

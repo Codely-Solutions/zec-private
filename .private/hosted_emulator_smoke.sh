@@ -3,6 +3,9 @@
 set -euo pipefail
 test -c /dev/kvm
 sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+if [[ ! -x "$ANDROID_HOME/emulator/emulator" ]]; then
+  timeout 180 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator
+fi
 "$ANDROID_HOME/emulator/emulator" -accel-check
 scratch=$(mktemp -d "$RUNNER_TEMP/zec-hosted-probe.XXXXXX")
 namespace="zec-probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
