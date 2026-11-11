@@ -10,9 +10,21 @@ fi
 scratch=$(mktemp -d "$RUNNER_TEMP/zec-hosted-probe.XXXXXX")
 namespace="zec-probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
 created=false
+stop_owned_processes() {
+  local pids signal
+  for signal in TERM KILL; do
+    pids=$(sudo ip netns pids "$namespace")
+    [[ -n "$pids" ]] || return 0
+    echo "Stopping remaining processes in the probe namespace ($signal)."
+    printf '%s\n' "$pids" | xargs -r ps -o pid=,stat=,comm= -p || true
+    printf '%s\n' "$pids" | xargs -r sudo kill "-$signal" || true
+    sleep 1
+  done
+  [[ -z "$(sudo ip netns pids "$namespace")" ]]
+}
 cleanup() {
   if "$created"; then
-    sudo ip netns pids "$namespace" | xargs -r sudo kill -KILL
+    stop_owned_processes || true
     sudo ip netns del "$namespace"
   fi
   case "$scratch" in "$RUNNER_TEMP"/zec-hosted-probe.*) rm -rf -- "$scratch" ;; *) exit 1 ;; esac
@@ -38,4 +50,7 @@ with EmulatorSession(Path(os.environ['CODEX_GUARD_OUTPUT']) / 'session') as sess
 assert session.cleanup == {'emulatorExited': True, 'privatePortsClosed': True}
 print('API 35 x86_64 booted in a namespace without routes and closed all owned ports.')
 PY
-test -z "$(sudo ip netns pids "$namespace")"
+stop_owned_processes
+sudo ip netns del "$namespace"
+created=false
+echo 'Verified that the probe namespace has no remaining processes.'
