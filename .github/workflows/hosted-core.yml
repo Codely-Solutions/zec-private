@@ -1,0 +1,111 @@
+name: Hosted testnet lifecycle
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      source_sha:
+        type: string
+        required: true
+      artifact_id:
+        type: string
+        required: true
+    outputs:
+      receipt_id:
+        value: ${{ jobs.wallet.outputs.receipt_id }}
+permissions: {}
+jobs:
+  reserve:
+    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      reservation: ${{ steps.claim.outputs.reservation }}
+      version: ${{ steps.claim.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: claim
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          REHEARSAL: ${{ inputs.source_sha == '' }}
+        run: |
+          if [[ -n "$SOURCE_SHA" ]]; then
+            [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+            git fetch --no-tags origin "$SOURCE_SHA"
+          fi
+          python3 -B .private/hosted_claim.py
+  wallet:
+    needs: reserve
+    runs-on: ubuntu-24.04
+    timeout-minutes: 44
+    permissions:
+      contents: read
+      packages: read
+      actions: read
+    outputs:
+      receipt_id: ${{ steps.receipt.outputs.artifact-id }}
+    env:
+      ZEC_CORE_SOURCE: ${{ inputs.source_sha || github.sha }}
+      ZEC_CORE_VERSION: ${{ needs.reserve.outputs.version }}
+      ZEC_CORE_RESERVATION: ${{ needs.reserve.outputs.reservation }}
+      ZEC_CORE_REHEARSAL: ${{ inputs.source_sha == '' }}
+      ZEC_CORE_RESULT: ${{ runner.temp }}/hosted-core.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify one-use reservation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=.private python3 -B -c 'from hosted_core import verify_reservation; verify_reservation()'
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
+        with:
+          distribution: temurin
+          java-version: '25.0.5+8'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24.22.2'
+          package-manager-cache: false
+      - uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63
+        with:
+          version: '1.3.6'
+      - name: Retrieve exact private upgrade pair
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: bash .private/pull_hosted_fixture.sh "$RUNNER_TEMP/zec-hosted-pair"
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+        if: inputs.source_sha == ''
+        with:
+          cache-read-only: true
+      - name: Compile testnet-only rehearsal pair
+        if: inputs.source_sha == ''
+        timeout-minutes: 16
+        run: bash .private/build_core_pair.sh "-PZCASH_VERSION_CODE=$ZEC_CORE_VERSION"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: inputs.source_sha != ''
+        with:
+          artifact-ids: ${{ inputs.artifact_id }}
+          path: core-artifact/
+      - name: Run isolated funded testnet lifecycle
+        run: |
+          git cat-file -e "$ZEC_CORE_SOURCE^{commit}" 2>/dev/null || git fetch --no-tags origin "$ZEC_CORE_SOURCE"
+          bash .private/run_tor_ci.sh --install-only
+          if [[ ! -x "$ANDROID_HOME/build-tools/36.0.0/zipalign" ]]; then
+            timeout 180 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'build-tools;36.0.0'
+          fi
+          ZEC_HOSTED_CORE_DIR="$PWD/core-artifact" ZEC_HOSTED_FIXTURE_DIR="$RUNNER_TEMP/zec-hosted-pair" bash .private/hosted_emulator_smoke.sh
+      - id: receipt
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: hosted-core-receipt
+          path: ${{ env.ZEC_CORE_RESULT }}
+          if-no-files-found: error
+          retention-days: 3
+      - if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zec-hosted-pair"

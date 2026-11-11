@@ -20,7 +20,8 @@ CANDIDATE_INSTRUMENTATION_STAGES = {'upgrade', 'transport', 'send', 'restart', '
 
 
 def validate_instrumentation_pairing(receipt, baseline):
-    expected_baseline = baseline['instrumentation']['apk_sha256']
+    expected_baseline = (baseline['instrumentation_apk_sha256'] if 'reference' in baseline
+                         else baseline['instrumentation']['apk_sha256'])
     if receipt.get('baseline_instrumentation_apk_sha256') != expected_baseline:
         raise ValueError('Instrumentation differs from selected upgrade baseline')
     pairing = receipt.get('instrumentation_pairing', {})
@@ -148,7 +149,7 @@ def requirements(paths):
             'profile_reasons': profile_reasons}
 
 
-def validate_core(receipt, expected_inputs, root=ROOT):
+def validate_core(receipt, expected_inputs, root=ROOT, *, baseline=None):
     if receipt.get('schema') != POLICY_VERSION or receipt.get('input_fingerprint') != expected_inputs:
         raise ValueError('Core acceptance inputs/policy mismatch')
     if receipt.get('evidence_class') != 'real-app-testnet' or receipt.get('network') != 'zcash-testnet':
@@ -208,7 +209,10 @@ def validate_core(receipt, expected_inputs, root=ROOT):
         raise ValueError('Missing relevant executed-build input fingerprint')
     if not re.fullmatch('[0-9a-f]{40}', str(receipt.get('build_source_sha', ''))):
         raise ValueError('Missing build source identity')
-    baseline = json.loads((Path(root) / '.private/upgrade-baseline.json').read_text())
+    if baseline is None:
+        baseline = json.loads((Path(root) / '.private/upgrade-baseline.json').read_text())
+    elif receipt.get('hosted_fixture') != baseline or receipt['baseline_apk_sha256'] != baseline['candidate_apk_sha256']:
+        raise ValueError('Hosted baseline differs from protected fixture')
     if (receipt.get('baseline_source_sha') != baseline['source_sha'] or
             receipt.get('baseline_version_code') != baseline['version_code']):
         raise ValueError('Unexpected migration baseline')
@@ -221,12 +225,12 @@ def validate_core(receipt, expected_inputs, root=ROOT):
     return True
 
 
-def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=None, root=ROOT):
+def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=None, root=ROOT, *, baseline=None):
     # For late test-only attestations use the trusted current acceptance source.
     # A controller-prepared upstream child instead owns its candidate app inputs,
     # preserving the existing separately gated upstream integration path.
     acceptance_revision = acceptance_revision or product_revision
-    validate_core(receipt, input_fingerprint(acceptance_revision, root=root), root=root)
+    validate_core(receipt, input_fingerprint(acceptance_revision, root=root), root=root, baseline=baseline)
     runtime = input_fingerprint(product_revision, root=root, profile='core-runtime')
     # Host/controller inputs still bind current acceptance to the product candidate.
     # The APK producer is checked separately against compiled inputs below: host

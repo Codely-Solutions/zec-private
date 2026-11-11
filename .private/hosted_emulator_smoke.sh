@@ -35,12 +35,14 @@ image=$(PYTHONPATH=.private python3 -B -c 'import sys; from emulator_session imp
 test -f "$image/system.img"
 transport=${ZEC_HOSTED_TRANSPORT_PROBE:-false}
 quotes=${ZEC_HOSTED_QUOTE_DIR:-}
+core=${ZEC_HOSTED_CORE_DIR:-}
 execution=()
-if [[ "$transport" == true || -n "$quotes" ]]; then
+if [[ "$transport" == true || -n "$quotes" || -n "$core" ]]; then
   # Live work uses an ephemeral hosted VM and the maintained app Tor scenarios.
   [[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_ENVIRONMENT:-}" == github-hosted ]]
   [[ "$transport" != true || -n "${ZEC_HOSTED_FIXTURE_DIR:-}" ]]
   [[ "$transport" != true || -z "$quotes" ]]
+  [[ -z "$core" || ( "$transport" == false && -z "$quotes" && -n "${ZEC_HOSTED_FIXTURE_DIR:-}" ) ]]
 else
   sudo ip netns add "$namespace"
   created=true
@@ -52,7 +54,7 @@ fi
 "${execution[@]}" env \
   ANDROID_HOME="$ANDROID_HOME" JAVA_HOME="${JAVA_HOME:-/usr}" CODEX_GUARD_OUTPUT="$scratch" CODEX_EMULATOR_IMAGE="$image" \
   ZEC_HOSTED_FIXTURE_DIR="${ZEC_HOSTED_FIXTURE_DIR:-}" ZEC_HOSTED_TRANSPORT_PROBE="$transport" \
-  ZEC_HOSTED_QUOTE_DIR="$quotes" \
+  ZEC_HOSTED_QUOTE_DIR="$quotes" ZEC_HOSTED_CORE_DIR="$core" \
   PYTHONPATH=.private python3 -B - <<'PY'
 import os
 from pathlib import Path
@@ -60,7 +62,8 @@ from emulator_session import EmulatorSession, SDK
 
 root = Path(os.environ['CODEX_GUARD_OUTPUT'])
 transport = os.environ['ZEC_HOSTED_TRANSPORT_PROBE'] == 'true'
-with EmulatorSession(root / 'session', guest_memory=3072 if transport else 1536) as session:
+core = os.environ['ZEC_HOSTED_CORE_DIR']
+with EmulatorSession(root / 'session', guest_memory=3072 if transport or core else 1536) as session:
     assert session.adb('shell', 'getprop', 'ro.product.cpu.abi').stdout.strip() == b'x86_64'
     assert session.adb('shell', 'getprop', 'ro.build.version.sdk').stdout.strip() == b'35'
     quotes = os.environ['ZEC_HOSTED_QUOTE_DIR']
@@ -68,7 +71,10 @@ with EmulatorSession(root / 'session', guest_memory=3072 if transport else 1536)
         from hosted_quote_probe import run as run_quotes
         run_quotes(session, root, Path(quotes))
     fixture = os.environ['ZEC_HOSTED_FIXTURE_DIR']
-    if fixture:
+    if core:
+        from hosted_core import run as run_core
+        run_core(session, root, Path(fixture), Path(core), Path(os.environ['ZEC_CORE_RESULT']))
+    elif fixture:
         import json
         import shutil
         from core_testnet_driver import run, verify_instrumentation_pair
