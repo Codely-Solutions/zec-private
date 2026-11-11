@@ -65,8 +65,9 @@ class AcceptancePolicyTest(unittest.TestCase):
             attestation=commit()
             self.assertTrue(verify_promotion_revision(candidate,attestation,root=root))
             self.assertFalse(verify_promotion_revision(attestation,attestation,root=root))
-            # A prepared child source remains available to the upstream path.
-            self.assertFalse(verify_promotion_revision(attestation,candidate,root=root))
+            # An upstream child cannot supply its own attestation.
+            with self.assertRaisesRegex(ValueError, 'changed controller-owned files'):
+                verify_promotion_revision(attestation,candidate,root=root)
             (root/'.private/publish.py').write_text('changed controller')
             changed_controller=commit()
             with self.assertRaises(ValueError):verify_promotion_revision(candidate,changed_controller,root=root)
@@ -322,13 +323,25 @@ class AcceptancePolicyTest(unittest.TestCase):
                     with self.subTest(stale=key),self.assertRaises(ValueError):
                         validate_core_sources(bad,candidate,accepted,root=root)
                 # A controller-prepared upstream child owns its changed app inputs.
-                (root/'app.kt').write_text('reviewed upstream product change');child=commit()
+                (root/'app.kt').write_text('reviewed upstream product change')
+                (root/'.private/candidate.json').write_text('{}')
+                (root/'.private/source-state.json').write_text('{}')
+                child=commit()
                 child_receipt=self.receipt(build_source_sha=child);child_receipt.update(
                     input_fingerprint=input_fingerprint(child,root=root),
                     build_input_fingerprint=input_fingerprint(child,root=root,profile='core-build'),
                     runtime_input_fingerprint=input_fingerprint(child,root=root,profile='core-runtime'))
                 validate_core_sources(child_receipt,child,root=root)
-                self.assertFalse(verify_promotion_revision(child,candidate,root=root))
+                self.assertFalse(verify_promotion_revision(child,accepted,root=root))
+                for name in ('.private/publish.py', '.private/quote-acceptance.json',
+                             '.github/workflows/build-release.yml', 'LICENSE'):
+                    path = root / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text('untrusted replacement')
+                    with self.subTest(upstream_protected=name), self.assertRaisesRegex(
+                            ValueError, 'changed controller-owned files'):
+                        verify_promotion_revision(commit(), accepted, root=root)
+                    path.unlink()
                 (root/'app.kt').write_text('unchanged product');commit()
                 forbidden=['app.kt','build.gradle.kts','.private/core-wallet/include.gradle',
                            '.private/core-wallet/src/Other.kt','.private/core_testnet_driver.py',

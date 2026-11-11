@@ -10,6 +10,15 @@ ROOT=Path(__file__).resolve().parents[1]
 REPO=os.environ['GITHUB_REPOSITORY']
 CERT='410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168'
 def run(*args): return subprocess.check_output(args,text=True).strip()
+
+
+def require_current_controller(controller):
+    if os.environ.get('GITHUB_REF') != 'refs/heads/main' or run('git', 'rev-parse', 'HEAD') != controller:
+        raise RuntimeError('Signing requires the checked-out main controller')
+    remote = run('gh', 'api', f'repos/{REPO}/git/ref/heads/main', '--jq', '.object.sha')
+    if remote != controller:
+        raise RuntimeError('Main changed since validation began; resolve a new promotion')
+
 def release_title(tag):
     match=re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-private\.([0-9]+)',tag) if isinstance(tag,str) else None
     if match is None: raise RuntimeError('Invalid private release tag')
@@ -83,6 +92,7 @@ def main():
     proof=json.loads((artifact/'proof.json').read_text())
     expected=os.environ['SOURCE_SHA']
     controller=os.environ['CONTROLLER_SHA']
+    require_current_controller(controller)
     late_attestation=verify_promotion_revision(expected,controller)
     if proof['source_sha']!=expected or proof['apk_sha256']!=hashlib.sha256(apk.read_bytes()).hexdigest():
         raise RuntimeError('Artifact identity/digest mismatch')
@@ -175,6 +185,7 @@ def main():
     validation.write_text(json.dumps(dict(source_sha=expected,controller_sha=controller,artifact_run_id=proof['workflow_run_id'],
         apk_sha256=digest,core=core,production_quotes=quote,production_arm_executed=False,real_funds_used=False),indent=2)+'\n')
     validation_bytes=validation.read_bytes()
+    require_current_controller(controller)
     run('gh','release','create',tag,str(signed),str(checksum),'--repo',REPO,'--target',expected,'--title',title,'--notes-file',str(notes))
     # Advance the integrated state only after publication. Candidate is already a full patched tree.
     run('git','fetch','origin',expected)

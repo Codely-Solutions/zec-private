@@ -9,6 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   prepare:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -38,9 +39,10 @@ jobs:
     uses: ./.github/workflows/build-release.yml
     with:
       source_sha: ${{ needs.prepare.outputs.source_sha }}
-    secrets: inherit
+    secrets:
+      NTFY_URL: ${{ secrets.NTFY_URL }}
   blocked:
-    if: ${{ always() && needs.prepare.result == 'failure' }}
+    if: ${{ always() && github.ref == 'refs/heads/main' && needs.prepare.result == 'failure' }}
     needs: prepare
     runs-on: ubuntu-24.04
     permissions:
