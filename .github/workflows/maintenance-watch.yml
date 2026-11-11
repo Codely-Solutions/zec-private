@@ -2,6 +2,8 @@ name: Watch maintenance discovery
 on:
   workflow_call:
     outputs:
+      source_sha:
+        value: ${{ jobs.prepare.outputs.source_sha }}
       reconciliation_run:
         description: Exact trusted run for an existing public release awaiting verification
         value: ${{ jobs.watch.outputs.reconciliation_run }}
@@ -43,6 +45,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
+    outputs:
+      source_sha: ${{ steps.stage.outputs.source_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -50,6 +54,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Prepare a candidate branch from verified coordinates
+        id: stage
         env:
           GH_TOKEN: ${{ github.token }}
           PROPOSAL: ${{ needs.watch.outputs.proposal }}

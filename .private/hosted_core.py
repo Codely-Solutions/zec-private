@@ -14,7 +14,8 @@ from strip_emulator_apk import prepare
 
 
 def sha(path):
-    return hashlib.file_digest(path.open('rb'), 'sha256').hexdigest()
+    with path.open('rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
 def candidate_pair(directory, source):
@@ -75,7 +76,11 @@ def run(session, root, fixture, candidate, result):
     report = json.loads((root / 'core-testnet-result.json').read_text())
     report.update(apk_preparation=prepared, hosted_fixture=selected,
                   hosted_reservation=os.environ['ZEC_CORE_RESERVATION'],
-                  rehearsal=os.environ['ZEC_CORE_REHEARSAL'] == 'true')
+                  rehearsal=os.environ['ZEC_CORE_REHEARSAL'] == 'true',
+                  workflow_run_id=int(os.environ['GITHUB_RUN_ID']))
+    if not report['rehearsal']:
+        report['producer'] = json.loads((candidate / 'producer.json').read_text())
+        report['production_artifact'] = json.loads((candidate / 'production.json').read_text())
     validate_core_sources(report, source, baseline=selected)
     require(report['funding_setup']['claim_requests'] == 1, 'Exactly one hosted faucet claim required')
     result.write_text(json.dumps(report, indent=2) + '\n')

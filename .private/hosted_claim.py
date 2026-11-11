@@ -3,6 +3,7 @@ import json
 import os
 import re
 import subprocess
+from urllib.parse import quote
 
 from release_metadata import Metadata, require
 
@@ -45,6 +46,10 @@ def verify(value, commit, metadata):
     require(live['object']['sha'] == commit
             and json.loads(metadata.api('/git/commits/' + commit)['message']) == value,
             'Claim reservation belongs to different inputs')
+    branch = quote(ref_for(value).removeprefix('refs/heads/'), safe='')
+    rules = metadata.api('/rules/branches/' + branch)
+    require({'update', 'deletion'} <= {rule['type'] for rule in rules},
+            'Claim reservation is missing its update and deletion protections')
 
 
 def main():
@@ -55,6 +60,10 @@ def main():
             'Only the initial trusted main run may reserve funding')
     controller = os.environ['GITHUB_SHA']
     rehearsal = os.environ['REHEARSAL'] == 'true'
+    if rehearsal:
+        require(os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch' and
+                os.environ['GITHUB_WORKFLOW_REF'].endswith('/.github/workflows/hosted-core.yml@refs/heads/main'),
+                'Rehearsals require the dedicated hosted workflow')
     source = os.environ.get('SOURCE_SHA') or controller
     verify_promotion_revision(source, controller, ROOT)
     base = json.loads((ROOT / '.private/hosted-fixture.json').read_text())['version_code']

@@ -79,7 +79,9 @@ def prepare(tag, archive, out, metadata):
     asset = metadata.api('/actions/artifacts/' + str(core['artifact_id']))
     require(asset['expired'] is False and asset['id'] == core['artifact_id']
             and asset['workflow_run']['id'] == core['workflow_run_id']
-            and asset['workflow_run']['head_sha'] == core['build_source_sha']
+            and asset['workflow_run']['head_sha'] == core.get('producer_controller_sha', core['build_source_sha'])
+            and ('producer' not in core or all(asset[key] == core['producer'][key]
+                                               for key in ('id', 'digest', 'size_in_bytes')))
             and 0 < asset['size_in_bytes'] <= MAX_ARCHIVE,
             'Accepted artifact run or source differs')
     with archive.open('xb') as stream:

@@ -134,24 +134,34 @@ def main():
         raise RuntimeError('Missing release validation evidence')
     # A pending core profile may build a candidate, but cannot enter signing.
     # Controller-owned attestation is independent of the untrusted build output.
-    core_bytes=(ROOT/'.private/core-acceptance.json').read_bytes()
-    core=json.loads(core_bytes)
-    acceptance_revision=controller if late_attestation else expected
-    core_inputs=validate_core_sources(core,expected,acceptance_revision)
     if proof.get('core_acceptance',{}).get('binding')!=CORE_BINDING:
         raise RuntimeError('Missing versioned candidate product-runtime binding')
-    core_artifact=artifact/'core-acceptance.json'
-    validate_binding(proof,'core_acceptance',core_inputs,core_bytes,
-                     core_artifact.read_bytes() if core_artifact.exists() else None,allow_late=late_attestation)
-    quote_bytes=(ROOT/'.private/quote-acceptance.json').read_bytes()
-    quote=json.loads(quote_bytes)
     quote_inputs=input_fingerprint(expected,profile='production-quotes')
-    validate_quotes(quote,quote_inputs)
-    if input_fingerprint(quote['build_source_sha'],profile='production-quotes')!=quote_inputs:
-        raise RuntimeError('Production quote inputs changed since executed acceptance')
-    quote_artifact=artifact/'quote-acceptance.json'
-    validate_binding(proof,'quote_acceptance',quote_inputs,quote_bytes,
-                     quote_artifact.read_bytes() if quote_artifact.exists() else None,allow_late=late_attestation)
+    if os.environ.get('HOSTED_ACCEPTANCE') == 'true':
+        from hosted_release import read_receipts
+
+        if (proof['core_acceptance']['input_fingerprint'] != input_fingerprint(expected, profile='core-runtime')
+                or proof['quote_acceptance']['input_fingerprint'] != quote_inputs):
+            raise RuntimeError('Unsigned artifact acceptance fingerprints differ from the hosted candidate')
+        core, quote = read_receipts(ROOT/'hosted-receipts', proof=proof, source=expected, controller=controller,
+                                    production_id=os.environ['PRODUCTION_ID'], core_id=os.environ['CORE_ID'],
+                                    quote_id=os.environ['QUOTE_ID'])
+    else:
+        core_bytes=(ROOT/'.private/core-acceptance.json').read_bytes()
+        core=json.loads(core_bytes)
+        acceptance_revision=controller if late_attestation else expected
+        core_inputs=validate_core_sources(core,expected,acceptance_revision)
+        core_artifact=artifact/'core-acceptance.json'
+        validate_binding(proof,'core_acceptance',core_inputs,core_bytes,
+                         core_artifact.read_bytes() if core_artifact.exists() else None,allow_late=late_attestation)
+        quote_bytes=(ROOT/'.private/quote-acceptance.json').read_bytes()
+        quote=json.loads(quote_bytes)
+        validate_quotes(quote,quote_inputs)
+        if input_fingerprint(quote['build_source_sha'],profile='production-quotes')!=quote_inputs:
+            raise RuntimeError('Production quote inputs changed since executed acceptance')
+        quote_artifact=artifact/'quote-acceptance.json'
+        validate_binding(proof,'quote_acceptance',quote_inputs,quote_bytes,
+                         quote_artifact.read_bytes() if quote_artifact.exists() else None,allow_late=late_attestation)
     contract_bytes=(artifact/'near-contract.json').read_bytes()
     contract=json.loads(contract_bytes)
     if (hashlib.sha256(contract_bytes).hexdigest()!=proof.get('live_contract_sha256') or
@@ -216,6 +226,8 @@ def main():
                        upstream=proof['upstream'], source_sha=expected, controller_sha=controller,
                        artifact_run_id=proof['workflow_run_id'], apk_sha256=digest, core=core,
                        production_quotes=quote, production_arm_executed=False, real_funds_used=False)
+    if os.environ.get('HOSTED_ACCEPTANCE') == 'true':
+        attestation['production_artifact'] = core['production_artifact']
     data = (json.dumps(attestation, indent=2) + '\n').encode()
     if len(data) > 256 * 1024:
         raise RuntimeError('Publication attestation exceeds its size budget')

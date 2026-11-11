@@ -26,6 +26,9 @@ on:
       reconciliation_run:
         type: string
         default: ''
+      hosted:
+        type: boolean
+        default: false
     secrets:
       NTFY_URL:
         required: false
@@ -34,14 +37,40 @@ concurrency:
   group: zec-private-release
   cancel-in-progress: false
 jobs:
+  admit_hosted:
+    if: inputs.hosted && !inputs.reconciliation_run && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git fetch --no-tags origin "$SOURCE_SHA"
+          PYTHONPATH=.private python3 -B - <<'PY'
+          import os
+          from hosted_release import admit
+          from release_metadata import Metadata
+          admit(os.environ['SOURCE_SHA'], os.environ['GITHUB_SHA'], Metadata())
+          PY
   unsigned:
-    if: ${{ !inputs.candidate_run && !inputs.reconciliation_run }}
+    needs: admit_hosted
+    if: ${{ always() && !cancelled() && !inputs.candidate_run && !inputs.reconciliation_run && (!inputs.hosted || needs.admit_hosted.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     permissions:
       contents: read
     outputs:
       source_sha: ${{ steps.identity.outputs.sha }}
+      artifact_id: ${{ steps.apk.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -60,7 +89,7 @@ jobs:
           java-version: '25.0.5+8'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
-          cache-read-only: false
+          cache-read-only: ${{ inputs.hosted || false }}
       - name: Fork regression checks
         run: |
           python3 .private/test_controls.py
@@ -73,6 +102,7 @@ jobs:
           python3 -B .private/test_publish.py
           python3 -B .private/test_maintenance_watch.py
           python3 -B .private/test_core_faucet.py
+          python3 -B .private/test_hosted_release.py
           python3 -B .private/test_sync.py
           python3 -B .private/test_release_notes.py
           python3 -B .private/test_toolchain_policy.py
@@ -83,7 +113,7 @@ jobs:
           python3 -B .private/test_ui_capture.py
       - name: Select acceptance by exact relevant inputs before expensive preparation
         env:
-          VALIDATION_ONLY: ${{ inputs.validation_only || false }}
+          VALIDATION_ONLY: ${{ inputs.hosted || inputs.validation_only || false }}
         run: python3 -B .private/acceptance_status.py
       - name: Unfunded NEAR API contracts over Tor without credentials
         timeout-minutes: 15
@@ -94,13 +124,14 @@ jobs:
           QUOTE_LAYOUT_SCREENSHOTS: ${{ github.workspace }}/ui-lib/build/reports/quote-layout
         run: bash .private/release_checks.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: apk
         with:
           name: validated-unsigned-apk
           path: artifact/
           if-no-files-found: error
           retention-days: 3
       - name: Retain bounded validation reports
-        if: always()
+        if: always() && !inputs.hosted
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: validation-reports
@@ -125,11 +156,14 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
   emulator:
-    if: ${{ !inputs.candidate_run && !inputs.reconciliation_run && inputs.build_emulator }}
+    needs: admit_hosted
+    if: ${{ always() && !cancelled() && !inputs.candidate_run && !inputs.reconciliation_run && (inputs.build_emulator || (inputs.hosted && needs.admit_hosted.result == 'success')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     permissions:
       contents: read
+    outputs:
+      artifact_id: ${{ steps.apk.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -151,13 +185,14 @@ jobs:
         timeout-minutes: 40
         run: bash .private/emulator_checks.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        id: apk
         with:
           name: isolated-ui-repro-apk
           path: emulator-artifact/
           if-no-files-found: error
           retention-days: 3
       - name: Retain bounded emulator timing
-        if: always()
+        if: always() && !inputs.hosted
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: emulator-validation-reports
@@ -166,6 +201,38 @@ jobs:
             build/reports/profile/
           if-no-files-found: ignore
           retention-days: 3
+  testnet_apk:
+    needs: admit_hosted
+    if: inputs.hosted && needs.admit_hosted.result == 'success'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/core-validation.yml
+    with:
+      source_sha: ${{ inputs.source_sha }}
+  hosted_core:
+    needs: [unsigned, testnet_apk]
+    if: inputs.hosted && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success'
+    permissions:
+      actions: read
+      contents: write
+      packages: read
+    uses: ./.github/workflows/hosted-core.yml
+    with:
+      source_sha: ${{ inputs.source_sha }}
+      artifact_id: ${{ needs.testnet_apk.outputs.artifact_id }}
+      production_id: ${{ needs.unsigned.outputs.artifact_id }}
+  hosted_quotes:
+    needs: [unsigned, emulator]
+    if: inputs.hosted && needs.unsigned.result == 'success' && needs.emulator.result == 'success'
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+    uses: ./.github/workflows/hosted-acceptance-probe.yml
+    with:
+      source_sha: ${{ inputs.source_sha }}
+      quote_id: ${{ needs.emulator.outputs.artifact_id }}
+      production_id: ${{ needs.unsigned.outputs.artifact_id }}
   promotion:
     if: ${{ github.ref == 'refs/heads/main' && inputs.candidate_run && !inputs.reconciliation_run }}
     runs-on: ubuntu-24.04
@@ -185,8 +252,8 @@ jobs:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: python3 .private/promotion.py
   publish:
-    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))) }}
-    needs: [unsigned, emulator, promotion]
+    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && needs.hosted_core.result == 'success' && needs.hosted_quotes.result == 'success') || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
+    needs: [unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes]
     environment: production-signing
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -205,11 +272,32 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: '!inputs.hosted'
         with:
           name: validated-unsigned-apk
           path: artifact/
           run-id: ${{ inputs.candidate_run || github.run_id }}
           github-token: ${{ github.token }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: inputs.hosted
+        with:
+          artifact-ids: ${{ needs.unsigned.outputs.artifact_id }}
+          path: artifact/
+          digest-mismatch: error
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: inputs.hosted
+        with:
+          artifact-ids: ${{ needs.hosted_core.outputs.receipt_id }},${{ needs.hosted_quotes.outputs.receipt_id }}
+          path: hosted-receipts/
+          merge-multiple: true
+          digest-mismatch: error
+      - name: Fetch exact hosted candidate objects without checking out its code
+        if: inputs.hosted
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git fetch --no-tags origin "$SOURCE_SHA"
       - name: Sign and verify the validated APK
         id: publication
         env:
@@ -217,6 +305,10 @@ jobs:
           SOURCE_SHA: ${{ needs.promotion.outputs.source_sha || needs.unsigned.outputs.source_sha }}
           ARTIFACT_RUN_ID: ${{ inputs.candidate_run || github.run_id }}
           CONTROLLER_SHA: ${{ github.sha }}
+          HOSTED_ACCEPTANCE: ${{ inputs.hosted || false }}
+          PRODUCTION_ID: ${{ needs.unsigned.outputs.artifact_id }}
+          CORE_ID: ${{ needs.testnet_apk.outputs.artifact_id }}
+          QUOTE_ID: ${{ needs.emulator.outputs.artifact_id }}
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
@@ -330,8 +422,8 @@ jobs:
           RELEASE_TAG: ${{ needs.publish.outputs.release_tag || needs.reconcile.outputs.release_tag }}
         run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
   failed:
-    if: ${{ always() && github.ref == 'refs/heads/main' && (needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
-    needs: [unsigned, emulator, promotion, publish, reconcile, verify_publication, record_integration]
+    if: ${{ always() && github.ref == 'refs/heads/main' && (needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.testnet_apk.result == 'failure' || needs.hosted_core.result == 'failure' || needs.hosted_quotes.result == 'failure' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
+    needs: [unsigned, emulator, testnet_apk, hosted_core, hosted_quotes, promotion, publish, reconcile, verify_publication, record_integration]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
