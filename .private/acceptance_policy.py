@@ -281,6 +281,7 @@ ATTESTATION_PATHS={'.private/core-acceptance.json','.private/quote-acceptance.js
                    '.private/core-validation-summary.json','.private/core-coverage.md','.private/STATUS.md'}
 UPSTREAM_CANDIDATE_RECORDS = {'.private/candidate.json', '.private/source-state.json'}
 DERIVED_UPSTREAM_RECORDS = {'.private/fork.patch', '.private/release-revision.json'}
+MAINTENANCE_CANDIDATE = '.private/maintenance-candidate.json'
 
 
 def validate_attestation_changes(paths):
@@ -288,9 +289,18 @@ def validate_attestation_changes(paths):
         raise ValueError('Candidate or controller changed after validation; rebuild required')
 
 
-def verify_derived_upstream_records(candidate, controller, root):
+def verify_canonical_patch(candidate, controller, upstream, root):
     from refresh_source import patch_paths
 
+    exclusions = json.loads(git('show', f'{controller}:.private/excluded-features.json', root=root))['forbidden_projects']
+    patch = git('diff', '--no-ext-diff', '--no-textconv', '--binary', '--unified=0',
+                '-I', '^ZCASH_VERSION_(CODE|NAME)=', upstream, candidate, '--',
+                *patch_paths(exclusions), root=root)
+    if patch != git('show', f'{candidate}:.private/fork.patch', root=root):
+        raise ValueError('Fork patch differs from the canonical candidate delta')
+
+
+def verify_derived_upstream_records(candidate, controller, root):
     def read(path):
         return git('show', f'{candidate}:{path}', root=root)
 
@@ -305,12 +315,47 @@ def verify_derived_upstream_records(candidate, controller, root):
     old = json.loads(git('show', f'{controller}:.private/release-revision.json', root=root))['private_revision']
     if set(recorded_revision) != {'private_revision'} or type(revision) is not int or not old < revision <= 999:
         raise ValueError('Upstream release revision must advance')
-    exclusions = json.loads(git('show', f'{controller}:.private/excluded-features.json', root=root))['forbidden_projects']
-    patch = git('diff', '--no-ext-diff', '--no-textconv', '--binary', '--unified=0',
-                '-I', '^ZCASH_VERSION_(CODE|NAME)=', upstream, candidate, '--',
-                *patch_paths(exclusions), root=root)
-    if patch != read('.private/fork.patch'):
-        raise ValueError('Upstream fork patch differs from the canonical candidate delta')
+    verify_canonical_patch(candidate, controller, upstream, root)
+
+
+def verify_maintenance_child(candidate, controller, root):
+    from maintenance_watch import WRAPPER_PROPERTIES, official_checksum, wrapper_patch
+
+    def read(revision, path):
+        return git('show', f'{revision}:{path}', root=root)
+
+    allowed = DERIVED_UPSTREAM_RECORDS | UPSTREAM_CANDIDATE_RECORDS | {
+        MAINTENANCE_CANDIDATE, WRAPPER_PROPERTIES, 'gradle.properties'}
+    paths = set(filter(None, git('diff', '--no-renames', '--name-only', '-z',
+                                controller, candidate, root=root).decode().split('\0')))
+    parents = git('rev-list', '--parents', '-n', '1', candidate, root=root).decode().split()
+    if paths - allowed or parents != [candidate, controller]:
+        raise ValueError('Maintenance proposal changed files outside the exact wrapper update')
+    if git('ls-tree', '--name-only', candidate, '--', '.private/candidate.json', root=root):
+        raise ValueError('Maintenance proposal contains an upstream candidate marker')
+    identity = json.loads(read(candidate, MAINTENANCE_CANDIDATE))
+    state = json.loads(read(controller, '.private/upstream.json'))
+    revised = json.loads(read(candidate, '.private/release-revision.json'))
+    previous = json.loads(read(controller, '.private/release-revision.json'))
+    if (identity['kind'] != 'gradle-wrapper-patch' or identity['controller_sha'] != controller
+            or not re.fullmatch(r'[0-9a-f]{40}', identity['proposal_head'])
+            or type(identity['proposal']) is not int or identity['proposal'] < 1
+            or set(revised) != {'private_revision'}
+            or type(revised['private_revision']) is not int
+            or not previous['private_revision'] < revised['private_revision'] <= 999
+            or identity['private_revision'] != revised['private_revision']
+            or type(identity['version_code']) is not int or not state['versionCode'] < identity['version_code'] <= 2_100_000_000):
+        raise ValueError('Invalid maintenance proposal release identity')
+    expected, replacements = re.subn(rb'^ZCASH_VERSION_CODE=[0-9]+$',
+                                     f'ZCASH_VERSION_CODE={identity["version_code"]}'.encode(),
+                                     read(controller, 'gradle.properties'), flags=re.M)
+    if replacements != 1 or expected != read(candidate, 'gradle.properties'):
+        raise ValueError('Maintenance proposal changed Gradle settings other than versionCode')
+    version = wrapper_patch(read(controller, WRAPPER_PROPERTIES).decode('ascii'),
+                            read(candidate, WRAPPER_PROPERTIES).decode('ascii'), official_checksum)
+    if identity['gradle'] != version:
+        raise ValueError('Maintenance proposal Gradle version differs from verified distribution')
+    verify_canonical_patch(candidate, controller, state['sha'], root)
 
 
 def verify_promotion_revision(candidate, controller, root=ROOT):
@@ -325,6 +370,9 @@ def verify_promotion_revision(candidate, controller, root=ROOT):
         protected_changes = git('diff', '--no-renames', '--name-only', '-z', controller, candidate,
                                 '--', '.github', '.private', 'LICENSE', root=root).decode().split('\0')
         protected = set(filter(None, protected_changes))
+        if MAINTENANCE_CANDIDATE in protected:
+            verify_maintenance_child(candidate, controller, root)
+            return False
         if protected - UPSTREAM_CANDIDATE_RECORDS - DERIVED_UPSTREAM_RECORDS:
             raise ValueError('Upstream candidate changed controller-owned files')
         if protected & DERIVED_UPSTREAM_RECORDS:

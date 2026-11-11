@@ -50,10 +50,12 @@ def wrapper_patch(base, proposed, published_checksum):
         sums = [match[1] for line in lines if (match := re.fullmatch(checksum, line))]
         if len(versions) != 1 or len(sums) != 1:
             raise ValueError('Expected one stable Gradle version and one SHA-256')
-        remaining = [line for line in lines if not re.fullmatch(url, line) and not re.fullmatch(checksum, line)]
-        if any(line.lstrip().startswith(('distributionUrl', 'distributionSha256Sum')) for line in remaining):
+        relevant = {'distributionUrl', 'distributionSha256Sum'}
+        if any(line.lstrip().startswith(tuple(relevant)) and not (re.fullmatch(url, line) or re.fullmatch(checksum, line))
+               for line in lines):
             raise ValueError('Ambiguous wrapper properties')
-        return tuple(map(int, versions[0].groups())), sums[0], remaining
+        template = [line.split('=', 1)[0] + '=' if line.split('=', 1)[0] in relevant else line for line in lines]
+        return tuple(map(int, versions[0].groups())), sums[0], template
 
     old, _, original = coordinates(base)
     new, proposed_checksum, changed = coordinates(proposed)
