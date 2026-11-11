@@ -1,6 +1,11 @@
 name: Probe isolated Linux Android host
 on:
   workflow_dispatch:
+    inputs:
+      prerequisites:
+        description: Check release fixture access and public faucet status before a candidate build
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -8,7 +13,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   blank-guest:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && !inputs.prerequisites
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -17,3 +22,42 @@ jobs:
           persist-credentials: false
       - name: Verify KVM, isolated boot and owned teardown
         run: bash .private/hosted_emulator_smoke.sh
+  prerequisites:
+    if: github.ref == 'refs/heads/main' && inputs.prerequisites
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Verify read-only access to paired baseline and quote bridge
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PYTHONPATH: .private
+        run: |
+          python3 -B - <<'PY'
+          import json
+          from pathlib import Path
+          from release_metadata import Metadata
+          base = json.loads(Path('.private/upgrade-baseline.json').read_text())
+          bridge = json.loads(Path('.private/maintenance-assets.json').read_text())['ui_bridge']
+          metadata = Metadata()
+          for asset in (base['artifact'], base['instrumentation']['artifact'], bridge):
+              metadata.verify_asset(asset)
+          print('Paired baseline and bridge metadata verified')
+          PY
+      - name: Verify unfunded faucet prerequisites through an owned Tor instance
+        if: ${{ !cancelled() }}
+        env:
+          PYTHONPATH: .private
+        run: |
+          bash .private/run_tor_ci.sh --install-only
+          python3 -B - <<'PY'
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          from core_faucet import node_executable, readiness
+          node_executable()
+          with TemporaryDirectory() as root:
+              receipt = readiness(Path(root))
+              print(f"Testnet faucet healthy through Tor. Claims issued: {receipt['claim_requests']}.")
+          PY

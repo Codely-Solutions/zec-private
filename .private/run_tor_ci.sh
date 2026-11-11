@@ -12,4 +12,6 @@ if systemctl is-active --quiet tor@default.service; then
   exit 1
 fi
 /usr/bin/tor --version
-python3 -B .private/tor_contract.py
+if [[ "${1:-}" != --install-only ]]; then
+  python3 -B .private/tor_contract.py
+fi

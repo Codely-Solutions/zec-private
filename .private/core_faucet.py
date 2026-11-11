@@ -276,11 +276,15 @@ def claim(address,root,port,negative):
         raise
     finally:client.close()
 
-@contextmanager
-def owned_tor(root):
-    root=Path(root)
-    proxy_unavailable_failed_closed=verify_unavailable_proxy()
-    setup_started=time.monotonic()
+def tor_binary(root):
+    if os.name != 'nt':
+        tor = Path('/usr/bin/tor')
+        package = subprocess.check_output(
+            ['dpkg-query', '-W', '-f=${db:Status-Status} ${Version}', 'tor'], text=True, timeout=10)
+        if not package.startswith('installed ') or not tor.is_file():
+            raise RuntimeError('Install the authenticated Ubuntu Tor package before acceptance')
+        return tor, {'ubuntu_tor_package': package.split()[1]}
+
     supplied_bundle=os.environ.get('CORE_FAUCET_TOR_BUNDLE')
     archive,total=bundle_archive(root,supplied_bundle)
     folder=root/'faucet-tor';folder.mkdir()
@@ -301,9 +305,20 @@ def owned_tor(root):
             target.parent.mkdir(exist_ok=True)
             with bundle.extractfile(member) as source,target.open('wb') as output:shutil.copyfileobj(source,output,1024*1024)
     if supplied_bundle is None:archive.unlink()
-    tor=folder/'tor/tor.exe'
-    version=subprocess.check_output([str(tor),'--version'],text=True,timeout=10,creationflags=0x08000000).splitlines()[0]
-    if 'Tor version 0.4.9.15' not in version:raise ValueError('Unexpected stable Tor binary version')
+    return folder/'tor/tor.exe', dict(bundle_sha256=BUNDLE_SHA256,download_bytes=total,
+        bundle_cache_hit=supplied_bundle is not None,expanded_bytes=expanded)
+
+
+@contextmanager
+def owned_tor(root):
+    root=Path(root)
+    proxy_unavailable_failed_closed=verify_unavailable_proxy()
+    setup_started=time.monotonic()
+    tor, metadata = tor_binary(root)
+    flags = 0x08000000 if os.name == 'nt' else 0
+    version=subprocess.check_output([str(tor),'--version'],text=True,timeout=10,creationflags=flags).splitlines()[0]
+    if os.name == 'nt' and 'Tor version 0.4.9.15' not in version:
+        raise ValueError('Unexpected stable Tor binary version')
     with socket.socket() as listener:
         listener.bind(('127.0.0.1',0));port=listener.getsockname()[1]
     torrc=root/'faucet-torrc'
@@ -314,7 +329,7 @@ def owned_tor(root):
     process=subprocess.Popen([str(tor),'-f',str(torrc),'--ClientOnly','1','--DataDirectory',str(root/'faucet-tor-data'),
                               '--SocksPort','127.0.0.1:'+str(port),'--AvoidDiskWrites','1',
                               '--Log','notice stdout'],
-                             stdout=console_stream,stderr=subprocess.STDOUT,creationflags=0x08000000)
+                             stdout=console_stream,stderr=subprocess.STDOUT,creationflags=flags)
     started=time.monotonic()
     setup_seconds=started-setup_started
     try:
@@ -330,9 +345,8 @@ def owned_tor(root):
             time.sleep(.5)
         else:raise RuntimeError('Task Tor bootstrap timed out; direct fallback forbidden')
         bootstrap_seconds=time.monotonic()-started
-        metadata=dict(bundle_sha256=BUNDLE_SHA256,download_bytes=total,bundle_cache_hit=supplied_bundle is not None,
-                      expanded_bytes=expanded,setup_seconds=setup_seconds,bootstrap_seconds=bootstrap_seconds,
-                      tor_binary_sha256=hashlib.sha256(tor.read_bytes()).hexdigest(),tor_version=version)
+        metadata.update(setup_seconds=setup_seconds,bootstrap_seconds=bootstrap_seconds,
+                        tor_binary_sha256=hashlib.sha256(tor.read_bytes()).hexdigest(),tor_version=version)
         yield port,proxy_unavailable_failed_closed,metadata
     finally:
         process.terminate()
