@@ -9,19 +9,34 @@ from publish import release_title
 from verify_public_release import API, bounded_zip, digest, gh, require
 
 
+PUBLISHERS = {
+    '.github/workflows/build-release.yml': ({'workflow_dispatch'}, 'publish'),
+    '.github/workflows/sync-upstream.yml': ({'workflow_dispatch', 'schedule'}, 'build / publish'),
+}
+
+
+def publisher_job(run, jobs, run_id, repository):
+    definition = PUBLISHERS.get(run.get('path'))
+    require(definition is not None and run['id'] == run_id
+            and run['event'] in definition[0] and run['head_branch'] == 'main'
+            and run['head_repository']['full_name'] == repository
+            and run['status'] == 'completed'
+            and re.fullmatch(r'[0-9a-f]{40}', run['head_sha']),
+            'Expected a completed trusted main publication')
+    publishers = [job for job in jobs if job['name'] == definition[1]
+                  and job['run_id'] == run_id and job['head_sha'] == run['head_sha']]
+    require(len(publishers) == 1 and publishers[0]['status'] == 'completed'
+            and publishers[0]['conclusion'] in ('success', 'failure', 'cancelled'),
+            'Expected the exact original publisher job')
+    return publishers[0]
+
+
 def main():
     run_id = os.environ['RECONCILIATION_RUN']
     require(re.fullmatch(r'[1-9][0-9]*', run_id), 'Invalid signing run ID')
     run = gh(f'actions/runs/{run_id}')
-    require(run['path'] == '.github/workflows/build-release.yml'
-            and run['event'] == 'workflow_dispatch' and run['head_branch'] == 'main'
-            and run['head_repository']['full_name'] == os.environ['GITHUB_REPOSITORY']
-            and run['status'] == 'completed'
-            and re.fullmatch(r'[0-9a-f]{40}', run['head_sha']),
-            'Expected a completed trusted main publication')
     jobs = gh(f'actions/runs/{run_id}/attempts/{run["run_attempt"]}/jobs?per_page=100')['jobs']
-    require(sum(job['name'] == 'publish' and job['conclusion'] == 'success' for job in jobs) == 1,
-            'The original publisher must have succeeded')
+    publisher_job(run, jobs, int(run_id), os.environ['GITHUB_REPOSITORY'])
     pages = gh(f'actions/runs/{run_id}/artifacts?per_page=100', '--paginate', '--slurp')
     name = f'release-attestation-{run["run_attempt"]}'
     assets = [item for page in pages for item in page['artifacts'] if item['name'] == name]
@@ -40,6 +55,14 @@ def main():
     require(attestation['controller_sha'] == run['head_sha'], 'Attestation controller differs from the signing run')
     tag = attestation['release_tag']
     release_title(tag)
+    # Even if the publish job ended during a timeout or cancellation, recovery
+    # can use the original attestation only when the complete release is live.
+    live = gh(f'releases/tags/{tag}')
+    assets = {asset['name']: asset for asset in live['assets']}
+    require(live['tag_name'] == tag and live['draft'] is False and live['prerelease'] is False
+            and len(live['assets']) == 2 and set(assets) == {'zec-private-latest.apk', 'SHA256SUMS'}
+            and assets['zec-private-latest.apk']['digest'] == 'sha256:' + attestation['apk_sha256'],
+            'Complete matching publication required; recovery never changes public assets')
     with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
         output.write(f'release_tag={tag}\nattestation_id={artifact["id"]}\n'
                      f'attestation_digest={digest(data)}\ncontroller_sha={run["head_sha"]}\n')
