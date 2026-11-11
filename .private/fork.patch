@@ -33623,7 +33623,7 @@ index 000000000..84b214fa3
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml
 new file mode 100644
-index 000000000..dc4c248f3
+index 000000000..c63dd9711
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml
 @@ -0,0 +1,20 @@
@@ -33644,7 +33644,7 @@ index 000000000..dc4c248f3
 +    <string name="private_pay_anyway">Pay anyway</string>
 +    <string name="private_minimum_deposit">Minimum deposit</string>
 +    <string name="private_minimum_deposit_help_label">About minimum deposit</string>
-+    <string name="private_minimum_deposit_help">At least this amount must reach the deposit address after fees.</string>
++    <string name="private_minimum_deposit_help">The deposit address must receive at least this amount before the quote expires.</string>
 +    <string name="private_price_no_market">No market reference for this asset</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_quote_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_quote_strings.xml
