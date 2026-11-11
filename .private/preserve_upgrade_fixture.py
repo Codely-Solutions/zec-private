@@ -44,6 +44,18 @@ def fixture_apks(archive,core):
     return payloads
 
 
+def write_seedless_pair(fixture, payloads, source):
+    entries = dict(payloads, **{
+        'source-sha.txt': (source + '\n').encode(),
+        'SHA256SUMS': ''.join(hashlib.sha256(data).hexdigest() + '  ' + name + '\n'
+                             for name, data in sorted(payloads.items())).encode(),
+    })
+    with zipfile.ZipFile(fixture, 'x') as archive:
+        for name, data in sorted(entries.items()):
+            # A resumed preservation must produce the same archive bytes.
+            archive.writestr(zipfile.ZipInfo(name), data, compress_type=zipfile.ZIP_STORED)
+
+
 def preserve(tag):
     if not re.fullmatch(r'v\d+\.\d+\.\d+-private\.\d+', tag):
         raise ValueError('Exact private release tag required')
