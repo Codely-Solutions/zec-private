@@ -1,6 +1,10 @@
 name: Probe private upgrade fixture registry
 on:
   workflow_dispatch:
+    inputs:
+      cleanup_only:
+        type: boolean
+        default: false
 permissions: {}
 concurrency:
   group: fixture-registry-probe
@@ -10,7 +14,7 @@ env:
   FIXTURE_REGISTRY: ghcr.io/codely-solutions/zec-private-fixture-probe
 jobs:
   write:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && !inputs.cleanup_only
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -68,7 +72,7 @@ jobs:
           cmp fixture-probe.txt <(printf '%s\n' "$GITHUB_RUN_ID/$GITHUB_RUN_ATTEMPT")
           echo 'Private fixture bytes verified by digest with a packages-read token.'
   cleanup:
-    if: always() && needs.write.result == 'success'
+    if: always() && github.ref == 'refs/heads/main' && (needs.write.result == 'success' || inputs.cleanup_only)
     needs: [write, read]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -78,13 +82,18 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           OCI_DIGEST: ${{ needs.write.outputs.digest }}
+          CLEANUP_ONLY: ${{ inputs.cleanup_only }}
         run: |
           set -euo pipefail
-          endpoint="orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/$FIXTURE_PACKAGE/versions"
+          package="orgs/${GITHUB_REPOSITORY_OWNER}/packages/container/$FIXTURE_PACKAGE"
           export EXPECTED_TAG="probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          version=$(gh api --paginate "$endpoint?per_page=100" --jq \
-            '.[] | select(.name == env.OCI_DIGEST and .metadata.container.tags == [env.EXPECTED_TAG]) | .id')
-          [[ "$version" =~ ^[0-9]+$ ]]
-          gh api --method DELETE "$endpoint/$version"
-          [[ -z "$(gh api --paginate "$endpoint?per_page=100" --jq '.[] | select(.name == env.OCI_DIGEST) | .id')" ]]
-          echo 'Verified removal of the exact disposable probe version.'
+          if [[ "$CLEANUP_ONLY" == true ]]; then
+            export EXPECTED_TAG=probe-43019247677-1
+            export OCI_DIGEST=sha256:96c5861ee65b724d9adb95e6eead6444aa0bc8c3ccacf60f082d0a8b037d6f95
+          fi
+          versions=$(gh api --paginate --slurp "$package/versions?per_page=100")
+          jq -e '[.[][]] | length == 1 and .[0].name == env.OCI_DIGEST and .[0].metadata.container.tags == [env.EXPECTED_TAG]' <<<"$versions"
+          gh api --method DELETE "$package"
+          result=$(gh api --include "$package" 2>&1) && exit 1
+          grep -Eq '^HTTP/[^ ]+ 404' <<<"$result"
+          echo 'Verified removal of the package containing only the exact disposable marker.'

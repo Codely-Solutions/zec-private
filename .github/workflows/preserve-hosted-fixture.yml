@@ -1,0 +1,94 @@
+name: Preserve accepted testnet pair privately
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Independently verified release with recorded testnet execution
+        required: true
+        type: string
+permissions: {}
+concurrency:
+  group: preserve-hosted-fixture
+  cancel-in-progress: false
+env:
+  FIXTURE_REGISTRY: ghcr.io/codely-solutions/zec-private-upgrade-fixtures
+  RELEASE_TAG: ${{ inputs.release_tag }}
+jobs:
+  store:
+    if: github.ref == 'refs/heads/main' && github.repository == 'Codely-Solutions/zec-private'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    outputs:
+      archive_digest: ${{ steps.prepare.outputs.archive_digest }}
+      oci_digest: ${{ steps.store.outputs.oci_digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -m 700 "$RUNNER_TEMP/zec-fixture"
+          python3 -B .private/hosted_fixture.py prepare --tag "$RELEASE_TAG" --directory "$RUNNER_TEMP/zec-fixture" >> "$GITHUB_OUTPUT"
+      - uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63 # v2.0.3
+        with:
+          version: '1.3.6'
+      - id: store
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+          ARCHIVE_DIGEST: ${{ steps.prepare.outputs.archive_digest }}
+        run: |
+          set -euo pipefail
+          [[ "$ARCHIVE_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          cd "$RUNNER_TEMP/zec-fixture"
+          printf '%s' "$REGISTRY_TOKEN" | oras login ghcr.io --username "$GITHUB_ACTOR" --password-stdin --registry-config auth.json
+          unset REGISTRY_TOKEN
+          reference="$FIXTURE_REGISTRY:bytes-${ARCHIVE_DIGEST#sha256:}"
+          if ! digest=$(oras resolve --registry-config auth.json "$reference"); then
+            digest=$(oras push --registry-config auth.json \
+              --annotation "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+              "$reference" fixture.zip:application/zip --format go-template='{{.digest}}')
+          fi
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          echo "oci_digest=$digest" >> "$GITHUB_OUTPUT"
+      - if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zec-fixture"
+  verify:
+    needs: store
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63 # v2.0.3
+        with:
+          version: '1.3.6'
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE_DIGEST: ${{ needs.store.outputs.archive_digest }}
+          OCI_DIGEST: ${{ needs.store.outputs.oci_digest }}
+        run: |
+          set -euo pipefail
+          gh api "orgs/$GITHUB_REPOSITORY_OWNER/packages/container/zec-private-upgrade-fixtures" \
+            --jq '.visibility' | grep -Fx private
+          [[ "$OCI_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          mkdir -m 700 "$RUNNER_TEMP/zec-fixture"
+          cd "$RUNNER_TEMP/zec-fixture"
+          printf '%s' "$GH_TOKEN" | oras login ghcr.io --username "$GITHUB_ACTOR" --password-stdin --registry-config auth.json
+          unset GH_TOKEN
+          oras pull --registry-config auth.json "$FIXTURE_REGISTRY@$OCI_DIGEST"
+          python3 -B "$GITHUB_WORKSPACE/.private/hosted_fixture.py" verify --tag "$RELEASE_TAG" --directory "$PWD" | tee -a "$GITHUB_STEP_SUMMARY"
+      - if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zec-fixture"

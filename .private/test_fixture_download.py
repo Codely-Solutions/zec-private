@@ -95,4 +95,28 @@ class FixtureDownloadTests(unittest.TestCase):
             with self.subTest(options=options),contents(**options) as archive,self.assertRaises(ValueError):
                 fixture_apks(archive,core)
 
+    def test_hosted_pair_is_deterministic_and_rejects_unexpected_contents(self):
+        from hosted_fixture import verify_pair
+        from preserve_upgrade_fixture import write_seedless_pair
+
+        app = b'accepted app'
+        test = b'accepted instrumentation'
+        payloads = {'app.apk': app, 'app-androidTest.apk': test}
+        core = dict(build_source_sha='a'*40,
+                    candidate_apk_sha256=hashlib.sha256(app).hexdigest(),
+                    instrumentation_apk_sha256=hashlib.sha256(test).hexdigest())
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            first, second = root/'first.zip', root/'second.zip'
+            write_seedless_pair(first, payloads, core['build_source_sha'])
+            write_seedless_pair(second, dict(reversed(list(payloads.items()))), core['build_source_sha'])
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            self.assertEqual(payloads, verify_pair(first, core, prepared=True))
+            with self.assertRaisesRegex(ValueError, 'APK mismatch'):
+                verify_pair(first, dict(core, instrumentation_apk_sha256='0'*64), prepared=True)
+            with zipfile.ZipFile(first, 'a') as archive:
+                archive.writestr('wallet-data.json', '{}')
+            with self.assertRaisesRegex(ValueError, 'Unexpected fixture entries'):
+                verify_pair(first, core, prepared=True)
+
 if __name__=='__main__':unittest.main()
