@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 import hosted_claim
+import hosted_core
 import hosted_release
 
 
@@ -16,6 +17,21 @@ VERSION = 3234022
 
 
 class HostedReleaseTests(unittest.TestCase):
+    def test_core_pair_matches_current_and_previous_producer_manifest_paths(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            files = [directory / 'app.apk', directory / 'app-androidTest.apk']
+            for path in files:
+                path.write_bytes(path.name.encode())
+            (directory / 'source-sha.txt').write_text(SOURCE + '\n')
+            manifest = directory / 'SHA256SUMS'
+            for prefix in ('./', 'core-artifact/'):
+                manifest.write_text('\n'.join(f'{hosted_core.sha(path)}  {prefix}{path.name}' for path in files))
+                self.assertEqual(hosted_core.candidate_pair(directory, SOURCE), sorted(files))
+            manifest.write_text(manifest.read_text().replace('core-artifact/', '../'))
+            with self.assertRaisesRegex(ValueError, 'checksums differ'):
+                hosted_core.candidate_pair(directory, SOURCE)
+
     def test_atomic_reservation_rejects_replay_and_changed_run(self):
         value = hosted_claim.binding(SOURCE, CONTROLLER, VERSION, RUN, False)
         metadata = Mock()

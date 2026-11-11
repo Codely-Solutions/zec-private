@@ -24,8 +24,11 @@ def candidate_pair(directory, source):
     files = sorted(directory.glob('*.apk'))
     require(len(files) == 2 and sum('androidTest' in p.name for p in files) == 1,
             'Expected one testnet app and its instrumentation')
-    expected = (directory / 'SHA256SUMS').read_text().splitlines()
-    require(sorted(expected) == sorted(f'{sha(path)}  ./{path.name}' for path in files),
+    rows = (directory / 'SHA256SUMS').read_text().splitlines()
+    expected = [re.fullmatch(r'([a-f0-9]{64})  (?:\./|core-artifact/)([A-Za-z0-9_.-]+\.apk)', row)
+                for row in rows]
+    require(all(expected) and sorted(match.groups() for match in expected) ==
+            sorted((sha(path), path.name) for path in files),
             'Testnet APK checksums differ from producer')
     return files
 
