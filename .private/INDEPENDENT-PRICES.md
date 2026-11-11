@@ -18,7 +18,7 @@ A difference of −15% or worse produces an inline warning and changes the exist
 
 ## Network and freshness
 
-- A pending check delays confirmation for up to eight seconds so the poor-rate warning can appear before approval. The provider serializes work, caches observations for 60 seconds, spaces cold requests by at least one second, and backs off failed requests for 60 seconds. Fresh cached comparisons can still run during backoff. Logs include bounded failure categories. See Kraken's [rate policy](https://support.kraken.com/articles/206548367-what-are-the-api-rate-limits-).
+- Review waits up to eight seconds for the poor-rate check. At that deadline it shows an unavailable reference and enables confirmation while the cancelled request finishes cleanup. Late results cannot change the reviewed action. The provider serializes work, caches observations for 60 seconds, spaces cold requests by at least one second, and backs off failed requests for 60 seconds. Fresh cached comparisons can still run during backoff. Logs include bounded failure categories. See Kraken's [rate policy](https://support.kraken.com/articles/206548367-what-are-the-api-rate-limits-).
 - Use timestamps from spread rows, not the response cursor. Accept observations younger than 120 seconds, received within 60 seconds, at most five seconds in the future and within 30 seconds of each other. Reject spreads over 2%, malformed identities and unbounded numeric/body inputs.
 - Bind results and continuation callbacks to the exact quote and known fee. Cancel replaced checks and expire displayed comparisons. Source failures preserve ordinary payment review and authentication.
 
