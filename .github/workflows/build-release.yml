@@ -177,7 +177,7 @@ jobs:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: python3 .private/promotion.py
   publish:
-    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && !inputs.validation_only && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))) }}
+    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))) }}
     needs: [unsigned, emulator, promotion]
     environment: production-signing
     runs-on: ubuntu-24.04
