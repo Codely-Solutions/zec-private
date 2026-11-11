@@ -204,8 +204,10 @@ def main():
     messages.append('\nVerified proposals may prepare an isolated branch. Integration and release require acceptance.')
     with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as stream:
         stream.write('\n'.join(messages) + '\n')
-    if upstream['state'] != 'active' or age is None or age > 8:
-        raise RuntimeError('Upstream discovery schedule is inactive or overdue')
+    if upstream['state'] != 'active':
+        raise RuntimeError('Upstream discovery is disabled')
+    if age is None or age > 8:
+        print('::warning::Upstream discovery timer is overdue. This run still checks current eligibility.', flush=True)
     if len(eligible) == 1:
         with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as stream:
             number, head = eligible[0]

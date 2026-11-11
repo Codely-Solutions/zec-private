@@ -6,11 +6,24 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, pending_recovery, trusted_proposal,
+from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, main, pending_recovery, trusted_proposal,
                                verified_wrapper, wrapper_patch)
 
 
 class MaintenanceWatchTest(unittest.TestCase):
+    def test_overdue_timer_warns_without_blocking_live_discovery(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            environment = {'GITHUB_OUTPUT': str(root/'output'), 'GITHUB_STEP_SUMMARY': str(root/'summary')}
+            repository = {'has_pull_requests': True, 'pull_request_creation_policy': 'collaborators_only'}
+            with patch.dict(os.environ, environment), patch('maintenance_watch.pending_recovery', return_value=None), \
+                    patch('maintenance_watch.api', side_effect=[repository, {'state': 'active'},
+                          {'workflow_runs': []}, []]) as api, patch('builtins.print') as emit:
+                main()
+                self.assertEqual(api.call_count, 4)
+                self.assertIn('timer is overdue', emit.call_args.args[0])
+                self.assertFalse((root/'output').exists())
+
     def test_wrapper_patch_requires_exact_official_coordinates_and_settings(self):
         base = ('distributionUrl=https\\://services.gradle.org/distributions/gradle-9.9.1-bin.zip\n'
                 'distributionSha256Sum=' + 'a'*64 + '\nnetworkTimeout=10000\n')
