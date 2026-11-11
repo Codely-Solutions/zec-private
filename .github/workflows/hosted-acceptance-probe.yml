@@ -78,6 +78,8 @@ jobs:
               receipt = readiness(Path(root))
               print(f"Testnet faucet healthy through Tor. Claims issued: {receipt['claim_requests']}.")
           PY
+      - if: always()
+        run: rm -rf -- "$RUNNER_TEMP/zec-tor-runtime"
   installed-pair:
     if: github.ref == 'refs/heads/main' && (inputs.install_baseline || inputs.test_transport)
     runs-on: ubuntu-24.04

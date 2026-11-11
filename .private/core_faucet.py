@@ -266,7 +266,7 @@ def claim(address,root,port,negative):
                 tor_transport_verified=True,proxy_unavailable_failed_closed=negative,persistent_tor_connection=True,
                 challenge_claim_same_tls=False,claim_poll_same_tls=True,challenge_ip_bound=False,
                 route_evidence='Pinned owned Tor; unavailable-proxy negative; validated TLS; sole claim and status polling share TLS',
-                bundle_sha256=BUNDLE_SHA256,source_blob='25e617b8f3f3010e1e5b2b17bc81b9661afadf16',
+                source_blob='25e617b8f3f3010e1e5b2b17bc81b9661afadf16',
                 source_url='https://github.com/anukulpandey/zcash-faucet/blob/main/server/server.js',
                 proof_seconds=proof['seconds'],proof_workers=proof['workers'],seconds=time.monotonic()-began)
         raise TimeoutError('Claim pending; preserve ledger and never resubmit')
@@ -278,12 +278,11 @@ def claim(address,root,port,negative):
 
 def tor_binary(root):
     if os.name != 'nt':
-        tor = Path('/usr/bin/tor')
-        package = subprocess.check_output(
-            ['dpkg-query', '-W', '-f=${db:Status-Status} ${Version}', 'tor'], text=True, timeout=10)
-        if not package.startswith('installed ') or not tor.is_file():
-            raise RuntimeError('Install the authenticated Ubuntu Tor package before acceptance')
-        return tor, {'ubuntu_tor_package': package.split()[1]}
+        runtime = Path(os.environ['RUNNER_TEMP']) / 'zec-tor-runtime'
+        tor = runtime / 'tor/tor'
+        if not tor.is_file():
+            raise RuntimeError('Prepare the authenticated Linux Tor runtime before acceptance')
+        return tor, {'bundle_sha256': (runtime / 'upstream-sha256.txt').read_text().strip()}
 
     supplied_bundle=os.environ.get('CORE_FAUCET_TOR_BUNDLE')
     archive,total=bundle_archive(root,supplied_bundle)
@@ -309,6 +308,12 @@ def tor_binary(root):
         bundle_cache_hit=supplied_bundle is not None,expanded_bytes=expanded)
 
 
+def tor_environment(tor):
+    if os.name == 'nt':
+        return None
+    return dict(os.environ, LD_LIBRARY_PATH=str(tor.parent))
+
+
 @contextmanager
 def owned_tor(root):
     root=Path(root)
@@ -316,7 +321,9 @@ def owned_tor(root):
     setup_started=time.monotonic()
     tor, metadata = tor_binary(root)
     flags = 0x08000000 if os.name == 'nt' else 0
-    version=subprocess.check_output([str(tor),'--version'],text=True,timeout=10,creationflags=flags).splitlines()[0]
+    environment = tor_environment(tor)
+    version=subprocess.check_output([str(tor),'--version'],text=True,timeout=10,creationflags=flags,
+                                    env=environment).splitlines()[0]
     if os.name == 'nt' and 'Tor version 0.4.9.15' not in version:
         raise ValueError('Unexpected stable Tor binary version')
     with socket.socket() as listener:
@@ -329,7 +336,7 @@ def owned_tor(root):
     process=subprocess.Popen([str(tor),'-f',str(torrc),'--ClientOnly','1','--DataDirectory',str(root/'faucet-tor-data'),
                               '--SocksPort','127.0.0.1:'+str(port),'--AvoidDiskWrites','1',
                               '--Log','notice stdout'],
-                             stdout=console_stream,stderr=subprocess.STDOUT,creationflags=flags)
+                             stdout=console_stream,stderr=subprocess.STDOUT,creationflags=flags,env=environment)
     started=time.monotonic()
     setup_seconds=started-setup_started
     try:

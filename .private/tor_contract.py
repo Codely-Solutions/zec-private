@@ -7,16 +7,15 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+from core_faucet import tor_binary, tor_environment
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
-    tor = Path('/usr/bin/tor')
-    if not tor.is_file():
-        raise RuntimeError('Managed Tor package is required')
     with tempfile.TemporaryDirectory(prefix='private-contract-', dir=os.environ['RUNNER_TEMP']) as folder:
         data = Path(folder)
+        tor, _ = tor_binary(data)
         with socket.socket() as listener:
             listener.bind(('127.0.0.1', 0))
             port = listener.getsockname()[1]
@@ -24,7 +23,7 @@ def main():
         process = subprocess.Popen([
             str(tor), '--DataDirectory', str(data / 'state'), '--SocksPort', f'127.0.0.1:{port}',
             '--ClientOnly', '1', '--Log', 'notice file ' + str(log), '--AvoidDiskWrites', '1',
-        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=tor_environment(tor))
         try:
             deadline = time.monotonic() + 180
             while time.monotonic() < deadline:
