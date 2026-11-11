@@ -211,6 +211,18 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             report['egress_denial_stage'] = stage_name
             raise RuntimeError('Unexpected app egress attempts blocked; inspect exact destinations')
 
+    def finish_network_check(stage_name, *, transport_exercised):
+        check_denials(stage_name)
+        report['network_enforcement'] = dict(
+            passed=True,
+            mode='direct public bulk endpoint TCP443 plus Tor relay allowlist; sensitive provider direct egress denied',
+            allowed_relay_peers=len(allowed), embedded_bootstrap_pairs=len(bootstrap_peers),
+            sensitive_targets=len(targets), direct_bulk_targets=sorted(bulk_targets),
+            metadata_no_direct_fallback_observed=transport_exercised,
+            metadata_rpc_scope=['getServerInfo', 'getLatestBlockHeight'] if transport_exercised else [],
+            sdk_transport_policy='published SDK6.0.0 source inspected; bulk direct, sensitive calls Tor')
+        report['passed'] = True
+
     def clear_wallet():
         private=adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15).stdout
         if len(private)>16384:
@@ -338,6 +350,10 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 adb('install','-r','-t',str(test),timeout=90)
                 if uid()!=app_uid or version()!=manifest['candidate_version_code']:
                     raise RuntimeError('Installed restore probe identity/version mismatch')
+                clear_wallet()
+                stage('restoreProbe',240)
+                finish_network_check('restore-probe', transport_exercised=False)
+                return
         else:
             current_stage='faucet_readiness'
             with faucet_ready_session(root) as (readiness, fund_testnet):
@@ -440,21 +456,15 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             check_denials('restart')
             clear_wallet()
             stage('restore')
-        check_denials('transport-probe' if transport_only else 'restore')
-        if restore_probe:
-            clear_wallet()
-            stage('restoreProbe',240)
-            check_denials('restore-probe')
         if repeat_cold_start:
             if not transport_only:
                 raise ValueError('Cold-start diagnostics must be unfunded')
+            check_denials('transport-probe')
             for cycle in range(2):
                 clear_wallet()
                 stage('sender', 240)
                 check_denials(f'cold-start-{cycle + 1}')
-        report['network_enforcement']=dict(passed=True,mode='direct public bulk endpoint TCP443 plus Tor relay allowlist; sensitive provider direct egress denied; metadata outage assertion',
-                                           allowed_relay_peers=len(allowed),embedded_bootstrap_pairs=len(bootstrap_peers),sensitive_targets=len(targets),direct_bulk_targets=sorted(bulk_targets),metadata_no_direct_fallback_observed=True,metadata_rpc_scope=['getServerInfo','getLatestBlockHeight'],sdk_transport_policy='published SDK6.0.0 source inspected; bulk direct, sensitive calls Tor')
-        report['passed']=True
+        finish_network_check('cold-start' if repeat_cold_start else current_stage, transport_exercised=True)
     finally:
         failure=sys.exc_info()[1]
         if failure:report['failure']=dict(type=type(failure).__name__,message=str(failure)[:1600])
