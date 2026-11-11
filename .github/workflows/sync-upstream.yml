@@ -8,6 +8,13 @@ concurrency:
   group: zec-private-sync
   cancel-in-progress: false
 jobs:
+  maintenance:
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: read
+    uses: ./.github/workflows/maintenance-watch.yml
   prepare:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04

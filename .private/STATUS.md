@@ -4,4 +4,6 @@
 
 The guarded tests confirmed testnet funding and send, upgrade from revision 20, controlled Tor/updater interruption and recovery, restart, and seed restore. Three unfunded Tor quote cycles passed, including same-form recipient correction and market comparisons. The verified paired revision 21 fixture is selected for the next upgrade. Revision 20 remains the rollback fixture.
 
-[Publication evidence](release-evidence/v3.19.0-private.21.json) records the executed checks and artifact identities. Production ARM64 was inspected. Physical hardware, biometric UI and funded production settlement remain outside this acceptance. Upstream discovery is active. The standing signing flag remains unset while hosted fixture access and unattended admission are open.
+[Publication evidence](release-evidence/v3.19.0-private.21.json) records the executed checks and artifact identities. Production ARM64 was inspected. Physical hardware, biometric UI and funded production settlement remain outside this acceptance.
+
+The [hosted baseline](hosted-fixture.json) is verified and installed on Linux. Upstream discovery and narrow Gradle proposal preparation are active. The standing signing flag remains unset pending complete hosted acceptance and its promotion binding.

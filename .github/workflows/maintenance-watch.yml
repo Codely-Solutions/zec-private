@@ -1,7 +1,6 @@
 name: Watch maintenance discovery
 on:
-  schedule:
-    - cron: '47 */6 * * *'
+  workflow_call:
   pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
