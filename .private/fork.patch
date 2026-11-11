@@ -2284,12 +2284,12 @@ index 3b9ca0b94..7607fb041 100644
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..c873411dd 100644
+index ec56161b5..cdd6433b8 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -50 +50 @@ NDK_DEBUG_SYMBOL_LEVEL=symbol_table
 -ZCASH_VERSION_CODE=1
-+ZCASH_VERSION_CODE=3234020
++ZCASH_VERSION_CODE=3234021
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
 -ZCASH_RELEASE_APP_NAME=Zodl
 -ZCASH_RELEASE_PACKAGE_NAME=co.electriccoin.zcash
@@ -14080,14 +14080,14 @@ zQG~0sxz_^?8RU?v&4R&-+xnP|RiI!I2ml6%X!~<u=!-k1m`~GUXjc4rD`tW)^l9A)
 hr``H8(?&#`F8l<mf(v)VWN=W|$w>nMcuDa3`Wrd~E}#Ga
 
 diff --git a/gradle/wrapper/gradle-wrapper.properties b/gradle/wrapper/gradle-wrapper.properties
-index 207c4600b..0bb71f346 100644
+index 207c4600b..bdc1ff0ac 100644
 --- a/gradle/wrapper/gradle-wrapper.properties
 +++ b/gradle/wrapper/gradle-wrapper.properties
 @@ -3,2 +3,2 @@ distributionPath=wrapper/dists
 -distributionSha256Sum=f1771298a70f6db5a29daf62378c4e18a17fc33c9ba6b14362e0cdf40610380d
 -distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.4-bin.zip
-+distributionSha256Sum=0b00b0ffe07c4d4789c12d4935a44a7057d55774b7540bd4a3f76f336deb177a
-+distributionUrl=https\://services.gradle.org/distributions/gradle-9.9.0-bin.zip
++distributionSha256Sum=d8a18a7a841dd5df825d35a685fad6f2d7f12ac0c280e57b67c27b4a520ba228
++distributionUrl=https\://services.gradle.org/distributions/gradle-9.9.1-bin.zip
 @@ -5,0 +6,2 @@ networkTimeout=10000
 +retries=0
 +retryBackOffMs=500

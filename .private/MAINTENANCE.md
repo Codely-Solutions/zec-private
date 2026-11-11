@@ -44,7 +44,7 @@ Use the [development session](DEVELOPMENT.md) for incremental checks and the [pr
 
 ## Build and validation
 
-Use the checked-in Gradle 9.9.0 wrapper, AGP 9.5.1, Kotlin 2.4.21, Temurin JDK 25.0.5+8 and Android SDK platform 37 (`platforms;android-37.0`). Keep Android target SDK 36, minimum SDK 27 and Java/Kotlin output 17. Preserve dependency locks and wrapper checksums. The fork uses stable Zcash SDK `6.0.0` in place of the upstream app tag's `6.0.0-SNAPSHOT`.
+Use the checked-in Gradle 9.9.1 wrapper, AGP 9.5.1, Kotlin 2.4.21, Temurin JDK 25.0.5+8 and Android SDK platform 37 (`platforms;android-37.0`). Keep Android target SDK 36, minimum SDK 27 and Java/Kotlin output 17. Preserve dependency locks and wrapper checksums. The fork uses stable Zcash SDK `6.0.0` in place of the upstream app tag's `6.0.0-SNAPSHOT`.
 
 ```sh
 python3 .private/check.py

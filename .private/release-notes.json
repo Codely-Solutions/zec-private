@@ -44,5 +44,8 @@
     "Make wallet setup and recovery more reliable, with validated recovery-phrase paste.",
     "Support Orchard-only viewing keys and clarify spendable, pending and transparent balances.",
     "Simplify contact selection, preserve edited CrossPay amounts and strengthen file-sharing and dependency checks."
+  ],
+  "v3.19.0-private.21": [
+    "Update the build toolchain with Gradle security fixes."
   ]
 }
