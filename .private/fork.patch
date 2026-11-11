@@ -27725,7 +27725,7 @@ index 2ceac399f..fbf537810 100644
 +    val showInline: Boolean = true,
 +    val detailItems: List<SwapQuoteInfoItem> = emptyList(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
-index 9f37c1d93..cb78531b5 100644
+index 9f37c1d93..bbfbf402b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVM.kt
 @@ -4,0 +5 @@ import androidx.lifecycle.viewModelScope
@@ -27741,16 +27741,20 @@ index 9f37c1d93..cb78531b5 100644
 @@ -30 +37 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 -import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 +import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
-@@ -31,0 +39,4 @@ import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationArg
+@@ -31,0 +39,5 @@ import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationArg
++import kotlinx.coroutines.async
 +import kotlinx.coroutines.delay
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.collectLatest
 +import kotlinx.coroutines.flow.flow
-@@ -54,0 +66 @@ internal class SwapQuoteVM(
+@@ -40,0 +53 @@ import kotlinx.coroutines.launch
++import kotlinx.coroutines.withTimeoutOrNull
+@@ -54,0 +68 @@ internal class SwapQuoteVM(
 +    private val independentPrices: IndependentPriceProvider,
-@@ -55,0 +68,13 @@ internal class SwapQuoteVM(
+@@ -55,0 +70,14 @@ internal class SwapQuoteVM(
 +    private companion object {
 +        const val PRICE_CLOCK_INTERVAL_MILLIS = 1_000L
++        const val PRICE_REVIEW_BUDGET_MILLIS = 8_000L
 +    }
 +
 +    private var isClosing = false
@@ -27762,15 +27766,15 @@ index 9f37c1d93..cb78531b5 100644
 +        }
 +    }
 +
-@@ -61 +86,3 @@ internal class SwapQuoteVM(
+@@ -61 +89,3 @@ internal class SwapQuoteVM(
 -        ) { quote, proposal, account ->
 +            priceCheck,
 +            clock,
 +        ) { quote, proposal, account, check, now ->
-@@ -65 +92 @@ internal class SwapQuoteVM(
+@@ -65 +95 @@ internal class SwapQuoteVM(
 -                is SwapQuoteData.Success -> createState(proposal, quote, account)
 +                is SwapQuoteData.Success -> createState(proposal, quote, account, check, now)
-@@ -73,0 +101,15 @@ internal class SwapQuoteVM(
+@@ -73,0 +104,23 @@ internal class SwapQuoteVM(
 +        viewModelScope.launch {
 +            combine(swapRepository.quote, observeProposal.observeNullable()) { quote, proposal -> quote to proposal }
 +                .collectLatest { (result, proposal) ->
@@ -27781,15 +27785,23 @@ index 9f37c1d93..cb78531b5 100644
 +                        val fee = quote.getTotalFeesZatoshi((proposal as? SwapTransactionProposal)?.proposal)
 +                            .convertZatoshiToZec()
 +                        priceCheck.value = BoundPriceCheck(quote, fee, IndependentPriceCheck.Checking)
-+                        val checked = independentPrices.check(quote, fee)
++                        // The transport can finish cancellation after the review deadline.
++                        // Cancel it without making the review wait for its cleanup.
++                        val request = viewModelScope.async { independentPrices.check(quote, fee) }
++                        val checked = try {
++                            withTimeoutOrNull(PRICE_REVIEW_BUDGET_MILLIS) { request.await() }
++                                ?: IndependentPriceCheck.Unavailable
++                        } finally {
++                            request.cancel()
++                        }
 +                        priceCheck.value = BoundPriceCheck(quote, fee, checked)
 +                    }
 +                }
 +        }
-@@ -80 +122 @@ internal class SwapQuoteVM(
+@@ -80 +133 @@ internal class SwapQuoteVM(
 -                    cancelSwapQuote()
 +                    onBack()
-@@ -88,3 +130,15 @@ internal class SwapQuoteVM(
+@@ -88,3 +141,15 @@ internal class SwapQuoteVM(
 -        account: WalletAccount
 -    ): SwapQuoteState.Success =
 -        swapQuoteSuccessMapper.createState(
@@ -27808,28 +27820,28 @@ index 9f37c1d93..cb78531b5 100644
 +            action()
 +        }
 +        return swapQuoteSuccessMapper.createState(
-@@ -93,2 +147,3 @@ internal class SwapQuoteVM(
+@@ -93,2 +158,3 @@ internal class SwapQuoteVM(
 -            onSubmitQuoteClick = ::onSubmitQuoteClick,
 -            onNavigateToOnRampSwap = ::onNavigateToOnRampSwap
 +            onSubmitQuoteClick = { reviewedAction { onSubmitQuoteClick() } },
 +            onNavigateToOnRampSwap = { reviewedAction { onNavigateToOnRampSwap() } },
 +            priceCheck = assessment,
-@@ -95,0 +151 @@ internal class SwapQuoteVM(
+@@ -95,0 +162 @@ internal class SwapQuoteVM(
 +    }
-@@ -109 +165 @@ internal class SwapQuoteVM(
+@@ -109 +176 @@ internal class SwapQuoteVM(
 -                        stringResByDynamicCurrencyNumber(
 +                        stringResByCurrencyNumber(
-@@ -111 +167,2 @@ internal class SwapQuoteVM(
+@@ -111 +178,2 @@ internal class SwapQuoteVM(
 -                            ticker = quote.exception.asset.tokenTicker
 +                            ticker = quote.exception.asset.tokenTicker,
 +                            minDecimals = 0,
-@@ -159 +216 @@ internal class SwapQuoteVM(
+@@ -159 +227 @@ internal class SwapQuoteVM(
 -    private fun onEditPaymentClick() = cancelSwapQuote()
 +    private fun onEditPaymentClick() = onBack()
-@@ -161 +218 @@ internal class SwapQuoteVM(
+@@ -161 +229 @@ internal class SwapQuoteVM(
 -    private fun onBack() = cancelSwapQuote()
 +    private fun onBack() = closeQuote { cancelSwapQuote() }
-@@ -163 +220,7 @@ internal class SwapQuoteVM(
+@@ -163 +231,7 @@ internal class SwapQuoteVM(
 -    private fun onBackDuringError() = cancelSwapQuote()
 +    private fun closeQuote(action: () -> Unit) {
 +        if (isClosing) return
@@ -27838,12 +27850,12 @@ index 9f37c1d93..cb78531b5 100644
 +    }
 +
 +    private fun onBackDuringError() = onBack()
-@@ -167 +230 @@ internal class SwapQuoteVM(
+@@ -167 +241 @@ internal class SwapQuoteVM(
 -    private fun onCancelPaymentClick() = cancelSwap()
 +    private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
-@@ -177 +239,0 @@ internal data class SwapQuoteInternalState(
+@@ -177 +250,0 @@ internal data class SwapQuoteInternalState(
 -    val totalFees = quote.affiliateFee
-@@ -180,0 +243,16 @@ internal data class SwapQuoteInternalState(
+@@ -180,0 +254,16 @@ internal data class SwapQuoteInternalState(
 +
 +private data class BoundPriceCheck(
 +    val quote: SwapQuote,
@@ -39808,7 +39820,7 @@ index 38427672d..7256c0e4f 100644
 +    }
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
-index 3027e6cda..6b7650807 100644
+index 3027e6cda..d9fcb3fc1 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt
 @@ -7,0 +8 @@ import co.electriccoin.zcash.ui.R
@@ -39821,16 +39833,20 @@ index 3027e6cda..6b7650807 100644
 +import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
 +import co.electriccoin.zcash.ui.common.provider.IndependentPriceProvider
 +import io.mockk.verify
-@@ -36,0 +45 @@ import org.robolectric.RobolectricTestRunner
+@@ -25,0 +34,3 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.NonCancellable
++import kotlinx.coroutines.delay
++import kotlinx.coroutines.withContext
+@@ -36,0 +48 @@ import org.robolectric.RobolectricTestRunner
 +import org.robolectric.RuntimeEnvironment
-@@ -37,0 +47,2 @@ import org.robolectric.annotation.Config
+@@ -37,0 +50,2 @@ import org.robolectric.annotation.Config
 +import java.math.BigDecimal
 +import java.util.Locale
-@@ -41,0 +53 @@ import kotlin.test.assertEquals
+@@ -41,0 +56 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
-@@ -42,0 +55 @@ import kotlin.test.assertNotNull
+@@ -42,0 +58 @@ import kotlin.test.assertNotNull
 +import kotlin.test.assertTrue
-@@ -96,0 +110,109 @@ class SwapQuoteVMTest {
+@@ -96,0 +113,133 @@ class SwapQuoteVMTest {
 +    @Test
 +    fun sheetDismissalCallbacksOnlyCancelOnce() =
 +        runTest {
@@ -39922,6 +39938,30 @@ index 3027e6cda..6b7650807 100644
 +    }
 +
 +    @Test
++    fun slowCancellationCannotDelayConfirmationOrReplaceUnavailableWithALateWarning() = runTest {
++        val prices = mockk<IndependentPriceProvider> {
++            coEvery { check(any(), any()) } coAnswers {
++                withContext(NonCancellable) { delay(12_000L) }
++                IndependentPriceCheck.Compared(BigDecimal("-30"), System.currentTimeMillis() + 60_000)
++            }
++        }
++        val vm = vm(zashi(), prices = prices)
++        collect(vm)
++        assertFalse((vm.state.value as SwapQuoteState.Success).primaryButton.isEnabled)
++
++        testScheduler.advanceTimeBy(8_001L)
++        testScheduler.runCurrent()
++        val available = vm.state.value as SwapQuoteState.Success
++        assertTrue(available.primaryButton.isEnabled)
++        assertFalse(available.priceCheck?.isWarning ?: true)
++
++        testScheduler.advanceTimeBy(5_000L)
++        testScheduler.runCurrent()
++        assertTrue((vm.state.value as SwapQuoteState.Success).primaryButton.isEnabled)
++        assertFalse((vm.state.value as SwapQuoteState.Success).priceCheck?.isWarning ?: true)
++    }
++
++    @Test
 +    fun normalReferenceKeepsItsPercentageInDetails() = runTest {
 +        val prices = mockk<IndependentPriceProvider> {
 +            coEvery { check(any(), any()) } returns
@@ -39940,7 +39980,7 @@ index 3027e6cda..6b7650807 100644
 +        )
 +    }
 +
-@@ -105 +227,12 @@ class SwapQuoteVMTest {
+@@ -105 +254,12 @@ class SwapQuoteVMTest {
 -    private fun vm(account: WalletAccount) =
 +    private fun vm(
 +        account: WalletAccount,
@@ -39954,20 +39994,20 @@ index 3027e6cda..6b7650807 100644
 +            quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
 +        ),
 +    ) =
-@@ -122,5 +255 @@ class SwapQuoteVMTest {
+@@ -122,5 +282 @@ class SwapQuoteVMTest {
 -                        MutableStateFlow(
 -                            SwapQuoteData.Success(
 -                                quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
 -                            )
 -                        )
 +                        (quotes ?: MutableStateFlow(quoteData))
-@@ -128 +257 @@ class SwapQuoteVMTest {
+@@ -128 +284 @@ class SwapQuoteVMTest {
 -            cancelSwapQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true),
 +            cancelSwapQuote = cancelQuote,
-@@ -131 +260 @@ class SwapQuoteVMTest {
+@@ -131 +287 @@ class SwapQuoteVMTest {
 -            submitProposal = mockk<SubmitProposalUseCase>(relaxed = true),
 +            submitProposal = submit,
-@@ -132,0 +262 @@ class SwapQuoteVMTest {
+@@ -132,0 +289 @@ class SwapQuoteVMTest {
 +            independentPrices = prices,
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt
 new file mode 100644
