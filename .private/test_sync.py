@@ -220,6 +220,8 @@ class SyncTests(unittest.TestCase):
                 self.assertEqual(22, json.loads(original('git','show',sha+':.private/release-revision.json'))['private_revision'])
                 patch_text = original('git','show',sha+':.private/fork.patch')
                 self.assertNotIn('+ZCASH_VERSION_CODE=', patch_text)
+                from acceptance_policy import verify_promotion_revision
+                self.assertFalse(verify_promotion_revision(sha, original('git','rev-parse','HEAD'), root=sync.ROOT))
             self.assertFalse((Path(temp)/'candidate').exists())
         self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
 

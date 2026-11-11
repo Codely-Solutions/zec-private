@@ -84,7 +84,6 @@ jobs:
           trap 'rm -f -- "$fixture/auth.json"' EXIT
           selected=.private/hosted-fixture.json
           tag=$(jq -er .release "$selected")
-          [[ "$tag" == "$(jq -er .release .private/upgrade-baseline.json)" ]]
           reference=$(jq -er .reference "$selected")
           [[ "$reference" =~ ^ghcr\.io/codely-solutions/zec-private-upgrade-fixtures@sha256:[0-9a-f]{64}$ ]]
           export ARCHIVE_DIGEST=$(jq -er .digest "$selected")

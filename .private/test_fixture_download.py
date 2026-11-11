@@ -119,4 +119,32 @@ class FixtureDownloadTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Unexpected fixture entries'):
                 verify_pair(first, core, prepared=True)
 
+    def test_hosted_binding_record_refuses_replacement_and_downgrade(self):
+        from hosted_fixture import REGISTRY, record
+
+        apk = 'a'*64
+        core = dict(build_source_sha='b'*40, candidate_version_code=22,
+                    candidate_apk_sha256=apk, instrumentation_apk_sha256='c'*64)
+        binding = dict(release='v3.19.0-private.22', source_sha=core['build_source_sha'],
+                       version_code=22, candidate_apk_sha256=apk,
+                       instrumentation_apk_sha256=core['instrumentation_apk_sha256'],
+                       reference=REGISTRY+'@sha256:'+'d'*64, digest='sha256:'+'e'*64, size_in_bytes=100)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root/'.private').mkdir()
+            selected = root/'.private/hosted-fixture.json'
+            selected.write_text('{"version_code":21}')
+            with patch('hosted_fixture.recorded_pair', return_value=({'apk_sha256': apk}, core)), \
+                    patch('hosted_fixture.Metadata.api', return_value={
+                        'tag_name': binding['release'],
+                        'assets': [{'name': 'zec-private-latest.apk', 'digest': 'sha256:'+apk}]}):
+                from release_metadata import Metadata
+
+                metadata = Metadata()
+                self.assertTrue(record(binding, metadata, root))
+                self.assertEqual(binding, json.loads(selected.read_text()))
+                self.assertFalse(record(binding, metadata, root))
+                with self.assertRaisesRegex(ValueError, 'replace or downgrade'):
+                    record(dict(binding, digest='sha256:'+'f'*64), metadata, root)
+
 if __name__=='__main__':unittest.main()

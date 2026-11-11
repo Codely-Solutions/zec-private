@@ -91,6 +91,8 @@ jobs:
     permissions:
       contents: read
       packages: read
+    outputs:
+      binding: ${{ steps.verify.outputs.binding }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -99,7 +101,8 @@ jobs:
       - uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63 # v2.0.3
         with:
           version: '1.3.6'
-      - env:
+      - id: verify
+        env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.select.outputs.tag }}
           ARCHIVE_DIGEST: ${{ needs.store.outputs.archive_digest }}
@@ -114,6 +117,52 @@ jobs:
           printf '%s' "$GH_TOKEN" | oras login ghcr.io --username "$GITHUB_ACTOR" --password-stdin --registry-config auth.json
           unset GH_TOKEN
           oras pull --registry-config auth.json "$FIXTURE_REGISTRY@$OCI_DIGEST"
-          python3 -B "$GITHUB_WORKSPACE/.private/hosted_fixture.py" verify --tag "$RELEASE_TAG" --directory "$PWD" | tee -a "$GITHUB_STEP_SUMMARY"
+          binding=$(python3 -B "$GITHUB_WORKSPACE/.private/hosted_fixture.py" verify --tag "$RELEASE_TAG" --directory "$PWD")
+          printf '%s\n' "$binding" | tee -a "$GITHUB_STEP_SUMMARY"
+          printf 'binding=%s\n' "$binding" >> "$GITHUB_OUTPUT"
       - if: always()
         run: rm -rf -- "$RUNNER_TEMP/zec-fixture"
+  record:
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    environment: maintenance-integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - id: record
+        env:
+          FIXTURE_BINDING: ${{ needs.verify.outputs.binding }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 -B .private/hosted_fixture.py record >> "$GITHUB_OUTPUT"
+          if git diff --quiet -- .private/hosted-fixture.json; then
+            echo 'Exact hosted fixture already recorded.'
+            exit 0
+          fi
+          test "$(git diff --name-only)" = '.private/hosted-fixture.json'
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA"
+          git add -- .private/hosted-fixture.json
+          git -c user.name='ZEC Private automation' -c user.email='zec-private@users.noreply.github.com' \
+            commit -m 'Select independently verified hosted upgrade fixture'
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
+        if: steps.record.outputs.updated == 'true'
+        id: integrator
+        with:
+          client-id: Iv23lik3K6p93iDL148Q
+          private-key: ${{ secrets.MAINTENANCE_APP_PRIVATE_KEY }}
+          owner: Codely-Solutions
+          repositories: zec-private
+          permission-contents: write
+      - if: steps.record.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ steps.integrator.outputs.token }}
+        run: |
+          gh auth setup-git
+          git push origin HEAD:refs/heads/main
