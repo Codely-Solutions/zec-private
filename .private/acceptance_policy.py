@@ -331,6 +331,14 @@ def verify_derived_upstream_records(candidate, controller, root):
     if set(recorded_revision) != {'private_revision'} or type(revision) is not int or not old < revision <= 999:
         raise ValueError('Upstream release revision must advance')
     verify_canonical_patch(candidate, controller, upstream, root)
+    if 'wrapper' in record:
+        from maintenance_watch import WRAPPER_PROPERTIES, official_checksum, wrapper_patch
+
+        before = git('show', f'{controller}:{WRAPPER_PROPERTIES}', root=root).decode('ascii')
+        after = read(WRAPPER_PROPERTIES).decode('ascii')
+        if (not re.fullmatch(r'[a-f0-9]{40}', record.get('wrapper_head', ''))
+                or wrapper_patch(before, after, official_checksum) != record['wrapper']):
+            raise ValueError('Upstream batch differs from the verified Gradle wrapper patch')
 
 
 def verify_maintenance_child(candidate, controller, root):
@@ -386,7 +394,13 @@ def verify_promotion_revision(candidate, controller, root=ROOT):
                                 '--', '.github', '.private', 'LICENSE', root=root).decode().split('\0')
         protected = set(filter(None, protected_changes))
         if MAINTENANCE_CANDIDATE in protected:
-            verify_maintenance_child(candidate, controller, root)
+            from maintenance_cadence import changed_marker, verify_security_child
+
+            marker = changed_marker(root, candidate, controller, MAINTENANCE_CANDIDATE)
+            if marker.get('kind') == 'security':
+                verify_security_child(candidate, controller, root)
+            else:
+                verify_maintenance_child(candidate, controller, root)
             return False
         if protected - UPSTREAM_CANDIDATE_RECORDS - DERIVED_UPSTREAM_RECORDS:
             raise ValueError('Upstream candidate changed controller-owned files')

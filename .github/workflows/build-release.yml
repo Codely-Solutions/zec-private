@@ -103,6 +103,7 @@ jobs:
           python3 -B .private/test_maintenance_watch.py
           python3 -B .private/test_core_faucet.py
           python3 -B .private/test_hosted_release.py
+          python3 -B .private/test_maintenance_cadence.py
           python3 -B .private/test_sync.py
           python3 -B .private/test_release_notes.py
           python3 -B .private/test_toolchain_policy.py

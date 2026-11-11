@@ -1,5 +1,6 @@
 """Trusted controller: fetch stable upstream, gate critical diffs, apply exact patch."""
 import hashlib, json, os, re, shutil, subprocess, sys
+from datetime import datetime
 from pathlib import Path
 from acceptance_policy import requirements
 from release_metadata import Metadata, next_release_version, wallet_release_versions
@@ -118,14 +119,19 @@ def sanitize_provider(root):
         raise RuntimeError('Reviewed NEAR provider contains partner authentication')
     path.write_text(reviewed)
 
-def main():
+def discover(cutoff=None):
+    releases=gh(f'repos/{OFFICIAL}/releases?per_page=100')
+    stable=[r for r in releases if not r['draft'] and not r['prerelease'] and r.get('published_at')
+            and (cutoff is None or datetime.fromisoformat(r['published_at']) <= cutoff)]
+    return max(stable,key=lambda r:r['published_at'],default=None)
+
+
+def main(latest=None, wrapper=None):
     expected=json.loads((ROOT/'.private/source-state.json').read_text())
     if source_state(ROOT)!=expected:
         raise RuntimeError('Fork source changed outside maintained patch; preserve modifications and review patch state')
     state=json.loads((ROOT/'.private/upstream.json').read_text())
-    releases=gh(f'repos/{OFFICIAL}/releases?per_page=100')
-    stable=[r for r in releases if not r['draft'] and not r['prerelease'] and r.get('published_at')]
-    latest=max(stable,key=lambda r:r['published_at'])
+    latest=latest or discover()
     tag=latest['tag_name']
     if version(tag)<=version(state['tag']):
         output(changed='false'); return
@@ -156,6 +162,12 @@ def main():
         remove_excluded_projects(candidate)
         overlay_github(candidate)
         shutil.copytree(ROOT/'.private',candidate/'.private',ignore=shutil.ignore_patterns('__pycache__','*.pyc'))
+        if wrapper:
+            from maintenance_watch import WRAPPER_PROPERTIES
+            path = candidate / WRAPPER_PROPERTIES
+            if path.read_bytes() != (ROOT / WRAPPER_PROPERTIES).read_bytes():
+                raise RuntimeError('Upstream patch changed the verified Gradle wrapper base')
+            path.write_text(wrapper[1], encoding='ascii', newline='\n')
         shutil.copy2(ROOT/'README.md',candidate/'README.md')
         for path in ('docs/UPSTREAM-README.md','docs/UPSTREAM-dependabot.yml'):
             shutil.copy2(ROOT/path,candidate/path)
@@ -165,7 +177,12 @@ def main():
             raise RuntimeError('Upstream Gradle release coordinates disagree with the stable tag')
         props.write_text(properties)
         (candidate/'.private/release-revision.json').write_text(json.dumps({'private_revision':revision})+'\n')
-        (candidate/'.private/candidate.json').write_text(json.dumps({'tag':tag,'sha':commit,'published_at':latest['published_at'],'versionCode':code,'acceptance':requirements(changes)},indent=2)+'\n')
+        record = dict(tag=tag, sha=commit, published_at=latest['published_at'], versionCode=code,
+                      acceptance=requirements(changes))
+        if wrapper:
+            record['wrapper'] = wrapper[0]
+            record['wrapper_head'] = wrapper[2]
+        (candidate/'.private/candidate.json').write_text(json.dumps(record,indent=2)+'\n')
         run('python3','-B','.private/check.py',cwd=candidate)
         run('python3','-B','.private/foundation_architecture.py',cwd=candidate)
         run('git','add','-A',cwd=candidate)
@@ -181,6 +198,8 @@ def main():
                 'user.email=zec-private@users.noreply.github.com','commit-tree',tree,
                 '-p',controller,'-p',commit,'-m',f'Integrate upstream {tag} with verified private patch',cwd=candidate)
         # Do not replace a previous candidate. A repeated poll can reuse only the exact same tree.
+        if wrapper:
+            branch += '-gradle-' + wrapper[0] + '-' + wrapper[2][:12]
         existing=run('git','ls-remote','origin',f'refs/heads/{branch}')
         if existing:
             prior=existing.split()[0]

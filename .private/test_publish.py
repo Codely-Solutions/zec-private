@@ -128,6 +128,7 @@ class PublishMetadataTest(unittest.TestCase):
         job = dict(name='build / publish', run_id=7, head_sha=run['head_sha'],
                    status='completed', conclusion='failure')
         self.assertEqual(publisher_job(run, [job], 7, repo), job)
+        self.assertEqual(publisher_job(dict(run, event='push'), [job], 7, repo), job)
         for change in ({'event': 'pull_request'}, {'head_branch': 'candidate'},
                        {'head_repository': {'full_name': 'fork/zec-private'}}, {'id': 8}):
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'trusted main'):
@@ -135,6 +136,17 @@ class PublishMetadataTest(unittest.TestCase):
         for change in ({'name': 'publish'}, {'conclusion': 'skipped'}, {'head_sha': 'b'*40}):
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'publisher job'):
                 publisher_job(run, [dict(job, **change)], 7, repo)
+
+    def test_public_verification_rejects_routine_receipt_from_a_security_review_push(self):
+        import verify_public_release as verify
+
+        sha = 'a' * 40
+        run = dict(path='.github/workflows/sync-upstream.yml', event='push', head_branch='main', head_sha=sha)
+        evidence = dict(artifact_run_id=7, source_sha=sha, controller_sha=sha, maintenance={'kind': 'routine'})
+        with patch.object(verify, 'gh', return_value=run) as gh:
+            with self.assertRaisesRegex(ValueError, 'main-branch release producer'):
+                verify.unsigned_proof(evidence)
+            gh.assert_called_once_with('actions/runs/7')
 
     def test_title_rejects_invalid_tags(self):
         for tag in (None,18,'v2.3.4','v2.3.4-private.18-extra','v2.3.4-private.18\n',

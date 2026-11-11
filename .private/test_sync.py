@@ -1,5 +1,5 @@
 """No-network controller tests, including an actual disposable upstream worktree."""
-import importlib.util,json,os,subprocess,tempfile,unittest
+import importlib.util,json,os,re,subprocess,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 
@@ -175,12 +175,24 @@ class SyncTests(unittest.TestCase):
                 with patch.dict(os.environ,{'RUNNER_TEMP':temp}),patch.object(sync,'gh',
                         return_value=[self.release(self.next_tag)]),patch.object(sync,'run',
                         side_effect=commands),patch.object(sync,'output') as output:
-                    sync.main()
+                    from maintenance_watch import WRAPPER_PROPERTIES
+                    wrapper = (sync.ROOT / WRAPPER_PROPERTIES).read_text()
+                    installed = re.search(r'gradle-(\d+)\.(\d+)\.(\d+)-bin.zip', wrapper)
+                    release = f'{installed[1]}.{installed[2]}.{int(installed[3]) + 1}'
+                    combined = wrapper.replace(installed[0], f'gradle-{release}-bin.zip')
+                    combined = re.sub(r'(?m)^distributionSha256Sum=.*$', 'distributionSha256Sum=' + 'a'*64, combined)
+                    sync.main(wrapper=(release, combined, 'a' * 40))
                     tree=original('git','ls-tree','-r','--name-only',output.call_args.kwargs['source_sha']).splitlines()
                     self.assertFalse(any(name.startswith('feature-voting/') for name in tree))
                     self.assertIn('.github/dependabot.yml',tree)
                     self.assertEqual(original('git','show',output.call_args.kwargs['source_sha']+':.github/dependabot.yml'),
                                      (sync.ROOT/'.github/dependabot.yml').read_text().strip())
+                    self.assertEqual(original('git','show',output.call_args.kwargs['source_sha']+':'+WRAPPER_PROPERTIES),
+                                     combined.strip())
+                    from acceptance_policy import verify_promotion_revision
+                    with patch('maintenance_watch.official_checksum', return_value='a'*64):
+                        self.assertFalse(verify_promotion_revision(output.call_args.kwargs['source_sha'],
+                                                                   original('git','rev-parse','HEAD'), root=sync.ROOT))
                     self.assertEqual(1,len(writes))
             finally:
                 original('git','worktree','remove','--force',str(upstream))

@@ -8,6 +8,8 @@ import re
 import subprocess
 from urllib.request import urlopen
 
+from maintenance_cadence import window
+
 
 REPOSITORY = 'Codely-Solutions/zec-private'
 CONTROL_ROOTS = {'.github', '.private'}
@@ -196,8 +198,12 @@ def main():
                     finding = 'official Gradle checksum unavailable'
                 else:
                     if base == os.environ['GITHUB_SHA']:
-                        eligible.append((number, head))
-                        finding = f'Gradle {version} wrapper coordinates verified; acceptance pending'
+                        cutoff = window(now)
+                        date = api(f'{prefix}/commits/{head}')['commit']['committer']['date']
+                        if (cutoff is not None and dt.datetime.fromisoformat(date) <= cutoff
+                                and dt.datetime.fromisoformat(detail['created_at']) <= cutoff):
+                            eligible.append((tuple(map(int, version.split('.'))), number, head))
+                        finding = f'Gradle {version} wrapper coordinates verified; retained for monthly selection'
                     else:
                         finding = 'controller main advanced; wait for the next watch run'
         messages.append(f'- #{number} `{head}`: {finding}')
@@ -208,9 +214,9 @@ def main():
         raise RuntimeError('Upstream discovery is disabled')
     if age is None or age > 8:
         print('::warning::Upstream discovery timer is overdue. This run still checks current eligibility.', flush=True)
-    if len(eligible) == 1:
+    if eligible:
         with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as stream:
-            number, head = eligible[0]
+            _, number, head = max(eligible)
             stream.write(f'proposal={number}\nproposal_head={head}\n')
 
 

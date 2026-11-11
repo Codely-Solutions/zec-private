@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 from maintenance_watch import REPOSITORY, WRAPPER_PROPERTIES, api, verified_wrapper
 from release_metadata import Metadata, next_release_version, require, wallet_release_versions
@@ -16,6 +17,54 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def git(*args):
     return subprocess.check_output(['git', *args], cwd=ROOT, text=True, timeout=45).strip()
+
+
+def prepare_security(review, controller, metadata):
+    from maintenance_cadence import PATCH, security_patch_scope, verify_security_child
+
+    require(git('rev-parse', 'HEAD') == controller and not git('status', '--porcelain'),
+            'Clean exact controller checkout required')
+    branch = f"updates/security-{review['advisory'].lower()}-{controller[:12]}"
+    existing = git('ls-remote', 'origin', f'refs/heads/{branch}')
+    if existing:
+        source = existing.split()[0]
+        git('fetch', '--no-tags', 'origin', source)
+        verify_security_child(source, controller, ROOT)
+        return source
+    git('apply', '--index', str(ROOT / PATCH))
+    security_patch_scope(git('diff', '--cached', '--no-renames', '--name-only', '-z').strip('\0').split('\0'))
+    state = json.loads((ROOT / '.private/upstream.json').read_bytes())
+    revision_path = ROOT / '.private/release-revision.json'
+    revisions = wallet_release_versions(metadata.api('/releases?per_page=100', paginated=True))
+    # A distinct expedited fix can advance past an existing routine claim.
+    # Its own retries reuse the prepared branch and the original reservation.
+    reservations = metadata.api('/git/matching-refs/heads/testnet-claims/release-')
+    revisions.extend((0, int(match[1])) for row in reservations
+                     if (match := re.fullmatch(r'refs/heads/testnet-claims/release-([1-9][0-9]*)', row['ref'])))
+    revision, code = next_release_version(revisions, json.loads(revision_path.read_bytes())['private_revision'],
+                                         state['versionCode'], version(state['tag'])[3])
+    properties = ROOT / 'gradle.properties'
+    data, count = re.subn(rb'^ZCASH_VERSION_CODE=\d+(?=\r?$)', f'ZCASH_VERSION_CODE={code}'.encode(),
+                          properties.read_bytes(), flags=re.M)
+    require(count == 1, 'Expected one existing Android versionCode')
+    properties.write_bytes(data)
+    revision_path.write_text(json.dumps({'private_revision': revision}) + '\n')
+    (ROOT / '.private/candidate.json').unlink(missing_ok=True)
+    identity = dict(kind='security', advisory=review['advisory'], affected_release=review['affected_release'],
+                    patch_sha256=review['patch_sha256'])
+    (ROOT / '.private/maintenance-candidate.json').write_text(json.dumps(identity, indent=2) + '\n')
+    git('add', '-A')
+    subprocess.run([sys.executable, '-B', '.private/check.py'], cwd=ROOT, check=True, timeout=45)
+    refresh_source()
+    git('add', '.private/fork.patch', '.private/source-state.json')
+    tree = git('write-tree')
+    source = git('-c', 'user.name=ZEC Private automation',
+                 '-c', 'user.email=zec-private@users.noreply.github.com', 'commit-tree', tree, '-p', controller,
+                 '-m', f"Prepare reviewed security fix {review['advisory']}")
+    verify_security_child(source, controller, ROOT)
+    require(api(f'{metadata.repo}/commits/main')['sha'] == controller, 'Main advanced before security staging')
+    git('push', 'origin', f'{source}:refs/heads/{branch}')
+    return source
 
 
 def prepare(number, head, controller):
