@@ -27611,10 +27611,10 @@ index 000000000..339016426
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/PriceCheckNotice.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/PriceCheckNotice.kt
 new file mode 100644
-index 000000000..7909e1fd6
+index 000000000..f7eb249d4
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/PriceCheckNotice.kt
-@@ -0,0 +1,54 @@
+@@ -0,0 +1,55 @@
 +package co.electriccoin.zcash.ui.screen.swap.quote
 +
 +import androidx.compose.foundation.clickable
@@ -27647,13 +27647,14 @@ index 000000000..7909e1fd6
 +@OptIn(ExperimentalMaterial3Api::class)
 +@Composable
 +internal fun PriceCheckNotice(state: PriceCheckNoticeState) {
++    val explanation = state.explanation ?: return
 +    val tooltip = rememberTooltipState(isPersistent = true)
 +    val scope = rememberCoroutineScope()
 +    val color = if (state.isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
 +    TooltipBox(
 +        positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
 +        state = tooltip,
-+        tooltip = { PlainTooltip { Text(state.explanation.getValue(), style = MaterialTheme.typography.bodySmall) } },
++        tooltip = { PlainTooltip { Text(explanation.getValue(), style = MaterialTheme.typography.bodySmall) } },
 +    ) {
 +        Row(
 +            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
@@ -27701,7 +27702,7 @@ index 000000000..d89066e86
 +        .multiply(BigDecimal("100"))
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt
-index 2ceac399f..6f9d0d9d0 100644
+index 2ceac399f..fbf537810 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt
 @@ -20,0 +21,2 @@ internal sealed interface SwapQuoteState : ModalBottomSheetState {
@@ -27719,7 +27720,7 @@ index 2ceac399f..6f9d0d9d0 100644
 +
 +internal data class PriceCheckNoticeState(
 +    val label: StringResource,
-+    val explanation: StringResource,
++    val explanation: StringResource? = null,
 +    val isWarning: Boolean = false,
 +    val showInline: Boolean = true,
 +    val detailItems: List<SwapQuoteInfoItem> = emptyList(),
@@ -27860,7 +27861,7 @@ index 9f37c1d93..cb78531b5 100644
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..5c7df7c0a 100644
+index 717411935..31194b8a3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
@@ -27896,7 +27897,7 @@ index 717411935..5c7df7c0a 100644
 +            stringRes(R.string.private_price_checking), stringRes(R.string.private_price_check_details)
 +        )
 +        IndependentPriceCheck.NoMarketReference -> PriceCheckNoticeState(
-+            stringRes(R.string.private_price_no_market), stringRes(R.string.private_price_no_market_details),
++            stringRes(R.string.private_price_no_market),
 +            showInline = false,
 +        )
 +        IndependentPriceCheck.Unavailable -> PriceCheckNoticeState(
@@ -28038,7 +28039,7 @@ index 717411935..5c7df7c0a 100644
 +        if (available) stringResByDynamicCurrencyNumber(usd, FiatCurrency.USD.symbol)
 +        else stringRes(R.string.private_quote_estimate_unavailable)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
-index 1fa0df8d6..2a61311fa 100644
+index 1fa0df8d6..fff906c2d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 @@ -8,0 +9,2 @@ import androidx.compose.foundation.layout.fillMaxWidth
@@ -28076,7 +28077,7 @@ index 1fa0df8d6..2a61311fa 100644
 +                Spacer(8.dp)
 +                QuoteDetails(priceDetails, state.minimumDeposit)
 +            }
-@@ -236,0 +265,67 @@ private fun Success(
+@@ -236,0 +265,69 @@ private fun Success(
 +@Composable
 +private fun QuoteDetails(state: PriceCheckNoticeState?, minimumDeposit: SwapQuoteInfoItem?) {
 +    var expanded by rememberSaveable { mutableStateOf(false) }
@@ -28098,7 +28099,7 @@ index 1fa0df8d6..2a61311fa 100644
 +                contentDescription = null, modifier = Modifier.size(24.dp),
 +            )
 +        }
-+        if (state != null && state.detailItems.isEmpty()) {
++        if (state != null && state.detailItems.isEmpty() && (expanded || state.explanation != null)) {
 +            Text(
 +                state.label.getValue(), style = MaterialTheme.typography.bodySmall,
 +                color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -28112,11 +28113,13 @@ index 1fa0df8d6..2a61311fa 100644
 +                Spacer(8.dp)
 +                SwapQuoteInfo(item)
 +            }
-+            Spacer(8.dp)
-+            Text(
-+                state.explanation.getValue(), style = MaterialTheme.typography.bodySmall,
-+                color = MaterialTheme.colorScheme.onSurfaceVariant,
-+            )
++            state.explanation?.let { explanation ->
++                Spacer(8.dp)
++                Text(
++                    explanation.getValue(), style = MaterialTheme.typography.bodySmall,
++                    color = MaterialTheme.colorScheme.onSurfaceVariant,
++                )
++            }
 +        }
 +    }
 +}
@@ -28144,7 +28147,7 @@ index 1fa0df8d6..2a61311fa 100644
 +    )
 +}
 +
-@@ -244,8 +339,15 @@ fun SwapQuoteInfo(
+@@ -244,8 +341,15 @@ fun SwapQuoteInfo(
 -    Row {
 -        Text(
 -            modifier = Modifier.weight(1f),
@@ -28168,7 +28171,7 @@ index 1fa0df8d6..2a61311fa 100644
 +            )
 +            item.help?.let { QuoteFieldHelp(item, descriptionColor) }
 +        }
-@@ -277,0 +380,40 @@ fun SwapQuoteInfo(
+@@ -277,0 +382,40 @@ fun SwapQuoteInfo(
 +@Suppress("MagicNumber")
 +@Composable
 +private fun StackedSwapQuoteInfo(
@@ -28209,10 +28212,10 @@ index 1fa0df8d6..2a61311fa 100644
 +    }
 +}
 +
-@@ -307 +449 @@ private fun SuccessPreview() =
+@@ -307 +451 @@ private fun SuccessPreview() =
 -                                title = stringRes("Zodl").withStyle(),
 +                                title = stringRes("ZEC Private").withStyle(),
-@@ -316 +458 @@ private fun SuccessPreview() =
+@@ -316 +460 @@ private fun SuccessPreview() =
 -                                description = stringRes("ZEC transaction fee"),
 +                                description = stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
@@ -33608,10 +33611,10 @@ index 000000000..84b214fa3
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml
 new file mode 100644
-index 000000000..0aa7ca897
+index 000000000..dc4c248f3
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml
-@@ -0,0 +1,21 @@
+@@ -0,0 +1,20 @@
 +<?xml version="1.0" encoding="utf-8"?>
 +<resources>
 +    <string name="private_price_checking">Checking market price…</string>
@@ -33631,7 +33634,6 @@ index 000000000..0aa7ca897
 +    <string name="private_minimum_deposit_help_label">About minimum deposit</string>
 +    <string name="private_minimum_deposit_help">At least this amount must reach the deposit address after fees.</string>
 +    <string name="private_price_no_market">No market reference for this asset</string>
-+    <string name="private_price_no_market_details">No reliable market match was found for one of the swap assets.</string>
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_quote_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_quote_strings.xml
 new file mode 100644

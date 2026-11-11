@@ -182,6 +182,13 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                         bigIcon = imageRes(R.drawable.ic_zec_round_full),
                         smallIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_zec_shielded),
                     )
+                } else if (screen == "price-no-market") {
+                    SwapTokenAmountState(
+                        amount = stringRes("0.39"), fiatAmount = stringRes("$0.39"),
+                        chain = stringRes("Arbitrum"), token = stringRes("USDT0"),
+                        bigIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_usdt0),
+                        smallIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_chain_arb),
+                    )
                 } else SwapTokenAmountState(amount = stringRes("0.000004"), fiatAmount = stringRes("$0.39"), chain = stringRes("Bitcoin"), token = stringRes("BTC"), bigIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc), smallIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc),
                     valueDifference = QuoteValueDifferenceState(
                         percentage = stringRes("-3.47%"),
@@ -202,7 +209,6 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                 priceCheck = when (screen) {
                     "price-no-market" -> PriceCheckNoticeState(
                         stringRes(R.string.private_price_no_market),
-                        stringRes(R.string.private_price_no_market_details),
                         showInline = false,
                     )
                     "price-warning" -> PriceCheckNoticeState(

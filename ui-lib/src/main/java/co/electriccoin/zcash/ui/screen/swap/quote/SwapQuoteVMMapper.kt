@@ -78,7 +78,7 @@ internal class SwapQuoteVMMapper {
             stringRes(R.string.private_price_checking), stringRes(R.string.private_price_check_details)
         )
         IndependentPriceCheck.NoMarketReference -> PriceCheckNoticeState(
-            stringRes(R.string.private_price_no_market), stringRes(R.string.private_price_no_market_details),
+            stringRes(R.string.private_price_no_market),
             showInline = false,
         )
         IndependentPriceCheck.Unavailable -> PriceCheckNoticeState(

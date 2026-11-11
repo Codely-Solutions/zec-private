@@ -283,7 +283,7 @@ private fun QuoteDetails(state: PriceCheckNoticeState?, minimumDeposit: SwapQuot
                 contentDescription = null, modifier = Modifier.size(24.dp),
             )
         }
-        if (state != null && state.detailItems.isEmpty()) {
+        if (state != null && state.detailItems.isEmpty() && (expanded || state.explanation != null)) {
             Text(
                 state.label.getValue(), style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -297,11 +297,13 @@ private fun QuoteDetails(state: PriceCheckNoticeState?, minimumDeposit: SwapQuot
                 Spacer(8.dp)
                 SwapQuoteInfo(item)
             }
-            Spacer(8.dp)
-            Text(
-                state.explanation.getValue(), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            state.explanation?.let { explanation ->
+                Spacer(8.dp)
+                Text(
+                    explanation.getValue(), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
