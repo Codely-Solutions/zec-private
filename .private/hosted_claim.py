@@ -53,7 +53,7 @@ def verify(value, commit, metadata):
 
 
 def rehearsal_version(base, controller, metadata, *, number):
-    require(1 <= number <= 6, 'Expected a bounded test-only rehearsal number')
+    require(1 <= number <= 8, 'Expected a bounded test-only rehearsal number')
     for previous in range(base + 1, base + number):
         prior_ref = ref_for({'rehearsal': True, 'version': previous})
         marker = metadata.api('/git/ref/' + prior_ref.removeprefix('refs/'))['object']['sha']
