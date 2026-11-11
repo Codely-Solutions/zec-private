@@ -197,7 +197,7 @@ class EmulatorSession:
         self.slot = resolve_slot(slot, self.base_environment)
         self.ports = session_ports(self.slot)
         self.sdk = Path(sdk)
-        self.gpu = "swiftshader_indirect" if sys.platform.startswith("linux") else "host"
+        self.gpu = "lavapipe" if sys.platform.startswith("linux") else "host"
         self.system = Path(system).resolve() if system else None
         self.avd_name = "CodexTorProbe" if self.slot == 0 else "CodexTorProbeSlot1"
         home = self.root / "android"

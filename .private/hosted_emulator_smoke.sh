@@ -7,6 +7,7 @@ if [[ ! -x "$ANDROID_HOME/emulator/emulator" ]]; then
   timeout 180 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install emulator
 fi
 "$ANDROID_HOME/emulator/emulator" -accel-check
+"$ANDROID_HOME/emulator/emulator" -version | head -n 2
 scratch=$(mktemp -d "$RUNNER_TEMP/zec-hosted-probe.XXXXXX")
 namespace="zec-probe-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
 created=false
@@ -89,6 +90,12 @@ with EmulatorSession(root / 'session', guest_memory=3072 if transport else 1536)
                     result = json.loads(result_path.read_text())
                     print('Hosted core stage:', result['last_stage'], result['failure']['type'], flush=True)
                 print('Hosted emulator process exit code:', session.process.poll(), flush=True)
+                # QEMU host diagnostics only. Android app logs and guest files stay private.
+                lines = (root / 'session' / 'emulator.log').read_text(errors='replace').splitlines()
+                for line in lines:
+                    if any(word in line.lower() for word in ('gpu emulation', 'segmentation fault',
+                                                             'fatal error', 'crash report')):
+                        print(line[:240], flush=True)
                 raise
             print('Native Tor interruption and recovery passed with zero faucet claims or valid transaction submissions.')
         else:
