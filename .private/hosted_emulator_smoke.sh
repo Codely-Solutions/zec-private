@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Check an empty hosted Android guest or install an already verified testnet pair.
+# Check a hosted Android guest with an optional verified testnet pair.
 set -euo pipefail
 test -c /dev/kvm
 sudo setfacl -m "u:$(id -un):rw" /dev/kvm
@@ -32,20 +32,27 @@ cleanup() {
 trap cleanup EXIT
 image=$(PYTHONPATH=.private python3 -B -c 'import sys; from emulator_session import prepare_image; print(prepare_image(sys.argv[1], environ={}))' "$scratch/image-input" | tail -n1)
 test -f "$image/system.img"
-sudo ip netns add "$namespace"
-created=true
-sudo ip netns exec "$namespace" ip link set lo up
-test -z "$(sudo ip -n "$namespace" route show default)"
-test -z "$(sudo ip -n "$namespace" -6 route show default)"
-sudo ip netns exec "$namespace" runuser -u "$(id -un)" -- env \
+transport=${ZEC_HOSTED_TRANSPORT_PROBE:-false}
+execution=()
+if [[ "$transport" == true ]]; then
+  # Live work runs only on an ephemeral GitHub-hosted VM. The existing
+  # testnet driver enforces its app-UID egress policy before creating a wallet.
+  [[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_ENVIRONMENT:-}" == github-hosted && -n "${ZEC_HOSTED_FIXTURE_DIR:-}" ]]
+else
+  sudo ip netns add "$namespace"
+  created=true
+  sudo ip netns exec "$namespace" ip link set lo up
+  test -z "$(sudo ip -n "$namespace" route show default)"
+  test -z "$(sudo ip -n "$namespace" -6 route show default)"
+  execution=(sudo ip netns exec "$namespace" runuser -u "$(id -un)" --)
+fi
+"${execution[@]}" env \
   ANDROID_HOME="$ANDROID_HOME" JAVA_HOME="${JAVA_HOME:-/usr}" CODEX_GUARD_OUTPUT="$scratch" CODEX_EMULATOR_IMAGE="$image" \
-  ZEC_HOSTED_FIXTURE_DIR="${ZEC_HOSTED_FIXTURE_DIR:-}" \
+  ZEC_HOSTED_FIXTURE_DIR="${ZEC_HOSTED_FIXTURE_DIR:-}" ZEC_HOSTED_TRANSPORT_PROBE="$transport" \
   PYTHONPATH=.private python3 -B - <<'PY'
 import os
 from pathlib import Path
 from emulator_session import EmulatorSession, SDK
-from core_testnet_driver import verify_instrumentation_pair
-from strip_emulator_apk import prepare
 
 root = Path(os.environ['CODEX_GUARD_OUTPUT'])
 with EmulatorSession(root / 'session') as session:
@@ -55,20 +62,37 @@ with EmulatorSession(root / 'session') as session:
     if fixture:
         import json
         import shutil
+        from core_testnet_driver import run, verify_instrumentation_pair
+        from strip_emulator_apk import prepare
 
         source = Path(fixture)
-        version = json.loads((source / 'fixture-binding.json').read_text())['version_code']
+        binding = json.loads((source / 'fixture-binding.json').read_text())
+        version = binding['version_code']
         app, test = [Path(shutil.copyfile(source / name, root / name))
                      for name in ('baseline-ui.apk', 'baseline-androidTest.apk')]
         prepared = prepare((app, test), root, SDK)
-        session.adb('install', '-r', str(app), timeout=90)
-        session.adb('install', '-r', '-t', str(test), timeout=90)
-        verify_instrumentation_pair(session.adb, version, prepared[test.name]['testedSha256'])
-        print('Installed verified x86_64 testnet app and instrumentation. No wallet or funds created.')
+        if os.environ['ZEC_HOSTED_TRANSPORT_PROBE'] == 'true':
+            manifest = dict(input_fingerprint=None, runtime_input_fingerprint=None, build_input_fingerprint=None,
+                baseline_source_sha=binding['source_sha'], build_source_sha=binding['source_sha'],
+                baseline_version_code=version, candidate_version_code=version,
+                baseline_apk_sha256=binding['candidate_apk_sha256'], candidate_apk_sha256=binding['candidate_apk_sha256'],
+                baseline_instrumentation_apk_sha256=binding['instrumentation_apk_sha256'],
+                instrumentation_apk_sha256=binding['instrumentation_apk_sha256'],
+                upgradeBaselineInstrumentation=dict(source_sha=binding['source_sha'],
+                                                    apk_sha256=binding['instrumentation_apk_sha256']))
+            run(session.adb, root, (app, test), manifest, transport_only=True)
+            print('Native Tor interruption and recovery passed with zero claims and submissions.')
+        else:
+            session.adb('install', '-r', str(app), timeout=90)
+            session.adb('install', '-r', '-t', str(test), timeout=90)
+            verify_instrumentation_pair(session.adb, version, prepared[test.name]['testedSha256'])
+            print('Installed verified x86_64 testnet app and instrumentation. No wallet or funds created.')
 assert session.cleanup == {'emulatorExited': True, 'privatePortsClosed': True}
-print('API 35 x86_64 booted in a namespace without routes and closed all owned ports.')
+print('API 35 x86_64 guest stopped and closed all owned ports.')
 PY
-stop_owned_processes
-sudo ip netns del "$namespace"
-created=false
-echo 'Verified that the probe namespace has no remaining processes.'
+if "$created"; then
+  stop_owned_processes
+  sudo ip netns del "$namespace"
+  created=false
+  echo 'Verified that the probe namespace has no remaining processes.'
+fi
