@@ -78,6 +78,9 @@ def read_receipts(directory, *, proof, source, controller, production_id, core_i
 def admit(source, controller, metadata):
     require(source != controller, 'Hosted automatic releases require a prepared child candidate')
     verify_promotion_revision(source, controller)
+    from maintenance_cadence import admit_cadence
+    from maintenance_watch import api
+    admit_cadence(ROOT, source, controller, metadata, api)
     version = version_code(ROOT, source)
     baseline = json.loads((ROOT / '.private/hosted-fixture.json').read_text())['version_code']
     live = metadata.api('/releases/latest')['tag_name']

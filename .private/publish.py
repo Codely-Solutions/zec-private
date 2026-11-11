@@ -139,7 +139,11 @@ def main():
     quote_inputs=input_fingerprint(expected,profile='production-quotes')
     if os.environ.get('HOSTED_ACCEPTANCE') == 'true':
         from hosted_release import read_receipts
+        from maintenance_cadence import admit_cadence
+        from maintenance_watch import api
+        from release_metadata import Metadata
 
+        admit_cadence(ROOT, expected, controller, Metadata(), api)
         if (proof['core_acceptance']['input_fingerprint'] != input_fingerprint(expected, profile='core-runtime')
                 or proof['quote_acceptance']['input_fingerprint'] != quote_inputs):
             raise RuntimeError('Unsigned artifact acceptance fingerprints differ from the hosted candidate')
@@ -228,6 +232,10 @@ def main():
                        production_quotes=quote, production_arm_executed=False, real_funds_used=False)
     if os.environ.get('HOSTED_ACCEPTANCE') == 'true':
         attestation['production_artifact'] = core['production_artifact']
+        from maintenance_cadence import MARKER, changed_marker
+
+        maintenance = changed_marker(ROOT, expected, controller, MARKER)
+        attestation['maintenance'] = maintenance if maintenance.get('kind') == 'security' else {'kind': 'routine'}
     data = (json.dumps(attestation, indent=2) + '\n').encode()
     if len(data) > 256 * 1024:
         raise RuntimeError('Publication attestation exceeds its size budget')

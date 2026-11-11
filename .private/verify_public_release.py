@@ -88,7 +88,9 @@ def unsigned_proof(evidence):
     run = gh(f'actions/runs/{run_id}')
     direct = (run['path'] == '.github/workflows/build-release.yml' and run['event'] == 'workflow_dispatch'
               and run['head_sha'] == source)
-    upstream = (run['path'] == '.github/workflows/sync-upstream.yml' and run['event'] in ('schedule', 'workflow_dispatch')
+    hosted_event = (run['event'] in ('schedule', 'workflow_dispatch') or
+                    (run['event'] == 'push' and evidence.get('maintenance', {}).get('kind') == 'security'))
+    upstream = (run['path'] == '.github/workflows/sync-upstream.yml' and hosted_event
                 and run['head_sha'] == evidence['controller_sha'])
     require(run['head_branch'] == 'main' and (direct or upstream),
             'Expected a main-branch release producer')

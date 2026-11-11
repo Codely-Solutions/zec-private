@@ -11,7 +11,7 @@ from verify_public_release import API, bounded_zip, digest, gh, require
 
 PUBLISHERS = {
     '.github/workflows/build-release.yml': ({'workflow_dispatch'}, 'publish'),
-    '.github/workflows/sync-upstream.yml': ({'workflow_dispatch', 'schedule'}, 'build / publish'),
+    '.github/workflows/sync-upstream.yml': ({'workflow_dispatch', 'schedule', 'push'}, 'build / publish'),
 }
 
 
@@ -52,6 +52,9 @@ def resolve(run_id):
         data = archive.read('release-attestation.json')
     attestation = json.loads(data)
     require(attestation['controller_sha'] == run['head_sha'], 'Attestation controller differs from the signing run')
+    if run['event'] == 'push':
+        require(attestation.get('maintenance', {}).get('kind') == 'security',
+                'Security review push can only attest a security release')
     tag = attestation['release_tag']
     release_title(tag)
     # Even if the publish job ended during a timeout or cancellation, recovery

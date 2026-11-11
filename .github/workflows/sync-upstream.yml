@@ -2,6 +2,9 @@ name: Follow stable upstream releases
 on:
   schedule:
     - cron: '37 */3 * * *'
+  push:
+    branches: [main]
+    paths: ['.private/security-maintenance.json', '.private/security-maintenance.patch']
   workflow_dispatch:
 permissions: {}
 concurrency:
@@ -12,36 +15,39 @@ jobs:
     if: github.ref == 'refs/heads/main'
     permissions:
       actions: read
-      contents: write
+      contents: read
       pull-requests: read
     uses: ./.github/workflows/maintenance-watch.yml
   prepare:
-    if: github.ref == 'refs/heads/main'
+    needs: maintenance
+    if: github.ref == 'refs/heads/main' && needs.maintenance.outputs.reconciliation_run == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
+      pull-requests: read
     outputs:
-      changed: ${{ steps.sync.outputs.changed }}
       source_sha: ${{ steps.sync.outputs.source_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: Prepare exact stable release with trusted patch set
+      - name: Select and prepare due maintenance with the trusted patch set
         id: sync
         env:
           GH_TOKEN: ${{ github.token }}
+          PROPOSAL: ${{ needs.maintenance.outputs.proposal }}
+          PROPOSAL_HEAD: ${{ needs.maintenance.outputs.proposal_head }}
         run: |
           gh auth setup-git
-          python3 .private/sync.py
+          python3 -B .private/maintenance_cadence.py
       - name: Report a prepared candidate waiting for signing setup
-        if: steps.sync.outputs.changed == 'true' && vars.PRODUCTION_SIGNING_READY != 'true'
+        if: steps.sync.outputs.source_sha != '' && vars.PRODUCTION_SIGNING_READY != 'true'
         run: echo '::warning::Upstream candidate prepared. Publication is waiting for verified signing environment setup.'
   build:
     needs: [prepare, maintenance]
-    if: ${{ always() && !cancelled() && needs.maintenance.result == 'success' && (needs.maintenance.outputs.reconciliation_run != '' || (needs.prepare.result == 'success' && (needs.prepare.outputs.source_sha != '' || needs.maintenance.outputs.source_sha != '') && vars.PRODUCTION_SIGNING_READY == 'true')) }}
+    if: ${{ always() && !cancelled() && needs.maintenance.result == 'success' && (needs.maintenance.outputs.reconciliation_run != '' || (needs.prepare.result == 'success' && needs.prepare.outputs.source_sha != '' && vars.PRODUCTION_SIGNING_READY == 'true')) }}
     permissions:
       contents: write
       issues: write
@@ -49,7 +55,7 @@ jobs:
       packages: read
     uses: ./.github/workflows/build-release.yml
     with:
-      source_sha: ${{ needs.prepare.outputs.source_sha || needs.maintenance.outputs.source_sha }}
+      source_sha: ${{ needs.prepare.outputs.source_sha }}
       reconciliation_run: ${{ needs.maintenance.outputs.reconciliation_run }}
       hosted: ${{ needs.maintenance.outputs.reconciliation_run == '' }}
     secrets:
