@@ -129,7 +129,7 @@ def main():
     if attestation_digest:
         evidence = read_attestation(Path(os.environ['RUNNER_TEMP']) / 'publication/release-attestation.json',
                                     attestation_digest)
-        require(evidence['release_tag'] == tag and evidence['controller_sha'] == os.environ['GITHUB_SHA'],
+        require(evidence['release_tag'] == tag and evidence['controller_sha'] == os.environ['ATTESTATION_CONTROLLER'],
                 'Publication attestation does not match the current controller')
     else:
         response = gh(f'contents/.private/release-evidence/{tag}.json?ref=main')

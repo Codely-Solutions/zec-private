@@ -16,6 +16,12 @@ on:
       attestation_digest:
         required: true
         type: string
+      attestation_run:
+        required: true
+        type: string
+      attestation_controller:
+        required: true
+        type: string
 permissions:
   actions: read
   contents: read
@@ -33,10 +39,13 @@ jobs:
         with:
           artifact-ids: ${{ inputs.attestation_id }}
           path: ${{ runner.temp }}/publication
+          run-id: ${{ inputs.attestation_run }}
+          github-token: ${{ github.token }}
       - name: Download and verify the public APK and latest-release response
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           VERIFY_RELEASE_TAG: ${{ inputs.release_tag }}
           ATTESTATION_DIGEST: ${{ inputs.attestation_digest }}
+          ATTESTATION_CONTROLLER: ${{ inputs.attestation_controller }}
         run: python3 -B .private/verify_public_release.py | tee -a "$GITHUB_STEP_SUMMARY"
