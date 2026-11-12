@@ -21,6 +21,8 @@ If a quote-only failure requires a harness repair on `main`, use `custom-release
 
 If that recovery passes quotes and the signer fails before creating an attestation, diagnose and fix signing, then add `quote_run=PASSING_QUOTE_RUN_ID` to reuse the passing quote receipt. The controller checks that the quote execution inputs match, and signing checks all three run identities. Reconcile an existing public release through its original attestation.
 
+Pass the named environment secret references when invoking the reusable release workflow. Their values come from `production-signing` and `maintenance-integration` only in the jobs that select those environments. Keep repository-level copies absent.
+
 ## Hosted maintenance releases
 
 The [upstream discovery workflow](../.github/workflows/sync-upstream.yml) polls every three hours. The routine release window opens on the first of each month at 09:00 UTC, starting December 1, 2026. It selects the latest stable upstream release and highest compatible verified Gradle patch available by that cutoff. Upstream releases and open Dependabot proposals are the queue. A missed poll can catch up within the window, and later arrivals roll into the next batch. The first verified routine publication in a window closes it. An empty window produces no APKs. A failed batch keeps its inputs queued. Keep any existing claim reservation and use the original run for recovery.

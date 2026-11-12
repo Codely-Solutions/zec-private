@@ -221,6 +221,9 @@ def main():
             raise RuntimeError('Signing job rejected missing or altered license')
     dist=ROOT/'dist';dist.mkdir(exist_ok=True)
     signed=dist/'zec-private-latest.apk'
+    for name in ('RELEASE_KEYSTORE_BASE64', 'RELEASE_STORE_PASSWORD', 'RELEASE_KEY_PASSWORD'):
+        if not os.environ.get(name):
+            raise RuntimeError('Production signing environment did not provide ' + name)
     with tempfile.TemporaryDirectory() as temp:
         temp=Path(temp)
         key=temp/'release.p12';key.write_bytes(base64.b64decode(os.environ['RELEASE_KEYSTORE_BASE64'],validate=True));key.chmod(0o600)

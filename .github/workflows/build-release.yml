@@ -38,6 +38,14 @@ on:
     secrets:
       NTFY_URL:
         required: false
+      RELEASE_KEYSTORE_BASE64:
+        required: true
+      RELEASE_STORE_PASSWORD:
+        required: true
+      RELEASE_KEY_PASSWORD:
+        required: true
+      MAINTENANCE_APP_PRIVATE_KEY:
+        required: true
 permissions: {}
 concurrency:
   group: zec-private-release
