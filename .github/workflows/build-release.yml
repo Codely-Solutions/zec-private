@@ -32,6 +32,9 @@ on:
       recover_run:
         type: string
         default: ''
+      quote_run:
+        type: string
+        default: ''
     secrets:
       NTFY_URL:
         required: false
@@ -50,6 +53,7 @@ jobs:
       core_id: ${{ steps.admission.outputs.core_id }}
       quote_id: ${{ steps.admission.outputs.quote_id }}
       core_receipt_id: ${{ steps.admission.outputs.core_receipt_id }}
+      quote_receipt_id: ${{ steps.admission.outputs.quote_receipt_id }}
     permissions:
       actions: read
       contents: read
@@ -63,6 +67,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           RECOVER_RUN: ${{ inputs.recover_run }}
+          QUOTE_RUN: ${{ inputs.quote_run }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           git fetch --no-tags origin "$SOURCE_SHA"
@@ -74,7 +79,7 @@ jobs:
           if os.environ['RECOVER_RUN']:
               from acceptance_policy import ROOT
               from quote_recovery import resolve
-              result = resolve(ROOT, source, controller, os.environ['RECOVER_RUN'], Metadata())
+              result = resolve(ROOT, source, controller, os.environ['RECOVER_RUN'], Metadata(), os.environ['QUOTE_RUN'])
               with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
                   output.writelines(f'{key}={value}\n' for key, value in result.items())
           else:
@@ -122,6 +127,7 @@ jobs:
           python3 -B .private/test_maintenance_watch.py
           python3 -B .private/test_core_faucet.py
           python3 -B .private/test_hosted_release.py
+          python3 -B .private/test_quote_recovery.py
           python3 -B .private/test_custom_release.py
           python3 -B .private/test_maintenance_cadence.py
           python3 -B .private/test_sync.py
@@ -244,7 +250,7 @@ jobs:
       production_id: ${{ needs.unsigned.outputs.artifact_id }}
   hosted_quotes:
     needs: [admit_hosted, unsigned, emulator]
-    if: ${{ always() && !cancelled() && inputs.hosted && needs.admit_hosted.result == 'success' && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
+    if: ${{ always() && !cancelled() && inputs.hosted && !inputs.quote_run && needs.admit_hosted.result == 'success' && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
     permissions:
       actions: read
       contents: read
@@ -275,7 +281,7 @@ jobs:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: python3 .private/promotion.py
   publish:
-    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && needs.hosted_quotes.result == 'success' && (needs.hosted_core.result == 'success' || (inputs.recover_run && needs.admit_hosted.result == 'success'))) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
+    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || (inputs.quote_run && needs.admit_hosted.outputs.quote_receipt_id != '')) && (needs.hosted_core.result == 'success' || (inputs.recover_run && needs.admit_hosted.result == 'success'))) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
     needs: [unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, admit_hosted]
     environment: production-signing
     runs-on: ubuntu-24.04
@@ -327,8 +333,10 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         if: inputs.hosted && inputs.recover_run
         with:
-          artifact-ids: ${{ needs.hosted_quotes.outputs.receipt_id }}
+          artifact-ids: ${{ needs.admit_hosted.outputs.quote_receipt_id || needs.hosted_quotes.outputs.receipt_id }}
           path: hosted-receipts/
+          run-id: ${{ inputs.quote_run || github.run_id }}
+          github-token: ${{ github.token }}
           digest-mismatch: error
       - name: Fetch exact hosted candidate objects without checking out its code
         if: inputs.hosted
@@ -344,6 +352,7 @@ jobs:
           SOURCE_SHA: ${{ needs.promotion.outputs.source_sha || needs.unsigned.outputs.source_sha || inputs.source_sha }}
           ARTIFACT_RUN_ID: ${{ inputs.recover_run || inputs.candidate_run || github.run_id }}
           RECOVER_RUN: ${{ inputs.recover_run }}
+          RECOVER_QUOTE_RUN: ${{ inputs.quote_run }}
           CONTROLLER_SHA: ${{ github.sha }}
           HOSTED_ACCEPTANCE: ${{ inputs.hosted || false }}
           PRODUCTION_ID: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}

@@ -131,7 +131,7 @@ def main():
             raise RuntimeError('Quote recovery requires hosted acceptance')
         from quote_recovery import resolve
 
-        recovery = resolve(ROOT, expected, controller, recover_run, Metadata())
+        recovery = resolve(ROOT, expected, controller, recover_run, Metadata(), os.environ.get('RECOVER_QUOTE_RUN', ''))
         recovery['run'] = int(recover_run)
         for name in ('production_id', 'core_id', 'quote_id'):
             if recovery[name] != os.environ[name.upper()]:
@@ -259,7 +259,7 @@ def main():
             attestation['maintenance'] = {'kind': 'custom'}
         if recovery:
             attestation['quote_recovery'] = {'original_controller': build_controller,
-                                             'quote_run_id': int(os.environ['GITHUB_RUN_ID'])}
+                                             'quote_run_id': quote['workflow_run_id']}
     data = (json.dumps(attestation, indent=2) + '\n').encode()
     if len(data) > 256 * 1024:
         raise RuntimeError('Publication attestation exceeds its size budget')

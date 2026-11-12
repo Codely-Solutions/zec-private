@@ -6,13 +6,40 @@ import unittest
 from unittest.mock import Mock, patch
 
 import hosted_release
-from quote_recovery import ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, resolve, verify_delta
+from quote_recovery import ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, resolve, resolve_quotes, verify_delta
 
 
 SOURCE, OLD, MAIN = 'a' * 40, 'b' * 40, 'c' * 40
 
 
 class QuoteRecoveryTests(unittest.TestCase):
+    def test_passing_quotes_reuse_requires_unchanged_runner_and_no_prior_attestation(self):
+        quote_head = 'd' * 40
+        run = dict(id=8, path=WORKFLOW, event='workflow_dispatch', head_branch='main', head_sha=quote_head,
+                   head_repository={'full_name': REPOSITORY}, actor={'id': OPERATOR_ID},
+                   status='completed', conclusion='failure', run_attempt=1)
+        jobs = [dict(name=name, conclusion=state, head_sha=quote_head, run_id=8) for name, state in (
+            ('review', 'success'), ('build / admit_hosted', 'success'),
+            ('build / hosted_quotes / quote-cycles', 'success'), ('build / publish', 'failure'))]
+        receipt = {'id': 22, 'name': 'hosted-quote-receipt'}
+        for delta, artifacts, error in (
+            (b'.private/publish.py\0', [receipt], None),
+            (b'.private/tor_resident_ui_driver.py\0', [receipt], 'execution inputs changed'),
+            (b'.private/publish.py\0', [receipt, {'name': 'release-attestation-1'}], 'no publication attestation'),
+        ):
+            metadata = Mock()
+            metadata.api.return_value = run
+            metadata.pages.side_effect = [jobs, artifacts]
+            with self.subTest(delta=delta, error=error), patch('quote_recovery.verify_delta'), \
+                    patch('quote_recovery.git', side_effect=[quote_head.encode(), delta]), \
+                    patch.object(hosted_release, 'artifact', return_value=receipt):
+                if error:
+                    with self.assertRaisesRegex(ValueError, error):
+                        resolve_quotes(Path('.'), SOURCE, MAIN, OLD, '8', metadata)
+                else:
+                    self.assertEqual(resolve_quotes(Path('.'), SOURCE, MAIN, OLD, '8', metadata),
+                                     {'quote_receipt_id': '22', 'quote_controller': quote_head, 'quote_run': 8})
+
     def test_signer_reaches_recovery_admission_before_reading_any_key(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
