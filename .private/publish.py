@@ -5,6 +5,7 @@ from pathlib import Path
 from apk_architecture import check_apk
 from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_binding, verify_promotion_revision, validate_core_sources, CORE_BINDING
 from foundation_architecture import validate_graph_binding
+from release_changelog import changes_for, hosted_changes
 from release_metadata import Metadata, wallet_release_versions
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -55,13 +56,14 @@ def release_title(tag):
     if match is None: raise RuntimeError('Invalid private release tag')
     return f'ZEC Private — Release {int(match[1])}'
 
-def release_notes(proof):
+def release_notes(proof, changes=None):
     tag=proof['release_tag']
-    changes=json.loads((ROOT/'.private/release-notes.json').read_text()).get(tag,[])
-    if not isinstance(changes,list) or len(changes)>6 or any(not isinstance(item,str) or not item.strip() or len(item)>300 for item in changes):
-        raise RuntimeError('Release changes must be a list of nonempty strings')
+    if changes is None:
+        changes = changes_for(json.loads((ROOT/'.private/release-notes.json').read_text(encoding='utf-8')), tag,
+                              required=os.environ.get('SIMULATION') != 'true')
     upstream=f'https://github.com/zodl-inc/zodl-android/releases/tag/{proof["upstream"]["tag"]}'
-    lines=[release_title(tag), '', *[f'- {item}' for item in changes]]
+    lines=[release_title(tag), '']
+    if changes: lines.extend(['## What’s new', '', *[f'- {item}' for item in changes]])
     if changes: lines.append('')
     lines.extend([
         'Install **zec-private-latest.apk** (ARM64 Android). Check `SHA256SUMS`; install over the existing wallet.',
@@ -197,6 +199,10 @@ def main():
     validate_graph_binding((artifact/'foundation-runtime.json').read_bytes(),proof,expected)
     tag=proof['release_tag']
     release_title(tag)
+    changes = None
+    if os.environ.get('HOSTED_ACCEPTANCE') == 'true':
+        changes = hosted_changes(ROOT, expected, recovery['original_controller'] if recovery else controller)
+    notes_text = release_notes(proof, changes)
     # Existing published tags/assets are immutable, including duplicate polling.
     existing=subprocess.run(['gh','release','view',tag,'--repo',REPO],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     if existing.returncode==0:
@@ -237,7 +243,7 @@ def main():
     digest=hashlib.sha256(signed.read_bytes()).hexdigest()
     checksum=dist/'SHA256SUMS';checksum.write_text(digest+'  zec-private-latest.apk\n')
     notes=dist/'release-notes.md'
-    notes.write_text(release_notes(proof))
+    notes.write_text(notes_text, encoding='utf-8')
     if os.environ.get('SIMULATION')=='true':
         try:
             simulation_receipt(proof,signed,digest,dist)

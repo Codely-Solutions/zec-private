@@ -46,6 +46,7 @@ jobs:
           import os
           from acceptance_policy import ROOT
           from custom_release import require_dispatch, verify_custom_child
+          from release_changelog import custom_changes
           from release_metadata import Metadata
 
           source, controller = os.environ['SOURCE_SHA'], os.environ['GITHUB_SHA']
@@ -55,6 +56,7 @@ jobs:
           else:
               require_dispatch(source, controller, Metadata(), publish=os.environ['OPERATION'] == 'publish')
               verify_custom_child(source, controller, ROOT)
+              custom_changes(ROOT, source, controller, required=True)
           print('Exact custom candidate and dispatch verified.')
           PY
   build:
