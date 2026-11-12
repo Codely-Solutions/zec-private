@@ -41,18 +41,21 @@ class PackagingTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         workflow = (root / '.github/workflows/build-release.yml').read_text()
         production = workflow.split('  unsigned:\n', 1)[1].split('  emulator:\n', 1)[0]
-        emulator = workflow.split('  emulator:\n', 1)[1].split('  promotion:\n', 1)[0]
-        publish = workflow.split('  publish:\n', 1)[1].split('  failed:\n', 1)[0]
+        emulator = workflow.split('  emulator:\n', 1)[1].split('  testnet_apk:\n', 1)[0]
+        publish = workflow.split('  publish:\n', 1)[1].split('  reconcile:\n', 1)[0]
         for job in (production, emulator):
             self.assertIn('!inputs.candidate_run', job)
             self.assertIn('ref: ${{ inputs.source_sha || github.sha }}', job)
             self.assertNotIn('secrets.', job)
-            self.assertNotIn('needs:', job)
-        self.assertIn('inputs.build_emulator', emulator)
+            dependencies = [line.strip() for line in job.splitlines() if line.startswith('    needs:')]
+            self.assertEqual(['needs: admit_hosted'], dependencies)
+        self.assertIn("!inputs.hosted || needs.admit_hosted.result == 'success'", production)
+        self.assertIn("inputs.build_emulator || (inputs.hosted && needs.admit_hosted.result == 'success')", emulator)
         self.assertIn('name: isolated-ui-repro-apk', emulator)
         self.assertNotIn('isolated-ui-repro-apk', production)
         self.assertIn("!inputs.build_emulator || needs.emulator.result == 'success'", publish)
-        self.assertIn('needs: [unsigned, emulator, promotion]', publish)
+        self.assertIn("needs.hosted_core.result == 'success' && needs.hosted_quotes.result == 'success'", publish)
+        self.assertIn('needs: [unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes]', publish)
         self.assertIn("needs.emulator.result == 'failure'", workflow.split('  failed:\n', 1)[1])
         release = (root / '.private/release_checks.sh').read_text()
         debug = (root / '.private/emulator_checks.sh').read_text()

@@ -774,7 +774,7 @@
   "feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/VKFlowEndVMTest.kt": "2c21b89e6a0d77ed63255dac1b6484629c82b88c4cb1aa34981112b983532a6b",
   "feature-viewing-key/src/test/java/co/electriccoin/zcash/viewingkey/ViewingKeyResourcesTest.kt": "a73590aaab286be20f51376ab582702ec557f328b70834788daf5ca9482d4234",
   "gradle.properties": "b4745d638b69359c296811e47690f7480f5e22d2ee7a9049ae8d3c539838cadf",
-  "gradle/verification-metadata.xml": "70731aa134f9f8360bc47dcf9e18e0ac40d5e3799d6c86150b745049fb0b87e4",
+  "gradle/verification-metadata.xml": "3bf72c1c09d17befa6786526fc067d8b956778bc36e8a6ddc2086805e0150468",
   "gradle/wrapper/gradle-wrapper.jar": "621008afc4f5d59357fcf06ffa644dd5aade5e091bdc363742710445f73cdaf8",
   "gradle/wrapper/gradle-wrapper.properties": "adf232c9285776c3f1c647fb178f0ad0ded13e3b2485341982de110708c36e70",
   "gradlew": "a5a5c199ba02189ae8c46a334223371a20599d9c298ef65e7540ede4a3f72d59",
