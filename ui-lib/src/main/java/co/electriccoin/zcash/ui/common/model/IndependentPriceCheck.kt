@@ -5,6 +5,7 @@ import java.math.MathContext
 
 sealed interface IndependentPriceCheck {
     data object Checking : IndependentPriceCheck
+    data object NoMarketReference : IndependentPriceCheck
     data object Unavailable : IndependentPriceCheck
     data class Compared(val differencePercent: BigDecimal, val validUntilMillis: Long) : IndependentPriceCheck {
         val poor: Boolean get() = differencePercent <= BigDecimal("-15")
@@ -30,17 +31,29 @@ object IndependentPricePolicy {
     private const val OBSERVATION_LIFETIME_MILLIS = 120_000L
     private const val RECEIPT_LIFETIME_MILLIS = 60_000L
 
-    private data class NativeMarket(val symbol: String, val decimals: Int, val pair: String)
+    private data class Market(val symbol: String, val network: String, val decimals: Int, val pair: String)
+
+    // Resolve exact identities from the swap catalog to this source's markets.
+    @Suppress("MagicNumber")
     private val markets = mapOf(
-        "nep141:zec.omft.near" to NativeMarket("zec", ZEC_DECIMALS, "ZECUSD"),
-        "nep141:btc.omft.near" to NativeMarket("btc", BTC_DECIMALS, "XBTUSD"),
-        "nep141:eth.omft.near" to NativeMarket("eth", ETH_DECIMALS, "ETHUSD"),
-        "nep141:sol.omft.near" to NativeMarket("sol", SOL_DECIMALS, "SOLUSD")
+        "nep141:zec.omft.near" to Market("zec", "zec", ZEC_DECIMALS, "ZECUSD"),
+        "nep141:btc.omft.near" to Market("btc", "btc", BTC_DECIMALS, "XBTUSD"),
+        "nep141:eth.omft.near" to Market("eth", "eth", ETH_DECIMALS, "ETHUSD"),
+        "nep141:sol.omft.near" to Market("sol", "sol", SOL_DECIMALS, "SOLUSD"),
+        "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near" to
+            Market("wbtc", "eth", BTC_DECIMALS, "WBTCUSD"),
+        "nep141:ltc.omft.near" to Market("ltc", "ltc", 8, "LTCUSD"),
+        "nep141:tron.omft.near" to Market("trx", "tron", 6, "TRXUSD"),
+        "nep141:bnb.omdep.near" to Market("bnb", "bsc", 18, "BNBUSD"),
+        "nep141:avax.omdep.near" to Market("avax", "avax", 18, "AVAXUSD"),
+        "nep141:xrp.omft.near" to Market("xrp", "xrp", 6, "XRPUSD"),
+        "nep141:dash.omft.near" to Market("dash", "dash", 8, "DASHUSD"),
+        "nep141:bch.omft.near" to Market("bch", "bch", 8, "BCHUSD"),
     )
 
     fun market(asset: SwapAsset): String? = markets[asset.assetId]?.takeIf {
         asset.tokenTicker.equals(it.symbol, ignoreCase = true) &&
-            asset.chainTicker.equals(it.symbol, ignoreCase = true) && asset.decimals == it.decimals
+            asset.chainTicker.equals(it.network, ignoreCase = true) && asset.decimals == it.decimals
     }?.pair
 
     // Each unavailable prerequisite ends the comparison before price arithmetic.
