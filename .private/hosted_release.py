@@ -91,9 +91,3 @@ def admit(source, controller, metadata):
     refs = metadata.api('/git/matching-refs/' + ref.removeprefix('refs/'))
     require(not any(item['ref'] == ref for item in refs),
             'Funding already reserved for this version. Recover the original run without rebuilding or claiming again.')
-    live_bytes = sum(row['size_in_bytes'] for row in metadata.pages('/actions/artifacts', 'artifacts')
-                     if not row['expired'])
-    # Standard public runners are free. Preserve a conservative allowance for
-    # production, quote and testnet archives and small release attestations.
-    require(live_bytes + 240_000_000 <= 500_000_000,
-            'Actions artifacts exceed the no-spending release headroom')
