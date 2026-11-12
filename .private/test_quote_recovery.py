@@ -13,6 +13,23 @@ SOURCE, OLD, MAIN = 'a' * 40, 'b' * 40, 'c' * 40
 
 
 class QuoteRecoveryTests(unittest.TestCase):
+    def test_signer_reaches_recovery_admission_before_reading_any_key(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / '.private').mkdir()
+            (root / '.private/release-policy.json').write_text('{"publication_enabled": true}')
+            (root / 'artifact').mkdir()
+            (root / 'artifact/proof.json').write_text('{}')
+            env = dict(GITHUB_REPOSITORY=REPOSITORY, SOURCE_SHA=SOURCE, CONTROLLER_SHA=MAIN,
+                       RECOVER_RUN='7', HOSTED_ACCEPTANCE='true')
+            with patch.dict(os.environ, env):
+                import publish
+
+                with patch.object(publish, 'ROOT', root), patch.object(publish, 'require_current_controller'), \
+                        patch('quote_recovery.resolve', side_effect=ValueError('Recovery admission reached')):
+                    with self.assertRaisesRegex(ValueError, 'Recovery admission reached'):
+                        publish.main()
+
     def test_recovery_rejects_quote_receipt_from_a_different_controller(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

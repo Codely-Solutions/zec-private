@@ -153,7 +153,6 @@ def main():
         from hosted_release import read_receipts
         from maintenance_cadence import admit_cadence
         from maintenance_watch import api
-        from release_metadata import Metadata
 
         if not recovery:
             admit_cadence(ROOT, expected, controller, Metadata(), api)
