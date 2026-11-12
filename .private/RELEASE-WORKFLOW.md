@@ -11,7 +11,9 @@ gh workflow run custom-release.yml --ref main -f operation=check -f source_sha=F
 gh workflow run custom-release.yml --ref main -f operation=publish -f source_sha=FULL_REVIEWED_SHA
 ```
 
-Use `publish` only with explicit authorization for that SHA. The trusted dispatcher must be the allowlisted GitHub account. An authorized dispatch runs the shared hosted build and wallet/quote acceptance, then signs and publishes if all gates pass. The custom path runs outside the monthly cadence and leaves the routine slot available. If `main` advances before signing, prepare a new child and obtain approval for its new SHA.
+Use `publish` after the user authorizes releasing the reviewed change. Bind the dispatch to the exact prepared SHA and use the allowlisted GitHub account. An authorized dispatch runs the shared hosted build and wallet/quote acceptance, then signs and publishes if all gates pass. The custom path runs outside the monthly cadence and leaves the routine slot available.
+
+If preparation or recovery changes the SHA, compare the replacement with the approved change and inspect the intervening controller diff. Carry approval forward for the same reviewed release after routine build fixes, version preparation or rebasing onto a compatible controller. Record the comparison, bind the new dispatch to its exact SHA and run the required checks. Get fresh approval if the release scope changes materially, signing or acceptance safeguards change, or the user expressly limits approval to a particular SHA.
 
 For a pre-publication failure, diagnose the affected job and recover the original run where its artifacts are still live and its controller is current. Preserve the claim reservation if funding occurred or is uncertain. For a public APK awaiting verification or recording, use [publication reconciliation](MAINTENANCE.md#signing-and-publication) with the original run ID. Fixture preservation uses the original hosted test pair.
 
