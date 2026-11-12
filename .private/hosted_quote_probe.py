@@ -10,14 +10,16 @@ from hosted_fixture import recorded_pair
 from release_metadata import Metadata, require
 
 
-def stage_candidate(root, source, quote_id, production_id):
+def stage_candidate(root, source, quote_id, production_id, original_run='', original_controller=''):
     from hosted_release import artifact, stage
     from release_inputs import version_code
 
     metadata = Metadata()
-    producer = stage(root, quote_id, 'isolated-ui-repro-apk', metadata=metadata)
+    run = original_run or os.environ['GITHUB_RUN_ID']
+    controller = original_controller or os.environ['GITHUB_SHA']
+    producer = stage(root, quote_id, 'isolated-ui-repro-apk', metadata=metadata, run=run, controller=controller)
     production = artifact(metadata, production_id, 'validated-unsigned-apk',
-                          os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_SHA'])
+                          run, controller)
     paths = list(root.glob('*.apk'))
     require(len(paths) == 1 and (root/'source-sha.txt').read_text().strip() == source,
             'Quote APK belongs to a different candidate')
@@ -25,7 +27,7 @@ def stage_candidate(root, source, quote_id, production_id):
     (root/'quote-manifest.json').write_text(json.dumps(dict(
         package='com.personal.zecprivate.foss.debug', expectedVersionCode=version_code(Path.cwd(), source),
         phase1Scenario=True, sizeWorkflowScenario=True, source=source, producer=producer,
-        production_artifact=production)))
+        production_artifact=production, artifact_run_id=int(run))))
 
 
 def stage_quote_apk(root, tag):
@@ -75,13 +77,14 @@ def run(session, root, fixture):
     quote_scenario(session.adb, root, apks, manifest)
     receipt = json.loads((root/'tor-ui-result.json').read_text())
     scenario = receipt['phase1Scenario']
+    print(json.dumps(dict(quote_reviews=receipt['quoteReviewsVerified'], dismissals=receipt['dismissals'],
+                          independent_comparisons=scenario['independentComparisons'],
+                          reference_states=scenario['referenceStates'],
+                          tor_enabled=receipt['torOptInVerified'], funded=False)), flush=True)
     require(receipt['passed'] is True and min(receipt['quoteRequests'], receipt['quoteReviewsVerified'],
                                              receipt['dismissals']) >= 3
             and scenario['recipientNetworkMismatchBlocked'] is True and scenario['correctedWithoutLeavingForm'] is True
             and scenario['independentComparisons'] > 0, 'Required hosted quote cycles and correction missing')
-    print(json.dumps(dict(quote_reviews=receipt['quoteReviewsVerified'], dismissals=receipt['dismissals'],
-                          independent_comparisons=scenario['independentComparisons'],
-                          tor_enabled=receipt['torOptInVerified'], funded=False)))
     if 'source' in manifest:
         from acceptance_policy import input_fingerprint, validate_quotes
         source = manifest['source']
@@ -97,6 +100,7 @@ def run(session, root, fixture):
                       corrected_without_leaving_form=scenario['correctedWithoutLeavingForm'],
                       independent_comparisons=scenario['independentComparisons'], reference_states=scenario['referenceStates'],
                       production_artifact=manifest['production_artifact'], producer=manifest['producer'],
-                      workflow_run_id=int(os.environ['GITHUB_RUN_ID']))
+                      workflow_run_id=int(os.environ['GITHUB_RUN_ID']), artifact_run_id=manifest['artifact_run_id'],
+                      quote_controller_sha=os.environ['GITHUB_SHA'])
         validate_quotes(result, result['input_fingerprint'])
         (fixture/'hosted-quotes.json').write_text(json.dumps(result, indent=2) + '\n')

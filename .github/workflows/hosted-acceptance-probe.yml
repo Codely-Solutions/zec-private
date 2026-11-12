@@ -11,6 +11,12 @@ on:
       production_id:
         type: string
         required: true
+      original_run:
+        type: string
+        default: ''
+      original_controller:
+        type: string
+        default: ''
     outputs:
       receipt_id:
         value: ${{ jobs.quote-cycles.outputs.receipt_id }}
@@ -133,6 +139,8 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
           QUOTE_ID: ${{ inputs.quote_id }}
           PRODUCTION_ID: ${{ inputs.production_id }}
+          ORIGINAL_RUN: ${{ inputs.original_run }}
+          ORIGINAL_CONTROLLER: ${{ inputs.original_controller }}
           PYTHONPATH: .private
         run: |
           if [[ -n "$SOURCE_SHA" ]]; then
@@ -146,7 +154,8 @@ jobs:
           target = Path(os.environ['RUNNER_TEMP'])/'zec-hosted-quotes'
           source = os.environ['SOURCE_SHA']
           if source:
-              stage_candidate(target, source, os.environ['QUOTE_ID'], os.environ['PRODUCTION_ID'])
+              stage_candidate(target, source, os.environ['QUOTE_ID'], os.environ['PRODUCTION_ID'],
+                              os.environ['ORIGINAL_RUN'], os.environ['ORIGINAL_CONTROLLER'])
           else:
               target.mkdir(mode=0o700)
               stage_quote_apk(target, os.environ['RELEASE_TAG'])

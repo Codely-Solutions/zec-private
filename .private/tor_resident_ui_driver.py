@@ -30,6 +30,7 @@ def run(adb, root, apks, manifest):
         return json.loads(data.split(b'\n',1)[0])
     last=None;trace=[];assertions=[];tor_opted_in=False;quote_requests=0;dismissals=0
     scenario_stop=threading.Event();scenario_thread=None;command_read_failures=0
+    pending_dismissal=False
     def capture(command):
         response=request(command)
         safe=[];labels=[str(n.get('text','')) for n in response.get('nodes',[])]
@@ -88,7 +89,10 @@ def run(adb, root, apks, manifest):
                             if not scenario_result.get('passed') or (root/'phase1-scenario-error.json').exists():
                                 receipt['passed']=False
                         (root/'tor-ui-result.json').write_text(json.dumps(receipt,separators=(',',':')))
-                        if not receipt['passed']:raise RuntimeError('Required Tor and quote UI assertions were not completed')
+                        if not receipt['passed']:
+                            print('Quote UI counters: '+json.dumps({key:receipt[key] for key in
+                                  ('quoteReviewsVerified','quoteRequests','dismissals','torOptInVerified')}),flush=True)
+                            raise RuntimeError('Required Tor and quote UI assertions were not completed')
                         return
                     if action=='upgrade_candidate':
                         if not baseline or upgrade is not None:raise ValueError('Upgrade is available exactly once')
@@ -123,10 +127,21 @@ def run(adb, root, apks, manifest):
                                 time.sleep(1)
                         trace.append({'sequence':last,'action':action,'versionCode':version})
                         continue
-                    if action=='assert_text':
+                    if action=='assert_quote_dismissed':
+                        state=capture({'action':'snapshot'})
+                        labels={n['text'].casefold() for n in state['nodes']}
+                        if pending_dismissal and 'get a quote' in labels and 'review quote' not in labels:
+                            dismissals+=1
+                            pending_dismissal=False
+                        else:
+                            state['error']='Quote dismissal did not return to the form'
+                            (root/'ui-state.json').write_text(json.dumps(state))
+                    elif action=='assert_text':
                         state=capture({'action':'snapshot'})
                         passed=any(command['text'].lower() in n['text'].lower() for n in state['nodes'])
                         assertions.append({'text':command['text'],'passed':passed,'sequence':last})
+                        if passed and command['text'].casefold()=='review quote':
+                            pending_dismissal=True
                         if not passed:state['error']='Expected UI text not present';(root/'ui-state.json').write_text(json.dumps(state))
                     else:
                         dismissing_quote = action=='back' and bool(trace) and 'Review Quote' in trace[-1].get('labels',[])
@@ -136,7 +151,8 @@ def run(adb, root, apks, manifest):
                     if not state.get('error'):
                         if action=='click_text' and command.get('text')=='Opt in':tor_opted_in=True
                         if action=='click_text' and command.get('text','').lower() in ('get quote','get a quote'):quote_requests+=1
-                        if action=='back' and dismissing_quote and any(n.get('text')=='Get a quote' for n in state.get('nodes',[])):dismissals+=1
+                        if (not manifest.get('sizeWorkflowScenario') and action=='back' and dismissing_quote
+                                and any(n.get('text')=='Get a quote' for n in state.get('nodes',[]))):dismissals+=1
                     trace.append({'sequence':last,'action':action,'requestedText':command.get('text'),'labels':[n['text'] for n in state.get('nodes',[]) if n['text']][:24],'error':state.get('error')})
                     while len(json.dumps(trace))>6500:trace.pop(0)
             time.sleep(.15)

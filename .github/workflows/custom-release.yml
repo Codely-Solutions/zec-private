@@ -9,8 +9,12 @@ on:
       operation:
         description: Check admission or authorize publication after acceptance
         type: choice
-        options: [check, publish]
+        options: [check, publish, recover]
         default: check
+      recover_run:
+        description: Original hosted run ID for quote-only recovery
+        type: string
+        default: ''
 permissions: {}
 jobs:
   review:
@@ -29,6 +33,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           OPERATION: ${{ inputs.operation }}
+          RECOVER_RUN: ${{ inputs.recover_run }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           git fetch --no-tags origin "$SOURCE_SHA"
@@ -39,13 +44,17 @@ jobs:
           from release_metadata import Metadata
 
           source, controller = os.environ['SOURCE_SHA'], os.environ['GITHUB_SHA']
-          require_dispatch(source, controller, Metadata(), publish=os.environ['OPERATION'] == 'publish')
-          verify_custom_child(source, controller, ROOT)
+          if os.environ['OPERATION'] == 'recover':
+              from quote_recovery import resolve
+              resolve(ROOT, source, controller, os.environ['RECOVER_RUN'], Metadata())
+          else:
+              require_dispatch(source, controller, Metadata(), publish=os.environ['OPERATION'] == 'publish')
+              verify_custom_child(source, controller, ROOT)
           print('Exact custom candidate and dispatch verified.')
           PY
   build:
     needs: review
-    if: inputs.operation == 'publish' && vars.PRODUCTION_SIGNING_READY == 'true'
+    if: (inputs.operation == 'publish' || inputs.operation == 'recover') && vars.PRODUCTION_SIGNING_READY == 'true'
     permissions:
       actions: read
       contents: write
@@ -55,5 +64,6 @@ jobs:
     with:
       hosted: true
       source_sha: ${{ inputs.source_sha }}
+      recover_run: ${{ inputs.recover_run }}
     secrets:
       NTFY_URL: ${{ secrets.NTFY_URL }}
