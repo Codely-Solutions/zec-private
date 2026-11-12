@@ -52,6 +52,7 @@ internal class SwapQuoteVMMapper {
                 onBack = onBack,
                 infoText = createInfoText(),
                 priceCheck = priceCheck?.toNotice(),
+                minimumDeposit = quote.minimumDepositInfo(),
                 primaryButton =
                     ButtonState(
                         text = when {
@@ -75,6 +76,10 @@ internal class SwapQuoteVMMapper {
     private fun IndependentPriceCheck.toNotice(): PriceCheckNoticeState = when (this) {
         IndependentPriceCheck.Checking -> PriceCheckNoticeState(
             stringRes(R.string.private_price_checking), stringRes(R.string.private_price_check_details)
+        )
+        IndependentPriceCheck.NoMarketReference -> PriceCheckNoticeState(
+            stringRes(R.string.private_price_no_market),
+            showInline = false,
         )
         IndependentPriceCheck.Unavailable -> PriceCheckNoticeState(
             stringRes(R.string.private_price_unavailable), stringRes(R.string.private_price_unavailable_details),

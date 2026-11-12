@@ -30,13 +30,14 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PriceCheckNotice(state: PriceCheckNoticeState) {
+    val explanation = state.explanation ?: return
     val tooltip = rememberTooltipState(isPersistent = true)
     val scope = rememberCoroutineScope()
     val color = if (state.isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
     TooltipBox(
         positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
         state = tooltip,
-        tooltip = { PlainTooltip { Text(state.explanation.getValue(), style = MaterialTheme.typography.bodySmall) } },
+        tooltip = { PlainTooltip { Text(explanation.getValue(), style = MaterialTheme.typography.bodySmall) } },
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)

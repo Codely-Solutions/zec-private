@@ -35,6 +35,20 @@ class IndependentPricePolicyTest {
     )
 
     @Test
+    fun ethereumWbtcHasItsOwnMarket() {
+        val wbtc = asset("wbtc", 8)
+        every { wbtc.chainTicker } returns "eth"
+        every { wbtc.assetId } returns "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near"
+        assertEquals("WBTCUSD", IndependentPricePolicy.market(wbtc))
+
+        every { wbtc.chainTicker } returns "base"
+        assertNull(IndependentPricePolicy.market(wbtc))
+        every { wbtc.chainTicker } returns "eth"
+        every { wbtc.assetId } returns "nep141:unknown-ethereum-token.omft.near"
+        assertNull(IndependentPricePolicy.market(wbtc))
+    }
+
+    @Test
     fun exactNativeIdentityRequired() {
         assertEquals("ZECUSD", IndependentPricePolicy.market(zec))
         assertEquals("XBTUSD", IndependentPricePolicy.market(btc))

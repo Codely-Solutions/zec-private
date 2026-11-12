@@ -22,11 +22,25 @@ import kotlin.time.Instant
 
 class KrakenPriceProviderTest {
     @Test
+    fun missingMarketDoesNotOpenAClient() = runTest {
+        val clients = mockk<HttpClientProvider>()
+        val quote = supportedQuote()
+        every { quote.destinationAsset.assetId } returns "unmapped"
+
+        assertEquals(
+            IndependentPriceCheck.NoMarketReference,
+            KrakenPriceProvider(clients).check(quote, BigDecimal.ZERO)
+        )
+        coVerify(exactly = 0) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
+    }
+
+    @Test
     fun wallClockJumpsDoNotChangeFailureBackoffExpiry() = runTest {
         var now = 10_000_000L
         var elapsed = 0L
         val clients = mockk<HttpClientProvider>()
-        coEvery { clients.createTor() } throws IllegalStateException("unavailable")
+        coEvery { clients.create() } throws IllegalStateException("unavailable")
         val provider = KrakenPriceProvider(clients, wallTimeMillis = { now }, elapsedTimeMillis = { elapsed })
 
         assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
@@ -36,13 +50,13 @@ class KrakenPriceProviderTest {
         now -= 7_200_000L
         elapsed = 59_999L
         assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
-        coVerify(exactly = 1) { clients.createTor() }
+        coVerify(exactly = 1) { clients.create() }
 
         elapsed = 60_000L
         assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
 
-        coVerify(exactly = 2) { clients.createTor() }
-        coVerify(exactly = 0) { clients.create() }
+        coVerify(exactly = 2) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
     }
 
     @Test
@@ -51,7 +65,7 @@ class KrakenPriceProviderTest {
         var elapsed = 0L
         var calls = 0
         val clients = mockk<HttpClientProvider>()
-        coEvery { clients.createTor() } coAnswers {
+        coEvery { clients.create() } coAnswers {
             observationClient {
                 calls++
                 wall
@@ -69,7 +83,7 @@ class KrakenPriceProviderTest {
         elapsed = 60_000L
         assertTrue(provider.check(quote, BigDecimal.ZERO) is IndependentPriceCheck.Compared)
         assertEquals(2, calls)
-        coVerify(exactly = 0) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
     }
 
     @Test
@@ -78,7 +92,7 @@ class KrakenPriceProviderTest {
         var elapsed = 0L
         val waits = mutableListOf<Long>()
         val clients = mockk<HttpClientProvider>()
-        coEvery { clients.createTor() } coAnswers { observationClient { wall } }
+        coEvery { clients.create() } coAnswers { observationClient { wall } }
         val provider = KrakenPriceProvider(clients, { wall }, { elapsed }, { wait ->
             waits += wait
             elapsed += wait
@@ -93,8 +107,8 @@ class KrakenPriceProviderTest {
         assertTrue(provider.check(supportedQuote(wall), BigDecimal.ZERO) is IndependentPriceCheck.Compared)
 
         assertEquals(listOf(0L, 900L, 900L), waits)
-        coVerify(exactly = 3) { clients.createTor() }
-        coVerify(exactly = 0) { clients.create() }
+        coVerify(exactly = 3) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
     }
 
     @Test
@@ -103,7 +117,7 @@ class KrakenPriceProviderTest {
         var elapsed = 0L
         val observedAt = wall
         val clients = mockk<HttpClientProvider>()
-        coEvery { clients.createTor() } coAnswers { observationClient { observedAt } }
+        coEvery { clients.create() } coAnswers { observationClient { observedAt } }
         val provider = KrakenPriceProvider(clients, { wall }, { elapsed }, { elapsed += it })
         val quote = supportedQuote(wall)
         assertTrue(provider.check(quote, BigDecimal.ZERO) is IndependentPriceCheck.Compared)
@@ -115,7 +129,7 @@ class KrakenPriceProviderTest {
         wall = observedAt - 5_001L
         elapsed += 1_000L
         assertEquals(IndependentPriceCheck.Unavailable, provider.check(quote, BigDecimal.ZERO))
-        coVerify(exactly = 0) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
     }
 
     @Test
@@ -123,7 +137,7 @@ class KrakenPriceProviderTest {
         val wall = 10_000_000L
         var requests = 0
         val clients = mockk<HttpClientProvider>()
-        coEvery { clients.createTor() } coAnswers {
+        coEvery { clients.create() } coAnswers {
             requests++
             if (requests == 1) throw CancellationException("cancelled")
             observationClient { wall }
@@ -137,21 +151,21 @@ class KrakenPriceProviderTest {
         }
         assertTrue(provider.check(supportedQuote(wall), BigDecimal.ZERO) is IndependentPriceCheck.Compared)
         assertEquals(2, requests)
-        coVerify(exactly = 0) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
     }
 
     @Test
     fun freshObservationDoesNotMakeAnExpiredQuoteComparable() = runTest {
         val wall = 10_000_000L
         val clients = mockk<HttpClientProvider>()
-        coEvery { clients.createTor() } coAnswers { observationClient { wall } }
+        coEvery { clients.create() } coAnswers { observationClient { wall } }
         val provider = KrakenPriceProvider(clients, { wall }, { 0L })
 
         assertEquals(
             IndependentPriceCheck.Unavailable,
             provider.check(supportedQuote(wall - 180_001L), BigDecimal.ZERO)
         )
-        coVerify(exactly = 0) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
     }
 
     private fun observationClient(observedAt: () -> Long) = HttpClient(MockEngine {
@@ -193,14 +207,14 @@ class KrakenPriceProviderTest {
             )
         })
         val clients = mockk<HttpClientProvider>()
-        coEvery { clients.createTor() } returns client
+        coEvery { clients.create() } returns client
         val provider = KrakenPriceProvider(clients)
         repeat(2) {
             assertTrue(provider.check(supportedQuote(), BigDecimal.ZERO) is IndependentPriceCheck.Compared)
         }
         assertEquals(1, calls)
-        coVerify(exactly = 1) { clients.createTor() }
-        coVerify(exactly = 0) { clients.create() }
+        coVerify(exactly = 1) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
     }
 
     @Test
@@ -211,26 +225,26 @@ class KrakenPriceProviderTest {
             respond("""{"error":[],"result":{"unexpected":[]}}""", HttpStatusCode.OK)
         })
         val clients = mockk<HttpClientProvider>()
-        coEvery { clients.createTor() } returns client
+        coEvery { clients.create() } returns client
         val provider = KrakenPriceProvider(clients)
         repeat(2) {
             assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
         }
         assertEquals(1, calls)
-        coVerify(exactly = 1) { clients.createTor() }
-        coVerify(exactly = 0) { clients.create() }
+        coVerify(exactly = 1) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
     }
 
     @Test
     fun transportFailureBacksOffAndNeverCreatesDirectClient() = runTest {
         val clients = mockk<HttpClientProvider>()
-        coEvery { clients.createTor() } throws IllegalStateException("unavailable")
+        coEvery { clients.create() } throws IllegalStateException("unavailable")
         val provider = KrakenPriceProvider(clients)
         repeat(2) {
             assertEquals(IndependentPriceCheck.Unavailable, provider.check(supportedQuote(), BigDecimal.ZERO))
         }
-        coVerify(exactly = 1) { clients.createTor() }
-        coVerify(exactly = 0) { clients.create() }
+        coVerify(exactly = 1) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
     }
 
     @Test
@@ -239,18 +253,18 @@ class KrakenPriceProviderTest {
             expectSuccess = true
         }
         val clients = mockk<HttpClientProvider>()
-        coEvery { clients.createTor() } returns client
+        coEvery { clients.create() } returns client
         assertEquals(
             IndependentPriceCheck.Unavailable,
             KrakenPriceProvider(clients).check(supportedQuote(), BigDecimal.ZERO),
         )
-        coVerify(exactly = 0) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
     }
 
     @Test
     fun parentCancellationPropagates() = runTest {
         val clients = mockk<HttpClientProvider>()
-        coEvery { clients.createTor() } throws CancellationException("cancelled")
+        coEvery { clients.create() } throws CancellationException("cancelled")
         var cancelled = false
         try {
             KrakenPriceProvider(clients).check(supportedQuote(), BigDecimal.ZERO)
@@ -258,7 +272,7 @@ class KrakenPriceProviderTest {
             cancelled = true
         }
         assertEquals(true, cancelled)
-        coVerify(exactly = 0) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
     }
 
     @Test
