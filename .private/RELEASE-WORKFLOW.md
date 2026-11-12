@@ -7,9 +7,9 @@ Keep held work on its branch. Run targeted development checks there. When ready,
 Add the new tag's user-facing changes to [release-notes.json](release-notes.json) in the candidate. Use the [custom workflow](../.github/workflows/custom-release.yml) on `main`. Use `check` for candidate, dispatcher and changelog admission alone. Use `preflight` to diagnose the shared release checks on GitHub or verify signing wiring through the actual reusable caller. It stops after recording APK job admission and cannot assemble APKs, run wallet acceptance, reserve funds or publish. For a normal release, dispatch `publish` directly so the pipeline runs preflight once.
 
 ```sh
-gh workflow run custom-release.yml --ref main -f operation=check -f source_sha=FULL_REVIEWED_SHA
-gh workflow run custom-release.yml --ref main -f operation=preflight -f source_sha=FULL_REVIEWED_SHA
-gh workflow run custom-release.yml --ref main -f operation=publish -f source_sha=FULL_REVIEWED_SHA
+gh workflow run custom-release.yml --repo Codely-Solutions/zec-private --ref main -f operation=check -f source_sha=FULL_REVIEWED_SHA
+gh workflow run custom-release.yml --repo Codely-Solutions/zec-private --ref main -f operation=preflight -f source_sha=FULL_REVIEWED_SHA
+gh workflow run custom-release.yml --repo Codely-Solutions/zec-private --ref main -f operation=publish -f source_sha=FULL_REVIEWED_SHA
 ```
 
 Use `publish` after the user authorizes releasing the reviewed change. Bind the dispatch to the exact prepared SHA and use the allowlisted GitHub account. An authorized dispatch runs the shared hosted build and wallet/quote acceptance, then signs and publishes if all gates pass. The custom path runs outside the monthly cadence and leaves the routine slot available.
