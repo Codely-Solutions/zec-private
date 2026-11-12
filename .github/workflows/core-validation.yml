@@ -5,6 +5,9 @@ on:
       source_sha:
         type: string
         required: true
+      preflight_only:
+        type: boolean
+        default: false
     outputs:
       artifact_id:
         value: ${{ jobs.testnet.outputs.artifact_id }}
@@ -23,25 +26,34 @@ jobs:
     outputs:
       artifact_id: ${{ steps.upload.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Record APK job admission in preflight mode
+        if: inputs.preflight_only
+        run: echo 'Shared preflight admitted this APK job.'
+      - if: ${{ !inputs.preflight_only }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
       - name: Offline preflight before Java and Gradle setup
+        if: inputs.source_sha == '' && !inputs.preflight_only
         run: |
           baseline=$(python3 -c 'import json; print(json.load(open(".private/upgrade-baseline.json"))["source_sha"])')
           python3 -B .private/preflight.py --base "$baseline"
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
+      - if: ${{ !inputs.preflight_only }}
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
         with:
           distribution: temurin
           java-version: '25.0.5+8'
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+      - if: ${{ !inputs.preflight_only }}
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
         with:
           cache-read-only: ${{ inputs.source_sha != '' }}
       - name: Build testnet candidate and instrumentation once
+        if: ${{ !inputs.preflight_only }}
         run: bash .private/build_core_pair.sh
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      - if: ${{ !inputs.preflight_only }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         id: upload
         with:
           name: core-testnet-candidate

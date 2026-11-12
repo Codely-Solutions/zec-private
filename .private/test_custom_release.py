@@ -20,6 +20,7 @@ class CustomReleaseTests(unittest.TestCase):
         cases = (
             ('publish', SOURCE, {}, MAIN, None),
             ('check', SOURCE, {}, MAIN, 'does not authorize'),
+            ('preflight', SOURCE, {}, MAIN, 'does not authorize'),
             ('publish', 'c' * 40, {}, MAIN, 'does not authorize'),
             ('publish', SOURCE, {'actor': {'id': 1}}, MAIN, 'authorized custom release operator'),
             ('publish', SOURCE, {'path': '.github/workflows/sync-upstream.yml'}, MAIN, 'authorized custom release operator'),
@@ -40,6 +41,9 @@ class CustomReleaseTests(unittest.TestCase):
                         if rejection:
                             with self.assertRaisesRegex(ValueError, rejection):
                                 admit_cadence(Path(directory), SOURCE, MAIN, metadata, Mock())
+                            if operation == 'preflight':
+                                metadata.api.side_effect = [run, {'object': {'sha': MAIN}}]
+                                admit_cadence(Path(directory), SOURCE, MAIN, metadata, Mock(), preflight_only=True)
                         else:
                             admit_cadence(Path(directory), SOURCE, MAIN, metadata, Mock())
 

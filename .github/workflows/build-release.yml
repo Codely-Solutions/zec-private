@@ -26,6 +26,9 @@ on:
       reconciliation_run:
         type: string
         default: ''
+      preflight_only:
+        type: boolean
+        default: false
       hosted:
         type: boolean
         default: false
@@ -76,6 +79,7 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
           RECOVER_RUN: ${{ inputs.recover_run }}
           QUOTE_RUN: ${{ inputs.quote_run }}
+          PREFLIGHT_ONLY: ${{ inputs.preflight_only }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           git fetch --no-tags origin "$SOURCE_SHA"
@@ -85,47 +89,63 @@ jobs:
           from release_metadata import Metadata
           source, controller = os.environ['SOURCE_SHA'], os.environ['GITHUB_SHA']
           if os.environ['RECOVER_RUN']:
+              if os.environ['PREFLIGHT_ONLY'] == 'true':
+                  raise ValueError('Preflight cannot authorize recovery')
               from acceptance_policy import ROOT
               from quote_recovery import resolve
               result = resolve(ROOT, source, controller, os.environ['RECOVER_RUN'], Metadata(), os.environ['QUOTE_RUN'])
               with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
                   output.writelines(f'{key}={value}\n' for key, value in result.items())
           else:
-              admit(source, controller, Metadata())
+              admit(source, controller, Metadata(), preflight_only=os.environ['PREFLIGHT_ONLY'] == 'true')
           PY
-  unsigned:
+  preflight:
     needs: admit_hosted
-    if: ${{ always() && !cancelled() && !inputs.candidate_run && !inputs.reconciliation_run && !inputs.recover_run && (!inputs.hosted || needs.admit_hosted.result == 'success') }}
+    if: ${{ always() && !cancelled() && !inputs.reconciliation_run && (!inputs.hosted || needs.admit_hosted.result == 'success') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 50
+    timeout-minutes: 15
     permissions:
+      actions: read
       contents: read
     outputs:
-      source_sha: ${{ steps.identity.outputs.sha }}
-      artifact_id: ${{ steps.apk.outputs.artifact-id }}
+      signing_changed: ${{ steps.wiring.outputs.changed }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check out the trusted release controller
+        if: github.ref == 'refs/heads/main'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Select signing smoke from trusted wiring
+        if: github.ref == 'refs/heads/main'
+        id: wiring
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B .private/signing_wiring.py
+      - name: Verify signing credentials are absent outside the environment
+        if: steps.wiring.outputs.changed == 'true'
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: test -z "$RELEASE_KEYSTORE_BASE64" && test -z "$RELEASE_STORE_PASSWORD" && test -z "$RELEASE_KEY_PASSWORD"
+      - name: Check out the exact new candidate
+        if: ${{ !inputs.candidate_run && !inputs.recover_run }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
-      - id: identity
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Offline preflight before Java and Gradle setup
+      - name: Offline source and controller checks
+        if: ${{ !inputs.candidate_run && !inputs.recover_run }}
         run: |
           baseline=$(python3 -c 'import json; print(json.load(open(".private/upgrade-baseline.json"))["source_sha"])')
           python3 -B .private/preflight.py --base "$baseline"
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
-        with:
-          distribution: temurin
-          java-version: '25.0.5+8'
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-        with:
-          cache-read-only: ${{ inputs.hosted || false }}
       - name: Fork regression checks
+        if: ${{ !inputs.candidate_run && !inputs.recover_run }}
         run: |
-          python3 .private/test_controls.py
-          python3 .private/test_packaging.py
+          python3 -B .private/test_controls.py
+          python3 -B .private/test_packaging.py
           python3 -B .private/test_branding.py
           python3 -B .private/test_foundation.py
           python3 -B .private/test_preflight.py
@@ -146,19 +166,91 @@ jobs:
           python3 -B .private/test_dev_session.py
           python3 -B .private/test_prepared_apks.py
           python3 -B .private/test_ui_capture.py
+          PYTHONPATH=.private python3 -B -m unittest test_emulator_session test_emulator_batch
       - name: Select acceptance by exact relevant inputs before expensive preparation
         env:
           VALIDATION_ONLY: ${{ inputs.hosted || inputs.validation_only || false }}
+        if: ${{ !inputs.candidate_run && !inputs.recover_run }}
         run: python3 -B .private/acceptance_status.py
+      - if: ${{ !inputs.candidate_run && !inputs.recover_run }}
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
+        with:
+          distribution: temurin
+          java-version: '25.0.5+8'
+      - if: ${{ !inputs.candidate_run && !inputs.recover_run }}
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+        with:
+          cache-read-only: true
+      - name: Strict Linux configuration and release Detekt
+        if: ${{ !inputs.candidate_run && !inputs.recover_run }}
+        run: |
+          chmod +x gradlew
+          ./gradlew -I .private/release-analysis.gradle --dependency-verification strict --warning-mode all \
+            --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' \
+            -Pkotlin.compiler.execution.strategy=in-process help detektAll
+  signing_smoke:
+    needs: preflight
+    if: github.ref == 'refs/heads/main' && needs.preflight.outputs.signing_changed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    environment: production-signing
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify protected certificate and private-key access
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: bash .private/verify_signing_key.sh
+  unsigned:
+    needs: [preflight, signing_smoke]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.candidate_run && !inputs.recover_run }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      contents: read
+    outputs:
+      source_sha: ${{ steps.identity.outputs.sha }}
+      artifact_id: ${{ steps.apk.outputs.artifact-id }}
+    steps:
+      - name: Record APK job admission in preflight mode
+        if: inputs.preflight_only
+        run: echo 'Shared preflight admitted this APK job.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ !inputs.preflight_only }}
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - id: identity
+        if: ${{ !inputs.preflight_only }}
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        if: ${{ !inputs.preflight_only }}
+        with:
+          distribution: temurin
+          java-version: '25.0.5+8'
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        if: ${{ !inputs.preflight_only }}
+        with:
+          cache-read-only: ${{ inputs.hosted || false }}
       - name: Unfunded NEAR API contracts over Tor without credentials
+        if: ${{ !inputs.preflight_only }}
         timeout-minutes: 15
         run: bash .private/run_tor_ci.sh
       - name: Validate and assemble production candidate once
+        if: ${{ !inputs.preflight_only }}
         timeout-minutes: 40
         env:
           QUOTE_LAYOUT_SCREENSHOTS: ${{ github.workspace }}/ui-lib/build/reports/quote-layout
         run: bash .private/release_checks.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !inputs.preflight_only }}
         id: apk
         with:
           name: validated-unsigned-apk
@@ -166,7 +258,7 @@ jobs:
           if-no-files-found: error
           retention-days: 3
       - name: Retain bounded validation reports
-        if: always() && !inputs.hosted
+        if: ${{ always() && !inputs.preflight_only && !inputs.hosted }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: validation-reports
@@ -179,7 +271,6 @@ jobs:
             ui-lib/build/reports/tests/
             ui-lib/build/reports/quote-layout/
             app/build/reports/lint-results-*.xml
-            build/reports/detekt/
             artifact/runtime.json
             artifact/foundation-runtime.json
             artifact/near-contract.json
@@ -191,8 +282,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
   emulator:
-    needs: admit_hosted
-    if: ${{ always() && !cancelled() && !inputs.candidate_run && !inputs.reconciliation_run && !inputs.recover_run && (inputs.build_emulator || (inputs.hosted && needs.admit_hosted.result == 'success')) }}
+    needs: [preflight, signing_smoke]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.candidate_run && !inputs.recover_run && (inputs.build_emulator || inputs.hosted) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     permissions:
@@ -200,26 +291,30 @@ jobs:
     outputs:
       artifact_id: ${{ steps.apk.outputs.artifact-id }}
     steps:
+      - name: Record APK job admission in preflight mode
+        if: inputs.preflight_only
+        run: echo 'Shared preflight admitted this APK job.'
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: ${{ !inputs.preflight_only }}
         with:
           ref: ${{ inputs.source_sha || github.sha }}
           persist-credentials: false
           fetch-depth: 0
-      - name: Offline preflight before Java and Gradle setup
-        run: |
-          baseline=$(python3 -c 'import json; print(json.load(open(".private/upgrade-baseline.json"))["source_sha"])')
-          python3 -B .private/preflight.py --base "$baseline"
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
+        if: ${{ !inputs.preflight_only }}
         with:
           distribution: temurin
           java-version: '25.0.5+8'
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c
+        if: ${{ !inputs.preflight_only }}
         with:
           cache-read-only: true
       - name: Assemble isolated emulator candidate once
+        if: ${{ !inputs.preflight_only }}
         timeout-minutes: 40
         run: bash .private/emulator_checks.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: ${{ !inputs.preflight_only }}
         id: apk
         with:
           name: isolated-ui-repro-apk
@@ -227,7 +322,7 @@ jobs:
           if-no-files-found: error
           retention-days: 3
       - name: Retain bounded emulator timing
-        if: always() && !inputs.hosted
+        if: ${{ always() && !inputs.preflight_only && !inputs.hosted }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: emulator-validation-reports
@@ -237,16 +332,17 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
   testnet_apk:
-    needs: admit_hosted
-    if: inputs.hosted && !inputs.recover_run && needs.admit_hosted.result == 'success'
+    needs: [preflight, signing_smoke]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && inputs.hosted && !inputs.recover_run && !inputs.candidate_run }}
     permissions:
       contents: read
     uses: ./.github/workflows/core-validation.yml
     with:
       source_sha: ${{ inputs.source_sha }}
+      preflight_only: ${{ inputs.preflight_only }}
   hosted_core:
     needs: [unsigned, testnet_apk]
-    if: inputs.hosted && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success'
+    if: inputs.hosted && !inputs.preflight_only && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success'
     permissions:
       actions: read
       contents: write
@@ -257,8 +353,8 @@ jobs:
       artifact_id: ${{ needs.testnet_apk.outputs.artifact_id }}
       production_id: ${{ needs.unsigned.outputs.artifact_id }}
   hosted_quotes:
-    needs: [admit_hosted, unsigned, emulator]
-    if: ${{ always() && !cancelled() && inputs.hosted && !inputs.quote_run && needs.admit_hosted.result == 'success' && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
+    needs: [admit_hosted, preflight, signing_smoke, unsigned, emulator]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && inputs.hosted && !inputs.preflight_only && !inputs.quote_run && needs.admit_hosted.result == 'success' && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
     permissions:
       actions: read
       contents: read
@@ -271,7 +367,8 @@ jobs:
       original_run: ${{ inputs.recover_run }}
       original_controller: ${{ needs.admit_hosted.outputs.original_controller }}
   promotion:
-    if: ${{ github.ref == 'refs/heads/main' && inputs.candidate_run && !inputs.reconciliation_run }}
+    needs: [preflight, signing_smoke]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && inputs.candidate_run && !inputs.reconciliation_run }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -289,8 +386,8 @@ jobs:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: python3 .private/promotion.py
   publish:
-    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || (inputs.quote_run && needs.admit_hosted.outputs.quote_receipt_id != '')) && (needs.hosted_core.result == 'success' || (inputs.recover_run && needs.admit_hosted.result == 'success'))) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
-    needs: [unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, admit_hosted]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || (inputs.quote_run && needs.admit_hosted.outputs.quote_receipt_id != '')) && (needs.hosted_core.result == 'success' || (inputs.recover_run && needs.admit_hosted.result == 'success'))) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
+    needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, admit_hosted]
     environment: production-signing
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -384,7 +481,7 @@ jobs:
           PUBLISH_SIGNED_RELEASE: 'true'
         run: python3 -B .private/publish.py
   reconcile:
-    if: github.ref == 'refs/heads/main' && inputs.reconciliation_run && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only
+    if: github.ref == 'refs/heads/main' && inputs.reconciliation_run && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only && !inputs.preflight_only
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     permissions:
@@ -479,8 +576,8 @@ jobs:
           RELEASE_TAG: ${{ needs.publish.outputs.release_tag || needs.reconcile.outputs.release_tag }}
         run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
   failed:
-    if: ${{ always() && github.ref == 'refs/heads/main' && (needs.admit_hosted.result == 'failure' || needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.testnet_apk.result == 'failure' || needs.hosted_core.result == 'failure' || needs.hosted_quotes.result == 'failure' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
-    needs: [admit_hosted, unsigned, emulator, testnet_apk, hosted_core, hosted_quotes, promotion, publish, reconcile, verify_publication, record_integration]
+    if: ${{ always() && !inputs.preflight_only && github.ref == 'refs/heads/main' && (needs.admit_hosted.result == 'failure' || needs.preflight.result == 'failure' || needs.signing_smoke.result == 'failure' || needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.testnet_apk.result == 'failure' || needs.hosted_core.result == 'failure' || needs.hosted_quotes.result == 'failure' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
+    needs: [admit_hosted, preflight, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, hosted_quotes, promotion, publish, reconcile, verify_publication, record_integration]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

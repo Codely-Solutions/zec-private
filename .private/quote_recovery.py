@@ -44,7 +44,7 @@ def resolve(root, source, controller, run_id, metadata, quote_run=''):
             'Original trusted custom run must have failed before publication')
     verify_delta(root, source, original, controller)
     jobs = metadata.pages(f'/actions/runs/{run_id}/attempts/{run["run_attempt"]}/jobs', 'jobs')
-    required = {'review': 'success', 'build / unsigned': 'success', 'build / emulator': 'success',
+    required = {'build / admit_hosted': 'success', 'build / unsigned': 'success', 'build / emulator': 'success',
                 'build / testnet_apk / testnet': 'success', 'build / hosted_core / wallet': 'success',
                 'build / hosted_quotes / quote-cycles': 'failure', 'build / publish': 'skipped'}
     for name, conclusion in required.items():
@@ -87,7 +87,7 @@ def resolve_quotes(root, source, controller, original, quote_run, metadata):
     require(set(filter(None, delta.decode().split('\0'))) <= publication_paths,
             'Quote execution inputs changed after the passing receipt')
     jobs = metadata.pages(f'/actions/runs/{quote_run}/attempts/{run["run_attempt"]}/jobs', 'jobs')
-    for name, conclusion in (('review', 'success'), ('build / admit_hosted', 'success'),
+    for name, conclusion in (('build / admit_hosted', 'success'),
                              ('build / hosted_quotes / quote-cycles', 'success'), ('build / publish', 'failure')):
         matching = [job for job in jobs if job['name'] == name]
         require(len(matching) == 1 and matching[0]['conclusion'] == conclusion

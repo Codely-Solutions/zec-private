@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# One finite Gradle process/configuration per candidate; no persistent daemon.
+# One Gradle invocation for release tests, lint and assembly after preflight.
 set -euo pipefail
-PYTHONPATH=.private python3 -B -m unittest test_emulator_session test_emulator_batch
 chmod +x gradlew
-tasks=(detektAll :wallet-foundation-lib:test :ui-design-lib:testReleaseUnitTest --tests '*MaterialThemeRolesTest' :preference-impl-android-lib:testReleaseUnitTest :feature-ledger:testZcashmainnetFossReleaseUnitTest :feature-viewing-key:testZcashmainnetFossReleaseUnitTest :feature-migration:testZcashmainnetFossReleaseUnitTest :app:privateRuntimeInventory :ui-lib:testZcashmainnetFossReleaseUnitTest :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease)
-init=(-I .private/runtime-inventory.gradle -I .private/robolectric-ci.gradle -I .private/release-analysis.gradle -I .private/task-timing.gradle)
+tasks=(:wallet-foundation-lib:test :ui-design-lib:testReleaseUnitTest --tests '*MaterialThemeRolesTest' :preference-impl-android-lib:testReleaseUnitTest :feature-ledger:testZcashmainnetFossReleaseUnitTest :feature-viewing-key:testZcashmainnetFossReleaseUnitTest :feature-migration:testZcashmainnetFossReleaseUnitTest :app:privateRuntimeInventory :ui-lib:testZcashmainnetFossReleaseUnitTest :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease)
+init=(-I .private/runtime-inventory.gradle -I .private/robolectric-ci.gradle -I .private/task-timing.gradle)
 start=$(date +%s)
 mkdir -p artifact
 ./gradlew "${init[@]}" --profile --warning-mode all --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process "${tasks[@]}"

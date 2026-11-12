@@ -7,9 +7,9 @@ on:
         type: string
         required: true
       operation:
-        description: Check admission or authorize publication after acceptance
+        description: Check admission, run release preflight, or authorize publication after acceptance
         type: choice
-        options: [check, publish, recover]
+        options: [check, preflight, publish, recover]
         default: check
       recover_run:
         description: Original hosted run ID for quote-only recovery
@@ -22,7 +22,7 @@ on:
 permissions: {}
 jobs:
   review:
-    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main'
+    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && inputs.operation == 'check'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -36,9 +36,6 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha }}
-          OPERATION: ${{ inputs.operation }}
-          RECOVER_RUN: ${{ inputs.recover_run }}
-          QUOTE_RUN: ${{ inputs.quote_run }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           git fetch --no-tags origin "$SOURCE_SHA"
@@ -50,18 +47,13 @@ jobs:
           from release_metadata import Metadata
 
           source, controller = os.environ['SOURCE_SHA'], os.environ['GITHUB_SHA']
-          if os.environ['OPERATION'] == 'recover':
-              from quote_recovery import resolve
-              resolve(ROOT, source, controller, os.environ['RECOVER_RUN'], Metadata(), os.environ['QUOTE_RUN'])
-          else:
-              require_dispatch(source, controller, Metadata(), publish=os.environ['OPERATION'] == 'publish')
-              verify_custom_child(source, controller, ROOT)
-              custom_changes(ROOT, source, controller, required=True)
+          require_dispatch(source, controller, Metadata(), publish=False)
+          verify_custom_child(source, controller, ROOT)
+          custom_changes(ROOT, source, controller, required=True)
           print('Exact custom candidate and dispatch verified.')
           PY
   build:
-    needs: review
-    if: (inputs.operation == 'publish' || inputs.operation == 'recover') && vars.PRODUCTION_SIGNING_READY == 'true'
+    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && (inputs.operation == 'preflight' || ((inputs.operation == 'publish' || inputs.operation == 'recover') && vars.PRODUCTION_SIGNING_READY == 'true'))
     permissions:
       actions: read
       contents: write
@@ -70,6 +62,7 @@ jobs:
     uses: ./.github/workflows/build-release.yml
     with:
       hosted: true
+      preflight_only: ${{ inputs.operation == 'preflight' }}
       source_sha: ${{ inputs.source_sha }}
       recover_run: ${{ inputs.recover_run }}
       quote_run: ${{ inputs.quote_run }}

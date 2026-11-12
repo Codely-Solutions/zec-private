@@ -4,10 +4,11 @@
 
 Keep held work on its branch. Run targeted development checks there. When ready, prepare one reviewed commit directly on the current protected `main`, advance the private revision and Android version code, and add `.private/custom-candidate.json` with `kind: custom` and `controller` set to the full parent SHA. Remove any inherited `.private/candidate.json`, stage the reviewed changes and refresh the canonical fork patch and source state with `python -B .private/refresh_source.py`. Push the prepared commit to its candidate branch. Keep controller and signing changes in their separate trusted review path.
 
-Add the new tag's user-facing changes to [release-notes.json](release-notes.json) in the candidate. Use the [custom workflow](../.github/workflows/custom-release.yml) on `main`. Its `check` operation verifies the changelog and candidate and dispatcher identities without building APKs, reserving funds or signing. Run the fork regression stage, strict hosted Gradle configuration and release static analysis before a full release when those boundaries have changed. Test changes to the signing environment through the actual caller path.
+Add the new tag's user-facing changes to [release-notes.json](release-notes.json) in the candidate. Use the [custom workflow](../.github/workflows/custom-release.yml) on `main`. Use `check` for candidate, dispatcher and changelog admission alone. Use `preflight` to diagnose the shared release checks on GitHub or verify signing wiring through the actual reusable caller. It stops after recording APK job admission and cannot assemble APKs, run wallet acceptance, reserve funds or publish. For a normal release, dispatch `publish` directly so the pipeline runs preflight once.
 
 ```sh
 gh workflow run custom-release.yml --ref main -f operation=check -f source_sha=FULL_REVIEWED_SHA
+gh workflow run custom-release.yml --ref main -f operation=preflight -f source_sha=FULL_REVIEWED_SHA
 gh workflow run custom-release.yml --ref main -f operation=publish -f source_sha=FULL_REVIEWED_SHA
 ```
 
@@ -22,6 +23,12 @@ If a quote-only failure requires a harness repair on `main`, use `custom-release
 If that recovery passes quotes and the signer fails before creating an attestation, diagnose and fix signing, then add `quote_run=PASSING_QUOTE_RUN_ID` to reuse the passing quote receipt. The controller checks that the quote execution inputs match, and signing checks all three run identities. Reconcile an existing public release through its original attestation.
 
 Pass the named environment secret references when invoking the reusable release workflow. Their values come from `production-signing` and `maintenance-integration` only in the jobs that select those environments. Keep repository-level copies absent.
+
+## Shared release preflight
+
+Hosted admission checks the exact candidate and changelog before one preflight job runs the offline checks, fast regressions, acceptance selection, and strict Linux Gradle configuration plus release Detekt. The unsigned production, emulator and testnet APK jobs share that gate and can start together. The wallet and quote acceptance jobs can overlap when their respective APKs are ready. Artifact promotion and quote-only recovery reuse the original build evidence. Reconciliation of an already published release starts from its original attestation.
+
+Preflight fingerprints the trusted signing workflows, key check and publisher, along with the live `production-signing` policy. GitHub must restrict that environment to the `main` branch. A changed fingerprint checks that credentials are absent in the ordinary job and proves access to the pinned key in the protected job with a disposable certificate request. Record the fingerprint and passing GitHub run ID in [signing-smoke.json](signing-smoke.json) after verifying both steps. Ordinary candidates then skip the key check. After rotating credentials, reset that record to `null` and use `preflight` through the custom caller. Credential values are outside the fingerprint.
 
 ## Hosted maintenance releases
 
