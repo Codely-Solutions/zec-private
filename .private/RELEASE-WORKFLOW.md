@@ -4,7 +4,7 @@
 
 Keep held work on its branch. Run targeted development checks there. When ready, prepare one reviewed commit directly on the current protected `main`, advance the private revision and Android version code, and add `.private/custom-candidate.json` with `kind: custom` and `controller` set to the full parent SHA. Remove any inherited `.private/candidate.json`, stage the reviewed changes and refresh the canonical fork patch and source state with `python -B .private/refresh_source.py`. Push the prepared commit to its candidate branch. Keep controller and signing changes in their separate trusted review path.
 
-Use the [custom workflow](../.github/workflows/custom-release.yml) on `main`. Its `check` operation confirms candidate and dispatcher identity on GitHub without building APKs, reserving funds or signing. It complements targeted development checks.
+Add the new tag's user-facing changes to [release-notes.json](release-notes.json) in the candidate. Use the [custom workflow](../.github/workflows/custom-release.yml) on `main`. Its `check` operation verifies the changelog and candidate and dispatcher identities without building APKs, reserving funds or signing. Run the fork regression stage, strict hosted Gradle configuration and release static analysis before a full release when those boundaries have changed. Test changes to the signing environment through the actual caller path.
 
 ```sh
 gh workflow run custom-release.yml --ref main -f operation=check -f source_sha=FULL_REVIEWED_SHA

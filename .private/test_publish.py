@@ -165,7 +165,7 @@ class PublishMetadataTest(unittest.TestCase):
         proof={'release_tag':'v2.3.4-private.18','versionCode':123456,'upstream':{'tag':'v2.3.4'}}
         with patch.object(Path,'read_text',return_value=json.dumps({proof['release_tag']:['Correct quote validation.']})):
             notes=publish.release_notes(proof)
-        self.assertTrue(notes.startswith('ZEC Private — Release 18\n\n- Correct quote validation.\n'))
+        self.assertTrue(notes.startswith('ZEC Private — Release 18\n\n## What’s new\n\n- Correct quote validation.\n'))
         self.assertIn('Android versionCode: 123456',notes)
         self.assertIn('/blob/v2.3.4-private.18/docs/WALLET-GUIDE.md',notes)
         self.assertIn('/.private/release-evidence/v2.3.4-private.18.json',notes)
@@ -176,7 +176,7 @@ class PublishMetadataTest(unittest.TestCase):
         for changes in (['Change']*7,['x'*301],[''],[1],{}):
             with self.subTest(changes=changes):
                 with patch.object(Path,'read_text',return_value=json.dumps({proof['release_tag']:changes})):
-                    with self.assertRaisesRegex(RuntimeError,'Release changes must be a list'):
+                    with self.assertRaisesRegex(ValueError, 'Release changes must contain'):
                         publish.release_notes(proof)
 
 

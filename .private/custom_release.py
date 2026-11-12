@@ -24,7 +24,7 @@ def verify_custom_child(source, controller, root):
     paths = git(root, 'diff', '--no-renames', '--name-only', '-z', controller, source,
                 '--', '.github', '.private', 'LICENSE', '.gitattributes').decode().split('\0')
     allowed = {MARKER, '.private/fork.patch', '.private/source-state.json',
-               '.private/release-revision.json', '.private/candidate.json'}
+               '.private/release-revision.json', '.private/candidate.json', '.private/release-notes.json'}
     require(not (set(filter(None, paths)) - allowed), 'Custom candidate changed controller-owned files')
     require(not git(root, 'ls-tree', '--name-only', source, '--', '.private/candidate.json'),
             'Custom release cannot carry an upstream candidate marker')
@@ -43,6 +43,10 @@ def verify_custom_child(source, controller, root):
             and max(upstream['versionCode'], version_code(root, controller)) < int(codes[0]) <= 2_100_000_000
             and names == [upstream['tag'].rsplit('-', 1)[0].encode()], 'Invalid custom release version')
     verify_canonical_patch(source, controller, upstream['sha'], root)
+    if '.private/release-notes.json' in paths:
+        from release_changelog import custom_changes
+
+        custom_changes(root, source, controller, required=True)
 
 
 def require_dispatch(source, controller, metadata, *, publish, recover_run='', quote_run=''):

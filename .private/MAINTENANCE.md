@@ -132,7 +132,7 @@ Keep the README product definition, GitHub About description and repository topi
 
 ## Release descriptions
 
-Add concise user-facing changes to `release-notes.json`, keyed by the exact private tag. Unlisted tags link to upstream changes. User help belongs in the [wallet guide](../docs/WALLET-GUIDE.md); test methodology and provenance belong in bound validation evidence. Preserve the `Android versionCode: N` line: the publisher uses it to reject non-increasing updates.
+Add concise user-facing changes to `release-notes.json`, keyed by the exact private tag. A custom candidate may add or edit only its own entry, and hosted admission requires it. Automated maintenance uses curated notes when supplied and otherwise describes its verified upstream, toolchain or security changes. Keep the `Android versionCode: N` line for the updater. Put user help in the [wallet guide](../docs/WALLET-GUIDE.md) and test provenance in release evidence.
 
 ## Dependency update policy
 

@@ -47,5 +47,10 @@
   ],
   "v3.19.0-private.21": [
     "Update the build toolchain with Gradle security fixes."
+  ],
+  "v3.19.0-private.22": [
+    "Show the minimum deposit in Quote details for incoming flexible-input swaps.",
+    "Add independent market references for Ethereum WBTC and more native assets.",
+    "Follow the wallet’s Tor setting for market checks and keep quote review usable when the reference times out."
   ]
 }
