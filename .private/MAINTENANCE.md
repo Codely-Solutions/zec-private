@@ -12,7 +12,7 @@ Use this entry for the checkout; local task state lives in the surrounding works
 | Inspect UI / capture screenshots | [UI-REVIEW.md](UI-REVIEW.md) | Established capture/control components; artifact/state orchestration must match the current task. |
 | Reuse local development state | [DEVELOPMENT.md](DEVELOPMENT.md), [dev_session.py](dev_session.py) | Related pinned checks in one bounded isolated workspace; no production release assembly. |
 | Prepare/admit/assemble release acceptance | [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md) | Verified producers, paired baseline, explicit ownership and selective execution; no signing. |
-| Hold, check or publish a custom change | [Hosted custom releases](RELEASE-WORKFLOW.md#hosted-custom-releases) | Explicit approval for the exact candidate, shared hosted acceptance and recovery. |
+| Hold, check or publish a custom change | [Hosted custom releases](RELEASE-WORKFLOW.md#hosted-custom-releases) | Release-scope approval, exact commit binding, and shared hosted acceptance and recovery. |
 | Select quick checks and release checks | Build section below; [core coverage](core-coverage.md) | Coverage records identify their executed revision; current evidence must match inputs. |
 | Maintain independent quote checks | [INDEPENDENT-PRICES.md](INDEPENDENT-PRICES.md) | Exact native-asset coverage, freshness, Tor behavior and advisory thresholds. |
 | Run real wallet acceptance | [core coverage](core-coverage.md), [core_testnet_driver.py](core_testnet_driver.py), [acceptance_policy.py](acceptance_policy.py) | Requires a current prepared job, baseline and artifact bindings. Use [development artifact reuse](DEVELOPMENT.md#reuse-artifacts-and-guest-state) and the funding procedure below. |
