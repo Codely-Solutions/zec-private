@@ -36,6 +36,7 @@ import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationArgs
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -49,6 +50,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigDecimal
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.minutes
@@ -67,6 +69,7 @@ internal class SwapQuoteVM(
 ) : ViewModel() {
     private companion object {
         const val PRICE_CLOCK_INTERVAL_MILLIS = 1_000L
+        const val PRICE_REVIEW_BUDGET_MILLIS = 8_000L
     }
 
     private var isClosing = false
@@ -108,7 +111,15 @@ internal class SwapQuoteVM(
                         val fee = quote.getTotalFeesZatoshi((proposal as? SwapTransactionProposal)?.proposal)
                             .convertZatoshiToZec()
                         priceCheck.value = BoundPriceCheck(quote, fee, IndependentPriceCheck.Checking)
-                        val checked = independentPrices.check(quote, fee)
+                        // The transport can finish cancellation after the review deadline.
+                        // Cancel it without making the review wait for its cleanup.
+                        val request = viewModelScope.async { independentPrices.check(quote, fee) }
+                        val checked = try {
+                            withTimeoutOrNull(PRICE_REVIEW_BUDGET_MILLIS) { request.await() }
+                                ?: IndependentPriceCheck.Unavailable
+                        } finally {
+                            request.cancel()
+                        }
                         priceCheck.value = BoundPriceCheck(quote, fee, checked)
                     }
                 }

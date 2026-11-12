@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.provider
 
+import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.model.boundedMarketNumber
 import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
 import co.electriccoin.zcash.ui.common.model.IndependentPricePolicy
@@ -46,32 +47,46 @@ class KrakenPriceProvider(
         networkFeeZec: BigDecimal
     ): IndependentPriceCheck = withContext(Dispatchers.IO) {
         val pairs = listOf(
-            IndependentPricePolicy.market(quote.originAsset) ?: return@withContext IndependentPriceCheck.Unavailable,
+            IndependentPricePolicy.market(quote.originAsset)
+                ?: return@withContext IndependentPriceCheck.NoMarketReference,
             IndependentPricePolicy.market(quote.destinationAsset)
-                ?: return@withContext IndependentPriceCheck.Unavailable
+                ?: return@withContext IndependentPriceCheck.NoMarketReference
         ).distinct()
         try {
             withTimeout(CHECK_TIMEOUT_MILLIS) {
                 mutex.withLock {
                     val now = wallTimeMillis()
                     val elapsedNow = elapsedTimeMillis()
-                    if (now < 0L || elapsedNow < 0L || failureAtMillis?.let {
-                        elapsedNow - it < FAILURE_BACKOFF_MILLIS
-                    } == true) return@withLock IndependentPriceCheck.Unavailable
+                    if (now < 0L || elapsedNow < 0L) return@withLock IndependentPriceCheck.Unavailable
                     val missing = pairs.filterNot { isCacheFresh(it, now, elapsedNow) }
                     if (missing.isNotEmpty()) {
-                        httpClientProvider.createTor().use { client ->
+                        if (failureAtMillis?.let { elapsedNow - it < FAILURE_BACKOFF_MILLIS } == true) {
+                            return@withLock IndependentPriceCheck.Unavailable
+                        }
+                        httpClientProvider.create().use { client ->
                             missing.forEach { pair ->
                                 awaitRequestInterval()
                                 val observation = client.prepareGet("https://api.kraken.com/0/public/Spread") {
                                     expectSuccess = false
                                     url { parameters.append("pair", pair) }
                                 }.execute { response ->
-                                    check(response.status.value == HttpStatusCode.OK.value)
+                                    val status = response.status
+                                    if (status != HttpStatusCode.OK) {
+                                        val reason = if (status == HttpStatusCode.TooManyRequests) {
+                                            "rate limited"
+                                        } else {
+                                            "HTTP " + status.value
+                                        }
+                                        throw MarketDataFailure(reason)
+                                    }
                                     val bytes = response.bodyAsChannel()
                                         .readBuffer(MAX_RESPONSE_BYTES.toLong() + 1L).readByteArray()
-                                    require(bytes.size <= MAX_RESPONSE_BYTES)
-                                    parseKrakenObservation(pair, bytes.decodeToString(), wallTimeMillis())
+                                    try {
+                                        require(bytes.size <= MAX_RESPONSE_BYTES)
+                                        parseKrakenObservation(pair, bytes.decodeToString(), wallTimeMillis())
+                                    } catch (_: RuntimeException) {
+                                        throw MarketDataFailure("rejected response")
+                                    }
                                 }
                                 cache[pair] = CachedObservation(observation, elapsedTimeMillis())
                             }
@@ -81,14 +96,20 @@ class KrakenPriceProvider(
                 }
             }
         } catch (_: TimeoutCancellationException) {
-            failureAtMillis = elapsedTimeMillis()
-            IndependentPriceCheck.Unavailable
+            unavailable("timeout")
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (_: Exception) {
-            failureAtMillis = elapsedTimeMillis()
-            IndependentPriceCheck.Unavailable
+        } catch (failure: MarketDataFailure) {
+            unavailable(failure.message)
+        } catch (failure: Exception) {
+            unavailable("request failed (" + failure.javaClass.simpleName + ")")
         }
+    }
+
+    private fun unavailable(reason: String): IndependentPriceCheck {
+        failureAtMillis = elapsedTimeMillis()
+        Twig.warn { "Independent market check: " + reason }
+        return IndependentPriceCheck.Unavailable
     }
 
     private fun isCacheFresh(pair: String, now: Long, elapsedNow: Long): Boolean =
@@ -125,7 +146,11 @@ class KrakenPriceProvider(
             // while leaving the provider observation and quote timestamps unchanged.
             cached.observation.copy(receivedAtMillis = comparisonTime - age)
         }
-        return IndependentPricePolicy.compare(quote, networkFeeZec, observations, comparisonTime)
+        val result = IndependentPricePolicy.compare(quote, networkFeeZec, observations, comparisonTime)
+        if (result == IndependentPriceCheck.Unavailable) {
+            Twig.warn { "Independent market check: market data failed comparison checks" }
+        }
+        return result
     }
 
     private data class CachedObservation(val observation: MarketObservation, val receivedAtElapsedMillis: Long)
@@ -137,11 +162,19 @@ internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis
         "XBTUSD" -> "XXBTZUSD"
         "ZECUSD" -> "XZECZUSD"
         "ETHUSD" -> "XETHZUSD"
-        "SOLUSD" -> "SOLUSD"
+        "LTCUSD" -> "XLTCZUSD"
+        "XRPUSD" -> "XXRPZUSD"
+        "SOLUSD", "WBTCUSD", "TRXUSD", "BNBUSD", "AVAXUSD", "DASHUSD", "BCHUSD" -> pair
         else -> error("Unsupported market")
     }
     val root = Json.parseToJsonElement(body).jsonObject
-    require(root.getValue("error").jsonArray.isEmpty())
+    val errors = root.getValue("error").jsonArray
+    val rateLimited = errors.any {
+        val error = it.jsonPrimitive.content
+        error.startsWith("EAPI:Rate limit") || error.startsWith("EService:Throttled")
+    }
+    if (rateLimited) throw MarketDataFailure("rate limited")
+    require(errors.isEmpty())
     val result = root.getValue("result").jsonObject
     require(result.keys == setOf(key, "last"))
     val rows = result.getValue(key).jsonArray
@@ -158,6 +191,8 @@ internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis
         MarketObservation(pair, bid, ask, observedAtMillis, receivedAtMillis)
     }.maxBy { it.observedAtMillis }
 }
+
+private class MarketDataFailure(override val message: String) : Exception(message)
 
 private const val CHECK_TIMEOUT_MILLIS = 8_000L
 private const val RECEIPT_LIFETIME_MILLIS = 60_000L
