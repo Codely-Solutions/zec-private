@@ -13,4 +13,8 @@
     <string name="private_price_poor">%1$s%% below market reference</string>
     <string name="private_swap_anyway">Swap anyway</string>
     <string name="private_pay_anyway">Pay anyway</string>
+    <string name="private_minimum_deposit">Minimum deposit</string>
+    <string name="private_minimum_deposit_help_label">About minimum deposit</string>
+    <string name="private_minimum_deposit_help">The deposit address must receive at least this amount before the quote expires.</string>
+    <string name="private_price_no_market">No market reference for this asset</string>
 </resources>

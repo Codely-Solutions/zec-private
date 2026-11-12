@@ -31,6 +31,9 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
@@ -195,6 +198,30 @@ class SwapQuoteVMTest {
             "Price check unavailable",
             state.priceCheck.label.getString(RuntimeEnvironment.getApplication(), Locale.US),
         )
+    }
+
+    @Test
+    fun slowCancellationCannotDelayConfirmationOrReplaceUnavailableWithALateWarning() = runTest {
+        val prices = mockk<IndependentPriceProvider> {
+            coEvery { check(any(), any()) } coAnswers {
+                withContext(NonCancellable) { delay(12_000L) }
+                IndependentPriceCheck.Compared(BigDecimal("-30"), System.currentTimeMillis() + 60_000)
+            }
+        }
+        val vm = vm(zashi(), prices = prices)
+        collect(vm)
+        assertFalse((vm.state.value as SwapQuoteState.Success).primaryButton.isEnabled)
+
+        testScheduler.advanceTimeBy(8_001L)
+        testScheduler.runCurrent()
+        val available = vm.state.value as SwapQuoteState.Success
+        assertTrue(available.primaryButton.isEnabled)
+        assertFalse(available.priceCheck?.isWarning ?: true)
+
+        testScheduler.advanceTimeBy(5_000L)
+        testScheduler.runCurrent()
+        assertTrue((vm.state.value as SwapQuoteState.Success).primaryButton.isEnabled)
+        assertFalse((vm.state.value as SwapQuoteState.Success).priceCheck?.isWarning ?: true)
     }
 
     @Test
