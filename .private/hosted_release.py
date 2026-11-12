@@ -84,13 +84,13 @@ def read_receipts(directory, *, proof, source, controller, production_id, core_i
     return core, quote
 
 
-def admit(source, controller, metadata):
+def admit(source, controller, metadata, *, preflight_only=False):
     require(source != controller, 'Hosted automatic releases require a prepared child candidate')
     verify_promotion_revision(source, controller)
     from maintenance_cadence import admit_cadence
     from maintenance_watch import api
     from release_changelog import hosted_changes
-    admit_cadence(ROOT, source, controller, metadata, api)
+    admit_cadence(ROOT, source, controller, metadata, api, preflight_only=preflight_only)
     hosted_changes(ROOT, source, controller)
     version = version_code(ROOT, source)
     baseline = json.loads((ROOT / '.private/hosted-fixture.json').read_text())['version_code']

@@ -140,12 +140,13 @@ def changed_marker(root, source, controller, path):
     return {}
 
 
-def admit_cadence(root, source, controller, metadata, advisory_api):
+def admit_cadence(root, source, controller, metadata, advisory_api, *, preflight_only=False):
     from custom_release import MARKER as CUSTOM_MARKER, require_dispatch
 
     if changed_marker(root, source, controller, CUSTOM_MARKER):
-        require_dispatch(source, controller, metadata, publish=True)
+        require_dispatch(source, controller, metadata, publish=not preflight_only, preflight_only=preflight_only)
         return
+    require(not preflight_only, 'Hosted preflight requires a prepared custom candidate')
     maintenance = changed_marker(root, source, controller, MARKER)
     if maintenance.get('kind') == 'security':
         review = security_review(root, metadata, advisory_api)

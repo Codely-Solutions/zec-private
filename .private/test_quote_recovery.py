@@ -87,7 +87,7 @@ class QuoteRecoveryTests(unittest.TestCase):
                         head_sha=OLD, head_repository={'full_name': REPOSITORY}, actor={'id': OPERATOR_ID},
                         status='completed', conclusion='failure', run_attempt=2)
         current = dict(original, id=8, head_sha=MAIN)
-        states = {'review': 'success', 'build / unsigned': 'success', 'build / emulator': 'success',
+        states = {'build / admit_hosted': 'success', 'build / unsigned': 'success', 'build / emulator': 'success',
                   'build / testnet_apk / testnet': 'success', 'build / hosted_core / wallet': 'success',
                   'build / hosted_quotes / quote-cycles': 'failure', 'build / publish': 'skipped'}
         artifacts = [dict(id=i, name=name) for i, name in enumerate(ARTIFACTS.values(), 1)]

@@ -4,8 +4,10 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import Mock
 from apk_architecture import check_apk
 from compare_runtime import compare
+from signing_wiring import environment_wiring
 
 
 class PackagingTests(unittest.TestCase):
@@ -43,20 +45,28 @@ class PackagingTests(unittest.TestCase):
         production = workflow.split('  unsigned:\n', 1)[1].split('  emulator:\n', 1)[0]
         emulator = workflow.split('  emulator:\n', 1)[1].split('  testnet_apk:\n', 1)[0]
         publish = workflow.split('  publish:\n', 1)[1].split('  reconcile:\n', 1)[0]
-        for job in (production, emulator):
+        testnet = workflow.split('  testnet_apk:\n', 1)[1].split('  hosted_core:\n', 1)[0]
+        preflight = workflow.split('  preflight:\n', 1)[1].split('  signing_smoke:\n', 1)[0]
+        for job in (production, emulator, testnet):
             self.assertIn('!inputs.candidate_run', job)
-            self.assertIn('ref: ${{ inputs.source_sha || github.sha }}', job)
             self.assertNotIn('secrets.', job)
             dependencies = [line.strip() for line in job.splitlines() if line.startswith('    needs:')]
-            self.assertEqual(['needs: admit_hosted'], dependencies)
-        self.assertIn("!inputs.hosted || needs.admit_hosted.result == 'success'", production)
-        self.assertIn("inputs.build_emulator || (inputs.hosted && needs.admit_hosted.result == 'success')", emulator)
+            self.assertEqual(['needs: [preflight, signing_smoke]'], dependencies)
+            self.assertIn("needs.preflight.result == 'success'", job)
+            self.assertIn("needs.signing_smoke.result == 'success'", job)
+            self.assertNotIn('.private/preflight.py', job)
+        for job in (production, emulator):
+            self.assertIn('ref: ${{ inputs.source_sha || github.sha }}', job)
+        self.assertIn('.private/preflight.py', preflight)
+        self.assertIn('--dependency-verification strict', preflight)
+        self.assertIn('help detektAll', preflight)
+        self.assertIn('!inputs.preflight_only', publish)
         self.assertIn('name: isolated-ui-repro-apk', emulator)
         self.assertNotIn('isolated-ui-repro-apk', production)
         self.assertIn("!inputs.build_emulator || needs.emulator.result == 'success'", publish)
         self.assertIn("needs.hosted_quotes.result == 'success' || (inputs.quote_run && needs.admit_hosted.outputs.quote_receipt_id != '')", publish)
         self.assertIn("needs.hosted_core.result == 'success' || (inputs.recover_run && needs.admit_hosted.result == 'success')", publish)
-        self.assertIn('needs: [unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, admit_hosted]', publish)
+        self.assertIn('needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, admit_hosted]', publish)
         self.assertIn('environment: production-signing', publish)
         for caller in ('custom-release.yml', 'sync-upstream.yml'):
             caller_workflow = (root / '.github/workflows' / caller).read_text()
@@ -69,6 +79,7 @@ class PackagingTests(unittest.TestCase):
         self.assertNotIn('FossDebug', release)
         self.assertNotIn('BUILD_EMULATOR', release)
         self.assertEqual(1, release.count('./gradlew '))
+        self.assertNotIn('detektAll', release)
         self.assertEqual(1, debug.count('./gradlew '))
         self.assertIn(':app:assembleZcashmainnetFossRelease', release)
         self.assertIn(':ui-lib:testZcashmainnetFossReleaseUnitTest', release)
@@ -82,6 +93,18 @@ class PackagingTests(unittest.TestCase):
             self.assertIn('-I .private/task-timing.gradle', script)
         self.assertIn('artifact/task-timing.jsonl', production)
         self.assertIn('artifact/task-timing.jsonl', emulator)
+
+    def test_signing_policy_rejects_tags_and_wider_branch_access(self):
+        metadata = Mock()
+        metadata.api.return_value = {'id': 5, 'protection_rules': [], 'deployment_branch_policy': {
+            'protected_branches': False, 'custom_branch_policies': True}}
+        main = {'name': 'main', 'type': 'branch'}
+        for policies in ([main, {'name': 'main', 'type': 'tag'}], [{'name': '*', 'type': 'branch'}], []):
+            with self.subTest(policies=policies), self.assertRaisesRegex(RuntimeError, 'main branch only'):
+                metadata.pages.return_value = policies
+                environment_wiring(metadata)
+        metadata.pages.return_value = [main]
+        self.assertEqual([main], environment_wiring(metadata)['branches'])
 
     def test_release_rejects_extra_abis_and_missing_engine(self):
         with tempfile.TemporaryDirectory() as temporary:

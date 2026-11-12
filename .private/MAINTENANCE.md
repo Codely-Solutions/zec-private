@@ -108,7 +108,7 @@ Keep the repository variable `PRODUCTION_SIGNING_READY` unset during signing set
 
 Keep the cloud repair connector scoped to the separate proposal repository. Verify its installation scope, protected controller ownership and job permissions independently before enabling automatic publication. An environment branch rule controls secret admission. The proposal import and integration policy must also control which source can enter `main`.
 
-After changing signing credentials, run `verify-signing-environment.yml` on `main` with the default scope check enabled. It verifies private-key access and the pinned certificate, and a separate ordinary job checks that the three credentials are absent outside the environment.
+After changing signing credentials, follow the [shared preflight procedure](RELEASE-WORKFLOW.md#shared-release-preflight) to verify access through the reusable release caller. Use [the standalone environment check](../.github/workflows/verify-signing-environment.yml) to isolate a credential problem from caller wiring.
 
 Tags use `v<upstream-version>-private.<revision>`, with the revision in `release-revision.json`. The upstream and Gradle preparation controllers allocate above the recorded revision and complete release history. The signing job checks versionCode again. Version-only lines are generated during preparation, and the next fork patch is relative to the actual upstream commit. Publication precedes a normal fast-forward integration-state push; concurrent changes cause that push to fail.
 

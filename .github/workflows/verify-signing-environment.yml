@@ -16,26 +16,19 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     environment: production-signing
+    permissions:
+      contents: read
     steps:
-      - name: Verify certificate and private key without publishing
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify certificate and private key
         env:
-          KEYSTORE: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          umask 077
-          scratch=$(mktemp -d)
-          trap 'rm -f "$scratch/key.p12" "$scratch/proof.csr"; rmdir "$scratch"' EXIT
-          test -n "$KEYSTORE" && test -n "$STORE_PASSWORD" && test "$KEY_PASSWORD" = "$STORE_PASSWORD"
-          printf '%s' "$KEYSTORE" | base64 --decode > "$scratch/key.p12"
-          cert=$(keytool -J-Duser.language=en -list -v -storetype PKCS12 -keystore "$scratch/key.p12" \
-            -alias zec-private -storepass:env STORE_PASSWORD | awk '/SHA256:/{gsub(/:/,"",$2); print tolower($2)}')
-          test "$cert" = '410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168'
-          keytool -certreq -storetype PKCS12 -keystore "$scratch/key.p12" -alias zec-private \
-            -storepass:env STORE_PASSWORD -keypass:env KEY_PASSWORD -file "$scratch/proof.csr"
-          test -s "$scratch/proof.csr"
-          echo 'Verified the pinned certificate and private-key access. No release artifact created.'
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: bash .private/verify_signing_key.sh
   verify-scope:
     if: github.ref == 'refs/heads/main' && inputs.require_environment_only
     runs-on: ubuntu-24.04
