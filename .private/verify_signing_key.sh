@@ -6,6 +6,8 @@ trap 'rm -f "$scratch/key.p12" "$scratch/proof.csr"; rmdir "$scratch"' EXIT
 : "${RELEASE_KEYSTORE_BASE64:?Signing keystore unavailable}"
 : "${RELEASE_STORE_PASSWORD:?Signing store password unavailable}"
 : "${RELEASE_KEY_PASSWORD:?Signing key password unavailable}"
+# keytool uses the store password for PKCS#12 keys, so check both values explicitly.
+test "$RELEASE_KEY_PASSWORD" = "$RELEASE_STORE_PASSWORD"
 printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$scratch/key.p12"
 expected=$(PYTHONPATH=.private python3 -B -c 'from publish import CERT; print(CERT)')
 cert=$(keytool -J-Duser.language=en -list -v -storetype PKCS12 -keystore "$scratch/key.p12" \
