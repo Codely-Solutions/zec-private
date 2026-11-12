@@ -58,6 +58,8 @@ def read_receipts(directory, *, proof, source, controller, production_id, core_i
     run = os.environ['GITHUB_RUN_ID']
     build_run = str(recovery['run']) if recovery else run
     build_controller = recovery['original_controller'] if recovery else controller
+    quote_run = recovery.get('quote_run', int(run)) if recovery else int(run)
+    quote_controller = recovery.get('quote_controller', controller) if recovery else controller
     production = artifact(metadata, production_id, 'validated-unsigned-apk', build_run, build_controller)
     version = version_code(ROOT, source)
     fixture = json.loads((ROOT / '.private/hosted-fixture.json').read_text())
@@ -65,10 +67,10 @@ def read_receipts(directory, *, proof, source, controller, production_id, core_i
     quote = json.loads((directory / 'hosted-quotes.json').read_text())
     require(all(receipt.get('build_source_sha') == source and receipt.get('candidate_version_code') == version
                 and receipt.get('production_artifact') == production and receipt.get('workflow_run_id') == int(receipt_run)
-                for receipt, receipt_run in ((core, build_run), (quote, run))) and str(proof['workflow_run_id']) == build_run
+                for receipt, receipt_run in ((core, build_run), (quote, quote_run))) and str(proof['workflow_run_id']) == build_run
             and proof['versionCode'] == version, 'Acceptance is not bound to this production candidate and run')
     if recovery:
-        require(quote.get('quote_controller_sha') == controller
+        require(quote.get('quote_controller_sha') == quote_controller
                 and quote.get('artifact_run_id') == int(build_run), 'Quote recovery used different execution inputs')
     require(core.get('rehearsal') is False and core['funding_setup']['claim_requests'] == 1,
             'Hosted release requires exactly one funded testnet claim')

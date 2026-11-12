@@ -54,7 +54,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('name: isolated-ui-repro-apk', emulator)
         self.assertNotIn('isolated-ui-repro-apk', production)
         self.assertIn("!inputs.build_emulator || needs.emulator.result == 'success'", publish)
-        self.assertIn("inputs.hosted && needs.hosted_quotes.result == 'success'", publish)
+        self.assertIn("needs.hosted_quotes.result == 'success' || (inputs.quote_run && needs.admit_hosted.outputs.quote_receipt_id != '')", publish)
         self.assertIn("needs.hosted_core.result == 'success' || (inputs.recover_run && needs.admit_hosted.result == 'success')", publish)
         self.assertIn('needs: [unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, admit_hosted]', publish)
         self.assertIn("needs.emulator.result == 'failure'", workflow.split('  failed:\n', 1)[1])

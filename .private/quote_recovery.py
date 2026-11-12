@@ -30,11 +30,11 @@ def verify_delta(root, source, original, controller):
             'Controller changed outside quote recovery paths')
 
 
-def resolve(root, source, controller, run_id, metadata):
+def resolve(root, source, controller, run_id, metadata, quote_run=''):
     from hosted_release import artifact
 
     require(re.fullmatch(r'[1-9][0-9]*', run_id), 'Exact original run required')
-    require_dispatch(source, controller, metadata, publish=True, recover_run=run_id)
+    require_dispatch(source, controller, metadata, publish=True, recover_run=run_id, quote_run=quote_run)
     run = metadata.api('/actions/runs/' + run_id)
     original = run['head_sha']
     require(run['id'] == int(run_id) and run['path'] == WORKFLOW and run['event'] == 'workflow_dispatch'
@@ -58,4 +58,44 @@ def resolve(root, source, controller, run_id, metadata):
         matching = [row for row in artifacts if row['name'] == name]
         require(len(matching) == 1, 'Expected one original artifact: ' + name)
         outputs[key] = str(artifact(metadata, matching[0]['id'], name, run_id, original)['id'])
+    if quote_run:
+        outputs.update(resolve_quotes(root, source, controller, original, quote_run, metadata))
     return outputs
+
+
+def resolve_quotes(root, source, controller, original, quote_run, metadata):
+    from hosted_release import artifact
+
+    require(re.fullmatch(r'[1-9][0-9]*', quote_run), 'Exact quote recovery run required')
+    run = metadata.api('/actions/runs/' + quote_run)
+    quote_controller = run['head_sha']
+    require(run['id'] == int(quote_run) and run['path'] == WORKFLOW and run['event'] == 'workflow_dispatch'
+            and run['head_branch'] == 'main' and run['head_repository']['full_name'] == REPOSITORY
+            and run['actor']['id'] == OPERATOR_ID and run['status'] == 'completed'
+            and run['conclusion'] == 'failure' and re.fullmatch(r'[a-f0-9]{40}', quote_controller),
+            'Expected the exact trusted recovery run with a signing failure')
+    verify_delta(root, source, original, quote_controller)
+    require(git(root, 'merge-base', quote_controller, controller).decode().strip() == quote_controller,
+            'Quote receipt controller is not an ancestor of the signer')
+    delta = git(root, 'diff', '--no-renames', '--name-only', '-z', quote_controller, controller)
+    publication_paths = {
+        '.github/workflows/build-release.yml', '.github/workflows/custom-release.yml', '.private/custom_release.py',
+        '.private/quote_recovery.py', '.private/hosted_release.py', '.private/publish.py',
+        '.private/test_packaging.py', '.private/test_quote_recovery.py', '.private/RELEASE-WORKFLOW.md',
+    }
+    require(set(filter(None, delta.decode().split('\0'))) <= publication_paths,
+            'Quote execution inputs changed after the passing receipt')
+    jobs = metadata.pages(f'/actions/runs/{quote_run}/attempts/{run["run_attempt"]}/jobs', 'jobs')
+    for name, conclusion in (('review', 'success'), ('build / admit_hosted', 'success'),
+                             ('build / hosted_quotes / quote-cycles', 'success'), ('build / publish', 'failure')):
+        matching = [job for job in jobs if job['name'] == name]
+        require(len(matching) == 1 and matching[0]['conclusion'] == conclusion
+                and matching[0]['run_id'] == int(quote_run) and matching[0]['head_sha'] == quote_controller,
+                'Prior quote recovery job did not reach the required boundary: ' + name)
+    artifacts = metadata.pages(f'/actions/runs/{quote_run}/artifacts', 'artifacts')
+    matching = [row for row in artifacts if row['name'] == 'hosted-quote-receipt']
+    require(len(matching) == 1 and not any(row['name'].startswith('release-attestation-') for row in artifacts),
+            'Prior recovery must have one passing quote receipt and no publication attestation')
+    quote_receipt = artifact(metadata, matching[0]['id'], 'hosted-quote-receipt', quote_run, quote_controller)
+    return {'quote_receipt_id': str(quote_receipt['id']), 'quote_controller': quote_controller,
+            'quote_run': int(quote_run)}
