@@ -29,6 +29,9 @@ on:
       hosted:
         type: boolean
         default: false
+      recover_run:
+        type: string
+        default: ''
     secrets:
       NTFY_URL:
         required: false
@@ -41,6 +44,12 @@ jobs:
     if: inputs.hosted && !inputs.reconciliation_run && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    outputs:
+      original_controller: ${{ steps.admission.outputs.original_controller }}
+      production_id: ${{ steps.admission.outputs.production_id }}
+      core_id: ${{ steps.admission.outputs.core_id }}
+      quote_id: ${{ steps.admission.outputs.quote_id }}
+      core_receipt_id: ${{ steps.admission.outputs.core_receipt_id }}
     permissions:
       actions: read
       contents: read
@@ -49,9 +58,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - env:
+      - id: admission
+        env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha }}
+          RECOVER_RUN: ${{ inputs.recover_run }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           git fetch --no-tags origin "$SOURCE_SHA"
@@ -59,11 +70,19 @@ jobs:
           import os
           from hosted_release import admit
           from release_metadata import Metadata
-          admit(os.environ['SOURCE_SHA'], os.environ['GITHUB_SHA'], Metadata())
+          source, controller = os.environ['SOURCE_SHA'], os.environ['GITHUB_SHA']
+          if os.environ['RECOVER_RUN']:
+              from acceptance_policy import ROOT
+              from quote_recovery import resolve
+              result = resolve(ROOT, source, controller, os.environ['RECOVER_RUN'], Metadata())
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+                  output.writelines(f'{key}={value}\n' for key, value in result.items())
+          else:
+              admit(source, controller, Metadata())
           PY
   unsigned:
     needs: admit_hosted
-    if: ${{ always() && !cancelled() && !inputs.candidate_run && !inputs.reconciliation_run && (!inputs.hosted || needs.admit_hosted.result == 'success') }}
+    if: ${{ always() && !cancelled() && !inputs.candidate_run && !inputs.reconciliation_run && !inputs.recover_run && (!inputs.hosted || needs.admit_hosted.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     permissions:
@@ -159,7 +178,7 @@ jobs:
           retention-days: 3
   emulator:
     needs: admit_hosted
-    if: ${{ always() && !cancelled() && !inputs.candidate_run && !inputs.reconciliation_run && (inputs.build_emulator || (inputs.hosted && needs.admit_hosted.result == 'success')) }}
+    if: ${{ always() && !cancelled() && !inputs.candidate_run && !inputs.reconciliation_run && !inputs.recover_run && (inputs.build_emulator || (inputs.hosted && needs.admit_hosted.result == 'success')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     permissions:
@@ -205,7 +224,7 @@ jobs:
           retention-days: 3
   testnet_apk:
     needs: admit_hosted
-    if: inputs.hosted && needs.admit_hosted.result == 'success'
+    if: inputs.hosted && !inputs.recover_run && needs.admit_hosted.result == 'success'
     permissions:
       contents: read
     uses: ./.github/workflows/core-validation.yml
@@ -224,8 +243,8 @@ jobs:
       artifact_id: ${{ needs.testnet_apk.outputs.artifact_id }}
       production_id: ${{ needs.unsigned.outputs.artifact_id }}
   hosted_quotes:
-    needs: [unsigned, emulator]
-    if: inputs.hosted && needs.unsigned.result == 'success' && needs.emulator.result == 'success'
+    needs: [admit_hosted, unsigned, emulator]
+    if: ${{ always() && !cancelled() && inputs.hosted && needs.admit_hosted.result == 'success' && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
     permissions:
       actions: read
       contents: read
@@ -233,8 +252,10 @@ jobs:
     uses: ./.github/workflows/hosted-acceptance-probe.yml
     with:
       source_sha: ${{ inputs.source_sha }}
-      quote_id: ${{ needs.emulator.outputs.artifact_id }}
-      production_id: ${{ needs.unsigned.outputs.artifact_id }}
+      quote_id: ${{ needs.admit_hosted.outputs.quote_id || needs.emulator.outputs.artifact_id }}
+      production_id: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}
+      original_run: ${{ inputs.recover_run }}
+      original_controller: ${{ needs.admit_hosted.outputs.original_controller }}
   promotion:
     if: ${{ github.ref == 'refs/heads/main' && inputs.candidate_run && !inputs.reconciliation_run }}
     runs-on: ubuntu-24.04
@@ -254,8 +275,8 @@ jobs:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: python3 .private/promotion.py
   publish:
-    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && needs.hosted_core.result == 'success' && needs.hosted_quotes.result == 'success') || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
-    needs: [unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes]
+    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && needs.hosted_quotes.result == 'success' && (needs.hosted_core.result == 'success' || (inputs.recover_run && needs.admit_hosted.result == 'success'))) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
+    needs: [unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, admit_hosted]
     environment: production-signing
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -283,15 +304,31 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         if: inputs.hosted
         with:
-          artifact-ids: ${{ needs.unsigned.outputs.artifact_id }}
+          artifact-ids: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}
           path: artifact/
+          run-id: ${{ inputs.recover_run || github.run_id }}
+          github-token: ${{ github.token }}
           digest-mismatch: error
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        if: inputs.hosted
+        if: inputs.hosted && !inputs.recover_run
         with:
           artifact-ids: ${{ needs.hosted_core.outputs.receipt_id }},${{ needs.hosted_quotes.outputs.receipt_id }}
           path: hosted-receipts/
           merge-multiple: true
+          digest-mismatch: error
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: inputs.hosted && inputs.recover_run
+        with:
+          artifact-ids: ${{ needs.admit_hosted.outputs.core_receipt_id }}
+          path: hosted-receipts/
+          run-id: ${{ inputs.recover_run }}
+          github-token: ${{ github.token }}
+          digest-mismatch: error
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: inputs.hosted && inputs.recover_run
+        with:
+          artifact-ids: ${{ needs.hosted_quotes.outputs.receipt_id }}
+          path: hosted-receipts/
           digest-mismatch: error
       - name: Fetch exact hosted candidate objects without checking out its code
         if: inputs.hosted
@@ -304,13 +341,14 @@ jobs:
         id: publication
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ needs.promotion.outputs.source_sha || needs.unsigned.outputs.source_sha }}
-          ARTIFACT_RUN_ID: ${{ inputs.candidate_run || github.run_id }}
+          SOURCE_SHA: ${{ needs.promotion.outputs.source_sha || needs.unsigned.outputs.source_sha || inputs.source_sha }}
+          ARTIFACT_RUN_ID: ${{ inputs.recover_run || inputs.candidate_run || github.run_id }}
+          RECOVER_RUN: ${{ inputs.recover_run }}
           CONTROLLER_SHA: ${{ github.sha }}
           HOSTED_ACCEPTANCE: ${{ inputs.hosted || false }}
-          PRODUCTION_ID: ${{ needs.unsigned.outputs.artifact_id }}
-          CORE_ID: ${{ needs.testnet_apk.outputs.artifact_id }}
-          QUOTE_ID: ${{ needs.emulator.outputs.artifact_id }}
+          PRODUCTION_ID: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}
+          CORE_ID: ${{ needs.admit_hosted.outputs.core_id || needs.testnet_apk.outputs.artifact_id }}
+          QUOTE_ID: ${{ needs.admit_hosted.outputs.quote_id || needs.emulator.outputs.artifact_id }}
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}

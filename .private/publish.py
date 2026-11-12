@@ -124,7 +124,19 @@ def main():
     expected=os.environ['SOURCE_SHA']
     controller=os.environ['CONTROLLER_SHA']
     require_current_controller(controller)
-    late_attestation=verify_promotion_revision(expected,controller)
+    recovery = None
+    recover_run = os.environ.get('RECOVER_RUN', '')
+    if recover_run:
+        if os.environ.get('HOSTED_ACCEPTANCE') != 'true':
+            raise RuntimeError('Quote recovery requires hosted acceptance')
+        from quote_recovery import resolve
+
+        recovery = resolve(ROOT, expected, controller, recover_run, Metadata())
+        recovery['run'] = int(recover_run)
+        for name in ('production_id', 'core_id', 'quote_id'):
+            if recovery[name] != os.environ[name.upper()]:
+                raise RuntimeError('Recovery artifact differs from verified original run')
+    late_attestation = False if recovery else verify_promotion_revision(expected, controller)
     if proof['source_sha']!=expected or proof['apk_sha256']!=hashlib.sha256(apk.read_bytes()).hexdigest():
         raise RuntimeError('Artifact identity/digest mismatch')
     verify_release_identity(proof, expected)
@@ -143,13 +155,14 @@ def main():
         from maintenance_watch import api
         from release_metadata import Metadata
 
-        admit_cadence(ROOT, expected, controller, Metadata(), api)
+        if not recovery:
+            admit_cadence(ROOT, expected, controller, Metadata(), api)
         if (proof['core_acceptance']['input_fingerprint'] != input_fingerprint(expected, profile='core-runtime')
                 or proof['quote_acceptance']['input_fingerprint'] != quote_inputs):
             raise RuntimeError('Unsigned artifact acceptance fingerprints differ from the hosted candidate')
         core, quote = read_receipts(ROOT/'hosted-receipts', proof=proof, source=expected, controller=controller,
                                     production_id=os.environ['PRODUCTION_ID'], core_id=os.environ['CORE_ID'],
-                                    quote_id=os.environ['QUOTE_ID'])
+                                    quote_id=os.environ['QUOTE_ID'], recovery=recovery)
     else:
         from custom_release import MARKER as CUSTOM_MARKER
 
@@ -238,12 +251,16 @@ def main():
         attestation['production_artifact'] = core['production_artifact']
         from maintenance_cadence import MARKER, changed_marker
 
-        maintenance = changed_marker(ROOT, expected, controller, MARKER)
+        build_controller = recovery['original_controller'] if recovery else controller
+        maintenance = changed_marker(ROOT, expected, build_controller, MARKER)
         attestation['maintenance'] = maintenance if maintenance.get('kind') == 'security' else {'kind': 'routine'}
         from custom_release import MARKER as CUSTOM_MARKER
 
-        if changed_marker(ROOT, expected, controller, CUSTOM_MARKER):
+        if changed_marker(ROOT, expected, build_controller, CUSTOM_MARKER):
             attestation['maintenance'] = {'kind': 'custom'}
+        if recovery:
+            attestation['quote_recovery'] = {'original_controller': build_controller,
+                                             'quote_run_id': int(os.environ['GITHUB_RUN_ID'])}
     data = (json.dumps(attestation, indent=2) + '\n').encode()
     if len(data) > 256 * 1024:
         raise RuntimeError('Publication attestation exceeds its size budget')

@@ -45,7 +45,7 @@ def verify_custom_child(source, controller, root):
     verify_canonical_patch(source, controller, upstream['sha'], root)
 
 
-def require_dispatch(source, controller, metadata, *, publish):
+def require_dispatch(source, controller, metadata, *, publish, recover_run=''):
     require(os.environ.get('GITHUB_REPOSITORY') == REPOSITORY
             and os.environ.get('GITHUB_REF') == 'refs/heads/main'
             and os.environ.get('GITHUB_EVENT_NAME') == 'workflow_dispatch', 'Expected a protected main dispatch')
@@ -59,7 +59,9 @@ def require_dispatch(source, controller, metadata, *, publish):
             and run['head_repository']['full_name'] == REPOSITORY
             and run['actor']['id'] == OPERATOR_ID, 'Expected the authorized custom release operator and workflow')
     inputs = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_bytes())['inputs']
-    require(inputs.get('source_sha') == source and inputs.get('operation') == ('publish' if publish else 'check'),
+    operation = 'recover' if recover_run else ('publish' if publish else 'check')
+    require(inputs.get('source_sha') == source and inputs.get('operation') == operation
+            and inputs.get('recover_run', '') == recover_run,
             'Dispatch does not authorize this exact custom candidate and operation')
     require(metadata.api('/git/ref/heads/main')['object']['sha'] == controller,
             'Protected main advanced; prepare and review a new candidate')

@@ -57,6 +57,18 @@ def state_commit(base, attestation, scratch, root):
                'commit-tree', tree, '-p', base, '-m', 'Record verified release ' + tag)
 
 
+def recovered_candidate_base(candidate, original, controller, root):
+    from quote_recovery import verify_delta
+
+    verify_delta(root, candidate, original, controller)
+    tree = subprocess.check_output(['git', 'merge-tree', '--write-tree', controller, candidate],
+                                   cwd=root, text=True, timeout=30).strip()
+    return subprocess.check_output(
+        ['git', '-c', 'user.name=ZEC Private automation', '-c', 'user.email=zec-private@users.noreply.github.com',
+         'commit-tree', tree, '-p', controller, '-p', candidate, '-m', 'Integrate recovered validated candidate'],
+        cwd=root, text=True, timeout=30).strip()
+
+
 def main():
     runner_temp = Path(os.environ['RUNNER_TEMP'])
     proof = read_attestation(runner_temp / 'publication/release-attestation.json', os.environ['ATTESTATION_DIGEST'])
@@ -67,7 +79,11 @@ def main():
     require_current_controller(controller)
     candidate = proof['source_sha']
     root = Path(__file__).resolve().parents[1]
-    base = integration_base(candidate, controller, original, root)
+    recovery = proof.get('quote_recovery')
+    if recovery and controller == original:
+        base = recovered_candidate_base(candidate, recovery['original_controller'], controller, root)
+    else:
+        base = integration_base(candidate, controller, original, root)
     verify_release_identity(proof, candidate)
     with tempfile.TemporaryDirectory(dir=runner_temp) as scratch:
         commit = state_commit(base, proof, Path(scratch), root)

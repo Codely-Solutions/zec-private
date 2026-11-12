@@ -94,8 +94,9 @@ def unsigned_proof(evidence):
                     (run['event'] == 'push' and evidence.get('maintenance', {}).get('kind') == 'security'))
     upstream = (run['path'] == '.github/workflows/sync-upstream.yml' and hosted_event
                 and run['head_sha'] == evidence['controller_sha'])
+    custom_controller = evidence.get('quote_recovery', {}).get('original_controller', evidence['controller_sha'])
     custom = (run['path'] == CUSTOM_WORKFLOW and run['event'] == 'workflow_dispatch'
-              and run['head_sha'] == evidence['controller_sha'] and evidence.get('maintenance', {}).get('kind') == 'custom')
+              and run['head_sha'] == custom_controller and evidence.get('maintenance', {}).get('kind') == 'custom')
     require(run['head_branch'] == 'main' and (direct or upstream or custom),
             'Expected a main-branch release producer')
     jobs = gh(f'actions/runs/{run_id}/jobs?per_page=100')['jobs']

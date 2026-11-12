@@ -27,9 +27,10 @@ def artifact(metadata, artifact_id, name, run, controller):
     return {key: value[key] for key in ('id', 'digest', 'size_in_bytes')}
 
 
-def stage(directory, artifact_id, name, *, metadata=None):
+def stage(directory, artifact_id, name, *, metadata=None, run=None, controller=None):
     metadata = metadata or Metadata()
-    value = artifact(metadata, artifact_id, name, os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_SHA'])
+    value = artifact(metadata, artifact_id, name, run or os.environ['GITHUB_RUN_ID'],
+                     controller or os.environ['GITHUB_SHA'])
     directory.mkdir(mode=0o700)
     path = directory / 'download.zip'
     with path.open('xb') as output:
@@ -51,27 +52,33 @@ def stage(directory, artifact_id, name, *, metadata=None):
     return value
 
 
-def read_receipts(directory, *, proof, source, controller, production_id, core_id, quote_id, metadata=None):
+def read_receipts(directory, *, proof, source, controller, production_id, core_id, quote_id,
+                  metadata=None, recovery=None):
     metadata = metadata or Metadata()
     run = os.environ['GITHUB_RUN_ID']
-    production = artifact(metadata, production_id, 'validated-unsigned-apk', run, controller)
+    build_run = str(recovery['run']) if recovery else run
+    build_controller = recovery['original_controller'] if recovery else controller
+    production = artifact(metadata, production_id, 'validated-unsigned-apk', build_run, build_controller)
     version = version_code(ROOT, source)
     fixture = json.loads((ROOT / '.private/hosted-fixture.json').read_text())
     core = json.loads((directory / 'hosted-core.json').read_text())
     quote = json.loads((directory / 'hosted-quotes.json').read_text())
     require(all(receipt.get('build_source_sha') == source and receipt.get('candidate_version_code') == version
-                and receipt.get('production_artifact') == production and receipt.get('workflow_run_id') == int(run)
-                for receipt in (core, quote)) and str(proof['workflow_run_id']) == run
+                and receipt.get('production_artifact') == production and receipt.get('workflow_run_id') == int(receipt_run)
+                for receipt, receipt_run in ((core, build_run), (quote, run))) and str(proof['workflow_run_id']) == build_run
             and proof['versionCode'] == version, 'Acceptance is not bound to this production candidate and run')
+    if recovery:
+        require(quote.get('quote_controller_sha') == controller
+                and quote.get('artifact_run_id') == int(build_run), 'Quote recovery used different execution inputs')
     require(core.get('rehearsal') is False and core['funding_setup']['claim_requests'] == 1,
             'Hosted release requires exactly one funded testnet claim')
-    verify(binding(source, controller, version, int(run), False), core['hosted_reservation'], metadata)
-    require(core['producer'] == artifact(metadata, core_id, 'core-testnet-candidate', run, controller)
-            and quote['producer'] == artifact(metadata, quote_id, 'isolated-ui-repro-apk', run, controller),
+    verify(binding(source, build_controller, version, int(build_run), False), core['hosted_reservation'], metadata)
+    require(core['producer'] == artifact(metadata, core_id, 'core-testnet-candidate', build_run, build_controller)
+            and quote['producer'] == artifact(metadata, quote_id, 'isolated-ui-repro-apk', build_run, build_controller),
             'Hosted receipt names a different test APK producer')
     validate_core_sources(core, source, baseline=fixture)
     validate_quotes(quote, input_fingerprint(source, profile='production-quotes'))
-    core.update(artifact_id=int(core_id), producer_controller_sha=controller)
+    core.update(artifact_id=int(core_id), producer_controller_sha=build_controller)
     return core, quote
 
 

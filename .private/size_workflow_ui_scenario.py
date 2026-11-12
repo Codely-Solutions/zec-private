@@ -84,17 +84,17 @@ def run(root, stop):
         # Keep the BTC contact visible while selecting an incompatible network,
         # then correct the token in this same form before requesting any quote.
         click('BTC', 'Select Token')
-        action('set_text', index=0, value='ETH')
-        click('ETH', 'Get a quote')
-        state = wait('Choose a recipient on ETH or change the asset.')
+        action('set_text', index=0, value='LTC')
+        click('Litecoin', 'Get a quote')
+        state = wait('Choose a recipient on LTC or change the asset.', timeout=20)
         if 'phase1fixture' not in labels(state):
             raise RuntimeError('Network edit discarded the selected recipient')
         quote_buttons = [n for n in state['nodes'] if n.get('id') == 'SWAP_REVIEW_BUTTON']
         if not quote_buttons or any(n.get('enabled') for n in quote_buttons):
             raise RuntimeError('Incompatible recipient did not block quote action')
-        click('ETH', 'Select Token')
+        click('LTC', 'Select Token')
         action('set_text', index=0, value='BTC')
-        click('BTC', 'Get a quote')
+        click('Bitcoin', 'Get a quote')
         state = action('snapshot')
         if any('choose a recipient on' in label for label in labels(state)):
             raise RuntimeError('Corrected recipient validation remained stale')
@@ -148,6 +148,7 @@ def run(root, stop):
                 raise RuntimeError('Independent price assessment did not finish')
             action('back')
             wait('Get a quote',timeout=15)
+            action('assert_quote_dismissed')
         back('More')
         click('More','More...')
         click('More...','Address Book')
