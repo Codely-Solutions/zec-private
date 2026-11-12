@@ -8,7 +8,7 @@ from release_metadata import require
 
 RECOVERY_PATHS = {
     '.github/workflows/build-release.yml', '.github/workflows/custom-release.yml',
-    '.github/workflows/hosted-acceptance-probe.yml', '.private/quote_recovery.py',
+    '.github/workflows/hosted-acceptance-probe.yml', '.github/workflows/sync-upstream.yml', '.private/quote_recovery.py',
     '.private/hosted_release.py', '.private/hosted_quote_probe.py', '.private/custom_release.py',
     '.private/publish.py', '.private/integrate_release.py', '.private/verify_public_release.py',
     '.private/tor_resident_ui_driver.py', '.private/size_workflow_ui_scenario.py',
@@ -79,7 +79,8 @@ def resolve_quotes(root, source, controller, original, quote_run, metadata):
             'Quote receipt controller is not an ancestor of the signer')
     delta = git(root, 'diff', '--no-renames', '--name-only', '-z', quote_controller, controller)
     publication_paths = {
-        '.github/workflows/build-release.yml', '.github/workflows/custom-release.yml', '.private/custom_release.py',
+        '.github/workflows/build-release.yml', '.github/workflows/custom-release.yml',
+        '.github/workflows/sync-upstream.yml', '.private/custom_release.py',
         '.private/quote_recovery.py', '.private/hosted_release.py', '.private/publish.py',
         '.private/test_packaging.py', '.private/test_quote_recovery.py', '.private/RELEASE-WORKFLOW.md',
     }

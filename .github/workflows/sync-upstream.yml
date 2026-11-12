@@ -60,6 +60,10 @@ jobs:
       hosted: ${{ needs.maintenance.outputs.reconciliation_run == '' }}
     secrets:
       NTFY_URL: ${{ secrets.NTFY_URL }}
+      RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+      RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+      RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+      MAINTENANCE_APP_PRIVATE_KEY: ${{ secrets.MAINTENANCE_APP_PRIVATE_KEY }}
   blocked:
     if: ${{ always() && github.ref == 'refs/heads/main' && needs.prepare.result == 'failure' }}
     needs: prepare

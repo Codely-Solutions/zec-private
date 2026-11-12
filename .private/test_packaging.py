@@ -57,6 +57,12 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("needs.hosted_quotes.result == 'success' || (inputs.quote_run && needs.admit_hosted.outputs.quote_receipt_id != '')", publish)
         self.assertIn("needs.hosted_core.result == 'success' || (inputs.recover_run && needs.admit_hosted.result == 'success')", publish)
         self.assertIn('needs: [unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, admit_hosted]', publish)
+        self.assertIn('environment: production-signing', publish)
+        for caller in ('custom-release.yml', 'sync-upstream.yml'):
+            caller_workflow = (root / '.github/workflows' / caller).read_text()
+            for secret in ('RELEASE_KEYSTORE_BASE64', 'RELEASE_STORE_PASSWORD', 'RELEASE_KEY_PASSWORD',
+                           'MAINTENANCE_APP_PRIVATE_KEY'):
+                self.assertIn(secret + ': ${{ secrets.' + secret + ' }}', caller_workflow)
         self.assertIn("needs.emulator.result == 'failure'", workflow.split('  failed:\n', 1)[1])
         release = (root / '.private/release_checks.sh').read_text()
         debug = (root / '.private/emulator_checks.sh').read_text()
