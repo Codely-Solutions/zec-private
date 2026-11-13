@@ -134,7 +134,8 @@ def main():
         from quote_recovery import resolve
 
         recovery = resolve(ROOT, expected, controller, recover_run, Metadata(),
-                           os.environ.get('RECOVER_QUOTE_RUN', ''), signing=True)
+                           os.environ.get('RECOVER_QUOTE_RUN', ''), signing=True,
+                           preclaim_run=os.environ.get('PRECLAIM_RUN', ''))
         recovery['run'] = int(recover_run)
         for name in ('production_id', 'core_id', 'quote_id'):
             if recovery[name] != os.environ[name.upper()]:

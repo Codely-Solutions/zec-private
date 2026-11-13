@@ -28,6 +28,12 @@ on:
       original_controller:
         type: string
         default: ''
+      previous_reservation:
+        type: string
+        default: ''
+      preclaim_run:
+        type: string
+        default: ''
     outputs:
       receipt_id:
         value: ${{ jobs.wallet.outputs.receipt_id }}
@@ -76,6 +82,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha }}
           ORIGINAL_BUILD_CONTROLLER: ${{ inputs.original_controller }}
+          ORIGINAL_ARTIFACT_RUN: ${{ inputs.original_run }}
+          PREVIOUS_RESERVATION: ${{ inputs.previous_reservation }}
+          PRECLAIM_RUN: ${{ inputs.preclaim_run }}
           REHEARSAL: ${{ inputs.source_sha == '' }}
           REHEARSAL_NUMBER: ${{ inputs.rehearsal_number || 1 }}
         run: |
@@ -102,6 +111,7 @@ jobs:
       ZEC_CORE_REHEARSAL: ${{ inputs.source_sha == '' }}
       ZEC_CORE_UPGRADE_PROBE: ${{ inputs.upgrade_probe != 'funded' && inputs.upgrade_probe || '' }}
       ZEC_CORE_ARTIFACT_RUN: ${{ inputs.original_run }}
+      ZEC_CORE_PREVIOUS_RESERVATION: ${{ inputs.previous_reservation }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

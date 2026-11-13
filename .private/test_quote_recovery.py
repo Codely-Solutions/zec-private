@@ -6,13 +6,40 @@ import unittest
 from unittest.mock import Mock, patch
 
 import hosted_release
-from quote_recovery import ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, resolve, resolve_quotes, verify_delta
+from quote_recovery import ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, resolve, resolve_quotes, unused_reservation, verify_delta
 
 
 SOURCE, OLD, MAIN = 'a' * 40, 'b' * 40, 'c' * 40
 
 
 class QuoteRecoveryTests(unittest.TestCase):
+    def test_linked_reservation_requires_positive_pre_wallet_failure_evidence(self):
+        prior = 'd' * 40
+        reservation = 'e' * 40
+        metadata = Mock(gh='gh', repo='repos/' + REPOSITORY)
+        run = dict(id=8, path=WORKFLOW, event='workflow_dispatch', head_branch='main', head_sha=prior,
+                   head_repository={'full_name': REPOSITORY}, actor={'id': OPERATOR_ID},
+                   status='completed', conclusion='failure', run_attempt=1)
+        jobs = [dict(id=i, name=name, conclusion=result, run_id=8, head_sha=prior)
+                for i, (name, result) in enumerate((('build / admit_hosted', 'success'),
+                    ('build / hosted_core / reserve', 'success'), ('build / hosted_core / wallet', 'failure'),
+                    ('build / publish', 'skipped')), 1)]
+        metadata.pages.return_value = jobs
+        safe = b'Hosted lifecycle failed at networkTargets, claim state no-POST'
+        for log, error in ((safe, None), (b'no-POST', 'did not prove'),
+                           (safe + b'\nCORE_STAGE sender passed', 'did not prove')):
+            metadata.api.side_effect = [run, {'object': {'sha': reservation}}]
+            with self.subTest(error=error), patch('quote_recovery.git', return_value=prior.encode()), \
+                    patch('quote_recovery.verify_delta'), patch('release_inputs.version_code', return_value=42), \
+                    patch('hosted_claim.verify') as verify, patch('subprocess.check_output', return_value=log):
+                if error:
+                    with self.assertRaisesRegex(ValueError, error):
+                        unused_reservation(Path('.'), SOURCE, MAIN, '7', OLD, '8', metadata)
+                    verify.assert_not_called()
+                else:
+                    self.assertEqual(unused_reservation(Path('.'), SOURCE, MAIN, '7', OLD, '8', metadata), reservation)
+                    self.assertEqual(verify.call_args.args[0]['run'], 8)
+
     def test_skipped_wallet_reuses_original_builds_and_passing_quotes(self):
         run = dict(id=7, path=WORKFLOW, event='workflow_dispatch', head_branch='main', head_sha=OLD,
                    head_repository={'full_name': REPOSITORY}, actor={'id': OPERATOR_ID},

@@ -10,18 +10,23 @@ from release_metadata import Metadata, require
 PREFIX = 'refs/heads/testnet-claims/'
 
 
-def binding(source, controller, version, run, rehearsal):
+def binding(source, controller, version, run, rehearsal, previous=None):
     require(all(re.fullmatch(r'[a-f0-9]{40}', sha) for sha in (source, controller)),
             'Exact source and controller required')
     require(type(version) is int and 0 < version <= 2_100_000_000
             and type(run) is int and run > 0 and type(rehearsal) is bool,
             'Exact version, run and mode required')
-    return dict(source=source, controller=controller, version=version, run=run, rehearsal=rehearsal)
+    value = dict(source=source, controller=controller, version=version, run=run, rehearsal=rehearsal)
+    if previous:
+        require(not rehearsal and re.fullmatch(r'[a-f0-9]{40}', previous), 'Exact unused reservation required')
+        value['previous'] = previous
+    return value
 
 
 def ref_for(value):
     mode = 'rehearsal' if value['rehearsal'] else 'release'
-    return PREFIX + f'{mode}-{value["version"]}'
+    suffix = '-preclaim-recovery' if value.get('previous') else ''
+    return PREFIX + f'{mode}-{value["version"]}' + suffix
 
 
 def reserve(value, metadata, post):
@@ -97,7 +102,15 @@ def main():
     version = (rehearsal_version(base, controller, metadata, number=number)
                if rehearsal else version_code(ROOT, source))
     require(version > base and (not rehearsal or source == controller), 'Expected an advancing testnet candidate')
-    value = binding(source, controller, version, int(os.environ['GITHUB_RUN_ID']), rehearsal)
+    previous = os.environ.get('PREVIOUS_RESERVATION', '')
+    if previous:
+        from quote_recovery import unused_reservation
+
+        run_id = os.environ['PRECLAIM_RUN']
+        require(previous == unused_reservation(ROOT, source, controller, os.environ['ORIGINAL_ARTIFACT_RUN'],
+                                               original, run_id, metadata),
+                'Pre-claim failure or reservation changed after admission')
+    value = binding(source, controller, version, int(os.environ['GITHUB_RUN_ID']), rehearsal, previous)
 
     def post(path, data):
         return json.loads(subprocess.check_output(
