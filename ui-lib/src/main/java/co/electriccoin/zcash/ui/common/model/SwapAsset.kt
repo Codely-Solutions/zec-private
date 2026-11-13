@@ -11,6 +11,7 @@ interface SwapAsset {
     val usdPrice: BigDecimal?
     val assetId: String
     val decimals: Int
+    val contractAddress: String? get() = null
     val blockchain: SwapBlockchain
 
     val chainTicker: String

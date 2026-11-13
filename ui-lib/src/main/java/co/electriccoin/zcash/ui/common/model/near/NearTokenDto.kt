@@ -25,6 +25,6 @@ data class NearTokenDto(
     val price: BigDecimal? = null,
     // @SerialName("priceUpdatedAt")
     // val priceUpdatedAt: String,
-    // @SerialName("contractAddress")
-    // val contractAddress: String? = null,
+    @SerialName("contractAddress")
+    val contractAddress: String? = null,
 )

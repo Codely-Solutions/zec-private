@@ -14,4 +14,5 @@ data class NearSwapAsset(
     override val assetId: String,
     override val decimals: Int,
     override val blockchain: SwapBlockchain,
+    override val contractAddress: String? = null,
 ) : SwapAsset

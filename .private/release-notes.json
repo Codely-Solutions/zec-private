@@ -56,5 +56,9 @@
   "v3.19.0-private.23": [
     "Open Address Book from Settings without another credential prompt when the wallet is unlocked.",
     "Expand independent swap price checks to ETH on Arbitrum and Base, DAI on Ethereum, and USDT on Ethereum, Solana and Tron."
+  ],
+  "v3.19.0-private.24": [
+    "Check swap and CrossPay quotes against independent market prices for every supported asset and network.",
+    "Use the exact token's market for bridged assets and show which sources were used in Quote details."
   ]
 }

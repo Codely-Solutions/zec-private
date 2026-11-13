@@ -106,7 +106,7 @@ internal class SwapQuoteVMMapper {
                 val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString() + "%"
                 listOf(
                     SwapQuoteInfoItem(
-                        stringRes(R.string.private_price_reference), stringRes("Kraken").withStyle(),
+                        stringRes(R.string.private_price_reference), stringRes(sources.joinToString()).withStyle(),
                     ),
                     SwapQuoteInfoItem(
                         stringRes(R.string.private_price_reference_difference), stringRes(signed).withStyle(),

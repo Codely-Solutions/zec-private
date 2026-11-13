@@ -7,7 +7,11 @@ sealed interface IndependentPriceCheck {
     data object Checking : IndependentPriceCheck
     data object NoMarketReference : IndependentPriceCheck
     data object Unavailable : IndependentPriceCheck
-    data class Compared(val differencePercent: BigDecimal, val validUntilMillis: Long) : IndependentPriceCheck {
+    data class Compared(
+        val differencePercent: BigDecimal,
+        val validUntilMillis: Long,
+        val sources: List<String> = listOf("Kraken"),
+    ) : IndependentPriceCheck {
         val poor: Boolean get() = differencePercent <= BigDecimal("-15")
     }
 }
@@ -17,54 +21,19 @@ data class MarketObservation(
     val bid: BigDecimal,
     val ask: BigDecimal,
     val observedAtMillis: Long,
-    val receivedAtMillis: Long
+    val receivedAtMillis: Long,
+    val sources: List<String> = listOf("Kraken"),
 )
 
 object IndependentPricePolicy {
-    private const val ZEC_DECIMALS = 8
-    private const val BTC_DECIMALS = 8
-    private const val ETH_DECIMALS = 18
-    private const val SOL_DECIMALS = 9
     private const val MAX_BOOK_SKEW_MILLIS = 30_000L
+    private const val MAX_POOL_SKEW_MILLIS = 120_000L
     private const val FUTURE_TOLERANCE_MILLIS = 5_000L
     private const val QUOTE_LIFETIME_MILLIS = 180_000L
     private const val OBSERVATION_LIFETIME_MILLIS = 120_000L
     private const val RECEIPT_LIFETIME_MILLIS = 60_000L
 
-    private data class Market(val symbol: String, val network: String, val decimals: Int, val pair: String)
-
-    // Resolve exact identities from the swap catalog to this source's markets.
-    @Suppress("MagicNumber")
-    private val markets = mapOf(
-        "nep141:zec.omft.near" to Market("zec", "zec", ZEC_DECIMALS, "ZECUSD"),
-        "nep141:btc.omft.near" to Market("btc", "btc", BTC_DECIMALS, "XBTUSD"),
-        "nep141:eth.omft.near" to Market("eth", "eth", ETH_DECIMALS, "ETHUSD"),
-        "nep141:arb.omft.near" to Market("eth", "arb", ETH_DECIMALS, "ETHUSD"),
-        "nep141:base.omft.near" to Market("eth", "base", ETH_DECIMALS, "ETHUSD"),
-        "nep141:sol.omft.near" to Market("sol", "sol", SOL_DECIMALS, "SOLUSD"),
-        "nep141:eth-0x6b175474e89094c44da98b954eedeac495271d0f.omft.near" to
-            Market("dai", "eth", 18, "DAIUSD"),
-        "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near" to
-            Market("usdt", "eth", 6, "USDTUSD"),
-        "nep141:sol-c800a4bd850783ccb82c2b7e84175443606352.omft.near" to
-            Market("usdt", "sol", 6, "USDTUSD"),
-        "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near" to
-            Market("usdt", "tron", 6, "USDTUSD"),
-        "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near" to
-            Market("wbtc", "eth", BTC_DECIMALS, "WBTCUSD"),
-        "nep141:ltc.omft.near" to Market("ltc", "ltc", 8, "LTCUSD"),
-        "nep141:tron.omft.near" to Market("trx", "tron", 6, "TRXUSD"),
-        "nep141:bnb.omdep.near" to Market("bnb", "bsc", 18, "BNBUSD"),
-        "nep141:avax.omdep.near" to Market("avax", "avax", 18, "AVAXUSD"),
-        "nep141:xrp.omft.near" to Market("xrp", "xrp", 6, "XRPUSD"),
-        "nep141:dash.omft.near" to Market("dash", "dash", 8, "DASHUSD"),
-        "nep141:bch.omft.near" to Market("bch", "bch", 8, "BCHUSD"),
-    )
-
-    fun market(asset: SwapAsset): String? = markets[asset.assetId]?.takeIf {
-        asset.tokenTicker.equals(it.symbol, ignoreCase = true) &&
-            asset.chainTicker.equals(it.network, ignoreCase = true) && asset.decimals == it.decimals
-    }?.pair
+    fun market(asset: SwapAsset): String? = SwapPriceMarkets.reference(asset)
 
     // Each unavailable prerequisite ends the comparison before price arithmetic.
     @Suppress("ReturnCount")
@@ -79,11 +48,12 @@ object IndependentPricePolicy {
         val input = observations[inputPair] ?: return IndependentPriceCheck.Unavailable
         val output = observations[outputPair] ?: return IndependentPriceCheck.Unavailable
         val selected = listOf(input, output)
-        if (input.pair != inputPair || output.pair != outputPair || selected.any { !valid(it, nowMillis) }) {
+        if (input.pair != inputPair || output.pair != outputPair || selected.any { !isUsable(it, nowMillis) }) {
             return IndependentPriceCheck.Unavailable
         }
+        val maxSkew = if (selected.any { it.sources.size > 1 }) MAX_POOL_SKEW_MILLIS else MAX_BOOK_SKEW_MILLIS
         if (!comparableQuote(quote, networkFeeZec, nowMillis) ||
-            kotlin.math.abs(input.observedAtMillis - output.observedAtMillis) > MAX_BOOK_SKEW_MILLIS
+            kotlin.math.abs(input.observedAtMillis - output.observedAtMillis) > maxSkew
         ) return IndependentPriceCheck.Unavailable
         val validUntil = minOf(
             quote.deadline.toEpochMilliseconds(),
@@ -92,12 +62,14 @@ object IndependentPricePolicy {
             selected.minOf { it.receivedAtMillis + RECEIPT_LIFETIME_MILLIS }
         )
         if (validUntil <= nowMillis) return IndependentPriceCheck.Unavailable
-        val inputAmount = quote.amountInFormatted + if (inputPair == "ZECUSD") networkFeeZec else BigDecimal.ZERO
+        val inputFee = if (quote.originAsset.isZCashAsset) networkFeeZec else BigDecimal.ZERO
+        val inputAmount = quote.amountInFormatted + inputFee
         val inputValue = inputAmount.multiply(input.bid)
         val outputValue = quote.amountOutFormatted.multiply(output.ask)
         return IndependentPriceCheck.Compared(
             outputValue.divide(inputValue, MathContext.DECIMAL128).subtract(BigDecimal.ONE).multiply(BigDecimal("100")),
-            validUntil
+            validUntil,
+            selected.flatMap { it.sources }.distinct()
         )
     }
 
@@ -108,7 +80,7 @@ object IndependentPricePolicy {
     private fun positiveQuoteAmounts(quote: SwapQuote): Boolean =
         quote.amountInFormatted.signum() > 0 && quote.amountOutFormatted.signum() > 0
 
-    private fun valid(observation: MarketObservation, now: Long): Boolean = with(observation) {
+    internal fun isUsable(observation: MarketObservation, now: Long): Boolean = with(observation) {
         boundedMarketNumber(bid) && boundedMarketNumber(ask) && bid.signum() > 0 && ask >= bid &&
             ask.subtract(bid).divide(bid, MathContext.DECIMAL128) <= BigDecimal("0.02") &&
             observedAtMillis <= now + FUTURE_TOLERANCE_MILLIS &&
