@@ -42,19 +42,35 @@ def run(root, stop):
     def wait_for_quote_form(timeout=60, retry_catalog=False):
         deadline = time.monotonic() + timeout
         retried = False
+        scrolls = 0
+        known = {'from', 'to', 'loading', 'loading…', 'try again', 'get a quote', 'processing',
+                 'review quote', 'quote unavailable', 'select token', 'phase1fixture',
+                 'the service is unavailable', 'unexpected error'}
         while time.monotonic() < deadline:
             state = action('snapshot')
             current = labels(state)
             if 'get a quote' in current:
                 return state
-            if retry_catalog and not retried and 'try again' in current:
+            if 'the service is unavailable' in current:
+                raise RuntimeError('Swap asset catalog returned service unavailable')
+            retry = next((node for node in state['nodes'] if node['text'].casefold() == 'try again'
+                          and node.get('enabled')), None)
+            if retry_catalog and not retried and retry:
                 action('click_text', text='Try again')
                 retried = True
+            elif scrolls < 2 and {'from', 'to'} <= current and not current & {'loading', 'loading…', 'try again'}:
+                # The amount field receives focus on entry. Scroll the form to
+                # expose its footer when the keyboard shortens the viewport.
+                try:
+                    action('scroll')
+                except RuntimeError as error:
+                    if str(error) != 'UI command failed: scroll IllegalStateException':
+                        raise
+                scrolls += 1
             if stop.wait(.5):
                 raise InterruptedError('UI driver stopped')
-        known = current & {'from', 'to', 'loading', 'loading…', 'try again', 'get a quote',
-                           'processing', 'review quote', 'quote unavailable', 'select token', 'phase1fixture'}
-        raise RuntimeError('Quote form did not become ready; visible known controls: ' + ', '.join(sorted(known)))
+        raise RuntimeError('Quote form did not become ready; visible known controls: ' +
+                           ', '.join(sorted(known & current)))
 
     def wait(text,timeout=240):
         deadline=time.monotonic()+timeout
@@ -95,11 +111,10 @@ def run(root, stop):
         back('SETTINGS')
         back('More')
         click('Swap','From')
-        wait_for_quote_form(retry_catalog=True)
         action('set_text',index=0,value='0.001')
         click('Open address book','Phase1Fixture')
         click('Phase1Fixture')
-        wait_for_quote_form()
+        wait_for_quote_form(retry_catalog=True)
         # Keep the BTC contact visible while selecting an incompatible network,
         # then correct the token in this same form before requesting any quote.
         click('BTC', 'Select Token')
