@@ -1762,7 +1762,7 @@ index 000000000..7c8c641cb
 +Foundation runtime changes invalidate both real wallet and quote evidence. Fingerprints remain conservative across the complete runtime graph. Unit tests cover precision, flow incompatibility, stale publication, fee calculations and synthetic legacy persistence. Required real testnet and unfunded production quote acceptance remain separate. Production artifacts are promoted after acceptance without rebuilding; signing secrets remain outside build jobs.
 diff --git a/docs/PRIVACY.md b/docs/PRIVACY.md
 new file mode 100644
-index 000000000..93a8c8906
+index 000000000..832b60182
 --- /dev/null
 +++ b/docs/PRIVACY.md
 @@ -0,0 +1,17 @@
@@ -1776,7 +1776,7 @@ index 000000000..93a8c8906
 +
 +NEAR receives swap assets, amounts, recipient/refund addresses and timing. Public-chain transactions and amounts can be correlated. Incoming swaps use fresh shielded recipients, and outgoing swaps use fresh shielded refund addresses. Tor and fresh addresses reduce exposure but cannot erase provider records or guarantee anonymity.
 +
-+Independent swap-price checks send public trading-pair names to Kraken through Tor. Wallet addresses, amounts and provider quote data are excluded.
++Independent swap-price checks send public market and pool identifiers to exchanges and blockchain RPCs. They follow your Tor setting and exclude wallet addresses, swap amounts and quote data.
 +
 +Fiat conversion uses CoinMarketCap where enabled. Opening a browser or sharing data hands it to the application you select, under that application's policies.
 +
@@ -1813,7 +1813,7 @@ index 000000000..cdadb0a3b
 +See the [wallet guide](WALLET-GUIDE.md) for instructions and [privacy](PRIVACY.md) before sharing diagnostics.
 diff --git a/docs/WALLET-GUIDE.md b/docs/WALLET-GUIDE.md
 new file mode 100644
-index 000000000..7ac5b6f59
+index 000000000..491846301
 --- /dev/null
 +++ b/docs/WALLET-GUIDE.md
 @@ -0,0 +1,57 @@
@@ -1855,7 +1855,7 @@ index 000000000..7ac5b6f59
 +
 +Quoted output is an estimate; execution can differ. Completed swap details show the provider's executed amount when available. Your wallet transaction shows the ZEC actually received.
 +
-+**Quote details** shows available independent Kraken comparisons for native BTC, ETH, SOL and ZEC. A rate at least 15% below that reference shows an inline warning with **Swap anyway** or **Pay anyway**. Unsupported, stale or failed checks show **Price check unavailable** and keep swaps available.
++**Quote details** shows an independent price comparison and its sources. All supported swap assets have a reference. A quote at least 15% below its reference shows an inline warning with **Swap anyway** or **Pay anyway**. If a fresh price cannot be verified, **Price check unavailable** keeps the quote usable.
 +
 +## Recovery and migration
 +

@@ -1,24 +1,30 @@
 # Independent quote reference
 
-`KrakenPriceProvider` uses Kraken's public [Spread API](https://docs.kraken.com/api-reference/market-data/get-recent-spreads) without credentials. It covers native BTC, SOL, ZEC, LTC, TRX, BNB, AVAX, XRP, DASH and BCH, ETH on Ethereum, Arbitrum One and Base, WBTC and DAI on Ethereum, and issuer-backed USDT on Ethereum, Solana and Tron.
+The wallet maps each selectable asset by its exact NEAR asset ID, chain, symbol, decimals and contract or mint. Run the [catalog check](../scripts/check-swap-price-catalog.py) against the live catalog before preparing a release. An unknown or changed identity has no reference until it is reviewed.
 
-Match the exact NEAR asset ID, network, symbol and decimals in `IndependentPricePolicy`. Check issuer contracts for tokens and verify fresh, usable spreads for each market. USDC's USD spread was over 20 hours old in the Release 23 review. Recheck freshness before adding a mapping. Use the [NEAR catalog](https://1click.chaindefuser.com/v0/tokens) and [Kraken pair metadata](https://docs.kraken.com/api-reference/market-data/get-tradable-asset-pairs).
+| Reference | Assets and networks |
+|---|---|
+| Kraken USD markets | ZEC (Zcash), BTC (Bitcoin), ETH (Ethereum, Arbitrum One, Base), SOL (Solana), DAI and WBTC (Ethereum), LTC (Litecoin), TRX (Tron), BNB (BNB Smart Chain), AVAX (Avalanche), XRP (XRP Ledger), DASH (Dash), BCH (Bitcoin Cash), wNEAR (NEAR) |
+| Kraken USDC/USD | Issuer-native USDC on Ethereum, Solana, Base, Arbitrum One, Sui, NEAR and Polygon |
+| Kraken USDT/USD | Issuer-native USDT on Ethereum, Solana, Tron and NEAR |
+| Public chain RPC with Kraken USD anchor | ZEC on Solana (Orca, USDC), Binance-Peg USDT (PancakeSwap, WBNB), Polygon USDT (Uniswap, WETH), and Arbitrum USDT0 (Uniswap, WETH) |
+| Rhea Finance pools with Kraken NEAR/USD anchor | BTC and ZEC on NEAR, priced against wNEAR on finalized NEAR state |
+
+Confirm exact identities using the [NEAR catalog](https://1click.chaindefuser.com/v0/tokens), [Circle contracts](https://developers.circle.com/stablecoins/usdc-contract-addresses), [Tether protocols](https://tether.to/en/supported-protocols/), and [USDT0 deployments](https://docs.usdt0.to/technical-documentation/developer). [wNEAR](https://github.com/near/core-contracts/tree/master/w-near) wraps NEAR one for one. The bridged references above observe the specific token market and can therefore reflect a deviation from the underlying asset.
 
 ## Comparison and interaction
 
-Value the reviewed input at the reference bid and the output at the ask. Add the separately known Zcash network fee for outgoing native ZEC. The reviewed quote input already includes any EXACT_OUTPUT allowance; quoted costs are counted once. Provider fiat estimates remain separate from this reference.
+Value the reviewed input at the reference bid and output at the ask. Include the separately known Zcash network fee for outgoing native ZEC. The reviewed EXACT_OUTPUT input already includes its allowance. Provider fiat estimates are separate from the independent comparison.
 
-A difference of −15% or worse produces an inline warning and changes the existing action to **Swap anyway** or **Pay anyway**. Ordinary results stay in collapsed **Quote details** below the total. **No market reference for this asset** signals an unmapped asset. **Price check unavailable** signals a failed or rejected comparison. Both leave the quote usable. Small transfers can legitimately have large percentage costs, so the threshold is advisory.
+A difference of −15% or worse shows an inline warning and uses the existing **Swap anyway** or **Pay anyway** action. Ordinary results and their sources appear in collapsed **Quote details**. **Price check unavailable** signals a timed-out, stale or rejected comparison. **No market reference for this asset** signals an unknown identity. Both leave the quote usable.
 
-## Network and freshness
+## Sources and freshness
 
-- Follow the wallet's Tor setting for swap market checks. Use Tor without direct fallback when enabled and the normal connection when disabled. Send only public market identifiers. The currency-conversion feed has its own Tor-only policy.
-- Review waits up to eight seconds for the market check. At the deadline it shows an unavailable reference and enables confirmation. Late results cannot change the reviewed action. Cache observations for 60 seconds, space cold requests by at least one second, and back off failures for 60 seconds. See Kraken's [rate policy](https://support.kraken.com/articles/206548367-what-are-the-api-rate-limits-).
-- Use timestamps from spread rows, not the response cursor. Accept observations younger than 120 seconds, received within 60 seconds, at most five seconds in the future and within 30 seconds of each other. Reject spreads over 2%, malformed identities and unbounded numeric/body inputs.
-- Bind results and continuation callbacks to the exact quote and known fee. Cancel replaced checks and expire displayed comparisons. Source failures preserve ordinary payment review and authentication.
+- Use the wallet's selected Tor or normal transport for all sources. Requests carry only public market or pool identifiers and fixed Rhea sample sizes. The separate currency-conversion feed follows its own Tor-only policy.
+- Use Kraken's [spread history](https://docs.kraken.com/api-reference/market-data/get-recent-spreads). For USDT and USDC, try the [order book](https://docs.kraken.com/api-reference/market-data/get-order-book) first and use the older of its two best-level timestamps. Try spread history if the book is stale or too wide.
+- Use pinned pools on [PublicNode RPC](https://www.publicnode.com/). EVM references check token identities and liquidity at the same block as spot and [two-minute oracle prices](https://developers.uniswap.org/docs/sdks/v3/guides/price-oracle). The Solana reference verifies the [Orca account](https://github.com/orca-so/whirlpools/blob/main/programs/whirlpool/src/state/whirlpool.rs), mints, liquidity and block time. Convert the observed token rates with independent Kraken anchors.
+- For Rhea, use public [NEAR RPC](https://docs.near.org/api/rpc/contracts) and the documented [exchange view](https://github.com/ref-finance/docs/blob/main/contracts/ref-exchange.md). Price small fixed buys and sells on the same finalized block. These are read-only simulations. A request contains no transaction, wallet address or user amount.
+- Reject observations aged 120 seconds or more, receipts aged 60 seconds or more and bands wider than 2%. Kraken-only comparisons require observations within 30 seconds of one another. For an on-chain market, each observation and its anchor must still meet the 120-second limit.
+- Review waits up to eight seconds. Cancel replaced checks and expire completed assessments. Space Kraken calls by at least one second, reuse fresh observations, and back off failed markets for 60 seconds without suppressing unrelated markets.
 
-## Validation and maintenance
-
-Run the affected `IndependentPricePolicyTest`, `KrakenPriceProviderTest`, `SwapQuoteVMTest` and mapper tests after changes. Exercise real public-source requests and unfunded provider quotes in the affected routing modes when mappings or transport change. Use the maintained development and capture procedures for rendered behavior.
-
-Revisit coverage when exact supported identities change. Reconsider the threshold with representative route evidence; use a separate decision for credentials, additional infrastructure or SDK ownership. Keep OHTTP deferred to a supported upstream release.
+Use focused policy, transport and quote mapper tests during development. Verify live public prices, unfunded app quotes and the relevant Tor modes before changing the source or mapping. Recheck publication if the live catalog changes between validation and dispatch.

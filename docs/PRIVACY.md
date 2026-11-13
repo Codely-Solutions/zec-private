@@ -8,7 +8,7 @@ When Tor is enabled, sensitive wallet metadata, transaction and swap-provider re
 
 NEAR receives swap assets, amounts, recipient/refund addresses and timing. Public-chain transactions and amounts can be correlated. Incoming swaps use fresh shielded recipients, and outgoing swaps use fresh shielded refund addresses. Tor and fresh addresses reduce exposure but cannot erase provider records or guarantee anonymity.
 
-Independent swap-price checks send public trading-pair names to Kraken through Tor. Wallet addresses, amounts and provider quote data are excluded.
+Independent swap-price checks send public market and pool identifiers to exchanges and blockchain RPCs. They follow your Tor setting and exclude wallet addresses, swap amounts and quote data.
 
 Fiat conversion uses CoinMarketCap where enabled. Opening a browser or sharing data hands it to the application you select, under that application's policies.
 
