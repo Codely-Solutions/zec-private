@@ -1,6 +1,6 @@
 # Independent quote reference
 
-The wallet maps each selectable asset by its exact NEAR asset ID, chain, symbol, decimals and contract or mint. Run the [catalog check](../scripts/check-swap-price-catalog.py) against the live catalog before preparing a release. An unknown or changed identity has no reference until it is reviewed.
+The wallet maps each selectable asset by its exact NEAR asset ID, chain, symbol, decimals and contract or mint. [Release preflight](RELEASE-WORKFLOW.md#shared-release-preflight) runs the [catalog check](../scripts/check-swap-price-catalog.py) against the public catalog for each new candidate. Run `python -B scripts/check-swap-price-catalog.py` from the repository root when editing the mappings. An unknown or changed identity has no reference until it is reviewed.
 
 | Reference | Assets and networks |
 |---|---|

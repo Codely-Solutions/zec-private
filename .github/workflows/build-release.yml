@@ -149,6 +149,14 @@ jobs:
         run: |
           baseline=$(python3 -c 'import json; print(json.load(open(".private/upgrade-baseline.json"))["source_sha"])')
           python3 -B .private/preflight.py --base "$baseline"
+      - name: Check live swap catalog for mapping drift
+        if: ${{ !inputs.candidate_run && !inputs.recover_run }}
+        run: |
+          if ! git diff --quiet --no-ext-diff "$GITHUB_SHA" HEAD -- scripts/check-swap-price-catalog.py; then
+            echo 'Review changes to the catalog checker on the release controller first.'
+            exit 1
+          fi
+          python3 -B scripts/check-swap-price-catalog.py
       - name: Fork regression checks
         if: ${{ !inputs.candidate_run && !inputs.recover_run }}
         run: |
