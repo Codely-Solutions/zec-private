@@ -170,9 +170,9 @@ jobs:
             '{
               query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
               variables: {input: {
-                branch: {repositoryNameWithOwner: $repo, refName: "refs/heads/main"},
+                branch: {repositoryNameWithOwner: $repo, branchName: "main"},
                 expectedHeadOid: $head,
                 message: {headline: "Select independently verified hosted upgrade fixture"},
                 fileChanges: {additions: [{path: ".private/hosted-fixture.json", contents: $content}]}
               }}
-            }' | gh api graphql --input - | jq -er '.data.createCommitOnBranch.commit.oid | select(test("^[a-f0-9]{40}$"))'
+            }' | gh api graphql --input - | jq -er '.data.createCommitOnBranch.commit.oid | strings | select(test("^[a-f0-9]{40}$"))'
