@@ -1,6 +1,8 @@
 # Independent quote reference
 
-`KrakenPriceProvider` uses Kraken's public [Spread API](https://docs.kraken.com/api-reference/market-data/get-recent-spreads) without credentials. It covers native BTC, ETH, SOL, ZEC, LTC, TRX, BNB, AVAX, XRP, DASH and BCH, plus Ethereum WBTC through `WBTCUSD`. Asset IDs, network, symbol and decimals must match `IndependentPricePolicy`. Maintain mappings against NEAR token metadata and Kraken [pair metadata](https://docs.kraken.com/api-reference/market-data/get-tradable-asset-pairs).
+`KrakenPriceProvider` uses Kraken's public [Spread API](https://docs.kraken.com/api-reference/market-data/get-recent-spreads) without credentials. It covers native BTC, SOL, ZEC, LTC, TRX, BNB, AVAX, XRP, DASH and BCH, ETH on Ethereum, Arbitrum One and Base, WBTC and DAI on Ethereum, and issuer-backed USDT on Ethereum, Solana and Tron.
+
+Match the exact NEAR asset ID, network, symbol and decimals in `IndependentPricePolicy`. Check issuer contracts for tokens and verify fresh, usable spreads for each market. USDC's USD spread was over 20 hours old in the Release 23 review. Recheck freshness before adding a mapping. Use the [NEAR catalog](https://1click.chaindefuser.com/v0/tokens) and [Kraken pair metadata](https://docs.kraken.com/api-reference/market-data/get-tradable-asset-pairs).
 
 ## Comparison and interaction
 

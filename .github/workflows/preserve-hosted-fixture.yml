@@ -150,10 +150,6 @@ jobs:
             exit 0
           fi
           test "$(git diff --name-only)" = '.private/hosted-fixture.json'
-          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA"
-          git add -- .private/hosted-fixture.json
-          git -c user.name='ZEC Private automation' -c user.email='zec-private@users.noreply.github.com' \
-            commit -m 'Select independently verified hosted upgrade fixture'
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510
         if: steps.record.outputs.updated == 'true'
         id: integrator
@@ -163,9 +159,20 @@ jobs:
           owner: Codely-Solutions
           repositories: zec-private
           permission-contents: write
-      - if: steps.record.outputs.updated == 'true'
+      - name: Record only the verified fixture on the expected main commit
+        if: steps.record.outputs.updated == 'true'
         env:
           GH_TOKEN: ${{ steps.integrator.outputs.token }}
         run: |
-          gh auth setup-git
-          git push origin HEAD:refs/heads/main
+          set -euo pipefail
+          jq -n --arg head "$GITHUB_SHA" --arg repo "$GITHUB_REPOSITORY" \
+            --arg content "$(base64 -w0 .private/hosted-fixture.json)" \
+            '{
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }",
+              variables: {input: {
+                branch: {repositoryNameWithOwner: $repo, refName: "refs/heads/main"},
+                expectedHeadOid: $head,
+                message: {headline: "Select independently verified hosted upgrade fixture"},
+                fileChanges: {additions: [{path: ".private/hosted-fixture.json", contents: $content}]}
+              }}
+            }' | gh api graphql --input - | jq -er '.data.createCommitOnBranch.commit.oid | select(test("^[a-f0-9]{40}$"))'
