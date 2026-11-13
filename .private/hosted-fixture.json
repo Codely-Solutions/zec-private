@@ -1,10 +1,10 @@
 {
-  "release": "v3.19.0-private.23",
-  "reference": "ghcr.io/codely-solutions/zec-private-upgrade-fixtures@sha256:bb50da5ab97c2a742134c884015470f6c4a0b6763d688d31ce0012bbf6599712",
-  "digest": "sha256:898f93eaa0133c002d797b0dddf0087f473a9d510b8405a9457bd11c1b2acf98",
-  "size_in_bytes": 116180361,
-  "source_sha": "3f7ed761ca9806cabf5ba1e959cb7df44a1e2807",
-  "version_code": 3234023,
-  "candidate_apk_sha256": "43548b04572c69a9e7812a6cd9bc411dc145c450e37c2c5dd963f918a9cb510d",
-  "instrumentation_apk_sha256": "bef4d30d3a3170bad8de1f5fc3f0f4462dbedeb7da2457e0659959ebc42c4f26"
+  "release": "v3.19.0-private.24",
+  "reference": "ghcr.io/codely-solutions/zec-private-upgrade-fixtures@sha256:e4a5c65881afa2588205770df64b597aed38749d3dfdada45a7c7f77b39a123e",
+  "digest": "sha256:706b192a11993519c622829fff17774955000da08d53f2d9e6c6f52943fb86ee",
+  "size_in_bytes": 116211705,
+  "source_sha": "3aef8b5054567c3a9e721e0ff568f60a648a3b2d",
+  "version_code": 3234024,
+  "candidate_apk_sha256": "bf65ca314275ae863ac1bb3cae132ab68cc3c1ca5e96c0fba76bcdf45f1da77e",
+  "instrumentation_apk_sha256": "e9f76d873bb2801a21d0ccc4160c692e64ab2907688e54a816faeaa2938f0fdc"
 }
