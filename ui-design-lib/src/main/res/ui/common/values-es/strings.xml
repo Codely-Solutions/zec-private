@@ -152,7 +152,6 @@
     <string name="authentication_use_case_seed_recovery">Función de Recuperación de Frase Semilla</string>
     <string name="authentication_use_case_send_funds">Función de Enviar Fondos</string>
     <string name="authentication_use_case_vote_submission">Envío de voto</string>
-    <string name="authentication_use_case_adress_book">Función de Libreta de Direcciones</string>
     <string name="authentication_use_case_tax_export">Exportación de Impuestos</string>
     <string name="authentication_toast_canceled">Autenticación cancelada</string>
     <string name="authentication_toast_failed">Autenticación fallida</string>

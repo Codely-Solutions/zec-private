@@ -49,6 +49,28 @@ class IndependentPricePolicyTest {
     }
 
     @Test
+    fun marketMatchesTheExactTokenOrNativeAssetOnItsNetwork() {
+        val usdt = asset("usdt", 6)
+        every { usdt.chainTicker } returns "sol"
+        every { usdt.assetId } returns "nep141:sol-c800a4bd850783ccb82c2b7e84175443606352.omft.near"
+        assertEquals("USDTUSD", IndependentPricePolicy.market(usdt))
+
+        every { usdt.chainTicker } returns "tron"
+        assertNull(IndependentPricePolicy.market(usdt))
+        every { usdt.assetId } returns "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near"
+        assertEquals("USDTUSD", IndependentPricePolicy.market(usdt))
+        every { usdt.decimals } returns 18
+        assertNull(IndependentPricePolicy.market(usdt))
+
+        val eth = asset("eth", 18)
+        every { eth.chainTicker } returns "base"
+        every { eth.assetId } returns "nep141:base.omft.near"
+        assertEquals("ETHUSD", IndependentPricePolicy.market(eth))
+        every { eth.assetId } returns "nep141:base-0x4200000000000000000000000000000000000006.omft.near"
+        assertNull(IndependentPricePolicy.market(eth))
+    }
+
+    @Test
     fun exactNativeIdentityRequired() {
         assertEquals("ZECUSD", IndependentPricePolicy.market(zec))
         assertEquals("XBTUSD", IndependentPricePolicy.market(btc))
