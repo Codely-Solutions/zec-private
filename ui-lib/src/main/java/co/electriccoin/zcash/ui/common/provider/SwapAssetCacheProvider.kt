@@ -49,6 +49,7 @@ class SwapAssetCacheProviderImpl(
                     tokenTicker = it.tokenTicker,
                     chainTicker = it.chainTicker,
                     decimals = it.decimals,
+                    contractAddress = it.contractAddress,
                 )
             }
         val encoded = json.encodeToString(cachedAssets)
@@ -66,6 +67,7 @@ class SwapAssetCacheProviderImpl(
             usdPrice = null,
             assetId = assetId,
             decimals = decimals,
+            contractAddress = contractAddress,
             blockchain = blockchainProvider.getBlockchain(chainTicker),
         )
 
@@ -75,6 +77,7 @@ class SwapAssetCacheProviderImpl(
         val tokenTicker: String,
         val chainTicker: String,
         val decimals: Int,
+        val contractAddress: String? = null,
     )
 
     private companion object {

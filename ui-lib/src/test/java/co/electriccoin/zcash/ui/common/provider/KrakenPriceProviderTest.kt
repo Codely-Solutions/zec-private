@@ -7,12 +7,15 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.encodedPath
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -21,6 +24,48 @@ import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 class KrakenPriceProviderTest {
+    @Test
+    fun depthUsesTheOlderBookSide() {
+        val body = """{"error":[],"result":{"USDCUSD":{
+            "bids":[["0.999","10",100]],"asks":[["1.001","20",104]]}}}"""
+        val book = parseKrakenDepth("USDCUSD", Json.parseToJsonElement(body).jsonObject, 105_000)
+        assertEquals(100_000L, book.observedAtMillis)
+        assertEquals(BigDecimal("0.999"), book.bid)
+        assertEquals(BigDecimal("1.001"), book.ask)
+    }
+
+    @Test
+    fun staleStablecoinDepthFallsBackToFreshSpread() = runTest {
+        val now = 10_000_000L
+        val clients = mockk<HttpClientProvider>()
+        val paths = mutableListOf<String>()
+        coEvery { clients.create() } coAnswers {
+            HttpClient(MockEngine { request ->
+                val path = request.url.encodedPath.substringAfterLast('/')
+                paths += path
+                val body = if (path == "Depth") {
+                    """{"error":[],"result":{"USDTZUSD":{"bids":[["1","1",9800]],"asks":[["1","1",10000]]}}}"""
+                } else {
+                    """{"error":[],"result":{"USDTZUSD":[[10000,"1","1.001"]],"last":10000}}"""
+                }
+                respond(body, HttpStatusCode.OK)
+            })
+        }
+        val quote = supportedQuote(now)
+        val asset = quote.originAsset
+        every { asset.assetId } returns "nep141:usdt.tether-token.near"
+        every { asset.contractAddress } returns "usdt.tether-token.near"
+        every { asset.tokenTicker } returns "USDT"
+        every { asset.chainTicker } returns "near"
+        every { asset.decimals } returns 6
+
+        val provider = KrakenPriceProvider(clients, { now }, { 0L }, {})
+        assertTrue(provider.check(quote, BigDecimal.ZERO) is IndependentPriceCheck.Compared)
+        assertEquals(listOf("Depth", "Spread"), paths)
+        coVerify(exactly = 1) { clients.create() }
+        coVerify(exactly = 0) { clients.createTor() }
+    }
+
     @Test
     fun tetherSpreadUsesTheKrakenResponseKey() {
         val body = """{"error":[],"result":{"USDTZUSD":[[100,"1.0000","1.0001"]],"last":100}}"""
@@ -191,6 +236,7 @@ class KrakenPriceProviderTest {
             every { tokenTicker } returns "ZEC"
             every { chainTicker } returns "zec"
             every { decimals } returns 8
+            every { contractAddress } returns null
         }
         return mockk {
             every { originAsset } returns asset

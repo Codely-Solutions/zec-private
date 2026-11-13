@@ -2328,7 +2328,7 @@ index 3b9ca0b94..7607fb041 100644
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..fca3ff537 100644
+index ec56161b5..978e78d0f 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
@@ -14634,6 +14634,84 @@ index 245c01c78..24b627df4 100644
 +++ b/preference-impl-android-lib/build.gradle.kts
 @@ -3 +2,0 @@ plugins {
 -    kotlin("android")
+diff --git a/scripts/check-swap-price-catalog.py b/scripts/check-swap-price-catalog.py
+new file mode 100644
+index 000000000..e81b2132a
+--- /dev/null
++++ b/scripts/check-swap-price-catalog.py
+@@ -0,0 +1,72 @@
++"""Check the app's exact independent market mappings against the public swap catalog."""
++import argparse
++import json
++from decimal import Decimal
++from pathlib import Path
++import re
++import subprocess
++
++ROOT = Path(__file__).resolve().parents[1]
++COMMON = ROOT / 'ui-lib/src/main/java/co/electriccoin/zcash/ui/common'
++CATALOG = 'https://1click.chaindefuser.com/v0/tokens'
++MARKET = re.compile(
++    r'"([^"]+)" to\s*Market\(\s*"([^"]+)",\s*"([^"]+)",\s*(\d+),\s*(null|"[^"]+"),\s*"([^"]+)"'
++)
++
++
++def entries():
++    allowed_text = (COMMON / 'provider/SimpleSwapAssetProvider.kt').read_text(encoding='utf-8')
++    market_text = (COMMON / 'model/SwapPriceMarkets.kt').read_text(encoding='utf-8')
++    allowed = {(token.casefold(), chain) for token, chain in re.findall(r'"([^"]+)" to "([^"]+)"', allowed_text)}
++    rows = MARKET.findall(market_text)
++    mapped = {asset: (token.casefold(), chain, int(decimals), None if contract == 'null' else contract.strip('"'))
++              for asset, token, chain, decimals, contract, _ in rows}
++    if len(mapped) != len(rows) or {(token, chain) for token, chain, _, _ in mapped.values()} != allowed:
++        raise ValueError('Market mappings do not cover the curated asset/network set')
++    return allowed, mapped
++
++
++def live_catalog(allowed, response):
++    live = {}
++    seen = set()
++    for row in response:
++        symbol, chain, decimals = (row[key] for key in ('symbol', 'blockchain', 'decimals'))
++        key = symbol, chain, decimals
++        if key in seen:
++            continue
++        seen.add(key)
++        if (symbol.casefold(), chain) in allowed and Decimal(str(row.get('price') or '0')) > 0:
++            live[row['assetId']] = (symbol.casefold(), chain, decimals, row.get('contractAddress'))
++    return live
++
++
++def check(response):
++    allowed, mapped = entries()
++    live = live_catalog(allowed, response)
++    missing = live.keys() - mapped.keys()
++    extra = mapped.keys() - live.keys()
++    changed = {key for key in live.keys() & mapped.keys() if live[key] != mapped[key]}
++    if missing or extra or changed:
++        raise ValueError(f'Catalog drift: unmapped={sorted(missing)}, not listed={sorted(extra)}, '
++                         f'changed identity={sorted(changed)}')
++    return len(live)
++
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('--offline', action='store_true', help='Check curated mappings without contacting the catalog')
++    args = parser.parse_args()
++    if args.offline:
++        _, mapped = entries()
++        print(f'Curated asset/network mappings verified offline: {len(mapped)}')
++        return
++    response = subprocess.run(['curl', '-fsS', '--max-time', '15', '--max-filesize', '1048576', CATALOG],
++                              capture_output=True, check=True, timeout=18)
++    print(f'Live catalog matches all {check(json.loads(response.stdout))} exact market mappings.')
++
++
++if __name__ == '__main__':
++    try:
++        main()
++    except (subprocess.SubprocessError, ValueError) as error:
++        raise SystemExit(str(error)) from None
 diff --git a/sdk-ext-lib/build.gradle.kts b/sdk-ext-lib/build.gradle.kts
 index d94c54a63..cc03febb0 100644
 --- a/sdk-ext-lib/build.gradle.kts
@@ -21505,7 +21583,7 @@ index 4d388e80f..aa9e205ae 100644
 +class FreshShieldedAddressUnavailableException :
 +    IllegalStateException("A fresh shielded address is unavailable. Wait for wallet synchronization and retry.")
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
-index a5bcffdcd..30135e743 100644
+index a5bcffdcd..166f17bca 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
 @@ -16 +15,0 @@ import co.electriccoin.zcash.ui.common.model.isZCashAsset
@@ -21514,11 +21592,13 @@ index a5bcffdcd..30135e743 100644
 -import co.electriccoin.zcash.ui.util.loggableNot
 @@ -50 +47,0 @@ class NearSwapDataSource(
 -    private val log = loggableNot("NearSwapDataSourceImpl")
-@@ -79,2 +76 @@ class NearSwapDataSource(
+@@ -67,0 +65 @@ class NearSwapDataSource(
++            contractAddress = dto.contractAddress,
+@@ -79,2 +77 @@ class NearSwapDataSource(
 -        slippage: BigDecimal,
 -        affiliateAddress: String
 +        slippage: BigDecimal
-@@ -118,8 +114 @@ class NearSwapDataSource(
+@@ -118,8 +115 @@ class NearSwapDataSource(
 -                appFees =
 -                    listOf(
 -                        AppFee(
@@ -21528,7 +21608,7 @@ index a5bcffdcd..30135e743 100644
 -                    ),
 -                referral = "zodl"
 +                appFees = emptyList()
-@@ -174,0 +164,9 @@ class NearSwapDataSource(
+@@ -174,0 +165,9 @@ class NearSwapDataSource(
 +            val depositType =
 +                if (originAsset.isZCashAsset) {
 +                    synchronizerProvider.getSynchronizer().validateAddress(response.quote.depositAddress)
@@ -21538,9 +21618,9 @@ index a5bcffdcd..30135e743 100644
 +            require(depositType != AddressType.Tex) {
 +                "TEX swap deposits require an intermediate transparent wallet address and are not supported."
 +            }
-@@ -209 +206,0 @@ class NearSwapDataSource(
+@@ -209 +207,0 @@ class NearSwapDataSource(
 -        log("checkSwapStatus $depositAddress")
-@@ -256,2 +252,0 @@ class NearSwapDataSource(
+@@ -256,2 +253,0 @@ class NearSwapDataSource(
 -const val AFFILIATE_FEE_BPS = 67
 -const val AFFILIATE_ADDRESS = "d78abd5477432c9d9c5e32c4a1a0056cd7b8be6580d3c49e1f97185b786592db"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
@@ -21624,10 +21704,10 @@ index befe3b652..3c6b6ef3a 100644
 +                stringResByCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker, minDecimals = 0)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt
 new file mode 100644
-index 000000000..cfb60a210
+index 000000000..dd46e4268
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt
-@@ -0,0 +1,126 @@
+@@ -0,0 +1,98 @@
 +package co.electriccoin.zcash.ui.common.model
 +
 +import java.math.BigDecimal
@@ -21637,7 +21717,11 @@ index 000000000..cfb60a210
 +    data object Checking : IndependentPriceCheck
 +    data object NoMarketReference : IndependentPriceCheck
 +    data object Unavailable : IndependentPriceCheck
-+    data class Compared(val differencePercent: BigDecimal, val validUntilMillis: Long) : IndependentPriceCheck {
++    data class Compared(
++        val differencePercent: BigDecimal,
++        val validUntilMillis: Long,
++        val sources: List<String> = listOf("Kraken"),
++    ) : IndependentPriceCheck {
 +        val poor: Boolean get() = differencePercent <= BigDecimal("-15")
 +    }
 +}
@@ -21647,54 +21731,19 @@ index 000000000..cfb60a210
 +    val bid: BigDecimal,
 +    val ask: BigDecimal,
 +    val observedAtMillis: Long,
-+    val receivedAtMillis: Long
++    val receivedAtMillis: Long,
++    val sources: List<String> = listOf("Kraken"),
 +)
 +
 +object IndependentPricePolicy {
-+    private const val ZEC_DECIMALS = 8
-+    private const val BTC_DECIMALS = 8
-+    private const val ETH_DECIMALS = 18
-+    private const val SOL_DECIMALS = 9
 +    private const val MAX_BOOK_SKEW_MILLIS = 30_000L
++    private const val MAX_POOL_SKEW_MILLIS = 120_000L
 +    private const val FUTURE_TOLERANCE_MILLIS = 5_000L
 +    private const val QUOTE_LIFETIME_MILLIS = 180_000L
 +    private const val OBSERVATION_LIFETIME_MILLIS = 120_000L
 +    private const val RECEIPT_LIFETIME_MILLIS = 60_000L
 +
-+    private data class Market(val symbol: String, val network: String, val decimals: Int, val pair: String)
-+
-+    // Resolve exact identities from the swap catalog to this source's markets.
-+    @Suppress("MagicNumber")
-+    private val markets = mapOf(
-+        "nep141:zec.omft.near" to Market("zec", "zec", ZEC_DECIMALS, "ZECUSD"),
-+        "nep141:btc.omft.near" to Market("btc", "btc", BTC_DECIMALS, "XBTUSD"),
-+        "nep141:eth.omft.near" to Market("eth", "eth", ETH_DECIMALS, "ETHUSD"),
-+        "nep141:arb.omft.near" to Market("eth", "arb", ETH_DECIMALS, "ETHUSD"),
-+        "nep141:base.omft.near" to Market("eth", "base", ETH_DECIMALS, "ETHUSD"),
-+        "nep141:sol.omft.near" to Market("sol", "sol", SOL_DECIMALS, "SOLUSD"),
-+        "nep141:eth-0x6b175474e89094c44da98b954eedeac495271d0f.omft.near" to
-+            Market("dai", "eth", 18, "DAIUSD"),
-+        "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near" to
-+            Market("usdt", "eth", 6, "USDTUSD"),
-+        "nep141:sol-c800a4bd850783ccb82c2b7e84175443606352.omft.near" to
-+            Market("usdt", "sol", 6, "USDTUSD"),
-+        "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near" to
-+            Market("usdt", "tron", 6, "USDTUSD"),
-+        "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near" to
-+            Market("wbtc", "eth", BTC_DECIMALS, "WBTCUSD"),
-+        "nep141:ltc.omft.near" to Market("ltc", "ltc", 8, "LTCUSD"),
-+        "nep141:tron.omft.near" to Market("trx", "tron", 6, "TRXUSD"),
-+        "nep141:bnb.omdep.near" to Market("bnb", "bsc", 18, "BNBUSD"),
-+        "nep141:avax.omdep.near" to Market("avax", "avax", 18, "AVAXUSD"),
-+        "nep141:xrp.omft.near" to Market("xrp", "xrp", 6, "XRPUSD"),
-+        "nep141:dash.omft.near" to Market("dash", "dash", 8, "DASHUSD"),
-+        "nep141:bch.omft.near" to Market("bch", "bch", 8, "BCHUSD"),
-+    )
-+
-+    fun market(asset: SwapAsset): String? = markets[asset.assetId]?.takeIf {
-+        asset.tokenTicker.equals(it.symbol, ignoreCase = true) &&
-+            asset.chainTicker.equals(it.network, ignoreCase = true) && asset.decimals == it.decimals
-+    }?.pair
++    fun market(asset: SwapAsset): String? = SwapPriceMarkets.reference(asset)
 +
 +    // Each unavailable prerequisite ends the comparison before price arithmetic.
 +    @Suppress("ReturnCount")
@@ -21709,11 +21758,12 @@ index 000000000..cfb60a210
 +        val input = observations[inputPair] ?: return IndependentPriceCheck.Unavailable
 +        val output = observations[outputPair] ?: return IndependentPriceCheck.Unavailable
 +        val selected = listOf(input, output)
-+        if (input.pair != inputPair || output.pair != outputPair || selected.any { !valid(it, nowMillis) }) {
++        if (input.pair != inputPair || output.pair != outputPair || selected.any { !isUsable(it, nowMillis) }) {
 +            return IndependentPriceCheck.Unavailable
 +        }
++        val maxSkew = if (selected.any { it.sources.size > 1 }) MAX_POOL_SKEW_MILLIS else MAX_BOOK_SKEW_MILLIS
 +        if (!comparableQuote(quote, networkFeeZec, nowMillis) ||
-+            kotlin.math.abs(input.observedAtMillis - output.observedAtMillis) > MAX_BOOK_SKEW_MILLIS
++            kotlin.math.abs(input.observedAtMillis - output.observedAtMillis) > maxSkew
 +        ) return IndependentPriceCheck.Unavailable
 +        val validUntil = minOf(
 +            quote.deadline.toEpochMilliseconds(),
@@ -21722,12 +21772,14 @@ index 000000000..cfb60a210
 +            selected.minOf { it.receivedAtMillis + RECEIPT_LIFETIME_MILLIS }
 +        )
 +        if (validUntil <= nowMillis) return IndependentPriceCheck.Unavailable
-+        val inputAmount = quote.amountInFormatted + if (inputPair == "ZECUSD") networkFeeZec else BigDecimal.ZERO
++        val inputFee = if (quote.originAsset.isZCashAsset) networkFeeZec else BigDecimal.ZERO
++        val inputAmount = quote.amountInFormatted + inputFee
 +        val inputValue = inputAmount.multiply(input.bid)
 +        val outputValue = quote.amountOutFormatted.multiply(output.ask)
 +        return IndependentPriceCheck.Compared(
 +            outputValue.divide(inputValue, MathContext.DECIMAL128).subtract(BigDecimal.ONE).multiply(BigDecimal("100")),
-+            validUntil
++            validUntil,
++            selected.flatMap { it.sources }.distinct()
 +        )
 +    }
 +
@@ -21738,7 +21790,7 @@ index 000000000..cfb60a210
 +    private fun positiveQuoteAmounts(quote: SwapQuote): Boolean =
 +        quote.amountInFormatted.signum() > 0 && quote.amountOutFormatted.signum() > 0
 +
-+    private fun valid(observation: MarketObservation, now: Long): Boolean = with(observation) {
++    internal fun isUsable(observation: MarketObservation, now: Long): Boolean = with(observation) {
 +        boundedMarketNumber(bid) && boundedMarketNumber(ask) && bid.signum() > 0 && ask >= bid &&
 +            ask.subtract(bid).divide(bid, MathContext.DECIMAL128) <= BigDecimal("0.02") &&
 +            observedAtMillis <= now + FUTURE_TOLERANCE_MILLIS &&
@@ -22133,6 +22185,93 @@ index 000000000..abe615b28
 +        return ByteArray(32) { (state[it / 8] ushr ((it % 8) * 8)).toByte() }
 +    }
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapAsset.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapAsset.kt
+index f57f2066d..aab8cd216 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapAsset.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapAsset.kt
+@@ -13,0 +14 @@ interface SwapAsset {
++    val contractAddress: String? get() = null
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapPriceMarkets.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapPriceMarkets.kt
+new file mode 100644
+index 000000000..80a483d8f
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapPriceMarkets.kt
+@@ -0,0 +1,75 @@
++package co.electriccoin.zcash.ui.common.model
++
++internal object SwapPriceMarkets {
++    private data class Market(
++        val symbol: String,
++        val network: String,
++        val decimals: Int,
++        val contract: String?,
++        val reference: String
++    )
++
++    // Contract identities come from the issuer or bridge. The catalog check also verifies the
++    // provider's current asset ID and contract before release.
++    @Suppress("MagicNumber")
++    private val markets = mapOf(
++        "nep141:zec.omft.near" to Market("ZEC", "zec", 8, null, "ZECUSD"),
++        "nep141:btc.omft.near" to Market("BTC", "btc", 8, null, "XBTUSD"),
++        "nep141:eth.omft.near" to Market("ETH", "eth", 18, null, "ETHUSD"),
++        "nep141:arb.omft.near" to Market("ETH", "arb", 18, null, "ETHUSD"),
++        "nep141:base.omft.near" to Market("ETH", "base", 18, null, "ETHUSD"),
++        "nep141:sol.omft.near" to Market("SOL", "sol", 9, null, "SOLUSD"),
++        "nep141:eth-0x6b175474e89094c44da98b954eedeac495271d0f.omft.near" to
++            Market("DAI", "eth", 18, "0x6b175474e89094c44da98b954eedeac495271d0f", "DAIUSD"),
++        "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near" to
++            Market("USDT", "eth", 6, "0xdac17f958d2ee523a2206206994597c13d831ec7", "USDTUSD"),
++        "nep141:sol-c800a4bd850783ccb82c2b2c7e84175443606352.omft.near" to
++            Market("USDT", "sol", 6, "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", "USDTUSD"),
++        "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near" to
++            Market("USDT", "tron", 6, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "USDTUSD"),
++        "nep141:usdt.tether-token.near" to Market("USDT", "near", 6, "usdt.tether-token.near", "USDTUSD"),
++        "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near" to
++            Market("WBTC", "eth", 8, "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599", "WBTCUSD"),
++        "nep141:ltc.omft.near" to Market("LTC", "ltc", 8, null, "LTCUSD"),
++        "nep141:tron.omft.near" to Market("TRX", "tron", 6, null, "TRXUSD"),
++        "nep141:bnb.omdep.near" to Market("BNB", "bsc", 18, null, "BNBUSD"),
++        "nep141:avax.omdep.near" to Market("AVAX", "avax", 18, null, "AVAXUSD"),
++        "nep141:xrp.omft.near" to Market("XRP", "xrp", 6, null, "XRPUSD"),
++        "nep141:dash.omft.near" to Market("DASH", "dash", 8, null, "DASHUSD"),
++        "nep141:bch.omft.near" to Market("BCH", "bch", 8, null, "BCHUSD"),
++        "nep141:wrap.near" to Market("wNEAR", "near", 24, "wrap.near", "NEARUSD"),
++        "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near" to
++            Market("USDC", "eth", 6, "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "USDCUSD"),
++        "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near" to
++            Market("USDC", "sol", 6, "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "USDCUSD"),
++        "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near" to
++            Market("USDC", "base", 6, "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", "USDCUSD"),
++        "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near" to
++            Market("USDC", "arb", 6, "0xaf88d065e77c8cc2239327c5edb3a432268e5831", "USDCUSD"),
++        "nep141:sui-c1b81ecaf27933252d31a963bc5e9458f13c18ce.omft.near" to
++            Market(
++                "USDC", "sui", 6,
++                "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC", "USDCUSD",
++            ),
++        "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1" to
++            Market("USDC", "near", 6, "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1", "USDCUSD"),
++        "nep141:pol-0x3c499c542cef5e3811e1192ce70d8cc03d5c3359.omdep.near" to
++            Market("USDC", "pol", 6, "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359", "USDCUSD"),
++        "nep141:bnb-0x55d398326f99059ff775485246999027b3197955.omdep.near" to
++            Market("USDT", "bsc", 18, "0x55d398326f99059ff775485246999027b3197955", "USDT-BSC"),
++        "nep141:pol-0xc2132d05d31c914a87c6611c10748aeb04b58e8f.omdep.near" to
++            Market("USDT", "pol", 6, "0xc2132d05d31c914a87c6611c10748aeb04b58e8f", "USDT-POL"),
++        "nep141:arb-0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9.omft.near" to
++            Market("USDT0", "arb", 6, "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9", "USDT0-ARB"),
++        "nep141:nbtc.bridge.near" to Market("BTC", "near", 8, "nbtc.bridge.near", "BTC-NEAR"),
++        "1cs_v1:near:nep141:zec.omft.near" to Market("ZEC", "near", 8, "zec.omft.near", "ZEC-NEAR"),
++        "1cs_v1:sol:spl:A7bdiYdS5GjqGFtxf17ppRHtDKPkkRqbKtR27dxvQXaS" to
++            Market("ZEC", "sol", 8, "A7bdiYdS5GjqGFtxf17ppRHtDKPkkRqbKtR27dxvQXaS", "ZEC-SOL"),
++    )
++
++    fun reference(asset: SwapAsset): String? = markets[asset.assetId]?.takeIf {
++        asset.tokenTicker.equals(it.symbol, ignoreCase = true) &&
++            asset.chainTicker.equals(it.network, ignoreCase = true) && asset.decimals == it.decimals &&
++            asset.contractAddress == it.contract
++    }?.reference
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
 index ab4d7ab5b..4d29e754b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/SwapQuote.kt
@@ -22365,6 +22504,12 @@ index 000000000..d21d293af
 +    /** Provider IDs are namespaced; ticker equality alone cannot identify an asset on another network. */
 +    private fun SwapAsset.foundationId() = AssetId("mainnet:${blockchain.chainTicker}", assetId)
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapAsset.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapAsset.kt
+index f301e0286..980ca5f78 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapAsset.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapAsset.kt
+@@ -16,0 +17 @@ data class NearSwapAsset(
++    override val contractAddress: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
 index e5b3ebffe..27b2c9c13 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
@@ -22573,6 +22718,15 @@ index b2c6505ad..9ed8a1e97 100644
 +        ?: response.swapDetails?.depositedAmount?.movePointLeft(origin.decimals)
 @@ -118,0 +158 @@ data class NearSwapQuoteStatus(
 +        ?: response.swapDetails?.refundedAmount?.movePointLeft(origin.decimals)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearTokenDto.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearTokenDto.kt
+index 620de4db6..0952b5ca9 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearTokenDto.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearTokenDto.kt
+@@ -28,2 +28,2 @@ data class NearTokenDto(
+-    // @SerialName("contractAddress")
+-    // val contractAddress: String? = null,
++    @SerialName("contractAddress")
++    val contractAddress: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteRequest.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteRequest.kt
 index d8016e519..37dcf12b4 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/QuoteRequest.kt
@@ -22736,6 +22890,131 @@ index 000000000..1ebd4391a
 +    val originUsdUnitPrice = amountInUsd.divide(amountInFormatted, MathContext.DECIMAL128)
 +    return originUsdUnitPrice.multiply(proposal.zecFee(), MathContext.DECIMAL128)
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/EvmPoolMarket.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/EvmPoolMarket.kt
+new file mode 100644
+index 000000000..186f84a66
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/EvmPoolMarket.kt
+@@ -0,0 +1,119 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import co.electriccoin.zcash.ui.common.model.MarketObservation
++import io.ktor.client.HttpClient
++import kotlinx.serialization.json.JsonArray
++import kotlinx.serialization.json.JsonPrimitive
++import kotlinx.serialization.json.buildJsonObject
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import kotlinx.serialization.json.put
++import java.math.BigDecimal
++import java.math.BigInteger
++import java.math.MathContext
++import kotlin.math.pow
++
++internal object EvmPoolMarket {
++    internal data class Pool(
++        val host: String,
++        val address: String,
++        val token0: String,
++        val token1: String,
++        val tokenIsFirst: Boolean,
++        val decimalsDelta: Int,
++        val anchor: String,
++        val venue: String,
++    )
++
++    private const val ETH = "ETHUSD"
++    private const val WBNB = "bb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c"
++    private const val ARB_WETH = "82af49447d8a07e3bd95bd0d56f35241523fbab1"
++    private const val POL_WETH = "7ceb23fd6bc0add59e62ac25578270cff1b9f619"
++    private const val WINDOW = 120
++    private const val ORACLE_HEAD_OFFSET = 64
++    private const val MAX_SQRT_PRICE_BITS = 160
++    private const val Q192 = 192
++    private const val WORD = 64
++    private const val HEX_RADIX = 16
++    private const val HEX_BYTE = 2
++    private const val TICK_BASE = 1.0001
++    private const val MAX_TICK = 887_272
++    private const val MILLIS_PER_SECOND = 1_000L
++    private val minLiquidity = BigInteger("100000000000000")
++    private val divisor = BigInteger.ONE.shiftLeft(Q192).toBigDecimal()
++
++    @Suppress("MagicNumber")
++    private val pools = mapOf(
++        "USDT-BSC" to Pool(
++            "bsc", "0x172fcd41e0913e95784454622d1c3724f546f849",
++            "55d398326f99059ff775485246999027b3197955", WBNB, true, 0, "BNBUSD", "PancakeSwap",
++        ),
++        "USDT-POL" to Pool(
++            "polygon-bor", "0xbb98b3d2b18aef63a3178023a920971cf5f29be4",
++            POL_WETH, "c2132d05d31c914a87c6611c10748aeb04b58e8f", false, 12, ETH, "Uniswap",
++        ),
++        "USDT0-ARB" to Pool(
++            "arbitrum-one", "0x641c00a822e8b671738d32a431a4fb6074e5c79d",
++            ARB_WETH, "fd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9", false, 12, ETH, "Uniswap",
++        ),
++    )
++
++    fun pool(reference: String): Pool? = pools[reference]
++
++    @Suppress("MagicNumber")
++    suspend fun observe(client: HttpClient, reference: String, pool: Pool, clock: () -> Long): MarketObservation {
++        val rpc = PublicMarketRpc(client, "https://${pool.host}-rpc.publicnode.com")
++        val latest = rpc.read(
++            "eth_getBlockByNumber", JsonArray(listOf(JsonPrimitive("latest"), JsonPrimitive(false))),
++        ).jsonObject
++        val block = latest.field("number")
++        require(block.matches(Regex("0x[0-9a-f]{1,16}")))
++        val timestamp = latest.field("timestamp").removePrefix("0x").toLong(16) * MILLIS_PER_SECOND
++        val observe = "883bdbfd" + listOf(32, 2, WINDOW, 0).joinToString("") { it.toString(16).padStart(WORD, '0') }
++        val responses = rpc.batch(listOf("0dfe1681", "d21220a7", "1a686502", "3850c7bd", observe).map { selector ->
++            "eth_call" to JsonArray(listOf(buildJsonObject {
++                put("to", pool.address)
++                put("data", "0x$selector")
++            }, JsonPrimitive(block)))
++        }).map { it.jsonPrimitive.content }
++        return parse(reference, pool, responses, timestamp, clock())
++    }
++
++    @Suppress("MagicNumber")
++    internal fun parse(
++        reference: String,
++        pool: Pool,
++        responses: List<String>,
++        timestamp: Long,
++        now: Long,
++    ): MarketObservation {
++        val words = responses.map { data ->
++            require(data.startsWith("0x") && data.length % WORD == 2)
++            data.drop(2).chunked(WORD)
++        }
++        require(words[0].single() == pool.token0.padStart(WORD, '0'))
++        require(words[1].single() == pool.token1.padStart(WORD, '0'))
++        require(words[2].single().toBigInteger(16) >= minLiquidity)
++        val squareRoot = words[3].first().toBigInteger(16)
++        require(squareRoot.signum() > 0 && squareRoot.bitLength() <= MAX_SQRT_PRICE_BITS)
++        val spot = squareRoot.pow(2).toBigDecimal().divide(divisor, MathContext.DECIMAL128)
++        val oracle = words[4]
++        require(oracle[0].toInt(16) == ORACLE_HEAD_OFFSET && oracle[2].toInt(16) == 2)
++        val meanTick = (signedTick(oracle[4]) - signedTick(oracle[3])).toDouble() / WINDOW
++        require(meanTick in -MAX_TICK.toDouble()..MAX_TICK.toDouble())
++        val average = BigDecimal.valueOf(TICK_BASE.pow(meanTick))
++        val scale = { price: BigDecimal ->
++            val human = price.scaleByPowerOfTen(pool.decimalsDelta)
++            if (pool.tokenIsFirst) human else BigDecimal.ONE.divide(human, MathContext.DECIMAL128)
++        }
++        val current = scale(spot)
++        val historical = scale(average)
++        return MarketObservation(
++            reference, minOf(current, historical), maxOf(current, historical), timestamp, now, listOf(pool.venue),
++        )
++    }
++
++    private fun signedTick(word: String): Long = BigInteger(
++        word.chunked(HEX_BYTE).map { it.toInt(HEX_RADIX).toByte() }.toByteArray()
++    ).longValueExact()
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/HttpClientProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/HttpClientProvider.kt
 index feef536f5..017b876eb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/HttpClientProvider.kt
@@ -22752,38 +23031,115 @@ index feef536f5..017b876eb 100644
 +            // Bodies and URL parameters carry wallet data in debug builds too. Quote lifecycle
 +            // diagnostics record bounded stage metadata without exposing payloads or URLs.
 +            level = LogLevel.NONE
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenMarketData.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenMarketData.kt
+new file mode 100644
+index 000000000..301cc8286
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenMarketData.kt
+@@ -0,0 +1,79 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import co.electriccoin.zcash.ui.common.model.MarketObservation
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.jsonArray
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++
++private fun krakenResponseKey(pair: String): String =
++    when (pair) {
++        "XBTUSD" -> "XXBTZUSD"
++        "ZECUSD" -> "XZECZUSD"
++        "ETHUSD" -> "XETHZUSD"
++        "LTCUSD" -> "XLTCZUSD"
++        "XRPUSD" -> "XXRPZUSD"
++        "USDTUSD" -> "USDTZUSD"
++        "SOLUSD", "WBTCUSD", "TRXUSD", "BNBUSD", "AVAXUSD", "DASHUSD", "BCHUSD", "DAIUSD", "USDCUSD", "NEARUSD" -> pair
++        else -> error("Unsupported market")
++    }
++
++internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis: Long): MarketObservation {
++    require(body.length <= KRAKEN_RESPONSE_BYTES && body.toByteArray(Charsets.UTF_8).size <= KRAKEN_RESPONSE_BYTES)
++    return parseKrakenSpread(pair, Json.parseToJsonElement(body).jsonObject, receivedAtMillis)
++}
++
++private fun krakenResult(root: JsonObject): JsonObject {
++    val errors = root.getValue("error").jsonArray
++    val rateLimited = errors.any {
++        val error = it.jsonPrimitive.content
++        error.startsWith("EAPI:Rate limit") || error.startsWith("EService:Throttled")
++    }
++    if (rateLimited) throw MarketDataFailure("rate limited")
++    require(errors.isEmpty())
++    return root.getValue("result").jsonObject
++}
++
++internal fun parseKrakenSpread(pair: String, root: JsonObject, receivedAtMillis: Long): MarketObservation {
++    val key = krakenResponseKey(pair)
++    val result = krakenResult(root)
++    require(result.keys == setOf(key, "last"))
++    val rows = result.getValue(key).jsonArray
++    require(rows.isNotEmpty() && rows.size <= MAX_SPREAD_ROWS)
++    return rows.reversed().map { element ->
++        val row = element.jsonArray
++        require(row.size == SPREAD_ROW_FIELDS)
++        val observedAtMillis = marketTime(row[0].jsonPrimitive.content)
++        val bid = marketDecimal(row[1].jsonPrimitive.content)
++        val ask = marketDecimal(row[2].jsonPrimitive.content)
++        require(ask >= bid)
++        MarketObservation(pair, bid, ask, observedAtMillis, receivedAtMillis)
++    }.maxBy { it.observedAtMillis }
++}
++
++internal fun parseKrakenDepth(pair: String, root: JsonObject, receivedAtMillis: Long): MarketObservation {
++    val key = krakenResponseKey(pair)
++    val result = krakenResult(root)
++    require(result.keys == setOf(key))
++    val book = result.getValue(key).jsonObject
++    val bid = book.getValue("bids").jsonArray.single().jsonArray
++    val ask = book.getValue("asks").jsonArray.single().jsonArray
++    require(bid.size == SPREAD_ROW_FIELDS && ask.size == SPREAD_ROW_FIELDS)
++    val bidTime = marketTime(bid[2].jsonPrimitive.content)
++    val askTime = marketTime(ask[2].jsonPrimitive.content)
++    require(maxOf(bidTime, askTime) <= receivedAtMillis + FUTURE_TOLERANCE_MILLIS)
++    return MarketObservation(
++        pair, marketDecimal(bid[0].jsonPrimitive.content), marketDecimal(ask[0].jsonPrimitive.content),
++        minOf(bidTime, askTime), receivedAtMillis,
++    )
++}
++
++private fun marketTime(seconds: String): Long =
++    marketDecimal(seconds).movePointRight(MILLIS_DECIMALS).longValueExact()
++
++internal const val KRAKEN_RESPONSE_BYTES = 65_536
++private const val MILLIS_DECIMALS = 3
++private const val FUTURE_TOLERANCE_MILLIS = 5_000L
++private const val MAX_SPREAD_ROWS = 1_000
++private const val SPREAD_ROW_FIELDS = 3
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
 new file mode 100644
-index 000000000..4a20148ae
+index 000000000..ddecf716f
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,193 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import co.electriccoin.zcash.spackle.Twig
-+import co.electriccoin.zcash.ui.common.model.boundedMarketNumber
 +import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
 +import co.electriccoin.zcash.ui.common.model.IndependentPricePolicy
 +import co.electriccoin.zcash.ui.common.model.MarketObservation
 +import co.electriccoin.zcash.ui.common.model.SwapQuote
-+import io.ktor.client.plugins.expectSuccess
-+import io.ktor.client.request.prepareGet
-+import io.ktor.client.statement.bodyAsChannel
-+import io.ktor.http.HttpStatusCode
-+import io.ktor.utils.io.readBuffer
++import io.ktor.client.HttpClient
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.TimeoutCancellationException
++import kotlinx.coroutines.async
++import kotlinx.coroutines.coroutineScope
 +import kotlinx.coroutines.delay
 +import kotlinx.coroutines.sync.Mutex
 +import kotlinx.coroutines.sync.withLock
 +import kotlinx.coroutines.withContext
 +import kotlinx.coroutines.withTimeout
-+import kotlinx.io.readByteArray
-+import kotlinx.serialization.json.Json
-+import kotlinx.serialization.json.jsonArray
-+import kotlinx.serialization.json.jsonObject
-+import kotlinx.serialization.json.jsonPrimitive
 +import java.math.BigDecimal
 +
 +interface IndependentPriceProvider {
@@ -22798,88 +23154,127 @@ index 000000000..4a20148ae
 +) : IndependentPriceProvider {
 +    private val mutex = Mutex()
 +    private val cache = mutableMapOf<String, CachedObservation>()
-+    @Volatile
-+    private var failureAtMillis: Long? = null
++    private val failures = mutableMapOf<String, Long>()
 +    private var lastRequestStartedMillis: Long? = null
 +
-+    // A failure in this optional reference must leave the provider quote usable.
 +    @Suppress("TooGenericExceptionCaught")
 +    override suspend fun check(
 +        quote: SwapQuote,
 +        networkFeeZec: BigDecimal
 +    ): IndependentPriceCheck = withContext(Dispatchers.IO) {
-+        val pairs = listOf(
++        val markets = listOf(
 +            IndependentPricePolicy.market(quote.originAsset)
 +                ?: return@withContext IndependentPriceCheck.NoMarketReference,
 +            IndependentPricePolicy.market(quote.destinationAsset)
 +                ?: return@withContext IndependentPriceCheck.NoMarketReference
-+        ).distinct()
++        ).distinct().sortedByDescending { it.contains('-') }
 +        try {
 +            withTimeout(CHECK_TIMEOUT_MILLIS) {
 +                mutex.withLock {
 +                    val now = wallTimeMillis()
-+                    val elapsedNow = elapsedTimeMillis()
-+                    if (now < 0L || elapsedNow < 0L) return@withLock IndependentPriceCheck.Unavailable
-+                    val missing = pairs.filterNot { isCacheFresh(it, now, elapsedNow) }
-+                    if (missing.isNotEmpty()) {
-+                        if (failureAtMillis?.let { elapsedNow - it < FAILURE_BACKOFF_MILLIS } == true) {
-+                            return@withLock IndependentPriceCheck.Unavailable
-+                        }
-+                        refreshObservations(missing)
++                    val elapsed = elapsedTimeMillis()
++                    if (now < 0L || elapsed < 0L) return@withLock IndependentPriceCheck.Unavailable
++                    val missing = markets.filterNot { isCacheFresh(it, now, elapsed) }
++                    if (missing.any { isBackingOff(it, elapsed) }) {
++                        return@withLock IndependentPriceCheck.Unavailable
 +                    }
-+                    compareCached(pairs, quote, networkFeeZec)
++                    if (missing.isNotEmpty()) refreshObservations(missing)
++                    compareCached(markets, quote, networkFeeZec)
 +                }
 +            }
 +        } catch (_: TimeoutCancellationException) {
-+            unavailable("timeout")
++            Twig.warn { "Independent market check: timeout" }
++            IndependentPriceCheck.Unavailable
 +        } catch (cancelled: CancellationException) {
 +            throw cancelled
 +        } catch (failure: MarketDataFailure) {
-+            unavailable(failure.message)
++            Twig.warn { "Independent market check: " + failure.message }
++            IndependentPriceCheck.Unavailable
 +        } catch (failure: Exception) {
-+            unavailable("request failed (" + failure.javaClass.simpleName + ")")
++            Twig.warn { "Independent market check: request failed (${failure.javaClass.simpleName})" }
++            IndependentPriceCheck.Unavailable
 +        }
 +    }
 +
++    @Suppress("TooGenericExceptionCaught")
 +    private suspend fun refreshObservations(missing: List<String>) {
-+        httpClientProvider.create().use { client ->
-+            missing.forEach { pair ->
-+                awaitRequestInterval()
-+                val observation = client.prepareGet("https://api.kraken.com/0/public/Spread") {
-+                    expectSuccess = false
-+                    url { parameters.append("pair", pair) }
-+                }.execute { response ->
-+                    val status = response.status
-+                    if (status != HttpStatusCode.OK) {
-+                        val reason = if (status == HttpStatusCode.TooManyRequests) {
-+                            "rate limited"
-+                        } else {
-+                            "HTTP " + status.value
-+                        }
-+                        throw MarketDataFailure(reason)
-+                    }
-+                    val bytes = response.bodyAsChannel().readBuffer(MAX_RESPONSE_BYTES.toLong() + 1L).readByteArray()
-+                    try {
-+                        require(bytes.size <= MAX_RESPONSE_BYTES)
-+                        parseKrakenObservation(pair, bytes.decodeToString(), wallTimeMillis())
-+                    } catch (_: RuntimeException) {
-+                        throw MarketDataFailure("rejected response")
-+                    }
++        var active = missing.first()
++        try {
++            httpClientProvider.create().use { client ->
++                missing.forEach { market ->
++                    active = market
++                    val observation = readObservation(client, market)
++                    val now = wallTimeMillis()
++                    require(IndependentPricePolicy.isUsable(observation, now))
++                    val receiptAge = (now - observation.receivedAtMillis).coerceAtLeast(0)
++                    cache[market] = CachedObservation(observation, elapsedTimeMillis() - receiptAge)
 +                }
-+                cache[pair] = CachedObservation(observation, elapsedTimeMillis())
 +            }
++        } catch (cancelled: CancellationException) {
++            throw cancelled
++        } catch (failure: Exception) {
++            failures[active] = elapsedTimeMillis()
++            throw failure
 +        }
 +    }
 +
-+    private fun unavailable(reason: String): IndependentPriceCheck {
-+        failureAtMillis = elapsedTimeMillis()
-+        Twig.warn { "Independent market check: " + reason }
-+        return IndependentPriceCheck.Unavailable
++    private suspend fun readObservation(client: HttpClient, market: String): MarketObservation {
++        val evmPool = EvmPoolMarket.pool(market)
++        val nearPool = RheaMarket.pool(market)
++        return when {
++            evmPool != null -> withAnchor(client, evmPool.anchor) {
++                EvmPoolMarket.observe(client, market, evmPool, wallTimeMillis)
++            }
++            market == OrcaMarket.REFERENCE -> withAnchor(client, OrcaMarket.ANCHOR) {
++                OrcaMarket.observe(client, wallTimeMillis)
++            }
++            nearPool != null -> withAnchor(client, RheaMarket.ANCHOR_MARKET) {
++                RheaMarket.observe(client, market, nearPool, wallTimeMillis)
++            }
++            else -> readKraken(client, market)
++        }
 +    }
 +
-+    private fun isCacheFresh(pair: String, now: Long, elapsedNow: Long): Boolean =
++    private suspend fun withAnchor(
++        client: HttpClient,
++        market: String,
++        observe: suspend () -> MarketObservation,
++    ): MarketObservation = coroutineScope {
++        val pool = async { observe() }
++        val anchor = anchorObservation(client, market)
++        pool.await().inDollars(anchor)
++    }
++
++    private suspend fun anchorObservation(client: HttpClient, market: String): MarketObservation {
++        val cached = cache[market]
++        if (cached != null && isCacheFresh(market, wallTimeMillis(), elapsedTimeMillis())) return cached.observation
++        return readKraken(client, market).also { cache[market] = CachedObservation(it, elapsedTimeMillis()) }
++    }
++
++    private suspend fun readKraken(client: HttpClient, market: String): MarketObservation {
++        val endpoints = if (market in DEPTH_FIRST) listOf("Depth", "Spread") else listOf("Spread")
++        for (endpoint in endpoints) {
++            awaitRequestInterval()
++            val root = client.readMarketJson("https://api.kraken.com/0/public/$endpoint", KRAKEN_RESPONSE_BYTES) {
++                url {
++                    parameters.append("pair", market)
++                    if (endpoint == "Depth") parameters.append("count", "1")
++                }
++            }
++            val now = wallTimeMillis()
++            val observation = if (endpoint == "Depth") parseKrakenDepth(market, root, now)
++            else parseKrakenSpread(market, root, now)
++            if (IndependentPricePolicy.isUsable(observation, now)) return observation
++        }
++        throw MarketDataFailure("stale or unusable book")
++    }
++
++    private fun isBackingOff(market: String, elapsed: Long): Boolean =
++        failures[market]?.let { elapsed - it in 0 until FAILURE_BACKOFF_MILLIS } == true
++
++    private fun isCacheFresh(pair: String, now: Long, elapsed: Long): Boolean =
 +        cache[pair]?.let {
-+            elapsedNow - it.receivedAtElapsedMillis in 0 until RECEIPT_LIFETIME_MILLIS &&
++            elapsed - it.receivedAtElapsedMillis in 0 until RECEIPT_LIFETIME_MILLIS &&
 +                now - it.observation.observedAtMillis in
 +                -FUTURE_TOLERANCE_MILLIS until OBSERVATION_LIFETIME_MILLIS
 +        } == true
@@ -22888,90 +23283,246 @@ index 000000000..4a20148ae
 +        val elapsed = elapsedTimeMillis()
 +        val sinceRequest = lastRequestStartedMillis?.let { elapsed - it }
 +        require(elapsed >= 0L && (sinceRequest == null || sinceRequest >= 0L))
-+        requestDelay(
-+            (REQUEST_INTERVAL_MILLIS - (sinceRequest ?: REQUEST_INTERVAL_MILLIS)).coerceAtLeast(0L)
-+        )
++        requestDelay((REQUEST_INTERVAL_MILLIS - (sinceRequest ?: REQUEST_INTERVAL_MILLIS)).coerceAtLeast(0L))
 +        lastRequestStartedMillis = elapsedTimeMillis()
 +    }
 +
 +    private fun compareCached(
-+        pairs: List<String>,
++        markets: List<String>,
 +        quote: SwapQuote,
 +        networkFeeZec: BigDecimal
 +    ): IndependentPriceCheck {
 +        val comparisonTime = wallTimeMillis()
 +        val comparisonElapsed = elapsedTimeMillis()
-+        val observations = pairs.associateWith { pair ->
-+            val cached = cache.getValue(pair)
++        val observations = markets.associateWith { market ->
++            val cached = cache.getValue(market)
 +            val age = comparisonElapsed - cached.receivedAtElapsedMillis
 +            if (comparisonTime < 0L || comparisonElapsed < 0L || age !in 0 until RECEIPT_LIFETIME_MILLIS) {
 +                return IndependentPriceCheck.Unavailable
 +            }
-+            // The policy uses absolute expiry timestamps. Preserve the local receipt's elapsed age
-+            // while leaving the provider observation and quote timestamps unchanged.
 +            cached.observation.copy(receivedAtMillis = comparisonTime - age)
 +        }
-+        val result = IndependentPricePolicy.compare(quote, networkFeeZec, observations, comparisonTime)
-+        if (result == IndependentPriceCheck.Unavailable) {
-+            Twig.warn { "Independent market check: market data failed comparison checks" }
-+        }
-+        return result
++        return IndependentPricePolicy.compare(quote, networkFeeZec, observations, comparisonTime)
 +    }
 +
 +    private data class CachedObservation(val observation: MarketObservation, val receivedAtElapsedMillis: Long)
 +}
 +
-+private fun spreadResponseKey(pair: String): String =
-+    when (pair) {
-+        "XBTUSD" -> "XXBTZUSD"
-+        "ZECUSD" -> "XZECZUSD"
-+        "ETHUSD" -> "XETHZUSD"
-+        "LTCUSD" -> "XLTCZUSD"
-+        "XRPUSD" -> "XXRPZUSD"
-+        "USDTUSD" -> "USDTZUSD"
-+        "SOLUSD", "WBTCUSD", "TRXUSD", "BNBUSD", "AVAXUSD", "DASHUSD", "BCHUSD", "DAIUSD" -> pair
-+        else -> error("Unsupported market")
-+    }
-+
-+internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis: Long): MarketObservation {
-+    require(body.length <= MAX_RESPONSE_BYTES && body.toByteArray(Charsets.UTF_8).size <= MAX_RESPONSE_BYTES)
-+    val key = spreadResponseKey(pair)
-+    val root = Json.parseToJsonElement(body).jsonObject
-+    val errors = root.getValue("error").jsonArray
-+    val rateLimited = errors.any {
-+        val error = it.jsonPrimitive.content
-+        error.startsWith("EAPI:Rate limit") || error.startsWith("EService:Throttled")
-+    }
-+    if (rateLimited) throw MarketDataFailure("rate limited")
-+    require(errors.isEmpty())
-+    val result = root.getValue("result").jsonObject
-+    require(result.keys == setOf(key, "last"))
-+    val rows = result.getValue(key).jsonArray
-+    require(rows.isNotEmpty() && rows.size <= MAX_SPREAD_ROWS)
-+    return rows.reversed().map { element ->
-+        val row = element.jsonArray
-+        require(row.size == SPREAD_ROW_FIELDS)
-+        val seconds = row[0].jsonPrimitive.content.toBigDecimal()
-+        val observedAtMillis = seconds.multiply(BigDecimal("1000")).longValueExact()
-+        val bid = row[1].jsonPrimitive.content.toBigDecimal()
-+        val ask = row[2].jsonPrimitive.content.toBigDecimal()
-+        require(boundedMarketNumber(bid) && boundedMarketNumber(ask))
-+        require(bid.signum() > 0 && ask >= bid)
-+        MarketObservation(pair, bid, ask, observedAtMillis, receivedAtMillis)
-+    }.maxBy { it.observedAtMillis }
-+}
-+
-+private class MarketDataFailure(override val message: String) : Exception(message)
-+
++private val DEPTH_FIRST = setOf("USDTUSD", "USDCUSD")
 +private const val CHECK_TIMEOUT_MILLIS = 8_000L
 +private const val RECEIPT_LIFETIME_MILLIS = 60_000L
 +private const val FUTURE_TOLERANCE_MILLIS = 5_000L
 +private const val OBSERVATION_LIFETIME_MILLIS = 120_000L
 +private const val REQUEST_INTERVAL_MILLIS = 1_000L
 +private const val FAILURE_BACKOFF_MILLIS = 60_000L
-+private const val MAX_RESPONSE_BYTES = 65_536
-+private const val MAX_SPREAD_ROWS = 1_000
-+private const val SPREAD_ROW_FIELDS = 3
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/MarketData.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/MarketData.kt
+new file mode 100644
+index 000000000..0a1aa94f3
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/MarketData.kt
+@@ -0,0 +1,59 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import co.electriccoin.zcash.ui.common.model.MarketObservation
++import co.electriccoin.zcash.ui.common.model.boundedMarketNumber
++import io.ktor.client.HttpClient
++import io.ktor.client.plugins.expectSuccess
++import io.ktor.client.request.HttpRequestBuilder
++import io.ktor.client.request.prepareRequest
++import io.ktor.client.statement.bodyAsChannel
++import io.ktor.http.HttpStatusCode
++import io.ktor.utils.io.readBuffer
++import kotlinx.io.readByteArray
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonElement
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import java.math.BigDecimal
++import java.math.RoundingMode
++
++internal suspend fun HttpClient.readMarketJson(
++    url: String,
++    maxBytes: Int,
++    configure: HttpRequestBuilder.() -> Unit = {}
++): JsonObject = readMarketBody(url, maxBytes, configure).jsonObject
++
++internal suspend fun HttpClient.readMarketBody(
++    url: String,
++    maxBytes: Int,
++    configure: HttpRequestBuilder.() -> Unit
++): JsonElement = prepareRequest(url) {
++    expectSuccess = false
++    configure()
++}.execute { response ->
++    when (response.status) {
++        HttpStatusCode.OK -> Unit
++        HttpStatusCode.TooManyRequests -> throw MarketDataFailure("rate limited")
++        else -> throw MarketDataFailure("HTTP ${response.status.value}")
++    }
++    val bytes = response.bodyAsChannel().readBuffer(maxBytes.toLong() + 1L).readByteArray()
++    require(bytes.size <= maxBytes)
++    Json.parseToJsonElement(bytes.decodeToString())
++}
++
++internal fun marketDecimal(value: String): BigDecimal = value.toBigDecimal().also {
++    require(boundedMarketNumber(it) && it.signum() > 0)
++}
++
++internal fun JsonObject.field(name: String): String = getValue(name).jsonPrimitive.content
++
++internal fun MarketObservation.inDollars(anchor: MarketObservation): MarketObservation = copy(
++    bid = (bid * anchor.bid).setScale(USD_SCALE, RoundingMode.DOWN).stripTrailingZeros(),
++    ask = (ask * anchor.ask).setScale(USD_SCALE, RoundingMode.UP).stripTrailingZeros(),
++    observedAtMillis = minOf(observedAtMillis, anchor.observedAtMillis),
++    receivedAtMillis = minOf(receivedAtMillis, anchor.receivedAtMillis),
++    sources = (sources + anchor.sources).distinct(),
++)
++
++private const val USD_SCALE = 18
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/MarketDataFailure.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/MarketDataFailure.kt
+new file mode 100644
+index 000000000..56c8b6e23
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/MarketDataFailure.kt
+@@ -0,0 +1,3 @@
++package co.electriccoin.zcash.ui.common.provider
++
++internal class MarketDataFailure(override val message: String) : Exception(message)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/OrcaMarket.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/OrcaMarket.kt
+new file mode 100644
+index 000000000..85f546267
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/OrcaMarket.kt
+@@ -0,0 +1,74 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import co.electriccoin.zcash.ui.common.model.MarketObservation
++import io.ktor.client.HttpClient
++import kotlinx.serialization.json.JsonArray
++import kotlinx.serialization.json.JsonPrimitive
++import kotlinx.serialization.json.buildJsonObject
++import kotlinx.serialization.json.jsonArray
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import kotlinx.serialization.json.put
++import java.math.BigDecimal
++import java.math.BigInteger
++import java.math.MathContext
++import java.util.Base64
++
++internal object OrcaMarket {
++    const val REFERENCE = "ZEC-SOL"
++    const val ANCHOR = "USDCUSD"
++    private const val POOL = "GTHKH8s82ZR8GTSFZ1dUu6wfdxhy59wpMShxzG5zjiPm"
++    private const val OWNER = "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"
++    private const val ZEC_MINT_BYTES = "8769d3af5983df446c4ebf258400afda125d71c13f12c6147cfbca313c9ef213"
++    private const val USDC_MINT_BYTES = "c6fa7af3bedbad3a3d65f36aabc97431b1bbe4c2d2f6e0e47ca60203452f5d61"
++    private const val ACCOUNT_BYTES = 653
++    private const val HEX_RADIX = 16
++    private const val HEX_BYTE = 2
++    private const val Q128 = 128
++    private const val MILLIS_PER_SECOND = 1_000L
++    private val minimumLiquidity = BigInteger("100000000000")
++    private val feeUnits = BigDecimal("1000000")
++
++    suspend fun observe(client: HttpClient, clock: () -> Long): MarketObservation {
++        val rpc = PublicMarketRpc(client, "https://solana-rpc.publicnode.com")
++        val account = rpc.read("getAccountInfo", JsonArray(listOf(
++            JsonPrimitive(POOL), buildJsonObject {
++                put("commitment", "confirmed")
++                put("encoding", "base64")
++            },
++        ))).jsonObject
++        val data = account.getValue("value").jsonObject
++        require(data.field("owner") == OWNER)
++        val slot = account.getValue("context").jsonObject.field("slot").toLong()
++        require(slot > 0)
++        val timestamp = rpc.read("getBlockTime", JsonArray(listOf(JsonPrimitive(slot))))
++            .jsonPrimitive.content.toLong() * MILLIS_PER_SECOND
++        val encoded = data.getValue("data").jsonArray
++        require(encoded.size == 2 && encoded[1].jsonPrimitive.content == "base64")
++        return parse(Base64.getDecoder().decode(encoded[0].jsonPrimitive.content), timestamp, clock())
++    }
++
++    @Suppress("MagicNumber")
++    internal fun parse(bytes: ByteArray, timestamp: Long, now: Long): MarketObservation {
++        require(bytes.size == ACCOUNT_BYTES)
++        // Account layout from Orca's Whirlpool state. Both token mints and orientation are pinned.
++        require(hex(bytes, 0, 8) == "3f95d10ce1806309")
++        require(hex(bytes, 101, 133) == ZEC_MINT_BYTES)
++        require(hex(bytes, 181, 213) == USDC_MINT_BYTES)
++        require(littleEndian(bytes, 49, 65) >= minimumLiquidity)
++        val sqrtPrice = littleEndian(bytes, 65, 81)
++        val price = sqrtPrice.pow(2).toBigDecimal().scaleByPowerOfTen(2)
++            .divide(BigInteger.ONE.shiftLeft(Q128).toBigDecimal(), MathContext.DECIMAL128)
++        val fee = littleEndian(bytes, 45, 47).toBigDecimal().divide(feeUnits)
++        val factor = BigDecimal.ONE - fee
++        return MarketObservation(
++            REFERENCE, price * factor, price.divide(factor, MathContext.DECIMAL128), timestamp, now, listOf("Orca"),
++        )
++    }
++
++    private fun hex(bytes: ByteArray, start: Int, end: Int): String =
++        bytes.copyOfRange(start, end).joinToString("") { it.toUByte().toString(HEX_RADIX).padStart(HEX_BYTE, '0') }
++
++    private fun littleEndian(bytes: ByteArray, start: Int, end: Int): BigInteger =
++        BigInteger(1, bytes.copyOfRange(start, end).reversedArray())
++}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PublicMarketRpc.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PublicMarketRpc.kt
+new file mode 100644
+index 000000000..b375367dc
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PublicMarketRpc.kt
+@@ -0,0 +1,48 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import io.ktor.client.HttpClient
++import io.ktor.client.request.setBody
++import io.ktor.http.ContentType
++import io.ktor.http.HttpMethod
++import io.ktor.http.content.TextContent
++import kotlinx.serialization.json.JsonArray
++import kotlinx.serialization.json.JsonElement
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.buildJsonObject
++import kotlinx.serialization.json.jsonArray
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.put
++
++internal class PublicMarketRpc(private val client: HttpClient, private val url: String) {
++    suspend fun read(method: String, params: JsonElement): JsonElement =
++        result(post(payload(1, method, params)).jsonObject, 1)
++
++    suspend fun batch(calls: List<Pair<String, JsonElement>>): List<JsonElement> {
++        val responses = post(JsonArray(calls.mapIndexed { id, (method, params) -> payload(id, method, params) }))
++            .jsonArray
++        val byId = responses.associateBy { it.jsonObject.field("id").toInt() }
++        require(responses.size == calls.size && byId.keys == calls.indices.toSet())
++        return calls.indices.map { result(byId.getValue(it).jsonObject, it) }
++    }
++
++    private suspend fun post(body: JsonElement): JsonElement = client.readMarketBody(url, MAX_BYTES) {
++        method = HttpMethod.Post
++        setBody(TextContent(body.toString(), ContentType.Application.Json))
++    }
++
++    private fun payload(id: Int, method: String, params: JsonElement): JsonObject = buildJsonObject {
++        put("jsonrpc", "2.0")
++        put("id", id)
++        put("method", method)
++        put("params", params)
++    }
++
++    private fun result(response: JsonObject, id: Int): JsonElement {
++        require(response.field("jsonrpc") == "2.0" && response.field("id").toInt() == id && "error" !in response)
++        return response.getValue("result")
++    }
++
++    private companion object {
++        const val MAX_BYTES = 32_768
++    }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnostics.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/QuoteRequestDiagnostics.kt
 new file mode 100644
 index 000000000..48c07c931
@@ -23027,6 +23578,116 @@ index 000000000..48c07c931
 +        const val NANOS_PER_MILLISECOND = 1_000_000L
 +    }
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/RheaMarket.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/RheaMarket.kt
+new file mode 100644
+index 000000000..8ab8b95c7
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/RheaMarket.kt
+@@ -0,0 +1,94 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import co.electriccoin.zcash.ui.common.model.MarketObservation
++import io.ktor.client.HttpClient
++import kotlinx.coroutines.async
++import kotlinx.coroutines.coroutineScope
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.buildJsonObject
++import kotlinx.serialization.json.jsonArray
++import kotlinx.serialization.json.jsonObject
++import kotlinx.serialization.json.jsonPrimitive
++import kotlinx.serialization.json.put
++import java.math.BigDecimal
++import java.math.RoundingMode
++import java.util.Base64
++
++internal object RheaMarket {
++    private const val RPC = "https://free.rpc.fastnear.com"
++    private const val EXCHANGE = "v2.ref-finance.near"
++    private const val WNEAR = "wrap.near"
++    private const val NBTC_POOL = 5949
++    private const val ZEC_POOL = 6065
++    private const val WNEAR_DECIMALS = 24
++    private const val TOKEN_DECIMALS = 8
++    private const val PRICE_DECIMALS = 12
++    private const val NANOS_PER_MILLISECOND = 1_000_000L
++    const val ANCHOR_MARKET = "NEARUSD"
++    private val wnearInput = BigDecimal("4")
++
++    internal data class Pool(val id: Int, val token: String, val tokenInput: BigDecimal)
++
++    private val pools = mapOf(
++        "BTC-NEAR" to Pool(NBTC_POOL, "nbtc.bridge.near", BigDecimal("0.0002")),
++        "ZEC-NEAR" to Pool(ZEC_POOL, "zec.omft.near", BigDecimal("0.015")),
++    )
++
++    fun pool(reference: String): Pool? = pools[reference]
++
++    suspend fun observe(client: HttpClient, reference: String, pool: Pool, clock: () -> Long): MarketObservation =
++        coroutineScope {
++            val rpc = PublicMarketRpc(client, RPC)
++            val header = rpc.read("block", buildJsonObject { put("finality", "final") })
++                .jsonObject.getValue("header").jsonObject
++            val block = header.field("hash")
++            val timestamp = header.field("timestamp_nanosec").toLong() / NANOS_PER_MILLISECOND
++            val sell = async {
++                viewReturn(rpc, pool, block, pool.token, WNEAR, pool.tokenInput, TOKEN_DECIMALS)
++                    .movePointLeft(WNEAR_DECIMALS)
++            }
++            val buy = async {
++                viewReturn(rpc, pool, block, WNEAR, pool.token, wnearInput, WNEAR_DECIMALS)
++                    .movePointLeft(TOKEN_DECIMALS)
++            }
++            MarketObservation(
++                reference,
++                sell.await().divide(pool.tokenInput, PRICE_DECIMALS, RoundingMode.DOWN),
++                wnearInput.divide(buy.await(), PRICE_DECIMALS, RoundingMode.UP),
++                timestamp,
++                clock(),
++                listOf("Rhea Finance"),
++            )
++        }
++
++    private suspend fun viewReturn(
++        rpc: PublicMarketRpc,
++        pool: Pool,
++        block: String,
++        tokenIn: String,
++        tokenOut: String,
++        amount: BigDecimal,
++        decimals: Int,
++    ): BigDecimal {
++        val args = buildJsonObject {
++            put("pool_id", pool.id)
++            put("token_in", tokenIn)
++            put("token_out", tokenOut)
++            put("amount_in", amount.movePointRight(decimals).toBigIntegerExact().toString())
++        }
++        val response = rpc.read("query", buildJsonObject {
++            put("request_type", "call_function")
++            put("block_id", block)
++            put("account_id", EXCHANGE)
++            put("method_name", "get_return")
++            put("args_base64", Base64.getEncoder().encodeToString(args.toString().encodeToByteArray()))
++        }).jsonObject
++        require(response.field("block_hash") == block)
++        val bytes = response.getValue("result").jsonArray.map { element ->
++            element.jsonPrimitive.content.toInt().also { require(it in 0..UByte.MAX_VALUE.toInt()) }.toByte()
++        }
++        val amountText = Json.parseToJsonElement(bytes.toByteArray().decodeToString()).jsonPrimitive.content
++        require(amountText.length <= WNEAR_DECIMALS + TOKEN_DECIMALS && amountText.all { it in '0'..'9' })
++        return marketDecimal(amountText)
++    }
++}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SwapAssetCacheProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SwapAssetCacheProvider.kt
+index 4b2a09ed5..78ef2e276 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SwapAssetCacheProvider.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SwapAssetCacheProvider.kt
+@@ -51,0 +52 @@ class SwapAssetCacheProviderImpl(
++                    contractAddress = it.contractAddress,
+@@ -68,0 +70 @@ class SwapAssetCacheProviderImpl(
++            contractAddress = contractAddress,
+@@ -77,0 +80 @@ class SwapAssetCacheProviderImpl(
++        val contractAddress: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ConfigurationRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ConfigurationRepository.kt
 index 549fbf800..05d18dfb3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ConfigurationRepository.kt
@@ -27932,7 +28593,7 @@ index 9f37c1d93..bbfbf402b 100644
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
-index 717411935..31194b8a3 100644
+index 717411935..f4e294719 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapper.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
@@ -27996,7 +28657,7 @@ index 717411935..31194b8a3 100644
 +                val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString() + "%"
 +                listOf(
 +                    SwapQuoteInfoItem(
-+                        stringRes(R.string.private_price_reference), stringRes("Kraken").withStyle(),
++                        stringRes(R.string.private_price_reference), stringRes(sources.joinToString()).withStyle(),
 +                    ),
 +                    SwapQuoteInfoItem(
 +                        stringRes(R.string.private_price_reference_difference), stringRes(signed).withStyle(),
@@ -33683,7 +34344,7 @@ index 000000000..84b214fa3
 +</resources>
 diff --git a/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml b/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml
 new file mode 100644
-index 000000000..c63dd9711
+index 000000000..3badc96e5
 --- /dev/null
 +++ b/ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml
 @@ -0,0 +1,20 @@
@@ -33691,8 +34352,8 @@ index 000000000..c63dd9711
 +<resources>
 +    <string name="private_price_checking">Checking market price…</string>
 +    <string name="private_price_unavailable">Price check unavailable</string>
-+    <string name="private_price_unavailable_details">No fresh reference is available. This check supports native BTC, ETH, SOL and ZEC.</string>
-+    <string name="private_price_check_details">Kraken spot reference, not an executable swap. Includes quoted costs and any known Zcash network fee; external sending fees may be extra.</string>
++    <string name="private_price_unavailable_details">No fresh market reference is available.</string>
++    <string name="private_price_check_details">Includes quoted costs and known Zcash network fees. External sending fees may be extra.</string>
 +    <string name="private_price_reference">Market reference</string>
 +    <string name="private_price_reference_difference">Reference difference</string>
 +    <string name="private_price_reference_details">Spot-price comparison, including quoted costs and known Zcash network fees.</string>
@@ -34255,10 +34916,10 @@ index 3f54429cb..4c5470daa 100644
 \ No newline at end of file
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/IndependentPricePolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/IndependentPricePolicyTest.kt
 new file mode 100644
-index 000000000..d814ff1f1
+index 000000000..75be961cf
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/IndependentPricePolicyTest.kt
-@@ -0,0 +1,163 @@
+@@ -0,0 +1,168 @@
 +package co.electriccoin.zcash.ui.common.model
 +
 +import io.mockk.every
@@ -34279,6 +34940,7 @@ index 000000000..d814ff1f1
 +        every { tokenTicker } returns symbol.uppercase()
 +        every { chainTicker } returns symbol
 +        every { decimals } returns assetDecimals
++        every { contractAddress } returns null
 +    }
 +    private val zec = asset("zec", 8)
 +    private val btc = asset("btc", 8)
@@ -34300,6 +34962,7 @@ index 000000000..d814ff1f1
 +        val wbtc = asset("wbtc", 8)
 +        every { wbtc.chainTicker } returns "eth"
 +        every { wbtc.assetId } returns "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near"
++        every { wbtc.contractAddress } returns "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
 +        assertEquals("WBTCUSD", IndependentPricePolicy.market(wbtc))
 +
 +        every { wbtc.chainTicker } returns "base"
@@ -34313,12 +34976,15 @@ index 000000000..d814ff1f1
 +    fun marketMatchesTheExactTokenOrNativeAssetOnItsNetwork() {
 +        val usdt = asset("usdt", 6)
 +        every { usdt.chainTicker } returns "sol"
-+        every { usdt.assetId } returns "nep141:sol-c800a4bd850783ccb82c2b7e84175443606352.omft.near"
++        every { usdt.contractAddress } returns "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
++        every { usdt.assetId } returns "nep141:sol-c800a4bd850783ccb82c2b2c7e84175443606352.omft.near"
 +        assertEquals("USDTUSD", IndependentPricePolicy.market(usdt))
 +
 +        every { usdt.chainTicker } returns "tron"
 +        assertNull(IndependentPricePolicy.market(usdt))
 +        every { usdt.assetId } returns "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near"
++        assertNull(IndependentPricePolicy.market(usdt))
++        every { usdt.contractAddress } returns "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 +        assertEquals("USDTUSD", IndependentPricePolicy.market(usdt))
 +        every { usdt.decimals } returns 18
 +        assertNull(IndependentPricePolicy.market(usdt))
@@ -35182,10 +35848,10 @@ index 000000000..2a71971b1
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt
 new file mode 100644
-index 000000000..62e6d756d
+index 000000000..3b5add4c0
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt
-@@ -0,0 +1,310 @@
+@@ -0,0 +1,356 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
@@ -35195,12 +35861,15 @@ index 000000000..62e6d756d
 +import io.ktor.client.engine.mock.MockEngine
 +import io.ktor.client.engine.mock.respond
 +import io.ktor.http.HttpStatusCode
++import io.ktor.http.encodedPath
 +import io.mockk.coEvery
 +import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.test.runTest
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.jsonObject
 +import java.math.BigDecimal
 +import kotlin.test.Test
 +import kotlin.test.assertEquals
@@ -35209,6 +35878,48 @@ index 000000000..62e6d756d
 +import kotlin.time.Instant
 +
 +class KrakenPriceProviderTest {
++    @Test
++    fun depthUsesTheOlderBookSide() {
++        val body = """{"error":[],"result":{"USDCUSD":{
++            "bids":[["0.999","10",100]],"asks":[["1.001","20",104]]}}}"""
++        val book = parseKrakenDepth("USDCUSD", Json.parseToJsonElement(body).jsonObject, 105_000)
++        assertEquals(100_000L, book.observedAtMillis)
++        assertEquals(BigDecimal("0.999"), book.bid)
++        assertEquals(BigDecimal("1.001"), book.ask)
++    }
++
++    @Test
++    fun staleStablecoinDepthFallsBackToFreshSpread() = runTest {
++        val now = 10_000_000L
++        val clients = mockk<HttpClientProvider>()
++        val paths = mutableListOf<String>()
++        coEvery { clients.create() } coAnswers {
++            HttpClient(MockEngine { request ->
++                val path = request.url.encodedPath.substringAfterLast('/')
++                paths += path
++                val body = if (path == "Depth") {
++                    """{"error":[],"result":{"USDTZUSD":{"bids":[["1","1",9800]],"asks":[["1","1",10000]]}}}"""
++                } else {
++                    """{"error":[],"result":{"USDTZUSD":[[10000,"1","1.001"]],"last":10000}}"""
++                }
++                respond(body, HttpStatusCode.OK)
++            })
++        }
++        val quote = supportedQuote(now)
++        val asset = quote.originAsset
++        every { asset.assetId } returns "nep141:usdt.tether-token.near"
++        every { asset.contractAddress } returns "usdt.tether-token.near"
++        every { asset.tokenTicker } returns "USDT"
++        every { asset.chainTicker } returns "near"
++        every { asset.decimals } returns 6
++
++        val provider = KrakenPriceProvider(clients, { now }, { 0L }, {})
++        assertTrue(provider.check(quote, BigDecimal.ZERO) is IndependentPriceCheck.Compared)
++        assertEquals(listOf("Depth", "Spread"), paths)
++        coVerify(exactly = 1) { clients.create() }
++        coVerify(exactly = 0) { clients.createTor() }
++    }
++
 +    @Test
 +    fun tetherSpreadUsesTheKrakenResponseKey() {
 +        val body = """{"error":[],"result":{"USDTZUSD":[[100,"1.0000","1.0001"]],"last":100}}"""
@@ -35379,6 +36090,7 @@ index 000000000..62e6d756d
 +            every { tokenTicker } returns "ZEC"
 +            every { chainTicker } returns "zec"
 +            every { decimals } returns 8
++            every { contractAddress } returns null
 +        }
 +        return mockk {
 +            every { originAsset } returns asset

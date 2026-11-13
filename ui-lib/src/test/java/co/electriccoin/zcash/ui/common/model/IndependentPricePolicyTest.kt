@@ -18,6 +18,7 @@ class IndependentPricePolicyTest {
         every { tokenTicker } returns symbol.uppercase()
         every { chainTicker } returns symbol
         every { decimals } returns assetDecimals
+        every { contractAddress } returns null
     }
     private val zec = asset("zec", 8)
     private val btc = asset("btc", 8)
@@ -39,6 +40,7 @@ class IndependentPricePolicyTest {
         val wbtc = asset("wbtc", 8)
         every { wbtc.chainTicker } returns "eth"
         every { wbtc.assetId } returns "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near"
+        every { wbtc.contractAddress } returns "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
         assertEquals("WBTCUSD", IndependentPricePolicy.market(wbtc))
 
         every { wbtc.chainTicker } returns "base"
@@ -52,12 +54,15 @@ class IndependentPricePolicyTest {
     fun marketMatchesTheExactTokenOrNativeAssetOnItsNetwork() {
         val usdt = asset("usdt", 6)
         every { usdt.chainTicker } returns "sol"
-        every { usdt.assetId } returns "nep141:sol-c800a4bd850783ccb82c2b7e84175443606352.omft.near"
+        every { usdt.contractAddress } returns "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
+        every { usdt.assetId } returns "nep141:sol-c800a4bd850783ccb82c2b2c7e84175443606352.omft.near"
         assertEquals("USDTUSD", IndependentPricePolicy.market(usdt))
 
         every { usdt.chainTicker } returns "tron"
         assertNull(IndependentPricePolicy.market(usdt))
         every { usdt.assetId } returns "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near"
+        assertNull(IndependentPricePolicy.market(usdt))
+        every { usdt.contractAddress } returns "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
         assertEquals("USDTUSD", IndependentPricePolicy.market(usdt))
         every { usdt.decimals } returns 18
         assertNull(IndependentPricePolicy.market(usdt))
