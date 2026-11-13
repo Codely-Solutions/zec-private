@@ -39,7 +39,17 @@ object IndependentPricePolicy {
         "nep141:zec.omft.near" to Market("zec", "zec", ZEC_DECIMALS, "ZECUSD"),
         "nep141:btc.omft.near" to Market("btc", "btc", BTC_DECIMALS, "XBTUSD"),
         "nep141:eth.omft.near" to Market("eth", "eth", ETH_DECIMALS, "ETHUSD"),
+        "nep141:arb.omft.near" to Market("eth", "arb", ETH_DECIMALS, "ETHUSD"),
+        "nep141:base.omft.near" to Market("eth", "base", ETH_DECIMALS, "ETHUSD"),
         "nep141:sol.omft.near" to Market("sol", "sol", SOL_DECIMALS, "SOLUSD"),
+        "nep141:eth-0x6b175474e89094c44da98b954eedeac495271d0f.omft.near" to
+            Market("dai", "eth", 18, "DAIUSD"),
+        "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near" to
+            Market("usdt", "eth", 6, "USDTUSD"),
+        "nep141:sol-c800a4bd850783ccb82c2b7e84175443606352.omft.near" to
+            Market("usdt", "sol", 6, "USDTUSD"),
+        "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near" to
+            Market("usdt", "tron", 6, "USDTUSD"),
         "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near" to
             Market("wbtc", "eth", BTC_DECIMALS, "WBTCUSD"),
         "nep141:ltc.omft.near" to Market("ltc", "ltc", 8, "LTCUSD"),
