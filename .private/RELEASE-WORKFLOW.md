@@ -22,6 +22,8 @@ If acceptance needs a controller repair, use `custom-release.yml` with `operatio
 
 If that recovery passes quotes and the signer fails before creating an attestation, diagnose and fix signing, then add `quote_run=PASSING_QUOTE_RUN_ID` to reuse the passing quote receipt. The controller checks that the quote execution inputs match, and signing checks all three run identities. Reconcile an existing public release through its original attestation.
 
+If skipped-wallet recovery reserved funding but its baseline network startup failed before wallet creation or any faucet request, diagnose that boundary with the unfunded transport probe. With positive pre-claim evidence, dispatch recovery with `preclaim_run=FAILED_WALLET_RECOVERY_RUN_ID`. The original reservation remains protected. The new run checks the prior wallet log and reservation, completes quote acceptance first, then may create one linked reservation. A failed or uncertain claim is ineligible.
+
 Pass the named environment secret references when invoking the reusable release workflow. Their values come from `production-signing` and `maintenance-integration` only in the jobs that select those environments. Keep repository-level copies absent.
 
 ## Shared release preflight

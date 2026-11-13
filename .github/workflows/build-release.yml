@@ -38,6 +38,9 @@ on:
       quote_run:
         type: string
         default: ''
+      preclaim_run:
+        type: string
+        default: ''
     secrets:
       NTFY_URL:
         required: false
@@ -67,6 +70,7 @@ jobs:
       quote_receipt_id: ${{ steps.admission.outputs.quote_receipt_id }}
       quote_receipt_run: ${{ steps.admission.outputs.quote_run }}
       run_missing_core: ${{ steps.admission.outputs.run_missing_core }}
+      previous_reservation: ${{ steps.admission.outputs.previous_reservation }}
     permissions:
       actions: read
       contents: read
@@ -81,6 +85,7 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
           RECOVER_RUN: ${{ inputs.recover_run }}
           QUOTE_RUN: ${{ inputs.quote_run }}
+          PRECLAIM_RUN: ${{ inputs.preclaim_run }}
           PREFLIGHT_ONLY: ${{ inputs.preflight_only }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
@@ -95,7 +100,8 @@ jobs:
                   raise ValueError('Preflight cannot authorize recovery')
               from acceptance_policy import ROOT
               from quote_recovery import resolve
-              result = resolve(ROOT, source, controller, os.environ['RECOVER_RUN'], Metadata(), os.environ['QUOTE_RUN'])
+              result = resolve(ROOT, source, controller, os.environ['RECOVER_RUN'], Metadata(), os.environ['QUOTE_RUN'],
+                               preclaim_run=os.environ['PRECLAIM_RUN'])
               with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
                   output.writelines(f'{key}={value}\n' for key, value in result.items())
           else:
@@ -343,8 +349,8 @@ jobs:
       source_sha: ${{ inputs.source_sha }}
       preflight_only: ${{ inputs.preflight_only }}
   hosted_core:
-    needs: [admit_hosted, preflight, signing_smoke, unsigned, testnet_apk]
-    if: ${{ !cancelled() && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && ((!inputs.recover_run && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success') || (inputs.recover_run && needs.admit_hosted.outputs.run_missing_core == 'true')) }}
+    needs: [admit_hosted, preflight, signing_smoke, unsigned, testnet_apk, recovery_quotes]
+    if: ${{ !cancelled() && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && ((!inputs.recover_run && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success') || (inputs.recover_run && needs.admit_hosted.outputs.run_missing_core == 'true' && (!inputs.preclaim_run || needs.recovery_quotes.result == 'success'))) }}
     permissions:
       actions: read
       contents: write
@@ -356,9 +362,11 @@ jobs:
       production_id: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}
       original_run: ${{ inputs.recover_run }}
       original_controller: ${{ needs.admit_hosted.outputs.original_controller }}
+      previous_reservation: ${{ needs.admit_hosted.outputs.previous_reservation }}
+      preclaim_run: ${{ inputs.preclaim_run }}
   hosted_quotes:
     needs: [admit_hosted, preflight, signing_smoke, unsigned, emulator]
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.result == 'success' && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && inputs.hosted && !inputs.preflight_only && !inputs.preclaim_run && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.result == 'success' && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
     permissions:
       actions: read
       contents: read
@@ -368,6 +376,20 @@ jobs:
       source_sha: ${{ inputs.source_sha }}
       quote_id: ${{ needs.admit_hosted.outputs.quote_id || needs.emulator.outputs.artifact_id }}
       production_id: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}
+      original_run: ${{ inputs.recover_run }}
+      original_controller: ${{ needs.admit_hosted.outputs.original_controller }}
+  recovery_quotes:
+    needs: [admit_hosted, preflight, signing_smoke]
+    if: ${{ !cancelled() && inputs.preclaim_run && needs.admit_hosted.outputs.previous_reservation != '' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
+    permissions:
+      actions: read
+      contents: read
+      packages: read
+    uses: ./.github/workflows/hosted-acceptance-probe.yml
+    with:
+      source_sha: ${{ inputs.source_sha }}
+      quote_id: ${{ needs.admit_hosted.outputs.quote_id }}
+      production_id: ${{ needs.admit_hosted.outputs.production_id }}
       original_run: ${{ inputs.recover_run }}
       original_controller: ${{ needs.admit_hosted.outputs.original_controller }}
   promotion:
@@ -390,8 +412,8 @@ jobs:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: python3 .private/promotion.py
   publish:
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != '') && (needs.hosted_core.result == 'success' || needs.admit_hosted.outputs.core_receipt_id != '')) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
-    needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, admit_hosted]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != '') && (needs.hosted_core.result == 'success' || needs.admit_hosted.outputs.core_receipt_id != '')) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
+    needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, admit_hosted]
     environment: production-signing
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -442,7 +464,7 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         if: inputs.hosted && inputs.recover_run
         with:
-          artifact-ids: ${{ needs.admit_hosted.outputs.quote_receipt_id || needs.hosted_quotes.outputs.receipt_id }}
+          artifact-ids: ${{ needs.admit_hosted.outputs.quote_receipt_id || needs.hosted_quotes.outputs.receipt_id || needs.recovery_quotes.outputs.receipt_id }}
           path: hosted-receipts/
           run-id: ${{ needs.admit_hosted.outputs.quote_receipt_run || github.run_id }}
           github-token: ${{ github.token }}
@@ -462,6 +484,7 @@ jobs:
           ARTIFACT_RUN_ID: ${{ inputs.recover_run || inputs.candidate_run || github.run_id }}
           RECOVER_RUN: ${{ inputs.recover_run }}
           RECOVER_QUOTE_RUN: ${{ inputs.quote_run }}
+          PRECLAIM_RUN: ${{ inputs.preclaim_run }}
           CONTROLLER_SHA: ${{ github.sha }}
           HOSTED_ACCEPTANCE: ${{ inputs.hosted || false }}
           PRODUCTION_ID: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}
@@ -581,7 +604,7 @@ jobs:
         run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
   failed:
     if: ${{ always() && !inputs.preflight_only && github.ref == 'refs/heads/main' && (needs.admit_hosted.result == 'failure' || needs.preflight.result == 'failure' || needs.signing_smoke.result == 'failure' || needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.testnet_apk.result == 'failure' || needs.hosted_core.result == 'failure' || needs.hosted_quotes.result == 'failure' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
-    needs: [admit_hosted, preflight, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, hosted_quotes, promotion, publish, reconcile, verify_publication, record_integration]
+    needs: [admit_hosted, preflight, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, promotion, publish, reconcile, verify_publication, record_integration]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

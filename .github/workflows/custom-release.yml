@@ -19,6 +19,10 @@ on:
         description: Passing quote recovery run if its signer failed before publication
         type: string
         default: ''
+      preclaim_run:
+        description: Failed wallet recovery run that stopped before any faucet request
+        type: string
+        default: ''
 permissions: {}
 jobs:
   review:
@@ -66,6 +70,7 @@ jobs:
       source_sha: ${{ inputs.source_sha }}
       recover_run: ${{ inputs.recover_run }}
       quote_run: ${{ inputs.quote_run }}
+      preclaim_run: ${{ inputs.preclaim_run }}
     secrets:
       NTFY_URL: ${{ secrets.NTFY_URL }}
       RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}

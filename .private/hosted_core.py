@@ -36,7 +36,8 @@ def candidate_pair(directory, source):
 def verify_reservation():
     require(os.environ['GITHUB_RUN_ATTEMPT'] == '1', 'Hosted funded reruns are forbidden')
     value = binding(os.environ['ZEC_CORE_SOURCE'], os.environ['GITHUB_SHA'], int(os.environ['ZEC_CORE_VERSION']),
-                    int(os.environ['GITHUB_RUN_ID']), os.environ['ZEC_CORE_REHEARSAL'] == 'true')
+                    int(os.environ['GITHUB_RUN_ID']), os.environ['ZEC_CORE_REHEARSAL'] == 'true',
+                    os.environ.get('ZEC_CORE_PREVIOUS_RESERVATION'))
     verify(value, os.environ['ZEC_CORE_RESERVATION'], Metadata())
     return value
 
@@ -100,6 +101,12 @@ def run(session, root, fixture, candidate, result):
                                              '\n'.join(stage_error.get('lines', [])), re.MULTILINE)))
             print('Hosted instrumentation markers ' + json.dumps(markers[:16]), flush=True)
             print('Hosted result channel ' + json.dumps(stage_error.get('result_channel')), flush=True)
+            if stage_error.get('stage') == 'networkTargets':
+                # Public-only bootstrap precedes wallet creation. Emit bounded
+                # exception categories, without raw app or provider output.
+                text = stage_error.get('pre_wallet_instrumentation', '') + stage_error.get('pre_wallet_crash', '')
+                classes = sorted(set(re.findall(r'\b(?:[a-z][\w]*\.){2,}[A-Z]\w*(?:Exception|Error)\b', text)))
+                print('Hosted network startup exception classes ' + json.dumps(classes[:12]), flush=True)
             sync = stage_error.get('sync', [])
             if sync:
                 keys = ('phase', 'elapsed_ms', 'probe_only', 'exception_class', 'status', 'error_type', 'cause_class',

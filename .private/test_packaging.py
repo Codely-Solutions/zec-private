@@ -64,13 +64,13 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('name: isolated-ui-repro-apk', emulator)
         self.assertNotIn('isolated-ui-repro-apk', production)
         self.assertIn("!inputs.build_emulator || needs.emulator.result == 'success'", publish)
-        self.assertIn("needs.hosted_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != ''", publish)
+        self.assertIn("needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != ''", publish)
         self.assertIn("needs.hosted_core.result == 'success' || needs.admit_hosted.outputs.core_receipt_id != ''", publish)
         hosted_core = workflow.split('  hosted_core:\n', 1)[1].split('  hosted_quotes:\n', 1)[0]
         self.assertIn('!cancelled()', hosted_core)
         self.assertIn("needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true'", hosted_core)
         self.assertIn("needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success'", hosted_core)
-        self.assertIn('needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, admit_hosted]', publish)
+        self.assertIn('needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, admit_hosted]', publish)
         self.assertIn('environment: production-signing', publish)
         for caller in ('custom-release.yml', 'sync-upstream.yml'):
             caller_workflow = (root / '.github/workflows' / caller).read_text()

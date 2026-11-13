@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import zipfile
 
@@ -81,6 +82,12 @@ def run(session, root, fixture):
                           independent_comparisons=scenario['independentComparisons'],
                           reference_states=scenario['referenceStates'],
                           tor_enabled=receipt['torOptInVerified'], funded=False)), flush=True)
+    if scenario['independentComparisons'] == 0:
+        logs = session.adb('logcat', '-d', '-v', 'raw', '-t', '3000', timeout=15, check=False)
+        safe = re.findall(r'Independent market check: (timeout|rate limited|HTTP \d{3}|rejected response|'
+                          r'request failed \([A-Za-z0-9_$]+\)|market data failed comparison checks)',
+                          logs.stdout.decode(errors='replace'))
+        print('Market failure categories: ' + json.dumps(safe[-8:]), flush=True)
     require(receipt['passed'] is True and min(receipt['quoteRequests'], receipt['quoteReviewsVerified'],
                                              receipt['dismissals']) >= 3
             and scenario['recipientNetworkMismatchBlocked'] is True and scenario['correctedWithoutLeavingForm'] is True

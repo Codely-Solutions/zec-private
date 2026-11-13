@@ -155,6 +155,10 @@ def run(root, stop):
             action('back')
             wait('Get a quote',timeout=15)
             action('assert_quote_dismissed')
+            # A transport failure can leave the provider in a 60-second backoff.
+            # Let that window clear once so all three cycles don't reuse one failure.
+            if index == 0 and reference == 'unavailable' and stop.wait(61):
+                raise InterruptedError('UI driver stopped')
         back('More')
         click('More','More...')
         click('More...','Address Book')

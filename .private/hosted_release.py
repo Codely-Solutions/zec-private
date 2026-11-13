@@ -79,7 +79,8 @@ def read_receipts(directory, *, proof, source, controller, production_id, core_i
         require(core.get('artifact_run_id') == int(build_run), 'Wallet recovery used a different artifact run')
     require(core.get('rehearsal') is False and core['funding_setup']['claim_requests'] == 1,
             'Hosted release requires exactly one funded testnet claim')
-    verify(binding(source, core_controller, version, int(core_run), False), core['hosted_reservation'], metadata)
+    previous = recovery.get('previous_reservation') if missing_core else None
+    verify(binding(source, core_controller, version, int(core_run), False, previous), core['hosted_reservation'], metadata)
     require(core['producer'] == artifact(metadata, core_id, 'core-testnet-candidate', build_run, build_controller)
             and quote['producer'] == artifact(metadata, quote_id, 'isolated-ui-repro-apk', build_run, build_controller),
             'Hosted receipt names a different test APK producer')
