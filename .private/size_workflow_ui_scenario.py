@@ -39,6 +39,23 @@ def run(root, stop):
     def labels(state):
         return {n['text'].casefold() for n in state.get('nodes',[]) if n.get('text')}
 
+    def wait_for_quote_form(timeout=60, retry_catalog=False):
+        deadline = time.monotonic() + timeout
+        retried = False
+        while time.monotonic() < deadline:
+            state = action('snapshot')
+            current = labels(state)
+            if 'get a quote' in current:
+                return state
+            if retry_catalog and not retried and 'try again' in current:
+                action('click_text', text='Try again')
+                retried = True
+            if stop.wait(.5):
+                raise InterruptedError('UI driver stopped')
+        known = current & {'from', 'to', 'loading', 'loading…', 'try again', 'get a quote',
+                           'processing', 'review quote', 'quote unavailable', 'select token', 'phase1fixture'}
+        raise RuntimeError('Quote form did not become ready; visible known controls: ' + ', '.join(sorted(known)))
+
     def wait(text,timeout=240):
         deadline=time.monotonic()+timeout
         while time.monotonic()<deadline:
@@ -78,14 +95,17 @@ def run(root, stop):
         back('SETTINGS')
         back('More')
         click('Swap','From')
+        wait_for_quote_form(retry_catalog=True)
         action('set_text',index=0,value='0.001')
         click('Open address book','Phase1Fixture')
-        click('Phase1Fixture','Get a quote')
+        click('Phase1Fixture')
+        wait_for_quote_form()
         # Keep the BTC contact visible while selecting an incompatible network,
         # then correct the token in this same form before requesting any quote.
         click('BTC', 'Select Token')
         action('set_text', index=0, value='LTC')
-        click('Litecoin', 'Get a quote')
+        click('Litecoin')
+        wait_for_quote_form()
         state = wait('Choose a recipient on LTC or change the asset.', timeout=20)
         if 'phase1fixture' not in labels(state):
             raise RuntimeError('Network edit discarded the selected recipient')
@@ -94,7 +114,8 @@ def run(root, stop):
             raise RuntimeError('Incompatible recipient did not block quote action')
         click('LTC', 'Select Token')
         action('set_text', index=0, value='BTC')
-        click('Bitcoin', 'Get a quote')
+        click('Bitcoin')
+        wait_for_quote_form()
         state = action('snapshot')
         if any('choose a recipient on' in label for label in labels(state)):
             raise RuntimeError('Corrected recipient validation remained stale')
@@ -136,7 +157,12 @@ def run(root, stop):
             else:raise RuntimeError('Provider timeout retry budget exhausted')
             if 'review quote' not in labels(state):raise RuntimeError('Quote response deadline exceeded')
             action('assert_text',text='Review Quote')
-            state=wait('Confirm')
+            state=action('snapshot')
+            ready_until = time.monotonic() + 15
+            while not (labels(state) & {'confirm', 'swap anyway'}) and time.monotonic() < ready_until:
+                state=action('snapshot')
+            if not (labels(state) & {'confirm', 'swap anyway'}):
+                raise RuntimeError('Quote review action did not become available')
             reference_deadline = time.monotonic() + 15
             while 'checking market price…' in labels(state) and time.monotonic() < reference_deadline:
                 if stop.wait(.5):raise InterruptedError('UI driver stopped')
