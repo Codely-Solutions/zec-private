@@ -22,6 +22,12 @@ on:
       production_id:
         type: string
         required: true
+      original_run:
+        type: string
+        default: ''
+      original_controller:
+        type: string
+        default: ''
     outputs:
       receipt_id:
         value: ${{ jobs.wallet.outputs.receipt_id }}
@@ -69,6 +75,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ inputs.source_sha }}
+          ORIGINAL_BUILD_CONTROLLER: ${{ inputs.original_controller }}
           REHEARSAL: ${{ inputs.source_sha == '' }}
           REHEARSAL_NUMBER: ${{ inputs.rehearsal_number || 1 }}
         run: |
@@ -94,6 +101,7 @@ jobs:
       ZEC_CORE_RESERVATION: ${{ needs.reserve.outputs.reservation }}
       ZEC_CORE_REHEARSAL: ${{ inputs.source_sha == '' }}
       ZEC_CORE_UPGRADE_PROBE: ${{ inputs.upgrade_probe != 'funded' && inputs.upgrade_probe || '' }}
+      ZEC_CORE_ARTIFACT_RUN: ${{ inputs.original_run }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -147,6 +155,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CORE_ID: ${{ inputs.artifact_id }}
           PRODUCTION_ID: ${{ inputs.production_id }}
+          ORIGINAL_CONTROLLER: ${{ inputs.original_controller }}
         run: |
           PYTHONPATH=.private python3 -B - <<'PY'
           import json, os
@@ -154,9 +163,11 @@ jobs:
           from hosted_release import artifact, stage
           from release_metadata import Metadata
           path = Path('core-artifact')
-          stage(path, os.environ['CORE_ID'], 'core-testnet-candidate')
+          run = os.environ['ZEC_CORE_ARTIFACT_RUN'] or os.environ['GITHUB_RUN_ID']
+          controller = os.environ['ORIGINAL_CONTROLLER'] or os.environ['GITHUB_SHA']
+          stage(path, os.environ['CORE_ID'], 'core-testnet-candidate', run=run, controller=controller)
           product = artifact(Metadata(), os.environ['PRODUCTION_ID'], 'validated-unsigned-apk',
-                             os.environ['GITHUB_RUN_ID'], os.environ['GITHUB_SHA'])
+                             run, controller)
           (path/'production.json').write_text(json.dumps(product))
           PY
       - name: Run isolated testnet acceptance

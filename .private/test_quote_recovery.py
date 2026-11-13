@@ -13,6 +13,37 @@ SOURCE, OLD, MAIN = 'a' * 40, 'b' * 40, 'c' * 40
 
 
 class QuoteRecoveryTests(unittest.TestCase):
+    def test_skipped_wallet_reuses_original_builds_and_passing_quotes(self):
+        run = dict(id=7, path=WORKFLOW, event='workflow_dispatch', head_branch='main', head_sha=OLD,
+                   head_repository={'full_name': REPOSITORY}, actor={'id': OPERATOR_ID},
+                   status='completed', conclusion='success', run_attempt=1)
+        states = {'build / admit_hosted': 'success', 'build / unsigned': 'success', 'build / emulator': 'success',
+                  'build / testnet_apk / testnet': 'success', 'build / hosted_core': 'skipped',
+                  'build / hosted_quotes / quote-cycles': 'success', 'build / publish': 'skipped'}
+        names = ('validated-unsigned-apk', 'core-testnet-candidate', 'isolated-ui-repro-apk', 'hosted-quote-receipt')
+        artifacts = [dict(id=i, name=name) for i, name in enumerate(names, 1)]
+        for outcomes, error in ((states, None),
+                                (dict(states, **{'build / hosted_core / reserve': 'success'}), 'previous wallet'),
+                                (dict(states, **{'build / publish': 'success'}), 'publish')):
+            metadata = Mock()
+            metadata.api.side_effect = [run, []]
+            metadata.pages.side_effect = [
+                [dict(name=name, conclusion=result, run_id=7, head_sha=OLD) for name, result in outcomes.items()],
+                artifacts]
+            with self.subTest(error=error), patch('quote_recovery.require_dispatch'), \
+                    patch('quote_recovery.verify_delta'), \
+                    patch('release_inputs.version_code', return_value=42), \
+                    patch.object(hosted_release, 'artifact', side_effect=lambda _, i, *args: {'id': i}):
+                if error:
+                    with self.assertRaisesRegex(ValueError, error):
+                        resolve(Path('.'), SOURCE, MAIN, '7', metadata)
+                else:
+                    result = resolve(Path('.'), SOURCE, MAIN, '7', metadata)
+                    self.assertEqual(result['run_missing_core'], 'true')
+                    self.assertEqual(result['quote_receipt_id'], '4')
+                    self.assertEqual(result['quote_run'], 7)
+                    self.assertNotIn('core_receipt_id', result)
+
     def test_passing_quotes_reuse_requires_unchanged_runner_and_no_prior_attestation(self):
         quote_head = 'd' * 40
         run = dict(id=8, path=WORKFLOW, event='workflow_dispatch', head_branch='main', head_sha=quote_head,

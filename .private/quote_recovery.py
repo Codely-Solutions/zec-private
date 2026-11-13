@@ -1,4 +1,4 @@
-"""Resume a custom release after a quote-only failure on the original build."""
+"""Resume an interrupted custom release on its original build."""
 import os
 import re
 
@@ -13,6 +13,7 @@ RECOVERY_PATHS = {
     '.private/publish.py', '.private/integrate_release.py', '.private/verify_public_release.py',
     '.private/tor_resident_ui_driver.py', '.private/size_workflow_ui_scenario.py',
     '.private/test_packaging.py', '.private/test_quote_recovery.py', '.private/RELEASE-WORKFLOW.md',
+    '.github/workflows/hosted-core.yml', '.private/hosted_claim.py', '.private/hosted_core.py', '.private/hosted_fixture.py',
 }
 
 ARTIFACTS = {
@@ -30,7 +31,7 @@ def verify_delta(root, source, original, controller):
             'Controller changed outside quote recovery paths')
 
 
-def resolve(root, source, controller, run_id, metadata, quote_run=''):
+def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing=False):
     from hosted_release import artifact
 
     require(re.fullmatch(r'[1-9][0-9]*', run_id), 'Exact original run required')
@@ -40,21 +41,49 @@ def resolve(root, source, controller, run_id, metadata, quote_run=''):
     require(run['id'] == int(run_id) and run['path'] == WORKFLOW and run['event'] == 'workflow_dispatch'
             and run['head_branch'] == 'main' and run['head_repository']['full_name'] == REPOSITORY
             and run['actor']['id'] == OPERATOR_ID and run['status'] == 'completed'
-            and run['conclusion'] == 'failure' and re.fullmatch(r'[a-f0-9]{40}', original),
-            'Original trusted custom run must have failed before publication')
+            and run['conclusion'] in ('failure', 'success') and re.fullmatch(r'[a-f0-9]{40}', original),
+            'Expected the original trusted custom run before publication')
     verify_delta(root, source, original, controller)
     jobs = metadata.pages(f'/actions/runs/{run_id}/attempts/{run["run_attempt"]}/jobs', 'jobs')
     required = {'build / admit_hosted': 'success', 'build / unsigned': 'success', 'build / emulator': 'success',
-                'build / testnet_apk / testnet': 'success', 'build / hosted_core / wallet': 'success',
-                'build / hosted_quotes / quote-cycles': 'failure', 'build / publish': 'skipped'}
+                'build / testnet_apk / testnet': 'success', 'build / publish': 'skipped'}
     for name, conclusion in required.items():
         matching = [job for job in jobs if job['name'] == name]
         require(len(matching) == 1 and matching[0]['conclusion'] == conclusion
                 and matching[0]['run_id'] == int(run_id) and matching[0]['head_sha'] == original,
                 'Original job did not reach the required boundary: ' + name)
+    missing_core = any(job['name'] == 'build / hosted_core' and job['conclusion'] == 'skipped'
+                       and job['run_id'] == int(run_id) and job['head_sha'] == original for job in jobs)
+    states = {job['name']: job['conclusion'] for job in jobs
+              if job['run_id'] == int(run_id) and job['head_sha'] == original}
+    quote_result = states.get('build / hosted_quotes / quote-cycles')
     artifacts = metadata.pages(f'/actions/runs/{run_id}/artifacts', 'artifacts')
     outputs = {'original_controller': original}
-    for key, name in ARTIFACTS.items():
+    expected_artifacts = dict(ARTIFACTS)
+    if missing_core:
+        require(not any(job['name'].startswith('build / hosted_core /') for job in jobs)
+                and not any(row['name'] == 'hosted-core-receipt' for row in artifacts)
+                and not quote_run and quote_result in ('success', 'failure'),
+                'Skipped-wallet recovery requires no previous wallet execution or receipt')
+        from hosted_claim import PREFIX
+        from release_inputs import version_code
+
+        ref = PREFIX + 'release-' + str(version_code(root, source))
+        if not signing:
+            reservations = metadata.api('/git/matching-refs/' + ref.removeprefix('refs/'))
+            require(not any(row['ref'] == ref for row in reservations),
+                    'This release already has a protected funding reservation')
+        expected_artifacts.pop('core_receipt_id')
+        outputs['run_missing_core'] = 'true'
+        if quote_result == 'success':
+            expected_artifacts['quote_receipt_id'] = 'hosted-quote-receipt'
+            outputs.update(quote_controller=original, quote_run=int(run_id))
+    else:
+        require(states.get('build / hosted_core / wallet') == 'success',
+                'Original job did not reach the required boundary: wallet')
+        require(quote_result == 'failure' and run['conclusion'] == 'failure',
+                'Original job did not reach the required boundary: quote failure')
+    for key, name in expected_artifacts.items():
         matching = [row for row in artifacts if row['name'] == name]
         require(len(matching) == 1, 'Expected one original artifact: ' + name)
         outputs[key] = str(artifact(metadata, matching[0]['id'], name, run_id, original)['id'])

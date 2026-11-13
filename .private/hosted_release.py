@@ -60,6 +60,9 @@ def read_receipts(directory, *, proof, source, controller, production_id, core_i
     build_controller = recovery['original_controller'] if recovery else controller
     quote_run = recovery.get('quote_run', int(run)) if recovery else int(run)
     quote_controller = recovery.get('quote_controller', controller) if recovery else controller
+    missing_core = recovery and recovery.get('run_missing_core') == 'true'
+    core_run = run if missing_core else build_run
+    core_controller = controller if missing_core else build_controller
     production = artifact(metadata, production_id, 'validated-unsigned-apk', build_run, build_controller)
     version = version_code(ROOT, source)
     fixture = json.loads((ROOT / '.private/hosted-fixture.json').read_text())
@@ -67,14 +70,16 @@ def read_receipts(directory, *, proof, source, controller, production_id, core_i
     quote = json.loads((directory / 'hosted-quotes.json').read_text())
     require(all(receipt.get('build_source_sha') == source and receipt.get('candidate_version_code') == version
                 and receipt.get('production_artifact') == production and receipt.get('workflow_run_id') == int(receipt_run)
-                for receipt, receipt_run in ((core, build_run), (quote, quote_run))) and str(proof['workflow_run_id']) == build_run
+                for receipt, receipt_run in ((core, core_run), (quote, quote_run))) and str(proof['workflow_run_id']) == build_run
             and proof['versionCode'] == version, 'Acceptance is not bound to this production candidate and run')
     if recovery:
         require(quote.get('quote_controller_sha') == quote_controller
                 and quote.get('artifact_run_id') == int(build_run), 'Quote recovery used different execution inputs')
+    if missing_core:
+        require(core.get('artifact_run_id') == int(build_run), 'Wallet recovery used a different artifact run')
     require(core.get('rehearsal') is False and core['funding_setup']['claim_requests'] == 1,
             'Hosted release requires exactly one funded testnet claim')
-    verify(binding(source, build_controller, version, int(build_run), False), core['hosted_reservation'], metadata)
+    verify(binding(source, core_controller, version, int(core_run), False), core['hosted_reservation'], metadata)
     require(core['producer'] == artifact(metadata, core_id, 'core-testnet-candidate', build_run, build_controller)
             and quote['producer'] == artifact(metadata, quote_id, 'isolated-ui-repro-apk', build_run, build_controller),
             'Hosted receipt names a different test APK producer')

@@ -12,7 +12,7 @@ on:
         options: [check, preflight, publish, recover]
         default: check
       recover_run:
-        description: Original hosted run ID for quote-only recovery
+        description: Original hosted run ID for acceptance recovery
         type: string
         default: ''
       quote_run:
