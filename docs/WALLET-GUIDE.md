@@ -36,7 +36,7 @@ The **Zcash network fee** pays for sending ZEC from your wallet. **Total ZEC to 
 
 Quoted output is an estimate; execution can differ. Completed swap details show the provider's executed amount when available. Your wallet transaction shows the ZEC actually received.
 
-**Quote details** shows available independent Kraken comparisons for native BTC, ETH, SOL and ZEC. A rate at least 15% below that reference shows an inline warning with **Swap anyway** or **Pay anyway**. Unsupported, stale or failed checks show **Price check unavailable** and keep swaps available.
+**Quote details** shows an independent price comparison and its sources. All supported swap assets have a reference. A quote at least 15% below its reference shows an inline warning with **Swap anyway** or **Pay anyway**. If a fresh price cannot be verified, **Price check unavailable** keeps the quote usable.
 
 ## Recovery and migration
 
