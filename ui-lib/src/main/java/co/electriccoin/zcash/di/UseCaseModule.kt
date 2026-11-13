@@ -71,7 +71,6 @@ import co.electriccoin.zcash.ui.common.usecase.IsScreenTimeoutDisabledDuringRest
 import co.electriccoin.zcash.ui.common.usecase.IsServerAutomaticUseCase
 import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
-import co.electriccoin.zcash.ui.common.usecase.NavigateToAddressBookUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToExportPrivateDataUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToNearPayUseCase
@@ -241,7 +240,6 @@ val useCaseModule =
         factoryOf(::SendTransactionAgainUseCase)
         factoryOf(::GetABContactsUseCase)
         factoryOf(::GetABSwapContactsUseCase)
-        factoryOf(::NavigateToAddressBookUseCase)
         factoryOf(::NavigateToSelectRecipientUseCase)
         factoryOf(::GetTransactionMetadataUseCase)
         factoryOf(::FlipTransactionBookmarkUseCase)

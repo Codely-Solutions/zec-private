@@ -52,5 +52,9 @@
     "Show the minimum deposit in Quote details for incoming flexible-input swaps.",
     "Add independent market references for Ethereum WBTC and more native assets.",
     "Follow the wallet’s Tor setting for market checks and keep quote review usable when the reference times out."
+  ],
+  "v3.19.0-private.23": [
+    "Open Address Book from Settings without another credential prompt when the wallet is unlocked.",
+    "Expand independent swap price checks to ETH on Arbitrum and Base, DAI on Ethereum, and USDT on Ethereum, Solana and Tron."
   ]
 }

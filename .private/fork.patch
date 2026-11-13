@@ -2328,7 +2328,7 @@ index 3b9ca0b94..7607fb041 100644
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/gradle.properties b/gradle.properties
-index ec56161b5..51e12fd30 100644
+index ec56161b5..fca3ff537 100644
 --- a/gradle.properties
 +++ b/gradle.properties
 @@ -55,2 +55,2 @@ ZCASH_VERSION_NAME=3.19.0
@@ -19554,7 +19554,7 @@ index 000000000..43d6ffd95
 +<resources xmlns:tools="http://schemas.android.com/tools"
 +    tools:keep="@drawable/ic_token_*,@drawable/ic_chain_*" />
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..2ad76b40b 100644
+index 7b9af8bf7..8c6292b3b 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -73 +73 @@
@@ -19592,60 +19592,62 @@ index 7b9af8bf7..2ad76b40b 100644
 @@ -150 +145 @@
 -        Autenticación para <xliff:g id="app_name" example="Zodl">%1$s</xliff:g>
 +        Autenticación para <xliff:g id="app_name" example="ZEC Private">%1$s</xliff:g>
-@@ -165 +160 @@
+@@ -160 +154,0 @@
+-    <string name="authentication_use_case_adress_book">Función de Libreta de Direcciones</string>
+@@ -165 +159 @@
 -    <string name="authentication_error_text">La autenticación falló por la siguiente razón. Intenta nuevamente o contacta al equipo de soporte para obtener ayuda.</string>
 +    <string name="authentication_error_text">La autenticación falló por la siguiente razón. Intenta nuevamente o exporta el diagnóstico si el problema continúa.</string>
-@@ -170 +165 @@
+@@ -170 +164 @@
 -    <string name="errorPage_action_contactSupport">Contactar Soporte</string>
 +    <string name="errorPage_action_contactSupport">Exportar diagnóstico</string>
-@@ -173 +168 @@
+@@ -173 +167 @@
 -        La autenticación fue presentada pero no reconocida. Intenta nuevamente o contacta al equipo de soporte para obtener ayuda.
 +        La autenticación fue presentada pero no reconocida. Intenta nuevamente o exporta el diagnóstico si el problema continúa.
-@@ -175,3 +170,3 @@
+@@ -175,3 +169,3 @@
 -    <string name="disconnectHWWallet_contactSupport">Contactar Soporte</string>
 -    <string name="authentication_failed_welcome_icon_cont_desc">Toca para desbloquear la aplicación <xliff:g id="app_name" example="Zodl">%1$s</xliff:g></string>
 -    <string name="splash_authTitle">Tu cuenta de Zodl está protegida.</string>
 +    <string name="disconnectHWWallet_contactSupport">Exportar diagnóstico</string>
 +    <string name="authentication_failed_welcome_icon_cont_desc">Toca para desbloquear la aplicación <xliff:g id="app_name" example="ZEC Private">%1$s</xliff:g></string>
 +    <string name="splash_authTitle">Tu cuenta de ZEC Private está protegida.</string>
-@@ -238 +233 @@
+@@ -238 +232 @@
 -    <string name="keystone_addHWWallet_deviceDesc">Conectarte a un hardware wallet que ya estuvo vinculado a Zodl requerirá sincronización para descubrir tu historial de transacciones. Te guiaremos en el proceso.</string>
 +    <string name="keystone_addHWWallet_deviceDesc">Conectarte a un hardware wallet que ya estuvo vinculado a ZEC Private requerirá sincronización para descubrir tu historial de transacciones. Te guiaremos en el proceso.</string>
-@@ -274 +269 @@
+@@ -274 +268 @@
 -    <string name="crash_reporting_opt_in_title">Ayuda a Mejorar Zodl</string>
 +    <string name="crash_reporting_opt_in_title">Ayuda a Mejorar ZEC Private</string>
-@@ -277,2 +272,2 @@
+@@ -277,2 +271,2 @@
 -    <string name="crash_reporting_opt_in_positive_desc">Compartir reportes de fallos con los desarrolladores de Zodl.</string>
 -    <string name="crash_reporting_opt_in_negative_desc">No compartir reportes de fallos con los desarrolladores de Zodl.</string>
 +    <string name="crash_reporting_opt_in_positive_desc">Compartir reportes de fallos con los desarrolladores de ZEC Private.</string>
 +    <string name="crash_reporting_opt_in_negative_desc">No compartir reportes de fallos con los desarrolladores de ZEC Private.</string>
-@@ -282 +277 @@
+@@ -282 +276 @@
 -    <string name="deleteWallet_title">Restablecer Zodl</string>
 +    <string name="deleteWallet_title">Restablecer ZEC Private</string>
-@@ -284 +279 @@
+@@ -284 +278 @@
 -    <string name="delete_wallet_text_2">Restablecer la aplicación Zodl eliminará la base de datos y los datos en
 +    <string name="delete_wallet_text_2">Restablecer la aplicación ZEC Private eliminará la base de datos y los datos en
-@@ -286 +281 @@
+@@ -286 +280 @@
 -    <string name="deleteWallet_message4">Una vez que restablezcas Zodl, la única forma de acceder a tus fondos será mediante un proceso de restauración de billetera que requiere tu Frase de Recuperación de Zodl y la Altura de Cumpleaños de la Billetera.</string>
 +    <string name="deleteWallet_message4">Una vez que restablezcas ZEC Private, la única forma de acceder a tus fondos será mediante un proceso de restauración de billetera que requiere tu Frase de Recuperación de ZEC Private y la Altura de Cumpleaños de la Billetera.</string>
-@@ -290 +285 @@
+@@ -290 +284 @@
 -    <string name="deleteWallet_actionButtonTitle">Restablecer Zodl</string>
 +    <string name="deleteWallet_actionButtonTitle">Restablecer ZEC Private</string>
-@@ -295 +290 @@
+@@ -295 +289 @@
 -    <string name="error_general_message">Causa desconocida. Por favor, contacta a nuestro equipo de soporte si el problema persiste.\n\n%s</string>
 +    <string name="error_general_message">Causa desconocida. Por favor, exporta el diagnóstico si el problema persiste.\n\n%s</string>
-@@ -309 +304 @@
+@@ -309 +303 @@
 -    <string name="currencyConversion_ipDesc">La función de conversión de moneda de Zodl no compromete tu dirección IP.</string>
 +    <string name="currencyConversion_ipDesc">La función de conversión de moneda de ZEC Private no compromete tu dirección IP.</string>
-@@ -342 +337 @@
+@@ -342 +336 @@
 -        Al hacer clic en “Estoy de acuerdo” a continuación, das tu consentimiento para exportar todos los datos privados de tus billeteras, como el historial completo de tus billeteras, incluidas las billeteras de hardware conectadas. Toda la información privada, como notas, montos y direcciones de destinatarios, incluso para tu actividad protegida, será exportada.*\n\nEstos datos privados también permiten la capacidad de ver ciertas acciones futuras que realices con Zodl.\n\nCompartir estos datos privados es irrevocable: una vez que hayas compartido estos datos privados con alguien, no hay forma de revocar su acceso.\n\n*Ten en cuenta que estos datos privados no les dan la capacidad de gastar tus fondos, solo la posibilidad de ver lo que haces con ellos.
 +        Al hacer clic en “Estoy de acuerdo” a continuación, das tu consentimiento para exportar todos los datos privados de tus billeteras, como el historial completo de tus billeteras, incluidas las billeteras de hardware conectadas. Toda la información privada, como notas, montos y direcciones de destinatarios, incluso para tu actividad protegida, será exportada.*\n\nEstos datos privados también permiten la capacidad de ver ciertas acciones futuras que realices con ZEC Private.\n\nCompartir estos datos privados es irrevocable: una vez que hayas compartido estos datos privados con alguien, no hay forma de revocar su acceso.\n\n*Ten en cuenta que estos datos privados no les dan la capacidad de gastar tus fondos, solo la posibilidad de ver lo que haces con ellos.
-@@ -344,2 +339,2 @@
+@@ -344,2 +338,2 @@
 -    <string name="privateDataConsent_confirmation">Estoy de acuerdo con las Políticas de Exportación de Datos Privados y la Política de Privacidad de Zodl</string>
 -    <string name="export_data_export_data_chooser_title">Compartir datos internos de Zodl con:</string>
 +    <string name="privateDataConsent_confirmation">Estoy de acuerdo con las Políticas de Exportación de Datos Privados y la Política de Privacidad de ZEC Private</string>
 +    <string name="export_data_export_data_chooser_title">Compartir datos internos de ZEC Private con:</string>
-@@ -349,8 +344,3 @@
+@@ -349,8 +343,3 @@
 -    <string name="sendFeedback_title">Envíanos tus comentarios</string>
 -    <string name="sendFeedback_ratingQuestion">¿Cómo ha sido tu experiencia con Zodl?</string>
 -    <string name="sendFeedback_howCanWeHelp">¿En qué podemos ayudarte?</string>
@@ -19657,241 +19659,241 @@ index 7b9af8bf7..2ad76b40b 100644
 +    <string name="support_confirmation_dialog_title">Exportar diagnóstico</string>
 +    <string name="support_confirmation_explanation">Elige una aplicación y destinatario para compartir el diagnóstico. Revisa su contenido antes de compartirlo; ningún equipo de soporte lo recibe automáticamente.</string>
 +    <string name="support_email_part_1">¿Cómo ha sido tu experiencia con ZEC Private?\n<xliff:g id="emoji_encoding" example="😍">%1$s</xliff:g> <xliff:g id="emoji_order" example="5">%2$s</xliff:g>/5</string>
-@@ -367 +357 @@
+@@ -367 +356 @@
 -    <string name="smartBanner_content_disconnected_info">Revisa tu conexión y recarga Zodl</string>
 +    <string name="smartBanner_content_disconnected_info">Revisa tu conexión y recarga ZEC Private</string>
-@@ -375 +365 @@
+@@ -375 +364 @@
 -    <string name="smartBanner_content_restore_info">Mantén Zodl abierto en la pantalla activa del teléfono</string>
 +    <string name="smartBanner_content_restore_info">Mantén ZEC Private abierto en la pantalla activa del teléfono</string>
-@@ -378 +368 @@
+@@ -378 +367 @@
 -    <string name="home_message_resyncing_subtitle">Mantén Zodl abierto en la pantalla activa del teléfono</string>
 +    <string name="home_message_resyncing_subtitle">Mantén ZEC Private abierto en la pantalla activa del teléfono</string>
-@@ -396 +386 @@
+@@ -396 +385 @@
 -    <string name="smartBanner_help_shield_info1">Para proteger la privacidad del usuario, Zodl no permite gastar %s transparentes. Toca el botón "Proteger" abajo para hacer que tus fondos transparentes sean utilizables y tu balance total en Zodl sea privado.</string>
 +    <string name="smartBanner_help_shield_info1">Para proteger la privacidad del usuario, ZEC Private no permite gastar %s transparentes. Toca el botón "Proteger" abajo para hacer que tus fondos transparentes sean utilizables y tu balance total en ZEC Private sea privado.</string>
-@@ -399 +389 @@
+@@ -399 +388 @@
 -    <string name="smartBanner_help_diconnected_info">Parece que estás sin conexión. Restaura tu conexión a internet para usar la wallet Zodl.</string>
 +    <string name="smartBanner_help_diconnected_info">Parece que estás sin conexión. Restaura tu conexión a internet para usar la wallet ZEC Private.</string>
-@@ -401,2 +391,2 @@
+@@ -401,2 +390,2 @@
 -    <string name="smartBanner_help_restore_info">Zodl está escaneando la blockchain para recuperar tus transacciones. Restaurar wallets antiguas puede tardar horas. Sigue estos pasos para evitar interrupciones:</string>
 -    <string name="home_info_restoring_bullet_1">Mantén la app de Zodl abierta en la pantalla activa del teléfono.</string>
 +    <string name="smartBanner_help_restore_info">ZEC Private está escaneando la blockchain para recuperar tus transacciones. Restaurar wallets antiguas puede tardar horas. Sigue estos pasos para evitar interrupciones:</string>
 +    <string name="home_info_restoring_bullet_1">Mantén la app de ZEC Private abierta en la pantalla activa del teléfono.</string>
-@@ -406 +396 @@
+@@ -406 +395 @@
 -    <string name="home_info_resyncing_message">Zodl está escaneando la blockchain para mostrar tus transacciones más recientes y asegurar que tus balances estén correctos. Mantén la app de Zodl abierta en la pantalla activa del teléfono para evitar interrupciones.</string>
 +    <string name="home_info_resyncing_message">ZEC Private está escaneando la blockchain para mostrar tus transacciones más recientes y asegurar que tus balances estén correctos. Mantén la app de ZEC Private abierta en la pantalla activa del teléfono para evitar interrupciones.</string>
-@@ -408 +398 @@
+@@ -408 +397 @@
 -    <string name="smartBanner_help_sync_info">Zodl está escaneando la blockchain para mostrar tus transacciones más recientes y asegurar que tus balances estén correctos. Mantén la app de Zodl abierta en la pantalla activa del teléfono para evitar interrupciones.</string>
 +    <string name="smartBanner_help_sync_info">ZEC Private está escaneando la blockchain para mostrar tus transacciones más recientes y asegurar que tus balances estén correctos. Mantén la app de ZEC Private abierta en la pantalla activa del teléfono para evitar interrupciones.</string>
-@@ -411 +401 @@
+@@ -411 +400 @@
 -    <string name="crash_report_detail_title">Ayuda a Mejorar Zodl</string>
 +    <string name="crash_report_detail_title">Ayuda a Mejorar ZEC Private</string>
-@@ -415 +405 @@
+@@ -415 +404 @@
 -    <string name="crash_report_detail_item_subtitle_2">Zodl no accede ni puede acceder a información sobre usuarios individuales, sus dispositivos, transacciones o su actividad dentro de la app. Los datos son completamente anónimos.</string>
 +    <string name="crash_report_detail_item_subtitle_2">ZEC Private no accede ni puede acceder a información sobre usuarios individuales, sus dispositivos, transacciones o su actividad dentro de la app. Los datos son completamente anónimos.</string>
-@@ -419 +409 @@
+@@ -419 +408 @@
 -    <string name="home_message_crash_reporting_title">Ayuda a mejorar Zodl</string>
 +    <string name="home_message_crash_reporting_title">Ayuda a mejorar ZEC Private</string>
-@@ -424 +414 @@
+@@ -424 +413 @@
 -    <string name="balances_infoSyncing">Zodl está escaneando la blockchain para asegurar que tus balances se muestren correctamente.</string>
 +    <string name="balances_infoSyncing">ZEC Private está escaneando la blockchain para asegurar que tus balances se muestren correctamente.</string>
-@@ -433 +423 @@
+@@ -433 +422 @@
 -    <string name="sheet_insufficientBalance_msg">No pudimos crear esta transacción. Tu billetera no tiene suficiente saldo para cubrir tanto el monto de la transacción como las comisiones. Por favor, reduce el monto para considerar las comisiones.</string>
 +    <string name="sheet_insufficientBalance_msg">Tu saldo no cubre el monto y la comisión de red de Zcash. Reduce el monto e inténtalo de nuevo.</string>
-@@ -437,4 +427,2 @@
+@@ -437,4 +426,2 @@
 -    <string name="integrations_coinbase">Compra <xliff:g id="currency" example="ZEC">%1$s</xliff:g> con Coinbase</string>
 -    <string name="integrations_coinbase_subtitle">Una manera fácil de comprar <xliff:g id="currency" example="ZEC">%1$s</xliff:g> y recibirlo directamente en tu wallet Zodl.</string>
 -    <string name="integrations_info">Las integraciones de Zodl brindan acceso a servicios de terceros. Las funciones e información compartida con ellos están fuera de nuestro control y sujetas a sus políticas de privacidad.</string>
 -    <string name="integrations_dialog_info">La información que compartas con los socios de integración de Zodl está sujeta a sus políticas de privacidad.</string>
 +    <string name="integrations_info">Las integraciones de ZEC Private brindan acceso a servicios de terceros. Las funciones e información compartida con ellos están fuera de nuestro control y sujetas a sus políticas de privacidad.</string>
 +    <string name="integrations_dialog_info">La información que compartas con los socios de integración de ZEC Private está sujeta a sus políticas de privacidad.</string>
-@@ -442,4 +429,0 @@
+@@ -442,4 +428,0 @@
 -    <string name="settings_flexa">Pagar con Flexa</string>
 -    <string name="settings_flexaDesc">Gasta ZEC en miles de establecimientos comerciales.</string>
 -    <string name="integrations_flexa_biometric_message">Autentícate para pagar con Flexa</string>
 -    <string name="integrations_disabled_info_flexa">Cambia de Keystone a Zodl para usar Flexa.</string>
-@@ -449 +432,0 @@
+@@ -449 +431,0 @@
 -    <string name="integrations_coinbase_subtitle_disabled">Coinbase Onramp está temporalmente no disponible.</string>
-@@ -454,3 +437,3 @@
+@@ -454,3 +436,3 @@
 -    <string name="restoreInfo_title">¡Mantén Zodl abierto!</string>
 -    <string name="keep_open_description">Zodl está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en sincronizarse. Sigue estos pasos para evitar interrupciones:</string>
 -    <string name="keep_open_bullet_1">Mantén la app de Zodl abierta con la pantalla del teléfono activa.</string>
 +    <string name="restoreInfo_title">¡Mantén ZEC Private abierto!</string>
 +    <string name="keep_open_description">ZEC Private está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en sincronizarse. Sigue estos pasos para evitar interrupciones:</string>
 +    <string name="keep_open_bullet_1">Mantén la app de ZEC Private abierta con la pantalla del teléfono activa.</string>
-@@ -458 +441 @@
+@@ -458 +440 @@
 -    <string name="keepZodlOpenInstructionsHWWallet">Zodl está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en completar la sincronización. Sigue estos pasos para evitar interrupciones:</string>
 +    <string name="keepZodlOpenInstructionsHWWallet">ZEC Private está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en completar la sincronización. Sigue estos pasos para evitar interrupciones:</string>
-@@ -460 +443 @@
+@@ -460 +442 @@
 -    <string name="keep_open_keystone_warning">No podrás usar tus fondos de Zodl hasta que tu billetera Keystone esté sincronizada.</string>
 +    <string name="keep_open_keystone_warning">No podrás usar tus fondos de ZEC Private hasta que tu billetera Keystone esté sincronizada.</string>
-@@ -463 +446 @@
+@@ -463 +445 @@
 -    <string name="keepZodlOpenInstructionsResyncing">Zodl está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en resincronizarse. Sigue estos pasos para evitar interrupciones:</string>
 +    <string name="keepZodlOpenInstructionsResyncing">ZEC Private está escaneando la cadena de bloques para recuperar tus transacciones. Las billeteras más antiguas pueden tardar horas en resincronizarse. Sigue estos pasos para evitar interrupciones:</string>
-@@ -479 +462 @@
+@@ -479 +461 @@
 -    <string name="swapAndPay_slippageWarn">Cualquier parte no utilizada de la comisión por deslizamiento será reembolsada si el intercambio se ejecuta con un deslizamiento menor al esperado.</string>
 +    <string name="swapAndPay_slippageWarn">El deslizamiento es un margen para cambios de precio, no una comisión fija. El margen no utilizado se reembolsa.</string>
-@@ -487 +469,0 @@
+@@ -487 +468,0 @@
 -    <string name="partners_flexa_transactionFailedTitle">Transacción Fallida</string>
-@@ -490 +472 @@
+@@ -490 +471 @@
 -    <string name="payment_request_dialog_error_grpc_text">Zodl encontró algunos problemas de conexión al enviar la transacción a la red. Volverá a intentarlo durante los próximos minutos.</string>
 +    <string name="payment_request_dialog_error_grpc_text">ZEC Private encontró algunos problemas de conexión al enviar la transacción a la red. Volverá a intentarlo durante los próximos minutos.</string>
-@@ -506 +488 @@
+@@ -506 +487 @@
 -    <string name="qr_code_share_chooser_title">Mi Dirección %s en Zodl</string>
 +    <string name="qr_code_share_chooser_title">Mi Dirección %s en ZEC Private</string>
-@@ -508 +490 @@
+@@ -508 +489 @@
 -        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
 +        https://github.com/Sammy-Lastre/zec-private/releases</string>
-@@ -531 +513 @@
+@@ -531 +512 @@
 -    <string name="receive_help_transparent_desc3">Para proteger tu privacidad, Zodl te guiará para proteger cualquier %s transparente que recibas con un solo clic.</string>
 +    <string name="receive_help_transparent_desc3">Para proteger tu privacidad, ZEC Private te guiará para proteger cualquier %s transparente que recibas con un solo clic.</string>
-@@ -537 +519 @@
+@@ -537 +518 @@
 -    <string name="redeemGift_scan_externalLink">Parece que abriste una tarjeta de regalo desde otra aplicación. Para mayor seguridad y protección, escanea el código QR de la tarjeta de regalo con Zodl.</string>
 +    <string name="redeemGift_scan_externalLink">Parece que abriste una tarjeta de regalo desde otra aplicación. Para mayor seguridad y protección, escanea el código QR de la tarjeta de regalo con ZEC Private.</string>
-@@ -550 +532 @@
+@@ -550 +531 @@
 -    <string name="redeemGift_ready_disclaimer">Los fondos se enviarán a tu billetera <xliff:g id="wallet" example="Zodl">%1$s</xliff:g>. La comisión de red ya está descontada del monto mostrado.</string>
 +    <string name="redeemGift_ready_disclaimer">Los fondos se enviarán a tu billetera <xliff:g id="wallet" example="ZEC Private">%1$s</xliff:g>. La comisión de red ya está descontada del monto mostrado.</string>
-@@ -603 +585 @@
+@@ -603 +584 @@
 -        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
 +        https://github.com/Sammy-Lastre/zec-private/releases</string>
-@@ -607 +589,3 @@
+@@ -607 +588,3 @@
 -    <string name="restoreWallet_info">Por favor, ingresa tu frase secreta de recuperación de 24 palabras en el orden correcto.</string>
 +    <string name="restoreWallet_info">Ingresa tu frase secreta de recuperación de 24 palabras en orden o pega la frase completa.</string>
 +    <string name="restore_seed_paste">Pegar frase de recuperación</string>
 +    <string name="restore_seed_paste_error">Ingresa o pega una frase de recuperación válida de 24 palabras.</string>
-@@ -609 +593 @@
+@@ -609 +592 @@
 -    <string name="restore_dialog_message_1">es un conjunto único de 24 palabras que aparecen en un orden preciso. Puede usarse para obtener control total de tus fondos desde cualquier dispositivo a través de cualquier app de billetera Zcash. Piénsala como la llave maestra de tu billetera. Está guardada en la Configuración Avanzada de Zodl.</string>
 +    <string name="restore_dialog_message_1">es un conjunto único de 24 palabras que aparecen en un orden preciso. Puede usarse para obtener control total de tus fondos desde cualquier dispositivo a través de cualquier app de billetera Zcash. Piénsala como la llave maestra de tu billetera. Está guardada en la Configuración Avanzada de ZEC Private.</string>
-@@ -611 +595 @@
+@@ -611 +594 @@
 -    <string name="restore_dialog_message_2">es la altura de bloque (número de bloque en la cadena de bloques) en la que se creó tu billetera. Si alguna vez pierdes acceso a tu app de Zodl y necesitas recuperar tus fondos, proporcionar esta altura junto con tu frase de recuperación puede acelerar significativamente el proceso.</string>
 +    <string name="restore_dialog_message_2">es la altura de bloque (número de bloque en la cadena de bloques) en la que se creó tu billetera. Si alguna vez pierdes acceso a tu app de ZEC Private y necesitas recuperar tus fondos, proporcionar esta altura junto con tu frase de recuperación puede acelerar significativamente el proceso.</string>
-@@ -613 +597 @@
+@@ -613 +596 @@
 -    <string name="firstWalletTransactionSubtitleRestore">Decide hasta dónde debe escanear Zodl. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
 +    <string name="firstWalletTransactionSubtitleRestore">Decide hasta dónde debe escanear ZEC Private. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
-@@ -618,2 +602,2 @@
+@@ -618,2 +601,2 @@
 -    <string name="firstWalletTransactionSubtitleResync">Decide hasta dónde debe resincronizarse Zodl. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
 -    <string name="resync_bd_estimation_message">Tu billetera se resincronizará desde %1$s (%2$s bloques). Zodl escaneará y recuperará todas las transacciones realizadas después del siguiente número de bloque.</string>
 +    <string name="firstWalletTransactionSubtitleResync">Decide hasta dónde debe resincronizarse ZEC Private. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
 +    <string name="resync_bd_estimation_message">Tu billetera se resincronizará desde %1$s (%2$s bloques). ZEC Private escaneará y recuperará todas las transacciones realizadas después del siguiente número de bloque.</string>
-@@ -622 +606 @@
+@@ -622 +605 @@
 -    <string name="resyncWallet_dateInfo">A menos que especifiques lo contrario a continuación, Zodl se resincronizará desde la fecha mostrada.</string>
 +    <string name="resyncWallet_dateInfo">A menos que especifiques lo contrario a continuación, ZEC Private se resincronizará desde la fecha mostrada.</string>
-@@ -635 +619 @@
+@@ -635 +618 @@
 -    <string name="scan_cameraSettings">La cámara no está autorizada. Por favor, ve a la configuración del sistema de Zodl y actívala.</string>
 +    <string name="scan_cameraSettings">La cámara no está autorizada. Por favor, ve a la configuración del sistema de ZEC Private y actívala.</string>
-@@ -645,2 +629,2 @@
+@@ -645,2 +628,2 @@
 -    <string name="deeplinkWarning_desc">Para mayor seguridad y protección, vuelve a escanear el código QR con Zodl.</string>
 -    <string name="deeplinkWarning_cta">Reescanear en Zodl</string>
 +    <string name="deeplinkWarning_desc">Para mayor seguridad y protección, vuelve a escanear el código QR con ZEC Private.</string>
 +    <string name="deeplinkWarning_cta">Reescanear en ZEC Private</string>
-@@ -654 +638 @@
+@@ -654 +637 @@
 -        Zodl y actívala.</string>
 +        ZEC Private y actívala.</string>
-@@ -736 +720 @@
+@@ -736 +719 @@
 -    <string name="send_confirmation_failure_grpc_subtitle">Zodl encontró problemas de conexión al enviar la transacción. Reintentará en los próximos minutos.</string>
 +    <string name="send_confirmation_failure_grpc_subtitle">ZEC Private encontró problemas de conexión al enviar la transacción. Reintentará en los próximos minutos.</string>
-@@ -742 +726 @@
+@@ -742 +725 @@
 -    <string name="send_confirmation_multiple_report_text">Hola, equipo de Zodl.\n\nAl enviar una transacción a una dirección TEX, encontré un error. Me comunico para recibir orientación sobre cómo recuperar mis fondos.\n\nGracias.</string>
 +    <string name="send_confirmation_multiple_report_text">Hola, equipo de ZEC Private.\n\nAl enviar una transacción a una dirección TEX, encontré un error. Me comunico para recibir orientación sobre cómo recuperar mis fondos.\n\nGracias.</string>
-@@ -810 +794 @@
+@@ -810 +793 @@
 -    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de Zodl.</string>
 +    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de ZEC Private.</string>
-@@ -816 +800 @@
+@@ -816 +799 @@
 -    <string name="pay_slippage_info">Podrías pagar hasta %s más, además de las comisiones de transacción.</string>
 +    <string name="pay_slippage_info">Podrías pagar hasta %s más si cambia el precio. Las comisiones de red de Zcash son adicionales.</string>
-@@ -846 +830 @@
+@@ -846 +829 @@
 -    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %s menos según el deslizamiento %s que configuraste.</string>
 +    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %1$s menos según el deslizamiento %2$s que configuraste.</string>
-@@ -853,2 +837,2 @@
+@@ -853,2 +836,2 @@
 -    <string name="swapToZec_info2">%s en %s</string>
 -    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en Zodl</string>
 +    <string name="swapToZec_info2">%1$s en %2$s</string>
 +    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en ZEC Private</string>
-@@ -884 +868 @@
+@@ -884 +867 @@
 -    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="Zodl" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
 +    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="ZEC Private" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
-@@ -894,2 +878,2 @@
+@@ -894,2 +877,2 @@
 -    <string name="texKeystone_step1_title">Envía primero a Zodl</string>
 -    <string name="texKeystone_step1_desc">Transfiere ZEC a tu dirección protegida de Zodl</string>
 +    <string name="texKeystone_step1_title">Envía primero a ZEC Private</string>
 +    <string name="texKeystone_step1_desc">Transfiere ZEC a tu dirección protegida de ZEC Private</string>
-@@ -897,2 +881,2 @@
+@@ -897,2 +880,2 @@
 -    <string name="texKeystone_step2_title">Envía desde Zodl a la dirección TEX</string>
 -    <string name="texKeystone_step2_desc">Una vez recibido en Zodl, envía los tokens a tu dirección TEX de destino final</string>
 +    <string name="texKeystone_step2_title">Envía desde ZEC Private a la dirección TEX</string>
 +    <string name="texKeystone_step2_desc">Una vez recibido en ZEC Private, envía los tokens a tu dirección TEX de destino final</string>
-@@ -948 +932 @@
+@@ -948 +931 @@
 -    <string name="swapAndPay_refundInfo">Tu depósito fue detectado pero el swap no pudo completarse. Tus fondos han sido devueltos, descontando las comisiones de transacción. Si aún no los recibiste, contacta al equipo de soporte de Zodl.</string>
 +    <string name="swapAndPay_refundInfo">Se detectó tu depósito, pero el swap no pudo completarse. El proveedor indica un reembolso, menos las comisiones. Si no llegó, conserva los detalles y consulta su estado con el proveedor.</string>
-@@ -951 +935 @@
+@@ -951 +934 @@
 -    <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos y no recibiste tu swap, contacta a soporte para que podamos resolverlo.</string>
 +    <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos, conserva los detalles y revisa su estado o reembolso con el proveedor antes de enviar de nuevo.</string>
-@@ -953 +937 @@
+@@ -953 +936 @@
 -    <string name="swapAndPay_expiredMsg">Este swap venció tras su ventana de validez de 24 horas. Si no enviaste fondos, no es necesario hacer nada. Si enviaste fondos, contacta a soporte para que podamos ayudarte.</string>
 +    <string name="swapAndPay_expiredMsg">Este swap caducó. Si no enviaste fondos, no debes hacer nada. Si enviaste, conserva los detalles y revisa su estado o reembolso con el proveedor.</string>
-@@ -957 +941 @@
+@@ -957 +940 @@
 -    <string name="reportSwap_msg">Al tocar el botón de abajo, se enviarán detalles de este swap (como la dirección de depósito y el activo destino) al equipo de soporte de Zodl para que puedan ayudarte a resolver tu problema. La información de la transacción se incluye automáticamente.</string>
 +    <string name="reportSwap_msg">Exporta detalles de este swap, como la dirección de depósito y el activo destino. Elige el destinatario y revisa el contenido antes de compartirlo. No se envía ningún informe automáticamente.</string>
-@@ -962 +946 @@
+@@ -962 +945 @@
 -    <string name="swap_mismatch_msg_2">Te agradeceríamos que nos lo reportaras para que podamos investigarlo con el proveedor de swap.</string>
 +    <string name="swap_mismatch_msg_2">Puedes exportar detalles de diagnóstico para investigar el problema. Revísalos antes de elegir un destinatario.</string>
-@@ -965,2 +949,2 @@
+@@ -965,2 +948,2 @@
 -    <string name="swap_mismatch_support_email_subject">Zodl Swap: discrepancia en la API</string>
 -    <string name="swap_mismatch_support_email_body">Zodl detectó el siguiente error en la respuesta de la API del proveedor de swap. Proporcionar estos detalles nos permite plantearlo con ellos para investigarlo. No compartiremos tus datos personales con el proveedor de swap. Puedes enviarlo tal cual o incluir una nota para nosotros. Gracias de antemano.\n\nProveedor de swap: %1$s\nTipo de swap: %2$s\nTipo de discrepancia: %3$s\nID de cotización: %4$s</string>
 +    <string name="swap_mismatch_support_email_subject">ZEC Private Swap: discrepancia en la API</string>
 +    <string name="swap_mismatch_support_email_body">ZEC Private rechazó una respuesta del proveedor que no coincidía con la solicitud. Revisa estos detalles antes de compartirlos.\n\nProveedor: %1$s\nTipo de swap: %2$s\nDiscrepancia: %3$s\nID de cotización: %4$s</string>
-@@ -1051 +1035 @@
+@@ -1051 +1034 @@
 -    <string name="update_title_available">Zodl aquí.</string>
 +    <string name="update_title_available">ZEC Private aquí.</string>
-@@ -1054 +1038 @@
+@@ -1054 +1037 @@
 -        Hay una actualización requerida para Zodl que realiza importantes mejoras en el rendimiento y/o la seguridad.
 +        Hay una actualización requerida para ZEC Private que realiza importantes mejoras en el rendimiento y/o la seguridad.
-@@ -1057 +1041 @@
+@@ -1057 +1040 @@
 -        Hay una nueva versión de Zodl que realiza actualizaciones menores para mejorar el rendimiento y/o la seguridad.\n\nPor favor, toma un momento para actualizar a la última versión.
 +        Hay una nueva versión de ZEC Private que realiza actualizaciones menores para mejorar el rendimiento y/o la seguridad.\n\nPor favor, toma un momento para actualizar a la última versión.
-@@ -1069 +1053 @@
+@@ -1069 +1052 @@
 -    <string name="notEnoughFreeSpace_messagePre">Zodl requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
 +    <string name="notEnoughFreeSpace_messagePre">ZEC Private requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
-@@ -1091 +1075 @@
+@@ -1091 +1074 @@
 -    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre Zodl para resolverlo.</string>
 +    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre ZEC Private para resolverlo.</string>
-@@ -1093,2 +1077,2 @@
+@@ -1093,2 +1076,2 @@
 -    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre Zodl para revisar los detalles.</string>
 -    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre Zodl para continuar tu migración.</string>
 +    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre ZEC Private para revisar los detalles.</string>
 +    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre ZEC Private para continuar tu migración.</string>
-@@ -1106 +1090 @@
+@@ -1106 +1089 @@
 -    <string name="restartMigration_support">Si reiniciar no resuelve el problema, contacta al soporte de Zodl a través de Enviar comentarios.</string>
 +    <string name="restartMigration_support">Si reiniciar no resuelve el problema, conserva tus datos de recuperación y exporta el diagnóstico desde la pantalla de error. Nunca compartas tu frase de recuperación.</string>
-@@ -1179 +1163 @@
+@@ -1179 +1162 @@
 -    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras Zodl. Recibe avisos sobre:</string>
 +    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras ZEC Private. Recibe avisos sobre:</string>
-@@ -1186 +1170 @@
+@@ -1186 +1169 @@
 -    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir Zodl para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
 +    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir ZEC Private para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
-@@ -1215 +1199 @@
+@@ -1215 +1198 @@
 -    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de Zodl/Keystone.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de ZEC Private/Keystone.</string>
-@@ -1248 +1232 @@
+@@ -1248 +1231 @@
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
-@@ -1262 +1246 @@
+@@ -1262 +1245 @@
 -    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, Zodl te avisará la próxima vez que abras la app.</string>
 +    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, ZEC Private te avisará la próxima vez que abras la app.</string>
-@@ -1277 +1261 @@
+@@ -1277 +1260 @@
 -    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, Zodl necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para Zodl en la configuración de tu dispositivo.</string>
 +    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, ZEC Private necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para ZEC Private en la configuración de tu dispositivo.</string>
-@@ -1279 +1263 @@
+@@ -1279 +1262 @@
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
-@@ -1283,2 +1267,2 @@
+@@ -1283,2 +1266,2 @@
 -    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir Zodl manualmente en cada horario programado para enviar.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir ZEC Private manualmente en cada horario programado para enviar.</string>
-@@ -1306 +1289,0 @@
+@@ -1306 +1288,0 @@
 -    <string name="coinVote_confirmSubmission_detailExcludedWeight">Excluido de esta votación</string>
-@@ -1312,2 +1295,2 @@
+@@ -1312,2 +1294,2 @@
 -    <string name="migrationTipUnavailable_title">Zodl sigue sincronizando</string>
 -    <string name="migrationTipUnavailable_message">Zodl debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private sigue sincronizando</string>
@@ -19936,7 +19938,7 @@ index 5ece3f5f9..000000000
 -</resources>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..c7ce2e06a 100644
+index f41234151..3ea9e1b99 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -19976,63 +19978,65 @@ index f41234151..c7ce2e06a 100644
 @@ -157 +152 @@
 -        Authentication for <xliff:g id="app_name" example="Zodl">%1$s</xliff:g>
 +        Authentication for <xliff:g id="app_name" example="ZEC Private">%1$s</xliff:g>
-@@ -172 +167 @@
+@@ -167 +161,0 @@
+-    <string name="authentication_use_case_adress_book">Address Book feature</string>
+@@ -172 +166 @@
 -    <string name="authentication_error_text">Authentication failed for the following reason. Retry the authentication, or contact the support team for help.</string>
 +    <string name="authentication_error_text">Authentication failed for the following reason. Retry the authentication, or export diagnostics if the problem persists.</string>
-@@ -177 +172 @@
+@@ -177 +171 @@
 -    <string name="errorPage_action_contactSupport">Contact Support</string>
 +    <string name="errorPage_action_contactSupport">Export diagnostics</string>
-@@ -180 +175 @@
+@@ -180 +174 @@
 -        Authentication was presented but not recognized. Retry authentication, or contact the support team for help.
 +        Authentication was presented but not recognized. Retry authentication, or export diagnostics if the problem persists.
-@@ -182,2 +177,2 @@
+@@ -182,2 +176,2 @@
 -    <string name="authentication_failed_welcome_icon_cont_desc">Tap to unlock <xliff:g id="app_name" example="Zodl">%1$s</xliff:g> app</string>
 -    <string name="splash_authTitle">Your Zodl account is secured.</string>
 +    <string name="authentication_failed_welcome_icon_cont_desc">Tap to unlock <xliff:g id="app_name" example="ZEC Private">%1$s</xliff:g> app</string>
 +    <string name="splash_authTitle">Your ZEC Private account is secured.</string>
-@@ -244 +239 @@
+@@ -244 +238 @@
 -    <string name="keystone_addHWWallet_deviceDesc">Connecting to a hardware wallet that was previously connected to Zodl will require synchronization to discover your transaction history. We\'ll guide you through it.</string>
 +    <string name="keystone_addHWWallet_deviceDesc">Connecting to a hardware wallet that was previously connected to ZEC Private will require synchronization to discover your transaction history. We\'ll guide you through it.</string>
-@@ -281 +276 @@
+@@ -281 +275 @@
 -    <string name="crash_reporting_opt_in_title">Help Improve Zodl</string>
 +    <string name="crash_reporting_opt_in_title">Help Improve ZEC Private</string>
-@@ -289 +284 @@
+@@ -289 +283 @@
 -    <string name="crash_reporting_opt_in_positive_desc">Share crash reports with Zodl developers.</string>
 +    <string name="crash_reporting_opt_in_positive_desc">Share crash reports with ZEC Private developers.</string>
-@@ -291 +286 @@
+@@ -291 +285 @@
 -    <string name="crash_reporting_opt_in_negative_desc">Don’t share crash reports with Zodl developers.</string>
 +    <string name="crash_reporting_opt_in_negative_desc">Don’t share crash reports with ZEC Private developers.</string>
-@@ -294 +289 @@
+@@ -294 +288 @@
 -    <string name="deleteWallet_title">Reset Zodl</string>
 +    <string name="deleteWallet_title">Reset ZEC Private</string>
-@@ -296,2 +291,2 @@
+@@ -296,2 +290,2 @@
 -    <string name="delete_wallet_text_2">Resetting the Zodl app will delete the Zodl database and cache, and will disconnect all connected hardware wallets.</string>
 -    <string name="deleteWallet_message4">Once you Reset Zodl, the only way to access your funds is through a wallet restore process that requires your Zodl Recovery Phrase and Wallet Birthday Height.</string>
 +    <string name="delete_wallet_text_2">Resetting the ZEC Private app will delete the ZEC Private database and cache, and will disconnect all connected hardware wallets.</string>
 +    <string name="deleteWallet_message4">Once you Reset ZEC Private, the only way to access your funds is through a wallet restore process that requires your ZEC Private Recovery Phrase and Wallet Birthday Height.</string>
-@@ -301 +296 @@
+@@ -301 +295 @@
 -    <string name="deleteWallet_actionButtonTitle">Reset Zodl</string>
 +    <string name="deleteWallet_actionButtonTitle">Reset ZEC Private</string>
-@@ -306 +301 @@
+@@ -306 +300 @@
 -    <string name="error_general_message">Unknown cause. Please contact our support team if the problem persists
 +    <string name="error_general_message">Unknown cause. Export diagnostics if the problem persists
-@@ -322 +317 @@
+@@ -322 +316 @@
 -    <string name="currencyConversion_ipDesc">Zodl\'s currency conversion feature doesn\'t compromise your IP address.</string>
 +    <string name="currencyConversion_ipDesc">ZEC Private\'s currency conversion feature doesn\'t compromise your IP address.</string>
-@@ -361 +356 @@
+@@ -361 +355 @@
 -        gives the ability to see certain future actions you take with Zodl.\n\nSharing this private data is
 +        gives the ability to see certain future actions you take with ZEC Private.\n\nSharing this private data is
-@@ -366,2 +361,2 @@
+@@ -366,2 +360,2 @@
 -    <string name="privateDataConsent_confirmation">I agree to Zodl\'s Export Private Data Policies and Privacy Policy</string>
 -    <string name="export_data_export_data_chooser_title">Share internal Zodl data with:</string>
 +    <string name="privateDataConsent_confirmation">I agree to ZEC Private\'s Export Private Data Policies and Privacy Policy</string>
 +    <string name="export_data_export_data_chooser_title">Share internal ZEC Private data with:</string>
-@@ -372,4 +366,0 @@
+@@ -372,4 +365,0 @@
 -    <string name="sendFeedback_title">Send Us Feedback</string>
 -    <string name="sendFeedback_ratingQuestion">How is your Zodl experience?</string>
 -    <string name="sendFeedback_howCanWeHelp">How can we help you?</string>
 -    <string name="sendFeedback_hcwhPlaceholder">I would like to ask about…</string>
-@@ -377,5 +368,3 @@
+@@ -377,5 +367,3 @@
 -    <string name="support_confirmation_dialog_title">Open e-mail app</string>
 -    <string name="support_confirmation_explanation">Zodl is about to
 -        open your e-mail app with a pre-filled message.\n\nBe sure to hit send within your e-mail app.</string>
@@ -20041,225 +20045,225 @@ index f41234151..c7ce2e06a 100644
 +    <string name="support_confirmation_dialog_title">Export diagnostics</string>
 +    <string name="support_confirmation_explanation">Choose an app and recipient to share diagnostics. Review the contents before sharing; no support team receives them automatically.</string>
 +    <string name="support_email_part_1">How is your ZEC Private experience?\n<xliff:g id="emoji_encoding" example="😍">%1$s</xliff:g> <xliff:g id="emoji_order" example="5">%2$s</xliff:g>/5</string>
-@@ -393 +382 @@
+@@ -393 +381 @@
 -    <string name="smartBanner_content_disconnected_info">Check your connection and reload Zodl</string>
 +    <string name="smartBanner_content_disconnected_info">Check your connection and reload ZEC Private</string>
-@@ -401 +390 @@
+@@ -401 +389 @@
 -    <string name="smartBanner_content_restore_info">Keep Zodl open on active phone screen</string>
 +    <string name="smartBanner_content_restore_info">Keep ZEC Private open on active phone screen</string>
-@@ -405 +394 @@
+@@ -405 +393 @@
 -    <string name="home_message_resyncing_subtitle">Keep Zodl open on an active phone screen</string>
 +    <string name="home_message_resyncing_subtitle">Keep ZEC Private open on an active phone screen</string>
-@@ -426,2 +415,2 @@
+@@ -426,2 +414,2 @@
 -    <string name="smartBanner_help_shield_info1">To protect user privacy, Zodl doesn\'t support spending transparent
 -        %s. Tap the \"Shield\" button below to make your transparent funds spendable and your total Zodl balance private. </string>
 +    <string name="smartBanner_help_shield_info1">To protect user privacy, ZEC Private doesn\'t support spending transparent
 +        %s. Tap the \"Shield\" button below to make your transparent funds spendable and your total ZEC Private balance private. </string>
-@@ -431 +420 @@
+@@ -431 +419 @@
 -        to use Zodl wallet.</string>
 +        to use ZEC Private wallet.</string>
-@@ -433 +422 @@
+@@ -433 +421 @@
 -    <string name="smartBanner_help_restore_info">Zodl is scanning the blockchain to retrieve your transactions. Older
 +    <string name="smartBanner_help_restore_info">ZEC Private is scanning the blockchain to retrieve your transactions. Older
-@@ -435 +424 @@
+@@ -435 +423 @@
 -    <string name="home_info_restoring_bullet_1">Keep the Zodl app open on an active phone screen.</string>
 +    <string name="home_info_restoring_bullet_1">Keep the ZEC Private app open on an active phone screen.</string>
-@@ -440,2 +429,2 @@
+@@ -440,2 +428,2 @@
 -    <string name="home_info_resyncing_message">Zodl is scanning the blockchain for your latest transactions to make sure
 -        your balances are displayed correctly. Keep the Zodl app open on an active phone screen to avoid interruptions.</string>
 +    <string name="home_info_resyncing_message">ZEC Private is scanning the blockchain for your latest transactions to make sure
 +        your balances are displayed correctly. Keep the ZEC Private app open on an active phone screen to avoid interruptions.</string>
-@@ -443,2 +432,2 @@
+@@ -443,2 +431,2 @@
 -    <string name="smartBanner_help_sync_info">Zodl is scanning the blockchain for your latest transactions to make sure
 -        your balances are displayed correctly. Keep the Zodl app open on an active phone screen to avoid interruptions.</string>
 +    <string name="smartBanner_help_sync_info">ZEC Private is scanning the blockchain for your latest transactions to make sure
 +        your balances are displayed correctly. Keep the ZEC Private app open on an active phone screen to avoid interruptions.</string>
-@@ -447 +436 @@
+@@ -447 +435 @@
 -    <string name="crash_report_detail_title">Help Improve Zodl</string>
 +    <string name="crash_report_detail_title">Help Improve ZEC Private</string>
-@@ -451 +440 @@
+@@ -451 +439 @@
 -    <string name="crash_report_detail_item_subtitle_2">Zodl does not and cannot access or collect information about individual users, their devices, transactions, or their in-app activity. The data is completely anonymized.</string>
 +    <string name="crash_report_detail_item_subtitle_2">ZEC Private does not and cannot access or collect information about individual users, their devices, transactions, or their in-app activity. The data is completely anonymized.</string>
-@@ -453 +442 @@
+@@ -453 +441 @@
 -    <string name="home_message_crash_reporting_title">Help improve Zodl</string>
 +    <string name="home_message_crash_reporting_title">Help improve ZEC Private</string>
-@@ -460 +449 @@
+@@ -460 +448 @@
 -    <string name="balances_infoSyncing">Zodl is scanning the blockchain to make sure your balances are displayed correctly.</string>
 +    <string name="balances_infoSyncing">ZEC Private is scanning the blockchain to make sure your balances are displayed correctly.</string>
-@@ -469 +458 @@
+@@ -469 +457 @@
 -    <string name="sheet_insufficientBalance_msg">We couldn\'t create this transaction for you. Your wallet doesn\'t have enough balance to cover both the transaction amount and transaction fees. Please lower the transaction amount to account for the fees.</string>
 +    <string name="sheet_insufficientBalance_msg">Your balance cannot cover both the amount and the Zcash network fee. Lower the amount and try again.</string>
-@@ -473,4 +462,2 @@
+@@ -473,4 +461,2 @@
 -    <string name="integrations_coinbase">Buy <xliff:g id="currency" example="ZEC">%1$s</xliff:g> with Coinbase</string>
 -    <string name="integrations_coinbase_subtitle">A hassle-free way to buy <xliff:g id="currency" example="ZEC">%1$s</xliff:g> and get it directly into your Zodl wallet.</string>
 -    <string name="integrations_info">Zodl integrations provide access to third party services. Features and information shared with them are outside of our control and subject to their privacy policies.</string>
 -    <string name="integrations_dialog_info">Information shared with Zodl integrations is subject to their privacy policies.</string>
 +    <string name="integrations_info">ZEC Private integrations provide access to third party services. Features and information shared with them are outside of our control and subject to their privacy policies.</string>
 +    <string name="integrations_dialog_info">Information shared with ZEC Private integrations is subject to their privacy policies.</string>
-@@ -478,4 +464,0 @@
+@@ -478,4 +463,0 @@
 -    <string name="settings_flexa">Pay with Flexa</string>
 -    <string name="settings_flexaDesc">Spend ZEC at thousands of retail locations.</string>
 -    <string name="integrations_flexa_biometric_message">Authenticate yourself to pay with Flexa</string>
 -    <string name="integrations_disabled_info_flexa">Switch from Keystone to Zodl to use Flexa.</string>
-@@ -485 +467,0 @@
+@@ -485 +466,0 @@
 -    <string name="integrations_coinbase_subtitle_disabled">Coinbase Onramp is temporarily unavailable.</string>
-@@ -490,3 +472,3 @@
+@@ -490,3 +471,3 @@
 -    <string name="restoreInfo_title">Keep Zodl open!</string>
 -    <string name="keep_open_description">Zodl is scanning the blockchain to retrieve your transactions. Older wallets can take hours to sync. Follow these steps to prevent interruption:</string>
 -    <string name="keep_open_bullet_1">Keep the Zodl app open on an active phone screen.</string>
 +    <string name="restoreInfo_title">Keep ZEC Private open!</string>
 +    <string name="keep_open_description">ZEC Private is scanning the blockchain to retrieve your transactions. Older wallets can take hours to sync. Follow these steps to prevent interruption:</string>
 +    <string name="keep_open_bullet_1">Keep the ZEC Private app open on an active phone screen.</string>
-@@ -494 +476 @@
+@@ -494 +475 @@
 -    <string name="keepZodlOpenInstructionsHWWallet">Zodl is scanning the blockchain to retrieve your transactions. Older wallets can take hours to complete syncing. Follow these steps to prevent interruption:</string>
 +    <string name="keepZodlOpenInstructionsHWWallet">ZEC Private is scanning the blockchain to retrieve your transactions. Older wallets can take hours to complete syncing. Follow these steps to prevent interruption:</string>
-@@ -496 +478 @@
+@@ -496 +477 @@
 -    <string name="keep_open_keystone_warning">Your Zodl funds cannot be spent until your Keystone wallet is synced.</string>
 +    <string name="keep_open_keystone_warning">Your ZEC Private funds cannot be spent until your Keystone wallet is synced.</string>
-@@ -499 +481 @@
+@@ -499 +480 @@
 -    <string name="keepZodlOpenInstructionsResyncing">Zodl is scanning the blockchain to retrieve your transactions. Older wallets can take hours to resync. Follow these steps to prevent interruption:</string>
 +    <string name="keepZodlOpenInstructionsResyncing">ZEC Private is scanning the blockchain to retrieve your transactions. Older wallets can take hours to resync. Follow these steps to prevent interruption:</string>
-@@ -515 +497 @@
+@@ -515 +496 @@
 -    <string name="swapAndPay_slippageWarn">Any unused portion of the slippage fee will be refunded if the swap executes with lower slippage than expected.</string>
 +    <string name="swapAndPay_slippageWarn">Slippage is a price-movement allowance, not a fixed fee. Any unused allowance is refunded.</string>
-@@ -523 +504,0 @@
+@@ -523 +503,0 @@
 -    <string name="partners_flexa_transactionFailedTitle">Transaction Failed</string>
-@@ -526 +507 @@
+@@ -526 +506 @@
 -    <string name="payment_request_dialog_error_grpc_text">Zodl encountered some connection issues when submitting
 +    <string name="payment_request_dialog_error_grpc_text">ZEC Private encountered some connection issues when submitting
-@@ -543 +524 @@
+@@ -543 +523 @@
 -    <string name="qr_code_share_chooser_title">My Zodl %s Address</string>
 +    <string name="qr_code_share_chooser_title">My ZEC Private %s Address</string>
-@@ -545 +526 @@
+@@ -545 +525 @@
 -        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
 +        https://github.com/Sammy-Lastre/zec-private/releases</string>
-@@ -559 +540 @@
+@@ -559 +539 @@
 -    <string name="receive_info_shielded_bullet_1">Use this address to receive and store your %s privately. Transparent and shielded %s sent to this address will be received and stored as shielded %s.</string>
 +    <string name="receive_info_shielded_bullet_1">Use this address to receive and store your %1$s privately. Transparent and shielded %2$s sent to this address will be received and stored as shielded %3$s.</string>
-@@ -566 +547 @@
+@@ -566 +546 @@
 -    <string name="receive_help_transparent_desc3">To protect your privacy, Zodl will guide you to shield any transparent %s you receive with just one click.</string>
 +    <string name="receive_help_transparent_desc3">To protect your privacy, ZEC Private will guide you to shield any transparent %s you receive with just one click.</string>
-@@ -572 +553 @@
+@@ -572 +552 @@
 -    <string name="redeemGift_scan_externalLink">Looks like you opened a gift card from another app. For better safety and security, scan the gift card\'s QR code with Zodl.</string>
 +    <string name="redeemGift_scan_externalLink">Looks like you opened a gift card from another app. For better safety and security, scan the gift card\'s QR code with ZEC Private.</string>
-@@ -585 +566 @@
+@@ -585 +565 @@
 -    <string name="redeemGift_ready_disclaimer">The funds will be sent to your <xliff:g id="wallet" example="Zodl">%1$s</xliff:g> wallet. The network fee is already deducted from the amount shown.</string>
 +    <string name="redeemGift_ready_disclaimer">The funds will be sent to your <xliff:g id="wallet" example="ZEC Private">%1$s</xliff:g> wallet. The network fee is already deducted from the amount shown.</string>
-@@ -638 +619 @@
+@@ -638 +618 @@
 -        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
 +        https://github.com/Sammy-Lastre/zec-private/releases</string>
-@@ -643 +624,3 @@
+@@ -643 +623,3 @@
 -    <string name="restoreWallet_info">Please type in your 24-word secret recovery phrase in the correct order.</string>
 +    <string name="restoreWallet_info">Enter your 24-word secret recovery phrase in order, or paste the complete phrase.</string>
 +    <string name="restore_seed_paste">Paste recovery phrase</string>
 +    <string name="restore_seed_paste_error">Enter or paste a valid 24-word recovery phrase.</string>
-@@ -647 +630 @@
+@@ -647 +629 @@
 -        Think of it as the master key to your wallet. It is stored in Zodl’s Advanced Settings.</string>
 +        Think of it as the master key to your wallet. It is stored in ZEC Private’s Advanced Settings.</string>
-@@ -650 +633 @@
+@@ -650 +632 @@
 -        blockchain) at which your wallet was created. If you ever lose access to your Zodl app and need to recover
 +        blockchain) at which your wallet was created. If you ever lose access to your ZEC Private app and need to recover
-@@ -654 +637 @@
+@@ -654 +636 @@
 -    <string name="firstWalletTransactionSubtitleRestore">Decide how far Zodl should scan. Enter a date before your first received transaction. If you\’re not sure, choose an earlier date.</string>
 +    <string name="firstWalletTransactionSubtitleRestore">Decide how far ZEC Private should scan. Enter a date before your first received transaction. If you\’re not sure, choose an earlier date.</string>
-@@ -658,2 +641,2 @@
+@@ -658,2 +640,2 @@
 -    <string name="firstWalletTransactionSubtitleResync">Decide how far Zodl should resync. Enter a date before your first received transaction. If you\'re not sure, choose an earlier date.</string>
 -    <string name="resync_bd_estimation_message">Your wallet will be resynced from %1$s (%2$s blocks). Zodl will scan and recover all transactions made after the following block number.</string>
 +    <string name="firstWalletTransactionSubtitleResync">Decide how far ZEC Private should resync. Enter a date before your first received transaction. If you\'re not sure, choose an earlier date.</string>
 +    <string name="resync_bd_estimation_message">Your wallet will be resynced from %1$s (%2$s blocks). ZEC Private will scan and recover all transactions made after the following block number.</string>
-@@ -663,2 +646,2 @@
+@@ -663,2 +645,2 @@
 -        balance.\n\nUnless you specify otherwise below, Zodl will resync from the date displayed.</string>
 -    <string name="resyncWallet_dateInfo">Unless you specify otherwise below, Zodl will resync from the date displayed.</string>
 +        balance.\n\nUnless you specify otherwise below, ZEC Private will resync from the date displayed.</string>
 +    <string name="resyncWallet_dateInfo">Unless you specify otherwise below, ZEC Private will resync from the date displayed.</string>
-@@ -676 +659 @@
+@@ -676 +658 @@
 -    <string name="scan_cameraSettings">The camera is not authorized. Please go to the system settings of Zodl and turn in on.</string>
 +    <string name="scan_cameraSettings">The camera is not authorized. Please go to the system settings of ZEC Private and turn in on.</string>
-@@ -686,2 +669,2 @@
+@@ -686,2 +668,2 @@
 -    <string name="deeplinkWarning_desc">For better safety and security, rescan the QR code with Zodl.</string>
 -    <string name="deeplinkWarning_cta">Rescan in Zodl</string>
 +    <string name="deeplinkWarning_desc">For better safety and security, rescan the QR code with ZEC Private.</string>
 +    <string name="deeplinkWarning_cta">Rescan in ZEC Private</string>
-@@ -694 +677 @@
+@@ -694 +676 @@
 -        Zodl and turn in on.</string>
 +        ZEC Private and turn in on.</string>
-@@ -778 +761 @@
+@@ -778 +760 @@
 -    <string name="send_confirmation_failure_grpc_subtitle">Zodl encountered connection issues when submitting the
 +    <string name="send_confirmation_failure_grpc_subtitle">ZEC Private encountered connection issues when submitting the
-@@ -786 +769 @@
+@@ -786 +768 @@
 -    <string name="send_confirmation_multiple_report_text">Hi, Zodl Team.\n\nWhile sending a transaction to a TEX
 +    <string name="send_confirmation_multiple_report_text">Hi, ZEC Private Team.\n\nWhile sending a transaction to a TEX
-@@ -849,3 +831,0 @@
+@@ -849,3 +830,0 @@
 -    <string name="coinVote_common_confirmation" tools:ignore="MissingTranslation">Confirmation</string>
 -    <string name="coinVote_delegationSigning_instruction" tools:ignore="MissingTranslation" translatable="false">After you have signed with Keystone, tap on the Scan Signature button below.</string>
 -    <string name="coinVote_delegationSigning_scanSignature" tools:ignore="MissingTranslation" translatable="false">Scan Signature</string>
-@@ -857,2 +836,0 @@
+@@ -857,2 +835,0 @@
 -    <string name="coinVote_delegationSigning_duplicateSignature" tools:ignore="MissingTranslation" translatable="false">That Keystone signature was already scanned for bundle %1$d of %2$d. Sign the current bundle on Keystone, then scan the new QR.</string>
 -    <string name="coinVote_delegationSigning_wrongSignature" tools:ignore="MissingTranslation" translatable="false">That signature is for a different bundle. Sign bundle %1$d of %2$d on Keystone, then scan the new QR.</string>
-@@ -864,2 +841,0 @@
+@@ -864,2 +840,0 @@
 -    <string name="coinVote_delegationSigning_title" tools:ignore="MissingTranslation" translatable="false">Authorize Vote</string>
 -    <string name="coinVote_delegationSigning_currentBundleProgress" tools:ignore="MissingTranslation" translatable="false">Signature %1$d of %2$d</string>
-@@ -869 +844,0 @@
+@@ -869 +843,0 @@
 -    <string name="coinVote_delegationSigning_useSignedBundlesOnly" tools:ignore="MissingTranslation" translatable="false">Use signed bundles only</string>
-@@ -871 +845,0 @@
+@@ -871 +844,0 @@
 -    <string name="coinVote_delegationSigning_memo" tools:ignore="MissingTranslation" translatable="false">Memo</string>
-@@ -880 +854 @@
+@@ -880 +853 @@
 -    <string name="swapAndPay_slippageDesc">This setting determines the maximum allowable difference between the expected price of a swap and the actual price you pay, which is outside of Zodl\'s control.</string>
 +    <string name="swapAndPay_slippageDesc">This setting determines the maximum allowable difference between the expected price of a swap and the actual price you pay, which is outside of ZEC Private\'s control.</string>
-@@ -886 +860 @@
+@@ -886 +859 @@
 -    <string name="pay_slippage_info">You may pay up to %s more, in addition to transaction fees.</string>
 +    <string name="pay_slippage_info">You may pay up to %s more if the price changes. Zcash network fees are additional.</string>
-@@ -916 +890 @@
+@@ -916 +889 @@
 -    <string name="swapAndPay_swapQuoteSlippageWarn">You could receive up to %s less based on the %s slippage you set.</string>
 +    <string name="swapAndPay_swapQuoteSlippageWarn">You could receive up to %1$s less based on the %2$s slippage you set.</string>
-@@ -923,2 +897,2 @@
+@@ -923,2 +896,2 @@
 -    <string name="swapToZec_info2">%s on %s</string>
 -    <string name="swap_to_zec_share_text">Deposit address for %1$s %2$s on %3$s swap to %4$s in Zodl</string>
 +    <string name="swapToZec_info2">%1$s on %2$s</string>
 +    <string name="swap_to_zec_share_text">Deposit address for %1$s %2$s on %3$s swap to %4$s in ZEC Private</string>
-@@ -954 +928 @@
+@@ -954 +927 @@
 -    <string name="taxExport_desc">Download your <xliff:g example="Zodl" id="account_name">%s</xliff:g> transaction history from the previous calendar year in a .csv format.</string>
 +    <string name="taxExport_desc">Download your <xliff:g example="ZEC Private" id="account_name">%s</xliff:g> transaction history from the previous calendar year in a .csv format.</string>
-@@ -964,2 +938,2 @@
+@@ -964,2 +937,2 @@
 -    <string name="texKeystone_step1_title">Send to Zodl first</string>
 -    <string name="texKeystone_step1_desc">Transfer ZEC to your Zodl shielded address</string>
 +    <string name="texKeystone_step1_title">Send to ZEC Private first</string>
 +    <string name="texKeystone_step1_desc">Transfer ZEC to your ZEC Private shielded address</string>
-@@ -967,2 +941,2 @@
+@@ -967,2 +940,2 @@
 -    <string name="texKeystone_step2_title">Send from Zodl to TEX address</string>
 -    <string name="texKeystone_step2_desc">Once received in Zodl, send the tokens to your final TEX destination address</string>
 +    <string name="texKeystone_step2_title">Send from ZEC Private to TEX address</string>
 +    <string name="texKeystone_step2_desc">Once received in ZEC Private, send the tokens to your final TEX destination address</string>
-@@ -1019 +993 @@
+@@ -1019 +992 @@
 -    <string name="swapAndPay_refundInfo">Your deposit was detected but the swap could not be completed. Your funds have been returned, minus transaction fees. If you haven\'t received them, contact the Zodl support team.</string>
 +    <string name="swapAndPay_refundInfo">Your deposit was detected but the swap could not be completed. The provider reports a refund, minus transaction fees. If it has not arrived, preserve the swap details and check its status with the provider.</string>
-@@ -1022 +996 @@
+@@ -1022 +995 @@
 -    <string name="swapAndPay_failedMsg">This swap could not be completed. If you deposited funds and didn\'t receive your swap, contact support so we can help resolve it.</string>
 +    <string name="swapAndPay_failedMsg">This swap could not be completed. If you deposited funds, preserve the swap details and inspect its status or refund with the provider before sending again.</string>
-@@ -1024 +998 @@
+@@ -1024 +997 @@
 -    <string name="swapAndPay_expiredMsg">This swap expired after its 24-hour validity window. If you didn\'t send funds, no action is needed. If you did send funds, contact support so we can help.</string>
 +    <string name="swapAndPay_expiredMsg">This swap expired. If you did not send funds, no action is needed. If you did, preserve the swap details and inspect its status or refund with the provider.</string>
-@@ -1028 +1002 @@
+@@ -1028 +1001 @@
 -    <string name="reportSwap_msg">Tapping the button below will send details about this swap (like the deposit address and target asset) to the Zodl support team so they can help resolve your issue. The transaction info is included automatically.</string>
 +    <string name="reportSwap_msg">Export details of this swap, including its deposit address and target asset. Choose the recipient yourself and review the contents before sharing. No report is sent automatically.</string>
-@@ -1033 +1007 @@
+@@ -1033 +1006 @@
 -    <string name="swap_mismatch_msg_2">We\’d appreciate you reporting this to us so we can investigate it with the swap provider.</string>
 +    <string name="swap_mismatch_msg_2">You can export diagnostic details for investigation. Review them before choosing a recipient.</string>
-@@ -1036,2 +1010,2 @@
+@@ -1036,2 +1009,2 @@
 -    <string name="swap_mismatch_support_email_subject">Zodl Swap: API mismatch</string>
 -    <string name="swap_mismatch_support_email_body">Zodl detected the following error in the API response from the swap provider. Providing these details allows us to raise it with them to investigate. We won\’t relay your personal details to the swap provider. You can send this as-is, or include a note to us. Thanks in advance.\n\nSwap provider: %1$s\nSwap type: %2$s\nMismatch type: %3$s\nQuote ID: %4$s</string>
 +    <string name="swap_mismatch_support_email_subject">ZEC Private Swap: API mismatch</string>
 +    <string name="swap_mismatch_support_email_body">ZEC Private rejected a swap-provider response that did not match the request. Review these diagnostic details before sharing.\n\nSwap provider: %1$s\nSwap type: %2$s\nMismatch type: %3$s\nQuote ID: %4$s</string>
-@@ -1122 +1096 @@
+@@ -1122 +1095 @@
 -    <string name="update_title_available">Zodl here.</string>
 +    <string name="update_title_available">ZEC Private here.</string>
-@@ -1125 +1099 @@
+@@ -1125 +1098 @@
 -        There is a required update\nfor Zodl that makes major improvements to\nperformance and/or security.
 +        There is a required update\nfor ZEC Private that makes major improvements to\nperformance and/or security.
-@@ -1128 +1102 @@
+@@ -1128 +1101 @@
 -        There is a new version of Zodl that makes minor updates to
 +        There is a new version of ZEC Private that makes minor updates to
-@@ -1140,7 +1113,0 @@
+@@ -1140,7 +1112,0 @@
 -    <string name="coinVote_common_continue" tools:ignore="MissingTranslation">Continue</string>
 -    <string name="coinVote_pollsList_chainConfigAccessibility" tools:ignore="MissingTranslation">Voting chain config</string>
 -    <string name="coinVote_configSettings_screenTitle" tools:ignore="MissingTranslation">Select Data Source</string>
@@ -20267,7 +20271,7 @@ index f41234151..c7ce2e06a 100644
 -    <string name="coinVote_configSettings_sectionSubtitle" tools:ignore="MissingTranslation">Pick a poll source, or add your own.</string>
 -    <string name="coinVote_configSettings_bundledName" tools:ignore="MissingTranslation">Coinholder Poll</string>
 -    <string name="coinVote_configSettings_defaultBadge" tools:ignore="MissingTranslation">Default</string>
-@@ -1149,15 +1115,0 @@
+@@ -1149,15 +1114,0 @@
 -    <string name="coinVote_configSettings_addCustomSource" tools:ignore="MissingTranslation">Add custom source</string>
 -    <string name="coinVote_configSettings_edit" tools:ignore="MissingTranslation">Edit</string>
 -    <string name="coinVote_configSettings_delete" tools:ignore="MissingTranslation">Delete</string>
@@ -20283,13 +20287,13 @@ index f41234151..c7ce2e06a 100644
 -    <string name="coinVote_configSettings_titleField" tools:ignore="MissingTranslation">Title</string>
 -    <string name="coinVote_configSettings_urlField" tools:ignore="MissingTranslation">URL</string>
 -    <string name="coinVote_configSettings_urlPlaceholder" tools:ignore="MissingTranslation">Enter...</string>
-@@ -1166 +1117,0 @@
+@@ -1166 +1116,0 @@
 -    <string name="coinVote_configSettings_errorTitleTooLong" tools:ignore="MissingTranslation">Title must be 15 characters or less, including spaces.</string>
-@@ -1168 +1118,0 @@
+@@ -1168 +1117,0 @@
 -    <string name="coinVote_configSettings_errorInvalidUrl" tools:ignore="MissingTranslation">Please enter a valid URL (e.g. https://zodl.com/polls)</string>
-@@ -1170 +1119,0 @@
+@@ -1170 +1118,0 @@
 -    <string name="coinVote_configSettings_errorDuplicateUrl" tools:ignore="MissingTranslation">This source URL is already added.</string>
-@@ -1172,24 +1120,0 @@
+@@ -1172,24 +1119,0 @@
 -    <string name="coinVote_howToVote_titleZodl" tools:ignore="MissingTranslation">How to vote with %1$s</string>
 -    <string name="coinVote_howToVote_subtitle" tools:ignore="MissingTranslation">Your ZEC gives you a voice. Shape the future of the Zcash network by voting on active proposals.</string>
 -    <string name="coinVote_howToVote_stepVotingTitle" tools:ignore="MissingTranslation">Voting on Proposals</string>
@@ -20314,11 +20318,11 @@ index f41234151..c7ce2e06a 100644
 -    <string name="coinVote_common_viewResults" tools:ignore="MissingTranslation">View Results</string>
 -    <string name="coinVote_delegationSigning_signedProgress" tools:ignore="MissingTranslation">%1$d of %2$d voted</string>
 -    <string name="coinVote_pollsList_loadErrorTitle" tools:ignore="MissingTranslation">Couldn\'t load polls</string>
-@@ -1201 +1125,0 @@
+@@ -1201 +1124,0 @@
 -    <string name="coinVote_error_configUnavailableTitle" tools:ignore="MissingTranslation">Voting unavailable</string>
-@@ -1203 +1126,0 @@
+@@ -1203 +1125,0 @@
 -    <string name="coinVote_results_loadErrorTitle" tools:ignore="MissingTranslation">Couldn\'t load results</string>
-@@ -1210,15 +1132,0 @@
+@@ -1210,15 +1131,0 @@
 -    <string name="coinVote_common_goBack" tools:ignore="MissingTranslation">Go Back</string>
 -    <string name="coinVote_confirmSubmission_authorizationFailedTitle" tools:ignore="MissingTranslation">Authorization Failed</string>
 -    <string name="coinVote_confirmSubmission_authorizationFailedMessage" tools:ignore="MissingTranslation">We couldn\'t authorize your vote. Check your connection and try again.</string>
@@ -20334,11 +20338,11 @@ index f41234151..c7ce2e06a 100644
 -    <string name="coinVote_common_close" tools:ignore="MissingTranslation">Close</string>
 -    <string name="coinVote_confirmSubmission_confirmWithKeystone" tools:ignore="MissingTranslation">Confirm with Keystone</string>
 -    <string name="coinVote_common_confirm" tools:ignore="MissingTranslation">Confirm</string>
-@@ -1228,3 +1135,0 @@ Your vote can no longer be submitted.</string>
+@@ -1228,3 +1134,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_delegationSigning_bundleProgress" tools:ignore="MissingTranslation">Sign bundle %1$d/%2$d</string>
 -    <string name="coinVote_submission_continuedProcessingTitle" tools:ignore="MissingTranslation">Submitting votes</string>
 -    <string name="coinVote_confirmSubmission_progressAuthorizing" tools:ignore="MissingTranslation">Authorizing...</string>
-@@ -1232,14 +1136,0 @@ Your vote can no longer be submitted.</string>
+@@ -1232,14 +1135,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_store_submissionAuthorizingVote" tools:ignore="MissingTranslation">Authorizing vote...</string>
 -    <string name="coinVote_confirmSubmission_progressSubmittingVoteCount" tools:ignore="MissingTranslation">Submitting vote %1$d of %2$d...</string>
 -    <string name="coinVote_confirmSubmission_progressRetrying" tools:ignore="MissingTranslation">Reconnecting...</string>
@@ -20353,29 +20357,29 @@ index f41234151..c7ce2e06a 100644
 -    <string name="coinVote_confirmSubmission_headerSubtitleSubmitting" tools:ignore="MissingTranslation">Vote submission is in progress, please don\'t leave this screen until it is finished.</string>
 -    <string name="coinVote_confirmSubmission_headerSubtitleCompleted" tools:ignore="MissingTranslation">Your vote was successfully published and cannot be changed.</string>
 -    <string name="coinVote_confirmSubmission_submissionFailedMessage" tools:ignore="MissingTranslation">Your vote couldn\'t be submitted. Check your connection and try again.</string>
-@@ -1252 +1142,0 @@ Your vote can no longer be submitted.</string>
+@@ -1252 +1141,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_delegationSigning_memoMessage" tools:ignore="MissingTranslation">I am authorizing this hotkey managed by my wallet to vote on %1$s with %2$s.</string>
-@@ -1254,5 +1143,0 @@ Your vote can no longer be submitted.</string>
+@@ -1254,5 +1142,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_confirmSubmission_detailPoll" tools:ignore="MissingTranslation">Poll</string>
 -    <string name="coinVote_confirmSubmission_detailVotingPower" tools:ignore="MissingTranslation">Voting power</string>
 -    <string name="coinVote_confirmSubmission_detailExcludedWeight">Excluded from this vote</string>
 -    <string name="coinVote_confirmSubmission_detailVotingHotkey" tools:ignore="MissingTranslation">Voting hotkey</string>
 -    <string name="coinVote_confirmSubmission_detailMemo" tools:ignore="MissingTranslation">Memo</string>
-@@ -1266,2 +1150,0 @@ Your vote can no longer be submitted.</string>
+@@ -1266,2 +1149,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_ineligible_titleNoVote" tools:ignore="MissingTranslation">Not Eligible for This Round</string>
 -    <string name="coinVote_ineligible_noNotesMessage" tools:ignore="MissingTranslation">Your wallet has no shielded notes from before the snapshot block. Only funds that existed at block #%@ are eligible for this voting round.</string>
-@@ -1271,5 +1153,0 @@ Your vote can no longer be submitted.</string>
+@@ -1271,5 +1152,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_proposalDetail_position" tools:ignore="MissingTranslation">%1$d OF %2$d</string>
 -    <string name="coinVote_proposalList_ctaConfirmSubmit" tools:ignore="MissingTranslation">Confirm &amp; Submit</string>
 -    <string name="coinVote_proposalList_ctaStartVoting" tools:ignore="MissingTranslation">Start Voting</string>
 -    <string name="coinVote_proposalList_ctaContinueVoting" tools:ignore="MissingTranslation">Continue Voting</string>
 -    <string name="coinVote_proposalList_reviewTitle" tools:ignore="MissingTranslation">Review and submit vote</string>
-@@ -1277,4 +1154,0 @@ Your vote can no longer be submitted.</string>
+@@ -1277,4 +1153,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_proposalList_headerEndsAt" tools:ignore="MissingTranslation">Ends %1$s</string>
 -    <string name="coinVote_common_votedDate" tools:ignore="MissingTranslation">Voted %1$s</string>
 -    <string name="coinVote_proposalList_votingPower" tools:ignore="MissingTranslation">Voting Power %1$s</string>
 -    <string name="coinVote_tallying_detailEnded" tools:ignore="MissingTranslation">Ended</string>
-@@ -1285,13 +1158,0 @@ Your vote can no longer be submitted.</string>
+@@ -1285,13 +1157,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_common_viewMore" tools:ignore="MissingTranslation">View more</string>
 -    <string name="coinVote_common_viewLess" tools:ignore="MissingTranslation">View less</string>
 -    <string name="coinVote_proposalList_viewForumDiscussions" tools:ignore="MissingTranslation">View Forum Discussions</string>
@@ -20389,13 +20393,13 @@ index f41234151..c7ce2e06a 100644
 -    <string name="coinVote_proposalDetail_unansweredTitle" tools:ignore="MissingTranslation">Unanswered Questions</string>
 -    <string name="coinVote_proposalDetail_skippedMessageSingle" tools:ignore="MissingTranslation">You have not responded to 1 question. Confirm to skip this question or go back to respond.</string>
 -    <string name="coinVote_proposalDetail_skippedMessageMultiple" tools:ignore="MissingTranslation">You have not responded to %1$d questions. Confirm to skip these questions or go back to respond.</string>
-@@ -1299,5 +1159,0 @@ Your vote can no longer be submitted.</string>
+@@ -1299,5 +1158,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_proposalList_reviewSubtitle" tools:ignore="MissingTranslation">Tap on the question to edit any of your answers. After you review your answers, tap on Confirm &amp; Submit.</string>
 -    <string name="coinVote_proposalList_yourVote" tools:ignore="MissingTranslation">Your vote:</string>
 -    <string name="coinVote_results_title" tools:ignore="MissingTranslation">Results</string>
 -    <string name="coinVote_common_zecValue" tools:ignore="MissingTranslation">%1$.3f ZEC</string>
 -    <string name="coinVote_results_total" tools:ignore="MissingTranslation">Total: %1$.3f ZEC</string>
-@@ -1306,30 +1161,0 @@ Your vote can no longer be submitted.</string>
+@@ -1306,30 +1160,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_common_votingPower" tools:ignore="MissingTranslation">Voting Power %1$.3f ZEC</string>
 -    <string name="coinVote_results_metaLine" tools:ignore="MissingTranslation">%1$s  &#8226;  %2$s</string>
 -    <string name="coinVote_results_votedLine" tools:ignore="MissingTranslation">Voted: %1$s</string>
@@ -20426,59 +20430,59 @@ index f41234151..c7ce2e06a 100644
 -    <string name="coinVote_store_userError_recoveredVoteMismatch" tools:ignore="MissingTranslation">The network reported an existing vote for this wallet that does not match this submission. If you voted from another device, check that device\'s voting status.</string>
 -    <string name="coinVote_store_userError_recoveredVoteUnverified" tools:ignore="MissingTranslation">An earlier vote transaction may already be on the network, but it could not be verified with the vote servers. Please try again in a moment.</string>
 -    <string name="coinVote_store_userError_roundNotPrepared" tools:ignore="MissingTranslation">This voting round\'s prepared data is missing on this device. Reopen the round to prepare it again.</string>
-@@ -1338 +1163,0 @@ Your vote can no longer be submitted.</string>
+@@ -1338 +1162,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_delegation_insufficientSnapshotBalance" tools:ignore="MissingTranslation">Your shielded balance at the snapshot (%1$s ZEC) is below the minimum required to vote (%2$s ZEC).</string>
-@@ -1343,2 +1167,0 @@ Your vote can no longer be submitted.</string>
+@@ -1343,2 +1166,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_walletSyncing_title" tools:ignore="MissingTranslation">Wallet Syncing</string>
 -    <string name="coinVote_walletSyncing_subtitle" tools:ignore="MissingTranslation">Your wallet needs to sync to the snapshot block height before you can participate in voting.</string>
-@@ -1355 +1178 @@ Your vote can no longer be submitted.</string>
+@@ -1355 +1177 @@ Your vote can no longer be submitted.</string>
 -    <string name="notEnoughFreeSpace_messagePre">Zodl requires <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB of space to synchronize the Zcash blockchain but there is only</string>
 +    <string name="notEnoughFreeSpace_messagePre">ZEC Private requires <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB of space to synchronize the Zcash blockchain but there is only</string>
-@@ -1377 +1200 @@ Your vote can no longer be submitted.</string>
+@@ -1377 +1199 @@ Your vote can no longer be submitted.</string>
 -    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open Zodl to resolve.</string>
 +    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open ZEC Private to resolve.</string>
-@@ -1379,2 +1202,2 @@ Your vote can no longer be submitted.</string>
+@@ -1379,2 +1201,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migration_notification_planInvalidText">Migration plan needs update. Open Zodl to review the details.</string>
 -    <string name="migration_notification_transferExpiredText">A transfer expired. Open Zodl to continue your migration.</string>
 +    <string name="migration_notification_planInvalidText">Migration plan needs update. Open ZEC Private to review the details.</string>
 +    <string name="migration_notification_transferExpiredText">A transfer expired. Open ZEC Private to continue your migration.</string>
-@@ -1392 +1215 @@ Your vote can no longer be submitted.</string>
+@@ -1392 +1214 @@ Your vote can no longer be submitted.</string>
 -    <string name="restartMigration_support">If restarting doesn\'t resolve the issue, please reach out to Zodl Support via Send Feedback.</string>
 +    <string name="restartMigration_support">If restarting does not resolve the issue, preserve your recovery information and export diagnostics from the error screen. Never share your recovery phrase.</string>
-@@ -1462,3 +1285,3 @@ Your vote can no longer be submitted.</string>
+@@ -1462,3 +1284,3 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Please contact support.</string>
 -    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Please contact support.</string>
 -    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Please contact support.</string>
 +    <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Preserve the transaction details and export diagnostics.</string>
 +    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Preserve the transaction details and export diagnostics.</string>
 +    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Preserve the transaction details and export diagnostics.</string>
-@@ -1472 +1295 @@ Your vote can no longer be submitted.</string>
+@@ -1472 +1294 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open Zodl. Get notified about:</string>
 +    <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open ZEC Private. Get notified about:</string>
-@@ -1479 +1302 @@ Your vote can no longer be submitted.</string>
+@@ -1479 +1301 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationNotifPermission_warningHint">Without notifications, the migration can\'t continue on its own. You\'ll be responsible for opening Zodl at every step to send each transfer.</string>
 +    <string name="migrationNotifPermission_warningHint">Without notifications, the migration can\'t continue on its own. You\'ll be responsible for opening ZEC Private at every step to send each transfer.</string>
-@@ -1507,2 +1330,2 @@ Your vote can no longer be submitted.</string>
+@@ -1507,2 +1329,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationTipUnavailable_title">Zodl is still syncing</string>
 -    <string name="migrationTipUnavailable_message">Zodl needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private is still syncing</string>
 +    <string name="migrationTipUnavailable_message">ZEC Private needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
-@@ -1514 +1337 @@ Your vote can no longer be submitted.</string>
+@@ -1514 +1336 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationLockExplainer_bullet2Bold">The lock lives on this Zodl/Keystone instance only.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">The lock lives on this ZEC Private/Keystone instance only.</string>
-@@ -1547 +1370 @@ Your vote can no longer be submitted.</string>
+@@ -1547 +1369 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl handles the rest, sending each transfer automatically in its scheduled window while the app runs in the background.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private handles the rest, sending each transfer automatically in its scheduled window while the app runs in the background.</string>
-@@ -1561 +1384 @@ Your vote can no longer be submitted.</string>
+@@ -1561 +1383 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationReview_privacyBody">Your balance splits into %1$d transfers over %2$s. Approve once and we\'ll handle the rest — just keep the app running in the background. Amounts are randomized for privacy. If we miss a window, Zodl will prompt you on next open.</string>
 +    <string name="migrationReview_privacyBody">Your balance splits into %1$d transfers over %2$s. Approve once and we\'ll handle the rest — just keep the app running in the background. Amounts are randomized for privacy. If we miss a window, ZEC Private will prompt you on next open.</string>
-@@ -1576 +1399 @@ Your vote can no longer be submitted.</string>
+@@ -1576 +1398 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_body">To send migration transfers at their scheduled times, Zodl needs to keep running in the background. Allow background activity for Zodl in your device settings.</string>
 +    <string name="migrationBattery_body">To send migration transfers at their scheduled times, ZEC Private needs to keep running in the background. Allow background activity for ZEC Private in your device settings.</string>
-@@ -1578 +1401 @@ Your vote can no longer be submitted.</string>
+@@ -1578 +1400 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl wakes up and sends each transfer at its scheduled time — no action needed.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private wakes up and sends each transfer at its scheduled time — no action needed.</string>
-@@ -1582,2 +1405,2 @@ Your vote can no longer be submitted.</string>
+@@ -1582,2 +1404,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open Zodl manually at each scheduled time to send.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open ZEC Private.</string>
@@ -21244,7 +21248,7 @@ index 1c2a8787c..9a180202c 100644
 -        singleOf(::TransactionRepositoryImpl) bind TransactionRepository::class
 +        single<TransactionRepository> { TransactionRepositoryImpl(get(), get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
-index c9262f680..fc14464b6 100644
+index c9262f680..cbf09a0c3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
@@ -21253,17 +21257,21 @@ index c9262f680..fc14464b6 100644
 -import co.electriccoin.zcash.ui.common.usecase.CreateFlexaTransactionUseCase
 @@ -42 +41,0 @@ import co.electriccoin.zcash.ui.common.usecase.GetFilteredActivitiesUseCase
 -import co.electriccoin.zcash.ui.common.usecase.GetFlexaStatusUseCase
-@@ -137 +135,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
+@@ -75 +73,0 @@ import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
+-import co.electriccoin.zcash.ui.common.usecase.NavigateToAddressBookUseCase
+@@ -137 +134,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 -import co.electriccoin.zcash.ui.common.usecase.SendSupportEmailUseCase
-@@ -188,0 +187 @@ val useCaseModule =
+@@ -188,0 +186 @@ val useCaseModule =
 +        singleOf(::CopyRecoveryToClipboardUseCase)
-@@ -201 +199,0 @@ val useCaseModule =
+@@ -201 +198,0 @@ val useCaseModule =
 -        factoryOf(::SendSupportEmailUseCase)
-@@ -256 +253,0 @@ val useCaseModule =
+@@ -246 +242,0 @@ val useCaseModule =
+-        factoryOf(::NavigateToAddressBookUseCase)
+@@ -256 +251,0 @@ val useCaseModule =
 -        factoryOf(::CreateFlexaTransactionUseCase)
-@@ -261 +257,0 @@ val useCaseModule =
+@@ -261 +255,0 @@ val useCaseModule =
 -        factoryOf(::GetFlexaStatusUseCase)
-@@ -325 +321 @@ val useCaseModule =
+@@ -325 +319 @@ val useCaseModule =
 -        factoryOf(::GetSwapStatusUseCase)
 +        factory { GetSwapStatusUseCase(get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt
@@ -21616,10 +21624,10 @@ index befe3b652..3c6b6ef3a 100644
 +                stringResByCurrencyNumber(missingAmount, quoteStatus.originAsset.tokenTicker, minDecimals = 0)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt
 new file mode 100644
-index 000000000..d3fa79bd3
+index 000000000..cfb60a210
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/IndependentPriceCheck.kt
-@@ -0,0 +1,116 @@
+@@ -0,0 +1,126 @@
 +package co.electriccoin.zcash.ui.common.model
 +
 +import java.math.BigDecimal
@@ -21661,7 +21669,17 @@ index 000000000..d3fa79bd3
 +        "nep141:zec.omft.near" to Market("zec", "zec", ZEC_DECIMALS, "ZECUSD"),
 +        "nep141:btc.omft.near" to Market("btc", "btc", BTC_DECIMALS, "XBTUSD"),
 +        "nep141:eth.omft.near" to Market("eth", "eth", ETH_DECIMALS, "ETHUSD"),
++        "nep141:arb.omft.near" to Market("eth", "arb", ETH_DECIMALS, "ETHUSD"),
++        "nep141:base.omft.near" to Market("eth", "base", ETH_DECIMALS, "ETHUSD"),
 +        "nep141:sol.omft.near" to Market("sol", "sol", SOL_DECIMALS, "SOLUSD"),
++        "nep141:eth-0x6b175474e89094c44da98b954eedeac495271d0f.omft.near" to
++            Market("dai", "eth", 18, "DAIUSD"),
++        "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near" to
++            Market("usdt", "eth", 6, "USDTUSD"),
++        "nep141:sol-c800a4bd850783ccb82c2b7e84175443606352.omft.near" to
++            Market("usdt", "sol", 6, "USDTUSD"),
++        "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near" to
++            Market("usdt", "tron", 6, "USDTUSD"),
 +        "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near" to
 +            Market("wbtc", "eth", BTC_DECIMALS, "WBTCUSD"),
 +        "nep141:ltc.omft.near" to Market("ltc", "ltc", 8, "LTCUSD"),
@@ -22736,10 +22754,10 @@ index feef536f5..017b876eb 100644
 +            level = LogLevel.NONE
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
 new file mode 100644
-index 000000000..b853f6718
+index 000000000..4a20148ae
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProvider.kt
-@@ -0,0 +1,210 @@
+@@ -0,0 +1,214 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import co.electriccoin.zcash.spackle.Twig
@@ -22903,17 +22921,21 @@ index 000000000..b853f6718
 +    private data class CachedObservation(val observation: MarketObservation, val receivedAtElapsedMillis: Long)
 +}
 +
-+internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis: Long): MarketObservation {
-+    require(body.length <= MAX_RESPONSE_BYTES && body.toByteArray(Charsets.UTF_8).size <= MAX_RESPONSE_BYTES)
-+    val key = when (pair) {
++private fun spreadResponseKey(pair: String): String =
++    when (pair) {
 +        "XBTUSD" -> "XXBTZUSD"
 +        "ZECUSD" -> "XZECZUSD"
 +        "ETHUSD" -> "XETHZUSD"
 +        "LTCUSD" -> "XLTCZUSD"
 +        "XRPUSD" -> "XXRPZUSD"
-+        "SOLUSD", "WBTCUSD", "TRXUSD", "BNBUSD", "AVAXUSD", "DASHUSD", "BCHUSD" -> pair
++        "USDTUSD" -> "USDTZUSD"
++        "SOLUSD", "WBTCUSD", "TRXUSD", "BNBUSD", "AVAXUSD", "DASHUSD", "BCHUSD", "DAIUSD" -> pair
 +        else -> error("Unsupported market")
 +    }
++
++internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis: Long): MarketObservation {
++    require(body.length <= MAX_RESPONSE_BYTES && body.toByteArray(Charsets.UTF_8).size <= MAX_RESPONSE_BYTES)
++    val key = spreadResponseKey(pair)
 +    val root = Json.parseToJsonElement(body).jsonObject
 +    val errors = root.getValue("error").jsonArray
 +    val rateLimited = errors.any {
@@ -24214,6 +24236,46 @@ index a33c847ad..f15858eba 100644
 +                        if (result.status == SwapStatus.SUCCESS) {
 +                            donationPreferences?.recordSuccessfulTransaction()
 +                        }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToAddressBookUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToAddressBookUseCase.kt
+deleted file mode 100644
+index dfe3474a2..000000000
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToAddressBookUseCase.kt
++++ /dev/null
+@@ -1,34 +0,0 @@
+-package co.electriccoin.zcash.ui.common.usecase
+-
+-import co.electriccoin.zcash.ui.NavigationRouter
+-import co.electriccoin.zcash.ui.R
+-import co.electriccoin.zcash.ui.common.repository.BiometricRepository
+-import co.electriccoin.zcash.ui.common.repository.BiometricRequest
+-import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
+-import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
+-import co.electriccoin.zcash.ui.design.util.stringRes
+-import co.electriccoin.zcash.ui.screen.addressbook.AddressBookArgs
+-
+-class NavigateToAddressBookUseCase(
+-    private val navigationRouter: NavigationRouter,
+-    private val biometricRepository: BiometricRepository
+-) {
+-    suspend operator fun invoke() {
+-        try {
+-            biometricRepository.requestBiometrics(
+-                BiometricRequest(
+-                    message =
+-                        stringRes(
+-                            R.string.authentication_system_ui_subtitle,
+-                            stringRes(R.string.authentication_use_case_adress_book)
+-                        )
+-                )
+-            )
+-            navigationRouter.forward(AddressBookArgs)
+-        } catch (_: BiometricsFailureException) {
+-            // do nothing
+-        } catch (_: BiometricsCancelledException) {
+-            // do nothing
+-        }
+-    }
+-}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToScanGenericAddressUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToScanGenericAddressUseCase.kt
 index 3a33ec79d..49f8f0f53 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToScanGenericAddressUseCase.kt
@@ -26519,45 +26581,56 @@ index c54f279c6..e3205bb55 100644
 +private const val GUIDE_URL =
 +    "https://github.com/Codely-Solutions/zec-private/blob/main/" + "docs/WALLET-GUIDE.md#ironwood-migration"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt
-index 607e89dcb..e741d6aab 100644
+index 607e89dcb..cbc05aee3 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/more/MoreVM.kt
-@@ -6 +5,0 @@ import co.electriccoin.zcash.ui.NavigationRouter
+@@ -4 +3,0 @@ import androidx.lifecycle.ViewModel
+-import androidx.lifecycle.viewModelScope
+@@ -6 +4,0 @@ import co.electriccoin.zcash.ui.NavigationRouter
 -import co.electriccoin.zcash.ui.NavigationTargets.WHATS_NEW
-@@ -10,2 +8,0 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToAddressBookUseCase
+@@ -9,3 +6,0 @@ import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
+-import co.electriccoin.zcash.ui.common.usecase.NavigateToAddressBookUseCase
 -import co.electriccoin.zcash.ui.common.usecase.NavigateToVotingUseCase
 -import co.electriccoin.zcash.ui.common.voting.VotingSettingsEntry
-@@ -14,0 +12 @@ import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -14,0 +10 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.screen.ExternalUrl
-@@ -18 +15,0 @@ import co.electriccoin.zcash.ui.screen.exchangerate.settings.ExchangeRateSetting
+@@ -15,0 +12 @@ import co.electriccoin.zcash.ui.screen.about.AboutArgs
++import co.electriccoin.zcash.ui.screen.addressbook.AddressBookArgs
+@@ -18 +14,0 @@ import co.electriccoin.zcash.ui.screen.exchangerate.settings.ExchangeRateSetting
 -import co.electriccoin.zcash.ui.screen.feedback.FeedbackArgs
-@@ -31,2 +27,0 @@ class MoreVM(
+@@ -25 +20,0 @@ import kotlinx.coroutines.flow.StateFlow
+-import kotlinx.coroutines.launch
+@@ -30,3 +24,0 @@ class MoreVM(
+-    private val navigateToAddressBook: NavigateToAddressBookUseCase,
 -    private val navigateToVoting: NavigateToVotingUseCase,
 -    private val votingSettingsEntry: VotingSettingsEntry,
-@@ -52,5 +46,0 @@ class MoreVM(
+@@ -52,5 +43,0 @@ class MoreVM(
 -                    ListItemState(
 -                        title = stringRes(R.string.settings_coinholderPolling),
 -                        bigIcon = imageRes(R.drawable.ic_settings_voting),
 -                        onClick = ::onVotingClick
 -                    ).takeIf { votingSettingsEntry.isEnabled },
-@@ -73 +63 @@ class MoreVM(
+@@ -73 +60 @@ class MoreVM(
 -                        title = stringRes(R.string.settings_about),
 +                        title = stringRes(R.string.private_support_title),
-@@ -75 +65 @@ class MoreVM(
+@@ -75 +62 @@ class MoreVM(
 -                        onClick = ::onAboutUsClick
 +                        onClick = { navigationRouter.forward(co.electriccoin.zcash.ui.screen.donation.DonationArgs()) }
-@@ -78,3 +68,3 @@ class MoreVM(
+@@ -78,3 +65,3 @@ class MoreVM(
 -                        title = stringRes(R.string.settings_feedback),
 -                        bigIcon = imageRes(R.drawable.ic_settings_feedback),
 -                        onClick = ::onSendUsFeedbackClick
 +                        title = stringRes(R.string.settings_about),
 +                        bigIcon = imageRes(R.drawable.ic_settings_info),
 +                        onClick = ::onAboutUsClick
-@@ -95 +84,0 @@ class MoreVM(
+@@ -95 +81,0 @@ class MoreVM(
 -    private fun onVotingClick() = viewModelScope.launch { navigateToVoting() }
-@@ -103 +91,0 @@ class MoreVM(
+@@ -103 +88,0 @@ class MoreVM(
 -    private fun onSendUsFeedbackClick() = navigationRouter.forward(FeedbackArgs)
-@@ -107 +95,2 @@ class MoreVM(
+@@ -105 +90 @@ class MoreVM(
+-    private fun onAddressBookClick() = viewModelScope.launch { navigateToAddressBook() }
++    private fun onAddressBookClick() = navigationRouter.forward(AddressBookArgs)
+@@ -107 +92,2 @@ class MoreVM(
 -    private fun onWhatsNewClick() = navigationRouter.forward(WHATS_NEW)
 +    private fun onWhatsNewClick() =
 +        navigationRouter.forward(ExternalUrl("https://github.com/Codely-Solutions/zec-private/releases"))
@@ -34182,10 +34255,10 @@ index 3f54429cb..4c5470daa 100644
 \ No newline at end of file
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/IndependentPricePolicyTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/IndependentPricePolicyTest.kt
 new file mode 100644
-index 000000000..2119a57d6
+index 000000000..d814ff1f1
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/IndependentPricePolicyTest.kt
-@@ -0,0 +1,141 @@
+@@ -0,0 +1,163 @@
 +package co.electriccoin.zcash.ui.common.model
 +
 +import io.mockk.every
@@ -34234,6 +34307,28 @@ index 000000000..2119a57d6
 +        every { wbtc.chainTicker } returns "eth"
 +        every { wbtc.assetId } returns "nep141:unknown-ethereum-token.omft.near"
 +        assertNull(IndependentPricePolicy.market(wbtc))
++    }
++
++    @Test
++    fun marketMatchesTheExactTokenOrNativeAssetOnItsNetwork() {
++        val usdt = asset("usdt", 6)
++        every { usdt.chainTicker } returns "sol"
++        every { usdt.assetId } returns "nep141:sol-c800a4bd850783ccb82c2b7e84175443606352.omft.near"
++        assertEquals("USDTUSD", IndependentPricePolicy.market(usdt))
++
++        every { usdt.chainTicker } returns "tron"
++        assertNull(IndependentPricePolicy.market(usdt))
++        every { usdt.assetId } returns "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near"
++        assertEquals("USDTUSD", IndependentPricePolicy.market(usdt))
++        every { usdt.decimals } returns 18
++        assertNull(IndependentPricePolicy.market(usdt))
++
++        val eth = asset("eth", 18)
++        every { eth.chainTicker } returns "base"
++        every { eth.assetId } returns "nep141:base.omft.near"
++        assertEquals("ETHUSD", IndependentPricePolicy.market(eth))
++        every { eth.assetId } returns "nep141:base-0x4200000000000000000000000000000000000006.omft.near"
++        assertNull(IndependentPricePolicy.market(eth))
 +    }
 +
 +    @Test
@@ -35087,10 +35182,10 @@ index 000000000..2a71971b1
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt
 new file mode 100644
-index 000000000..38a3dd615
+index 000000000..62e6d756d
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/KrakenPriceProviderTest.kt
-@@ -0,0 +1,301 @@
+@@ -0,0 +1,310 @@
 +package co.electriccoin.zcash.ui.common.provider
 +
 +import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
@@ -35114,6 +35209,15 @@ index 000000000..38a3dd615
 +import kotlin.time.Instant
 +
 +class KrakenPriceProviderTest {
++    @Test
++    fun tetherSpreadUsesTheKrakenResponseKey() {
++        val body = """{"error":[],"result":{"USDTZUSD":[[100,"1.0000","1.0001"]],"last":100}}"""
++        val result = parseKrakenObservation("USDTUSD", body, 101_000)
++        assertEquals("USDTUSD", result.pair)
++        assertEquals(BigDecimal("1.0001"), result.ask)
++        assertFails { parseKrakenObservation("DAIUSD", body, 101_000) }
++    }
++
 +    @Test
 +    fun missingMarketDoesNotOpenAClient() = runTest {
 +        val clients = mockk<HttpClientProvider>()

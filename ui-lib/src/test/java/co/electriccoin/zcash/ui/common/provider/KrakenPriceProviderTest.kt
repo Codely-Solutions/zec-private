@@ -22,6 +22,15 @@ import kotlin.time.Instant
 
 class KrakenPriceProviderTest {
     @Test
+    fun tetherSpreadUsesTheKrakenResponseKey() {
+        val body = """{"error":[],"result":{"USDTZUSD":[[100,"1.0000","1.0001"]],"last":100}}"""
+        val result = parseKrakenObservation("USDTUSD", body, 101_000)
+        assertEquals("USDTUSD", result.pair)
+        assertEquals(BigDecimal("1.0001"), result.ask)
+        assertFails { parseKrakenObservation("DAIUSD", body, 101_000) }
+    }
+
+    @Test
     fun missingMarketDoesNotOpenAClient() = runTest {
         val clients = mockk<HttpClientProvider>()
         val quote = supportedQuote()

@@ -1,16 +1,15 @@
 package co.electriccoin.zcash.ui.screen.more
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
-import co.electriccoin.zcash.ui.common.usecase.NavigateToAddressBookUseCase
 import co.electriccoin.zcash.ui.design.component.listitem.ListItemState
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.ExternalUrl
 import co.electriccoin.zcash.ui.screen.about.AboutArgs
+import co.electriccoin.zcash.ui.screen.addressbook.AddressBookArgs
 import co.electriccoin.zcash.ui.screen.advancedsettings.AdvancedSettingsArgs
 import co.electriccoin.zcash.ui.screen.exchangerate.settings.ExchangeRateSettingsArgs
 import co.electriccoin.zcash.ui.screen.hotfix.enhancement.EnhancementHotfixArgs
@@ -19,12 +18,10 @@ import co.electriccoin.zcash.ui.screen.theme.settings.ThemeSettingsArgs
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.launch
 
 class MoreVM(
     private val getVersionInfo: GetVersionInfoProvider,
     private val navigationRouter: NavigationRouter,
-    private val navigateToAddressBook: NavigateToAddressBookUseCase,
 ) : ViewModel() {
     val state: StateFlow<MoreState> = MutableStateFlow(createState())
 
@@ -90,7 +87,7 @@ class MoreVM(
     private fun onAboutUsClick() = navigationRouter.forward(AboutArgs)
 
 
-    private fun onAddressBookClick() = viewModelScope.launch { navigateToAddressBook() }
+    private fun onAddressBookClick() = navigationRouter.forward(AddressBookArgs)
 
     private fun onWhatsNewClick() =
         navigationRouter.forward(ExternalUrl("https://github.com/Codely-Solutions/zec-private/releases"))
