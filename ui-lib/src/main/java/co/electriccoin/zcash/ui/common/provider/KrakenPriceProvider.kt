@@ -161,17 +161,21 @@ class KrakenPriceProvider(
     private data class CachedObservation(val observation: MarketObservation, val receivedAtElapsedMillis: Long)
 }
 
-internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis: Long): MarketObservation {
-    require(body.length <= MAX_RESPONSE_BYTES && body.toByteArray(Charsets.UTF_8).size <= MAX_RESPONSE_BYTES)
-    val key = when (pair) {
+private fun spreadResponseKey(pair: String): String =
+    when (pair) {
         "XBTUSD" -> "XXBTZUSD"
         "ZECUSD" -> "XZECZUSD"
         "ETHUSD" -> "XETHZUSD"
         "LTCUSD" -> "XLTCZUSD"
         "XRPUSD" -> "XXRPZUSD"
-        "SOLUSD", "WBTCUSD", "TRXUSD", "BNBUSD", "AVAXUSD", "DASHUSD", "BCHUSD" -> pair
+        "USDTUSD" -> "USDTZUSD"
+        "SOLUSD", "WBTCUSD", "TRXUSD", "BNBUSD", "AVAXUSD", "DASHUSD", "BCHUSD", "DAIUSD" -> pair
         else -> error("Unsupported market")
     }
+
+internal fun parseKrakenObservation(pair: String, body: String, receivedAtMillis: Long): MarketObservation {
+    require(body.length <= MAX_RESPONSE_BYTES && body.toByteArray(Charsets.UTF_8).size <= MAX_RESPONSE_BYTES)
+    val key = spreadResponseKey(pair)
     val root = Json.parseToJsonElement(body).jsonObject
     val errors = root.getValue("error").jsonArray
     val rateLimited = errors.any {
