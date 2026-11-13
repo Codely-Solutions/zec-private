@@ -65,6 +65,8 @@ jobs:
       quote_id: ${{ steps.admission.outputs.quote_id }}
       core_receipt_id: ${{ steps.admission.outputs.core_receipt_id }}
       quote_receipt_id: ${{ steps.admission.outputs.quote_receipt_id }}
+      quote_receipt_run: ${{ steps.admission.outputs.quote_run }}
+      run_missing_core: ${{ steps.admission.outputs.run_missing_core }}
     permissions:
       actions: read
       contents: read
@@ -341,8 +343,8 @@ jobs:
       source_sha: ${{ inputs.source_sha }}
       preflight_only: ${{ inputs.preflight_only }}
   hosted_core:
-    needs: [unsigned, testnet_apk]
-    if: inputs.hosted && !inputs.preflight_only && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success'
+    needs: [admit_hosted, preflight, signing_smoke, unsigned, testnet_apk]
+    if: ${{ !cancelled() && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && ((!inputs.recover_run && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success') || (inputs.recover_run && needs.admit_hosted.outputs.run_missing_core == 'true')) }}
     permissions:
       actions: read
       contents: write
@@ -350,11 +352,13 @@ jobs:
     uses: ./.github/workflows/hosted-core.yml
     with:
       source_sha: ${{ inputs.source_sha }}
-      artifact_id: ${{ needs.testnet_apk.outputs.artifact_id }}
-      production_id: ${{ needs.unsigned.outputs.artifact_id }}
+      artifact_id: ${{ needs.admit_hosted.outputs.core_id || needs.testnet_apk.outputs.artifact_id }}
+      production_id: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}
+      original_run: ${{ inputs.recover_run }}
+      original_controller: ${{ needs.admit_hosted.outputs.original_controller }}
   hosted_quotes:
     needs: [admit_hosted, preflight, signing_smoke, unsigned, emulator]
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && inputs.hosted && !inputs.preflight_only && !inputs.quote_run && needs.admit_hosted.result == 'success' && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.result == 'success' && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
     permissions:
       actions: read
       contents: read
@@ -386,7 +390,7 @@ jobs:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: python3 .private/promotion.py
   publish:
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || (inputs.quote_run && needs.admit_hosted.outputs.quote_receipt_id != '')) && (needs.hosted_core.result == 'success' || (inputs.recover_run && needs.admit_hosted.result == 'success'))) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != '') && (needs.hosted_core.result == 'success' || needs.admit_hosted.outputs.core_receipt_id != '')) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
     needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, admit_hosted]
     environment: production-signing
     runs-on: ubuntu-24.04
@@ -430,9 +434,9 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         if: inputs.hosted && inputs.recover_run
         with:
-          artifact-ids: ${{ needs.admit_hosted.outputs.core_receipt_id }}
+          artifact-ids: ${{ needs.admit_hosted.outputs.core_receipt_id || needs.hosted_core.outputs.receipt_id }}
           path: hosted-receipts/
-          run-id: ${{ inputs.recover_run }}
+          run-id: ${{ needs.admit_hosted.outputs.core_receipt_id != '' && inputs.recover_run || github.run_id }}
           github-token: ${{ github.token }}
           digest-mismatch: error
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
@@ -440,7 +444,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.admit_hosted.outputs.quote_receipt_id || needs.hosted_quotes.outputs.receipt_id }}
           path: hosted-receipts/
-          run-id: ${{ inputs.quote_run || github.run_id }}
+          run-id: ${{ needs.admit_hosted.outputs.quote_receipt_run || github.run_id }}
           github-token: ${{ github.token }}
           digest-mismatch: error
       - name: Fetch exact hosted candidate objects without checking out its code

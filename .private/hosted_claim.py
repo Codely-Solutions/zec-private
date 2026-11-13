@@ -84,7 +84,14 @@ def main():
                 os.environ['GITHUB_WORKFLOW_REF'].endswith('/.github/workflows/hosted-core.yml@refs/heads/main'),
                 'Rehearsals require the dedicated hosted workflow')
     source = os.environ.get('SOURCE_SHA') or controller
-    verify_promotion_revision(source, controller, ROOT)
+    original = os.environ.get('ORIGINAL_BUILD_CONTROLLER', '')
+    if original:
+        from quote_recovery import verify_delta
+
+        require(not rehearsal, 'Recovery requires the original release candidate')
+        verify_delta(ROOT, source, original, controller)
+    else:
+        verify_promotion_revision(source, controller, ROOT)
     base = json.loads((ROOT / '.private/hosted-fixture.json').read_text())['version_code']
     metadata = Metadata(repo=os.environ['GITHUB_REPOSITORY'])
     version = (rehearsal_version(base, controller, metadata, number=number)

@@ -101,6 +101,16 @@ def run(root, stop):
         provider_errors=[]
         independent_comparisons = 0
         reference_states = []
+        def market_state(state):
+            current = labels(state)
+            if 'kraken' in current:
+                return 'compared'
+            if 'price check unavailable' in current:
+                return 'unavailable'
+            if any('below market reference' in label for label in current):
+                return 'warning'
+            return None
+
         for index in range(3):
             for attempt in range(3):
                 state=click('Get a quote')
@@ -133,19 +143,15 @@ def run(root, stop):
                 state = action('snapshot')
             if 'quote details' in labels(state):
                 state = click('Quote details')
-                if 'kraken' in labels(state):
-                    independent_comparisons += 1
-                    reference_states.append('compared')
-                elif 'price check unavailable' in labels(state):
-                    reference_states.append('unavailable')
-                else:
-                    raise RuntimeError('Independent reference details missing')
-                state = click('Quote details')
-            elif any('below market reference' in label for label in labels(state)):
-                independent_comparisons += 1
-                reference_states.append('warning')
-            else:
-                raise RuntimeError('Independent price assessment did not finish')
+                # The command acknowledges the tap before the expanded Compose nodes settle.
+                deadline = time.monotonic() + 10
+                while market_state(state) is None and time.monotonic() < deadline:
+                    state = action('snapshot')
+            reference = market_state(state)
+            if reference is None:
+                raise RuntimeError('Expanded quote did not expose a supported market result')
+            independent_comparisons += reference in ('compared', 'warning')
+            reference_states.append(reference)
             action('back')
             wait('Get a quote',timeout=15)
             action('assert_quote_dismissed')

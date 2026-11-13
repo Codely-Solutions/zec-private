@@ -137,6 +137,7 @@ def run(session, root, fixture, candidate, result):
     if not report['rehearsal']:
         report['producer'] = json.loads((candidate / 'producer.json').read_text())
         report['production_artifact'] = json.loads((candidate / 'production.json').read_text())
+        report['artifact_run_id'] = int(os.environ.get('ZEC_CORE_ARTIFACT_RUN') or os.environ['GITHUB_RUN_ID'])
     validate_core_sources(report, source, baseline=selected)
     require(report['funding_setup']['claim_requests'] == 1, 'Exactly one hosted faucet claim required')
     result.write_text(json.dumps(report, indent=2) + '\n')
