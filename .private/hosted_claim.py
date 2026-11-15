@@ -30,7 +30,10 @@ def ref_for(value):
 
 
 def reserve(value, metadata, post):
-    ref = ref_for(value)
+    return reserve_ref(ref_for(value), value, metadata, post)
+
+
+def reserve_ref(ref, value, metadata, post):
     controller = value['controller']
     require(metadata.api('/git/ref/heads/main')['object']['sha'] == controller,
             'Main advanced before claim reservation')
@@ -46,15 +49,29 @@ def reserve(value, metadata, post):
 
 
 def verify(value, commit, metadata):
-    require(re.fullmatch(r'[a-f0-9]{40}', commit), 'Exact claim reservation required')
-    live = metadata.api('/git/ref/' + ref_for(value).removeprefix('refs/'))
+    verify_ref(ref_for(value), value, commit, metadata)
+
+
+def verify_ref(ref, value, commit, metadata):
+    require(re.fullmatch(r'[a-f0-9]{40}', commit), 'Exact protected reservation required')
+    live = metadata.api('/git/ref/' + ref.removeprefix('refs/'))
     require(live['object']['sha'] == commit
             and json.loads(metadata.api('/git/commits/' + commit)['message']) == value,
-            'Claim reservation belongs to different inputs')
-    branch = quote(ref_for(value).removeprefix('refs/heads/'), safe='')
+            'Protected reservation belongs to different inputs')
+    verify_ref_rules(ref, metadata)
+
+
+def verify_ref_rules(ref, metadata):
+    branch = quote(ref.removeprefix('refs/heads/'), safe='')
     rules = metadata.api('/rules/branches/' + branch)
     require({'update', 'deletion'} <= {rule['type'] for rule in rules},
-            'Claim reservation is missing its update and deletion protections')
+            'Reservation is missing its update and deletion protections')
+
+
+def post_ref(metadata, path, data):
+    return json.loads(subprocess.check_output(
+        [metadata.gh, 'api', '-X', 'POST', metadata.repo + path, '--input', '-'],
+        input=json.dumps(data), text=True, timeout=30))
 
 
 def rehearsal_version(base, controller, metadata, *, number):
@@ -112,12 +129,7 @@ def main():
                 'Pre-claim failure or reservation changed after admission')
     value = binding(source, controller, version, int(os.environ['GITHUB_RUN_ID']), rehearsal, previous)
 
-    def post(path, data):
-        return json.loads(subprocess.check_output(
-            [metadata.gh, 'api', '-X', 'POST', metadata.repo + path, '--input', '-'],
-            input=json.dumps(data), text=True, timeout=30))
-
-    commit = reserve(value, metadata, post)
+    commit = reserve(value, metadata, lambda path, data: post_ref(metadata, path, data))
     with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as stream:
         stream.write(f'reservation={commit}\nversion={version}\n')
 

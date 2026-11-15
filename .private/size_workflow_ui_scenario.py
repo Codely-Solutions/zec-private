@@ -2,6 +2,7 @@
 import json
 import re
 import time
+from quote_recovery import TRANSIENT_FAILURE
 
 
 def tor_http_failure(before, records):
@@ -176,6 +177,9 @@ def run(root, stop, quote_stage_records):
                     elif 'quote unavailable' in current:
                         messages=[n['text'] for n in state['nodes'] if 'timeout' in n['text'].lower()]
                         if tor_http_failure(previous_quote_stages, quote_stage_records()):
+                            if attempt == 2:
+                                print(TRANSIENT_FAILURE + ' tor_http', flush=True)
+                                raise RuntimeError('Tor HTTP retry budget exhausted')
                             transport_retries += 1
                             print('Retrying unfunded quote after Tor HTTP failure without a response.', flush=True)
                         elif any('25000ms' in message for message in messages):

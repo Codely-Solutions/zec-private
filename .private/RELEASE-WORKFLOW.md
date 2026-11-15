@@ -16,15 +16,29 @@ Use `publish` after the user authorizes releasing the reviewed change. Bind the 
 
 If preparation or recovery changes the SHA, compare the replacement with the approved change and inspect the intervening controller diff. Carry approval forward for the same reviewed release after routine build fixes, version preparation or rebasing onto a compatible controller. Record the comparison, bind the new dispatch to its exact SHA and run the required checks. Get fresh approval if the release scope changes materially, signing or acceptance safeguards change, or the user expressly limits approval to a particular SHA.
 
-For a pre-publication failure, diagnose the affected job and recover the original run where its artifacts are still live and its controller is current. Preserve the claim reservation if funding occurred or is uncertain. For a public APK awaiting verification or recording, use [publication reconciliation](MAINTENANCE.md#signing-and-publication) with the original run ID. Fixture preservation uses the original hosted test pair.
+## Release recovery
 
-If acceptance needs a controller repair, use `custom-release.yml` with `operation=recover`, the original `source_sha` and `recover_run=ORIGINAL_RUN_ID`. Recovery requires successful APK producers, a skipped publisher and live artifacts. Review the controller diff before deploying it. For a quote failure, retain the passing wallet receipt and rerun the quotes on the original emulator APK. If the entire wallet workflow was skipped before reservation or execution, run it once with the original testnet APKs and reuse the original quote receipt when it passed. The signer rechecks the original artifact digests, both acceptance run identities and the protected reservation. The existing release authorization applies.
+Identify the last verified stage and keep the original run, candidate SHA and artifact IDs. Use the original artifacts while their digests and provenance still match.
+
+| Last verified stage | Next action and required evidence |
+| --- | --- |
+| Before a faucet POST | Fix the failed readiness boundary and use the unfunded probe when needed. If the wallet job never ran, recover the original artifacts and reuse its quote receipt if available. If a protected reservation exists, pass the original or failed wallet recovery run as `preclaim_run` after reviewing the newer controller. Admission requires positive no-POST evidence at startup or pre-claim readiness and permits one linked reservation. The original reservation stays protected. |
+| Claim sent or uncertain | Preserve the reservation and reconcile the original claim. If the disposable wallet is gone and acceptance cannot resume, document the cause and prepare a reviewed replacement with an unused version code after correction. |
+| Wallet receipt passed | Recover the quote job against the original emulator APK and wallet receipt. An unchanged controller can retry once when the original job identifies a Tor HTTP transport or independent market timeout. A trusted job creates `testnet-claims/quote-recovery-ORIGINAL_RUN_ID` atomically. Leave it protected so repeated dispatches cannot reuse the retry. For a test/controller defect, review the narrow controller repair first. |
+| APK public | Use [publication reconciliation](MAINTENANCE.md#signing-and-publication) with the original attestation and run. Preserve the original public assets and accepted testnet pair. |
+
+```sh
+gh workflow run custom-release.yml --repo Codely-Solutions/zec-private --ref main -f operation=recover -f source_sha=FULL_REVIEWED_SHA -f recover_run=ORIGINAL_RUN_ID
+gh workflow run custom-release.yml --repo Codely-Solutions/zec-private --ref main -f operation=recover -f source_sha=FULL_REVIEWED_SHA -f recover_run=ORIGINAL_RUN_ID -f preclaim_run=FAILED_WALLET_RUN_ID
+```
+
+Recovery requires successful APK producers, a skipped publisher and live artifacts. The signer rechecks candidate and artifact digests, both acceptance run identities, the funding reservation and, for an unchanged controller, the exact retry reservation. The existing release authorization applies.
 
 If that recovery passes quotes and the signer fails before creating an attestation, diagnose and fix signing, then add `quote_run=PASSING_QUOTE_RUN_ID` to reuse the passing quote receipt. The controller checks that the quote execution inputs match, and signing checks all three run identities. Reconcile an existing public release through its original attestation.
 
 Hosted quote failures report sanitized application stages. The unfunded scenario can retry a Tor HTTP request that ends without a response when the current attempt records the observed runtime failure. Retries stay within the existing per-cycle budget. The receipt requires at least three successful reviews and dismissals and one independent comparison. When the first two comparisons fail, the scenario waits for the provider backoff to clear and allows one extra unfunded quote if needed.
 
-If skipped-wallet recovery reserved funding but its baseline network startup failed before wallet creation or any faucet request, diagnose that boundary with the unfunded transport probe. With positive pre-claim evidence, dispatch recovery with `preclaim_run=FAILED_WALLET_RECOVERY_RUN_ID`. The original reservation remains protected. The new run checks the prior wallet log and reservation, completes quote acceptance first, then may create one linked reservation. A failed or uncertain claim is ineligible.
+For a linked pre-claim recovery, the controller completes quote acceptance before creating the linked reservation.
 
 Pass the named environment secret references when invoking the reusable release workflow. Their values come from `production-signing` and `maintenance-integration` only in the jobs that select those environments. Keep repository-level copies absent.
 
@@ -43,6 +57,8 @@ To expedite an applicable security fix, push the exact reviewed `security-mainte
 The cadence and candidate checks run before [release validation](../.github/workflows/build-release.yml), and signing rechecks eligibility. Admission also checks the private fixture and claim reservation. GitHub enforces Actions storage limits. Secretless jobs build each APK once. Separate hosted guests run the funded testnet lifecycle and unfunded production quote checks. Recovery of an already published release runs independently of the calendar.
 
 The [hosted core workflow](../.github/workflows/hosted-core.yml) verifies the pinned Tor Project Linux Expert Bundle before creating a protected `testnet-claims/release-<versionCode>` ref. The wallet job verifies the staged runtime by artifact ID and checksums. The ref binds the controller, candidate and run. A duplicate ref, ambiguous create response or subsequent attempt cannot authorize another claim. Keep the reservation if funding is uncertain. After a successful wallet job, recover a failed signing job using the original run and live artifacts. An already public release uses [publication reconciliation](MAINTENANCE.md#signing-and-publication).
+
+On the funded guest, the verified baseline pair reports readiness through the app's Tor RPC and a parsed updater response before the faucet POST. The host checks the unfunded marker and firewall counters, stops the probe before the simulated outage, and keeps the installed sender for the funded lifecycle. Use `hosted-acceptance-probe.yml -f test_preclaim=true` to isolate readiness. Add `-f test_transport=true` for the unfunded interruption check on the same pair, or `-f test_recovery_controls=true` to exercise the recovery fixtures and read the live ref protection. These modes have read-only repository access and cannot fund or publish.
 
 The main-only signing job fetches the unsigned APK and the two receipts by artifact ID and rechecks their digests, source, test APK producers, acceptance fingerprints and claim reservation. Independent public verification rechecks the same unsigned artifact. Fixture preservation publishes the original testnet pair to the private registry and updates the hosted baseline after a separate read-back. Its timer can recover a missing fixture from the verified release record and original Actions artifact while that artifact is live.
 

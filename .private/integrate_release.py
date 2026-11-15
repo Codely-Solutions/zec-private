@@ -80,7 +80,7 @@ def main():
     candidate = proof['source_sha']
     root = Path(__file__).resolve().parents[1]
     recovery = proof.get('quote_recovery')
-    if recovery and controller == original:
+    if recovery and controller == original and recovery['original_controller'] != controller:
         base = recovered_candidate_base(candidate, recovery['original_controller'], controller, root)
     else:
         base = integration_base(candidate, controller, original, root)

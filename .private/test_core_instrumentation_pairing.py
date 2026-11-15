@@ -2,10 +2,35 @@
 from pathlib import Path
 import unittest
 from types import SimpleNamespace
-from core_testnet_driver import PACKAGE, RUNNER, instrumentation_role, select_apk_roles, verify_instrumentation_pair
+from unittest.mock import Mock
+from core_testnet_driver import (
+    PACKAGE, RUNNER, claim_after_readiness, instrumentation_role, select_apk_roles,
+    verify_instrumentation_pair, wait_for_preclaim_marker,
+)
 
 
 class CoreInstrumentationPairingTest(unittest.TestCase):
+    def test_missing_or_failed_readiness_never_calls_faucet(self):
+        for marker in (b'{"ready":true,"probe_only":false}', b'{}', b'null', b'incomplete'):
+            with self.subTest(marker=marker):
+                adb = Mock(return_value=SimpleNamespace(returncode=0, stdout=marker))
+                operation = Mock()
+                operation.poll.return_value = 1
+                faucet = Mock()
+
+                def require_readiness():
+                    if not wait_for_preclaim_marker(adb, operation, 1):
+                        raise RuntimeError('preclaim_readiness')
+
+                with self.assertRaisesRegex(RuntimeError, 'preclaim_readiness'):
+                    claim_after_readiness(require_readiness, faucet)
+                faucet.assert_not_called()
+
+    def test_readiness_precedes_the_claim(self):
+        steps = []
+        claim_after_readiness(lambda: steps.append('app Tor ready'), lambda: steps.append('POST'))
+        self.assertEqual(steps, ['app Tor ready', 'POST'])
+
     def test_baseline_and_candidate_roles_are_explicit(self):
         baseline = Path('baseline-ui.apk')
         old_test = Path('baseline-androidTest.apk')

@@ -71,6 +71,7 @@ jobs:
       quote_receipt_run: ${{ steps.admission.outputs.quote_run }}
       run_missing_core: ${{ steps.admission.outputs.run_missing_core }}
       previous_reservation: ${{ steps.admission.outputs.previous_reservation }}
+      same_controller_retry: ${{ steps.admission.outputs.same_controller_retry }}
     permissions:
       actions: read
       contents: read
@@ -372,9 +373,34 @@ jobs:
       original_controller: ${{ needs.admit_hosted.outputs.original_controller }}
       previous_reservation: ${{ needs.admit_hosted.outputs.previous_reservation }}
       preclaim_run: ${{ inputs.preclaim_run }}
+  reserve_quote_retry:
+    needs: [admit_hosted, preflight, signing_smoke]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && inputs.recover_run && !inputs.preflight_only && needs.admit_hosted.outputs.same_controller_retry == 'true' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Reserve the single same-controller retry
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha }}
+          RECOVER_RUN: ${{ inputs.recover_run }}
+          PYTHONPATH: .private
+        run: |
+          python3 -B - <<'PY'
+          import os
+          from quote_recovery import same_controller_retry
+          from release_metadata import Metadata
+          same_controller_retry(os.environ['SOURCE_SHA'], os.environ['GITHUB_SHA'],
+                                os.environ['RECOVER_RUN'], Metadata())
+          PY
   hosted_quotes:
-    needs: [admit_hosted, preflight, signing_smoke, unsigned, emulator]
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && inputs.hosted && !inputs.preflight_only && !inputs.preclaim_run && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.result == 'success' && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
+    needs: [admit_hosted, preflight, signing_smoke, unsigned, emulator, reserve_quote_retry]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && inputs.hosted && !inputs.preflight_only && !inputs.preclaim_run && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.result == 'success' && (needs.admit_hosted.outputs.same_controller_retry != 'true' || (github.run_attempt == 1 && needs.reserve_quote_retry.result == 'success')) && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
     permissions:
       actions: read
       contents: read

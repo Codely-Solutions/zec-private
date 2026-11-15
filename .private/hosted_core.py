@@ -83,7 +83,8 @@ def run(session, root, fixture, candidate, result):
         build_input_fingerprint=input_fingerprint(source, profile='core-build'))
     prepared = prepare(apks, root, SDK)
     try:
-        lifecycle(session.adb, root, apks, manifest, transport_only=bool(upgrade_probe), upgrade_probe=upgrade_probe)
+        lifecycle(session.adb, root, apks, manifest, transport_only=bool(upgrade_probe), upgrade_probe=upgrade_probe,
+                  preclaim_check=not upgrade_probe)
     except Exception:
         report = root / 'core-testnet-result.json'
         if report.exists():

@@ -61,8 +61,36 @@ def verify_instrumentation_pair(adb, expected_version, expected_hash):
     return dict(app_version_code=expected_version, executed_sha256=installed_hash, installed_hash_verified=True)
 
 
-def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False, upgrade_probe=None):
+def wait_for_preclaim_marker(adb, operation, timeout):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        marker = adb('shell', 'run-as', PACKAGE, 'cat', 'files/core-sync-ready.json',
+                     timeout=10, check=False)
+        if marker.returncode == 0:
+            try:
+                ready = json.loads(marker.stdout)
+            except json.JSONDecodeError:
+                # The guest may still be writing the marker.
+                pass
+            else:
+                return isinstance(ready, dict) and ready.get('ready') is True and ready.get('probe_only') is True
+        if operation.poll() is not None:
+            break
+        time.sleep(.5)
+    return False
+
+
+def claim_after_readiness(check_readiness, submit_claim):
+    if check_readiness is not None:
+        check_readiness()
+    return submit_claim()
+
+
+def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False, upgrade_probe=None,
+        preclaim_check=False, preclaim_only=False):
     started = time.monotonic()
+    if preclaim_only and (not transport_only or upgrade_probe or repeat_cold_start):
+        raise ValueError('Pre-claim validation requires the unfunded baseline pair')
     if upgrade_probe and (upgrade_probe not in ('restore', 'transport') or not transport_only or repeat_cold_start):
         raise ValueError('The upgrade probe requires its own unfunded advancing APK pair')
     if transport_only and not upgrade_probe:
@@ -103,15 +131,16 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
     active_instrumentation={}
     operation_lock=threading.Lock()
 
-    def stage(name, timeout=700):
+    def stage(name, timeout=700, *, readiness_only=False):
         nonlocal current_stage
-        current_stage = name
+        current_stage = 'preclaim_readiness' if readiness_only else name
         if time.monotonic() - started > 1600:
             raise RuntimeError('Core acceptance total deadline exhausted')
-        role = instrumentation_role(name)
+        role = 'baseline' if readiness_only else instrumentation_role(name)
         expected = pairing[role]
         verify_instrumentation_pair(adb, expected['app_version_code'], expected['executed_sha256'])
-        pairing['stages'][name] = dict(role=role, **expected, installed_hash_verified=True)
+        if not readiness_only:
+            pairing['stages'][name] = dict(role=role, **expected, installed_hash_verified=True)
         adb('logcat','-c',timeout=15)
         command=adb.command_base+['shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
                      'co.electriccoin.zcash.app.CoreWalletAcceptance', '-e', 'isolatedTestnet',
@@ -119,7 +148,13 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         timeout_seconds=min(timeout,max(1,1700-int(time.monotonic()-started)))
         operation=subprocess.Popen(command,env=adb.environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         with operation_lock:active_instrumentation[name]=operation
+        ready = False
         try:
+            if readiness_only:
+                ready = wait_for_preclaim_marker(adb, operation, timeout_seconds)
+                # Stop at the existing unfunded marker, before the host requests an outage.
+                adb('shell', 'am', 'force-stop', PACKAGE, timeout=15)
+                timeout_seconds = 15
             stdout,stderr=operation.communicate(timeout=timeout_seconds)
             result=subprocess.CompletedProcess(command,operation.returncode,stdout,stderr)
         except BaseException:
@@ -137,15 +172,18 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         thread_logs=adb('logcat','-d','-v','threadtime','-t','2000','--uid='+str(app_uid),timeout=15).stdout.decode(errors='replace')
         application_pids.update(int(match[1]) for match in re.finditer(r'^\S+\s+\S+\s+(\d+)\s+\d+\s+[A-Z]\s+',thread_logs,re.M))
         if sum(map(len,markers))>8192:raise RuntimeError('Safe core markers exceed bound')
+        if readiness_only and ready:
+            print('CORE_PRECLAIM: app Tor RPC and updater metadata ready', flush=True)
+            return
         output+='\n'+'\n'.join(markers)
         direct = re.findall(r'^INSTRUMENTATION_STATUS: zec_core_receipt=(\{[^\r\n]+\})\s*$', output, re.MULTILINE)
         # Published upgrade fixtures predate the instrumentation receipt channel.
         legacy = [line.split('CORE_RESULT ', 1)[1] for line in output.splitlines() if 'CORE_RESULT {' in line]
         rows = [json.loads(row) for row in (direct or legacy)]
-        if result.returncode or 'OK (1 test)' not in output or len(rows) != 1 or rows[0].get('stage') != name or rows[0].get('passed') is not True:
+        if readiness_only or result.returncode or 'OK (1 test)' not in output or len(rows) != 1 or rows[0].get('stage') != name or rows[0].get('passed') is not True:
             # Keep only class/line locations and explicit safe assertions; never raw test output.
             safe = [line[:240] for line in output.splitlines() if re.search(r'CoreWalletAcceptance.kt:\d+|^java\.lang\.|^kotlinx\.coroutines\.|Faucet claim HTTP \d+', line)]
-            diagnostic=dict(stage=name,lines=safe[-12:], result_channel=dict(
+            diagnostic=dict(stage=current_stage,lines=safe[-12:], result_channel=dict(
                 exit_code=result.returncode, junit_passed='OK (1 test)' in output,
                 direct_receipts=len(direct), legacy_receipts=len(legacy)))
             diagnostic['sync']=[json.loads(line.split(' ',1)[1]) for line in markers if line.startswith('CORE_SYNC_DIAGNOSTIC ')][-8:]
@@ -176,7 +214,7 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 crash=adb('logcat','-b','crash','-d','-t','80',timeout=15,check=False)
                 diagnostic['pre_wallet_crash']=crash.stdout.decode(errors='replace')[-10000:]
             (root/'core-testnet-diagnostic.json').write_text(json.dumps(diagnostic))
-            raise RuntimeError('Core test stage failed: ' + name)
+            raise RuntimeError('Core test stage failed: ' + current_stage)
         if name in ('fund', 'upgrade', 'send', 'restart', 'restore'):
             stages[name] = rows[0]
         if name=='sender':report['sync_preflight']=rows[0]
@@ -243,6 +281,30 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
     def write_fixture(value):
         subprocess.run(adb.command_base+['shell',"run-as "+PACKAGE+" sh -c 'cat > files/core-private.json'"],
                        input=json.dumps(value).encode(),env=adb.environment,capture_output=True,check=True,timeout=15)
+
+    def check_preclaim():
+        nonlocal current_stage
+        current_stage = 'preclaim_readiness'
+        marker = 'files/core-sync-ready.json'
+        shell('run-as', PACKAGE, 'rm', '-f', marker)
+        try:
+            stage('transportProbe', 180, readiness_only=True)
+            check_denials('preclaim_readiness')
+            report['preclaim_readiness'] = dict(passed=True, route='app-tor', role='baseline')
+        finally:
+            shell('run-as', PACKAGE, 'rm', '-f', marker)
+
+    def claim_funding(fund_testnet):
+        nonlocal current_stage
+        private = json.loads(adb('shell', 'run-as', PACKAGE, 'cat', 'files/core-private.json', timeout=15).stdout)
+        if private.get('claimAttempted'):
+            raise RuntimeError('Funding was already attempted; automatic re-claim forbidden')
+        private['claimAttempted'] = True
+        write_fixture(private)
+        current_stage = 'funding_setup'
+        # The funding helper receives only the public test address.
+        report['funding_setup'] = fund_testnet(private['senderAddress'])
+        return private
 
     firewall = False
     try:
@@ -358,6 +420,11 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             stage('sender',240)
             check_denials('sender')
             report['faucet_claims'] = 0
+            if preclaim_only or preclaim_check:
+                check_preclaim()
+            if preclaim_only:
+                finish_network_check('preclaim_readiness', transport_exercised=False)
+                return
             if upgrade_probe:
                 shell('am','force-stop',PACKAGE)
                 adb('install','-r',str(candidate),timeout=90)
@@ -378,13 +445,8 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 clear_wallet()
                 stage('sender',240)
                 check_denials('sender')
-                private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15).stdout)
-                if private.get('claimAttempted'):raise RuntimeError('Funding was already attempted; automatic re-claim forbidden')
-                private['claimAttempted']=True
-                write_fixture(private)
-                current_stage='funding_setup'
-                # Only the public test address enters this helper; it never sees seeds.
-                report['funding_setup']=fund_testnet(private['senderAddress'])
+                private = claim_after_readiness(check_preclaim if preclaim_check else None,
+                                                lambda: claim_funding(fund_testnet))
             private.update(fundingTxId=report['funding_setup']['txid'],fundingProvider=report['funding_setup']['provider'])
             write_fixture(private)
             # App Tor must reconnect through the enforced relay set; refusal is safe.

@@ -34,15 +34,17 @@ trap cleanup EXIT
 image=$(PYTHONPATH=.private python3 -B -c 'import sys; from emulator_session import prepare_image; print(prepare_image(sys.argv[1], environ={}))' "$scratch/image-input" | tail -n1)
 test -f "$image/system.img"
 transport=${ZEC_HOSTED_TRANSPORT_PROBE:-false}
+preclaim=${ZEC_HOSTED_PRECLAIM_PROBE:-false}
 quotes=${ZEC_HOSTED_QUOTE_DIR:-}
 core=${ZEC_HOSTED_CORE_DIR:-}
 execution=()
-if [[ "$transport" == true || -n "$quotes" || -n "$core" ]]; then
+if [[ "$transport" == true || "$preclaim" == true || -n "$quotes" || -n "$core" ]]; then
   # Live work uses an ephemeral hosted VM and the maintained app Tor scenarios.
   [[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_ENVIRONMENT:-}" == github-hosted ]]
   [[ "$transport" != true || -n "${ZEC_HOSTED_FIXTURE_DIR:-}" ]]
   [[ "$transport" != true || -z "$quotes" ]]
-  [[ -z "$core" || ( "$transport" == false && -z "$quotes" && -n "${ZEC_HOSTED_FIXTURE_DIR:-}" ) ]]
+  [[ "$preclaim" != true || ( -z "$quotes" && -n "${ZEC_HOSTED_FIXTURE_DIR:-}" ) ]]
+  [[ -z "$core" || ( "$transport" == false && "$preclaim" == false && -z "$quotes" && -n "${ZEC_HOSTED_FIXTURE_DIR:-}" ) ]]
 else
   sudo ip netns add "$namespace"
   created=true
@@ -54,6 +56,7 @@ fi
 "${execution[@]}" env \
   ANDROID_HOME="$ANDROID_HOME" JAVA_HOME="${JAVA_HOME:-/usr}" CODEX_GUARD_OUTPUT="$scratch" CODEX_EMULATOR_IMAGE="$image" \
   ZEC_HOSTED_FIXTURE_DIR="${ZEC_HOSTED_FIXTURE_DIR:-}" ZEC_HOSTED_TRANSPORT_PROBE="$transport" \
+  ZEC_HOSTED_PRECLAIM_PROBE="$preclaim" \
   ZEC_HOSTED_QUOTE_DIR="$quotes" ZEC_HOSTED_CORE_DIR="$core" \
   PYTHONPATH=.private python3 -B - <<'PY'
 import os
@@ -62,8 +65,9 @@ from emulator_session import EmulatorSession, SDK
 
 root = Path(os.environ['CODEX_GUARD_OUTPUT'])
 transport = os.environ['ZEC_HOSTED_TRANSPORT_PROBE'] == 'true'
+preclaim = os.environ['ZEC_HOSTED_PRECLAIM_PROBE'] == 'true'
 core = os.environ['ZEC_HOSTED_CORE_DIR']
-with EmulatorSession(root / 'session', guest_memory=3072 if transport or core else 1536) as session:
+with EmulatorSession(root / 'session', guest_memory=3072 if transport or preclaim or core else 1536) as session:
     assert session.adb('shell', 'getprop', 'ro.product.cpu.abi').stdout.strip() == b'x86_64'
     assert session.adb('shell', 'getprop', 'ro.build.version.sdk').stdout.strip() == b'35'
     quotes = os.environ['ZEC_HOSTED_QUOTE_DIR']
@@ -86,7 +90,7 @@ with EmulatorSession(root / 'session', guest_memory=3072 if transport or core el
         app, test = [Path(shutil.copyfile(source / name, root / name))
                      for name in ('baseline-ui.apk', 'baseline-androidTest.apk')]
         prepared = prepare((app, test), root, SDK)
-        if transport:
+        if transport or preclaim:
             manifest = dict(input_fingerprint=None, runtime_input_fingerprint=None, build_input_fingerprint=None,
                 baseline_source_sha=binding['source_sha'], build_source_sha=binding['source_sha'],
                 baseline_version_code=version, candidate_version_code=version,
@@ -97,6 +101,7 @@ with EmulatorSession(root / 'session', guest_memory=3072 if transport or core el
                                                     apk_sha256=binding['instrumentation_apk_sha256']))
             try:
                 run(session.adb, root, (app, test), manifest, transport_only=True,
+                    preclaim_only=preclaim and not transport, preclaim_check=preclaim,
                     repeat_cold_start=os.environ.get('ZEC_REPEAT_COLD_START') == 'true')
             except Exception:
                 result_path = root / 'core-testnet-result.json'
@@ -113,7 +118,8 @@ with EmulatorSession(root / 'session', guest_memory=3072 if transport or core el
                                                              'fatal error', 'crash report')):
                         print(line[:240], flush=True)
                 raise
-            print('Native Tor interruption and recovery passed with zero faucet claims or valid transaction submissions.')
+            outcome = 'Native Tor interruption and recovery' if transport else 'Pre-claim app Tor readiness'
+            print(outcome + ' passed with zero faucet claims or valid transaction submissions.')
         else:
             session.adb('install', '-r', str(app), timeout=90)
             session.adb('install', '-r', '-t', str(test), timeout=90)

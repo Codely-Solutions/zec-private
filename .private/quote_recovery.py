@@ -1,6 +1,7 @@
 """Resume an interrupted custom release on its original build."""
 import os
 import re
+import subprocess
 
 from custom_release import OPERATOR_ID, REPOSITORY, WORKFLOW, require_dispatch, verify_custom_child
 from maintenance_cadence import git
@@ -20,6 +21,33 @@ ARTIFACTS = {
     'production_id': 'validated-unsigned-apk', 'core_id': 'core-testnet-candidate',
     'quote_id': 'isolated-ui-repro-apk', 'core_receipt_id': 'hosted-core-receipt',
 }
+TRANSIENT_FAILURE = 'HOSTED_QUOTE_FAILURE transient'
+
+
+def require_transient_quote_failure(metadata, job):
+    log = subprocess.check_output([metadata.gh, 'api', '--allow-escape-sequences',
+                                   metadata.repo + f'/actions/jobs/{int(job["id"])}/logs'], timeout=30)
+    marker = rb'(?:[0-9TZ:.-]+ )?' + re.escape(TRANSIENT_FAILURE.encode()) + rb' (?:tor_http|market_timeout)'
+    require(len(log) <= 1024**2 and sum(bool(re.fullmatch(marker, line)) for line in log.splitlines()) == 1,
+            'Original quote job did not prove a transient failure')
+
+
+def same_controller_retry(source, controller, original_run, metadata, *, signing=False):
+    from hosted_claim import post_ref, reserve_ref, verify_ref, verify_ref_rules
+
+    require(re.fullmatch(r'[1-9][0-9]*', original_run) and os.environ['GITHUB_RUN_ATTEMPT'] == '1',
+            'Same-controller quote retry requires the initial dispatch and exact original run')
+    run = int(os.environ['GITHUB_RUN_ID'])
+    require(run > 0 and run != int(original_run), 'Expected a separate quote recovery run')
+    ref = 'refs/heads/testnet-claims/quote-recovery-' + original_run
+    value = dict(kind='quote-recovery', source=source, controller=controller,
+                 original_run=int(original_run), run=run)
+    if signing:
+        commit = metadata.api('/git/ref/' + ref.removeprefix('refs/'))['object']['sha']
+        verify_ref(ref, value, commit, metadata)
+    else:
+        verify_ref_rules(ref, metadata)
+        reserve_ref(ref, value, metadata, lambda path, data: post_ref(metadata, path, data))
 
 
 def verify_delta(root, source, original, controller):
@@ -44,7 +72,14 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
             and run['actor']['id'] == OPERATOR_ID and run['status'] == 'completed'
             and run['conclusion'] in ('failure', 'success') and re.fullmatch(r'[a-f0-9]{40}', original),
             'Expected the original trusted custom run before publication')
-    verify_delta(root, source, original, controller)
+    same = original == controller
+    if same:
+        require(run['run_attempt'] == 1 and os.environ['GITHUB_RUN_ATTEMPT'] == '1'
+                and not preclaim_run and not quote_run,
+                'Same-controller recovery is limited to one original quote failure')
+        verify_custom_child(source, original, root)
+    else:
+        verify_delta(root, source, original, controller)
     jobs = metadata.pages(f'/actions/runs/{run_id}/attempts/{run["run_attempt"]}/jobs', 'jobs')
     required = {'build / admit_hosted': 'success', 'build / unsigned': 'success', 'build / emulator': 'success',
                 'build / testnet_apk / testnet': 'success', 'build / publish': 'skipped'}
@@ -55,17 +90,21 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
                 'Original job did not reach the required boundary: ' + name)
     missing_core = any(job['name'] == 'build / hosted_core' and job['conclusion'] == 'skipped'
                        and job['run_id'] == int(run_id) and job['head_sha'] == original for job in jobs)
+    original_preclaim = preclaim_run == run_id
     states = {job['name']: job['conclusion'] for job in jobs
               if job['run_id'] == int(run_id) and job['head_sha'] == original}
     quote_result = states.get('build / hosted_quotes / quote-cycles')
     artifacts = metadata.pages(f'/actions/runs/{run_id}/artifacts', 'artifacts')
     outputs = {'original_controller': original}
     expected_artifacts = dict(ARTIFACTS)
-    if missing_core:
-        require(not any(job['name'].startswith('build / hosted_core /') for job in jobs)
-                and not any(row['name'] == 'hosted-core-receipt' for row in artifacts)
+    if missing_core or original_preclaim:
+        require(not same, 'Same-controller recovery requires a passing original wallet receipt')
+        require(not any(row['name'] == 'hosted-core-receipt' for row in artifacts)
                 and not quote_run and quote_result in ('success', 'failure'),
-                'Skipped-wallet recovery requires no previous wallet execution or receipt')
+                'Wallet recovery requires no previous wallet receipt')
+        if not original_preclaim:
+            require(not any(job['name'].startswith('build / hosted_core /') for job in jobs),
+                    'Skipped-wallet recovery requires no previous wallet execution')
         from hosted_claim import PREFIX
         from release_inputs import version_code
 
@@ -89,12 +128,20 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
                 'Original job did not reach the required boundary: wallet')
         require(quote_result == 'failure' and run['conclusion'] == 'failure',
                 'Original job did not reach the required boundary: quote failure')
+        if same:
+            matching = [job for job in jobs if job['name'] == 'build / hosted_quotes / quote-cycles'
+                        and job['run_id'] == int(run_id) and job['head_sha'] == original]
+            require(len(matching) == 1, 'Expected exactly one original quote job')
+            require_transient_quote_failure(metadata, matching[0])
+            outputs['same_controller_retry'] = 'true'
     for key, name in expected_artifacts.items():
         matching = [row for row in artifacts if row['name'] == name]
         require(len(matching) == 1, 'Expected one original artifact: ' + name)
         outputs[key] = str(artifact(metadata, matching[0]['id'], name, run_id, original)['id'])
     if quote_run:
         outputs.update(resolve_quotes(root, source, controller, original, quote_run, metadata))
+    if signing and same:
+        same_controller_retry(source, controller, run_id, metadata, signing=True)
     return outputs
 
 
@@ -103,7 +150,7 @@ def unused_reservation(root, source, controller, original_run, original, prior_r
     from release_inputs import version_code
     import subprocess
 
-    require(re.fullmatch(r'[1-9][0-9]*', prior_run) and prior_run != original_run,
+    require(re.fullmatch(r'[1-9][0-9]*', prior_run),
             'Exact prior pre-claim run required')
     run = metadata.api('/actions/runs/' + prior_run)
     prior = run['head_sha']
@@ -114,7 +161,10 @@ def unused_reservation(root, source, controller, original_run, original, prior_r
             and re.fullmatch(r'[a-f0-9]{40}', prior) and prior != controller
             and git(root, 'merge-base', prior, controller).decode().strip() == prior,
             'Prior pre-claim run does not match the trusted recovery controller')
-    verify_delta(root, source, original, prior)
+    if prior_run == original_run:
+        require(prior == original, 'Original pre-claim run has a different controller')
+    else:
+        verify_delta(root, source, original, prior)
     jobs = metadata.pages(f'/actions/runs/{prior_run}/attempts/1/jobs', 'jobs')
     wallet = None
     for name, conclusion in (('build / admit_hosted', 'success'), ('build / hosted_core / reserve', 'success'),
@@ -127,8 +177,11 @@ def unused_reservation(root, source, controller, original_run, original, prior_r
             wallet = matching[0]['id']
     log = subprocess.check_output([metadata.gh, 'api', '--allow-escape-sequences',
                                    metadata.repo + f'/actions/jobs/{int(wallet)}/logs'], timeout=30)
-    require(len(log) <= 1024**2 and b'Hosted lifecycle failed at networkTargets, claim state no-POST' in log
-            and b'CORE_STAGE recipient passed' not in log and b'CORE_STAGE sender passed' not in log,
+    startup_failed = (b'Hosted lifecycle failed at networkTargets, claim state no-POST' in log
+                      and b'CORE_STAGE recipient passed' not in log and b'CORE_STAGE sender passed' not in log)
+    readiness_failed = (b'Hosted lifecycle failed at preclaim_readiness, claim state no-POST' in log
+                        and b'CORE_STAGE sender passed' in log)
+    require(len(log) <= 1024**2 and (startup_failed or readiness_failed) and b'CORE_STAGE fund passed' not in log,
             'Prior wallet did not prove failure before any funding request')
     value = binding(source, prior, version_code(root, source), int(prior_run), False)
     commit = metadata.api('/git/ref/' + ref_for(value).removeprefix('refs/'))['object']['sha']

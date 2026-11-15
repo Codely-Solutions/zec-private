@@ -6,7 +6,10 @@ import unittest
 from unittest.mock import Mock, patch
 
 import hosted_release
-from quote_recovery import ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, resolve, resolve_quotes, unused_reservation, verify_delta
+from quote_recovery import (
+    ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, require_transient_quote_failure,
+    resolve, resolve_quotes, same_controller_retry, unused_reservation, verify_delta,
+)
 from size_workflow_ui_scenario import tor_http_failure
 from tor_resident_ui_driver import quote_stage_records
 
@@ -15,6 +18,83 @@ SOURCE, OLD, MAIN = 'a' * 40, 'b' * 40, 'c' * 40
 
 
 class QuoteRecoveryTests(unittest.TestCase):
+    def test_transient_failure_requires_one_exact_trusted_marker(self):
+        metadata = Mock(gh='gh', repo='repos/' + REPOSITORY)
+        marker = b'2026-11-15T12:00:00.000Z HOSTED_QUOTE_FAILURE transient tor_http\n'
+        for log in (b'PHASE1_SCENARIO_FAILED: HOSTED_QUOTE_FAILURE transient tor_http\n',
+                    marker + marker, marker.replace(b'tor_http', b'unknown')):
+            with patch('quote_recovery.subprocess.check_output', return_value=log):
+                with self.assertRaisesRegex(ValueError, 'did not prove'):
+                    require_transient_quote_failure(metadata, {'id': 9})
+        with patch('quote_recovery.subprocess.check_output', return_value=marker):
+            require_transient_quote_failure(metadata, {'id': 9})
+
+    def test_same_controller_reservation_is_atomic_and_signer_checks_the_run(self):
+        metadata = Mock()
+        commit = 'e' * 40
+        ref = 'refs/heads/testnet-claims/quote-recovery-7'
+        commits = {}
+        refs = {}
+
+        def api(path):
+            if path == '/git/ref/heads/main':
+                return {'object': {'sha': MAIN}}
+            if path == '/git/commits/' + MAIN:
+                return {'tree': {'sha': 'f' * 40}}
+            if path.startswith('/rules/branches/'):
+                return [{'type': 'update'}, {'type': 'deletion'}]
+            if path == '/git/commits/' + commit:
+                return commits[commit]
+            return {'object': {'sha': refs[ref]}}
+
+        def post(_metadata, path, data):
+            if path == '/git/commits':
+                if not commits:
+                    commits[commit] = data
+                return {'sha': commit}
+            if data['ref'] in refs:
+                raise RuntimeError('Reference already exists')
+            refs[data['ref']] = data['sha']
+            return {'ref': data['ref'], 'object': {'sha': data['sha']}}
+
+        metadata.api.side_effect = api
+        with patch('hosted_claim.post_ref', side_effect=post), \
+                patch.dict(os.environ, {'GITHUB_RUN_ID': '8', 'GITHUB_RUN_ATTEMPT': '1'}):
+            same_controller_retry(SOURCE, MAIN, '7', metadata)
+            same_controller_retry(SOURCE, MAIN, '7', metadata, signing=True)
+            with patch.dict(os.environ, {'GITHUB_RUN_ID': '9'}):
+                with self.assertRaisesRegex(RuntimeError, 'already exists'):
+                    same_controller_retry(SOURCE, MAIN, '7', metadata)
+                with self.assertRaisesRegex(ValueError, 'different inputs'):
+                    same_controller_retry(SOURCE, MAIN, '7', metadata, signing=True)
+            with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '2'}):
+                with self.assertRaisesRegex(ValueError, 'initial dispatch'):
+                    same_controller_retry(SOURCE, MAIN, '7', metadata)
+
+    def test_same_controller_admission_reuses_exact_original_artifact_ids(self):
+        original = dict(id=7, path=WORKFLOW, event='workflow_dispatch', head_branch='main',
+                        head_sha=MAIN, head_repository={'full_name': REPOSITORY}, actor={'id': OPERATOR_ID},
+                        status='completed', conclusion='failure', run_attempt=1)
+        states = {'build / admit_hosted': 'success', 'build / unsigned': 'success', 'build / emulator': 'success',
+                  'build / testnet_apk / testnet': 'success', 'build / hosted_core / wallet': 'success',
+                  'build / hosted_quotes / quote-cycles': 'failure', 'build / publish': 'skipped'}
+        metadata = Mock()
+        metadata.api.return_value = original
+        metadata.pages.side_effect = [
+            [dict(id=i, name=name, conclusion=state, run_id=7, head_sha=MAIN)
+             for i, (name, state) in enumerate(states.items())],
+            [dict(id=i, name=name) for i, name in enumerate(ARTIFACTS.values(), 1)],
+        ]
+        with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '1'}), \
+                patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_custom_child'), \
+                patch('quote_recovery.require_transient_quote_failure') as failure, \
+                patch.object(hosted_release, 'artifact', side_effect=lambda _, i, *args: {'id': i}) as artifact:
+            result = resolve(Path('.'), SOURCE, MAIN, '7', metadata)
+            self.assertEqual(result, dict(original_controller=MAIN, same_controller_retry='true',
+                                          production_id='1', core_id='2', quote_id='3', core_receipt_id='4'))
+            self.assertEqual({(call.args[3], call.args[4]) for call in artifact.call_args_list}, {('7', MAIN)})
+            self.assertEqual(failure.call_args.args[1]['name'], 'build / hosted_quotes / quote-cycles')
+
     def test_quote_retry_uses_only_the_current_request_without_an_http_response(self):
         def record(time, stage, error, status):
             return (f'1794751000.{time}  1457  2181 I SwapQuoteStage: stage={stage} '
@@ -50,7 +130,10 @@ class QuoteRecoveryTests(unittest.TestCase):
                     ('build / publish', 'skipped')), 1)]
         metadata.pages.return_value = jobs
         safe = b'Hosted lifecycle failed at networkTargets, claim state no-POST'
-        for log, error in ((safe, None), (b'no-POST', 'did not prove'),
+        preclaim = b'CORE_STAGE sender passed\nHosted lifecycle failed at preclaim_readiness, claim state no-POST'
+        for log, error in ((safe, None), (preclaim, None), (b'no-POST', 'did not prove'),
+                           (preclaim.replace(b'no-POST', b'uncertain'), 'did not prove'),
+                           (preclaim + b'\nCORE_STAGE fund passed', 'did not prove'),
                            (safe + b'\nCORE_STAGE sender passed', 'did not prove')):
             metadata.api.side_effect = [run, {'object': {'sha': reservation}}]
             with self.subTest(error=error), patch('quote_recovery.git', return_value=prior.encode()), \
@@ -63,6 +146,11 @@ class QuoteRecoveryTests(unittest.TestCase):
                 else:
                     self.assertEqual(unused_reservation(Path('.'), SOURCE, MAIN, '7', OLD, '8', metadata), reservation)
                     self.assertEqual(verify.call_args.args[0]['run'], 8)
+        metadata.api.side_effect = [run, {'object': {'sha': reservation}}]
+        with patch('quote_recovery.git', return_value=prior.encode()), \
+                patch('release_inputs.version_code', return_value=42), patch('hosted_claim.verify'), \
+                patch('quote_recovery.subprocess.check_output', return_value=preclaim):
+            self.assertEqual(unused_reservation(Path('.'), SOURCE, MAIN, '8', prior, '8', metadata), reservation)
 
     def test_skipped_wallet_reuses_original_builds_and_passing_quotes(self):
         run = dict(id=7, path=WORKFLOW, event='workflow_dispatch', head_branch='main', head_sha=OLD,

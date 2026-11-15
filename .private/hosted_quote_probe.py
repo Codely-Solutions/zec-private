@@ -69,6 +69,7 @@ def stage_quote_apk(root, tag):
 
 def run(session, root, fixture):
     from emulator_session import SDK
+    from quote_recovery import TRANSIENT_FAILURE
     from strip_emulator_apk import prepare
     from tor_resident_ui_driver import run as quote_scenario
 
@@ -101,6 +102,8 @@ def run(session, root, fixture):
                                              receipt['dismissals']) >= 3
             and scenario['recipientNetworkMismatchBlocked'] is True and scenario['correctedWithoutLeavingForm'] is True,
             'Required hosted quote cycles and correction missing')
+    if scenario['independentComparisons'] == 0 and safe and set(safe) == {'timeout'}:
+        print(TRANSIENT_FAILURE + ' market_timeout', flush=True)
     require(scenario['independentComparisons'] > 0, 'No independent price comparison passed in the hosted quote cycles')
     if 'source' in manifest:
         from acceptance_policy import input_fingerprint, validate_quotes
