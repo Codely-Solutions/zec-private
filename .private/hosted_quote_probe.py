@@ -99,8 +99,9 @@ def run(session, root, fixture):
         print('Market failure categories: ' + json.dumps(safe[-8:]), flush=True)
     require(receipt['passed'] is True and min(receipt['quoteRequests'], receipt['quoteReviewsVerified'],
                                              receipt['dismissals']) >= 3
-            and scenario['recipientNetworkMismatchBlocked'] is True and scenario['correctedWithoutLeavingForm'] is True
-            and scenario['independentComparisons'] > 0, 'Required hosted quote cycles and correction missing')
+            and scenario['recipientNetworkMismatchBlocked'] is True and scenario['correctedWithoutLeavingForm'] is True,
+            'Required hosted quote cycles and correction missing')
+    require(scenario['independentComparisons'] > 0, 'No independent price comparison passed in the hosted quote cycles')
     if 'source' in manifest:
         from acceptance_policy import input_fingerprint, validate_quotes
         source = manifest['source']

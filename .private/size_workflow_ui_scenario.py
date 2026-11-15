@@ -159,7 +159,9 @@ def run(root, stop, quote_stage_records):
                 return 'warning'
             return None
 
-        for index in range(3):
+        for index in range(4):
+            if index == 3 and independent_comparisons:
+                break
             for attempt in range(3):
                 previous_quote_stages = set(quote_stage_records())
                 state=click('Get a quote')
@@ -212,9 +214,9 @@ def run(root, stop, quote_stage_records):
             action('back')
             wait('Get a quote',timeout=15)
             action('assert_quote_dismissed')
-            # A transport failure can leave the provider in a 60-second backoff.
-            # Let that window clear once so all three cycles don't reuse one failure.
-            if index == 0 and reference == 'unavailable' and stop.wait(61):
+            # Try a second quote while partial observations from a timeout are fresh.
+            # If both miss, clear any provider backoff before the final two checks.
+            if index == 1 and independent_comparisons == 0 and stop.wait(61):
                 raise InterruptedError('UI driver stopped')
         back('More')
         click('More','More...')
@@ -226,7 +228,7 @@ def run(root, stop, quote_stage_records):
         action('assert_text',text='Advanced Settings')
         action('assert_text',text='About')
         action('assert_text',text="What's New")
-        result={'passed':True,'freshIsolatedWallet':True,'quotesReviewedAndDismissed':3,
+        result={'passed':True,'freshIsolatedWallet':True,'quotesReviewedAndDismissed':len(reference_states),
                 'providerTimeouts':provider_errors,'excludedSettingsAbsent':True,'settingsLabels':sorted(current),
                 'dismissalAction':'Android back; return to same form verified',
                 'recipientNetworkMismatchBlocked':True,'correctedWithoutLeavingForm':True,'fundsTransferred':False}
