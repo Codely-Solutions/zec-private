@@ -1,6 +1,20 @@
 """One resident UiAutomation instrumentation session; no repeated UI-dump JVMs."""
 import os,socket,json,time,re,subprocess,threading
 
+
+def quote_stage_records(adb):
+    observed = adb('shell', 'logcat', '-d', '-v', 'epoch', '-t', '3000',
+                   'SwapQuoteStage:I', '*:S', timeout=15, check=False)
+    records = {}
+    for line in observed.stdout.decode(errors='replace').splitlines():
+        match = re.fullmatch(
+            r'\s*\d+\.\d+\s+\d+\s+\d+\s+I\s+SwapQuoteStage:\s+'
+            r'(stage=[A-Z_]+ elapsedMs=\d+ exception=[A-Za-z0-9_$]+ status=(?:none|\d{3}))', line)
+        if match:
+            records[line] = match[1]
+    return records
+
+
 def run(adb, root, apks, manifest):
     if manifest['package']!='com.personal.zecprivate.foss.debug':
         raise ValueError('Only the isolated debug wallet package is supported')
@@ -53,9 +67,11 @@ def run(adb, root, apks, manifest):
         if manifest.get('phase1Scenario'):
             if manifest.get('sizeWorkflowScenario'):
                 from size_workflow_ui_scenario import run as run_scenario
+                args = (root, scenario_stop, lambda: quote_stage_records(adb))
             else:
                 from phase1_ui_scenario import run as run_scenario
-            scenario_thread=threading.Thread(target=run_scenario,args=(root,scenario_stop),daemon=True)
+                args = (root, scenario_stop)
+            scenario_thread=threading.Thread(target=run_scenario,args=args,daemon=True)
             scenario_thread.start()
         deadline=time.monotonic()+1000
         while time.monotonic()<deadline:
@@ -172,9 +188,7 @@ def run(adb, root, apks, manifest):
         try:adb('forward','--remove','tcp:'+str(bridge_port),timeout=10,check=False)
         except (OSError,subprocess.TimeoutExpired):pass
         try:
-            observed=adb('shell','logcat','-d','-v','raw','-t','3000','SwapQuoteStage:I','*:S',timeout=15,check=False)
-            lines=[line for line in observed.stdout.decode(errors='replace').splitlines() if re.fullmatch(
-                r'stage=[A-Z_]+ elapsedMs=\d+ exception=[A-Za-z0-9_$]+ status=(?:none|\d{3})',line)]
+            lines = list(quote_stage_records(adb).values())
             diagnostic=dict(lines=lines[-80:])
         except (OSError,subprocess.SubprocessError) as error:
             diagnostic=dict(diagnostic_error_class=type(error).__name__)

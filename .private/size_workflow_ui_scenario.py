@@ -1,9 +1,17 @@
 """Fresh-wallet unfunded size/workflow quote acceptance inside the guarded emulator Job."""
 import json
+import re
 import time
 
 
-def run(root, stop):
+def tor_http_failure(before, records):
+    latest_request = next((stage for key, stage in reversed(records.items())
+                           if key not in before and stage.startswith('stage=HTTP_REQUEST ')), '')
+    return re.fullmatch(r'stage=HTTP_REQUEST elapsedMs=\d+ exception=RuntimeException status=none',
+                        latest_request) is not None
+
+
+def run(root, stop, quote_stage_records):
     sequence=0
 
     def read_state():
@@ -135,6 +143,7 @@ def run(root, stop):
         if any('choose a recipient on' in label for label in labels(state)):
             raise RuntimeError('Corrected recipient validation remained stale')
         provider_errors=[]
+        transport_retries = 0
         independent_comparisons = 0
         reference_states = []
         def market_state(state):
@@ -149,6 +158,7 @@ def run(root, stop):
 
         for index in range(3):
             for attempt in range(3):
+                previous_quote_stages = set(quote_stage_records())
                 state=click('Get a quote')
                 deadline=time.monotonic()+180
                 while time.monotonic()<deadline:
@@ -160,16 +170,19 @@ def run(root, stop):
                         break
                     elif 'quote unavailable' in current:
                         messages=[n['text'] for n in state['nodes'] if 'timeout' in n['text'].lower()]
-                        # Retry this observed upstream timeout only. Other errors require diagnosis.
-                        if not messages or not any('25000ms' in m for m in messages):
+                        if tor_http_failure(previous_quote_stages, quote_stage_records()):
+                            transport_retries += 1
+                            print('Retrying unfunded quote after Tor HTTP failure without a response.', flush=True)
+                        elif any('25000ms' in message for message in messages):
+                            provider_errors.append({'cycle':index+1,'attempt':attempt+1,'messages':messages})
+                        else:
                             raise RuntimeError('Unexpected provider quote failure')
-                        provider_errors.append({'cycle':index+1,'attempt':attempt+1,'messages':messages})
                         click('Edit swap','Get a quote')
                         if stop.wait(15):raise InterruptedError('UI driver stopped')
                         break
                     if stop.wait(.5):raise InterruptedError('UI driver stopped')
                 if 'review quote' in labels(state):break
-            else:raise RuntimeError('Provider timeout retry budget exhausted')
+            else:raise RuntimeError('Quote transport retry budget exhausted')
             if 'review quote' not in labels(state):raise RuntimeError('Quote response deadline exceeded')
             action('assert_text',text='Review Quote')
             state=action('snapshot')
@@ -214,7 +227,8 @@ def run(root, stop):
                 'providerTimeouts':provider_errors,'excludedSettingsAbsent':True,'settingsLabels':sorted(current),
                 'dismissalAction':'Android back; return to same form verified',
                 'recipientNetworkMismatchBlocked':True,'correctedWithoutLeavingForm':True,'fundsTransferred':False}
-        result.update(independentComparisons=independent_comparisons, referenceStates=reference_states)
+        result.update(independentComparisons=independent_comparisons, referenceStates=reference_states,
+                      torHttpRetries=transport_retries)
         (root/'phase1-scenario-result.json').write_text(json.dumps(result,indent=2)+'\n')
         action('finish')
     except Exception as error:

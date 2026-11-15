@@ -89,6 +89,7 @@ def run(session, root, fixture):
     print(json.dumps(dict(quote_reviews=receipt['quoteReviewsVerified'], dismissals=receipt['dismissals'],
                           independent_comparisons=scenario['independentComparisons'],
                           reference_states=scenario['referenceStates'],
+                          tor_http_retries=scenario['torHttpRetries'],
                           tor_enabled=receipt['torOptInVerified'], funded=False)), flush=True)
     if scenario['independentComparisons'] == 0:
         logs = session.adb('logcat', '-d', '-v', 'raw', '-t', '3000', timeout=15, check=False)

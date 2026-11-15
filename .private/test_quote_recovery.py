@@ -7,12 +7,36 @@ from unittest.mock import Mock, patch
 
 import hosted_release
 from quote_recovery import ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, resolve, resolve_quotes, unused_reservation, verify_delta
+from size_workflow_ui_scenario import tor_http_failure
+from tor_resident_ui_driver import quote_stage_records
 
 
 SOURCE, OLD, MAIN = 'a' * 40, 'b' * 40, 'c' * 40
 
 
 class QuoteRecoveryTests(unittest.TestCase):
+    def test_quote_retry_uses_only_the_current_request_without_an_http_response(self):
+        def record(time, stage, error, status):
+            return (f'1794751000.{time}  1457  2181 I SwapQuoteStage: stage={stage} '
+                    f'elapsedMs=12302 exception={error} status={status}\n')
+
+        stale = record('111', 'HTTP_REQUEST', 'RuntimeException', 'none')
+        transport_error = record('222', 'HTTP_REQUEST', 'RuntimeException', 'none')
+        rejection = record('333', 'HTTP_REQUEST', 'ClientRequestException', '400')
+        bad_data = record('444', 'RESPONSE_DECODE', 'RuntimeException', 'none')
+        adb = Mock()
+
+        def collect(log):
+            adb.return_value.stdout = log.encode()
+            return quote_stage_records(adb)
+
+        before = set(collect(stale))
+        self.assertTrue(tor_http_failure(before, collect(stale + transport_error)))
+        self.assertFalse(tor_http_failure(before, collect(stale + bad_data)))
+        self.assertFalse(tor_http_failure(before, collect(stale + transport_error + rejection)))
+        self.assertEqual(list(collect(stale + 'unrelated log\n').values()),
+                         ['stage=HTTP_REQUEST elapsedMs=12302 exception=RuntimeException status=none'])
+
     def test_linked_reservation_requires_positive_pre_wallet_failure_evidence(self):
         prior = 'd' * 40
         reservation = 'e' * 40
