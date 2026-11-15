@@ -1,9 +1,10 @@
 """Read release inputs from the selected immutable source revision."""
+import argparse
 import json
 import re
 import subprocess
 from pathlib import Path
-from release_metadata import require
+from release_metadata import Metadata, next_release_version, require, reserved_release_versions, wallet_release_versions
 
 
 def git(source, *args):
@@ -30,3 +31,29 @@ def version_code(source, sha):
     match = re.search(r'^ZCASH_VERSION_CODE=(\d+)$', git(source, 'show', sha + ':gradle.properties'), re.M)
     require(match is not None, 'Source versionCode required')
     return int(match[1])
+
+
+def replacement_version(root, abandoned_code, metadata):
+    from sync import version
+
+    controller = git(root, 'rev-parse', 'HEAD')
+    require(metadata.api('/git/ref/heads/main')['object']['sha'] == controller,
+            'Select current protected main before preparing a replacement')
+    reservations = reserved_release_versions(metadata)
+    current_code = version_code(root, controller)
+    require(abandoned_code > current_code and (0, abandoned_code) in reservations,
+            'Expected a reserved, unpublished version above current main')
+    upstream = json.loads(git(root, 'show', controller + ':.private/upstream.json'))
+    revision = json.loads(git(root, 'show', controller + ':.private/release-revision.json'))['private_revision']
+    versions = wallet_release_versions(metadata.api('/releases?per_page=100', paginated=True))
+    require(all(code < abandoned_code for _, code in versions), 'A published version supersedes the abandoned code')
+    next_revision, next_code = next_release_version(versions + reservations, revision, current_code,
+                                                     version(upstream['tag'])[3])
+    return dict(private_revision=next_revision, version_code=next_code, controller=controller)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Suggest a version for a reviewed replacement release')
+    parser.add_argument('--replacement-of', type=int, required=True, help='Abandoned reserved Android version code')
+    args = parser.parse_args()
+    print(json.dumps(replacement_version(Path(__file__).resolve().parents[1], args.replacement_of, Metadata())))

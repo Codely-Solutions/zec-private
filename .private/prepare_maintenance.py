@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 from maintenance_watch import REPOSITORY, WRAPPER_PROPERTIES, api, verified_wrapper
-from release_metadata import Metadata, next_release_version, require, wallet_release_versions
+from release_metadata import Metadata, next_release_version, require, reserved_release_versions, wallet_release_versions
 from refresh_source import main as refresh_source
 from sync import version
 
@@ -38,9 +38,7 @@ def prepare_security(review, controller, metadata):
     revisions = wallet_release_versions(metadata.api('/releases?per_page=100', paginated=True))
     # A distinct expedited fix can advance past an existing routine claim.
     # Its own retries reuse the prepared branch and the original reservation.
-    reservations = metadata.api('/git/matching-refs/heads/testnet-claims/release-')
-    revisions.extend((0, int(match[1])) for row in reservations
-                     if (match := re.fullmatch(r'refs/heads/testnet-claims/release-([1-9][0-9]*)', row['ref'])))
+    revisions.extend(reserved_release_versions(metadata))
     revision, code = next_release_version(revisions, json.loads(revision_path.read_bytes())['private_revision'],
                                          state['versionCode'], version(state['tag'])[3])
     properties = ROOT / 'gradle.properties'

@@ -1,7 +1,7 @@
 """No-network controller tests, including an actual disposable upstream worktree."""
 import importlib.util,json,os,re,subprocess,tempfile,unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 spec=importlib.util.spec_from_file_location('sync',Path(__file__).with_name('sync.py'))
 sync=importlib.util.module_from_spec(spec);spec.loader.exec_module(sync)
@@ -77,6 +77,23 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(next_release_version(versions, 21, 3234021, 1), (24, 4000001))
         with self.assertRaisesRegex(ValueError, 'outside reviewed bounds'):
             next_release_version(versions, 999, 3234021, 1)
+
+    def test_reviewed_replacement_skips_reserved_versions(self):
+        from release_inputs import replacement_version
+
+        controller = 'a' * 40
+        metadata = Mock()
+        metadata.api.side_effect = [
+            {'object': {'sha': controller}},
+            [{'ref': 'refs/heads/testnet-claims/' + name} for name in (
+                'release-3234027', 'release-3234027-preclaim-recovery', 'release-3234028',
+                'rehearsal-9000000', 'quote-recovery-9000001')],
+            [[{'tag_name': 'v3.19.0-private.26', 'body': 'Android versionCode: 3234026'}]],
+        ]
+        with patch('release_inputs.git', side_effect=[controller, 'ZCASH_VERSION_CODE=3234026',
+                                                    '{"tag":"3.19.0-3234"}', '{"private_revision":26}']):
+            self.assertEqual(replacement_version(sync.ROOT, 3234027, metadata),
+                             dict(controller=controller, private_revision=27, version_code=3234029))
 
     def release(self,tag,published='2026-11-04T00:00:00Z',**extra):
         return dict(tag_name=tag,published_at=published,draft=False,prerelease=False,

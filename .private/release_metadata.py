@@ -25,6 +25,12 @@ def next_release_version(versions, current_revision, current_code, upstream_buil
     return revision, code
 
 
+def reserved_release_versions(metadata):
+    refs = metadata.api('/git/matching-refs/heads/testnet-claims/release-')
+    pattern = r'refs/heads/testnet-claims/release-([1-9][0-9]*)(?:-preclaim-recovery)?'
+    return sorted({(0, int(match[1])) for row in refs if (match := re.fullmatch(pattern, row['ref']))})
+
+
 class Metadata:
     def __init__(self, repo="Codely-Solutions/zec-private", gh=GH, seconds=180):
         require(re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo), "Invalid repository")
