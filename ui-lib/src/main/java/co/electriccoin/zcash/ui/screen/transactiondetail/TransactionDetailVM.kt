@@ -557,51 +557,45 @@ class TransactionDetailVM(
                                 }
                             }
                         } else {
-                            if (transaction is SendTransaction.Failed) {
-                                when (data.metadata.swapMetadata.mode) {
-                                    EXACT_INPUT -> stringRes(R.string.swapStatus_swapFailed)
-                                    EXACT_OUTPUT -> stringRes(R.string.swapStatus_paymentFailed)
-                                    FLEX_INPUT -> throw UnsupportedOperationException("FLEX_INPUT not supported")
+                            val swapStatus =
+                                data.metadata.swapMetadata.outgoingStatus(transaction, data.swap?.status?.status)
+                            when (data.metadata.swapMetadata.mode) {
+                                EXACT_INPUT -> {
+                                    when (swapStatus) {
+                                        PROCESSING,
+                                        PENDING -> stringRes(R.string.swapStatus_swapping)
+
+                                        INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
+
+                                        SUCCESS -> stringRes(R.string.swapStatus_swapped)
+
+                                        REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
+
+                                        FAILED -> stringRes(R.string.swapStatus_swapFailed)
+
+                                        EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
+                                    }
                                 }
-                            } else {
-                                when (data.metadata.swapMetadata.mode) {
-                                    EXACT_INPUT -> {
-                                        when (data.metadata.swapMetadata.status) {
-                                            PROCESSING,
-                                            PENDING -> stringRes(R.string.swapStatus_swapping)
 
-                                            INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
+                                EXACT_OUTPUT -> {
+                                    when (swapStatus) {
+                                        PROCESSING,
+                                        PENDING -> stringRes(R.string.swapStatus_paying)
 
-                                            SUCCESS -> stringRes(R.string.swapStatus_swapped)
+                                        INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_paymentIncomplete)
 
-                                            REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
+                                        SUCCESS -> stringRes(R.string.swapStatus_paid)
 
-                                            FAILED -> stringRes(R.string.swapStatus_swapFailed)
+                                        REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
 
-                                            EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
-                                        }
+                                        FAILED -> stringRes(R.string.swapStatus_paymentFailed)
+
+                                        EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
                                     }
+                                }
 
-                                    EXACT_OUTPUT -> {
-                                        when (data.metadata.swapMetadata.status) {
-                                            PROCESSING,
-                                            PENDING -> stringRes(R.string.swapStatus_paying)
-
-                                            INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_paymentIncomplete)
-
-                                            SUCCESS -> stringRes(R.string.swapStatus_paid)
-
-                                            REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
-
-                                            FAILED -> stringRes(R.string.swapStatus_paymentFailed)
-
-                                            EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
-                                        }
-                                    }
-
-                                    FLEX_INPUT -> {
-                                        throw UnsupportedOperationException("FLEX_INPUT not supported")
-                                    }
+                                FLEX_INPUT -> {
+                                    throw UnsupportedOperationException("FLEX_INPUT not supported")
                                 }
                             }
                         }

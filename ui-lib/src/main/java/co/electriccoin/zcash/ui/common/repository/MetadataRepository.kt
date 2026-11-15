@@ -425,9 +425,22 @@ data class TransactionSwapMetadata(
     val origin: SimpleSwapAsset,
     val destination: SimpleSwapAsset,
     val mode: SwapMode,
-    val status: SwapStatus,
+    val recordedStatus: SwapStatus?,
     val amountOutFormatted: BigDecimal,
-)
+) {
+    val status: SwapStatus
+        get() = recordedStatus ?: SwapStatus.SUCCESS
+
+    internal fun outgoingStatus(transaction: SendTransaction, liveStatus: SwapStatus? = null): SwapStatus {
+        val settlement = liveStatus ?: recordedStatus
+        // An explicit settlement can outlive a stale local funding transaction state.
+        return if (transaction is SendTransaction.Failed && settlement != SwapStatus.SUCCESS) {
+            SwapStatus.FAILED
+        } else {
+            settlement ?: status
+        }
+    }
+}
 
 internal fun SwapMetadataV3.toBusinessObject(
     simpleSwapAssetProvider: SimpleSwapAssetProvider
@@ -451,7 +464,7 @@ internal fun SwapMetadataV3.toBusinessObject(
             } else {
                 SwapMode.FLEX_INPUT
             },
-        status = status ?: SwapStatus.SUCCESS,
+        recordedStatus = status,
         amountOutFormatted = amountOutFormatted ?: BigDecimal(0),
         provider = provider,
         totalFees = totalFees,
