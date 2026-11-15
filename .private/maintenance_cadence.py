@@ -7,6 +7,8 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 from release_metadata import require
 
@@ -15,6 +17,10 @@ REVIEW = '.private/security-maintenance.json'
 PATCH = '.private/security-maintenance.patch'
 MARKER = '.private/maintenance-candidate.json'
 WALLET_TAG = re.compile(r'v\d+\.\d+\.\d+-private\.[1-9]\d*')
+REVIEWED_SDK_BLOCK = ('3.20.0-3807', '168d3c3dbe4bf202adea0c1e7cc68953f42f0e59')
+REQUIRED_SDK_VERSION = '8.0.0'
+SDK_ARTIFACTS = ('zcash-android-sdk', 'zcash-android-backend', 'zcash-android-sdk-incubator', 'lightwallet-client')
+SDK_REPOSITORY = 'https://repo.maven.apache.org/maven2/com/zodl/android'
 
 
 def window(now=None):
@@ -46,6 +52,27 @@ def routine_window(root, metadata, now=None):
                 continue
         return None
     return cutoff
+
+
+def defer_for_sdk(tag, upstream_api):
+    reviewed_tag, reviewed_commit = REVIEWED_SDK_BLOCK
+    if tag != reviewed_tag or upstream_api(f'repos/zodl-inc/zodl-android/commits/{tag}')['sha'] != reviewed_commit:
+        return False
+    for artifact in SDK_ARTIFACTS:
+        for extension in ('pom', 'aar'):
+            name = f'{artifact}-{REQUIRED_SDK_VERSION}.{extension}'
+            url = f'{SDK_REPOSITORY}/{artifact}/{REQUIRED_SDK_VERSION}/{name}'
+            try:
+                with urlopen(Request(url, method='HEAD'), timeout=10) as response:
+                    require(response.status == 200 and response.geturl() == url,
+                            'Unexpected Maven Central SDK artifact response')
+            except HTTPError as error:
+                with error:
+                    if error.code != 404 or error.url != url:
+                        raise
+                print(f'Upstream {tag} remains queued. Maven Central has not published {name}.')
+                return True
+    return False
 
 
 def security_review(root, metadata, advisory_api):
@@ -181,7 +208,7 @@ def main():
     current = json.loads((root / '.private/upstream.json').read_bytes())['tag']
     latest = sync.discover()
     if latest and sync.version(latest['tag_name']) > sync.version(current):
-        print(f"Stable upstream {latest['tag_name']} is available for maintenance selection.")
+        print(f"Discovered stable upstream {latest['tag_name']}.")
     review = security_review(root, metadata, api)
     if review:
         source = prepare_security(review, controller, metadata)
@@ -196,7 +223,8 @@ def main():
     if latest and datetime.fromisoformat(latest['published_at']) > cutoff:
         latest = sync.discover(cutoff)
     proposal, head = os.environ['PROPOSAL'], os.environ['PROPOSAL_HEAD']
-    if latest and sync.version(latest['tag_name']) > sync.version(current):
+    if (latest and sync.version(latest['tag_name']) > sync.version(current)
+            and not defer_for_sdk(latest['tag_name'], sync.gh)):
         wrapper = None
         if proposal:
             wrapper = (*verified_wrapper(metadata.repo, int(proposal), controller, head, metadata.api('')['id']), head)

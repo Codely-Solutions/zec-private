@@ -5,7 +5,8 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
+from urllib.error import HTTPError
 
 import maintenance_cadence as cadence
 
@@ -26,6 +27,74 @@ def release(date):
 
 
 class CadenceTest(unittest.TestCase):
+    def test_sdk_deferral_requires_the_reviewed_tag_and_exact_missing_artifact(self):
+        tag, commit = cadence.REVIEWED_SDK_BLOCK
+        api = Mock(return_value={'sha': commit})
+        failure = None
+
+        def central(request, *, timeout):
+            self.assertEqual(request.get_method(), 'HEAD')
+            self.assertEqual(timeout, 10)
+            self.assertIn('/8.0.0/', request.full_url)
+            if failure and request.full_url.endswith(failure[0]):
+                raise HTTPError(request.full_url, failure[1], 'fixture', {}, None)
+            response = Mock(status=200)
+            response.geturl.return_value = request.full_url
+            manager = MagicMock()
+            manager.__enter__.return_value = response
+            return manager
+
+        with patch('maintenance_cadence.urlopen', side_effect=central) as maven:
+            self.assertFalse(cadence.defer_for_sdk('3.20.1-3808', api))
+            api.assert_not_called()
+            api.return_value = {'sha': SHA}
+            self.assertFalse(cadence.defer_for_sdk(tag, api))
+            maven.assert_not_called()
+            api.return_value = {'sha': commit}
+            self.assertFalse(cadence.defer_for_sdk(tag, api))
+            self.assertEqual(maven.call_count, 2 * len(cadence.SDK_ARTIFACTS))
+            failure = ('lightwallet-client-8.0.0.aar', 404)
+            self.assertTrue(cadence.defer_for_sdk(tag, api))
+            failure = ('lightwallet-client-8.0.0.aar', 503)
+            with self.assertRaises(HTTPError):
+                cadence.defer_for_sdk(tag, api)
+
+    def test_reviewed_sdk_deferral_leaves_due_gradle_proposal_independent(self):
+        tag, _ = cadence.REVIEWED_SDK_BLOCK
+        latest = dict(tag_name=tag, published_at='2026-11-12T07:52:42Z')
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            state = root / '.private/upstream.json'
+            state.parent.mkdir()
+            state.write_text('{"tag":"3.19.0-3234"}')
+            with patch.dict(os.environ, {'PROPOSAL': '7', 'PROPOSAL_HEAD': SHA, 'GITHUB_SHA': SHA,
+                                         'GITHUB_EVENT_NAME': 'schedule'}), \
+                    patch('sync.ROOT', root), patch('sync.discover', return_value=latest), \
+                    patch('maintenance_cadence.security_review', return_value=None), \
+                    patch('maintenance_cadence.routine_window', return_value=None) as window, \
+                    patch('maintenance_cadence.defer_for_sdk', return_value=True) as deferred, \
+                    patch('prepare_maintenance.prepare', return_value=SHA) as wrapper, \
+                    patch('maintenance_watch.verified_wrapper', return_value=('9.9.2', 'verified properties')), \
+                    patch('release_metadata.Metadata'), patch('sync.main') as upstream, patch('sync.output') as output:
+                cadence.main()
+                deferred.assert_not_called()
+                wrapper.assert_not_called()
+                window.return_value = cadence.FIRST_WINDOW
+                cadence.main()
+                upstream.assert_not_called()
+                wrapper.assert_called_once_with('7', SHA, SHA)
+                output.assert_called_once_with(source_sha=SHA)
+                with patch.dict(os.environ, {'PROPOSAL': ''}):
+                    cadence.main()
+                wrapper.assert_called_once()
+                output.assert_called_once()
+                deferred.return_value = False
+                upstream.side_effect = RuntimeError('Critical upstream changes require review')
+                with self.assertRaisesRegex(RuntimeError, 'Critical upstream changes'):
+                    cadence.main()
+                upstream.assert_called_once_with(latest, ('9.9.2', 'verified properties', SHA))
+                wrapper.assert_called_once()
+
     def test_window_rollover_missed_poll_and_one_routine_publication(self):
         metadata = Mock()
         metadata.api.return_value = [[]]
