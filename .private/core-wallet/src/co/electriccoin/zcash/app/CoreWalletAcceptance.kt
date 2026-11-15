@@ -69,6 +69,7 @@ import org.json.JSONArray
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 import java.io.File
+import java.io.IOException
 import java.lang.reflect.Proxy
 
 /** Exercises the installed app graph. No mocks, SDK-only wallet, or mainnet spending. */
@@ -464,10 +465,20 @@ class CoreWalletAcceptance {
             check(beforeBalance == 0L && !fixture().has("fundingTxId")) { "Probe requires an unfunded fixture" }
             null
         } else fixture().getString("fundingTxId")
+        mark("wallet_ready_before_outage")
         val endpoint = dependency<PersistableWalletProvider>().requirePersistableWallet().endpoint
         requireEndpointReady(original, "before_outage")
+        mark("endpoint_ready_before_outage")
         val updates = dependency<AppUpdateRepository>()
-        val updateBefore = updates.readLatestRelease()
+        val updateBefore = try {
+            updates.readLatestRelease()
+        } catch (_: IOException) {
+            // The read is public metadata routed through the same app Tor path.
+            mark("updater_read_before_outage_retry")
+            delay(2_000)
+            updates.readLatestRelease()
+        }
+        mark("updater_read_before_outage_succeeded")
         // Resolve public endpoint DNS before the host starts its 35-second DROP window.
         val bulkAddress = withContext(kotlinx.coroutines.Dispatchers.IO) {
             java.net.InetSocketAddress(endpoint.host, endpoint.port).also { check(!it.isUnresolved) }
