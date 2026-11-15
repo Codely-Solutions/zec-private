@@ -146,9 +146,6 @@ jobs:
           ZEC_HOSTED_PRECLAIM_PROBE: ${{ inputs.test_preclaim }}
           ZEC_REPEAT_COLD_START: ${{ inputs.cold_start_diagnostics }}
         run: |
-          if [[ ! -x "$ANDROID_HOME/build-tools/36.0.0/zipalign" ]]; then
-            timeout 180 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'build-tools;36.0.0'
-          fi
           ZEC_HOSTED_FIXTURE_DIR="$RUNNER_TEMP/zec-hosted-pair" bash .private/hosted_emulator_smoke.sh
       - if: always()
         run: rm -rf -- "$RUNNER_TEMP/zec-hosted-pair"

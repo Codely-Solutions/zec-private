@@ -82,14 +82,14 @@ with EmulatorSession(root / 'session', guest_memory=3072 if transport or preclai
         import json
         import shutil
         from core_testnet_driver import run, verify_instrumentation_pair
-        from strip_emulator_apk import prepare
 
         source = Path(fixture)
         binding = json.loads((source / 'fixture-binding.json').read_text())
         version = binding['version_code']
         app, test = [Path(shutil.copyfile(source / name, root / name))
                      for name in ('baseline-ui.apk', 'baseline-androidTest.apk')]
-        prepared = prepare((app, test), root, SDK)
+        # The private registry contains the original matching debug-signed pair.
+        # A single-pair probe installs those bytes directly.
         if transport or preclaim:
             manifest = dict(input_fingerprint=None, runtime_input_fingerprint=None, build_input_fingerprint=None,
                 baseline_source_sha=binding['source_sha'], build_source_sha=binding['source_sha'],
@@ -123,7 +123,7 @@ with EmulatorSession(root / 'session', guest_memory=3072 if transport or preclai
         else:
             session.adb('install', '-r', str(app), timeout=90)
             session.adb('install', '-r', '-t', str(test), timeout=90)
-            verify_instrumentation_pair(session.adb, version, prepared[test.name]['testedSha256'])
+            verify_instrumentation_pair(session.adb, version, binding['instrumentation_apk_sha256'])
             print('Installed verified x86_64 testnet app and instrumentation. No wallet or funds created.')
 assert session.cleanup == {'emulatorExited': True, 'privatePortsClosed': True}
 print('API 35 x86_64 guest stopped and closed all owned ports.')
