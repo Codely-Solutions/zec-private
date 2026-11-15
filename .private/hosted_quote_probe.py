@@ -75,7 +75,15 @@ def run(session, root, fixture):
     manifest = json.loads((fixture/'quote-manifest.json').read_text())
     apks = [fixture/name for name in ('quotes.apk', 'ui-bridge.apk')]
     prepared = prepare(apks, root, SDK)
-    quote_scenario(session.adb, root, apks, manifest)
+    try:
+        quote_scenario(session.adb, root, apks, manifest)
+    except RuntimeError:
+        # The driver retains only stage, elapsed time, exception class and HTTP status.
+        # Surface that evidence before the hosted guest and its files are discarded.
+        diagnostics = root/'quote-stages.json'
+        if diagnostics.is_file():
+            print('Quote request stages: ' + diagnostics.read_text().strip(), flush=True)
+        raise
     receipt = json.loads((root/'tor-ui-result.json').read_text())
     scenario = receipt['phase1Scenario']
     print(json.dumps(dict(quote_reviews=receipt['quoteReviewsVerified'], dismissals=receipt['dismissals'],
