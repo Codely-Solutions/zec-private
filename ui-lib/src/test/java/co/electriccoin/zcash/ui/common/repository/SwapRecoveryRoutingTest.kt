@@ -20,6 +20,7 @@ import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SwapRecoveryRoutingTest {
@@ -70,6 +71,7 @@ class SwapRecoveryRoutingTest {
         assertEquals(RecoveryReference(ProviderId("near"), 1, "synthetic-deposit"), business.requireNearRecovery())
         assertEquals(SwapMode.EXACT_INPUT, business.mode)
         assertEquals(SwapStatus.SUCCESS, business.status)
+        assertNull(business.recordedStatus)
         assertEquals(BigDecimal.ZERO, business.amountOutFormatted)
         assertEquals("zec", business.origin.tokenTicker)
         assertEquals("btc", business.destination.tokenTicker)

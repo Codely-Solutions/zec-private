@@ -163,27 +163,21 @@ class ActivityMapper {
                         }
                     }
                 } else {
-                    if (transaction is SendTransaction.Failed) {
-                        when (data.metadata.swapMetadata.mode) {
-                            EXACT_INPUT, FLEX_INPUT -> R.drawable.ic_transaction_send_failed
-                            EXACT_OUTPUT -> R.drawable.ic_transaction_pay_failed
-                        }
-                    } else {
-                        when (data.metadata.swapMetadata.mode) {
-                            EXACT_INPUT, FLEX_INPUT -> {
-                                when (data.metadata.swapMetadata.status) {
-                                    INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_send_pending
-                                    SUCCESS -> R.drawable.ic_transaction_sent
-                                    EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_send_failed
-                                }
+                    val status = data.metadata.swapMetadata.outgoingStatus(transaction)
+                    when (data.metadata.swapMetadata.mode) {
+                        EXACT_INPUT, FLEX_INPUT -> {
+                            when (status) {
+                                INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_send_pending
+                                SUCCESS -> R.drawable.ic_transaction_sent
+                                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_send_failed
                             }
+                        }
 
-                            EXACT_OUTPUT -> {
-                                when (data.metadata.swapMetadata.status) {
-                                    INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_paying
-                                    SUCCESS -> R.drawable.ic_transaction_paid
-                                    EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_pay_failed
-                                }
+                        EXACT_OUTPUT -> {
+                            when (status) {
+                                INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_paying
+                                SUCCESS -> R.drawable.ic_transaction_paid
+                                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_pay_failed
                             }
                         }
                     }
@@ -246,43 +240,37 @@ class ActivityMapper {
                         }
                     }
                 } else {
-                    if (transaction is SendTransaction.Failed) {
-                        when (data.metadata.swapMetadata.mode) {
-                            EXACT_INPUT, FLEX_INPUT -> stringRes(R.string.swapStatus_swapFailed)
-                            EXACT_OUTPUT -> stringRes(R.string.swapStatus_paymentFailed)
-                        }
-                    } else {
-                        when (data.metadata.swapMetadata.mode) {
-                            EXACT_INPUT, FLEX_INPUT -> {
-                                when (data.metadata.swapMetadata.status) {
-                                    INCOMPLETE_DEPOSIT,
-                                    PROCESSING,
-                                    PENDING -> stringRes(R.string.transaction_history_swapping)
+                    val status = data.metadata.swapMetadata.outgoingStatus(transaction)
+                    when (data.metadata.swapMetadata.mode) {
+                        EXACT_INPUT, FLEX_INPUT -> {
+                            when (status) {
+                                INCOMPLETE_DEPOSIT,
+                                PROCESSING,
+                                PENDING -> stringRes(R.string.transaction_history_swapping)
 
-                                    SUCCESS -> stringRes(R.string.swapStatus_swapped)
+                                SUCCESS -> stringRes(R.string.swapStatus_swapped)
 
-                                    REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
+                                REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
 
-                                    FAILED -> stringRes(R.string.swapStatus_swapFailed)
+                                FAILED -> stringRes(R.string.swapStatus_swapFailed)
 
-                                    EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
-                                }
+                                EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
                             }
+                        }
 
-                            EXACT_OUTPUT -> {
-                                when (data.metadata.swapMetadata.status) {
-                                    INCOMPLETE_DEPOSIT,
-                                    PROCESSING,
-                                    PENDING -> stringRes(R.string.transaction_history_paying)
+                        EXACT_OUTPUT -> {
+                            when (status) {
+                                INCOMPLETE_DEPOSIT,
+                                PROCESSING,
+                                PENDING -> stringRes(R.string.transaction_history_paying)
 
-                                    SUCCESS -> stringRes(R.string.swapStatus_paid)
+                                SUCCESS -> stringRes(R.string.swapStatus_paid)
 
-                                    REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
+                                REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
 
-                                    FAILED -> stringRes(R.string.swapStatus_paymentFailed)
+                                FAILED -> stringRes(R.string.swapStatus_paymentFailed)
 
-                                    EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
-                                }
+                                EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
                             }
                         }
                     }
@@ -383,12 +371,8 @@ class ActivityMapper {
                             }
                         }
 
-                        data.transaction is SendTransaction.Failed -> {
-                            StringResourceColor.NEGATIVE
-                        }
-
                         else -> {
-                            when (data.metadata.swapMetadata.status) {
+                            when (data.metadata.swapMetadata.outgoingStatus(data.transaction)) {
                                 INCOMPLETE_DEPOSIT,
                                 PENDING,
                                 SUCCESS,
