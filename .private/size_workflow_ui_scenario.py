@@ -47,8 +47,8 @@ def run(root, stop, quote_stage_records):
     def labels(state):
         return {n['text'].casefold() for n in state.get('nodes',[]) if n.get('text')}
 
-    def wait_for_quote_form(timeout=60, retry_catalog=False):
-        deadline = time.monotonic() + timeout
+    def wait_for_quote_form(retry_catalog=False):
+        deadline = time.monotonic() + (120 if retry_catalog else 60)
         retried = False
         scrolls = 0
         known = {'from', 'to', 'loading', 'loading…', 'try again', 'get a quote', 'processing',
@@ -66,9 +66,12 @@ def run(root, stop, quote_stage_records):
             if retry_catalog and not retried and retry:
                 action('click_text', text='Try again')
                 retried = True
-            elif scrolls < 2 and {'from', 'to'} <= current and not current & {'loading', 'loading…', 'try again'}:
+                print('Retried the swap catalog through the visible Try again action.', flush=True)
+            elif scrolls < 2 and 'try again' not in current and (
+                    'unexpected error' in current or
+                    ({'from', 'to'} <= current and not current & {'loading', 'loading…'})):
                 # The amount field receives focus on entry. Scroll the form to
-                # expose its footer when the keyboard shortens the viewport.
+                # expose its footer even if amount or balance rows still say Loading.
                 try:
                     action('scroll')
                 except RuntimeError as error:
