@@ -1,12 +1,16 @@
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+import zipfile
 
 import hosted_release
 from hosted_core import network_startup_diagnostics
+from hosted_quote_probe import stage_quote_apk
 from quote_recovery import (
     ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, require_transient_quote_failure,
     resolve, resolve_quotes, same_controller_retry, unused_reservation, verify_delta,
@@ -38,6 +42,32 @@ class QuoteRecoveryTests(unittest.TestCase):
                                       frames=['cash.z.ecc.android.sdk.Test.get(Test.kt:40)'],
                                       resolved_targets=True, causes=['tls'],
                                       native=[dict(probe_stage='latest_height', sdk_code=3200)]))
+
+    def test_published_quote_probe_uses_hosted_build_run_after_recovery(self):
+        buffer = io.BytesIO()
+        binary = b'fake quote APK'
+        with zipfile.ZipFile(buffer, 'w') as archive:
+            archive.writestr('app.apk', binary)
+            archive.writestr('source-sha.txt', SOURCE)
+        data = buffer.getvalue()
+        producer = dict(id=54, size_in_bytes=len(data), digest='sha256:' + hashlib.sha256(data).hexdigest())
+        quote = dict(passed=True, funds_transferred=False, personal_wallet_access=False, build_source_sha=SOURCE,
+                     workflow_run_id=9, artifact_run_id=7, producer=producer,
+                     original_apk_sha256=hashlib.sha256(binary).hexdigest())
+        evidence = dict(source_sha=SOURCE, production_quotes=quote, artifact_run_id='7', versionCode=42)
+        core = dict(producer_controller_sha=OLD)
+        with tempfile.TemporaryDirectory() as folder, \
+                patch('hosted_quote_probe.recorded_pair', return_value=(evidence, core)), \
+                patch('hosted_quote_probe.Metadata'), \
+                patch('hosted_release.artifact', return_value=producer) as lookup, \
+                patch('hosted_quote_probe.subprocess.run', side_effect=lambda *_, stdout, **__: stdout.write(data)):
+            root = Path(folder)
+            stage_quote_apk(root, 'v3.19.0-private.26')
+            self.assertEqual(lookup.call_args.args[1:], (54, 'isolated-ui-repro-apk', 7, OLD))
+            self.assertEqual((root / 'quotes.apk').read_bytes(), binary)
+            quote['artifact_run_id'] = 9
+            with self.assertRaisesRegex(ValueError, 'different build'):
+                stage_quote_apk(root, 'v3.19.0-private.26')
 
     def test_transient_failure_requires_one_exact_trusted_marker(self):
         metadata = Mock(gh='gh', repo='repos/' + REPOSITORY)

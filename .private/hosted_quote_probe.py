@@ -32,18 +32,29 @@ def stage_candidate(root, source, quote_id, production_id, original_run='', orig
 
 
 def stage_quote_apk(root, tag):
-    evidence, _ = recorded_pair(tag)
+    evidence, core = recorded_pair(tag)
     source = evidence['source_sha']
     quote = evidence['production_quotes']
     require(quote['passed'] is True and quote['funds_transferred'] is False
             and quote['personal_wallet_access'] is False and quote['build_source_sha'] == source,
             'Exact release with unfunded quote evidence required')
     metadata = Metadata()
-    _, artifact, _ = metadata.producer(quote['workflow_run_id'], source, 'build-release.yml', 'emulator',
-                                      'isolated-ui-repro-apk')
-    require(artifact['id'] == quote['artifact_id'] and artifact['digest'] == 'sha256:' + quote['archive_sha256']
-            and 0 < artifact['size_in_bytes'] <= 160 * 1024**2,
-            'Quote producer differs from release evidence')
+    if 'producer' in quote:
+        # Hosted quote execution may occur in a recovery run, separate from the
+        # original release build that emitted the installed APK.
+        from hosted_release import artifact as hosted_artifact
+
+        original_run = int(evidence['artifact_run_id'])
+        require(quote['artifact_run_id'] == original_run, 'Quote receipt belongs to a different build')
+        artifact = hosted_artifact(metadata, quote['producer']['id'], 'isolated-ui-repro-apk',
+                                   original_run, core['producer_controller_sha'])
+        require(artifact == quote['producer'], 'Hosted quote producer differs from release evidence')
+    else:
+        _, artifact, _ = metadata.producer(quote['workflow_run_id'], source, 'build-release.yml', 'emulator',
+                                          'isolated-ui-repro-apk')
+        require(artifact['id'] == quote['artifact_id'] and artifact['digest'] == 'sha256:' + quote['archive_sha256']
+                and 0 < artifact['size_in_bytes'] <= 160 * 1024**2,
+                'Quote producer differs from release evidence')
     with (root/'quote.zip').open('xb') as output:
         subprocess.run(['gh', 'api', metadata.repo + '/actions/artifacts/' + str(artifact['id']) + '/zip'],
                        stdout=output, timeout=120, check=True)
