@@ -9,6 +9,7 @@ import re
 import subprocess
 import tempfile
 import time
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 import zipfile
 
@@ -45,9 +46,23 @@ def public_read(url, maximum):
 
 def latest(tag):
     for attempt in range(3):
-        value = json.loads(public_read(f'https://api.github.com/{API}/releases/latest', MIB))
+        try:
+            value = json.loads(public_read(f'https://api.github.com/{API}/releases/latest', MIB))
+            route = 'public-api'
+        except HTTPError as error:
+            if not (error.code == 429 or (error.code == 403 and error.headers.get('X-RateLimit-Remaining') == '0')):
+                raise
+            error.close()
+            # Shared runner IPs can exhaust the public JSON quota. Verify the
+            # unauthenticated latest redirect as well as the read-only API data.
+            request = Request(f'{PUBLIC}/releases/latest', headers={'User-Agent': 'ZEC-Private-release-verifier'})
+            with urlopen(request, timeout=30) as response:
+                public_url = response.geturl()
+            require(public_url == f'{PUBLIC}/releases/tag/{tag}', 'Public latest release redirect differs')
+            value = gh('releases/latest')
+            route = 'public-latest-redirect-and-read-only-api'
         if value.get('tag_name') == tag:
-            return value
+            return value, route
         if attempt < 2:
             time.sleep(5)
     raise ValueError('Public updater discovery has not reached the expected tag')
@@ -128,7 +143,7 @@ def unsigned_proof(evidence):
 def main():
     tag = os.environ['VERIFY_RELEASE_TAG']
     require(re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-private\.[1-9][0-9]*', tag), 'Invalid release tag')
-    release = latest(tag)
+    release, discovery_route = latest(tag)
     require(not release['draft'] and not release['prerelease'], 'Expected a public stable release')
     assets = {item['name']: item for item in release['assets']}
     require(len(release['assets']) == 2 and set(assets) == {APK, CHECKSUM}, 'Unexpected public asset set')
@@ -177,7 +192,8 @@ def main():
             'Public APK manifest or architecture mismatch')
     print(json.dumps({'tag': tag, 'apk_sha256': sha, 'version_code': proof['versionCode'],
                       'source_sha': evidence['source_sha'], 'unsigned_artifact_id': artifact_id,
-                      'public_discovery_verified': True, 'signed_payload_matches': True}))
+                      'public_discovery_verified': True, 'public_discovery_route': discovery_route,
+                      'signed_payload_matches': True}))
 
 
 if __name__ == '__main__':

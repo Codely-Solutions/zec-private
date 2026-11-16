@@ -7,7 +7,8 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError
 
 spec=importlib.util.spec_from_file_location('private_publish',Path(__file__).with_name('publish.py'))
 publish=importlib.util.module_from_spec(spec)
@@ -154,6 +155,30 @@ class PublishMetadataTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'main-branch release producer'):
                 verify.unsigned_proof(evidence)
             gh.assert_called_once_with('actions/runs/7')
+
+    def test_public_discovery_uses_a_matching_public_redirect_on_rate_limit(self):
+        import verify_public_release as verify
+
+        tag = 'v3.19.0-private.27'
+        record = {'tag_name': tag}
+        response = MagicMock()
+        response.__enter__.return_value.geturl.return_value = verify.PUBLIC + '/releases/tag/' + tag
+        limited = HTTPError('https://api.github.com', 403, 'rate limited', {'X-RateLimit-Remaining': '0'}, None)
+        with patch.object(verify, 'public_read', side_effect=limited), \
+                patch.object(verify, 'urlopen', return_value=response), patch.object(verify, 'gh', return_value=record):
+            self.assertEqual(verify.latest(tag), (record, 'public-latest-redirect-and-read-only-api'))
+            response.__enter__.return_value.geturl.return_value = verify.PUBLIC + '/releases/tag/older'
+            with self.assertRaisesRegex(ValueError, 'Public latest release redirect differs'):
+                verify.latest(tag)
+
+    def test_public_discovery_propagates_other_forbidden_responses(self):
+        import verify_public_release as verify
+
+        forbidden = HTTPError('https://api.github.com', 403, 'forbidden', {'X-RateLimit-Remaining': '12'}, None)
+        with patch.object(verify, 'public_read', side_effect=forbidden), patch.object(verify, 'gh') as gh:
+            with self.assertRaises(HTTPError):
+                verify.latest('v3.19.0-private.27')
+            gh.assert_not_called()
 
     def test_title_rejects_invalid_tags(self):
         for tag in (None,18,'v2.3.4','v2.3.4-private.18-extra','v2.3.4-private.18\n',
