@@ -63,5 +63,9 @@
   ],
   "v3.19.0-private.26": [
     "Show completed outgoing swaps correctly in Activity, even while wallet sync catches up."
+  ],
+  "v3.19.0-private.27": [
+    "Keep the fiat estimate on Home as plain text, with a separate refresh button.",
+    "Refresh an expired fiat rate automatically when you return to the app."
   ]
 }

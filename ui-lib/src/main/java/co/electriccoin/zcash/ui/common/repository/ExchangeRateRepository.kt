@@ -149,7 +149,13 @@ class ExchangeRateRepositoryImpl(
         StaleLock(
             timestampToObserve = usdExchangeRateTimestamp,
             lockDuration = USD_EXCHANGE_STALE_LOCK_THRESHOLD,
-            onRefresh = { refreshExchangeRateUsdInternal().join() }
+            onRefresh = { expiredTimestamp ->
+                // The combined UI state may still hold its previous value when collection resumes.
+                val observed = exchangeRateUsdInternal.value.observed
+                if (!observed.isLoading && observed.currencyConversion?.timestamp == expiredTimestamp) {
+                    refreshPipeline.emit(Unit)
+                }
+            }
         )
 
     override val state: StateFlow<ExchangeRateState> =
@@ -205,16 +211,13 @@ class ExchangeRateRepositoryImpl(
         }
 
     override fun refreshExchangeRateUsd() {
-        refreshExchangeRateUsdInternal()
-    }
-
-    private fun refreshExchangeRateUsdInternal() =
         scope.launch {
             val value = state.value
             if (value is ExchangeRateState.Data && value.isRefreshEnabled && !value.isLoading) {
                 refreshPipeline.emit(Unit)
             }
         }
+    }
 }
 
 /**

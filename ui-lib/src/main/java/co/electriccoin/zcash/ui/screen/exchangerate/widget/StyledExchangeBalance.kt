@@ -2,24 +2,23 @@
 
 package co.electriccoin.zcash.ui.screen.exchangerate.widget
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ElevatedButton
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.ui.Alignment.Companion.CenterVertically
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
@@ -45,7 +44,6 @@ import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.TickerLocation
 import co.electriccoin.zcash.ui.design.util.getValue
-import co.electriccoin.zcash.ui.design.util.orDark
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 import co.electriccoin.zcash.ui.fixture.ObserveFiatCurrencyResultFixture
@@ -80,7 +78,8 @@ fun StyledExchangeBalance(
                     zatoshi = zatoshi,
                     state = state,
                     hiddenBalancePlaceholder = hiddenBalancePlaceholder,
-                    isHideBalance = LocalBalancesAvailable.current.not()
+                    isHideBalance = LocalBalancesAvailable.current.not(),
+                    modifier = modifier
                 )
             }
         }
@@ -106,13 +105,9 @@ private fun ExchangeAvailableRateLabelInternal(
     isHideBalance: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val isEnabled = !state.isLoading && state.isRefreshEnabled && zatoshi != null
-
-    ExchangeRateButton(
+    Row(
         modifier = modifier,
-        onClick = state.onRefresh,
-        isEnabled = isEnabled,
-        textColor = textColor,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         ShimmerableText(
             text =
@@ -125,27 +120,26 @@ private fun ExchangeAvailableRateLabelInternal(
             color = textColor,
         )
 
-        Spacer(modifier = Modifier.width(12.dp))
-
+        val refreshTargetSize = 48.dp
         if (state.isLoading || zatoshi == null) {
-            LottieProgress(modifier = Modifier.align(CenterVertically))
+            Box(modifier = Modifier.size(refreshTargetSize), contentAlignment = Alignment.Center) {
+                LottieProgress()
+            }
         } else {
-            Image(
-                modifier =
-                    Modifier
-                        .align(CenterVertically)
-                        .size(16.dp),
-                painter = painterResource(R.drawable.ic_exchange_rate_retry),
-                contentDescription = null,
-                colorFilter =
-                    ColorFilter.tint(
-                        if (state.isRefreshEnabled) {
-                            textColor
-                        } else {
-                            ZashiColors.Text.textDisabled
-                        }
-                    )
-            )
+            IconButton(
+                modifier = Modifier.size(refreshTargetSize),
+                onClick = state.onRefresh,
+                enabled = state.isRefreshEnabled,
+            ) {
+                Image(
+                    modifier = Modifier.size(16.dp),
+                    painter = painterResource(R.drawable.ic_exchange_rate_retry),
+                    contentDescription =
+                        stringResource(co.electriccoin.zcash.ui.design.R.string.currencyConversion_refreshAction),
+                    colorFilter =
+                        ColorFilter.tint(if (state.isRefreshEnabled) textColor else ZashiColors.Text.textDisabled)
+                )
+            }
         }
     }
 }
@@ -200,16 +194,15 @@ private fun ExchangeRateUnavailableButton(
             )
         }
     ) {
-        ExchangeRateButton(
+        TextButton(
             modifier = modifier,
             onClick = {
                 scope.launch {
                     if (tooltipState.isVisible) tooltipState.dismiss() else tooltipState.show()
                 }
             },
-            isEnabled = true,
-            enableBorder = false,
-            textColor = textColor,
+            colors = ButtonDefaults.textButtonColors(contentColor = textColor),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
         ) {
             Text(
                 text = stringResource(id = R.string.tooltip_exchangeRate_title),
@@ -221,61 +214,13 @@ private fun ExchangeRateUnavailableButton(
             Spacer(modifier = Modifier.width(10.dp))
 
             Image(
-                modifier =
-                    Modifier
-                        .align(CenterVertically),
+                modifier = Modifier.align(Alignment.CenterVertically),
                 painter = painterResource(R.drawable.ic_exchange_rate_info),
                 contentDescription = null,
                 colorFilter = ColorFilter.tint(textColor)
             )
         }
     }
-}
-
-@Suppress("LongParameterList")
-@Composable
-private fun ExchangeRateButton(
-    isEnabled: Boolean,
-    textColor: Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enableBorder: Boolean = true,
-    content: @Composable RowScope.() -> Unit
-) {
-    ElevatedButton(
-        modifier = modifier.height(36.dp),
-        onClick = onClick,
-        enabled = isEnabled,
-        shape = RoundedCornerShape(8.dp),
-        elevation =
-            ButtonDefaults.elevatedButtonElevation(
-                defaultElevation = 0.dp,
-                pressedElevation = 0.dp,
-                focusedElevation = 0.dp,
-                hoveredElevation = 0.dp,
-                disabledElevation = 0.dp,
-            ),
-        colors =
-            ButtonDefaults.elevatedButtonColors(
-                containerColor =
-                    if (isEnabled && enableBorder) {
-                        ZashiColors.Surfaces.bgPrimary orDark ZashiColors.Surfaces.bgTertiary
-                    } else {
-                        Color.Transparent
-                    },
-                disabledContainerColor = Color.Transparent,
-                disabledContentColor = textColor,
-                contentColor = textColor
-            ),
-        border =
-            if (isEnabled && enableBorder) {
-                BorderStroke(1.dp, ZashiColors.Surfaces.strokePrimary)
-            } else {
-                BorderStroke(1.dp, Color.Transparent)
-            },
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp),
-        content = content
-    )
 }
 
 @PreviewScreens

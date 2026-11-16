@@ -16,7 +16,7 @@ import kotlin.time.Instant
 internal class StaleLock(
     timestampToObserve: Flow<Instant?>,
     private val lockDuration: Duration,
-    private val onRefresh: suspend () -> Unit
+    private val onRefresh: suspend (Instant) -> Unit
 ) : TimestampFlowLock {
     private val mutex = Mutex()
 
@@ -30,14 +30,12 @@ internal class StaleLock(
                         return@flow
                     }
                     val elapsed = Clock.System.now() - lastRefresh
-                    if (elapsed > lockDuration) {
-                        emitWithLock(true)
-                    } else {
+                    if (elapsed < lockDuration) {
                         emitWithLock(false)
                         delay(lockDuration - elapsed)
-                        onRefresh()
-                        emitWithLock(true)
                     }
+                    onRefresh(lastRefresh)
+                    emitWithLock(true)
                 }
             }.distinctUntilChanged()
 
