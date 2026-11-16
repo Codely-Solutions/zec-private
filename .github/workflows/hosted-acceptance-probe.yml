@@ -1,5 +1,7 @@
 name: Probe isolated Linux Android host
 on:
+  schedule:
+    - cron: '17 6 * * *'
   workflow_call:
     inputs:
       source_sha:
@@ -17,6 +19,9 @@ on:
       original_controller:
         type: string
         default: ''
+      use_tor:
+        type: boolean
+        default: true
     outputs:
       receipt_id:
         value: ${{ jobs.quote-cycles.outputs.receipt_id }}
@@ -57,11 +62,11 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: hosted-acceptance-probe
+  group: hosted-acceptance-probe-${{ github.event_name == 'schedule' && 'monitoring' || 'on-demand' }}
   cancel-in-progress: false
 jobs:
   blank-guest:
-    if: github.ref == 'refs/heads/main' && !inputs.source_sha && !inputs.prerequisites && !inputs.install_baseline && !inputs.test_transport && !inputs.test_preclaim && !inputs.test_recovery_controls && !inputs.quote_release
+    if: github.event_name != 'schedule' && github.ref == 'refs/heads/main' && !inputs.source_sha && !inputs.prerequisites && !inputs.install_baseline && !inputs.test_transport && !inputs.test_preclaim && !inputs.test_recovery_controls && !inputs.quote_release
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
@@ -123,7 +128,7 @@ jobs:
       - if: always()
         run: rm -rf -- "$RUNNER_TEMP/zec-tor-runtime"
   installed-pair:
-    if: github.ref == 'refs/heads/main' && (inputs.install_baseline || inputs.test_transport || inputs.test_preclaim)
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.install_baseline || inputs.test_transport || inputs.test_preclaim)
     runs-on: ubuntu-24.04
     timeout-minutes: 21
     permissions:
@@ -179,12 +184,19 @@ jobs:
                   print('Standalone Tor testnet diagnostic failed: ' + type(error).__name__, flush=True)
           PY
       - name: Execute the selected verification in an isolated guest
+        id: readiness
+        continue-on-error: ${{ github.event_name == 'schedule' }}
         env:
           ZEC_HOSTED_TRANSPORT_PROBE: ${{ inputs.test_transport }}
-          ZEC_HOSTED_PRECLAIM_PROBE: ${{ inputs.test_preclaim }}
+          ZEC_HOSTED_PRECLAIM_PROBE: ${{ github.event_name == 'schedule' || inputs.test_preclaim }}
           ZEC_REPEAT_COLD_START: ${{ inputs.cold_start_diagnostics }}
         run: |
           ZEC_HOSTED_FIXTURE_DIR="$RUNNER_TEMP/zec-hosted-pair" bash .private/hosted_emulator_smoke.sh
+      - name: Record scheduled Tor readiness result
+        if: always() && github.event_name == 'schedule'
+        env:
+          READINESS: ${{ steps.readiness.outcome }}
+        run: echo "Native Tor readiness on the installed fixture: **$READINESS**. This check used no funds." >> "$GITHUB_STEP_SUMMARY"
       - if: always()
         run: rm -rf -- "$RUNNER_TEMP/zec-hosted-pair"
   quote-cycles:
@@ -209,6 +221,7 @@ jobs:
           PRODUCTION_ID: ${{ inputs.production_id }}
           ORIGINAL_RUN: ${{ inputs.original_run }}
           ORIGINAL_CONTROLLER: ${{ inputs.original_controller }}
+          USE_TOR: ${{ inputs.source_sha == '' || inputs.use_tor }}
           PYTHONPATH: .private
         run: |
           if [[ -n "$SOURCE_SHA" ]]; then
@@ -223,7 +236,8 @@ jobs:
           source = os.environ['SOURCE_SHA']
           if source:
               stage_candidate(target, source, os.environ['QUOTE_ID'], os.environ['PRODUCTION_ID'],
-                              os.environ['ORIGINAL_RUN'], os.environ['ORIGINAL_CONTROLLER'])
+                              os.environ['ORIGINAL_RUN'], os.environ['ORIGINAL_CONTROLLER'],
+                              use_tor=os.environ['USE_TOR'] == 'true')
           else:
               target.mkdir(mode=0o700)
               stage_quote_apk(target, os.environ['RELEASE_TAG'])
@@ -241,7 +255,7 @@ jobs:
           chmod +x gradlew
           ./gradlew -p .private/ui-bridge --no-daemon --no-watch-fs assembleDebug
           cp .private/ui-bridge/build/outputs/apk/debug/*.apk "$RUNNER_TEMP/zec-hosted-quotes/ui-bridge.apk"
-      - name: Exercise unfunded production quotes over app Tor
+      - name: Exercise unfunded production quotes over the selected app route
         run: |
           if [[ ! -x "$ANDROID_HOME/build-tools/36.0.0/zipalign" ]]; then
             timeout 180 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'build-tools;36.0.0'

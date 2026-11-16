@@ -65,6 +65,7 @@ jobs:
       original_controller: ${{ steps.admission.outputs.original_controller }}
       production_id: ${{ steps.admission.outputs.production_id }}
       core_id: ${{ steps.admission.outputs.core_id }}
+      tor_inputs_changed: ${{ steps.admission.outputs.tor_inputs_changed }}
       quote_id: ${{ steps.admission.outputs.quote_id }}
       core_receipt_id: ${{ steps.admission.outputs.core_receipt_id }}
       quote_receipt_id: ${{ steps.admission.outputs.quote_receipt_id }}
@@ -94,6 +95,7 @@ jobs:
           PYTHONPATH=.private python3 -B - <<'PY'
           import os
           from hosted_release import admit
+          from acceptance_policy import needs_live_tor_probe
           from release_metadata import Metadata
           source, controller = os.environ['SOURCE_SHA'], os.environ['GITHUB_SHA']
           if os.environ['RECOVER_RUN']:
@@ -107,6 +109,10 @@ jobs:
                   output.writelines(f'{key}={value}\n' for key, value in result.items())
           else:
               admit(source, controller, Metadata(), preflight_only=os.environ['PREFLIGHT_ONLY'] == 'true')
+          tor_inputs_changed = needs_live_tor_probe(source)
+          print('Hosted wallet and quote acceptance use direct app networking.')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'tor_inputs_changed={str(tor_inputs_changed).lower()}\n')
           PY
   preflight:
     needs: admit_hosted
@@ -225,7 +231,7 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: bash .private/verify_signing_key.sh
   unsigned:
-    needs: [preflight, signing_smoke]
+    needs: [admit_hosted, preflight, signing_smoke]
     if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.candidate_run && !inputs.recover_run }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
@@ -257,7 +263,7 @@ jobs:
         with:
           cache-read-only: ${{ inputs.hosted || false }}
       - name: Unfunded NEAR API contracts over Tor without credentials
-        if: ${{ !inputs.preflight_only }}
+        if: ${{ !inputs.preflight_only && (!inputs.hosted || needs.admit_hosted.outputs.tor_inputs_changed == 'true') }}
         timeout-minutes: 15
         run: bash .private/run_tor_ci.sh
       - name: Validate and assemble production candidate once
@@ -373,6 +379,7 @@ jobs:
       original_controller: ${{ needs.admit_hosted.outputs.original_controller }}
       previous_reservation: ${{ needs.admit_hosted.outputs.previous_reservation }}
       preclaim_run: ${{ inputs.preclaim_run }}
+      use_tor: false
   reserve_quote_retry:
     needs: [admit_hosted, preflight, signing_smoke]
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' && inputs.recover_run && !inputs.preflight_only && needs.admit_hosted.outputs.same_controller_retry == 'true' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
@@ -412,6 +419,7 @@ jobs:
       production_id: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}
       original_run: ${{ inputs.recover_run }}
       original_controller: ${{ needs.admit_hosted.outputs.original_controller }}
+      use_tor: false
   recovery_quotes:
     needs: [admit_hosted, preflight, signing_smoke]
     if: ${{ !cancelled() && inputs.preclaim_run && needs.admit_hosted.outputs.previous_reservation != '' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
@@ -426,6 +434,7 @@ jobs:
       production_id: ${{ needs.admit_hosted.outputs.production_id }}
       original_run: ${{ inputs.recover_run }}
       original_controller: ${{ needs.admit_hosted.outputs.original_controller }}
+      use_tor: false
   promotion:
     needs: [preflight, signing_smoke]
     if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && inputs.candidate_run && !inputs.reconciliation_run }}
@@ -523,6 +532,7 @@ jobs:
           HOSTED_ACCEPTANCE: ${{ inputs.hosted || false }}
           PRODUCTION_ID: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}
           CORE_ID: ${{ needs.admit_hosted.outputs.core_id || needs.testnet_apk.outputs.artifact_id }}
+          DIRECT_CORE_ID: ${{ needs.hosted_core.outputs.direct_core_id }}
           QUOTE_ID: ${{ needs.admit_hosted.outputs.quote_id || needs.emulator.outputs.artifact_id }}
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}

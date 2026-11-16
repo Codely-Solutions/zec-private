@@ -18,10 +18,42 @@ CORE_STAGES = {'fund', 'upgrade', 'send', 'restart', 'restore', 'interruption'}
 BASELINE_INSTRUMENTATION_STAGES = {'networkTargets', 'recipient', 'sender', 'fund'}
 CANDIDATE_INSTRUMENTATION_STAGES = {'upgrade', 'transport', 'send', 'restart', 'restore'}
 
+# Unknown product changes retain live Tor acceptance. Keep this list limited
+# to reviewed presentation and fiat refresh scheduling inputs.
+DIRECT_PRODUCT_PATHS = {
+    'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepository.kt',
+    'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/wallet/StaleLock.kt',
+    'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/wallet/RefreshLock.kt',
+    'ui-design-lib/src/main/res/ui/common/values/strings.xml',
+    'ui-design-lib/src/main/res/ui/common/values-es/strings.xml',
+}
+DIRECT_PRESENTATION_PREFIXES = (
+    'ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/',
+)
 
-def validate_instrumentation_pairing(receipt, baseline):
+
+def needs_live_tor_probe(source, root=ROOT):
+    """Recheck live Tor when tracked runtime inputs may have changed its behavior."""
+    fixture = json.loads((root / '.private/hosted-fixture.json').read_bytes())
+    baseline = fixture['source_sha']
+    if not re.fullmatch('[a-f0-9]{40}', baseline):
+        raise ValueError('Expected an exact hosted transport baseline')
+    previous = input_manifest(baseline, root=root, profile='core-runtime')
+    current = input_manifest(source, root=root, profile='core-runtime')
+    for path in previous.keys() | current.keys():
+        if (path.startswith(('.private/', '.github/')) or path in DIRECT_PRODUCT_PATHS
+                or path.startswith(DIRECT_PRESENTATION_PREFIXES)):
+            continue
+        if previous.get(path) != current.get(path):
+            return True
+    return False
+
+
+def validate_instrumentation_pairing(receipt, baseline, *, use_tor=True, prepared=None):
     expected_baseline = (baseline['instrumentation_apk_sha256'] if 'reference' in baseline
                          else baseline['instrumentation']['apk_sha256'])
+    if prepared is not None:
+        expected_baseline = prepared['baseline_instrumentation_sha256']
     if receipt.get('baseline_instrumentation_apk_sha256') != expected_baseline:
         raise ValueError('Instrumentation differs from selected upgrade baseline')
     pairing = receipt.get('instrumentation_pairing', {})
@@ -35,7 +67,10 @@ def validate_instrumentation_pairing(receipt, baseline):
                 not re.fullmatch('[0-9a-f]{64}', str(value.get('executed_sha256', '')))):
             raise ValueError('Missing exact original/executed instrumentation identity: ' + role)
     stages = pairing.get('stages', {})
-    if set(stages) != BASELINE_INSTRUMENTATION_STAGES | CANDIDATE_INSTRUMENTATION_STAGES:
+    expected_stages = BASELINE_INSTRUMENTATION_STAGES | CANDIDATE_INSTRUMENTATION_STAGES
+    if not use_tor:
+        expected_stages -= {'networkTargets', 'transport'}
+    if set(stages) != expected_stages:
         raise ValueError('Missing version-paired instrumentation stages')
     for stage, value in stages.items():
         role = 'baseline' if stage in BASELINE_INSTRUMENTATION_STAGES else 'candidate'
@@ -102,6 +137,13 @@ def input_fingerprint(revision='HEAD', root=ROOT, profile='core-testnet'):
     return hashlib.sha256(json.dumps(entries, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
+def direct_core_build_fingerprint(source, harness_controller, root=ROOT):
+    entries = input_manifest(source, root=root, profile='core-build')
+    harness = input_manifest(harness_controller, root=root, profile='core-build')
+    entries[CORE_TEST_SOURCE] = harness[CORE_TEST_SOURCE]
+    return hashlib.sha256(json.dumps(entries, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
 def profile_input(path, profile='core-testnet'):
     """Share the v1 receipt boundary between hashing and selection.
 
@@ -153,29 +195,35 @@ def requirements(paths):
             'profile_reasons': profile_reasons}
 
 
-def validate_core(receipt, expected_inputs, root=ROOT, *, baseline=None):
+def validate_core(receipt, expected_inputs, root=ROOT, *, baseline=None, use_tor=True, prepared=None):
     if receipt.get('schema') != POLICY_VERSION or receipt.get('input_fingerprint') != expected_inputs:
         raise ValueError('Core acceptance inputs/policy mismatch')
     if receipt.get('evidence_class') != 'real-app-testnet' or receipt.get('network') != 'zcash-testnet':
         raise ValueError('Real testnet app evidence required')
     if receipt.get('passed') is not True or receipt.get('clearnet_fallback') is not False:
         raise ValueError('Core acceptance failed or transport not established')
+    if receipt.get('tor_enabled', True) is not use_tor:
+        raise ValueError('Wallet receipt used the wrong app transport')
     if receipt.get('personal_wallet_access') is not False or receipt.get('real_funds_used') is not False:
         raise ValueError('Unsafe wallet evidence')
     stages = receipt.get('stages', {})
-    if set(stages) != CORE_STAGES or any(v.get('passed') is not True for v in stages.values()):
+    if set(stages) != (CORE_STAGES if use_tor else CORE_STAGES - {'interruption'}) or any(
+            v.get('passed') is not True for v in stages.values()):
         raise ValueError('Missing required core acceptance stage')
-    if not receipt.get('network_enforcement', {}).get('passed'):
-        raise ValueError('Missing fail-closed connection evidence')
-    enforcement=receipt['network_enforcement']
-    if enforcement.get('metadata_no_direct_fallback_observed') is not True or not enforcement.get('direct_bulk_targets'):
-        raise ValueError('Missing scoped Tor policy and authorized bulk transport evidence')
+    if use_tor:
+        enforcement = receipt.get('network_enforcement', {})
+        if (enforcement.get('passed') is not True or enforcement.get('metadata_no_direct_fallback_observed') is not True
+                or not enforcement.get('direct_bulk_targets')):
+            raise ValueError('Missing scoped Tor policy and authorized bulk transport evidence')
+    elif (any(v.get('tor_enabled') is not False for v in stages.values())
+          or receipt.get('preclaim_readiness') != dict(passed=True, route='direct', role='baseline')):
+        raise ValueError('Direct execution and pre-claim readiness evidence required')
     preflight=receipt.get('sync_preflight',{})
     if (preflight.get('passed') is not True or preflight.get('mode') not in ('caught-up','advancing-scan') or
             not 0<preflight.get('scanned_height',0)<=preflight.get('network_height',0)):
         raise ValueError('Missing real pre-funding synchronization readiness')
-    recovery=stages['interruption']
-    if (not all(recovery.get(key) is True for key in ('sync_restarted','synced','balance_preserved','history_preserved',
+    recovery=stages.get('interruption', {})
+    if use_tor and (not all(recovery.get(key) is True for key in ('sync_restarted','synced','balance_preserved','history_preserved',
                                                     'metadata_blocked','direct_bulk_reachable','metadata_recovered')) or
             recovery.get('blocked_packets',0)<=0 or recovery.get('scanned_height',0)<=0):
         raise ValueError('Actual wallet synchronization interruption/recovery required')
@@ -227,7 +275,7 @@ def validate_core(receipt, expected_inputs, root=ROOT, *, baseline=None):
     if (receipt.get('baseline_source_sha') != baseline['source_sha'] or
             receipt.get('baseline_version_code') != baseline['version_code']):
         raise ValueError('Unexpected migration baseline')
-    validate_instrumentation_pairing(receipt, baseline)
+    validate_instrumentation_pairing(receipt, baseline, use_tor=use_tor, prepared=prepared)
     if receipt.get('candidate_version_code', 0) <= receipt.get('baseline_version_code', 0):
         raise ValueError('Update did not increase versionCode')
     txids = {stages[name].get('txId') for name in ('send', 'restart', 'restore')}
@@ -236,12 +284,14 @@ def validate_core(receipt, expected_inputs, root=ROOT, *, baseline=None):
     return True
 
 
-def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=None, root=ROOT, *, baseline=None):
+def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=None, root=ROOT, *, baseline=None,
+                          use_tor=True, prepared=None):
     # For late test-only attestations use the trusted current acceptance source.
     # A controller-prepared upstream child instead owns its candidate app inputs,
     # preserving the existing separately gated upstream integration path.
     acceptance_revision = acceptance_revision or product_revision
-    validate_core(receipt, input_fingerprint(acceptance_revision, root=root), root=root, baseline=baseline)
+    validate_core(receipt, input_fingerprint(acceptance_revision, root=root), root=root, baseline=baseline,
+                  use_tor=use_tor, prepared=prepared)
     runtime = input_fingerprint(product_revision, root=root, profile='core-runtime')
     # Host/controller inputs still bind current acceptance to the product candidate.
     # The APK producer is checked separately against compiled inputs below: host
@@ -251,16 +301,27 @@ def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=
     if receipt.get('runtime_input_fingerprint') != runtime:
         raise ValueError('Receipt wallet runtime binding mismatch')
     compiled = receipt['build_input_fingerprint']
+    if prepared is not None:
+        if use_tor or direct_core_build_fingerprint(product_revision, prepared['harness_controller'], root) != compiled:
+            raise ValueError('Direct instrumentation differs from the trusted build inputs')
+        if needs_live_tor_probe(product_revision, root):
+            probe = receipt.get('live_tor_probe', {})
+            candidate = receipt['instrumentation_pairing']['candidate']
+            if (probe.get('passed') is not True or probe.get('tor_enabled') is not True
+                    or probe.get('installed_hash_verified') is not True
+                    or any(probe.get(key) != value for key, value in candidate.items())):
+                raise ValueError('Changed transport inputs require a passing native Tor probe on the exact candidate')
+        return runtime
     for revision in (acceptance_revision, receipt['build_source_sha']):
         if input_fingerprint(revision, root=root, profile='core-build') != compiled:
             raise ValueError('Executed instrumentation differs from current compiled test inputs')
     return runtime
 
 
-def validate_quotes(receipt, expected_inputs):
+def validate_quotes(receipt, expected_inputs, *, use_tor=True):
     if (receipt.get('schema')!=POLICY_VERSION or receipt.get('input_fingerprint')!=expected_inputs or
             receipt.get('evidence_class')!='real-app-production-quotes' or receipt.get('passed') is not True or
-            receipt.get('tor_enabled') is not True or receipt.get('funds_transferred') is not False or
+            receipt.get('tor_enabled') is not use_tor or receipt.get('funds_transferred') is not False or
             receipt.get('personal_wallet_access') is not False):
         raise ValueError('Missing real unfunded production quote acceptance')
     if min(receipt.get(key,0) for key in ('quote_requests','quote_reviews','dismissals'))<3:

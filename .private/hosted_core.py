@@ -6,7 +6,7 @@ from pathlib import Path
 import re
 import shutil
 
-from acceptance_policy import input_fingerprint, validate_core_sources
+from acceptance_policy import direct_core_build_fingerprint, input_fingerprint, needs_live_tor_probe, validate_core_sources
 from core_testnet_driver import run as lifecycle, select_apk_roles
 from emulator_session import SDK
 from hosted_claim import binding, verify
@@ -93,14 +93,32 @@ def run(session, root, fixture, candidate, result):
     require(json.loads((fixture / 'fixture-binding.json').read_text()) == selected,
             'Downloaded baseline differs from protected selection')
     source = os.environ['ZEC_CORE_SOURCE']
+    use_tor = os.environ.get('ZEC_CORE_USE_TOR', 'true') == 'true'
+    if os.environ['ZEC_CORE_REHEARSAL'] != 'true':
+        require(not use_tor, 'Release wallet acceptance must use direct app networking')
     version = int(os.environ['ZEC_CORE_VERSION'])
     require(version > selected['version_code'], 'Hosted testnet update must advance version')
     files = candidate_pair(candidate, source)
-    inputs = files + [fixture / 'baseline-ui.apk', fixture / 'baseline-androidTest.apk']
+    prepared = None
+    baseline_test = fixture / 'baseline-androidTest.apk'
+    require(sha(baseline_test) == selected['instrumentation_apk_sha256'], 'Baseline instrumentation bytes differ')
+    if not use_tor:
+        prepared = json.loads((candidate / 'direct-preparation.json').read_bytes())
+        compiled_base = candidate / 'baseline-instrumentation.bin'
+        app, test = sorted(files, key=lambda path: 'androidTest' in path.name)
+        require(prepared['source'] == source and prepared['harness_controller'] == os.environ['GITHUB_SHA']
+                and prepared['baseline_source'] == selected['source_sha']
+                and prepared['baseline_apk_sha256'] == selected['candidate_apk_sha256']
+                and prepared['candidate_apk_sha256'] == sha(app)
+                and prepared['candidate_instrumentation_sha256'] == sha(test)
+                and prepared['baseline_instrumentation_sha256'] == sha(compiled_base),
+                'Prepared baseline or candidate differs from exact instrumentation binding')
+        baseline_test = Path(shutil.copyfile(compiled_base, root / 'baseline-androidTest.apk'))
+    inputs = files + [fixture / 'baseline-ui.apk']
     apks = [Path(shutil.copyfile(path, root / path.name)) for path in inputs]
+    apks.append(Path(shutil.copyfile(baseline_test, root / baseline_test.name)) if use_tor else baseline_test)
     base, base_test, app, test = select_apk_roles(apks)
-    require(sha(base) == selected['candidate_apk_sha256']
-            and sha(base_test) == selected['instrumentation_apk_sha256'], 'Baseline APK bytes differ')
+    require(sha(base) == selected['candidate_apk_sha256'], 'Baseline app APK bytes differ')
     manifest = dict(
         build_source_sha=source, baseline_source_sha=selected['source_sha'],
         baseline_version_code=selected['version_code'], candidate_version_code=version,
@@ -109,11 +127,13 @@ def run(session, root, fixture, candidate, result):
         upgradeBaselineInstrumentation=dict(source_sha=selected['source_sha'], apk_sha256=sha(base_test)),
         input_fingerprint=input_fingerprint(source),
         runtime_input_fingerprint=input_fingerprint(source, profile='core-runtime'),
-        build_input_fingerprint=input_fingerprint(source, profile='core-build'))
-    prepared = prepare(apks, root, SDK)
+        build_input_fingerprint=(input_fingerprint(source, profile='core-build') if use_tor else
+                                 direct_core_build_fingerprint(source, prepared['harness_controller'])))
+    apk_preparation = prepare(apks, root, SDK)
     try:
         lifecycle(session.adb, root, apks, manifest, transport_only=bool(upgrade_probe), upgrade_probe=upgrade_probe,
-                  preclaim_check=not upgrade_probe)
+                  preclaim_check=not upgrade_probe, use_tor=use_tor,
+                  live_tor_probe=not use_tor and needs_live_tor_probe(source))
     except Exception:
         report = root / 'core-testnet-result.json'
         if report.exists():
@@ -161,15 +181,19 @@ def run(session, root, fixture, candidate, result):
         require(report['passed'] and report['faucet_claims'] == 0, 'Unfunded upgrade probe failed')
         print(f'Hosted unfunded {upgrade_probe} after installed upgrade passed with the Tor firewall enabled.', flush=True)
         return
-    report.update(apk_preparation=prepared, hosted_fixture=selected,
+    report.update(apk_preparation=apk_preparation, hosted_fixture=selected,
                   hosted_reservation=os.environ['ZEC_CORE_RESERVATION'],
                   rehearsal=os.environ['ZEC_CORE_REHEARSAL'] == 'true',
                   workflow_run_id=int(os.environ['GITHUB_RUN_ID']))
     if not report['rehearsal']:
         report['producer'] = json.loads((candidate / 'producer.json').read_text())
         report['production_artifact'] = json.loads((candidate / 'production.json').read_text())
-        report['artifact_run_id'] = int(os.environ.get('ZEC_CORE_ARTIFACT_RUN') or os.environ['GITHUB_RUN_ID'])
-    validate_core_sources(report, source, baseline=selected)
+        report['artifact_run_id'] = int((os.environ.get('ZEC_CORE_ARTIFACT_RUN') if use_tor else None)
+                                        or os.environ['GITHUB_RUN_ID'])
+    if prepared is not None:
+        report['direct_preparation'] = prepared
+    validate_core_sources(report, source, baseline=selected, use_tor=use_tor, prepared=prepared)
     require(report['funding_setup']['claim_requests'] == 1, 'Exactly one hosted faucet claim required')
     result.write_text(json.dumps(report, indent=2) + '\n')
-    print('Hosted testnet upgrade, Tor recovery, send, restart and restore passed with one faucet claim.')
+    route = 'Tor (including interruption and recovery)' if use_tor else 'direct app networking'
+    print(f'Hosted testnet upgrade, send, restart and restore passed with {route} and one faucet claim.')

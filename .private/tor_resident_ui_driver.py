@@ -18,6 +18,9 @@ def quote_stage_records(adb):
 def run(adb, root, apks, manifest):
     if manifest['package']!='com.personal.zecprivate.foss.debug':
         raise ValueError('Only the isolated debug wallet package is supported')
+    use_tor = manifest.get('tor_enabled', True)
+    if type(use_tor) is not bool or (not use_tor and not manifest.get('sizeWorkflowScenario')):
+        raise ValueError('Expected an explicit supported quote transport')
     bridge=next(p for p in apks if p.name=='ui-bridge.apk')
     baseline=next((p for p in apks if p.name=='baseline-ui.apk'),None)
     app=next(p for p in apks if p!=bridge and p!=baseline)
@@ -42,7 +45,7 @@ def run(adb, root, apks, manifest):
                 data+=chunk
                 if len(data)>512*1024:raise ValueError('UI bridge response exceeds budget')
         return json.loads(data.split(b'\n',1)[0])
-    last=None;trace=[];assertions=[];tor_opted_in=False;quote_requests=0;dismissals=0
+    last=None;trace=[];assertions=[];tor_opted_in=False;tor_opted_out=False;quote_requests=0;dismissals=0
     scenario_stop=threading.Event();scenario_thread=None;command_read_failures=0
     pending_dismissal=False
     def capture(command):
@@ -68,10 +71,12 @@ def run(adb, root, apks, manifest):
             if manifest.get('sizeWorkflowScenario'):
                 from size_workflow_ui_scenario import run as run_scenario
                 args = (root, scenario_stop, lambda: quote_stage_records(adb))
+                options = {'use_tor': use_tor}
             else:
                 from phase1_ui_scenario import run as run_scenario
                 args = (root, scenario_stop)
-            scenario_thread=threading.Thread(target=run_scenario,args=args,daemon=True)
+                options = {}
+            scenario_thread=threading.Thread(target=run_scenario,args=args,kwargs=options,daemon=True)
             scenario_thread.start()
         deadline=time.monotonic()+1000
         while time.monotonic()<deadline:
@@ -94,8 +99,10 @@ def run(adb, root, apks, manifest):
                         receipt={'completed':True,'versionCode':version,'assertions':assertions,'trace':trace,'fundsTransferred':False,'personalWalletAccess':False,'control':'same-certificate instrumentation, loopback ADB forward, strict target package'}
                         receipt['quoteReviewsVerified']=sum(a['passed'] and a['text'].lower()=='review quote' for a in assertions)
                         receipt['torOptInVerified']=tor_opted_in
+                        receipt['torOptOutVerified']=tor_opted_out
                         receipt['quoteRequests']=quote_requests;receipt['dismissals']=dismissals
-                        receipt['passed']=receipt['quoteReviewsVerified']>=3 and quote_requests>=3 and dismissals>=2 and receipt['torOptInVerified'] and all(a['passed'] for a in assertions)
+                        transport_verified = (tor_opted_in, tor_opted_out) == (use_tor, not use_tor)
+                        receipt['passed']=receipt['quoteReviewsVerified']>=3 and quote_requests>=3 and dismissals>=2 and transport_verified and all(a['passed'] for a in assertions)
                         receipt['upgrade']=upgrade
                         if baseline and not (upgrade and upgrade['passed']):receipt['passed']=False
                         if manifest.get('phase1Scenario'):
@@ -166,6 +173,7 @@ def run(adb, root, apks, manifest):
                             state={'sequence':last,'nodes':[],'error':type(error).__name__};(root/'ui-state.json').write_text(json.dumps(state))
                     if not state.get('error'):
                         if action=='click_text' and command.get('text')=='Opt in':tor_opted_in=True
+                        if action=='click_text' and command.get('text')=='Opt out':tor_opted_out=True
                         if action=='click_text' and command.get('text','').lower() in ('get quote','get a quote'):quote_requests+=1
                         if (not manifest.get('sizeWorkflowScenario') and action=='back' and dismissing_quote
                                 and any(n.get('text')=='Get a quote' for n in state.get('nodes',[]))):dismissals+=1

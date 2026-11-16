@@ -16,6 +16,14 @@ RECOVERY_PATHS = {
     '.private/test_packaging.py', '.private/test_quote_recovery.py', '.private/RELEASE-WORKFLOW.md',
     '.github/workflows/hosted-core.yml', '.private/hosted_claim.py', '.private/hosted_core.py', '.private/hosted_fixture.py',
 }
+# The protected controller may prepare fresh direct-mode test instrumentation
+# while retaining the exact previously built product APKs.
+DIRECT_RECOVERY_PATHS = {
+    '.private/acceptance_policy.py', '.private/core_testnet_driver.py',
+    '.private/core-wallet/src/co/electriccoin/zcash/app/CoreWalletAcceptance.kt',
+    '.private/prepare_direct_core.py', '.private/test_acceptance_policy.py',
+    '.private/test_hosted_release.py', '.private/core-coverage.md',
+}
 
 ARTIFACTS = {
     'production_id': 'validated-unsigned-apk', 'core_id': 'core-testnet-candidate',
@@ -55,8 +63,12 @@ def verify_delta(root, source, original, controller):
     require(original != controller and git(root, 'merge-base', original, controller).decode().strip() == original,
             'Quote recovery requires a descendant controller')
     delta = git(root, 'diff', '--no-renames', '--name-only', '-z', original, controller)
-    require(set(filter(None, delta.decode().split('\0'))) <= RECOVERY_PATHS,
-            'Controller changed outside quote recovery paths')
+    changed = set(filter(None, delta.decode().split('\0'))) - RECOVERY_PATHS
+    if changed:
+        require(changed <= DIRECT_RECOVERY_PATHS, 'Controller changed outside quote recovery paths')
+        from acceptance_policy import needs_live_tor_probe
+
+        require(not needs_live_tor_probe(source, root), 'Controller changed outside quote recovery paths for a Tor candidate')
 
 
 def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing=False, preclaim_run=''):

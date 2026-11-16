@@ -299,9 +299,16 @@ class QuoteRecoveryTests(unittest.TestCase):
     def test_recovery_rejects_product_and_wallet_harness_changes(self):
         for changed in (b'gradle.properties\0', b'.private/core_testnet_driver.py\0'):
             with patch('quote_recovery.verify_custom_child'), \
+                    patch('acceptance_policy.needs_live_tor_probe', return_value=True), \
                     patch('quote_recovery.git', side_effect=[OLD.encode(), changed]):
                 with self.assertRaisesRegex(ValueError, 'outside quote recovery paths'):
                     verify_delta(Path('.'), SOURCE, OLD, MAIN)
+
+    def test_direct_recovery_accepts_controller_only_instrumentation_preparation(self):
+        with patch('quote_recovery.verify_custom_child'), \
+                patch('acceptance_policy.needs_live_tor_probe', return_value=False), \
+                patch('quote_recovery.git', side_effect=[OLD.encode(), b'.private/prepare_direct_core.py\0']):
+            verify_delta(Path('.'), SOURCE, OLD, MAIN)
 
     def test_recovery_requires_authorized_exact_run_and_completed_original_wallet(self):
         original = dict(id=7, path=WORKFLOW, event='workflow_dispatch', head_branch='main',

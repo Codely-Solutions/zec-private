@@ -98,14 +98,20 @@ class HostedReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
             (directory/'.private').mkdir()
-            (directory/'.private/hosted-fixture.json').write_text('{}')
+            fixture = dict(source_sha='b'*40, candidate_apk_sha256='a'*64)
+            (directory/'.private/hosted-fixture.json').write_text(json.dumps(fixture))
             production = dict(id=5, digest='sha256:'+'c'*64, size_in_bytes=321)
             producer = dict(id=6, digest='sha256:'+'d'*64, size_in_bytes=123)
             quotes = dict(id=7, digest='sha256:'+'e'*64, size_in_bytes=456)
+            prepared = dict(id=8, digest='sha256:'+'f'*64, size_in_bytes=789)
             common = dict(build_source_sha=SOURCE, candidate_version_code=VERSION,
                           production_artifact=production, workflow_run_id=RUN)
             core = dict(common, rehearsal=False, funding_setup={'claim_requests': 1},
-                        hosted_reservation='d'*40, producer=producer)
+                        hosted_reservation='d'*40, producer=prepared, candidate_apk_sha256='c'*64,
+                        instrumentation_apk_sha256='d'*64,
+                        direct_preparation=dict(source=SOURCE, harness_controller=CONTROLLER, original_core=producer,
+                                                baseline_source=fixture['source_sha'], baseline_apk_sha256='a'*64,
+                                                candidate_apk_sha256='c'*64, candidate_instrumentation_sha256='d'*64))
             quote = dict(common, producer=quotes)
             proof = dict(workflow_run_id=str(RUN), versionCode=VERSION)
 
@@ -113,15 +119,18 @@ class HostedReleaseTests(unittest.TestCase):
                 (directory/'hosted-core.json').write_text(json.dumps(core))
                 (directory/'hosted-quotes.json').write_text(json.dumps(quote))
                 return hosted_release.read_receipts(directory, proof=proof, source=SOURCE, controller=CONTROLLER,
-                                                    production_id=5, core_id=6, quote_id=7, metadata=Mock())
+                                                    production_id=5, core_id=6, quote_id=7, metadata=Mock(),
+                                                    direct_core_id=8)
 
             with patch.dict(os.environ, {'GITHUB_RUN_ID': str(RUN)}), patch.object(hosted_release, 'ROOT', directory), \
                     patch.object(hosted_release, 'version_code', return_value=VERSION), \
-                    patch.object(hosted_release, 'artifact', side_effect=lambda _, i, *a: {5: production, 6: producer, 7: quotes}[i]), \
+                    patch.object(hosted_release, 'artifact', side_effect=lambda _, i, *a: {5: production, 6: producer, 7: quotes, 8: prepared}[i]), \
                     patch.object(hosted_release, 'verify'), patch.object(hosted_release, 'validate_core_sources'), \
                     patch.object(hosted_release, 'validate_quotes'), patch.object(hosted_release, 'input_fingerprint'):
                 accepted, _ = read(core, quote)
-                self.assertEqual(accepted['artifact_id'], 6)
+                self.assertEqual(accepted['artifact_id'], 8)
+                with self.assertRaisesRegex(ValueError, 'exact APK and instrumentation'):
+                    read(dict(core, candidate_apk_sha256='e'*64), quote)
                 for change in ({'candidate_version_code': VERSION+1}, {'workflow_run_id': RUN+1},
                                {'production_artifact': dict(production, id=8)}, {'build_source_sha': CONTROLLER}):
                     with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'not bound'):

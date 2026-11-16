@@ -23,7 +23,7 @@ RUNNER = PACKAGE + '.test/co.electriccoin.zcash.test.ZcashUiTestRunner'
 def instrumentation_role(stage):
     if stage in BASELINE_INSTRUMENTATION_STAGES:
         return 'baseline'
-    if stage in CANDIDATE_INSTRUMENTATION_STAGES or stage in ('transportProbe', 'restoreProbe', 'receiptProbe'):
+    if stage in CANDIDATE_INSTRUMENTATION_STAGES or stage in ('transportProbe', 'restoreProbe', 'receiptProbe', 'rpcProbe'):
         return 'candidate'
     raise ValueError('Unknown version-paired instrumentation stage: ' + stage)
 
@@ -87,8 +87,10 @@ def claim_after_readiness(check_readiness, submit_claim):
 
 
 def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False, upgrade_probe=None,
-        preclaim_check=False, preclaim_only=False):
+        preclaim_check=False, preclaim_only=False, use_tor=True, live_tor_probe=False):
     started = time.monotonic()
+    if not use_tor and (transport_only or repeat_cold_start or upgrade_probe or preclaim_only):
+        raise ValueError('Tor-specific unfunded probes require the Tor transport')
     if preclaim_only and (not transport_only or upgrade_probe or repeat_cold_start):
         raise ValueError('Pre-claim validation requires the unfunded baseline pair')
     if upgrade_probe and (upgrade_probe not in ('restore', 'transport') or not transport_only or repeat_cold_start):
@@ -117,6 +119,7 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
     report = dict(schema=1, passed=False,
                   evidence_class='unfunded-app-transport-probe' if transport_only else 'real-app-testnet',
                   network='zcash-testnet',
+                  tor_enabled=use_tor,
                   clearnet_fallback=False, direct_bulk_downloads=True,personal_wallet_access=False, real_funds_used=False,
                   stages=stages, instrumentation_pairing=pairing, input_fingerprint=manifest['input_fingerprint'],
                   runtime_input_fingerprint=manifest['runtime_input_fingerprint'],
@@ -137,6 +140,7 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         if time.monotonic() - started > 1600:
             raise RuntimeError('Core acceptance total deadline exhausted')
         role = 'baseline' if readiness_only else instrumentation_role(name)
+        stage_uses_tor = use_tor or name == 'rpcProbe'
         expected = pairing[role]
         verify_instrumentation_pair(adb, expected['app_version_code'], expected['executed_sha256'])
         if not readiness_only:
@@ -144,7 +148,8 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         adb('logcat','-c',timeout=15)
         command=adb.command_base+['shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
                      'co.electriccoin.zcash.app.CoreWalletAcceptance', '-e', 'isolatedTestnet',
-                     'valueless-coins-only', '-e', 'stage', name, RUNNER]
+                     'valueless-coins-only', '-e', 'transport', 'tor' if stage_uses_tor else 'direct',
+                     '-e', 'stage', name, RUNNER]
         timeout_seconds=min(timeout,max(1,1700-int(time.monotonic()-started)))
         operation=subprocess.Popen(command,env=adb.environment,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         with operation_lock:active_instrumentation[name]=operation
@@ -215,6 +220,10 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 diagnostic['pre_wallet_crash']=crash.stdout.decode(errors='replace')[-10000:]
             (root/'core-testnet-diagnostic.json').write_text(json.dumps(diagnostic))
             raise RuntimeError('Core test stage failed: ' + current_stage)
+        if (not use_tor or name == 'rpcProbe') and rows[0].get('tor_enabled') is not stage_uses_tor:
+            raise RuntimeError('Instrumentation did not establish the expected Tor setting')
+        if name == 'rpcProbe':
+            report['live_tor_probe'] = dict(pairing['stages'].pop(name), passed=True, tor_enabled=True)
         if name in ('fund', 'upgrade', 'send', 'restart', 'restore'):
             stages[name] = rows[0]
         if name=='sender':report['sync_preflight']=rows[0]
@@ -248,6 +257,8 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         return [line for line in rows if len(line.split()) > 2 and line.split()[2] == 'REJECT']
 
     def check_denials(stage_name):
+        if not use_tor:
+            return
         rejected = {binary: denied_rows(binary) for binary in ('iptables', 'ip6tables')}
         report.update({binary+'_denials': lines for binary, lines in rejected.items()})
         if any(int(line.split()[0]) for lines in rejected.values() for line in lines):
@@ -285,6 +296,11 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
     def check_preclaim():
         nonlocal current_stage
         current_stage = 'preclaim_readiness'
+        if not use_tor:
+            if report.get('sync_preflight', {}).get('tor_enabled') is not False:
+                raise RuntimeError('Direct wallet readiness was not established before requesting funds')
+            report['preclaim_readiness'] = dict(passed=True, route='direct', role='baseline')
+            return
         marker = 'files/core-sync-ready.json'
         shell('run-as', PACKAGE, 'rm', '-f', marker)
         try:
@@ -316,6 +332,8 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             adb('install', '-r', str(candidate), timeout=90)
             adb('install', '-r', '-t', str(test), timeout=90)
             stage('receiptProbe', 50)
+            if live_tor_probe:
+                stage('rpcProbe', 120)
             adb('uninstall', PACKAGE + '.test', timeout=30)
             adb('uninstall', PACKAGE, timeout=30)
             # Probe provenance is useful in progress logs. The release receipt
@@ -325,94 +343,95 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         adb('install', '-r', '-t', str(baseline_test), timeout=90)
         if version() != manifest['baseline_version_code']:
             raise RuntimeError('Wrong baseline version')
-        uid()
-        # Bounded kernel connection metadata identifies blocked native SDK
-        # bootstrap attempts when this AOSP image lacks the LOG extension.
-        adb('shell','mount','-t','tracefs','nodev','/sys/kernel/tracing',timeout=15,check=False)
-        try:
-            for path,value in (('tracing_on','0'),('buffer_size_kb','2048'),('options/record-tgid','1'),
-                               ('events/sock/inet_sock_set_state/enable','1'),('tracing_on','1')):
-                shell('echo '+value+' > /sys/kernel/tracing/'+path)
-            report['connection_tracing']=True
-        except RuntimeError as error:
-            report['connection_tracing']=False
-            report['connection_tracing_error']=str(error)[:400]
-        # Normal DNS is permitted for the explicitly authorized public bulk path.
-        # Sensitive SDK/provider calls must still use native Tor without fallback.
-        output = stage('networkTargets', 180)
-        targets = set()
-        bulk_targets = set()
-        for line in output.splitlines():
-            if line.startswith('CORE_TARGETS '):
-                resolved=json.loads(line.split(' ',1)[1])
-                targets.update(str(ipaddress.ip_address(value)) for value in resolved['sensitive'])
-                bulk_targets.update(str(ipaddress.ip_address(value)) for value in resolved['bulk'])
-        if not targets or not bulk_targets or targets & bulk_targets:
-            raise RuntimeError('Missing Tor-resolved destination addresses')
         app_uid = uid()
-        # The fixed public relay directory is fetched by bounded direct HTTPS
-        # before wallet creation/firewall installation. It contains no wallet data.
-        # These peers permit Tor rotation, not arbitrary direct wallet requests.
-        directory=json.loads(shell('run-as',PACKAGE,'cat','files/core-relays.json'))
-        allowed=set()
-        for relay in directory['relays']:
-            for address in relay.get('or_addresses',[]):
-                host=address.rsplit(':',1)[0].strip('[]')
-                allowed.add(str(ipaddress.ip_address(host)))
-        if not 1000 <= len(allowed) <= 40000:
-            raise RuntimeError('Tor relay inventory outside reviewed bound')
-        bootstrap_path=Path(__file__).with_name('core-network-policy.json')
-        bootstrap=json.loads(bootstrap_path.read_text())
-        properties=(Path(__file__).resolve().parents[1]/'gradle.properties').read_text()
-        if 'ZCASH_SDK_VERSION='+bootstrap['sdk_version'] not in properties:
-            raise RuntimeError('Tor bootstrap inventory does not match the compiled SDK')
-        bootstrap_peers={(str(ipaddress.ip_address(row['address'])),int(row['port'])) for row in bootstrap['addresses']}
-        if not 50<len(bootstrap_peers)<2000 or any(not 1<=port<=65535 for _,port in bootstrap_peers):
-            raise RuntimeError('Tor bootstrap inventory outside reviewed bounds')
-        if {address for address,_ in bootstrap_peers}&targets:
-            raise RuntimeError('Tor bootstrap inventory overlaps direct wallet/provider destinations')
-        report['bootstrap_policy_sha256']=hashlib.sha256(bootstrap_path.read_bytes()).hexdigest()
-        # Snapshot established app TCP sockets after native Tor bootstrap.
-        peers = set()
-        for table in ('tcp', 'tcp6'):
-            for line in shell('cat', '/proc/net/'+table).splitlines()[1:]:
-                fields = line.split()
-                if len(fields) < 8 or int(fields[7]) != app_uid or fields[3] != '01':
-                    continue
-                address = fields[2].split(':')[0]
-                raw = bytes.fromhex(address)
-                raw = b''.join(raw[i:i+4][::-1] for i in range(0,len(raw),4))
-                peer = ipaddress.ip_address(raw)
-                if not peer.is_loopback and not peer.is_unspecified:
-                    peers.add(str(peer))
-        if peers & targets or not peers.issubset(allowed | {address for address,_ in bootstrap_peers}):
-            raise RuntimeError('Cannot establish isolated native Tor relay peers')
-        for binary, family in (('iptables',4),('ip6tables',6)):
-            lines=['*filter', ':CORE_ACCEPT - [0:0]', ':CORE_TOR - [0:0]',
-                   '-A CORE_ACCEPT -d '+('127.0.0.0/8' if family==4 else '::1')+' -j ACCEPT']
-            for target in sorted(targets):
-                if ipaddress.ip_address(target).version==family:
-                    lines.append('-A CORE_ACCEPT -d '+target+' -j REJECT')
-            for target in sorted(bulk_targets):
-                if ipaddress.ip_address(target).version==family:
-                    lines.append('-A CORE_ACCEPT -p tcp -d '+target+' --dport 443 -j ACCEPT')
-            lines.append('-A CORE_ACCEPT -j CORE_TOR')
-            for peer in sorted(allowed):
-                if ipaddress.ip_address(peer).version == family:
-                    lines.append('-A CORE_TOR -p tcp -d '+peer+' -j ACCEPT')
-            for peer,port in sorted(bootstrap_peers):
-                if ipaddress.ip_address(peer).version==family and peer not in allowed:
-                    lines.append('-A CORE_TOR -p tcp -d '+peer+' --dport '+str(port)+' -j ACCEPT')
-            # No UDP DNS or unobserved endpoint/relay is allowed from the app.
-            lines.extend(['-A CORE_TOR -p udp -j REJECT','-A CORE_TOR -j REJECT','COMMIT'])
-            local=root/(binary+'-rules.txt')
-            # Windows text-mode CRLF is invalid input for Android restore.
-            local.write_bytes(('\n'.join(lines)+'\n').encode('ascii'))
-            remote='/data/local/tmp/'+local.name
-            adb('push',str(local),remote,timeout=20)
-            shell(binary+'-restore --noflush < '+remote)
-            rule(binary,'-I','OUTPUT','1','-m','owner','--uid-owner',str(app_uid),'-j','CORE_ACCEPT')
-        firewall = True
+        if use_tor:
+            # Bounded kernel connection metadata identifies blocked native SDK
+            # bootstrap attempts when this AOSP image lacks the LOG extension.
+            adb('shell','mount','-t','tracefs','nodev','/sys/kernel/tracing',timeout=15,check=False)
+            try:
+                for path,value in (('tracing_on','0'),('buffer_size_kb','2048'),('options/record-tgid','1'),
+                                   ('events/sock/inet_sock_set_state/enable','1'),('tracing_on','1')):
+                    shell('echo '+value+' > /sys/kernel/tracing/'+path)
+                report['connection_tracing']=True
+            except RuntimeError as error:
+                report['connection_tracing']=False
+                report['connection_tracing_error']=str(error)[:400]
+            # Normal DNS is permitted for the explicitly authorized public bulk path.
+            # Sensitive SDK/provider calls must still use native Tor without fallback.
+            output = stage('networkTargets', 180)
+            targets = set()
+            bulk_targets = set()
+            for line in output.splitlines():
+                if line.startswith('CORE_TARGETS '):
+                    resolved=json.loads(line.split(' ',1)[1])
+                    targets.update(str(ipaddress.ip_address(value)) for value in resolved['sensitive'])
+                    bulk_targets.update(str(ipaddress.ip_address(value)) for value in resolved['bulk'])
+            if not targets or not bulk_targets or targets & bulk_targets:
+                raise RuntimeError('Missing Tor-resolved destination addresses')
+            app_uid = uid()
+            # The fixed public relay directory is fetched by bounded direct HTTPS
+            # before wallet creation/firewall installation. It contains no wallet data.
+            # These peers permit Tor rotation, not arbitrary direct wallet requests.
+            directory=json.loads(shell('run-as',PACKAGE,'cat','files/core-relays.json'))
+            allowed=set()
+            for relay in directory['relays']:
+                for address in relay.get('or_addresses',[]):
+                    host=address.rsplit(':',1)[0].strip('[]')
+                    allowed.add(str(ipaddress.ip_address(host)))
+            if not 1000 <= len(allowed) <= 40000:
+                raise RuntimeError('Tor relay inventory outside reviewed bound')
+            bootstrap_path=Path(__file__).with_name('core-network-policy.json')
+            bootstrap=json.loads(bootstrap_path.read_text())
+            properties=(Path(__file__).resolve().parents[1]/'gradle.properties').read_text()
+            if 'ZCASH_SDK_VERSION='+bootstrap['sdk_version'] not in properties:
+                raise RuntimeError('Tor bootstrap inventory does not match the compiled SDK')
+            bootstrap_peers={(str(ipaddress.ip_address(row['address'])),int(row['port'])) for row in bootstrap['addresses']}
+            if not 50<len(bootstrap_peers)<2000 or any(not 1<=port<=65535 for _,port in bootstrap_peers):
+                raise RuntimeError('Tor bootstrap inventory outside reviewed bounds')
+            if {address for address,_ in bootstrap_peers}&targets:
+                raise RuntimeError('Tor bootstrap inventory overlaps direct wallet/provider destinations')
+            report['bootstrap_policy_sha256']=hashlib.sha256(bootstrap_path.read_bytes()).hexdigest()
+            # Snapshot established app TCP sockets after native Tor bootstrap.
+            peers = set()
+            for table in ('tcp', 'tcp6'):
+                for line in shell('cat', '/proc/net/'+table).splitlines()[1:]:
+                    fields = line.split()
+                    if len(fields) < 8 or int(fields[7]) != app_uid or fields[3] != '01':
+                        continue
+                    address = fields[2].split(':')[0]
+                    raw = bytes.fromhex(address)
+                    raw = b''.join(raw[i:i+4][::-1] for i in range(0,len(raw),4))
+                    peer = ipaddress.ip_address(raw)
+                    if not peer.is_loopback and not peer.is_unspecified:
+                        peers.add(str(peer))
+            if peers & targets or not peers.issubset(allowed | {address for address,_ in bootstrap_peers}):
+                raise RuntimeError('Cannot establish isolated native Tor relay peers')
+            for binary, family in (('iptables',4),('ip6tables',6)):
+                lines=['*filter', ':CORE_ACCEPT - [0:0]', ':CORE_TOR - [0:0]',
+                       '-A CORE_ACCEPT -d '+('127.0.0.0/8' if family==4 else '::1')+' -j ACCEPT']
+                for target in sorted(targets):
+                    if ipaddress.ip_address(target).version==family:
+                        lines.append('-A CORE_ACCEPT -d '+target+' -j REJECT')
+                for target in sorted(bulk_targets):
+                    if ipaddress.ip_address(target).version==family:
+                        lines.append('-A CORE_ACCEPT -p tcp -d '+target+' --dport 443 -j ACCEPT')
+                lines.append('-A CORE_ACCEPT -j CORE_TOR')
+                for peer in sorted(allowed):
+                    if ipaddress.ip_address(peer).version == family:
+                        lines.append('-A CORE_TOR -p tcp -d '+peer+' -j ACCEPT')
+                for peer,port in sorted(bootstrap_peers):
+                    if ipaddress.ip_address(peer).version==family and peer not in allowed:
+                        lines.append('-A CORE_TOR -p tcp -d '+peer+' --dport '+str(port)+' -j ACCEPT')
+                # No UDP DNS or unobserved endpoint/relay is allowed from the app.
+                lines.extend(['-A CORE_TOR -p udp -j REJECT','-A CORE_TOR -j REJECT','COMMIT'])
+                local=root/(binary+'-rules.txt')
+                # Windows text-mode CRLF is invalid input for Android restore.
+                local.write_bytes(('\n'.join(lines)+'\n').encode('ascii'))
+                remote='/data/local/tmp/'+local.name
+                adb('push',str(local),remote,timeout=20)
+                shell(binary+'-restore --noflush < '+remote)
+                rule(binary,'-I','OUTPUT','1','-m','owner','--uid-owner',str(app_uid),'-j','CORE_ACCEPT')
+            firewall = True
         if transport_only:
             stage('recipient',240)
             check_denials('recipient')
@@ -459,77 +478,78 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 raise RuntimeError('Installed update identity/version mismatch')
             stage('upgrade',240)
             check_denials('upgrade')
-        # Start the normal wallet resync path, then interrupt its actual native
-        # synchronizer before broadcast. Require fresh sync and intact history.
-        before = time.monotonic()
-        outcome = {}
-        transport_stage = 'transportProbe' if transport_only else 'transport'
-        def interrupted_request():
-            try: stage(transport_stage,420);outcome['passed']=True
-            except Exception as error: outcome['error']=type(error).__name__
-        worker = threading.Thread(target=interrupted_request)
-        worker.start()
-        active_drops=[]
-        try:
-            def wait_marker(name,timeout=120):
-                deadline=time.monotonic()+timeout
-                while time.monotonic()<deadline:
-                    data=adb('shell','run-as',PACKAGE,'cat','files/'+name,timeout=10,check=False)
-                    if data.returncode==0:
-                        return json.loads(data.stdout)
-                    if not worker.is_alive():raise RuntimeError('Wallet sync stage ended before handshake')
-                    time.sleep(.5)
-                raise RuntimeError('Wallet sync handshake deadline exceeded')
-            if not wait_marker('core-sync-ready.json',180).get('ready'):
-                raise RuntimeError('Wallet synchronizer not ready for interruption')
-            for binary in ('iptables','ip6tables'):
-                rule(binary,'-I','CORE_TOR','1','-j','DROP')
-                active_drops.append(binary)
-            shell('run-as',PACKAGE,'touch','files/core-sync-drop')
-            outage=wait_marker('core-sync-requested.json',35)
-            if not all(outage.get(key) is True for key in ('requested','metadata_blocked','update_blocked','direct_bulk_reachable')):
-                raise RuntimeError('Sensitive Tor failure with reachable direct bulk path not established')
-            time.sleep(10)
-            blocked = 0
-            for binary in ('iptables','ip6tables'):
-                counters = rule(binary,'-L','CORE_TOR','-n','-v','-x')
-                for line in counters.splitlines():
-                    fields=line.split()
-                    if len(fields)>2 and fields[2]=='DROP':blocked+=int(fields[0])
-                rule(binary,'-D','CORE_TOR','-j','DROP')
-                active_drops.remove(binary)
-            worker.join(timeout=200)
-            if worker.is_alive() or not outcome.get('passed') or blocked==0:
-                report['transport_failure'] = dict(worker_active=worker.is_alive(),
-                    worker_error=outcome.get('error'), blocked_packets=blocked)
-                raise RuntimeError('Tor interruption/recovery not established')
-            recovery=json.loads(shell('run-as',PACKAGE,'cat','files/core-sync-result.json'))
-            required = ['sync_restarted', 'synced', 'balance_preserved', 'update_metadata_valid_before',
-                        'update_blocked_during_outage']
-            required.append('probe_only' if transport_only else 'history_preserved')
-            updater_reachable = recovery.get('update_metadata_valid_after') is True or (
-                recovery.get('update_rate_limited_after') is True and recovery.get('update_http_status_after') in (403,429))
-            if not all(recovery.get(key) is True for key in required) or not updater_reachable:
-                raise RuntimeError('Wallet synchronization recovery not established')
-            print('CORE_UPDATER_RECOVERY ' + json.dumps(dict(metadata_valid=recovery['update_metadata_valid_after'],
-                http_status=recovery.get('update_http_status_after', 200))), flush=True)
-            stages['interruption']=dict(passed=True,metadata_blocked=True,direct_bulk_reachable=True,metadata_recovered=True,blocked_packets=blocked,seconds=time.monotonic()-before,**recovery)
-        finally:
-            cleanup_errors=[]
-            for binary in reversed(active_drops):
-                try:rule(binary,'-D','CORE_TOR','-j','DROP')
-                except Exception as error:cleanup_errors.append(type(error).__name__)
-            if worker.is_alive():
-                try:adb('shell','am','force-stop',PACKAGE,timeout=15,check=False)
-                except Exception as error:cleanup_errors.append(type(error).__name__)
-                with operation_lock:operation=active_instrumentation.get(transport_stage)
-                if operation is not None and operation.poll() is None:
-                    operation.terminate()
-                    try:operation.wait(timeout=10)
-                    except subprocess.TimeoutExpired:operation.kill();operation.wait(timeout=10)
-                worker.join(timeout=100)
-            if worker.is_alive():raise RuntimeError('Interruption instrumentation worker did not exit')
-            if cleanup_errors:raise RuntimeError('Tor outage cleanup failed: '+','.join(cleanup_errors))
+        if use_tor:
+            # Start the normal wallet resync path, then interrupt its actual native
+            # synchronizer before broadcast. Require fresh sync and intact history.
+            before = time.monotonic()
+            outcome = {}
+            transport_stage = 'transportProbe' if transport_only else 'transport'
+            def interrupted_request():
+                try: stage(transport_stage,420);outcome['passed']=True
+                except Exception as error: outcome['error']=type(error).__name__
+            worker = threading.Thread(target=interrupted_request)
+            worker.start()
+            active_drops=[]
+            try:
+                def wait_marker(name,timeout=120):
+                    deadline=time.monotonic()+timeout
+                    while time.monotonic()<deadline:
+                        data=adb('shell','run-as',PACKAGE,'cat','files/'+name,timeout=10,check=False)
+                        if data.returncode==0:
+                            return json.loads(data.stdout)
+                        if not worker.is_alive():raise RuntimeError('Wallet sync stage ended before handshake')
+                        time.sleep(.5)
+                    raise RuntimeError('Wallet sync handshake deadline exceeded')
+                if not wait_marker('core-sync-ready.json',180).get('ready'):
+                    raise RuntimeError('Wallet synchronizer not ready for interruption')
+                for binary in ('iptables','ip6tables'):
+                    rule(binary,'-I','CORE_TOR','1','-j','DROP')
+                    active_drops.append(binary)
+                shell('run-as',PACKAGE,'touch','files/core-sync-drop')
+                outage=wait_marker('core-sync-requested.json',35)
+                if not all(outage.get(key) is True for key in ('requested','metadata_blocked','update_blocked','direct_bulk_reachable')):
+                    raise RuntimeError('Sensitive Tor failure with reachable direct bulk path not established')
+                time.sleep(10)
+                blocked = 0
+                for binary in ('iptables','ip6tables'):
+                    counters = rule(binary,'-L','CORE_TOR','-n','-v','-x')
+                    for line in counters.splitlines():
+                        fields=line.split()
+                        if len(fields)>2 and fields[2]=='DROP':blocked+=int(fields[0])
+                    rule(binary,'-D','CORE_TOR','-j','DROP')
+                    active_drops.remove(binary)
+                worker.join(timeout=200)
+                if worker.is_alive() or not outcome.get('passed') or blocked==0:
+                    report['transport_failure'] = dict(worker_active=worker.is_alive(),
+                        worker_error=outcome.get('error'), blocked_packets=blocked)
+                    raise RuntimeError('Tor interruption/recovery not established')
+                recovery=json.loads(shell('run-as',PACKAGE,'cat','files/core-sync-result.json'))
+                required = ['sync_restarted', 'synced', 'balance_preserved', 'update_metadata_valid_before',
+                            'update_blocked_during_outage']
+                required.append('probe_only' if transport_only else 'history_preserved')
+                updater_reachable = recovery.get('update_metadata_valid_after') is True or (
+                    recovery.get('update_rate_limited_after') is True and recovery.get('update_http_status_after') in (403,429))
+                if not all(recovery.get(key) is True for key in required) or not updater_reachable:
+                    raise RuntimeError('Wallet synchronization recovery not established')
+                print('CORE_UPDATER_RECOVERY ' + json.dumps(dict(metadata_valid=recovery['update_metadata_valid_after'],
+                    http_status=recovery.get('update_http_status_after', 200))), flush=True)
+                stages['interruption']=dict(passed=True,metadata_blocked=True,direct_bulk_reachable=True,metadata_recovered=True,blocked_packets=blocked,seconds=time.monotonic()-before,**recovery)
+            finally:
+                cleanup_errors=[]
+                for binary in reversed(active_drops):
+                    try:rule(binary,'-D','CORE_TOR','-j','DROP')
+                    except Exception as error:cleanup_errors.append(type(error).__name__)
+                if worker.is_alive():
+                    try:adb('shell','am','force-stop',PACKAGE,timeout=15,check=False)
+                    except Exception as error:cleanup_errors.append(type(error).__name__)
+                    with operation_lock:operation=active_instrumentation.get(transport_stage)
+                    if operation is not None and operation.poll() is None:
+                        operation.terminate()
+                        try:operation.wait(timeout=10)
+                        except subprocess.TimeoutExpired:operation.kill();operation.wait(timeout=10)
+                    worker.join(timeout=100)
+                if worker.is_alive():raise RuntimeError('Interruption instrumentation worker did not exit')
+                if cleanup_errors:raise RuntimeError('Tor outage cleanup failed: '+','.join(cleanup_errors))
         if not transport_only:
             check_denials('transport')
             stage('send')
@@ -547,7 +567,10 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 clear_wallet()
                 stage('sender', 240)
                 check_denials(f'cold-start-{cycle + 1}')
-        finish_network_check('cold-start' if repeat_cold_start else current_stage, transport_exercised=True)
+        if use_tor:
+            finish_network_check('cold-start' if repeat_cold_start else current_stage, transport_exercised=True)
+        else:
+            report['passed'] = True
     finally:
         failure=sys.exc_info()[1]
         if failure:report['failure']=dict(type=type(failure).__name__,message=str(failure)[:1600])

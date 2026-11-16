@@ -51,7 +51,8 @@ class PackagingTests(unittest.TestCase):
             self.assertIn('!inputs.candidate_run', job)
             self.assertNotIn('secrets.', job)
             dependencies = [line.strip() for line in job.splitlines() if line.startswith('    needs:')]
-            self.assertEqual(['needs: [preflight, signing_smoke]'], dependencies)
+            self.assertEqual(['needs: [admit_hosted, preflight, signing_smoke]' if job is production else
+                              'needs: [preflight, signing_smoke]'], dependencies)
             self.assertIn("needs.preflight.result == 'success'", job)
             self.assertIn("needs.signing_smoke.result == 'success'", job)
             self.assertNotIn('.private/preflight.py', job)

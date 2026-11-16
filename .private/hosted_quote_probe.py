@@ -11,7 +11,7 @@ from hosted_fixture import recorded_pair
 from release_metadata import Metadata, require
 
 
-def stage_candidate(root, source, quote_id, production_id, original_run='', original_controller=''):
+def stage_candidate(root, source, quote_id, production_id, original_run='', original_controller='', *, use_tor=True):
     from hosted_release import artifact, stage
     from release_inputs import version_code
 
@@ -28,7 +28,7 @@ def stage_candidate(root, source, quote_id, production_id, original_run='', orig
     (root/'quote-manifest.json').write_text(json.dumps(dict(
         package='com.personal.zecprivate.foss.debug', expectedVersionCode=version_code(Path.cwd(), source),
         phase1Scenario=True, sizeWorkflowScenario=True, source=source, producer=producer,
-        production_artifact=production, artifact_run_id=int(run))))
+        production_artifact=production, artifact_run_id=int(run), tor_enabled=use_tor)))
 
 
 def stage_quote_apk(root, tag):
@@ -47,7 +47,7 @@ def stage_quote_apk(root, tag):
         original_run = int(evidence['artifact_run_id'])
         require(quote['artifact_run_id'] == original_run, 'Quote receipt belongs to a different build')
         artifact = hosted_artifact(metadata, quote['producer']['id'], 'isolated-ui-repro-apk',
-                                   original_run, core['producer_controller_sha'])
+                                   original_run, quote.get('producer_controller_sha', core['producer_controller_sha']))
         require(artifact == quote['producer'], 'Hosted quote producer differs from release evidence')
     else:
         _, artifact, _ = metadata.producer(quote['workflow_run_id'], source, 'build-release.yml', 'emulator',
@@ -98,11 +98,14 @@ def run(session, root, fixture):
         raise
     receipt = json.loads((root/'tor-ui-result.json').read_text())
     scenario = receipt['phase1Scenario']
+    use_tor = manifest.get('tor_enabled', True)
+    require(receipt['torOptInVerified'] is use_tor and receipt['torOptOutVerified'] is (not use_tor),
+            'Quoted wallet did not select the required transport')
     print(json.dumps(dict(quote_reviews=receipt['quoteReviewsVerified'], dismissals=receipt['dismissals'],
                           independent_comparisons=scenario['independentComparisons'],
                           reference_states=scenario['referenceStates'],
                           tor_http_retries=scenario['torHttpRetries'],
-                          tor_enabled=receipt['torOptInVerified'], funded=False)), flush=True)
+                          tor_enabled=use_tor, funded=False)), flush=True)
     if scenario['independentComparisons'] == 0:
         logs = session.adb('logcat', '-d', '-v', 'raw', '-t', '3000', timeout=15, check=False)
         safe = re.findall(r'Independent market check: (timeout|rate limited|HTTP \d{3}|rejected response|'
@@ -125,7 +128,7 @@ def run(session, root, fixture):
                       executed_apk_sha256=prepared['quotes.apk']['testedSha256'],
                       original_apk_sha256=prepared['quotes.apk']['originalSha256'],
                       quote_requests=receipt['quoteRequests'], quote_reviews=receipt['quoteReviewsVerified'],
-                      dismissals=receipt['dismissals'], tor_enabled=receipt['torOptInVerified'],
+                      dismissals=receipt['dismissals'], tor_enabled=use_tor,
                       funds_transferred=receipt['fundsTransferred'], personal_wallet_access=receipt['personalWalletAccess'],
                       recipient_network_mismatch_blocked=scenario['recipientNetworkMismatchBlocked'],
                       corrected_without_leaving_form=scenario['correctedWithoutLeavingForm'],
@@ -133,5 +136,5 @@ def run(session, root, fixture):
                       production_artifact=manifest['production_artifact'], producer=manifest['producer'],
                       workflow_run_id=int(os.environ['GITHUB_RUN_ID']), artifact_run_id=manifest['artifact_run_id'],
                       quote_controller_sha=os.environ['GITHUB_SHA'])
-        validate_quotes(result, result['input_fingerprint'])
+        validate_quotes(result, result['input_fingerprint'], use_tor=use_tor)
         (fixture/'hosted-quotes.json').write_text(json.dumps(result, indent=2) + '\n')

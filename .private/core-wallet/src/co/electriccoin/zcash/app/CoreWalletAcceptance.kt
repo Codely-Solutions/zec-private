@@ -95,9 +95,15 @@ class CoreWalletAcceptance {
         check(ZcashNetwork.fromResources(context) == ZcashNetwork.Testnet)
         check(arguments.getString("isolatedTestnet") == "valueless-coins-only")
         val stage = checkNotNull(arguments.getString("stage"))
+        val transport = arguments.getString("transport") ?: "tor"
+        check(transport in setOf("tor", "direct"))
+        val useTor = transport == "tor"
+        check(useTor || stage !in setOf("networkTargets", "rpcProbe", "transport", "transportProbe"))
         val started = System.nanoTime()
         withTimeout(900_000) {
-            dependency<IsTorEnabledStorageProvider>().store(true)
+            val preference = dependency<IsTorEnabledStorageProvider>()
+            preference.store(useTor)
+            check(preference.get() == useTor)
             if (stage !in listOf("networkTargets", "rpcProbe", "receiptProbe")) {
                 val intent = checkNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -402,19 +408,26 @@ class CoreWalletAcceptance {
                 }
                 else -> error("Unsupported core stage")
             }
+            check(preference.get() == useTor)
         }
         val receipt = JSONObject().put("stage", stage).put("passed", true)
-            .put("network", "zcash-testnet").put("transport", "Tor sensitive RPCs; upstream direct bulk")
+            .put("network", "zcash-testnet").put("tor_enabled", useTor)
+            .put("transport", if (useTor) "Tor sensitive RPCs; upstream direct bulk" else "direct")
             .put("seconds", (System.nanoTime() - started) / 1_000_000_000.0)
         if (stage in listOf("send", "restart", "restore")) receipt.put("txId", fixture().getString("txId"))
-        if (stage in listOf("rpcProbe", "networkTargets", "fund")) {
+        if (useTor && stage in listOf("rpcProbe", "networkTargets", "fund")) {
             receipt.put("native_rpc_probe", fixture().getJSONObject("nativeRpcProbe"))
         }
         if (stage=="transportProbe") receipt.put("probe_only", true)
-        if (stage=="fund") receipt.put("funding_txid",fixture().getString("fundingTxId")).put("balance_zatoshi",fixture().getLong("fundedBalance"))
-            .put("app_transaction_state",fixture().getString("fundConfirmedState"))
-            .put("public_relay_directory_transport", "direct HTTPS before wallet firewall; no wallet data")
-            .put("public_relay_fetch_millis",fixture().getLong("publicRelayFetchMillis"))
+        if (stage == "fund") {
+            receipt.put("funding_txid", fixture().getString("fundingTxId"))
+                .put("balance_zatoshi", fixture().getLong("fundedBalance"))
+                .put("app_transaction_state", fixture().getString("fundConfirmedState"))
+            if (useTor) {
+                receipt.put("public_relay_directory_transport", "direct HTTPS before wallet firewall; no wallet data")
+                    .put("public_relay_fetch_millis", fixture().getLong("publicRelayFetchMillis"))
+            }
+        }
         if (stage=="sender") receipt.put("scanned_height",fixture().getLong("preflightScannedHeight"))
             .put("network_height",fixture().getLong("preflightNetworkHeight"))
             .put("mode",fixture().getString("preflightMode"))

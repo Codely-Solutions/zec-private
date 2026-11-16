@@ -42,8 +42,9 @@ def stage(directory, artifact_id, name, *, metadata=None, run=None, controller=N
             'Downloaded archive bytes differ from the GitHub artifact')
     with zipfile.ZipFile(path) as archive:
         names = archive.namelist()
+        extra = {'direct-preparation.json', 'baseline-instrumentation.bin'} if name == 'core-direct-candidate' else set()
         require(len(names) == len(set(names)) <= 8 and
-                all(re.fullmatch(r'[A-Za-z0-9_.-]+\.apk|source-sha\.txt|SHA256SUMS', n) for n in names)
+                all(n in extra or re.fullmatch(r'[A-Za-z0-9_.-]+\.apk|source-sha\.txt|SHA256SUMS', n) for n in names)
                 and sum(item.file_size for item in archive.infolist()) <= 192 * 1024**2,
                 'Unexpected or excessive APK archive entries')
         archive.extractall(directory)
@@ -53,7 +54,7 @@ def stage(directory, artifact_id, name, *, metadata=None, run=None, controller=N
 
 
 def read_receipts(directory, *, proof, source, controller, production_id, core_id, quote_id,
-                  metadata=None, recovery=None):
+                  metadata=None, recovery=None, direct_core_id=''):
     metadata = metadata or Metadata()
     run = os.environ['GITHUB_RUN_ID']
     build_run = str(recovery['run']) if recovery else run
@@ -68,6 +69,26 @@ def read_receipts(directory, *, proof, source, controller, production_id, core_i
     fixture = json.loads((ROOT / '.private/hosted-fixture.json').read_text())
     core = json.loads((directory / 'hosted-core.json').read_text())
     quote = json.loads((directory / 'hosted-quotes.json').read_text())
+    # A verified prior Tor wallet receipt can only be reused during recovery.
+    use_tor = bool(recovery and not missing_core and core.get('tor_enabled', True) is True)
+    original_core = artifact(metadata, core_id, 'core-testnet-candidate', build_run, build_controller)
+    prepared = None
+    if use_tor:
+        require(not direct_core_id, 'Tor acceptance cannot use a direct wallet artifact')
+        core_producer = original_core
+        core_artifact_run, core_build_controller = build_run, build_controller
+    else:
+        core_artifact_run, core_build_controller = str(core_run), core_controller
+        if recovery and not missing_core:
+            direct_core_id = core['producer']['id']
+        core_producer = artifact(metadata, direct_core_id, 'core-direct-candidate', core_artifact_run, core_build_controller)
+        prepared = core['direct_preparation']
+        require(prepared['source'] == source and prepared['harness_controller'] == core_controller
+                and prepared['original_core'] == original_core and prepared['baseline_source'] == fixture['source_sha']
+                and prepared['baseline_apk_sha256'] == fixture['candidate_apk_sha256']
+                and prepared['candidate_apk_sha256'] == core['candidate_apk_sha256']
+                and prepared['candidate_instrumentation_sha256'] == core['instrumentation_apk_sha256'],
+                'Direct acceptance differs from its exact APK and instrumentation preparation')
     require(all(receipt.get('build_source_sha') == source and receipt.get('candidate_version_code') == version
                 and receipt.get('production_artifact') == production and receipt.get('workflow_run_id') == int(receipt_run)
                 for receipt, receipt_run in ((core, core_run), (quote, quote_run))) and str(proof['workflow_run_id']) == build_run
@@ -76,17 +97,18 @@ def read_receipts(directory, *, proof, source, controller, production_id, core_i
         require(quote.get('quote_controller_sha') == quote_controller
                 and quote.get('artifact_run_id') == int(build_run), 'Quote recovery used different execution inputs')
     if missing_core:
-        require(core.get('artifact_run_id') == int(build_run), 'Wallet recovery used a different artifact run')
+        require(core.get('artifact_run_id') == int(core_artifact_run), 'Wallet recovery used a different artifact run')
     require(core.get('rehearsal') is False and core['funding_setup']['claim_requests'] == 1,
             'Hosted release requires exactly one funded testnet claim')
     previous = recovery.get('previous_reservation') if missing_core else None
     verify(binding(source, core_controller, version, int(core_run), False, previous), core['hosted_reservation'], metadata)
-    require(core['producer'] == artifact(metadata, core_id, 'core-testnet-candidate', build_run, build_controller)
+    require(core['producer'] == core_producer
             and quote['producer'] == artifact(metadata, quote_id, 'isolated-ui-repro-apk', build_run, build_controller),
             'Hosted receipt names a different test APK producer')
-    validate_core_sources(core, source, baseline=fixture)
-    validate_quotes(quote, input_fingerprint(source, profile='production-quotes'))
-    core.update(artifact_id=int(core_id), producer_controller_sha=build_controller)
+    validate_core_sources(core, source, baseline=fixture, use_tor=use_tor, prepared=prepared)
+    validate_quotes(quote, input_fingerprint(source, profile='production-quotes'), use_tor=use_tor)
+    core.update(artifact_id=core_producer['id'], producer_controller_sha=core_build_controller)
+    quote['producer_controller_sha'] = build_controller
     return core, quote
 
 

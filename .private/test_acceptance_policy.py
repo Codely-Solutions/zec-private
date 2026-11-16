@@ -148,6 +148,20 @@ class AcceptancePolicyTest(unittest.TestCase):
         bad['funding_setup']=dict(tor_exit_verified=True,persistent_tor_connection=True,txid='c'*64)
         with self.assertRaises(ValueError):validate_core(bad,'inputs')
 
+    def test_direct_receipt_still_requires_financial_stages_and_readiness(self):
+        receipt = self.receipt(tor_enabled=False, preclaim_readiness=dict(passed=True, route='direct', role='baseline'))
+        del receipt['network_enforcement'], receipt['stages']['interruption']
+        for stage in ('networkTargets', 'transport'):
+            del receipt['instrumentation_pairing']['stages'][stage]
+        for stage in receipt['stages'].values():
+            stage['tor_enabled'] = False
+        self.assertTrue(validate_core(receipt, 'inputs', use_tor=False))
+        for change in (dict(preclaim_readiness={}), dict(stages={}), dict(tor_enabled=True)):
+            with self.assertRaises(ValueError):
+                validate_core(dict(receipt, **change), 'inputs', use_tor=False)
+        with self.assertRaises(ValueError):
+            validate_core(receipt, 'inputs')
+
     def test_updater_transport_distinguishes_quota_from_metadata_success(self):
         for status in (200, 403, 429):
             receipt = self.receipt()

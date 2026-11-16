@@ -165,7 +165,8 @@ def main():
             raise RuntimeError('Unsigned artifact acceptance fingerprints differ from the hosted candidate')
         core, quote = read_receipts(ROOT/'hosted-receipts', proof=proof, source=expected, controller=controller,
                                     production_id=os.environ['PRODUCTION_ID'], core_id=os.environ['CORE_ID'],
-                                    quote_id=os.environ['QUOTE_ID'], recovery=recovery)
+                                    quote_id=os.environ['QUOTE_ID'], recovery=recovery,
+                                    direct_core_id=os.environ.get('DIRECT_CORE_ID', ''))
     else:
         from custom_release import MARKER as CUSTOM_MARKER
 

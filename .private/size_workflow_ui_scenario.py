@@ -20,7 +20,7 @@ def quote_footer_needs_scroll(labels, footer):
     return footer is None and {'from', 'to'} <= labels
 
 
-def run(root, stop, quote_stage_records):
+def run(root, stop, quote_stage_records, *, use_tor=True):
     sequence=0
 
     def read_state():
@@ -117,7 +117,7 @@ def run(root, stop, quote_stage_records):
         back('Create New Wallet')
         click('Create New Wallet','More')
         click('Review','Opt in')
-        click('Opt in','More')
+        click('Opt in' if use_tor else 'Opt out', 'More')
         click('More','More...')
         click('More...','Address Book')
         click('Address Book','Add New Contact')
@@ -185,7 +185,7 @@ def run(root, stop, quote_stage_records):
                         break
                     elif 'quote unavailable' in current:
                         messages=[n['text'] for n in state['nodes'] if 'timeout' in n['text'].lower()]
-                        if tor_http_failure(previous_quote_stages, quote_stage_records()):
+                        if use_tor and tor_http_failure(previous_quote_stages, quote_stage_records()):
                             if attempt == 2:
                                 print(TRANSIENT_FAILURE + ' tor_http', flush=True)
                                 raise RuntimeError('Tor HTTP retry budget exhausted')
