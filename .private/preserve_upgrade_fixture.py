@@ -4,7 +4,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import zipfile
 
@@ -23,6 +22,14 @@ def api(path):
 
 def digest(path):
     return 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def artifact_matches_pair(asset, pair):
+    return (asset['expired'] is False and asset['id'] == pair['artifact_id']
+            and asset['workflow_run']['id'] == pair.get('artifact_run_id', pair['workflow_run_id'])
+            and asset['workflow_run']['head_sha'] == pair.get('producer_controller_sha', pair['build_source_sha'])
+            and ('producer' not in pair or all(asset[key] == pair['producer'][key]
+                                               for key in ('id', 'digest', 'size_in_bytes'))))
 
 
 def fixture_apks(archive,core):
@@ -57,18 +64,15 @@ def write_seedless_pair(fixture, payloads, source):
 
 
 def preserve(tag):
-    if not re.fullmatch(r'v\d+\.\d+\.\d+-private\.\d+', tag):
-        raise ValueError('Exact private release tag required')
+    from hosted_fixture import recorded_pair
+
     out = Path(os.environ['CODEX_GUARD_OUTPUT']).resolve()
-    evidence = json.loads((ROOT / '.private/release-evidence' / (tag + '.json')).read_text())
-    core = evidence['core']
-    if not core['passed'] or core['real_funds_used'] or core['personal_wallet_access']:
-        raise ValueError('Accepted isolated testnet execution required')
+    evidence, core = recorded_pair(tag, ROOT)
     release = json.loads(gh('release', 'view', tag, '--repo', REPO, '--json', 'isDraft,body,assets'))
     if release['isDraft'] or 'Android versionCode: ' + str(core['candidate_version_code']) not in release['body']:
         raise ValueError('Published matching wallet release required')
     live = api('actions/artifacts/' + str(core['artifact_id']))
-    if live['expired'] or live['workflow_run']['id'] != core['workflow_run_id'] or live['workflow_run']['head_sha'] != core['build_source_sha']:
+    if not artifact_matches_pair(live, core):
         raise ValueError('Executed artifact producer mismatch')
     raw = gh('api', 'repos/' + REPO + '/actions/artifacts/' + str(core['artifact_id']) + '/zip')
     if len(raw) != live['size_in_bytes'] or 'sha256:' + hashlib.sha256(raw).hexdigest() != live['digest']:
@@ -87,7 +91,7 @@ def preserve(tag):
                                            for name,data in payloads.items()))
     provenance = dict(release=tag, production_source=evidence['source_sha'], build_source=core['build_source_sha'],
         version_code=core['candidate_version_code'], package='com.personal.zecprivate.testnet.foss.debug',
-        original_artifact_id=core['artifact_id'], workflow_run_id=core['workflow_run_id'],
+        original_artifact_id=core['artifact_id'], workflow_run_id=live['workflow_run']['id'],
         original_apk_sha256=core['candidate_apk_sha256'],
         original_instrumentation_apk_sha256=core['instrumentation_apk_sha256'], fixture_digest=digest(fixture), fixture_bytes=fixture.stat().st_size,
         purpose='Next installed-update baseline; version-matched original app and instrumentation APKs, no wallet data or keys')

@@ -4,7 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock
 from core_testnet_driver import (
-    PACKAGE, RUNNER, claim_after_readiness, instrumentation_role, select_apk_roles,
+    PACKAGE, RUNNER, claim_after_readiness, installed_apk_hash, instrumentation_role, run, select_apk_roles,
     verify_instrumentation_pair, wait_for_preclaim_marker,
 )
 
@@ -76,6 +76,26 @@ class CoreInstrumentationPairingTest(unittest.TestCase):
                 with self.assertRaises(RuntimeError): verify_instrumentation_pair(adb, 3234017, 'a'*64)
             finally:
                 responses[key] = original
+
+    def test_installed_app_hash_requires_exact_package_path(self):
+        path = '/data/app/~~AbC_123==/' + PACKAGE + '-Zyx_456==/base.apk'
+        shell = Mock(side_effect=['package:' + path, 'a' * 64 + '  ' + path])
+        self.assertEqual(installed_apk_hash(shell, PACKAGE), 'a' * 64)
+        shell.assert_called_with('sha256sum', path)
+        shell = Mock(return_value='package:' + path.replace(PACKAGE, PACKAGE + '.test'))
+        with self.assertRaises(RuntimeError):
+            installed_apk_hash(shell, PACKAGE)
+        shell.assert_called_once_with('pm', 'path', PACKAGE)
+
+    def test_installed_upgrade_rejects_any_other_mode_before_adb(self):
+        for flag in ('use_tor', 'transport_only', 'repeat_cold_start', 'upgrade_probe',
+                     'preclaim_check', 'preclaim_only', 'live_tor_probe'):
+            with self.subTest(flag=flag):
+                adb = Mock()
+                options = {'use_tor': False, flag: True}
+                with self.assertRaisesRegex(ValueError, 'direct unfunded path'):
+                    run(adb, None, None, None, installed_upgrade=True, **options)
+                adb.assert_not_called()
 
 
 if __name__ == '__main__':

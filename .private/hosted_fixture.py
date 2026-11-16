@@ -1,4 +1,4 @@
-"""Bind a private registry fixture to the original accepted testnet APK pair."""
+"""Bind a private registry fixture to the accepted testnet APK pair for a release."""
 import argparse
 import json
 import os
@@ -7,7 +7,7 @@ import re
 import subprocess
 import zipfile
 
-from preserve_upgrade_fixture import digest, fixture_apks, write_seedless_pair
+from preserve_upgrade_fixture import artifact_matches_pair, digest, fixture_apks, write_seedless_pair
 from release_metadata import Metadata, require
 
 
@@ -16,15 +16,27 @@ REGISTRY = 'ghcr.io/codely-solutions/zec-private-upgrade-fixtures'
 MAX_ARCHIVE = 160 * 1024**2
 
 
-def recorded_pair(tag):
+def release_pair(evidence):
+    if 'funded_reuse' not in evidence:
+        return evidence.get('core') or {}
+    pair = evidence['installed_upgrade']
+    require(pair['evidence_class'] == 'unfunded-installed-upgrade'
+            and pair['build_source_sha'] == evidence['source_sha']
+            and pair['candidate_version_code'] == evidence['versionCode']
+            and pair['artifact_id'] == pair['producer']['id'],
+            'Installed upgrade must identify the exact accepted APK pair for the release')
+    return pair
+
+
+def recorded_pair(tag, root=None):
     require(re.fullmatch(r'v\d+\.\d+\.\d+-private\.\d+', tag), 'Exact release tag required')
-    evidence = json.loads((ROOT / '.private/release-evidence' / (tag + '.json')).read_text())
-    core = evidence['core']
-    require(evidence['release_tag'] == tag and core['passed'] is True
-            and core['real_funds_used'] is False and core['personal_wallet_access'] is False
-            and core['candidate_version_code'] == evidence['versionCode'],
+    evidence = json.loads(((root or ROOT) / '.private/release-evidence' / (tag + '.json')).read_text())
+    pair = release_pair(evidence)
+    require(evidence['release_tag'] == tag and pair['passed'] is True
+            and pair['real_funds_used'] is False and pair['personal_wallet_access'] is False
+            and pair['candidate_version_code'] == evidence['versionCode'],
             'Verified release with isolated testnet execution required')
-    return evidence, core
+    return evidence, pair
 
 
 def added_release(before, after, root=ROOT):
@@ -45,8 +57,7 @@ def select(tag, before):
         if not tag:
             return ''
         evidence = json.loads((ROOT / '.private/release-evidence' / (tag + '.json')).read_text())
-        # Reused core evidence keeps its existing version-paired baseline.
-        if (evidence.get('core') or {}).get('candidate_version_code') != evidence.get('versionCode'):
+        if release_pair(evidence).get('candidate_version_code') != evidence.get('versionCode'):
             return ''
     recorded_pair(tag)
     return tag
@@ -63,9 +74,10 @@ def pending_pair(metadata, root=ROOT):
     evidence = json.loads(record.read_text())
     # An already integrated release with a new real pair can be recovered from
     # its original artifact. Public verification remains required in prepare().
-    if (evidence.get('core') or {}).get('candidate_version_code') != evidence['versionCode']:
+    if release_pair(evidence).get('candidate_version_code') != evidence['versionCode']:
         return ''
     require(evidence['versionCode'] > selected['version_code'], 'Refusing to recover an older fixture')
+    recorded_pair(tag, root)
     return tag
 
 
@@ -94,12 +106,7 @@ def prepare(tag, archive, out, metadata):
             and apks[0].get('digest') == 'sha256:' + evidence['apk_sha256'],
             'Published APK differs from recorded verification')
     asset = metadata.api('/actions/artifacts/' + str(core['artifact_id']))
-    require(asset['expired'] is False and asset['id'] == core['artifact_id']
-            and asset['workflow_run']['id'] == core.get('artifact_run_id', core['workflow_run_id'])
-            and asset['workflow_run']['head_sha'] == core.get('producer_controller_sha', core['build_source_sha'])
-            and ('producer' not in core or all(asset[key] == core['producer'][key]
-                                               for key in ('id', 'digest', 'size_in_bytes')))
-            and 0 < asset['size_in_bytes'] <= MAX_ARCHIVE,
+    require(artifact_matches_pair(asset, core) and 0 < asset['size_in_bytes'] <= MAX_ARCHIVE,
             'Accepted artifact run or source differs')
     with archive.open('xb') as stream:
         subprocess.run(['gh', 'api', metadata.repo + '/actions/artifacts/' + str(asset['id']) + '/zip'],
@@ -133,7 +140,7 @@ def verify(tag, path, archive_digest, oci_digest, *, extract=False):
 
 def record(binding, metadata, root=ROOT):
     tag = binding['release']
-    evidence, core = recorded_pair(tag)
+    evidence, core = recorded_pair(tag, root)
     require(binding['source_sha'] == core['build_source_sha']
             and binding['version_code'] == core['candidate_version_code']
             and binding['candidate_apk_sha256'] == core['candidate_apk_sha256']

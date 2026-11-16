@@ -37,15 +37,23 @@ on:
       use_tor:
         type: boolean
         default: true
+      reuse_funded:
+        type: boolean
+        default: false
+      prepared_id:
+        type: string
+        default: ''
     outputs:
       receipt_id:
         value: ${{ jobs.wallet.outputs.receipt_id }}
+      upgrade_receipt_id:
+        value: ${{ jobs.wallet.outputs.upgrade_receipt_id }}
       direct_core_id:
-        value: ${{ jobs.prepare-direct.outputs.artifact_id }}
+        value: ${{ (inputs.reuse_funded && inputs.prepared_id) || jobs.prepare-direct.outputs.artifact_id }}
 permissions: {}
 jobs:
   prepare-direct:
-    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && inputs.source_sha != '' && !inputs.use_tor
+    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && inputs.source_sha != '' && !inputs.use_tor && (!inputs.reuse_funded || inputs.prepared_id == '')
     runs-on: ubuntu-24.04
     timeout-minutes: 38
     permissions:
@@ -94,7 +102,7 @@ jobs:
       - if: always()
         run: rm -rf -- "$RUNNER_TEMP/zec-hosted-pair" "$RUNNER_TEMP/zec-direct-build" direct-core-artifact
   provision-tor:
-    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && (!inputs.upgrade_probe || inputs.upgrade_probe == 'funded')
+    if: github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && !inputs.reuse_funded && (!inputs.upgrade_probe || inputs.upgrade_probe == 'funded')
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -117,7 +125,7 @@ jobs:
         run: rm -rf -- "$RUNNER_TEMP/zec-tor-runtime"
   reserve:
     needs: [provision-tor, prepare-direct]
-    if: ${{ !cancelled() && needs.provision-tor.result == 'success' && (inputs.source_sha == '' || inputs.use_tor || needs.prepare-direct.result == 'success') && github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && (!inputs.upgrade_probe || inputs.upgrade_probe == 'funded') }}
+    if: ${{ !cancelled() && !inputs.reuse_funded && needs.provision-tor.result == 'success' && (inputs.source_sha == '' || inputs.use_tor || needs.prepare-direct.result == 'success') && github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1 && (!inputs.upgrade_probe || inputs.upgrade_probe == 'funded') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -149,7 +157,13 @@ jobs:
           python3 -B .private/hosted_claim.py
   wallet:
     needs: [provision-tor, reserve, prepare-direct]
-    if: ${{ !cancelled() && (needs.reserve.result == 'success' || ((inputs.upgrade_probe == 'restore' || inputs.upgrade_probe == 'transport') && github.event_name == 'workflow_dispatch' && github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main' && github.run_attempt == 1)) }}
+    if: >-
+      ${{ !cancelled() && github.repository == 'Codely-Solutions/zec-private' && github.ref == 'refs/heads/main'
+      && github.run_attempt == 1 && (needs.reserve.result == 'success'
+      || ((inputs.upgrade_probe == 'restore' || inputs.upgrade_probe == 'transport') && github.event_name == 'workflow_dispatch')
+      || (inputs.reuse_funded && !inputs.use_tor && inputs.source_sha != ''
+      && (needs.prepare-direct.result == 'success'
+      || (inputs.prepared_id != '' && inputs.original_run != '' && inputs.original_controller != '')))) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 44
     permissions:
@@ -158,6 +172,7 @@ jobs:
       actions: read
     outputs:
       receipt_id: ${{ steps.receipt.outputs.artifact-id }}
+      upgrade_receipt_id: ${{ steps.upgrade-receipt.outputs.artifact-id }}
     env:
       ZEC_CORE_SOURCE: ${{ inputs.source_sha || github.sha }}
       ZEC_CORE_VERSION: ${{ needs.reserve.outputs.version }}
@@ -167,13 +182,14 @@ jobs:
       ZEC_CORE_ARTIFACT_RUN: ${{ inputs.original_run }}
       ZEC_CORE_PREVIOUS_RESERVATION: ${{ inputs.previous_reservation }}
       ZEC_CORE_USE_TOR: ${{ inputs.source_sha == '' || inputs.use_tor }}
+      ZEC_CORE_REUSE_FUNDED: ${{ inputs.reuse_funded || false }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 0
       - name: Verify one-use reservation
-        if: '!env.ZEC_CORE_UPGRADE_PROBE'
+        if: '!env.ZEC_CORE_UPGRADE_PROBE && !inputs.reuse_funded'
         env:
           GH_TOKEN: ${{ github.token }}
         run: PYTHONPATH=.private python3 -B -c 'from hosted_core import verify_reservation; verify_reservation()'
@@ -186,13 +202,13 @@ jobs:
           node-version: '24.22.2'
           package-manager-cache: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        if: '!env.ZEC_CORE_UPGRADE_PROBE'
+        if: '!env.ZEC_CORE_UPGRADE_PROBE && !inputs.reuse_funded'
         with:
           artifact-ids: ${{ needs.provision-tor.outputs.bundle_id }}
           path: ${{ runner.temp }}/zec-tor-runtime
           digest-mismatch: error
       - name: Verify and run the staged Tor binary without a download
-        if: '!env.ZEC_CORE_UPGRADE_PROBE'
+        if: '!env.ZEC_CORE_UPGRADE_PROBE && !inputs.reuse_funded'
         run: bash .private/run_tor_ci.sh --install-bundle
       - uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63
         with:
@@ -215,7 +231,7 @@ jobs:
           fi
           bash .private/build_core_pair.sh "-PZCASH_VERSION_CODE=$ZEC_CORE_VERSION"
       - name: Fetch bound testnet pair
-        if: inputs.source_sha != ''
+        if: inputs.source_sha != '' && !inputs.reuse_funded
         env:
           GH_TOKEN: ${{ github.token }}
           CORE_ID: ${{ needs.prepare-direct.outputs.artifact_id || inputs.artifact_id }}
@@ -238,20 +254,53 @@ jobs:
                              run, controller)
           (path/'production.json').write_text(json.dumps(product))
           PY
+      - name: Fetch exact original app and direct test harness
+        if: inputs.reuse_funded
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CORE_ID: ${{ inputs.prepared_id || needs.prepare-direct.outputs.artifact_id }}
+          ORIGINAL_CORE_ID: ${{ inputs.artifact_id }}
+          PRODUCTION_ID: ${{ inputs.production_id }}
+          ORIGINAL_RUN: ${{ inputs.original_run || github.run_id }}
+          ORIGINAL_CONTROLLER: ${{ inputs.original_controller || github.sha }}
+          HARNESS_RUN: ${{ inputs.prepared_id != '' && inputs.original_run || github.run_id }}
+          HARNESS_CONTROLLER: ${{ inputs.prepared_id != '' && inputs.original_controller || github.sha }}
+        run: |
+          PYTHONPATH=.private python3 -B - <<'PY'
+          import os
+          from pathlib import Path
+          from hosted_core import stage_upgrade
+
+          stage_upgrade(Path('core-artifact'), source=os.environ['ZEC_CORE_SOURCE'],
+                        core_id=os.environ['CORE_ID'], original_core_id=os.environ['ORIGINAL_CORE_ID'],
+                        production_id=os.environ['PRODUCTION_ID'], original_run=os.environ['ORIGINAL_RUN'],
+                        original_controller=os.environ['ORIGINAL_CONTROLLER'],
+                        producer_run=os.environ['HARNESS_RUN'], producer_controller=os.environ['HARNESS_CONTROLLER'])
+          PY
       - name: Run isolated testnet acceptance
+        env:
+          ZEC_CORE_RESULT: ${{ runner.temp }}/${{ inputs.reuse_funded && 'hosted-upgrade.json' || 'hosted-core.json' }}
         run: |
           git cat-file -e "$ZEC_CORE_SOURCE^{commit}" 2>/dev/null || git fetch --no-tags origin "$ZEC_CORE_SOURCE"
           if [[ ! -x "$ANDROID_HOME/build-tools/36.0.0/zipalign" ]]; then
             timeout 180 "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'build-tools;36.0.0'
           fi
-          ZEC_CORE_RESULT="$RUNNER_TEMP/hosted-core.json" ZEC_HOSTED_CORE_DIR="$PWD/core-artifact" ZEC_HOSTED_FIXTURE_DIR="$RUNNER_TEMP/zec-hosted-pair" bash .private/hosted_emulator_smoke.sh
+          ZEC_HOSTED_CORE_DIR="$PWD/core-artifact" ZEC_HOSTED_FIXTURE_DIR="$RUNNER_TEMP/zec-hosted-pair" bash .private/hosted_emulator_smoke.sh
       - id: receipt
-        if: '!env.ZEC_CORE_UPGRADE_PROBE'
+        if: '!env.ZEC_CORE_UPGRADE_PROBE && !inputs.reuse_funded'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: hosted-core-receipt
           path: ${{ runner.temp }}/hosted-core.json
           if-no-files-found: error
           retention-days: 3
+      - id: upgrade-receipt
+        if: inputs.reuse_funded
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: hosted-upgrade-receipt
+          path: ${{ runner.temp }}/hosted-upgrade.json
+          if-no-files-found: error
+          retention-days: 3
       - if: always()
-        run: rm -rf -- "$RUNNER_TEMP/zec-hosted-pair" "$RUNNER_TEMP/zec-tor-runtime"
+        run: rm -rf -- "$RUNNER_TEMP/zec-hosted-pair" "$RUNNER_TEMP/zec-tor-runtime" core-artifact original-core-artifact

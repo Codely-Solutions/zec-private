@@ -18,6 +18,8 @@ from acceptance_policy import BASELINE_INSTRUMENTATION_STAGES, CANDIDATE_INSTRUM
 
 PACKAGE = 'com.personal.zecprivate.testnet.foss.debug'
 RUNNER = PACKAGE + '.test/co.electriccoin.zcash.test.ZcashUiTestRunner'
+INSTALLED_UPGRADE_STAGES = {'receiptProbe': 'candidate', 'recipient': 'baseline', 'restoreProbe': 'candidate'}
+WALLET_PREFERENCES = 'shared_prefs/co.electriccoin.zcash.encrypted.xml'
 
 
 def instrumentation_role(stage):
@@ -41,6 +43,15 @@ def select_apk_roles(apks):
     return baseline, baseline_test, candidates[0], tests[0]
 
 
+def installed_apk_hash(shell, package):
+    installed = shell('pm', 'path', package).strip()
+    managed_path = (r'package:/data/app/[A-Za-z0-9_~+=-]+/' + re.escape(package) +
+                    r'-[A-Za-z0-9_~+=-]+/base\.apk')
+    if not re.fullmatch(managed_path, installed):
+        raise RuntimeError('Expected exactly one installed APK for ' + package)
+    return shell('sha256sum', installed.removeprefix('package:')).split()[0]
+
+
 def verify_instrumentation_pair(adb, expected_version, expected_hash):
     """Verify the installed app/test pair before a core stage or unfunded transport probe."""
     def shell(*args):
@@ -48,12 +59,7 @@ def verify_instrumentation_pair(adb, expected_version, expected_hash):
     match = re.search(r'versionCode=(\d+)', shell('dumpsys', 'package', PACKAGE))
     if not match or int(match[1]) != expected_version:
         raise RuntimeError('Wrong app version for instrumentation dispatch')
-    installed = shell('pm', 'path', PACKAGE + '.test').strip()
-    managed_test_path = (r'package:/data/app/[A-Za-z0-9_~+=-]+/' + re.escape(PACKAGE + '.test') +
-                         r'-[A-Za-z0-9_~+=-]+/base\.apk')
-    if not re.fullmatch(managed_test_path, installed):
-        raise RuntimeError('Expected exactly one installed instrumentation APK')
-    installed_hash = shell('sha256sum', installed.removeprefix('package:')).split()[0]
+    installed_hash = installed_apk_hash(shell, PACKAGE + '.test')
     if installed_hash != expected_hash:
         raise RuntimeError('Wrong instrumentation APK for dispatch')
     if RUNNER + ' (target=' + PACKAGE + ')' not in shell('pm', 'list', 'instrumentation', PACKAGE):
@@ -87,8 +93,11 @@ def claim_after_readiness(check_readiness, submit_claim):
 
 
 def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False, upgrade_probe=None,
-        preclaim_check=False, preclaim_only=False, use_tor=True, live_tor_probe=False):
+        preclaim_check=False, preclaim_only=False, use_tor=True, live_tor_probe=False, installed_upgrade=False):
     started = time.monotonic()
+    if installed_upgrade and (use_tor or transport_only or repeat_cold_start or upgrade_probe or preclaim_check
+                              or preclaim_only or live_tor_probe):
+        raise ValueError('Installed-upgrade verification requires the dedicated direct unfunded path')
     if not use_tor and (transport_only or repeat_cold_start or upgrade_probe or preclaim_only):
         raise ValueError('Tor-specific unfunded probes require the Tor transport')
     if preclaim_only and (not transport_only or upgrade_probe or repeat_cold_start):
@@ -117,7 +126,8 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
     stages = {}
     application_pids=set()
     report = dict(schema=1, passed=False,
-                  evidence_class='unfunded-app-transport-probe' if transport_only else 'real-app-testnet',
+                  evidence_class=('unfunded-installed-upgrade' if installed_upgrade else
+                                  'unfunded-app-transport-probe' if transport_only else 'real-app-testnet'),
                   network='zcash-testnet',
                   tor_enabled=use_tor,
                   clearnet_fallback=False, direct_bulk_downloads=True,personal_wallet_access=False, real_funds_used=False,
@@ -139,7 +149,10 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         current_stage = 'preclaim_readiness' if readiness_only else name
         if time.monotonic() - started > 1600:
             raise RuntimeError('Core acceptance total deadline exhausted')
-        role = 'baseline' if readiness_only or (not use_tor and name == 'restoreProbe') else instrumentation_role(name)
+        if installed_upgrade:
+            role = INSTALLED_UPGRADE_STAGES[name]
+        else:
+            role = 'baseline' if readiness_only or (not use_tor and name == 'restoreProbe') else instrumentation_role(name)
         stage_uses_tor = use_tor or name == 'rpcProbe'
         expected = pairing[role]
         verify_instrumentation_pair(adb, expected['app_version_code'], expected['executed_sha256'])
@@ -226,6 +239,10 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             report['live_tor_probe'] = dict(pairing['stages'].pop(name), passed=True, tor_enabled=True)
         if name in ('fund', 'upgrade', 'send', 'restart', 'restore'):
             stages[name] = rows[0]
+        if installed_upgrade:
+            stages[name] = {key: rows[0][key] for key in ('stage', 'passed', 'network', 'tor_enabled', 'transport')}
+            if stages[name]['network'] != 'zcash-testnet' or stages[name]['transport'] != 'direct':
+                raise RuntimeError('Unexpected unfunded upgrade stage network or transport')
         if name=='sender':report['sync_preflight']=rows[0]
         (root/'core-testnet-progress.json').write_text(json.dumps(dict(last_completed_stage=name,stages=stages,elapsed_seconds=time.monotonic()-started)))
         print('CORE_STAGE '+name+' passed', flush=True)
@@ -340,12 +357,44 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             adb('uninstall', PACKAGE, timeout=30)
             # Probe provenance is useful in progress logs. The release receipt
             # records only the exact required funded baseline/candidate stages.
-            pairing['stages'].pop('receiptProbe')
+            if not installed_upgrade:
+                pairing['stages'].pop('receiptProbe')
         adb('install', '-r', str(baseline), timeout=90)
         adb('install', '-r', '-t', str(baseline_test), timeout=90)
         if version() != manifest['baseline_version_code']:
             raise RuntimeError('Wrong baseline version')
         app_uid = uid()
+        if installed_upgrade:
+            baseline_hash = installed_apk_hash(shell, PACKAGE)
+            if baseline_hash != hashlib.sha256(baseline.read_bytes()).hexdigest():
+                raise RuntimeError('Installed baseline app bytes differ from the prepared APK')
+            stage('recipient', 240)
+            current_stage = 'installed_upgrade'
+            shell('am', 'force-stop', PACKAGE)
+            # Hash private files inside the guest and record only the comparison outcome.
+            # The encrypted wallet preferences contain the seed persisted by the app.
+            def wallet_snapshot():
+                return shell('run-as', PACKAGE, 'sha256sum', WALLET_PREFERENCES, 'files/core-private.json')
+
+            previous = wallet_snapshot()
+            if len(re.findall(r'^[0-9a-f]{64}[ \t]+', previous, re.MULTILINE)) != 2:
+                raise RuntimeError('Expected encrypted wallet preferences and recovery fixture')
+            adb('install', '-r', str(candidate), timeout=90)
+            adb('install', '-r', '-t', str(test), timeout=90)
+            candidate_hash = installed_apk_hash(shell, PACKAGE)
+            if (uid() != app_uid or version() != manifest['candidate_version_code']
+                    or candidate_hash != hashlib.sha256(candidate.read_bytes()).hexdigest()):
+                raise RuntimeError('Installed update identity, version or APK mismatch')
+            if previous != wallet_snapshot():
+                raise RuntimeError('Encrypted wallet preferences or recovery fixture changed during installation')
+            # The native restore probe requires cleared app storage. This happens
+            # after the replacement/persistence assertions and restores the same seed.
+            clear_wallet()
+            stage('restoreProbe', 240)
+            report.update(passed=True, faucet_claims=0, installed_upgrade=dict(
+                package=PACKAGE, uid_preserved=True, encrypted_wallet_preserved=True, recovery_fixture_preserved=True,
+                baseline_installed_sha256=baseline_hash, candidate_installed_sha256=candidate_hash))
+            return
         if use_tor:
             # Bounded kernel connection metadata identifies blocked native SDK
             # bootstrap attempts when this AOSP image lacks the LOG extension.
@@ -630,9 +679,10 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 report['blocked_connection_diagnostics']=[line[:350] for line in kernel.splitlines() if 'CORE_EGRESS:' in line][-30:]
             except (RuntimeError, subprocess.SubprocessError) as error:
                 report['guest_diagnostic_error']=type(error).__name__
-        try:
-            private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15,check=False).stdout)
-            allowed_fields=('claimId','fundingTxId','fundingProvider','fundedBalance','balanceBeforeSend','feeZatoshi','senderConfirmedBalance','restoreMinedHeight','restoreTransactionState','candidateTxIds','initialSubmitType')
-            report['transaction_evidence']={key:private[key] for key in allowed_fields if key in private}
-        except (ValueError,subprocess.SubprocessError):pass
+        if not installed_upgrade:
+            try:
+                private=json.loads(adb('shell','run-as',PACKAGE,'cat','files/core-private.json',timeout=15,check=False).stdout)
+                allowed_fields=('claimId','fundingTxId','fundingProvider','fundedBalance','balanceBeforeSend','feeZatoshi','senderConfirmedBalance','restoreMinedHeight','restoreTransactionState','candidateTxIds','initialSubmitType')
+                report['transaction_evidence']={key:private[key] for key in allowed_fields if key in private}
+            except (ValueError,subprocess.SubprocessError):pass
         (root/'core-testnet-result.json').write_text(json.dumps(report,indent=2)+'\n')

@@ -54,7 +54,7 @@ def stage(directory, artifact_id, name, *, metadata=None, run=None, controller=N
 
 
 def read_receipts(directory, *, proof, source, controller, production_id, core_id, quote_id,
-                  metadata=None, recovery=None, direct_core_id=''):
+                  metadata=None, recovery=None, direct_core_id='', reuse_funded=False):
     metadata = metadata or Metadata()
     run = os.environ['GITHUB_RUN_ID']
     build_run = str(recovery['run']) if recovery else run
@@ -66,9 +66,36 @@ def read_receipts(directory, *, proof, source, controller, production_id, core_i
     core_controller = controller if missing_core else build_controller
     production = artifact(metadata, production_id, 'validated-unsigned-apk', build_run, build_controller)
     version = version_code(ROOT, source)
+    quote = json.loads((directory / 'hosted-quotes.json').read_text())
+    if reuse_funded:
+        from funded_reuse import select
+        from hosted_core import validate_upgrade
+
+        selected = select(source, controller, metadata, root=ROOT)
+        require(selected is not None, 'Candidate does not qualify for reuse of funded evidence')
+        require(quote.get('build_source_sha') == source and quote.get('candidate_version_code') == version
+                and quote.get('production_artifact') == production and quote.get('workflow_run_id') == quote_run
+                and quote.get('quote_controller_sha') == quote_controller and quote.get('artifact_run_id') == int(build_run)
+                and str(proof['workflow_run_id']) == build_run and proof['versionCode'] == version,
+                'Quote acceptance is not bound to this production candidate and trusted run')
+        quote_producer = artifact(metadata, quote_id, 'isolated-ui-repro-apk', build_run, build_controller)
+        require(quote.get('producer') == quote_producer, 'Quote receipt names a different test APK producer')
+        validate_quotes(quote, input_fingerprint(source, profile='production-quotes'), use_tor=False)
+        original_core = artifact(metadata, core_id, 'core-testnet-candidate', build_run, build_controller)
+        prepared_id = recovery.get('prepared_id') if recovery else None
+        if prepared_id:
+            require(str(direct_core_id) == str(prepared_id), 'Recovery changed the prepared test APK artifact')
+        producer_run, producer_controller = (build_run, build_controller) if prepared_id else (run, controller)
+        producer = artifact(metadata, direct_core_id, 'core-direct-candidate', producer_run, producer_controller)
+        upgrade = json.loads((directory / 'hosted-upgrade.json').read_text())
+        validate_upgrade(upgrade, source=source, version=version, production=production, producer=producer,
+                         original_core=original_core, fixture=selected['fixture'], run=int(run), controller=controller,
+                         producer_run=int(producer_run), producer_controller=producer_controller)
+        quote['producer_controller_sha'] = build_controller
+        return selected['core'], quote, {'funded_reuse': selected['origin'], 'installed_upgrade': upgrade}
+
     fixture = json.loads((ROOT / '.private/hosted-fixture.json').read_text())
     core = json.loads((directory / 'hosted-core.json').read_text())
-    quote = json.loads((directory / 'hosted-quotes.json').read_text())
     # A verified prior Tor wallet receipt can only be reused during recovery.
     use_tor = bool(recovery and not missing_core and core.get('tor_enabled', True) is True)
     original_core = artifact(metadata, core_id, 'core-testnet-candidate', build_run, build_controller)

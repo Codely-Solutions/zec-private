@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 
 import hosted_claim
 import hosted_core
+import hosted_fixture
 import hosted_release
 
 
@@ -139,6 +140,92 @@ class HostedReleaseTests(unittest.TestCase):
                     read(dict(core, rehearsal=True), quote)
                 with self.assertRaisesRegex(ValueError, 'different test APK producer'):
                     read(dict(core, producer=quotes), quote)
+
+    def test_signing_reuses_original_funding_and_binds_fresh_upgrade_and_quotes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            production, original, quotes, producer = ({'id': n} for n in range(1, 5))
+            core = {'build_source_sha': 'c' * 40, 'candidate_version_code': VERSION - 1}
+            fixture = {'release': 'v3.19.0-private.26'}
+            origin = {'release': fixture['release'], 'sha256': 'd' * 64, 'source': core['build_source_sha']}
+            selected = {'core': core, 'fixture': fixture, 'origin': origin}
+            quote = dict(build_source_sha=SOURCE, candidate_version_code=VERSION, production_artifact=production,
+                         producer=quotes, workflow_run_id=RUN - 1, quote_controller_sha='e' * 40,
+                         artifact_run_id=RUN - 2)
+            upgrade = {'build_source_sha': SOURCE, 'candidate_version_code': VERSION}
+            (directory/'hosted-upgrade.json').write_text(json.dumps(upgrade))
+            recovery = dict(run=RUN - 2, original_controller='f' * 40, quote_run=RUN - 1,
+                            quote_controller='e' * 40, prepared_id='4')
+            proof = dict(workflow_run_id=str(RUN - 2), versionCode=VERSION)
+
+            def read(current_quote, direct_core_id=4):
+                (directory/'hosted-quotes.json').write_text(json.dumps(current_quote))
+                return hosted_release.read_receipts(directory, proof=proof, source=SOURCE, controller=CONTROLLER,
+                                                    production_id=1, core_id=2, quote_id=3, metadata=Mock(),
+                                                    direct_core_id=direct_core_id, reuse_funded=True, recovery=recovery)
+
+            with patch.dict(os.environ, {'GITHUB_RUN_ID': str(RUN)}), \
+                    patch.object(hosted_release, 'ROOT', directory), \
+                    patch.object(hosted_release, 'version_code', return_value=VERSION), \
+                    patch('funded_reuse.select', return_value=selected) as select, \
+                    patch.object(hosted_core, 'validate_upgrade') as validate_upgrade, \
+                    patch.object(hosted_release, 'artifact', side_effect=lambda _, n, *a:
+                                 {1: production, 2: original, 3: quotes, 4: producer}[n]) as artifact, \
+                    patch.object(hosted_release, 'validate_quotes') as validate_quotes, \
+                    patch.object(hosted_release, 'input_fingerprint', return_value='candidate-inputs'):
+                accepted_core, accepted_quote, extra = read(quote)
+                self.assertIs(accepted_core, core)
+                self.assertEqual(accepted_quote, dict(quote, producer_controller_sha='f' * 40))
+                self.assertEqual(extra, {'funded_reuse': origin, 'installed_upgrade': upgrade})
+                select.assert_called_once()
+                validate_upgrade.assert_called_once_with(upgrade, source=SOURCE, version=VERSION,
+                    production=production, producer=producer, original_core=original, fixture=fixture,
+                    run=RUN, controller=CONTROLLER, producer_run=RUN - 2, producer_controller='f' * 40)
+                validate_quotes.assert_called_once_with(accepted_quote, 'candidate-inputs', use_tor=False)
+                self.assertEqual(artifact.call_args.args[1:], (4, 'core-direct-candidate', str(RUN - 2), 'f' * 40))
+                for change in ({'build_source_sha': 'c' * 40}, {'workflow_run_id': RUN},
+                               {'quote_controller_sha': CONTROLLER}, {'artifact_run_id': RUN},
+                               {'production_artifact': original}):
+                    with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'trusted run'):
+                        read(dict(quote, **change))
+                with self.assertRaisesRegex(ValueError, 'prepared test APK'):
+                    read(quote, direct_core_id=2)
+                select.return_value = None
+                with self.assertRaisesRegex(ValueError, 'qualify for reuse'):
+                    read(quote)
+
+    def test_fixture_selects_release_upgrade_pair_when_funded_core_is_older(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            records = root / '.private/release-evidence'
+            records.mkdir(parents=True)
+            prior_tag, tag = 'v3.19.0-private.26', 'v3.19.0-private.27'
+            core = dict(passed=True, real_funds_used=False, personal_wallet_access=False,
+                        build_source_sha='c' * 40, candidate_version_code=VERSION - 1)
+            producer = {'id': 11, 'digest': 'sha256:' + 'f' * 64, 'size_in_bytes': 100}
+            upgrade = dict(core, evidence_class='unfunded-installed-upgrade', build_source_sha=SOURCE,
+                           candidate_version_code=VERSION, artifact_id=11, producer=producer,
+                           workflow_run_id=RUN, artifact_run_id=RUN - 1, producer_controller_sha=CONTROLLER)
+            evidence = dict(release_tag=tag, source_sha=SOURCE, versionCode=VERSION, core=core)
+            record = records / (tag + '.json')
+            (root/'.private/hosted-fixture.json').write_text(json.dumps(
+                {'release': prior_tag, 'version_code': VERSION - 1}))
+            metadata = Mock()
+            metadata.api.return_value = {'tag_name': tag}
+            record.write_text(json.dumps(evidence))
+            self.assertEqual(hosted_fixture.pending_pair(metadata, root), '')
+            evidence.update(funded_reuse={'release': prior_tag}, installed_upgrade=upgrade)
+            record.write_text(json.dumps(evidence))
+            self.assertEqual(hosted_fixture.pending_pair(metadata, root), tag)
+            self.assertEqual(hosted_fixture.recorded_pair(tag, root), (evidence, upgrade))
+            live = dict(producer, expired=False, workflow_run={'id': RUN - 1, 'head_sha': CONTROLLER})
+            self.assertTrue(hosted_fixture.artifact_matches_pair(live, upgrade))
+            self.assertFalse(hosted_fixture.artifact_matches_pair(
+                dict(live, workflow_run={'id': RUN, 'head_sha': CONTROLLER}), upgrade))
+            upgrade['build_source_sha'] = core['build_source_sha']
+            record.write_text(json.dumps(evidence))
+            with self.assertRaisesRegex(ValueError, 'exact accepted APK pair'):
+                hosted_fixture.recorded_pair(tag, root)
 
 
 if __name__ == '__main__':

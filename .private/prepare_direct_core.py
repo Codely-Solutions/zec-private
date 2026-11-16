@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 
 from acceptance_policy import CORE_TEST_SOURCE, ROOT, git
 from hosted_core import candidate_pair, sha
+from hosted_fixture import recorded_pair
 from hosted_release import stage
 
 
@@ -69,7 +70,7 @@ def prepare(work, fixture, output, source, artifact_id, build_run, build_control
     (output / test.name).write_bytes(candidate_test)
     (output / 'source-sha.txt').write_text(source + '\n')
     (output / 'SHA256SUMS').write_text(''.join(f'{sha(path)}  ./{path.name}\n' for path in sorted(output.glob('*.apk'))))
-    released_core = json.loads((ROOT / '.private/release-evidence' / (baseline['release'] + '.json')).read_bytes())['core']
+    _, released_core = recorded_pair(baseline['release'], ROOT)
     if (released_core.get('direct_preparation') and released_core.get('instrumentation_apk_sha256')
             == baseline['instrumentation_apk_sha256']):
         baseline_test = (fixture / 'baseline-androidTest.apk').read_bytes()

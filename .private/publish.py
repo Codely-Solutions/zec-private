@@ -127,9 +127,13 @@ def main():
     controller=os.environ['CONTROLLER_SHA']
     require_current_controller(controller)
     recovery = None
+    reuse_funded = os.environ.get('REUSE_FUNDED') == 'true'
+    hosted = os.environ.get('HOSTED_ACCEPTANCE') == 'true'
+    if reuse_funded and not hosted:
+        raise RuntimeError('Funded evidence reuse requires hosted acceptance')
     recover_run = os.environ.get('RECOVER_RUN', '')
     if recover_run:
-        if os.environ.get('HOSTED_ACCEPTANCE') != 'true':
+        if not hosted:
             raise RuntimeError('Quote recovery requires hosted acceptance')
         from quote_recovery import resolve
 
@@ -137,6 +141,8 @@ def main():
                            os.environ.get('RECOVER_QUOTE_RUN', ''), signing=True,
                            preclaim_run=os.environ.get('PRECLAIM_RUN', ''))
         recovery['run'] = int(recover_run)
+        if (recovery.get('reuse_funded') == 'true') != reuse_funded:
+            raise RuntimeError('Recovery evidence policy differs from verified original run')
         for name in ('production_id', 'core_id', 'quote_id'):
             if recovery[name] != os.environ[name.upper()]:
                 raise RuntimeError('Recovery artifact differs from verified original run')
@@ -153,7 +159,8 @@ def main():
     if proof.get('core_acceptance',{}).get('binding')!=CORE_BINDING:
         raise RuntimeError('Missing versioned candidate product-runtime binding')
     quote_inputs=input_fingerprint(expected,profile='production-quotes')
-    if os.environ.get('HOSTED_ACCEPTANCE') == 'true':
+    reused_evidence = []
+    if hosted:
         from hosted_release import read_receipts
         from maintenance_cadence import admit_cadence
         from maintenance_watch import api
@@ -163,10 +170,11 @@ def main():
         if (proof['core_acceptance']['input_fingerprint'] != input_fingerprint(expected, profile='core-runtime')
                 or proof['quote_acceptance']['input_fingerprint'] != quote_inputs):
             raise RuntimeError('Unsigned artifact acceptance fingerprints differ from the hosted candidate')
-        core, quote = read_receipts(ROOT/'hosted-receipts', proof=proof, source=expected, controller=controller,
-                                    production_id=os.environ['PRODUCTION_ID'], core_id=os.environ['CORE_ID'],
-                                    quote_id=os.environ['QUOTE_ID'], recovery=recovery,
-                                    direct_core_id=os.environ.get('DIRECT_CORE_ID', ''))
+        core, quote, *reused_evidence = read_receipts(
+            ROOT/'hosted-receipts', proof=proof, source=expected, controller=controller,
+            production_id=os.environ['PRODUCTION_ID'], core_id=os.environ['CORE_ID'],
+            quote_id=os.environ['QUOTE_ID'], recovery=recovery,
+            direct_core_id=os.environ.get('DIRECT_CORE_ID', ''), reuse_funded=reuse_funded)
     else:
         from custom_release import MARKER as CUSTOM_MARKER
 
@@ -203,7 +211,7 @@ def main():
     tag=proof['release_tag']
     release_title(tag)
     changes = None
-    if os.environ.get('HOSTED_ACCEPTANCE') == 'true':
+    if hosted:
         changes = hosted_changes(ROOT, expected, recovery['original_controller'] if recovery else controller)
     notes_text = release_notes(proof, changes)
     # Existing published tags/assets are immutable, including duplicate polling.
@@ -258,8 +266,10 @@ def main():
                        upstream=proof['upstream'], source_sha=expected, controller_sha=controller,
                        artifact_run_id=proof['workflow_run_id'], apk_sha256=digest, core=core,
                        production_quotes=quote, production_arm_executed=False, real_funds_used=False)
-    if os.environ.get('HOSTED_ACCEPTANCE') == 'true':
-        attestation['production_artifact'] = core['production_artifact']
+    if hosted:
+        attestation['production_artifact'] = quote['production_artifact']
+        if reused_evidence:
+            attestation.update(reused_evidence[0])
         from maintenance_cadence import MARKER, changed_marker
 
         build_controller = recovery['original_controller'] if recovery else controller

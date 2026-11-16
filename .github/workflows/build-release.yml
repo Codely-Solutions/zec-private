@@ -72,6 +72,8 @@ jobs:
       run_missing_core: ${{ steps.admission.outputs.run_missing_core }}
       previous_reservation: ${{ steps.admission.outputs.previous_reservation }}
       same_controller_retry: ${{ steps.admission.outputs.same_controller_retry }}
+      reuse_funded: ${{ steps.admission.outputs.reuse_funded }}
+      prepared_id: ${{ steps.admission.outputs.prepared_id }}
     permissions:
       actions: read
       contents: read
@@ -93,21 +95,27 @@ jobs:
           git fetch --no-tags origin "$SOURCE_SHA"
           PYTHONPATH=.private python3 -B - <<'PY'
           import os
+          from funded_reuse import select
           from hosted_release import admit
           from release_metadata import Metadata
           source, controller = os.environ['SOURCE_SHA'], os.environ['GITHUB_SHA']
+          metadata = Metadata()
           if os.environ['RECOVER_RUN']:
               if os.environ['PREFLIGHT_ONLY'] == 'true':
                   raise ValueError('Preflight cannot authorize recovery')
               from acceptance_policy import ROOT
               from quote_recovery import resolve
-              result = resolve(ROOT, source, controller, os.environ['RECOVER_RUN'], Metadata(), os.environ['QUOTE_RUN'],
+              result = resolve(ROOT, source, controller, os.environ['RECOVER_RUN'], metadata, os.environ['QUOTE_RUN'],
                                preclaim_run=os.environ['PRECLAIM_RUN'])
-              with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-                  output.writelines(f'{key}={value}\n' for key, value in result.items())
           else:
-              admit(source, controller, Metadata(), preflight_only=os.environ['PREFLIGHT_ONLY'] == 'true')
+              admit(source, controller, metadata, preflight_only=os.environ['PREFLIGHT_ONLY'] == 'true')
+              evidence = select(source, controller, metadata)
+              result = {'reuse_funded': 'true'} if evidence else {}
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.writelines(f'{key}={value}\n' for key, value in result.items())
           print('Hosted wallet and quote acceptance use direct app networking.')
+          if result.get('reuse_funded') == 'true':
+              print('Funded evidence matches. Run the installed upgrade without a faucet claim.')
           PY
   preflight:
     needs: admit_hosted
@@ -169,6 +177,7 @@ jobs:
           python3 -B .private/test_preflight.py
           python3 -B .private/test_actions_artifact_cleanup.py
           python3 -B .private/test_acceptance_policy.py
+          python3 -B .private/test_funded_reuse.py
           python3 -B .private/test_publish.py
           python3 -B .private/test_maintenance_watch.py
           python3 -B .private/test_core_faucet.py
@@ -360,7 +369,7 @@ jobs:
       preflight_only: ${{ inputs.preflight_only }}
   hosted_core:
     needs: [admit_hosted, preflight, signing_smoke, unsigned, testnet_apk, recovery_quotes]
-    if: ${{ !cancelled() && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && ((!inputs.recover_run && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success') || (inputs.recover_run && needs.admit_hosted.outputs.run_missing_core == 'true' && (!inputs.preclaim_run || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != ''))) }}
+    if: ${{ !cancelled() && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && ((!inputs.recover_run && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success') || (inputs.recover_run && (needs.admit_hosted.outputs.reuse_funded == 'true' || (needs.admit_hosted.outputs.run_missing_core == 'true' && (!inputs.preclaim_run || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != ''))))) }}
     permissions:
       actions: read
       contents: write
@@ -375,6 +384,8 @@ jobs:
       previous_reservation: ${{ needs.admit_hosted.outputs.previous_reservation }}
       preclaim_run: ${{ inputs.preclaim_run }}
       use_tor: false
+      reuse_funded: ${{ needs.admit_hosted.outputs.reuse_funded == 'true' }}
+      prepared_id: ${{ needs.admit_hosted.outputs.prepared_id }}
   reserve_quote_retry:
     needs: [admit_hosted, preflight, signing_smoke]
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' && inputs.recover_run && !inputs.preflight_only && needs.admit_hosted.outputs.same_controller_retry == 'true' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
@@ -487,14 +498,14 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         if: inputs.hosted && !inputs.recover_run
         with:
-          artifact-ids: ${{ needs.hosted_core.outputs.receipt_id }},${{ needs.hosted_quotes.outputs.receipt_id }}
+          artifact-ids: ${{ needs.hosted_core.outputs.upgrade_receipt_id || needs.hosted_core.outputs.receipt_id }},${{ needs.hosted_quotes.outputs.receipt_id }}
           path: hosted-receipts/
           merge-multiple: true
           digest-mismatch: error
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         if: inputs.hosted && inputs.recover_run
         with:
-          artifact-ids: ${{ needs.admit_hosted.outputs.core_receipt_id || needs.hosted_core.outputs.receipt_id }}
+          artifact-ids: ${{ needs.admit_hosted.outputs.core_receipt_id || needs.hosted_core.outputs.upgrade_receipt_id || needs.hosted_core.outputs.receipt_id }}
           path: hosted-receipts/
           run-id: ${{ needs.admit_hosted.outputs.core_receipt_id != '' && inputs.recover_run || github.run_id }}
           github-token: ${{ github.token }}
@@ -528,6 +539,7 @@ jobs:
           PRODUCTION_ID: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}
           CORE_ID: ${{ needs.admit_hosted.outputs.core_id || needs.testnet_apk.outputs.artifact_id }}
           DIRECT_CORE_ID: ${{ needs.hosted_core.outputs.direct_core_id }}
+          REUSE_FUNDED: ${{ needs.admit_hosted.outputs.reuse_funded == 'true' }}
           QUOTE_ID: ${{ needs.admit_hosted.outputs.quote_id || needs.emulator.outputs.artifact_id }}
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}

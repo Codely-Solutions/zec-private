@@ -32,10 +32,11 @@ DIRECT_PRESENTATION_PREFIXES = (
 )
 
 
-def needs_live_tor_probe(source, root=ROOT):
+def needs_live_tor_probe(source, root=ROOT, *, baseline=None):
     """Recheck live Tor when tracked runtime inputs may have changed its behavior."""
-    fixture = json.loads((root / '.private/hosted-fixture.json').read_bytes())
-    baseline = fixture['source_sha']
+    if baseline is None:
+        fixture = json.loads((root / '.private/hosted-fixture.json').read_bytes())
+        baseline = fixture['source_sha']
     if not re.fullmatch('[a-f0-9]{40}', baseline):
         raise ValueError('Expected an exact hosted transport baseline')
     previous = input_manifest(baseline, root=root, profile='core-runtime')
@@ -306,7 +307,7 @@ def validate_core_sources(receipt, product_revision='HEAD', acceptance_revision=
     if prepared is not None:
         if use_tor or direct_core_build_fingerprint(product_revision, prepared['harness_controller'], root) != compiled:
             raise ValueError('Direct instrumentation differs from the trusted build inputs')
-        if needs_live_tor_probe(product_revision, root):
+        if needs_live_tor_probe(product_revision, root, baseline=receipt['baseline_source_sha']):
             probe = receipt.get('live_tor_probe', {})
             candidate = receipt['instrumentation_pairing']['candidate']
             if (probe.get('passed') is not True or probe.get('tor_enabled') is not True

@@ -241,6 +241,81 @@ class QuoteRecoveryTests(unittest.TestCase):
                     self.assertEqual(result['quote_run'], 7)
                     self.assertNotIn('core_receipt_id', result)
 
+    def test_funded_recovery_binds_original_jobs_artifacts_and_reservation(self):
+        original = dict(id=7, path=WORKFLOW, event='workflow_dispatch', head_branch='main',
+                        head_sha=OLD, head_repository={'full_name': REPOSITORY}, actor={'id': OPERATOR_ID},
+                        status='completed', conclusion='failure', run_attempt=1)
+        states = {'build / admit_hosted': 'success', 'build / unsigned': 'success', 'build / emulator': 'success',
+                  'build / testnet_apk / testnet': 'success', 'build / hosted_core / reserve': 'success',
+                  'build / hosted_core / wallet': 'failure', 'build / hosted_core / prepare-direct': 'success',
+                  'build / hosted_quotes / quote-cycles': 'success', 'build / publish': 'skipped'}
+        names = ('validated-unsigned-apk', 'core-testnet-candidate', 'isolated-ui-repro-apk',
+                 'hosted-quote-receipt', 'core-direct-candidate')
+        artifacts = [dict(id=i, name=name, expired=False) for i, name in enumerate(names, 1)]
+        claim = dict(ref='refs/heads/testnet-claims/release-42', object={'sha': 'd' * 40})
+
+        def run_case(run, outcomes, available, reservations, *, signing=False):
+            metadata = Mock()
+            metadata.api.side_effect = [run, reservations]
+            metadata.pages.side_effect = [
+                [dict(name=name, conclusion=result, run_id=7, head_sha=OLD) for name, result in outcomes.items()],
+                available,
+            ]
+            return resolve(Path('.'), SOURCE, MAIN, '7', metadata, signing=signing)
+
+        with patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_delta') as delta, \
+                patch('funded_reuse.select', return_value={'core': {}, 'origin': {}, 'fixture': {}}) as select, \
+                patch('release_inputs.version_code', return_value=42), patch('hosted_claim.verify') as verify, \
+                patch.object(hosted_release, 'artifact', side_effect=lambda _, i, *args: {'id': i}) as artifact:
+            expected = dict(original_controller=OLD, reuse_funded='true', production_id='1',
+                            core_id='2', quote_id='3', quote_receipt_id='4', quote_controller=OLD, quote_run=7,
+                            prepared_id='5')
+            self.assertEqual(run_case(original, states, artifacts, [claim]), expected)
+            self.assertEqual(run_case(original, states, artifacts, [claim], signing=True), expected)
+            delta.assert_called_with(Path('.'), SOURCE, OLD, MAIN, funded=True)
+            self.assertEqual(select.call_count, 2)
+            self.assertEqual(verify.call_args.args[0], dict(source=SOURCE, controller=OLD, version=42, run=7,
+                                                            rehearsal=False))
+            self.assertEqual({call.args[3:] for call in artifact.call_args_list}, {('7', OLD)})
+
+            cancelled = dict(original, conclusion='cancelled')
+            idle = {name: result for name, result in states.items()
+                    if not name.startswith('build / hosted_core') and name != 'build / publish'}
+            recovered = run_case(cancelled, idle, artifacts[:-1], [])
+            self.assertEqual(recovered, {key: value for key, value in expected.items() if key != 'prepared_id'})
+            failed_quote = dict(states, **{'build / hosted_quotes / quote-cycles': 'failure'})
+            recovered = run_case(original, failed_quote, artifacts[:3] + artifacts[4:], [claim])
+            quote_receipt_keys = {'quote_receipt_id', 'quote_controller', 'quote_run'}
+            self.assertEqual(recovered, {key: value for key, value in expected.items() if key not in quote_receipt_keys})
+
+            for run, outcomes, available, reservations, error in (
+                (dict(original, status='in_progress'), states, artifacts, [claim], 'trusted custom run'),
+                (cancelled, dict(idle, **{'build / hosted_core / wallet': None}), artifacts, [], 'wallet'),
+                (cancelled, dict(idle, **{'build / publish': 'success'}), artifacts, [], 'publish'),
+                (cancelled, dict(idle, **{'build / hosted_quotes / quote-cycles': 'failure'}), artifacts, [], 'quote-cycles'),
+                (original, states, artifacts, [], 'original protected funding reservation'),
+                (original, states, artifacts, [claim, dict(claim, ref=claim['ref'] + '-preclaim-recovery')],
+                 'linked funding reservation'),
+                (original, states, artifacts + [dict(name='hosted-core-receipt')], [claim], 'previous wallet receipt'),
+            ):
+                with self.subTest(error=error), self.assertRaisesRegex(ValueError, error):
+                    run_case(run, outcomes, available, reservations)
+
+            select.return_value = None
+            with self.assertRaisesRegex(ValueError, 'qualified funded reuse'):
+                run_case(cancelled, idle, artifacts, [])
+
+    def test_funded_recovery_delta_rejects_quote_runner_changes(self):
+        for path, allowed in ((b'.private/funded_reuse.py\0', True),
+                              (b'.private/tor_resident_ui_driver.py\0', False)):
+            with self.subTest(path=path), patch('quote_recovery.verify_custom_child'), \
+                    patch('quote_recovery.git', side_effect=[OLD.encode(), path]):
+                if allowed:
+                    verify_delta(Path('.'), SOURCE, OLD, MAIN, funded=True)
+                else:
+                    with self.assertRaisesRegex(ValueError, 'outside funded recovery paths'):
+                        verify_delta(Path('.'), SOURCE, OLD, MAIN, funded=True)
+
     def test_passing_quotes_reuse_requires_unchanged_runner_and_no_prior_attestation(self):
         quote_head = 'd' * 40
         run = dict(id=8, path=WORKFLOW, event='workflow_dispatch', head_branch='main', head_sha=quote_head,

@@ -1,4 +1,4 @@
-"""Run the maintained funded lifecycle against a verified hosted APK pair."""
+"""Run funded acceptance or an unfunded installed upgrade against verified APK pairs."""
 import hashlib
 import json
 import os
@@ -7,9 +7,10 @@ import re
 import shutil
 
 from acceptance_policy import direct_core_build_fingerprint, input_fingerprint, needs_live_tor_probe, validate_core_sources
-from core_testnet_driver import run as lifecycle, select_apk_roles
+from core_testnet_driver import INSTALLED_UPGRADE_STAGES, PACKAGE, run as lifecycle, select_apk_roles
 from emulator_session import SDK
 from hosted_claim import binding, verify
+from release_inputs import version_code
 from release_metadata import Metadata, require
 from strip_emulator_apk import prepare
 
@@ -31,6 +32,84 @@ def candidate_pair(directory, source):
             sorted((sha(path), path.name) for path in files),
             'Testnet APK checksums differ from producer')
     return files
+
+
+def stage_upgrade(path, *, source, core_id, original_core_id, production_id, original_run, original_controller,
+                  producer_run, producer_controller):
+    from hosted_release import artifact, stage
+
+    metadata = Metadata()
+    original_dir = path.with_name('original-core-artifact')
+    original_core = stage(original_dir, original_core_id, 'core-testnet-candidate',
+                          metadata=metadata, run=original_run, controller=original_controller)
+    original_app, _ = sorted(candidate_pair(original_dir, source), key=lambda p: 'androidTest' in p.name)
+    producer = stage(path, core_id, 'core-direct-candidate',
+                     metadata=metadata, run=producer_run, controller=producer_controller)
+    prepared_app, _ = sorted(candidate_pair(path, source), key=lambda p: 'androidTest' in p.name)
+    require(sha(prepared_app) == sha(original_app), 'Prepared app differs from the original producer APK')
+    production = artifact(metadata, production_id, 'validated-unsigned-apk', original_run, original_controller)
+    bound = dict(original_core=original_core, producer=producer, production_artifact=production,
+                 artifact_id=producer['id'], artifact_run_id=int(producer_run),
+                 producer_controller_sha=producer_controller)
+    (path / 'upgrade-producers.json').write_text(json.dumps(bound))
+
+
+def validate_upgrade(report, *, source, version, production, producer, original_core, fixture,
+                     run, controller, producer_run, producer_controller):
+    expected = dict(schema=1, evidence_class='unfunded-installed-upgrade', network='zcash-testnet',
+                    build_source_sha=source, candidate_version_code=version, production_artifact=production,
+                    producer=producer, original_core=original_core, hosted_fixture=fixture, workflow_run_id=int(run),
+                    workflow_controller_sha=controller, artifact_id=producer['id'], artifact_run_id=int(producer_run),
+                    producer_controller_sha=producer_controller, baseline_source_sha=fixture['source_sha'],
+                    baseline_version_code=fixture['version_code'], baseline_apk_sha256=fixture['candidate_apk_sha256'])
+    require(all(report.get(key) == value for key, value in expected.items()) and version > fixture['version_code'],
+            'Unfunded upgrade differs from the exact release candidate, producers or baseline')
+    require(report.get('passed') is True and report.get('rehearsal') is False and
+            all(report.get(key) is False for key in ('tor_enabled', 'clearnet_fallback', 'personal_wallet_access',
+                                                     'real_funds_used')) and
+            type(report.get('faucet_claims')) is int and report['faucet_claims'] == 0 and
+            not {'funding_setup', 'hosted_reservation', 'transaction_evidence'} & report.keys(),
+            'Unfunded upgrade must use direct testnet without a reservation or claims')
+    keys = ('baseline_apk_sha256', 'baseline_instrumentation_apk_sha256',
+            'candidate_apk_sha256', 'instrumentation_apk_sha256')
+    require(all(re.fullmatch(r'[0-9a-f]{64}', report.get(key, '')) for key in keys),
+            'Exact installed-upgrade APK pairs required')
+    preparation = dict(source=source, harness_controller=producer_controller, original_core=original_core,
+                       baseline_source=fixture['source_sha'], baseline_apk_sha256=report['baseline_apk_sha256'],
+                       baseline_instrumentation_sha256=report['baseline_instrumentation_apk_sha256'],
+                       candidate_apk_sha256=report['candidate_apk_sha256'],
+                       candidate_instrumentation_sha256=report['instrumentation_apk_sha256'])
+    require(report['direct_preparation'] == preparation, 'Direct harness preparation differs from the bound APK pairs')
+    installed = report['installed_upgrade']
+    require(installed.get('package') == PACKAGE and
+            all(installed.get(key) is True for key in ('uid_preserved', 'encrypted_wallet_preserved',
+                                                      'recovery_fixture_preserved')),
+            'Installed wallet identity and data preservation required')
+    apks = report['apk_preparation']
+    pairing = report['instrumentation_pairing']
+    require(len(apks) == 4 and len({entry['testSignerSha256'] for entry in apks.values()}) == 1 and
+            all(entry.get('executionEntriesUnchanged') is True and entry.get('abi') == 'x86_64'
+                for entry in apks.values()), 'One x86_64 test signer and unchanged executable entries required')
+    for key, tested in (('baseline_apk_sha256', installed['baseline_installed_sha256']),
+                        ('candidate_apk_sha256', installed['candidate_installed_sha256']),
+                        ('baseline_instrumentation_apk_sha256', pairing['baseline']['executed_sha256']),
+                        ('instrumentation_apk_sha256', pairing['candidate']['executed_sha256'])):
+        require(re.fullmatch('[0-9a-f]{64}', tested) and
+                sum(entry['originalSha256'] == report[key] and entry['testedSha256'] == tested
+                    for entry in apks.values()) == 1, 'Installed bytes differ from the emulator-prepared pair')
+    for role, sha_key, revision, app_version in (
+            ('baseline', 'baseline_instrumentation_apk_sha256', fixture['source_sha'], fixture['version_code']),
+            ('candidate', 'instrumentation_apk_sha256', source, version)):
+        require(pairing[role]['original_sha256'] == report[sha_key] and pairing[role]['source_sha'] == revision and
+                pairing[role]['app_version_code'] == app_version, 'Installed instrumentation source/version mismatch')
+    stages = report['stages']
+    require(set(stages) == set(pairing['stages']) == set(INSTALLED_UPGRADE_STAGES),
+            'Exact unfunded installed-upgrade stages required')
+    for name, role in INSTALLED_UPGRADE_STAGES.items():
+        require(stages[name] == dict(stage=name, passed=True, network='zcash-testnet', tor_enabled=False,
+                                     transport='direct') and
+                pairing['stages'][name] == dict(role=role, installed_hash_verified=True, **pairing[role]),
+                'Unfunded stage used a different APK pair, route or outcome')
 
 
 def verify_reservation():
@@ -82,10 +161,14 @@ def egress_diagnostics(report):
 
 
 def run(session, root, fixture, candidate, result):
-    require(os.environ['GITHUB_RUN_ATTEMPT'] == '1', 'Hosted funded reruns are forbidden')
+    require(os.environ['GITHUB_RUN_ATTEMPT'] == '1', 'Hosted wallet reruns are forbidden')
     require(not os.environ.get('GH_TOKEN') and not os.environ.get('GITHUB_TOKEN'),
             'Wallet runner must not receive a repository token')
     upgrade_probe = os.environ.get('ZEC_CORE_UPGRADE_PROBE')
+    installed_upgrade = os.environ.get('ZEC_CORE_REUSE_FUNDED') == 'true'
+    if installed_upgrade:
+        require(not upgrade_probe and os.environ['ZEC_CORE_REHEARSAL'] == 'false' and
+                not os.environ['ZEC_CORE_RESERVATION'], 'Installed upgrade requires an unreserved release candidate')
     require(not upgrade_probe or (upgrade_probe in ('restore', 'transport') and os.environ['ZEC_CORE_REHEARSAL'] == 'true'
             and not os.environ['ZEC_CORE_RESERVATION'] and os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch'),
             'An unfunded upgrade probe must use the dedicated rehearsal workflow without a reservation')
@@ -96,7 +179,8 @@ def run(session, root, fixture, candidate, result):
     use_tor = os.environ.get('ZEC_CORE_USE_TOR', 'true') == 'true'
     if os.environ['ZEC_CORE_REHEARSAL'] != 'true':
         require(not use_tor, 'Release wallet acceptance must use direct app networking')
-    version = int(os.environ['ZEC_CORE_VERSION'])
+    version = version_code(Path.cwd(), source) if installed_upgrade else int(os.environ['ZEC_CORE_VERSION'])
+    bound = json.loads((candidate / 'upgrade-producers.json').read_text()) if installed_upgrade else None
     require(version > selected['version_code'], 'Hosted testnet update must advance version')
     files = candidate_pair(candidate, source)
     prepared = None
@@ -106,13 +190,16 @@ def run(session, root, fixture, candidate, result):
         prepared = json.loads((candidate / 'direct-preparation.json').read_bytes())
         compiled_base = candidate / 'baseline-instrumentation.bin'
         app, test = sorted(files, key=lambda path: 'androidTest' in path.name)
-        require(prepared['source'] == source and prepared['harness_controller'] == os.environ['GITHUB_SHA']
+        producer_controller = bound['producer_controller_sha'] if installed_upgrade else os.environ['GITHUB_SHA']
+        require(prepared['source'] == source and prepared['harness_controller'] == producer_controller
                 and prepared['baseline_source'] == selected['source_sha']
                 and prepared['baseline_apk_sha256'] == selected['candidate_apk_sha256']
                 and prepared['candidate_apk_sha256'] == sha(app)
                 and prepared['candidate_instrumentation_sha256'] == sha(test)
                 and prepared['baseline_instrumentation_sha256'] == sha(compiled_base),
                 'Prepared baseline or candidate differs from exact instrumentation binding')
+        if installed_upgrade:
+            require(prepared['original_core'] == bound['original_core'], 'Prepared pair names another original APK producer')
         baseline_test = Path(shutil.copyfile(compiled_base, root / 'baseline-androidTest.apk'))
     inputs = files + [fixture / 'baseline-ui.apk']
     apks = [Path(shutil.copyfile(path, root / path.name)) for path in inputs]
@@ -132,8 +219,9 @@ def run(session, root, fixture, candidate, result):
     apk_preparation = prepare(apks, root, SDK)
     try:
         lifecycle(session.adb, root, apks, manifest, transport_only=bool(upgrade_probe), upgrade_probe=upgrade_probe,
-                  preclaim_check=not upgrade_probe, use_tor=use_tor,
-                  live_tor_probe=not use_tor and needs_live_tor_probe(source))
+                  preclaim_check=not (upgrade_probe or installed_upgrade), use_tor=use_tor,
+                  live_tor_probe=not use_tor and not installed_upgrade and needs_live_tor_probe(source),
+                  installed_upgrade=installed_upgrade)
     except Exception:
         report = root / 'core-testnet-result.json'
         if report.exists():
@@ -188,6 +276,18 @@ def run(session, root, fixture, candidate, result):
                       flush=True)
         raise
     report = json.loads((root / 'core-testnet-result.json').read_text())
+    if installed_upgrade:
+        run_id, controller = int(os.environ['GITHUB_RUN_ID']), os.environ['GITHUB_SHA']
+        report.update(bound, apk_preparation=apk_preparation, hosted_fixture=selected, direct_preparation=prepared,
+                      workflow_run_id=run_id, workflow_controller_sha=controller, rehearsal=False)
+        validate_upgrade(report, source=source, version=version, production=bound['production_artifact'],
+                         producer=bound['producer'], original_core=bound['original_core'], fixture=selected,
+                         run=run_id, controller=controller, producer_run=bound['artifact_run_id'],
+                         producer_controller=bound['producer_controller_sha'])
+        result.write_text(json.dumps(report, indent=2) + '\n')
+        print('Installed direct testnet upgrade preserved wallet data and restored the isolated seed with zero claims.',
+              flush=True)
+        return
     if upgrade_probe:
         require(report['passed'] and report['faucet_claims'] == 0, 'Unfunded upgrade probe failed')
         print(f'Hosted unfunded {upgrade_probe} after installed upgrade passed with the Tor firewall enabled.', flush=True)
