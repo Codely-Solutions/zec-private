@@ -29,14 +29,14 @@ class QuoteRecoveryTests(unittest.TestCase):
 
     def test_startup_diagnostics_report_locations_and_codes_without_messages(self):
         result = network_startup_diagnostics({
-            'pre_wallet_instrumentation': 'java.lang.RuntimeException: private message\n'
+            'pre_wallet_instrumentation': 'java.lang.RuntimeException: TLS handshake failed, private message\n'
                                           '  at cash.z.ecc.android.sdk.Test.get(Test.kt:40)\n'
                                           'CORE_TARGETS private target list',
             'native_errors': [{'probe_stage': 'latest_height', 'sdk_code': 3200, 'body': 'private payload'}],
         })
         self.assertEqual(result, dict(exception_classes=['java.lang.RuntimeException'],
                                       frames=['cash.z.ecc.android.sdk.Test.get(Test.kt:40)'],
-                                      resolved_targets=True,
+                                      resolved_targets=True, causes=['tls'],
                                       native=[dict(probe_stage='latest_height', sdk_code=3200)]))
 
     def test_transient_failure_requires_one_exact_trusted_marker(self):

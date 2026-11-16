@@ -50,8 +50,18 @@ def network_startup_diagnostics(diagnostic):
         r'[\w.$<>]+\((?:[\w.]+:\d+|Native Method|Unknown Source)\))', lines, re.MULTILINE)))
     native_fields = ('probe_stage', 'exception_class', 'height_response_class',
                      'submit_response_class', 'sdk_code', 'native_rejection_code')
+    known_causes = {
+        'certificate': r'UnknownIssuer|CertExpired|certificate|invalid peer',
+        'tls': r'handshake|rustls|tls error|tls connect',
+        'stream': r'stream failed|stream failure|stream closed|stream error',
+        'timeout': r'timed? ?out|timeout|deadline exceeded',
+        'refused': r'connection refused|connection reset|no route to host',
+        'tor_circuit': r'circuit|guard selection|bootstrap',
+        'dns': r'dns|name resolution|lookup address',
+    }
     return dict(exception_classes=classes[:12], frames=frames[:12],
                 resolved_targets=bool(re.search(r'^CORE_TARGETS ', lines, re.MULTILINE)),
+                causes=[name for name, pattern in known_causes.items() if re.search(pattern, lines, re.IGNORECASE)],
                 native=[{key: entry[key] for key in native_fields if key in entry}
                         for entry in diagnostic.get('native_errors', [])][-3:])
 

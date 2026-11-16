@@ -38,6 +38,10 @@ on:
         description: Verify app Tor RPC and updater readiness without a faucet claim
         type: boolean
         default: false
+      compare_testnet_tls:
+        description: Compare the testnet gRPC endpoint through standalone Tor before the app readiness probe
+        type: boolean
+        default: false
       test_recovery_controls:
         description: Test recovery with synthetic GitHub records and verify live ref protections
         type: boolean
@@ -140,6 +144,40 @@ jobs:
         env:
           REGISTRY_TOKEN: ${{ github.token }}
         run: bash .private/pull_hosted_fixture.sh "$RUNNER_TEMP/zec-hosted-pair"
+      - name: Reach the same public testnet endpoint through standalone Tor
+        if: inputs.test_preclaim && inputs.compare_testnet_tls
+        env:
+          PYTHONPATH: .private
+        run: |
+          bash .private/run_tor_ci.sh --install-only
+          trap 'rm -rf -- "$RUNNER_TEMP/zec-tor-runtime"' EXIT
+          python3 -B - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          from core_faucet import owned_tor
+
+          with TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as directory:
+              root = Path(directory)
+              try:
+                  with owned_tor(root) as (port, _negative, _metadata):
+                      body = root / 'response.bin'
+                      result = subprocess.run([
+                          'curl', '--silent', '--proto', '=https', '--http2', '--noproxy', '',
+                          '--socks5-hostname', f'127.0.0.1:{port}', '--max-time', '30',
+                          '--max-filesize', '65536', '-H', 'Content-Type: application/grpc',
+                          '-H', 'TE: trailers', '--data-binary', '@-', '-o', str(body),
+                          '-w', '%{http_code} %{http_version} %{ssl_verify_result}',
+                          'https://testnet.zec.rocks/cash.z.wallet.sdk.rpc.CompactTxStreamer/GetLatestBlock',
+                      ], input=b'\0' * 5, capture_output=True, timeout=35)
+                      payload = body.read_bytes() if body.is_file() else b''
+                      grpc_frame = len(payload) > 5 and payload[0] == 0 and int.from_bytes(payload[1:5]) == len(payload) - 5
+                      print(f'Standalone Tor testnet curl exit={result.returncode}, HTTP/version/TLS='
+                            f'{result.stdout.decode().strip()}, gRPC reply={grpc_frame}', flush=True)
+              except Exception as error:
+                  print('Standalone Tor testnet diagnostic failed: ' + type(error).__name__, flush=True)
+          PY
       - name: Execute the selected verification in an isolated guest
         env:
           ZEC_HOSTED_TRANSPORT_PROBE: ${{ inputs.test_transport }}
