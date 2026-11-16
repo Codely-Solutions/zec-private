@@ -6,11 +6,12 @@ import unittest
 from unittest.mock import Mock, patch
 
 import hosted_release
+from hosted_core import network_startup_diagnostics
 from quote_recovery import (
     ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, require_transient_quote_failure,
     resolve, resolve_quotes, same_controller_retry, unused_reservation, verify_delta,
 )
-from size_workflow_ui_scenario import tor_http_failure
+from size_workflow_ui_scenario import quote_footer, quote_footer_needs_scroll, tor_http_failure
 from tor_resident_ui_driver import quote_stage_records
 
 
@@ -18,6 +19,26 @@ SOURCE, OLD, MAIN = 'a' * 40, 'b' * 40, 'c' * 40
 
 
 class QuoteRecoveryTests(unittest.TestCase):
+    def test_loading_balance_does_not_hide_the_quote_footer_from_the_scenario(self):
+        labels = {'from', 'to', 'loading'}
+        self.assertTrue(quote_footer_needs_scroll(labels, quote_footer([
+            {'id': 'balance', 'text': 'Loading'},
+        ])))
+        footer = {'id': 'SWAP_REVIEW_BUTTON', 'text': 'Loading'}
+        self.assertFalse(quote_footer_needs_scroll(labels, quote_footer([footer])))
+
+    def test_startup_diagnostics_report_locations_and_codes_without_messages(self):
+        result = network_startup_diagnostics({
+            'pre_wallet_instrumentation': 'java.lang.RuntimeException: private message\n'
+                                          '  at cash.z.ecc.android.sdk.Test.get(Test.kt:40)\n'
+                                          'CORE_TARGETS private target list',
+            'native_errors': [{'probe_stage': 'latest_height', 'sdk_code': 3200, 'body': 'private payload'}],
+        })
+        self.assertEqual(result, dict(exception_classes=['java.lang.RuntimeException'],
+                                      frames=['cash.z.ecc.android.sdk.Test.get(Test.kt:40)'],
+                                      resolved_targets=True,
+                                      native=[dict(probe_stage='latest_height', sdk_code=3200)]))
+
     def test_transient_failure_requires_one_exact_trusted_marker(self):
         metadata = Mock(gh='gh', repo='repos/' + REPOSITORY)
         marker = b'2026-11-15T12:00:00.000Z HOSTED_QUOTE_FAILURE transient tor_http\n'

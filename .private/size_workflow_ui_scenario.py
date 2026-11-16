@@ -12,6 +12,14 @@ def tor_http_failure(before, records):
                         latest_request) is not None
 
 
+def quote_footer(nodes):
+    return next((node for node in nodes if node.get('id') == 'SWAP_REVIEW_BUTTON'), None)
+
+
+def quote_footer_needs_scroll(labels, footer):
+    return footer is None and {'from', 'to'} <= labels
+
+
 def run(root, stop, quote_stage_records):
     sequence=0
 
@@ -58,6 +66,7 @@ def run(root, stop, quote_stage_records):
         while time.monotonic() < deadline:
             state = action('snapshot')
             current = labels(state)
+            footer = quote_footer(state['nodes'])
             if 'get a quote' in current:
                 return state
             if 'the service is unavailable' in current:
@@ -68,9 +77,7 @@ def run(root, stop, quote_stage_records):
                 action('click_text', text='Try again')
                 retried = True
                 print('Retried the swap catalog through the visible Try again action.', flush=True)
-            elif scrolls < 2 and 'try again' not in current and (
-                    'unexpected error' in current or
-                    ({'from', 'to'} <= current and not current & {'loading', 'loading…'})):
+            elif scrolls < 2 and 'try again' not in current and quote_footer_needs_scroll(current, footer):
                 # The amount field receives focus on entry. Scroll the form to
                 # expose its footer even if amount or balance rows still say Loading.
                 try:
@@ -82,7 +89,9 @@ def run(root, stop, quote_stage_records):
             if stop.wait(.5):
                 raise InterruptedError('UI driver stopped')
         raise RuntimeError('Quote form did not become ready; visible known controls: ' +
-                           ', '.join(sorted(known & current)))
+                           ', '.join(sorted(known & current)) +
+                           '; footer: ' + (footer['text'].casefold() if footer and
+                                           footer['text'].casefold() in known else 'not identified'))
 
     def wait(text,timeout=240):
         deadline=time.monotonic()+timeout
