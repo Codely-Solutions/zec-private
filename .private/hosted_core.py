@@ -54,7 +54,7 @@ def network_startup_diagnostics(diagnostic):
         'certificate': r'UnknownIssuer|CertExpired|certificate|invalid peer',
         'tls': r'handshake|rustls|tls error|tls connect',
         'stream': r'stream failed|stream failure|stream closed|stream error',
-        'timeout': r'timed? ?out|timeout|deadline exceeded',
+        'timeout': r'timed? ?out|timeout|deadline (?:has )?(?:elapsed|exceeded)',
         'refused': r'connection refused|connection reset|no route to host',
         'tor_circuit': r'circuit|guard selection|bootstrap',
         'dns': r'dns|name resolution|lookup address',
