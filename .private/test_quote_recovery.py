@@ -15,7 +15,7 @@ from quote_recovery import (
     ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, require_transient_quote_failure,
     resolve, resolve_quotes, same_controller_retry, unused_reservation, verify_delta,
 )
-from size_workflow_ui_scenario import quote_footer, quote_footer_needs_scroll, tor_http_failure
+from size_workflow_ui_scenario import market_reference_state, quote_footer, quote_footer_needs_scroll, tor_http_failure
 from tor_resident_ui_driver import quote_stage_records
 
 
@@ -23,6 +23,13 @@ SOURCE, OLD, MAIN = 'a' * 40, 'b' * 40, 'c' * 40
 
 
 class QuoteRecoveryTests(unittest.TestCase):
+    def test_market_result_requires_visible_reference_or_warning(self):
+        self.assertIsNone(market_reference_state({'quote details', 'market reference'}))
+        self.assertIsNone(market_reference_state({'checking market price…', 'confirm'}))
+        self.assertEqual(market_reference_state({'kraken', 'market reference'}), 'compared')
+        self.assertEqual(market_reference_state({'17.0% below market reference'}), 'warning')
+        self.assertEqual(market_reference_state({'price check unavailable'}), 'unavailable')
+
     def test_loading_balance_does_not_hide_the_quote_footer_from_the_scenario(self):
         labels = {'from', 'to', 'loading'}
         self.assertTrue(quote_footer_needs_scroll(labels, quote_footer([

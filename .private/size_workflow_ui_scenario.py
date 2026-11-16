@@ -20,6 +20,16 @@ def quote_footer_needs_scroll(labels, footer):
     return footer is None and {'from', 'to'} <= labels
 
 
+def market_reference_state(labels):
+    if 'kraken' in labels:
+        return 'compared'
+    if 'price check unavailable' in labels:
+        return 'unavailable'
+    if any('below market reference' in label for label in labels):
+        return 'warning'
+    return None
+
+
 def run(root, stop, quote_stage_records, *, use_tor=True):
     sequence=0
 
@@ -110,6 +120,38 @@ def run(root, stop, quote_stage_records, *, use_tor=True):
         action('back')
         return wait(next_text)
 
+    def inspect_market_reference(state):
+        deadline = time.monotonic() + 22
+        expanded = False
+        scrolls = 0
+        safe_labels = {'review quote', 'quote details', 'checking market price…', 'confirm', 'swap anyway',
+                       'market reference', 'reference difference', 'no market reference for this asset'}
+        seen = set()
+        while time.monotonic() < deadline:
+            current = labels(state)
+            seen.update(current & safe_labels)
+            result = market_reference_state(current)
+            if result is not None:
+                return result
+            if 'checking market price…' in current:
+                state = action('snapshot')
+            elif 'quote details' in current and not expanded:
+                state = action('click_text', text='Quote details')
+                expanded = True
+            elif scrolls < 2 and 'review quote' in current:
+                # Expansion can place the source and result below the current viewport.
+                scrolls += 1
+                try:
+                    state = action('scroll')
+                except RuntimeError as error:
+                    if str(error) != 'UI command failed: scroll IllegalStateException':
+                        raise
+                    state = action('snapshot')
+            else:
+                state = action('snapshot')
+        raise RuntimeError(f'Quote market result unavailable to the UI test (expanded={expanded}, '
+                           f'scrolls={scrolls}, controls={sorted(seen)})')
+
     try:
         wait('Create New Wallet')
         click('Restore Existing Wallet','Seed Recovery Phrase')
@@ -159,16 +201,6 @@ def run(root, stop, quote_stage_records, *, use_tor=True):
         transport_retries = 0
         independent_comparisons = 0
         reference_states = []
-        def market_state(state):
-            current = labels(state)
-            if 'kraken' in current:
-                return 'compared'
-            if 'price check unavailable' in current:
-                return 'unavailable'
-            if any('below market reference' in label for label in current):
-                return 'warning'
-            return None
-
         for index in range(4):
             if index == 3 and independent_comparisons:
                 break
@@ -209,19 +241,7 @@ def run(root, stop, quote_stage_records, *, use_tor=True):
                 state=action('snapshot')
             if not (labels(state) & {'confirm', 'swap anyway'}):
                 raise RuntimeError('Quote review action did not become available')
-            reference_deadline = time.monotonic() + 15
-            while 'checking market price…' in labels(state) and time.monotonic() < reference_deadline:
-                if stop.wait(.5):raise InterruptedError('UI driver stopped')
-                state = action('snapshot')
-            if 'quote details' in labels(state):
-                state = click('Quote details')
-                # The command acknowledges the tap before the expanded Compose nodes settle.
-                deadline = time.monotonic() + 10
-                while market_state(state) is None and time.monotonic() < deadline:
-                    state = action('snapshot')
-            reference = market_state(state)
-            if reference is None:
-                raise RuntimeError('Expanded quote did not expose a supported market result')
+            reference = inspect_market_reference(state)
             independent_comparisons += reference in ('compared', 'warning')
             reference_states.append(reference)
             action('back')
