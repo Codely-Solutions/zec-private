@@ -136,7 +136,8 @@ class FixtureDownloadTests(unittest.TestCase):
                 record = records / (tag + '.json')
                 record.write_text(json.dumps(dict(versionCode=22, core=dict(candidate_version_code=21))))
                 self.assertEqual(pending_pair(metadata, root), '')
-                record.write_text(json.dumps(dict(versionCode=22, core=dict(candidate_version_code=22))))
+                record.write_text(json.dumps(dict(release_tag=tag, versionCode=22, core=dict(
+                    candidate_version_code=22, passed=True, real_funds_used=False, personal_wallet_access=False))))
                 self.assertEqual(pending_pair(metadata, root), tag)
                 selected.write_text(json.dumps(dict(release=tag, version_code=22)))
                 self.assertEqual(pending_pair(metadata, root), '')
