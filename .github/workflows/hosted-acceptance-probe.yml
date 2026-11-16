@@ -196,7 +196,8 @@ jobs:
         if: always() && github.event_name == 'schedule'
         env:
           READINESS: ${{ steps.readiness.outcome }}
-        run: echo "Native Tor readiness on the installed fixture: **$READINESS**. This check used no funds." >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo "Native Tor readiness on the installed fixture: **$READINESS**. This check used no funds." >> "$GITHUB_STEP_SUMMARY"
       - if: always()
         run: rm -rf -- "$RUNNER_TEMP/zec-hosted-pair"
   quote-cycles:
