@@ -58,6 +58,8 @@ class PackagingTests(unittest.TestCase):
             self.assertNotIn('.private/preflight.py', job)
         for job in (production, emulator):
             self.assertIn('ref: ${{ inputs.source_sha || github.sha }}', job)
+        self.assertIn("Unfunded NEAR API contracts over Tor without credentials\n"
+                      "        if: ${{ !inputs.preflight_only }}", production)
         self.assertIn('.private/preflight.py', preflight)
         self.assertIn('--dependency-verification strict', preflight)
         self.assertIn('help detektAll', preflight)

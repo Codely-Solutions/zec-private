@@ -70,10 +70,11 @@ def validate_instrumentation_pairing(receipt, baseline, *, use_tor=True, prepare
     expected_stages = BASELINE_INSTRUMENTATION_STAGES | CANDIDATE_INSTRUMENTATION_STAGES
     if not use_tor:
         expected_stages -= {'networkTargets', 'transport'}
+        expected_stages.add('restoreProbe')
     if set(stages) != expected_stages:
         raise ValueError('Missing version-paired instrumentation stages')
     for stage, value in stages.items():
-        role = 'baseline' if stage in BASELINE_INSTRUMENTATION_STAGES else 'candidate'
+        role = 'baseline' if stage in BASELINE_INSTRUMENTATION_STAGES or stage == 'restoreProbe' else 'candidate'
         if (value.get('role') != role or value.get('installed_hash_verified') is not True or
                 any(value.get(key) != expected for key, expected in pairing[role].items())):
             raise ValueError('Wrong app/instrumentation pair for stage: ' + stage)
@@ -216,7 +217,8 @@ def validate_core(receipt, expected_inputs, root=ROOT, *, baseline=None, use_tor
                 or not enforcement.get('direct_bulk_targets')):
             raise ValueError('Missing scoped Tor policy and authorized bulk transport evidence')
     elif (any(v.get('tor_enabled') is not False for v in stages.values())
-          or receipt.get('preclaim_readiness') != dict(passed=True, route='direct', role='baseline')):
+          or receipt.get('preclaim_readiness') != dict(passed=True, route='direct', role='baseline',
+                                                      restore_verified=True)):
         raise ValueError('Direct execution and pre-claim readiness evidence required')
     preflight=receipt.get('sync_preflight',{})
     if (preflight.get('passed') is not True or preflight.get('mode') not in ('caught-up','advancing-scan') or

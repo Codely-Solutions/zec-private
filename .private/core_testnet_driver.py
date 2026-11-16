@@ -139,7 +139,7 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         current_stage = 'preclaim_readiness' if readiness_only else name
         if time.monotonic() - started > 1600:
             raise RuntimeError('Core acceptance total deadline exhausted')
-        role = 'baseline' if readiness_only else instrumentation_role(name)
+        role = 'baseline' if readiness_only or (not use_tor and name == 'restoreProbe') else instrumentation_role(name)
         stage_uses_tor = use_tor or name == 'rpcProbe'
         expected = pairing[role]
         verify_instrumentation_pair(adb, expected['app_version_code'], expected['executed_sha256'])
@@ -299,7 +299,9 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         if not use_tor:
             if report.get('sync_preflight', {}).get('tor_enabled') is not False:
                 raise RuntimeError('Direct wallet readiness was not established before requesting funds')
-            report['preclaim_readiness'] = dict(passed=True, route='direct', role='baseline')
+            if 'restoreProbe' not in pairing['stages']:
+                raise RuntimeError('Direct seed restore was not established before requesting funds')
+            report['preclaim_readiness'] = dict(passed=True, route='direct', role='baseline', restore_verified=True)
             return
         marker = 'files/core-sync-ready.json'
         shell('run-as', PACKAGE, 'rm', '-f', marker)
@@ -462,6 +464,9 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 stage('recipient',240)
                 check_denials('recipient')
                 clear_wallet()
+                if not use_tor:
+                    stage('restoreProbe', 240)
+                    clear_wallet()
                 stage('sender',240)
                 check_denials('sender')
                 private = claim_after_readiness(check_preclaim if preclaim_check else None,

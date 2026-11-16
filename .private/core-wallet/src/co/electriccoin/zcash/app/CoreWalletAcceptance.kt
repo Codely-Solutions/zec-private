@@ -304,9 +304,11 @@ class CoreWalletAcceptance {
                     val state = fixture()
                     check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
                     dependency<RestoreWalletUseCase>()(
-                        SeedPhrase.new(state.getString("recipientSeed")), true,
-                        BlockHeight.new(state.getLong("recipientBirthday"))
+                        seedPhrase = SeedPhrase.new(state.getString("recipientSeed")),
+                        enableTor = useTor,
+                        birthday = BlockHeight.new(state.getLong("recipientBirthday")),
                     )
+                    check(preference.get() == useTor) { "Restore changed the requested transport" }
                     dependency<PersistableWalletProvider>().persistableWallet.filterNotNull().first()
                     checkWallet("recipient")
                     if (stage == "restoreProbe") {
@@ -314,18 +316,18 @@ class CoreWalletAcceptance {
                         requireEndpointReady(sync, "restore_probe")
                         withTimeout(120_000) { sync.status.first { it == Synchronizer.Status.SYNCED } }
                         check(balance() == 0L)
-                        return@withTimeout
+                    } else {
+                        val transaction = withTimeout(600_000) {
+                            dependency<TransactionRepository>().observeTransaction(state.getString("txId"))
+                                .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight != null }
+                        }
+                        check(transaction.amount.value == 1_000_000L)
+                        check(dependency<TransactionRepository>().getMemos(transaction).single() == reviewedDonationMemo)
+                        awaitBalance(1_000_000)
+                        check(balance() == 1_000_000L)
+                        save(state.put("restoreMinedHeight", checkNotNull(transaction.overview.minedHeight).value)
+                            .put("restoreTransactionState", transaction.overview.transactionState.toString()))
                     }
-                    val transaction = withTimeout(600_000) {
-                        dependency<TransactionRepository>().observeTransaction(state.getString("txId"))
-                            .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight!=null }
-                    }
-                    check(transaction.amount.value == 1_000_000L)
-                    check(dependency<TransactionRepository>().getMemos(transaction).single() == reviewedDonationMemo)
-                    awaitBalance(1_000_000)
-                    check(balance() == 1_000_000L)
-                    save(state.put("restoreMinedHeight",checkNotNull(transaction.overview.minedHeight).value)
-                        .put("restoreTransactionState",transaction.overview.transactionState.toString()))
                 }
                 "transport", "transportProbe" -> try {
                     runTransport(probeOnly = stage == "transportProbe")
@@ -1345,7 +1347,7 @@ class CoreWalletAcceptance {
                 .put("cause_class", (result as? ServerValidation.InValid)?.reason?.javaClass?.simpleName ?: "none"))
             if (attempt < 2) delay(2_000)
         }
-        error("Core Tor metadata readiness was not established")
+        error("Core wallet metadata readiness was not established")
     }
 
     private suspend fun balance(): Long = dependency<AccountDataSource>().getZashiAccount().totalShieldedBalance?.value ?: -1L

@@ -13,6 +13,7 @@ from pathlib import Path
 import unittest
 from unittest.mock import patch
 from acceptance_policy import profile_input, changed_inputs, input_fingerprint, requirements, validate_core, validate_quotes, validate_binding, verify_promotion_revision, CORE_STAGES, CORE_TEST_SOURCE, CORE_BINDING, validate_core_sources, BASELINE_INSTRUMENTATION_STAGES, CANDIDATE_INSTRUMENTATION_STAGES
+from acceptance_policy import needs_live_tor_probe
 
 
 class AcceptancePolicyTest(unittest.TestCase):
@@ -149,10 +150,12 @@ class AcceptancePolicyTest(unittest.TestCase):
         with self.assertRaises(ValueError):validate_core(bad,'inputs')
 
     def test_direct_receipt_still_requires_financial_stages_and_readiness(self):
-        receipt = self.receipt(tor_enabled=False, preclaim_readiness=dict(passed=True, route='direct', role='baseline'))
+        receipt = self.receipt(tor_enabled=False, preclaim_readiness=dict(
+            passed=True, route='direct', role='baseline', restore_verified=True))
         del receipt['network_enforcement'], receipt['stages']['interruption']
         for stage in ('networkTargets', 'transport'):
             del receipt['instrumentation_pairing']['stages'][stage]
+        receipt['instrumentation_pairing']['stages']['restoreProbe'] = receipt['instrumentation_pairing']['stages']['recipient']
         for stage in receipt['stages'].values():
             stage['tor_enabled'] = False
         self.assertTrue(validate_core(receipt, 'inputs', use_tor=False))
@@ -461,12 +464,27 @@ class AcceptancePolicyTest(unittest.TestCase):
         raw=b'accepted';proof={'core_acceptance':dict(status='pending',input_fingerprint='inputs')}
         with self.assertRaises(ValueError):validate_binding(proof,'core_acceptance','inputs',raw,None,allow_late=True)
 
-    def test_quotes_need_real_repeated_tor_evidence(self):
+    def test_native_tor_probe_checks_changed_transport_and_unknown_inputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / '.private').mkdir()
+            (root / '.private/hosted-fixture.json').write_text(json.dumps(dict(source_sha='a'*40)))
+            widget = 'ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/exchangerate/widget/Balance.kt'
+            for changed, expected in ((widget, False), ('.private/acceptance_policy.py', False),
+                                      ('gradle.properties', True), ('some-new-transport-input', True)):
+                with self.subTest(path=changed), patch('acceptance_policy.input_manifest',
+                                                       side_effect=[{changed: 'old'}, {changed: 'new'}]):
+                    self.assertIs(needs_live_tor_probe('b'*40, root), expected)
+
+    def test_quotes_need_real_repeated_evidence_on_the_requested_route(self):
         receipt=dict(schema=1,input_fingerprint='inputs',evidence_class='real-app-production-quotes',
                      passed=True,tor_enabled=True,funds_transferred=False,personal_wallet_access=False,
                      quote_requests=3,quote_reviews=3,dismissals=3,executed_apk_sha256='a'*64,build_source_sha='b'*40,
                      recipient_network_mismatch_blocked=True,corrected_without_leaving_form=True,independent_comparisons=1)
         self.assertTrue(validate_quotes(receipt,'inputs'))
+        self.assertTrue(validate_quotes(dict(receipt, tor_enabled=False), 'inputs', use_tor=False))
+        with self.assertRaises(ValueError):
+            validate_quotes(receipt, 'inputs', use_tor=False)
         for key,value in (('dismissals',2),('tor_enabled',False),('input_fingerprint','old'),('funds_transferred',True),
                           ('recipient_network_mismatch_blocked',False),('corrected_without_leaving_form',False),
                           ('independent_comparisons',0)):
