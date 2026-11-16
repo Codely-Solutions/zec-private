@@ -365,7 +365,7 @@ jobs:
       preflight_only: ${{ inputs.preflight_only }}
   hosted_core:
     needs: [admit_hosted, preflight, signing_smoke, unsigned, testnet_apk, recovery_quotes]
-    if: ${{ !cancelled() && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && ((!inputs.recover_run && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success') || (inputs.recover_run && needs.admit_hosted.outputs.run_missing_core == 'true' && (!inputs.preclaim_run || needs.recovery_quotes.result == 'success'))) }}
+    if: ${{ !cancelled() && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && ((!inputs.recover_run && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success') || (inputs.recover_run && needs.admit_hosted.outputs.run_missing_core == 'true' && (!inputs.preclaim_run || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != ''))) }}
     permissions:
       actions: read
       contents: write
@@ -422,7 +422,7 @@ jobs:
       use_tor: false
   recovery_quotes:
     needs: [admit_hosted, preflight, signing_smoke]
-    if: ${{ !cancelled() && inputs.preclaim_run && needs.admit_hosted.outputs.previous_reservation != '' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
+    if: ${{ !cancelled() && inputs.preclaim_run && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.outputs.previous_reservation != '' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
     permissions:
       actions: read
       contents: read

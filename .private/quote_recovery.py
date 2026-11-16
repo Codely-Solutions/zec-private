@@ -1,7 +1,11 @@
 """Resume an interrupted custom release on its original build."""
+import hashlib
+import io
+import json
 import os
 import re
 import subprocess
+import zipfile
 
 from custom_release import OPERATOR_ID, REPOSITORY, WORKFLOW, require_dispatch, verify_custom_child
 from maintenance_cadence import git
@@ -112,7 +116,7 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
     if missing_core or original_preclaim:
         require(not same, 'Same-controller recovery requires a passing original wallet receipt')
         require(not any(row['name'] == 'hosted-core-receipt' for row in artifacts)
-                and not quote_run and quote_result in ('success', 'failure'),
+                and (not quote_run or bool(preclaim_run)) and quote_result in ('success', 'failure'),
                 'Wallet recovery requires no previous wallet receipt')
         if not original_preclaim:
             require(not any(job['name'].startswith('build / hosted_core /') for job in jobs),
@@ -151,7 +155,11 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
         require(len(matching) == 1, 'Expected one original artifact: ' + name)
         outputs[key] = str(artifact(metadata, matching[0]['id'], name, run_id, original)['id'])
     if quote_run:
-        outputs.update(resolve_quotes(root, source, controller, original, quote_run, metadata))
+        if preclaim_run:
+            outputs.update(resolve_preclaim_quotes(root, source, controller, original, run_id, quote_run,
+                                                   outputs, metadata))
+        else:
+            outputs.update(resolve_quotes(root, source, controller, original, quote_run, metadata))
     if signing and same:
         same_controller_retry(source, controller, run_id, metadata, signing=True)
     return outputs
@@ -238,3 +246,58 @@ def resolve_quotes(root, source, controller, original, quote_run, metadata):
     quote_receipt = artifact(metadata, matching[0]['id'], 'hosted-quote-receipt', quote_run, quote_controller)
     return {'quote_receipt_id': str(quote_receipt['id']), 'quote_controller': quote_controller,
             'quote_run': int(quote_run)}
+
+
+def resolve_preclaim_quotes(root, source, controller, original, build_run, quote_run, outputs, metadata):
+    from acceptance_policy import input_fingerprint, validate_quotes
+    from hosted_release import artifact
+    from release_inputs import version_code
+
+    require(re.fullmatch(r'[1-9][0-9]*', quote_run) and quote_run != build_run,
+            'Exact linked quote recovery run required')
+    run = metadata.api('/actions/runs/' + quote_run)
+    prior = run['head_sha']
+    require(run['id'] == int(quote_run) and run['path'] == WORKFLOW and run['event'] == 'workflow_dispatch'
+            and run['head_branch'] == 'main' and run['head_repository']['full_name'] == REPOSITORY
+            and run['actor']['id'] == OPERATOR_ID and run['status'] == 'completed'
+            and run['conclusion'] == 'failure' and run['run_attempt'] == 1
+            and re.fullmatch(r'[a-f0-9]{40}', prior) and prior != controller
+            and git(root, 'merge-base', prior, controller).decode().strip() == prior,
+            'Expected a completed trusted recovery before the linked claim')
+    verify_delta(root, source, original, prior)
+    changed = git(root, 'diff', '--no-renames', '--name-only', '-z', prior, controller)
+    require(set(filter(None, changed.decode().split('\0'))) <= {
+        '.private/prepare_direct_core.py', '.private/quote_recovery.py', '.github/workflows/build-release.yml',
+        '.private/test_quote_recovery.py', '.private/RELEASE-WORKFLOW.md',
+    }, 'Prior quote execution inputs changed')
+    jobs = metadata.pages(f'/actions/runs/{quote_run}/attempts/1/jobs', 'jobs')
+    for name, conclusion in (('admit_hosted', 'success'), ('recovery_quotes / quote-cycles', 'success'),
+                             ('hosted_core / prepare-direct', 'failure'), ('hosted_core / reserve', 'skipped'),
+                             ('hosted_core / wallet', 'skipped'), ('publish', 'skipped')):
+        matching = [job for job in jobs if job['name'] == 'build / ' + name
+                    and job['run_id'] == int(quote_run) and job['head_sha'] == prior]
+        require(len(matching) == 1 and matching[0]['conclusion'] == conclusion,
+                'Prior recovery did not prove a passing quote and stopped wallet setup: ' + name)
+    artifacts = metadata.pages(f'/actions/runs/{quote_run}/artifacts', 'artifacts')
+    matching = [row for row in artifacts if row['name'] == 'hosted-quote-receipt']
+    require(len(matching) == 1, 'Expected exactly one linked recovery quote receipt')
+    recorded = artifact(metadata, matching[0]['id'], 'hosted-quote-receipt', quote_run, prior)
+    require(recorded['size_in_bytes'] <= 64 * 1024, 'Quote receipt archive is too large')
+    archive = subprocess.check_output([metadata.gh, 'api', metadata.repo +
+                                        f'/actions/artifacts/{recorded["id"]}/zip'], timeout=30)
+    require(len(archive) == recorded['size_in_bytes'] and 'sha256:' + hashlib.sha256(archive).hexdigest() ==
+            recorded['digest'], 'Linked quote receipt archive changed')
+    with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+        require(bundle.namelist() == ['hosted-quotes.json'] and
+                bundle.getinfo('hosted-quotes.json').file_size <= 64 * 1024, 'Unexpected linked quote receipt archive')
+        receipt = json.loads(bundle.read('hosted-quotes.json'))
+    validate_quotes(receipt, input_fingerprint(source, root=root, profile='production-quotes'), use_tor=False)
+    require(receipt.get('build_source_sha') == source and receipt.get('candidate_version_code') ==
+            version_code(root, source) and receipt.get('workflow_run_id') == int(quote_run)
+            and receipt.get('artifact_run_id') == int(build_run) and receipt.get('quote_controller_sha') == prior
+            and receipt.get('producer') == artifact(metadata, outputs['quote_id'], 'isolated-ui-repro-apk',
+                                                     build_run, original)
+            and receipt.get('production_artifact') == artifact(metadata, outputs['production_id'],
+                                                               'validated-unsigned-apk', build_run, original),
+            'Linked quote receipt does not match the original release APKs')
+    return {'quote_receipt_id': str(recorded['id']), 'quote_controller': prior, 'quote_run': int(quote_run)}

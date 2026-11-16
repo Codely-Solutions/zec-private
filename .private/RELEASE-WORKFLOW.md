@@ -38,7 +38,7 @@ If that recovery passes quotes and the signer fails before creating an attestati
 
 Hosted quote failures report sanitized application stages. The unfunded scenario can retry a Tor HTTP request that ends without a response when the current attempt records the observed runtime failure. Retries stay within the existing per-cycle budget. The receipt requires at least three successful reviews and dismissals and one independent comparison. When the first two comparisons fail, the scenario waits for the provider backoff to clear and allows one extra unfunded quote if needed.
 
-For a linked pre-claim recovery, the controller completes quote acceptance before creating the linked reservation.
+For a linked pre-claim recovery, the controller completes quote acceptance before creating the linked reservation. If the prior recovery passed quotes and failed to prepare wallet instrumentation before reservation, pass its run as `quote_run`. Admission verifies the prior job states, receipt bytes, direct route and original APK bindings before allowing the wallet job.
 
 Pass the named environment secret references when invoking the reusable release workflow. Their values come from `production-signing` and `maintenance-integration` only in the jobs that select those environments. Keep repository-level copies absent.
 

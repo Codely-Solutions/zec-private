@@ -13,17 +13,31 @@ from hosted_core import candidate_pair, sha
 from hosted_release import stage
 
 
+TOOLING_REPOSITORIES = '''
+beforeSettings { settings ->
+    if (settings.settingsDir.name == 'build-conventions-secant') {
+        settings.pluginManagement.repositories {
+            mavenCentral { content { includeGroup('org.jetbrains.kotlin') } }
+            gradlePluginPortal()
+        }
+    }
+}
+'''
+
+
 def compile_instrumentation(revision, parent):
     if not re.fullmatch('[a-f0-9]{40}', revision):
         raise ValueError('Exact testnet build source required')
     with TemporaryDirectory(dir=parent) as scratch:
         checkout = Path(scratch) / 'source'
+        repositories = Path(scratch) / 'instrumentation-tooling.gradle'
+        repositories.write_text(TOOLING_REPOSITORIES)
         git('worktree', 'add', '--detach', str(checkout), revision)
         try:
             shutil.copyfile(ROOT / CORE_TEST_SOURCE, checkout / CORE_TEST_SOURCE)
             environment = {key: value for key, value in os.environ.items()
                            if key not in {'GH_TOKEN', 'GITHUB_TOKEN', 'REGISTRY_TOKEN'}}
-            subprocess.run(['bash', './gradlew', '-I', '.private/tor-ui-abi.gradle', '-I',
+            subprocess.run(['bash', './gradlew', '-I', str(repositories), '-I', '.private/tor-ui-abi.gradle', '-I',
                             '.private/core-wallet/include.gradle', '--no-daemon', '--no-watch-fs',
                             '--max-workers=2', '-Dorg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g',
                             '-Pkotlin.compiler.execution.strategy=in-process',
