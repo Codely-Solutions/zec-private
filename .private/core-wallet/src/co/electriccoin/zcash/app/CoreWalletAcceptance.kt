@@ -120,10 +120,7 @@ class CoreWalletAcceptance {
                     check(state.getBoolean("claimAttempted"))
                     check(state.getString("fundingTxId").matches(Regex("[0-9a-f]{64}")))
                     checkWallet("sender")
-                    val received=withTimeout(850_000) {
-                        dependency<TransactionRepository>().observeTransaction(state.getString("fundingTxId"))
-                            .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight!=null }
-                    }
+                    val received = awaitFundingTransaction(state.getString("fundingTxId"), allowSyncRestart = !useTor)
                     awaitBalance(2_000_000)
                     check(balance()==received.amount.value)
                     withTimeout(850_000) {
@@ -1369,6 +1366,29 @@ class CoreWalletAcceptance {
     }
 
     private suspend fun balance(): Long = dependency<AccountDataSource>().getZashiAccount().totalShieldedBalance?.value ?: -1L
+
+    private suspend fun awaitFundingTransaction(txId: String, allowSyncRestart: Boolean): ReceiveTransaction {
+        val transactions = dependency<TransactionRepository>()
+        val provider = dependency<SynchronizerProvider>()
+        val original = provider.getSynchronizer()
+        val initialScan = original.fullyScannedHeight.value?.value
+        suspend fun observeMined(): ReceiveTransaction = transactions.observeTransaction(txId)
+            .filterNotNull().first { it is ReceiveTransaction && it.overview.minedHeight != null } as ReceiveTransaction
+
+        withTimeoutOrNull(if (allowSyncRestart) 360_000 else 850_000) { observeMined() }?.let { return it }
+        val sync = withTimeoutOrNull(3_000) { provider.getSynchronizer() }
+        val scanned = sync?.fullyScannedHeight?.value?.value
+        val tip = sync?.networkHeight?.value?.value
+        val stalled = sync === original && scanned != null && scanned == initialScan && tip != null && tip > scanned
+        val restart = allowSyncRestart && stalled
+        println("CORE_SYNC_DIAGNOSTIC " + JSONObject().put("phase", "funding_observation_wait")
+            .put("wallet_behind_tip", scanned != null && tip != null && scanned < tip)
+            .put("scan_stalled", stalled).put("sync_restarted", restart))
+        if (!allowSyncRestart) error("The original testnet funding transaction was not observed")
+        if (restart) provider.resetSynchronizer()
+        // Observe the same txid in the same wallet after a read-only reset or a slow confirmation.
+        return withTimeout(480_000) { observeMined() }
+    }
 
     private suspend fun awaitBalance(minimum: Long) = withTimeout(600_000) {
         while (balance() < minimum) delay(2_000)

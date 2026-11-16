@@ -144,6 +144,10 @@ def run(session, root, fixture, candidate, result):
             egress_diagnostics(value)
             if 'transport_failure' in value:
                 print('Hosted transport failure ' + json.dumps(value['transport_failure']), flush=True)
+            if value['last_stage'] == 'fund' and state == 'broadcast':
+                funding_txid = value.get('funding_setup', {}).get('txid', '')
+                if re.fullmatch('[0-9a-f]{64}', funding_txid):
+                    print('Hosted testnet funding transaction for reconciliation ' + funding_txid, flush=True)
         diagnostic = root / 'core-testnet-diagnostic.json'
         if diagnostic.is_file():
             stage_error = json.loads(diagnostic.read_text())
@@ -154,7 +158,7 @@ def run(session, root, fixture, candidate, result):
             sync = stage_error.get('sync', [])
             if sync:
                 keys = ('phase', 'elapsed_ms', 'probe_only', 'exception_class', 'status', 'error_type', 'cause_class',
-                        'http_status')
+                        'http_status', 'wallet_behind_tip', 'scan_stalled', 'sync_restarted')
                 data = [{key: item[key] for key in keys if key in item} for item in sync]
                 print('Hosted synchronization markers ' + json.dumps(data), flush=True)
             submission = stage_error.get('submission', [])
