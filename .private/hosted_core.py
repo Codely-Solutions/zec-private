@@ -158,6 +158,13 @@ def run(session, root, fixture, candidate, result):
                 data = [{key: item[key] for key in keys if key in item} for item in sync]
                 print('Hosted synchronization markers ' + json.dumps(data), flush=True)
             submission = stage_error.get('submission', [])
+            accounting = stage_error.get('accounting', [])
+            if accounting:
+                keys = ('ui_control', 'ui_outcome', 'review_attempt', 'insufficient_balance_sheet',
+                        'form_review_visible', 'review_title_visible', 'proposal_error_logged',
+                        'send_validation_failed_logged', 'exception_classes', 'sync_status')
+                print('Hosted proposal evidence ' + json.dumps([{key: entry[key] for key in keys if key in entry}
+                                                                for entry in accounting[-3:]]), flush=True)
             if submission:
                 item = submission[-1]
                 keys = ('type', 'code', 'reason', 'cause_class', 'manual_resubmissions')

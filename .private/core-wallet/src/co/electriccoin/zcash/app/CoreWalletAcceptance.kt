@@ -34,6 +34,7 @@ import cash.z.ecc.android.sdk.internal.model.TorClient
 import cash.z.ecc.android.sdk.internal.model.TorHttp
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
@@ -195,32 +196,44 @@ class CoreWalletAcceptance {
                     clickUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_add_message), "expand_memo")
                     enterDonationAmount(reviewedDonationMemo, co.electriccoin.zcash.ui.screen.send.SendTag.SEND_MEMO_FIELD)
                     scrollToText(context.getString(co.electriccoin.zcash.ui.R.string.private_support_review))
+                    var reviewRetryAvailable = true
                     suspend fun openReview() {
                         reviewAttempt++
                         awaitReviewSync()
                         val logBoundary = "CORE_REVIEW_BEGIN_" + reviewAttempt
                         android.util.Log.i("CoreReview", logBoundary)
-                        try {
-                            clickUi(context.getString(co.electriccoin.zcash.ui.R.string.private_support_review), "form_review")
-                        } catch (error: Exception) {
-                            proposalFailureDiagnostic(logBoundary, reviewAttempt)
-                            throw error
-                        }
-                        val proposal = withTimeoutOrNull(60_000) {
-                            var pending = proposals.transactionProposal.value
-                            while (pending == null) {
-                                val insufficientTitle = context.getString(
-                                    co.electriccoin.zcash.ui.R.string.sheet_insufficientBalance_title
-                                )
-                                if (hasUiText(insufficientTitle)) {
-                                    // Capture eligibility at rejection, before asynchronous sync changes it.
-                                    proposalFailureDiagnostic(logBoundary, reviewAttempt)
-                                    error("Core UI proposal reported insufficient funds")
-                                }
-                                delay(200)
-                                pending = proposals.transactionProposal.value
+                        val reviewText = context.getString(co.electriccoin.zcash.ui.R.string.private_support_review)
+                        val proposalFailed = context.getString(co.electriccoin.zcash.ui.R.string.private_support_failed)
+                        suspend fun requestReview(): TransactionProposal? {
+                            try {
+                                clickUi(reviewText, "form_review")
+                            } catch (error: Exception) {
+                                proposalFailureDiagnostic(logBoundary, reviewAttempt)
+                                throw error
                             }
-                            pending
+                            return withTimeoutOrNull(45_000) {
+                                var pending = proposals.transactionProposal.value
+                                while (pending == null) {
+                                    val insufficientTitle = context.getString(
+                                        co.electriccoin.zcash.ui.R.string.sheet_insufficientBalance_title
+                                    )
+                                    if (hasUiText(insufficientTitle) || hasUiText(proposalFailed)) {
+                                        proposalFailureDiagnostic(logBoundary, reviewAttempt)
+                                        error("Core UI rejected the donation proposal")
+                                    }
+                                    delay(200)
+                                    pending = proposals.transactionProposal.value
+                                }
+                                pending
+                            }
+                        }
+                        var proposal = requestReview()
+                        if (proposal == null && reviewRetryAvailable && proposals.submitState.value == null &&
+                            hasUiText(reviewText) && hasUiText(reviewedDonationMemo) && !hasUiText(proposalFailed)
+                        ) {
+                            reviewRetryAvailable = false
+                            proposalFailureDiagnostic(logBoundary, reviewAttempt)
+                            proposal = proposals.transactionProposal.value ?: requestReview()
                         }
                         if (proposal == null) {
                             // Keep the bounded log classification last, even if input validation fails.
@@ -1222,6 +1235,11 @@ class CoreWalletAcceptance {
     private suspend fun clickUi(text: String, label: String) {
         val node = awaitUi(text, label, clickable = true)
         try {
+            // Use the exposed accessibility action for this read-only review control.
+            if (label == "form_review") {
+                check(node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) { "Core Review action rejected" }
+                return
+            }
             // Readiness may be polled; an action with an ambiguous result is never retried.
             check(label != "review_approve" || approvalActions == 0) { "Core approval may be attempted only once" }
             if (label == "review_approve") approvalActions++
