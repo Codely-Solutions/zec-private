@@ -4,9 +4,59 @@ import unittest
 from unittest.mock import Mock, patch
 
 import funded_reuse
+import hosted_claim
+import published_history
 
 
 class FundedReuseTests(unittest.TestCase):
+    def test_history_migration_requires_exact_source_tree(self):
+        original, rewritten, tree = 'a' * 40, 'b' * 40, 'c' * 40
+        migration = {'sources': {original: {'commit': rewritten, 'tree': tree}}}
+        with patch.object(published_history, 'migration', return_value=migration), \
+                patch.object(published_history.subprocess, 'check_output', side_effect=(tree, 'd' * 40)):
+            self.assertEqual(rewritten, published_history.source_revision(original))
+            self.assertEqual('HEAD', published_history.source_revision('HEAD'))
+            with self.assertRaisesRegex(ValueError, 'tree changed'):
+                published_history.source_revision(original)
+
+    def test_history_migration_preserves_exact_claim_and_rules(self):
+        original, rewritten = 'a' * 40, 'b' * 40
+        ref = 'refs/heads/testnet-claims/release-27'
+        binding = {'version': 27}
+        migration = {'claims': {original: {'ref': ref, 'commit': rewritten}}}
+        metadata = Mock()
+        results = [{'object': {'sha': rewritten}}, {'message': json.dumps(binding)},
+                   [{'type': 'update'}, {'type': 'deletion'}]]
+        with patch.object(published_history, 'migration', return_value=migration):
+            metadata.api.side_effect = results
+            hosted_claim.verify_ref(ref, binding, original, metadata)
+            metadata.api.side_effect = results[:2] + [[{'type': 'update'}]]
+            with self.assertRaisesRegex(ValueError, 'missing.*protections'):
+                hosted_claim.verify_ref(ref, binding, original, metadata)
+            with self.assertRaisesRegex(ValueError, 'Invalid migrated reservation'):
+                hosted_claim.verify_ref(ref + '-other', binding, original, metadata)
+            metadata.api.side_effect = [{'object': {'sha': 'c' * 40}}]
+            with self.assertRaisesRegex(ValueError, 'different inputs'):
+                hosted_claim.verify_ref(ref, binding, original, metadata)
+
+    def test_history_migration_matches_only_the_pinned_release_and_asset(self):
+        source, rewritten, tree = 'a' * 40, 'b' * 40, 'c' * 40
+        tag, apk, release_id = 'v3.19.0-private.27', 'd' * 64, 27
+        record = {'release': {'tag': tag, 'source': source, 'id': release_id,
+                              'commit': rewritten, 'tree': tree, 'apk_sha256': apk}}
+        api = Mock(return_value={'tree': {'sha': tree}})
+        ref = {'type': 'commit', 'sha': rewritten}
+        with patch.object(published_history, 'migration', return_value=record):
+            matches = published_history.release_tag_matches
+            self.assertTrue(matches(tag, source, apk, release_id, ref, api))
+            self.assertFalse(matches(tag, source, 'e' * 64, release_id, ref, api))
+            self.assertFalse(matches(tag, source, apk, release_id + 1, ref, api))
+            self.assertFalse(matches(tag + '-other', source, apk, release_id, ref, api))
+            self.assertFalse(matches(tag, source, apk, release_id, {'type': 'commit', 'sha': '0' * 40}, api))
+            api.return_value = {'tree': {'sha': 'e' * 40}}
+            self.assertFalse(matches(tag, source, apk, release_id, ref, api))
+            self.assertTrue(matches('future', source, apk, release_id, {'type': 'commit', 'sha': source}, api))
+
     def test_unfunded_lane_cannot_provision_or_reserve_a_claim(self):
         workflow = (funded_reuse.ROOT / '.github/workflows/hosted-core.yml').read_text()
         provision = workflow.split('  provision-tor:\n', 1)[1].split('  reserve:\n', 1)[0]

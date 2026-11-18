@@ -1,0 +1,102 @@
+{
+  "release": {
+    "tag": "v3.19.0-private.27",
+    "id": 447210242,
+    "source": "ca3b711ee1bbf4b055d7d83650906ee2c60fc169",
+    "commit": "a0bcf3dfa9470bad6f030ff478b97aa1bfe28bef",
+    "tree": "8a8b7a6c2f6519523243eb8f7ef2275021601363",
+    "apk_sha256": "2afc6f039ba221e4dc6083dd4136610f3306825bbab8c98484ba5af08e33197a"
+  },
+  "sources": {
+    "39a027eaf2f931c03542bfc6f78f9e50011668eb": {
+      "commit": "0b65b9ef14f4383ce32e22b90221ff2074f80bc0",
+      "tree": "af8638a4f3d67ed3ff13d7ec7e8992ebc37b3e00"
+    },
+    "b22c821fb39ca3df4a77ef59c9b42d0d535cd615": {
+      "commit": "c6418e6096177e9fdc6aa9e8ad308be72065992d",
+      "tree": "9f96644df534d3d9a8e509d7e855a2735f994336"
+    },
+    "ca3b711ee1bbf4b055d7d83650906ee2c60fc169": {
+      "commit": "a0bcf3dfa9470bad6f030ff478b97aa1bfe28bef",
+      "tree": "8a8b7a6c2f6519523243eb8f7ef2275021601363"
+    },
+    "eeeb03c29da57a350e349292fe2b4bb288e98765": {
+      "commit": "0f907e09a03753a9dd1864f168bcc840d91f05de",
+      "tree": "b1a19e0a76097a00ad112cd0ebc214f6a691127d"
+    }
+  },
+  "claims": {
+    "8dfbbf78e6006ff6415d336941c8c5f975bc61f1": {
+      "ref": "refs/heads/testnet-claims/rehearsal-3234022",
+      "commit": "193a38748db84d9817f30cab22be6344f408e3b0"
+    },
+    "59a3224d2632f61468d2d83741e6f0e8357f61b2": {
+      "ref": "refs/heads/testnet-claims/rehearsal-3234023",
+      "commit": "04b29130360bb10f9cb232a3b541e1fa54782906"
+    },
+    "ca2037e311ea0e3cc74c39c3a6cc0177ac85062f": {
+      "ref": "refs/heads/testnet-claims/rehearsal-3234024",
+      "commit": "ad78fb708cdfdf59f7aba464570285f3f2e49488"
+    },
+    "eb429929a9468cd32a478ea318fa0887bad8eaa7": {
+      "ref": "refs/heads/testnet-claims/rehearsal-3234025",
+      "commit": "e054d7cb150bafff4fa8e8f93afe500c13dffa5d"
+    },
+    "b9742e43a1c2aed18699cd30c9e00c713d2f43a9": {
+      "ref": "refs/heads/testnet-claims/rehearsal-3234026",
+      "commit": "e95392448dd2c17ae592d071f0601e7d294dbf78"
+    },
+    "422eaf41ca22cb3677afee5758663e7de8a1b084": {
+      "ref": "refs/heads/testnet-claims/rehearsal-3234027",
+      "commit": "44a90a9a5c2beadbcc9b88e23cc3723cce22fee1"
+    },
+    "75f4196b84bf4fdb306e64a1219803006cc228a9": {
+      "ref": "refs/heads/testnet-claims/rehearsal-3234028",
+      "commit": "a2bb416b845589c809da72f36c0382c4c3d3495e"
+    },
+    "6724e3b1c722d646afb58b87fc6fb683a3cf2b06": {
+      "ref": "refs/heads/testnet-claims/release-3234022",
+      "commit": "d8c6c2a601ad10095e21e1b925782ea759c2b1fc"
+    },
+    "1ee113d3cdabcf8f2386627d86503e0482b440bc": {
+      "ref": "refs/heads/testnet-claims/release-3234023",
+      "commit": "ee244d3f6d025d5e52d6f4f7429e2fe53430b5b8"
+    },
+    "314f4d7cff04a98da41eb96c6f1bdc05fc36ab49": {
+      "ref": "refs/heads/testnet-claims/release-3234023-preclaim-recovery",
+      "commit": "076a85e1bf3a168de03aba6156a6a71e4629e319"
+    },
+    "b131eebdd97259aae9e50a6f3fd8008ec18d770f": {
+      "ref": "refs/heads/testnet-claims/release-3234024",
+      "commit": "1987249e10429f34bde5810d84ddfe72cae255d3"
+    },
+    "4cd91c0d4b73f189ad1a525f074c46341d94febb": {
+      "ref": "refs/heads/testnet-claims/release-3234025",
+      "commit": "cd86e5f3155dd2318543ec34e3ae24a05df341f9"
+    },
+    "221e671fadd00f003130d9329a8db7cffe0fecf4": {
+      "ref": "refs/heads/testnet-claims/release-3234026",
+      "commit": "945b6fa18e8df8a74cd7e007cfe81a54e6e68042"
+    },
+    "d2781be2f236c7593367fc340fe4cd3f03806511": {
+      "ref": "refs/heads/testnet-claims/release-3234027",
+      "commit": "69a07094997720e64daa0220934200364610b698"
+    },
+    "e704e6767bf40754d9ab088cd176ebe75ad574c5": {
+      "ref": "refs/heads/testnet-claims/release-3234027-preclaim-recovery",
+      "commit": "b0ce54e8b55d24894abde589e4ff68d7514f9c81"
+    },
+    "77b778731cdb30f4035609a240f5cac2f118b1de": {
+      "ref": "refs/heads/testnet-claims/release-3234028",
+      "commit": "fede031018a76099f28565540f629b34f032b703"
+    },
+    "29b83c6187a1020af4355389e9574396a8381bb3": {
+      "ref": "refs/heads/testnet-claims/release-3234029",
+      "commit": "567b0e1c490ccc20e4b25b526d2b72ccc296e50e"
+    },
+    "23cf2d11a744106d8eea1c6148265ffdf79eafdb": {
+      "ref": "refs/heads/testnet-claims/release-3234030",
+      "commit": "9c3861e1f9a619f4ba27f25385514c7ae819db10"
+    }
+  }
+}

@@ -6,6 +6,7 @@ import subprocess
 from urllib.parse import quote
 
 from release_metadata import Metadata, require
+from published_history import claim_revision
 
 PREFIX = 'refs/heads/testnet-claims/'
 
@@ -54,9 +55,10 @@ def verify(value, commit, metadata):
 
 def verify_ref(ref, value, commit, metadata):
     require(re.fullmatch(r'[a-f0-9]{40}', commit), 'Exact protected reservation required')
+    live_commit = claim_revision(commit, ref=ref)
     live = metadata.api('/git/ref/' + ref.removeprefix('refs/'))
-    require(live['object']['sha'] == commit
-            and json.loads(metadata.api('/git/commits/' + commit)['message']) == value,
+    require(live['object']['sha'] == live_commit
+            and json.loads(metadata.api('/git/commits/' + live_commit)['message']) == value,
             'Protected reservation belongs to different inputs')
     verify_ref_rules(ref, metadata)
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from check import check
+from published_history import source_revision
 from sync import source_state
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -107,6 +108,7 @@ def run(root=ROOT, base='HEAD'):
     errors.extend(documentation_links(root))
     if git(root, 'rev-parse', '--is-shallow-repository').strip() != 'false':
         errors.append('Checkout is shallow; use fetch-depth: 0 before acceptance selection')
+    base = source_revision(base, root)
     git(root, 'rev-parse', '--verify', base + '^{commit}')
     expected = json.loads((root / '.private/source-state.json').read_text())
     if source_state(root) != expected:

@@ -68,16 +68,20 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - name: Select the pinned prior-release source
         id: selected-baseline
         run: |
           python3 - <<'PY'
-          import json, os, re
+          import json, os, re, sys
+          sys.path.insert(0, ".private")
+          from published_history import source_revision
           baseline = json.load(open(".private/upgrade-baseline.json"))
           source_sha = baseline["source_sha"]
           assert re.fullmatch(r"[0-9a-f]{40}", source_sha), "Invalid baseline source SHA"
+          checkout_sha = source_revision(source_sha)
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-              output.write(f"source_sha={source_sha}\n")
+              output.write(f"source_sha={checkout_sha}\n")
           print(f"Selected prior release: {baseline['release']} ({source_sha})")
           PY
       - name: Check out the selected prior release

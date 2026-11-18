@@ -12,6 +12,7 @@ from acceptance_policy import CORE_TEST_SOURCE, ROOT, git
 from hosted_core import candidate_pair, sha
 from hosted_fixture import recorded_pair
 from hosted_release import stage
+from published_history import source_revision
 
 
 TOOLING_REPOSITORIES = '''
@@ -33,7 +34,7 @@ def compile_instrumentation(revision, parent):
         checkout = Path(scratch) / 'source'
         repositories = Path(scratch) / 'instrumentation-tooling.gradle'
         repositories.write_text(TOOLING_REPOSITORIES)
-        git('worktree', 'add', '--detach', str(checkout), revision)
+        git('worktree', 'add', '--detach', str(checkout), source_revision(revision))
         try:
             shutil.copyfile(ROOT / CORE_TEST_SOURCE, checkout / CORE_TEST_SOURCE)
             environment = {key: value for key, value in os.environ.items()
@@ -74,7 +75,7 @@ def prepare(work, fixture, output, source, artifact_id, build_run, build_control
     if (released_core.get('direct_preparation') and released_core.get('instrumentation_apk_sha256')
             == baseline['instrumentation_apk_sha256']):
         baseline_test = (fixture / 'baseline-androidTest.apk').read_bytes()
-    elif git('show', baseline['source_sha'] + ':' + CORE_TEST_SOURCE) == current_test:
+    elif git('show', source_revision(baseline['source_sha']) + ':' + CORE_TEST_SOURCE) == current_test:
         baseline_test = (fixture / 'baseline-androidTest.apk').read_bytes()
     else:
         baseline_test = compile_instrumentation(baseline['source_sha'], work)

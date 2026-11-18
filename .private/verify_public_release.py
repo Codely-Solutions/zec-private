@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 import zipfile
 
 from apk_architecture import check_apk
+from published_history import release_tag_matches
 from publish import CERT, REPO, read_attestation
 
 
@@ -166,7 +167,7 @@ def main():
         if ref['type'] != 'tag':
             break
         ref = gh(f'git/tags/{ref["sha"]}')['object']
-    require(ref['type'] == 'commit' and ref['sha'] == evidence['source_sha'],
+    require(release_tag_matches(tag, evidence['source_sha'], sha, release['id'], ref, gh),
             'Public tag does not identify the validated source')
     unsigned, proof, artifact_id = unsigned_proof(evidence)
     require(proof['release_tag'] == tag and payload(signed) == payload(unsigned),
@@ -191,7 +192,8 @@ def main():
             and 'application-debuggable' not in badging and check_apk(apk)['abis'] == ['arm64-v8a'],
             'Public APK manifest or architecture mismatch')
     print(json.dumps({'tag': tag, 'apk_sha256': sha, 'version_code': proof['versionCode'],
-                      'source_sha': evidence['source_sha'], 'unsigned_artifact_id': artifact_id,
+                      'source_sha': evidence['source_sha'], 'public_tag_source_sha': ref['sha'],
+                      'unsigned_artifact_id': artifact_id,
                       'public_discovery_verified': True, 'public_discovery_route': discovery_route,
                       'signed_payload_matches': True}))
 

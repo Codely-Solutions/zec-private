@@ -9,6 +9,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from published_history import source_revision
+
 ROOT = Path(__file__).resolve().parents[1]
 POLICY_VERSION = 1
 CORE_TEST_SOURCE = '.private/core-wallet/src/co/electriccoin/zcash/app/CoreWalletAcceptance.kt'
@@ -111,6 +113,7 @@ def input_manifest(revision='HEAD', root=ROOT, profile='core-testnet'):
     # independent of Windows checkout line endings; no subprocess per file.
     if profile not in PROFILES:
         raise ValueError('Unknown acceptance profile: '+profile)
+    revision = source_revision(revision, root)
     rows = git('ls-tree', '-r', '-z', revision, root=root).decode().split('\0')
     entries = {}
     test_source_metadata = None

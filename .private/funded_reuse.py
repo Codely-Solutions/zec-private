@@ -5,6 +5,7 @@ import re
 
 from acceptance_policy import ROOT, git, input_manifest, validate_core_sources
 from hosted_claim import binding, verify
+from published_history import claim_revision, source_revision
 from release_metadata import require
 
 TAG = re.compile(r'v\d+\.\d+\.\d+-private\.\d+')
@@ -47,6 +48,7 @@ def read_record(controller, tag, root):
 
 
 def signing_identity(revision, root):
+    revision = source_revision(revision, root)
     script = git('show', revision + ':.private/verify_signing_key.sh', root=root)
     publisher = git('show', revision + ':.private/publish.py', root=root)
     certificates = re.findall(rb"^CERT='([a-f0-9]{64})'$", publisher, re.M)
@@ -84,7 +86,8 @@ def select(source, controller, metadata, root=ROOT):
     validate_core_sources(core, origin['source'], root=root, baseline=core['hosted_fixture'],
                           use_tor=core.get('tor_enabled', True), prepared=prepared)
     reservation = core['hosted_reservation']
-    saved = json.loads(metadata.api('/git/commits/' + reservation)['message'])
+    marker = claim_revision(reservation, root=root)
+    saved = json.loads(metadata.api('/git/commits/' + marker)['message'])
     verify(binding(origin['source'], core['producer_controller_sha'], record['versionCode'], core['workflow_run_id'],
                    False, saved.get('previous')), reservation, metadata)
     public = metadata.api('/releases/tags/' + origin['release'])
