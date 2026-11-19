@@ -15,33 +15,31 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Instant
 import co.electriccoin.zcash.ui.common.model.SwapStatus as ModelSwapStatus
 
-/**
- * Covers the client-side EXPIRED synthesis in [NearSwapQuoteStatus.status]. The condition is: if the
- * server still reports PENDING_DEPOSIT but we are within 5 minutes of the quote's deadline, the client
- * returns EXPIRED — terminating the polling loop even before the server itself has acknowledged the
- * expiry. Other server statuses pass through untouched regardless of the deadline.
- */
+/** Provider settlement state remains authoritative after the funding cutoff. */
 class NearSwapQuoteStatusTest {
     @Test
-    fun statusIsExpiredWhenPendingDepositAndDeadlinePassed() {
+    fun providerExpiryRemainsTerminal() {
+        val swap = nearSwapQuoteStatus(SwapStatus.EXPIRED, Clock.System.now() - 1.hours)
+        assertEquals(ModelSwapStatus.EXPIRED, swap.status)
+    }
+    @Test
+    fun statusStaysPendingAfterDepositDeadline() {
         val swap =
             nearSwapQuoteStatus(
                 serverStatus = SwapStatus.PENDING_DEPOSIT,
                 deadline = Clock.System.now() - 1.hours
             )
-        assertEquals(ModelSwapStatus.EXPIRED, swap.status)
+        assertEquals(ModelSwapStatus.PENDING, swap.status)
     }
 
     @Test
-    fun statusIsExpiredWhenPendingDepositAndWithinFiveMinuteGuard() {
-        // Deadline is still in the future but within the 5-minute look-ahead window — the client
-        // pre-emptively returns EXPIRED rather than wait for the server to catch up.
+    fun statusStaysPendingNearDepositDeadline() {
         val swap =
             nearSwapQuoteStatus(
                 serverStatus = SwapStatus.PENDING_DEPOSIT,
                 deadline = Clock.System.now() + 3.minutes
             )
-        assertEquals(ModelSwapStatus.EXPIRED, swap.status)
+        assertEquals(ModelSwapStatus.PENDING, swap.status)
     }
 
     @Test
@@ -56,8 +54,6 @@ class NearSwapQuoteStatusTest {
 
     @Test
     fun statusPreservedWhenSuccessEvenIfDeadlinePassed() {
-        // Synthesis only kicks in for PENDING_DEPOSIT — a server-reported SUCCESS passes through
-        // unchanged regardless of the deadline.
         val swap =
             nearSwapQuoteStatus(
                 serverStatus = SwapStatus.SUCCESS,

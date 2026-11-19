@@ -2,6 +2,8 @@
 
 Software-wallet keys and databases are stored on your device. Keep your recovery information secure. The FOSS release does not enable Firebase collection.
 
+Android may include encrypted contacts and wallet metadata, such as transaction notes and swap records, in system backup or device transfer according to your Android settings. The app's backup rules exclude wallet keys and the recovery phrase. Keep your recovery phrase and wallet birthday separately for wallet recovery.
+
 ## Network connections
 
 When Tor is enabled, sensitive wallet metadata, transaction and swap-provider requests use Tor and fail if it is unavailable. Public compact-block downloads and normal DNS use direct connections; Tor is not a device-wide tunnel.

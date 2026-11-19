@@ -31,6 +31,10 @@ data class NearSwapQuote(
     val expectedSlippageToleranceBps: Int? = null,
 ) : SwapQuote {
     init {
+        requireNearAssetIdentity(originAsset, response.quoteRequest.originAsset, SwapQuoteMismatchType.ORIGIN_ASSET)
+        requireNearAssetIdentity(
+            destinationAsset, response.quoteRequest.destinationAsset, SwapQuoteMismatchType.DESTINATION_ASSET
+        )
         // Guards input USD unit pricing (= amountInUsd / amountInFormatted) against a
         // divide-by-zero. A quote with a non-positive input amount is invalid anyway; fail closed with a
         // clear message before presentation attempts to calculate a unit price.

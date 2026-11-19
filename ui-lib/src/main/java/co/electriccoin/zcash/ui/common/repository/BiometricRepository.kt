@@ -1,9 +1,12 @@
 package co.electriccoin.zcash.ui.common.repository
 
+import android.app.KeyguardManager
 import android.content.Context
+import android.widget.Toast
 import androidx.biometric.BiometricManager
 import co.electriccoin.zcash.spackle.AndroidApiVersion
 import co.electriccoin.zcash.ui.BiometricActivity
+import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.getString
 import kotlinx.coroutines.CoroutineScope
@@ -13,6 +16,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 
 interface BiometricRepository {
@@ -90,9 +94,14 @@ class BiometricRepositoryImpl(
     }
 
     override suspend fun requestBiometrics(request: BiometricRequest) {
-        if (!canAuthenticate()) {
-            // do nothing
-            return
+        val capability = biometricManager.canAuthenticate(allowedAuthenticators)
+        val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        if (permitsUnsecuredDeviceAccess(capability, keyguard?.isDeviceSecure)) return
+        if (capability != BiometricManager.BIOMETRIC_SUCCESS) {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, R.string.authentication_unavailable_remedy, Toast.LENGTH_LONG).show()
+            }
+            throw BiometricsFailureException()
         }
 
         context.startActivity(
@@ -118,10 +127,14 @@ class BiometricRepositoryImpl(
             }
         }
     }
-
-    private fun canAuthenticate(): Boolean =
-        when (biometricManager.canAuthenticate(allowedAuthenticators)) {
-            BiometricManager.BIOMETRIC_SUCCESS -> true
-            else -> false
-        }
 }
+
+/**
+ * Devices without a configured screen lock retain the app's credential-free behavior. Only an explicit
+ * absence of credentials/hardware and an independent keyguard confirmation permit it. Capability
+ * errors, unknown security state and every failure on a secured device require a retry or device repair.
+ */
+internal fun permitsUnsecuredDeviceAccess(capability: Int, isDeviceSecure: Boolean?): Boolean =
+    isDeviceSecure == false &&
+        (capability == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED ||
+            capability == BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE)

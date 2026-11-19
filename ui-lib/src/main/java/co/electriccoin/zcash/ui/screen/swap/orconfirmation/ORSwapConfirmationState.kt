@@ -20,5 +20,8 @@ data class ORSwapConfirmationState(
     val shareButton: BigIconButtonState,
     val footer: StyledStringResource,
     val primaryButton: ButtonState,
-    val onBack: () -> Unit
+    val onBack: () -> Unit,
+    val fundingEnabled: Boolean = true,
+    val expiryMessage: StringResource? = null,
+    val freshQuoteButton: ButtonState? = null,
 )

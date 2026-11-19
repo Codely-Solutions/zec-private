@@ -34,9 +34,8 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="zcash" />
             </intent-filter>
-            <!-- Gift card app links. Verification needs https://gift.zodl.com/.well-known/assetlinks.json to list
-                 this build's package name and signing certificate. MainActivity routes these by host. -->
-            <intent-filter android:autoVerify="true">
+            <!-- Handle gift links delivered explicitly by Android and direct users to in-app redemption. -->
+            <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />

@@ -34,6 +34,6 @@ internal data class FakeSwapQuote(
     override val affiliateFee: BigDecimal = BigDecimal.ZERO,
     override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO,
     override val timestamp: Instant = Clock.System.now(),
-    override val deadline: Instant = Clock.System.now(),
+    override val deadline: Instant = Instant.parse("2100-01-01T00:00:00Z"),
     override val slippage: BigDecimal = BigDecimal("1"),
 ) : SwapQuote

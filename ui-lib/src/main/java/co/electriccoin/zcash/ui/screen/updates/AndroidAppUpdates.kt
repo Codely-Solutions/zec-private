@@ -11,7 +11,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.screen.ExternalUrl
 import co.electriccoin.zcash.ui.screen.about.AboutArgs
-import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -20,8 +21,10 @@ private fun ObserveForegroundUpdates(repository: AppUpdateRepository) {
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(repository, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-            repository.check()
-            awaitCancellation()
+            while (isActive) {
+                repository.check()
+                delay(repository.nextCheckDelayMillis())
+            }
         }
     }
 }
@@ -34,14 +37,16 @@ internal fun AndroidAppUpdates() {
     val state by repository.state.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     ObserveForegroundUpdates(repository)
-    val available = (state as? AppUpdateState.Available)?.release
+    val available = (state as? AppUpdateState.Available)?.let { repository.currentOffer() }
     AppUpdateContent(
         checking = state is AppUpdateState.Checking,
         current = state is AppUpdateState.Current,
         failed = state is AppUpdateState.Failed,
         availableTag = available?.tag,
         onCheck = { scope.launch { repository.check(manual = true) } },
-        onOpenRelease = { available?.let { router.forward(ExternalUrl(it.releasePage)) } },
+        onOpenRelease = {
+            available?.takeIf { it == repository.currentOffer() }?.let { router.forward(ExternalUrl(it.releasePage)) }
+        },
         onObtainium = { router.forward(ExternalUrl(OBTAINIUM_GUIDE_URL)) },
     )
 }

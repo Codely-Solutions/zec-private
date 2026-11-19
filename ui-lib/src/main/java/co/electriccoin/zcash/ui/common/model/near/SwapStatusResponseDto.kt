@@ -87,5 +87,6 @@ enum class SwapStatus(
     PROCESSING("PROCESSING"),
     SUCCESS("SUCCESS"),
     REFUNDED("REFUNDED"),
-    FAILED("FAILED")
+    FAILED("FAILED"),
+    EXPIRED("EXPIRED")
 }

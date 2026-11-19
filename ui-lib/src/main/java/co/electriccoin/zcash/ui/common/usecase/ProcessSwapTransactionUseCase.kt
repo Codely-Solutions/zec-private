@@ -14,7 +14,7 @@ class ProcessSwapTransactionUseCase(
     // private val ephemeralAddressRepository: EphemeralAddressRepository,
 ) {
     suspend operator fun invoke(transactionProposal: SwapTransactionProposal, result: SubmitResult) {
-        saveSwapToMetadata(transactionProposal)
+        persistBeforeFunding(transactionProposal)
         // invalidateEphemeralAddress(result)
         submitDepositTransactions(transactionProposal, result)
     }
@@ -31,8 +31,9 @@ class ProcessSwapTransactionUseCase(
     //     }
     // }
 
-    private suspend fun saveSwapToMetadata(transactionProposal: SwapTransactionProposal) {
-        metadataRepository.markTxAsSwap(
+    suspend fun persistBeforeFunding(transactionProposal: SwapTransactionProposal) {
+        if (metadataRepository.getSwapMetadata(transactionProposal.destination.address) != null) return
+        check(metadataRepository.markTxAsSwap(
             depositAddress = transactionProposal.destination.address,
             provider = transactionProposal.quote.provider,
             totalFees = transactionProposal.totalFees,
@@ -42,7 +43,7 @@ class ProcessSwapTransactionUseCase(
             destination = transactionProposal.quote.destinationAsset,
             mode = transactionProposal.quote.mode,
             status = SwapStatus.PENDING
-        )
+        )) { "Unable to save swap tracking before funding" }
     }
 
     @Suppress("TooGenericExceptionCaught")

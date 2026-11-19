@@ -212,6 +212,49 @@ class AppUpdateRepositoryTest {
         assertNull(upgraded.cachedNotice())
     }
 
+    @Test
+    fun failureHidesPriorOfferAcrossRecreationAndManualRetryRestoresIt(): Unit = runBlocking {
+        val provider = UpdateTestClientProvider { releaseMetadata(200) }
+        val repository = AppUpdateRepository(context, provider)
+        repository.check()
+        assertEquals(200, repository.cachedNotice()?.versionCode)
+
+        provider.reply = { throw IOException("Synthetic outage") }
+        repository.check(manual = true)
+        assertIs<AppUpdateState.Failed>(repository.state.value)
+        assertNull(repository.cachedNotice())
+        assertNull(repository.currentOffer())
+
+        val recreated = AppUpdateRepository(context, provider)
+        assertIs<AppUpdateState.Failed>(recreated.state.value)
+        assertNull(recreated.currentOffer())
+        provider.reply = { releaseMetadata(201) }
+        recreated.check(manual = true)
+        assertEquals(201, recreated.currentOffer()?.versionCode)
+    }
+
+    @Test
+    fun lastSuccessfulOfferExpiresAndForegroundCheckIsDue(): Unit = runBlocking {
+        var now = 1L
+        val provider = UpdateTestClientProvider { releaseMetadata(200) }
+        val repository = AppUpdateRepository(context, provider) { now }
+        repository.check()
+        assertEquals(UPDATE_INTERVAL_MILLIS, repository.nextCheckDelayMillis())
+
+        now += UPDATE_INTERVAL_MILLIS - 1
+        assertEquals(200, repository.currentOffer()?.versionCode)
+        assertEquals(1L, repository.nextCheckDelayMillis())
+
+        now++
+        assertNull(repository.currentOffer())
+        assertNull(repository.cachedNotice())
+        val recreated = AppUpdateRepository(context, provider) { now }
+        assertIs<AppUpdateState.Idle>(recreated.state.value)
+        recreated.check()
+        assertEquals(2, provider.requests)
+        assertEquals(200, recreated.currentOffer()?.versionCode)
+    }
+
     private fun installVersion(code: Long) {
         val info = PackageInfo().apply {
             packageName = PRODUCTION_PACKAGE

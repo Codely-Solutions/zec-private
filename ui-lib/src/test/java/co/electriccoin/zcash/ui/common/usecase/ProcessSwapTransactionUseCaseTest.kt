@@ -11,6 +11,7 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -21,6 +22,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.math.BigDecimal
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 /**
  * [ProcessSwapTransactionUseCase] records a freshly-submitted swap: it writes the swap metadata
@@ -35,6 +37,27 @@ import kotlin.test.Test
 class ProcessSwapTransactionUseCaseTest {
     private val origin = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc")
     private val destinationAsset = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth")
+
+    @Test
+    fun existingTrackingIsPreservedWhenProcessingSubmission() = runTest {
+        val fx = Fixtures()
+        coEvery { fx.metadataRepository.getSwapMetadata(any()) } returns mockk<TransactionSwapMetadata>()
+        val proposal = swapProposal()
+        fx.useCase(proposal, SubmitResult.Success(listOf("tx1")))
+        coVerify(exactly = 0) {
+            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+        }
+        coVerify(exactly = 1) { fx.swapRepository.submitDepositTransaction("tx1", proposal) }
+    }
+
+    @Test
+    fun pendingTrackingMustBeSavedBeforeFunding() = runTest {
+        val fx = Fixtures()
+        coEvery {
+            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } returns false
+        assertFailsWith<IllegalStateException> { fx.useCase.persistBeforeFunding(swapProposal()) }
+    }
 
     @Test
     fun savesSwapMetadataFromProposalAndQuote() =
@@ -152,5 +175,12 @@ class ProcessSwapTransactionUseCaseTest {
         val metadataRepository = mockk<MetadataRepository>(relaxed = true)
         val swapRepository = mockk<SwapRepository>(relaxed = true)
         val useCase = ProcessSwapTransactionUseCase(metadataRepository, swapRepository)
+
+        init {
+            coEvery { metadataRepository.getSwapMetadata(any()) } returns null
+            coEvery {
+                metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            } returns true
+        }
     }
 }

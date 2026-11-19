@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.common.usecase
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
@@ -17,7 +18,15 @@ class SaveORSwapUseCase(
     suspend operator fun invoke() {
         val quote = (swapRepository.quote.value as? SwapQuoteData.Success)?.quote
         if (quote != null) {
-            metadataRepository.markTxAsSwap(
+            persistBeforeFunding(quote)
+            swapRepository.clear()
+            navigationRouter.backToRoot()
+        }
+    }
+
+    suspend fun persistBeforeFunding(quote: SwapQuote) {
+        if (metadataRepository.getSwapMetadata(quote.depositAddress.address) != null) return
+        check(metadataRepository.markTxAsSwap(
                 depositAddress = quote.depositAddress.address,
                 provider = quote.provider,
                 totalFees = Zatoshi(0),
@@ -27,10 +36,6 @@ class SaveORSwapUseCase(
                 status = SwapStatus.PENDING,
                 origin = quote.originAsset,
                 destination = quote.destinationAsset
-            )
-            // ephemeralAddressRepository.invalidate()
-            swapRepository.clear()
-            navigationRouter.backToRoot()
-        }
+            )) { "Unable to save swap tracking before funding" }
     }
 }

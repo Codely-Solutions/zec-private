@@ -97,7 +97,7 @@ fun ORSwapConfirmationView(state: ORSwapConfirmationState) {
             ) {
                 Header(state)
                 Spacer(12.dp)
-                ZashiQr(
+                if (state.fundingEnabled) ZashiQr(
                     modifier = Modifier.align(CenterHorizontally),
                     state = QrState(qrData = state.qr),
                     colors =
@@ -105,7 +105,7 @@ fun ORSwapConfirmationView(state: ORSwapConfirmationState) {
                             border = Color.Unspecified
                         )
                 )
-                Surface(
+                if (state.fundingEnabled) Surface(
                     modifier = Modifier.align(CenterHorizontally),
                     shape = CircleShape,
                     color = ZashiColors.Surfaces.bgSecondary
@@ -122,7 +122,7 @@ fun ORSwapConfirmationView(state: ORSwapConfirmationState) {
                     }
                 }
                 Spacer(12.dp)
-                Row {
+                if (state.fundingEnabled) Row {
                     BigIconButton(
                         modifier = Modifier.weight(1f),
                         state = state.copyButton
@@ -135,7 +135,15 @@ fun ORSwapConfirmationView(state: ORSwapConfirmationState) {
                 }
                 Spacer(24.dp)
                 Spacer(1f)
-                Text(
+                state.expiryMessage?.let { message ->
+                    Text(
+                        modifier = Modifier.fillMaxWidth(),
+                        text = message.getValue(),
+                        style = ZashiTypography.textSm,
+                        color = ZashiColors.Text.textPrimary,
+                    )
+                }
+                if (state.fundingEnabled) Text(
                     modifier = Modifier.fillMaxWidth(),
                     text = state.footer.getValue(),
                     textAlign = TextAlign.Center,
@@ -143,6 +151,10 @@ fun ORSwapConfirmationView(state: ORSwapConfirmationState) {
                     color = ZashiColors.Text.textPrimary
                 )
                 Spacer(24.dp)
+                state.freshQuoteButton?.let { button ->
+                    ZashiButton(modifier = Modifier.fillMaxWidth(), state = button)
+                    Spacer(12.dp)
+                }
                 ZashiButton(
                     modifier = Modifier.fillMaxWidth(),
                     state = state.primaryButton
@@ -197,6 +209,7 @@ private fun Header(state: ORSwapConfirmationState) {
             Modifier
                 .fillMaxWidth()
                 .clickable(
+                    enabled = state.fundingEnabled,
                     onClick = state.onAmountClick,
                     indication = null,
                     interactionSource = remember { MutableInteractionSource() }
@@ -212,12 +225,14 @@ private fun Header(state: ORSwapConfirmationState) {
                 fontWeight = FontWeight.Medium,
                 color = ZashiColors.Text.textPrimary
             )
-            Spacer(14.dp)
-            Image(
-                painter = painterResource(id = co.electriccoin.zcash.ui.R.drawable.ic_copy_other),
-                contentDescription = null,
-                colorFilter = ColorFilter.tint(ZashiColors.Text.textPrimary)
-            )
+            if (state.fundingEnabled) {
+                Spacer(14.dp)
+                Image(
+                    painter = painterResource(id = co.electriccoin.zcash.ui.R.drawable.ic_copy_other),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(ZashiColors.Text.textPrimary)
+                )
+            }
         }
         Spacer(4.dp)
         Row(
