@@ -225,7 +225,7 @@ class SwapQuoteVMTest {
     }
 
     @Test
-    fun normalReferenceKeepsItsPercentageInDetails() = runTest {
+    fun normalReferenceKeepsItsValueComparisonInDetails() = runTest {
         val prices = mockk<IndependentPriceProvider> {
             coEvery { check(any(), any()) } returns
                 IndependentPriceCheck.Compared(BigDecimal("-2.5"), System.currentTimeMillis() + 60_000)
@@ -234,13 +234,9 @@ class SwapQuoteVMTest {
         collect(vm)
         val notice = (vm.state.value as SwapQuoteState.Success).priceCheck ?: error("Missing comparison")
         assertFalse(notice.showInline)
-        assertEquals(
-            listOf("Kraken", "-2.50%"),
-            notice.detailItems.map {
-                (it.title as StyledStringResource.ByStringResource).resource
-                    .getString(RuntimeEnvironment.getApplication(), Locale.US)
-            },
-        )
+        val row = assertNotNull(notice.detailItem)
+        val result = (row.title as StyledStringResource.ByStringResource).resource
+        assertEquals("2.50% less value", result.getString(RuntimeEnvironment.getApplication(), Locale.US))
     }
 
     private fun fromRowTitle(vm: SwapQuoteVM): Int {

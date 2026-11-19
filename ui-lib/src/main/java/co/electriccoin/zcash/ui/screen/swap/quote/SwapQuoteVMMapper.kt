@@ -51,7 +51,7 @@ internal class SwapQuoteVMMapper {
                 amount = createTotalAmountState(),
                 onBack = onBack,
                 infoText = createInfoText(),
-                priceCheck = priceCheck?.toNotice(),
+                priceCheck = priceCheck?.let(::mapPriceCheck),
                 minimumDeposit = quote.minimumDepositInfo(),
                 primaryButton =
                     ButtonState(
@@ -76,49 +76,6 @@ internal class SwapQuoteVMMapper {
                     )
             )
         }
-
-    private fun IndependentPriceCheck.toNotice(): PriceCheckNoticeState = when (this) {
-        IndependentPriceCheck.Checking -> PriceCheckNoticeState(
-            stringRes(R.string.private_price_checking), stringRes(R.string.private_price_check_details)
-        )
-        IndependentPriceCheck.NoMarketReference -> PriceCheckNoticeState(
-            stringRes(R.string.private_price_no_market),
-            showInline = false,
-        )
-        IndependentPriceCheck.Unavailable -> PriceCheckNoticeState(
-            stringRes(R.string.private_price_unavailable), stringRes(R.string.private_price_unavailable_details),
-            showInline = false,
-        )
-        is IndependentPriceCheck.Compared -> PriceCheckNoticeState(
-            label = if (poor) {
-                stringRes(
-                    R.string.private_price_poor,
-                    differencePercent.abs().setScale(1, RoundingMode.HALF_UP).toPlainString(),
-                )
-            } else {
-                stringRes(R.string.private_price_reference)
-            },
-            explanation = if (poor) {
-                stringRes(R.string.private_price_check_details)
-            } else {
-                stringRes(R.string.private_price_reference_details)
-            },
-            isWarning = poor,
-            showInline = poor,
-            detailItems = if (poor) emptyList() else {
-                val rounded = differencePercent.setScale(2, RoundingMode.HALF_UP)
-                val signed = (if (rounded.signum() > 0) "+" else "") + rounded.toPlainString() + "%"
-                listOf(
-                    SwapQuoteInfoItem(
-                        stringRes(R.string.private_price_reference), stringRes(sources.joinToString()).withStyle(),
-                    ),
-                    SwapQuoteInfoItem(
-                        stringRes(R.string.private_price_reference_difference), stringRes(signed).withStyle(),
-                    ),
-                )
-            },
-        )
-    }
 
     @Suppress("MagicNumber")
     private fun SwapQuoteInternalState.createInfoText(): StringResource? {
@@ -260,4 +217,53 @@ internal class SwapQuoteVMMapper {
     private fun quoteFiatAmount(usd: BigDecimal, available: Boolean = usd.signum() > 0): StringResource =
         if (available) stringResByDynamicCurrencyNumber(usd, FiatCurrency.USD.symbol)
         else stringRes(R.string.private_quote_estimate_unavailable)
+}
+
+internal fun mapPriceCheck(check: IndependentPriceCheck): PriceCheckNoticeState = when (check) {
+    IndependentPriceCheck.Checking -> PriceCheckNoticeState(
+        stringRes(R.string.private_price_checking), stringRes(R.string.private_price_check_details)
+    )
+    IndependentPriceCheck.NoMarketReference -> PriceCheckNoticeState(
+        stringRes(R.string.private_price_no_market),
+        showInline = false,
+    )
+    IndependentPriceCheck.Unavailable -> PriceCheckNoticeState(
+        stringRes(R.string.private_price_unavailable), stringRes(R.string.private_price_unavailable_details),
+        showInline = false,
+    )
+    is IndependentPriceCheck.Compared -> if (check.poor) {
+        PriceCheckNoticeState(
+            label = stringRes(
+                R.string.private_price_poor,
+                check.differencePercent.abs().setScale(1, RoundingMode.HALF_UP).toPlainString(),
+            ),
+            explanation = stringRes(R.string.private_price_check_details),
+            isWarning = true,
+        )
+    } else {
+        check.toMarketComparison()
+    }
+}
+
+private fun IndependentPriceCheck.Compared.toMarketComparison(): PriceCheckNoticeState {
+    val label = stringRes(R.string.private_price_reference)
+    val rounded = differencePercent.setScale(2, RoundingMode.HALF_UP)
+    val percentage = rounded.abs().toPlainString()
+    val result = when (rounded.signum()) {
+        -1 -> stringRes(R.string.private_price_less_value, percentage)
+        1 -> stringRes(R.string.private_price_more_value, percentage)
+        else -> stringRes(R.string.private_price_in_line)
+    }
+    return PriceCheckNoticeState(
+        label = label,
+        showInline = false,
+        detailItem = SwapQuoteInfoItem(
+            description = label,
+            title = result.withStyle(),
+            help = SwapQuoteFieldHelp(
+                label = stringRes(R.string.private_price_reference_help_label),
+                text = stringRes(R.string.private_price_reference_help, sources.joinToString()),
+            ),
+        ),
+    )
 }

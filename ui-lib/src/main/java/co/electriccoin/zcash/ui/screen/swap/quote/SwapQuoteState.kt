@@ -37,8 +37,10 @@ data class SwapQuoteInfoItem(
     val title: StyledStringResource,
     val subtitle: StyledStringResource? = null,
     val layout: SwapQuoteInfoLayout = SwapQuoteInfoLayout.INLINE,
-    val help: StringResource? = null,
+    val help: SwapQuoteFieldHelp? = null,
 )
+
+data class SwapQuoteFieldHelp(val label: StringResource, val text: StringResource)
 
 enum class SwapQuoteInfoLayout {
     INLINE,
@@ -50,5 +52,5 @@ internal data class PriceCheckNoticeState(
     val explanation: StringResource? = null,
     val isWarning: Boolean = false,
     val showInline: Boolean = true,
-    val detailItems: List<SwapQuoteInfoItem> = emptyList(),
+    val detailItem: SwapQuoteInfoItem? = null,
 )

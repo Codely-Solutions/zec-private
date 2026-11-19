@@ -25,6 +25,7 @@ import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.SwapAsset
@@ -65,6 +66,43 @@ import kotlin.test.assertTrue
 @Config(sdk = [34], qualifiers = "w411dp-h891dp")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SwapQuoteVMMapperTest {
+    @Test
+    fun ordinaryMarketComparisonUsesOneRowWithDirectionalValueAndSourceHelp() {
+        val cases = mapOf(
+            "-0.255" to "0.26% less value",
+            "0.25" to "0.25% more value",
+            "-0.004" to "In line with market",
+        )
+        for ((difference, expected) in cases) {
+            val check = IndependentPriceCheck.Compared(BigDecimal(difference), Long.MAX_VALUE, listOf("Kraken", "Orca"))
+            val notice = mapPriceCheck(check)
+            val row = requireNotNull(notice.detailItem)
+            assertFalse(notice.showInline)
+            kotlin.test.assertNull(notice.explanation)
+            assertEquals("Market comparison", row.description.getString(RuntimeEnvironment.getApplication(), Locale.US))
+            assertEquals(expected, (row.title as StyledStringResource.ByStringResource).resource
+                .getString(RuntimeEnvironment.getApplication(), Locale.US))
+            assertEquals(
+                "Value received versus total spend, using prices from Kraken, Orca.",
+                requireNotNull(row.help).text.getString(RuntimeEnvironment.getApplication(), Locale.US),
+            )
+        }
+    }
+
+    @Test
+    fun poorAndUnavailableComparisonsUseTheirExistingNotices() {
+        val check = IndependentPriceCheck.Compared(BigDecimal("-15"), Long.MAX_VALUE)
+        val poor = mapPriceCheck(check)
+        assertTrue(poor.showInline)
+        assertTrue(poor.isWarning)
+        kotlin.test.assertNull(poor.detailItem)
+        assertEquals(R.string.private_price_poor, poor.label.resourceId())
+        val unavailable = mapPriceCheck(IndependentPriceCheck.Unavailable)
+        assertFalse(unavailable.isWarning)
+        kotlin.test.assertNull(unavailable.detailItem)
+        assertEquals(R.string.private_price_unavailable, unavailable.label.resourceId())
+    }
+
     @Test
     fun freshQuoteShowsSignedDifferenceAndStaleQuoteDoesNot() {
         val now = kotlin.time.Clock.System.now()

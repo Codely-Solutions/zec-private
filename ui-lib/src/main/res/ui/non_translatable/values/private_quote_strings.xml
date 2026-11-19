@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="private_included_input_allowance" translatable="false">Included allowance (%1$s)</string>
-    <string name="private_value_difference_known" translatable="false">Estimated value received versus total spend, including the network fee.</string>
-    <string name="private_value_difference_external" translatable="false">Estimated value received versus the amount sent.</string>
-    <string name="private_value_difference_buffered" translatable="false">Estimated value received versus the total to fund, including allowance and network fee.</string>
+    <string name="private_value_difference_known" translatable="false">Value received versus total spend at quoted dollar prices, including the network fee.</string>
+    <string name="private_value_difference_external" translatable="false">Value received versus the amount sent at quoted dollar prices.</string>
+    <string name="private_value_difference_buffered" translatable="false">Value received versus total funding at quoted dollar prices, including the allowance and network fee.</string>
     <string name="private_quote_estimate_unavailable" translatable="false">Estimate unavailable</string>
 </resources>
