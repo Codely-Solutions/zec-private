@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.swap.quote
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -37,14 +39,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Constraints
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.component.ButtonState
@@ -74,6 +79,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByAddress
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.withStyle
+import kotlin.math.ceil
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -283,7 +289,7 @@ private fun QuoteDetails(state: PriceCheckNoticeState?, minimumDeposit: SwapQuot
                 contentDescription = null, modifier = Modifier.size(24.dp),
             )
         }
-        val standaloneNotice = state?.takeIf { it.detailItems.isEmpty() }
+        val standaloneNotice = state?.takeIf { it.detailItem == null }
         if (standaloneNotice != null && (expanded || standaloneNotice.explanation != null)) {
             Text(
                 standaloneNotice.label.getValue(), style = MaterialTheme.typography.bodySmall,
@@ -294,7 +300,7 @@ private fun QuoteDetails(state: PriceCheckNoticeState?, minimumDeposit: SwapQuot
             minimumDeposit?.let { SwapQuoteInfo(it) }
         }
         if (expanded && state != null) {
-            state.detailItems.forEach { item ->
+            state.detailItem?.let { item ->
                 Spacer(8.dp)
                 SwapQuoteInfo(item)
             }
@@ -311,18 +317,17 @@ private fun QuoteDetails(state: PriceCheckNoticeState?, minimumDeposit: SwapQuot
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun QuoteFieldHelp(item: SwapQuoteInfoItem, tint: Color) {
-    val help = item.help ?: return
+private fun QuoteFieldHelp(help: SwapQuoteFieldHelp, tint: Color) {
     val tooltip = rememberTooltipState(isPersistent = true)
     val scope = rememberCoroutineScope()
     ZashiTooltipBox(
         state = tooltip,
-        tooltip = { PlainTooltip { Text(help.getValue(), style = ZashiTypography.textSm) } },
+        tooltip = { PlainTooltip { Text(help.text.getValue(), style = ZashiTypography.textSm) } },
         anchor = {
             ZashiIconButton(
                 state = IconButtonState(
                     icon = co.electriccoin.zcash.ui.design.R.drawable.ic_info,
-                    contentDescription = stringRes(R.string.private_minimum_deposit_help_label),
+                    contentDescription = help.label,
                     onClick = { scope.launch { tooltip.show() } },
                 ),
                 iconSize = 20.dp,
@@ -330,6 +335,39 @@ private fun QuoteFieldHelp(item: SwapQuoteInfoItem, tint: Color) {
             )
         },
     )
+}
+
+@Composable
+private fun QuoteInfoLabel(
+    item: SwapQuoteInfoItem,
+    style: TextStyle,
+    color: Color,
+    modifier: Modifier,
+) {
+    val label = item.description.getValue()
+    val help = item.help
+    if (help == null) {
+        Text(text = label, modifier = modifier, style = style, color = color)
+    } else {
+        val measurer = rememberTextMeasurer()
+        val density = LocalDensity.current
+        BoxWithConstraints(modifier) {
+            val available = (constraints.maxWidth - with(density) { 48.dp.roundToPx() }).coerceAtLeast(1)
+            val measured = measurer.measure(label, style, constraints = Constraints(maxWidth = available))
+            val labelWidth = ceil((0 until measured.lineCount).maxOf {
+                measured.getLineRight(it) - measured.getLineLeft(it)
+            }).toInt().coerceIn(1, available)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = label,
+                    modifier = Modifier.width(with(density) { labelWidth.toDp() }),
+                    style = style,
+                    color = color,
+                )
+                QuoteFieldHelp(help, color)
+            }
+        }
+    }
 }
 
 @Composable
@@ -344,16 +382,12 @@ fun SwapQuoteInfo(
         return
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                modifier = Modifier.weight(1f, fill = false),
-                text = item.description.getValue(),
-                style = descriptionStyle,
-                fontWeight = descriptionFontWeight,
-                color = descriptionColor
-            )
-            item.help?.let { QuoteFieldHelp(item, descriptionColor) }
-        }
+        QuoteInfoLabel(
+            item = item,
+            style = descriptionStyle.copy(fontWeight = descriptionFontWeight),
+            color = descriptionColor,
+            modifier = Modifier.weight(1f),
+        )
         Column(
             horizontalAlignment = Alignment.End
         ) {

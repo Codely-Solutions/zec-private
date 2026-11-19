@@ -72,5 +72,9 @@
     "Make wallet setup more reliable and require valid authentication on devices with a screen lock.",
     "Check swap asset identity, offer a fresh quote after expiry, and keep swap tracking available from the start.",
     "Show when an update check fails and clarify gift redemption and Android backups."
+  ],
+  "v3.19.0-private.29": [
+    "Show the independent market comparison on one row in Quote details, with price sources available on tap.",
+    "Clarify how the percentage beside the received dollar amount is calculated."
   ]
 }

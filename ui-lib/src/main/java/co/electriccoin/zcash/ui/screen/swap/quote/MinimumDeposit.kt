@@ -16,7 +16,10 @@ internal fun SwapQuote.minimumDepositInfo(): SwapQuoteInfoItem? {
             title = stringResByCurrencyNumber(
                 minimum, originAsset.tokenTicker, minDecimals = 0, maxDecimals = originAsset.decimals,
             ).withStyle(),
-            help = stringRes(R.string.private_minimum_deposit_help),
+            help = SwapQuoteFieldHelp(
+                label = stringRes(R.string.private_minimum_deposit_help_label),
+                text = stringRes(R.string.private_minimum_deposit_help),
+            ),
         )
     }
 }
