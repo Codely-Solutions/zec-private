@@ -1,5 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.model.WalletAddress
+
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
@@ -17,6 +19,7 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
@@ -81,6 +84,10 @@ class SubmitProposalUseCaseTest {
 
             verify(exactly = 1) { fx.metadataRepository.addSwapAssetToHistory("eth", "eth") }
             verify(exactly = 1) { fx.navigationRouter.replace(SignKeystoneTransactionArgs) }
+            coVerifyOrder {
+                fx.processSwapTransaction.persistBeforeFunding(any())
+                fx.navigationRouter.replace(SignKeystoneTransactionArgs)
+            }
             // Keystone defers submission to the PCZT flow — nothing is cleared, submitted, processed,
             // or prefill-cleared on this path.
             verify(exactly = 0) { fx.swapRepository.clear() }
@@ -135,6 +142,7 @@ class SubmitProposalUseCaseTest {
             verify(exactly = 1) { fx.prefillSend.clear() }
             // Swap state is cleared before submitting, and navigation happens after submit is kicked off.
             coVerifyOrder {
+                fx.processSwapTransaction.persistBeforeFunding(proposal)
                 fx.swapRepository.clear()
                 fx.zashiProposalRepository.submit()
                 fx.navigationRouter.replace(TransactionProgressArgs)
@@ -158,6 +166,26 @@ class SubmitProposalUseCaseTest {
         }
 
     @Test
+    fun approvedSwapCannotStartASecondSubmission() = runTest {
+        val fx = useCase()
+        fx.givenZashi(swapProposal("eth", "eth"))
+        fx.useCase()
+        fx.useCase()
+        coVerify(exactly = 1) { fx.processSwapTransaction.persistBeforeFunding(any()) }
+        coVerify(exactly = 1) { fx.zashiProposalRepository.submit() }
+    }
+
+    @Test
+    fun existingSwapBlocksPaymentUntilStatusIsReviewed() = runTest {
+        val fx = useCase()
+        fx.givenZashi(swapProposal("eth", "eth"))
+        coEvery { fx.metadataRepository.getSwapMetadata(any()) } returns mockk<TransactionSwapMetadata>()
+        fx.useCase()
+        coVerify(exactly = 0) { fx.processSwapTransaction.persistBeforeFunding(any()) }
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit() }
+    }
+
+    @Test
     fun zashiSubmitFailureStillClearsPrefillAndStillNavigates() =
         runTest {
             val fx = useCase()
@@ -175,17 +203,20 @@ class SubmitProposalUseCaseTest {
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
         }
 
-    private fun swapProposal(
+    private suspend fun swapProposal(
         tokenTicker: String,
         chainTicker: String
-    ): SwapTransactionProposal =
-        mockk {
+    ): SwapTransactionProposal {
+        val address = WalletAddress.Unified.new("deposit-address")
+        return mockk {
+            every { destination } returns address
             every { quote } returns
                 mockk {
                     every { destinationAsset } returns
                         SwapAssetTestFixture.asset(tokenTicker = tokenTicker, chainTicker = chainTicker)
                 }
         }
+    }
 
     private fun Fixtures.givenKeystone(proposal: TransactionProposal) {
         coEvery { accountDataSource.getSelectedAccount() } returns spendable<KeystoneAccount>()
@@ -225,6 +256,9 @@ class SubmitProposalUseCaseTest {
         val swapRepository = mockk<SwapRepository>(relaxed = true)
         val metadataRepository = mockk<MetadataRepository>(relaxed = true)
         val processSwapTransaction = mockk<ProcessSwapTransactionUseCase>(relaxed = true)
+        init {
+            coEvery { metadataRepository.getSwapMetadata(any()) } returns null
+        }
         val prefillSend = mockk<PrefillSendUseCase>(relaxed = true)
         val useCase =
             SubmitProposalUseCase(

@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -43,6 +43,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.time.Instant
 
 /**
  * The swap deposit confirmation screen: sharing the deposit QR hands the share use case the deposit address
@@ -75,7 +77,7 @@ class ORSwapConfirmationVMTest {
             val vm = startedVm(shareQR = shareQR)
 
             requireNotNull(vm.state.value).shareButton.onClick()
-            advanceUntilIdle()
+            runCurrent()
 
             coVerify(exactly = 1) {
                 shareQR(
@@ -109,10 +111,37 @@ class ORSwapConfirmationVMTest {
             verify(exactly = 1) { copyToClipboard(AMOUNT_IN.toPlainString()) }
         }
 
+    @Test
+    fun trackingIsSavedBeforeFundingInstructionsAppear() = runTest(dispatcher) {
+        val save = mockk<SaveORSwapUseCase>(relaxed = true)
+        val vm = startedVm(saveORSwap = save)
+        requireNotNull(vm.state.value)
+        coVerify(exactly = 1) { save.persistBeforeFunding(any()) }
+    }
+
+    @Test
+    fun expiredFundingKeepsTrackingActionAndBlocksDepositSharing() = runTest(dispatcher) {
+        val copy = mockk<CopyToClipboardUseCase>(relaxed = true)
+        val share = mockk<ShareQRUseCase>(relaxed = true)
+        val vm = startedVm(copyToClipboard = copy, shareQR = share, deadline = Instant.parse("2000-01-01T00:00:00Z"))
+        val state = requireNotNull(vm.state.value)
+        assertFalse(state.fundingEnabled)
+        requireNotNull(state.freshQuoteButton)
+        requireNotNull(state.expiryMessage)
+        state.copyButton.onClick()
+        state.shareButton.onClick()
+        state.onAmountClick()
+        runCurrent()
+        verify(exactly = 0) { copy(any<String>()) }
+        coVerify(exactly = 0) { share(any(), any(), any(), any(), any()) }
+    }
+
     private fun TestScope.startedVm(
         copyToClipboard: CopyToClipboardUseCase = mockk(relaxed = true),
         shareQR: ShareQRUseCase = mockk(relaxed = true),
         router: FakeNavigationRouter = FakeNavigationRouter(),
+        saveORSwap: SaveORSwapUseCase = mockk(relaxed = true),
+        deadline: Instant = Instant.parse("2100-01-01T00:00:00Z"),
     ): ORSwapConfirmationVM {
         val quote =
             FakeSwapQuote(
@@ -124,7 +153,8 @@ class ORSwapConfirmationVMTest {
                 amountOutFormatted = BigDecimal.ONE,
                 depositAddress = DEPOSIT_ADDRESS,
                 destinationAddress = "u1destination",
-                refundAddress = "bc1refund"
+                refundAddress = "bc1refund",
+                deadline = deadline,
             )
         val swapRepository =
             mockk<SwapRepository> {
@@ -136,11 +166,11 @@ class ORSwapConfirmationVMTest {
                 cancelSwapQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true),
                 copyToClipboard = copyToClipboard,
                 navigationRouter = router,
-                saveORSwap = mockk<SaveORSwapUseCase>(relaxed = true),
+                saveORSwap = saveORSwap,
                 shareQR = shareQR,
             )
         backgroundScope.launch { vm.state.collect { } }
-        advanceUntilIdle()
+        runCurrent()
         return vm
     }
 }

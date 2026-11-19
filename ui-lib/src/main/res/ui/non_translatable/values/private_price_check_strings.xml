@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="private_swap_fresh_quote">Get a fresh quote</string>
+    <string name="private_swap_tracking_failed_title">Unable to save swap</string>
+    <string name="private_swap_tracking_failed">Swap tracking could not be saved. Get a fresh quote before sending funds.</string>
+    <string name="private_swap_funding_expired">This deposit quote has expired. Funds already sent are still tracked.</string>
     <string name="private_price_checking">Checking market price…</string>
     <string name="private_price_unavailable">Price check unavailable</string>
     <string name="private_price_unavailable_details">No fresh market reference is available.</string>

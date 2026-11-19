@@ -9,7 +9,6 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import java.math.BigDecimal
 import java.math.MathContext
 import java.time.Instant
-import kotlin.time.Duration.Companion.minutes
 import kotlin.time.toJavaInstant
 import co.electriccoin.zcash.ui.common.model.SwapStatus as ModelSwapStatus
 
@@ -97,22 +96,16 @@ data class NearSwapQuoteStatus(
 
     override val status: ModelSwapStatus
         get() =
-            if (
-                response.status == SwapStatus.PENDING_DEPOSIT &&
-                Instant.now() > (response.quoteResponse.quote.deadline - 5.minutes).toJavaInstant()
-            ) {
-                ModelSwapStatus.EXPIRED
-            } else {
-                when (response.status) {
-                    SwapStatus.KNOWN_DEPOSIT_TX -> ModelSwapStatus.PENDING
-                    SwapStatus.PENDING_DEPOSIT -> ModelSwapStatus.PENDING
-                    SwapStatus.INCOMPLETE_DEPOSIT -> ModelSwapStatus.INCOMPLETE_DEPOSIT
-                    SwapStatus.PROCESSING -> ModelSwapStatus.PROCESSING
-                    SwapStatus.SUCCESS -> ModelSwapStatus.SUCCESS
-                    SwapStatus.REFUNDED -> ModelSwapStatus.REFUNDED
-                    SwapStatus.FAILED -> ModelSwapStatus.FAILED
-                    null -> ModelSwapStatus.PENDING
-                }
+            when (response.status) {
+                SwapStatus.KNOWN_DEPOSIT_TX -> ModelSwapStatus.PENDING
+                SwapStatus.PENDING_DEPOSIT -> ModelSwapStatus.PENDING
+                SwapStatus.INCOMPLETE_DEPOSIT -> ModelSwapStatus.INCOMPLETE_DEPOSIT
+                SwapStatus.PROCESSING -> ModelSwapStatus.PROCESSING
+                SwapStatus.SUCCESS -> ModelSwapStatus.SUCCESS
+                SwapStatus.REFUNDED -> ModelSwapStatus.REFUNDED
+                SwapStatus.FAILED -> ModelSwapStatus.FAILED
+                SwapStatus.EXPIRED -> ModelSwapStatus.EXPIRED
+                null -> ModelSwapStatus.PENDING
             }
 
     override val isSlippageRealized: Boolean = response.swapDetails?.slippage != null

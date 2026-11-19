@@ -8,6 +8,7 @@ import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.usecase.CancelSwapQuoteUseCase
@@ -16,6 +17,7 @@ import co.electriccoin.zcash.ui.common.usecase.SaveORSwapUseCase
 import co.electriccoin.zcash.ui.common.usecase.ShareQRUseCase
 import co.electriccoin.zcash.ui.design.component.BigIconButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -27,6 +29,11 @@ import co.electriccoin.zcash.ui.screen.error.ErrorState
 import co.electriccoin.zcash.ui.screen.swap.info.DepositSwapInfoArgs
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -37,9 +44,10 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
+import kotlin.time.Clock
 
 class ORSwapConfirmationVM(
-    swapRepository: SwapRepository,
+    private val swapRepository: SwapRepository,
     private val cancelSwapQuote: CancelSwapQuoteUseCase,
     private val copyToClipboard: CopyToClipboardUseCase,
     private val navigationRouter: NavigationRouter,
@@ -54,7 +62,23 @@ class ORSwapConfirmationVM(
             .filterIsInstance<SwapQuoteData.Success>()
             .map { it.quote }
             .map { quote ->
+                saveORSwap.persistBeforeFunding(quote)
+                quote
+            }
+            .combine(flow {
+                while (true) {
+                    emit(Clock.System.now())
+                    delay(FUNDING_CLOCK_INTERVAL_MILLIS)
+                }
+            }) { quote, now -> quote to (now < quote.deadline) }
+            .map<Pair<SwapQuote, Boolean>, ORSwapConfirmationState?> { (quote, fundingEnabled) ->
                 ORSwapConfirmationState(
+                    fundingEnabled = fundingEnabled,
+                    expiryMessage = if (fundingEnabled) null else stringRes(R.string.private_swap_funding_expired),
+                    freshQuoteButton = if (fundingEnabled) null else ButtonState(
+                        text = stringRes(R.string.private_swap_fresh_quote),
+                        onClick = ::onCancelSwapClick,
+                    ),
                     onBack = ::onBack,
                     info =
                         IconButtonState(
@@ -65,7 +89,7 @@ class ORSwapConfirmationVM(
                     smallIcon = quote.originAsset.chainIcon,
                     amount = stringResByNumber(quote.amountInFormatted),
                     amountFiat = stringResByDynamicCurrencyNumber(quote.amountInUsd, FiatCurrency.USD.symbol),
-                    onAmountClick = { onAmountClick(quote.amountInFormatted) },
+                    onAmountClick = { onAmountClick(quote.amountInFormatted, quote.depositAddress.address) },
                     qr = quote.depositAddress.address,
                     address = stringResByAddress(quote.depositAddress.address),
                     copyButton =
@@ -100,9 +124,26 @@ class ORSwapConfirmationVM(
                     primaryButton =
                         ButtonState(
                             text = stringRes(R.string.swapToZec_sentTheFunds),
+                            style = if (fundingEnabled) ButtonStyle.PRIMARY else ButtonStyle.SECONDARY,
                             hapticFeedbackType = HapticFeedbackType.Confirm,
                             onClick = ::onSentFundsClick
                         ),
+                )
+            }.catch { error ->
+                if (error is CancellationException) throw error
+                emit(null)
+                _dialogState.value = ErrorState(
+                    title = stringRes(R.string.private_swap_tracking_failed_title),
+                    message = stringRes(R.string.private_swap_tracking_failed),
+                    positive = ButtonState(
+                        text = stringRes(R.string.private_swap_fresh_quote),
+                        onClick = ::onCancelSwapClick,
+                    ),
+                    negative = ButtonState(
+                        text = stringRes(R.string.swapAndPay_cancelSwap),
+                        onClick = ::onCancelSwapClick,
+                    ),
+                    onBack = ::onCancelSwapClick,
                 )
             }.stateIn(
                 scope = viewModelScope,
@@ -112,9 +153,18 @@ class ORSwapConfirmationVM(
 
     private var onSentFundsClickJob: Job? = null
 
-    private fun onAmountClick(amountInFormatted: BigDecimal) = copyToClipboard(amountInFormatted.toPlainString())
+    private fun canFund(depositAddress: String): Boolean =
+        (swapRepository.quote.value as? SwapQuoteData.Success)?.quote?.let {
+            it.depositAddress.address == depositAddress && Clock.System.now() < it.deadline
+        } == true
 
-    private fun onCopyAddressClick(depositAddress: String) = copyToClipboard(depositAddress)
+    private fun onAmountClick(amountInFormatted: BigDecimal, depositAddress: String) {
+        if (canFund(depositAddress)) copyToClipboard(amountInFormatted.toPlainString())
+    }
+
+    private fun onCopyAddressClick(depositAddress: String) {
+        if (canFund(depositAddress)) copyToClipboard(depositAddress)
+    }
 
     private fun onBack() {
         if (onSentFundsClickJob?.isActive == true) return
@@ -159,6 +209,7 @@ class ORSwapConfirmationVM(
         tokenTicker: String,
         chainName: StringResource
     ) = viewModelScope.launch {
+        if (!canFund(qrData)) return@launch
         shareQR(
             qrData = qrData,
             shareText =
@@ -174,3 +225,5 @@ class ORSwapConfirmationVM(
         )
     }
 }
+
+private const val FUNDING_CLOCK_INTERVAL_MILLIS = 1_000L

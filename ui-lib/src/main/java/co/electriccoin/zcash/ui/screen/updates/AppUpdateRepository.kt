@@ -32,15 +32,17 @@ sealed interface AppUpdateState {
     data object Failed : AppUpdateState
 }
 
-class AppUpdateRepository(context: Context, private val httpClientProvider: HttpClientProvider) {
+class AppUpdateRepository(
+    context: Context,
+    private val httpClientProvider: HttpClientProvider,
+    private val nowMillis: () -> Long = System::currentTimeMillis,
+) {
     private val appContext = context.applicationContext
     private val preferences = appContext.getSharedPreferences("app_update_discovery", Context.MODE_PRIVATE)
     private val installedCode =
         appContext.packageManager.getPackageInfoCompat(appContext.packageName, 0L).versionCodeCompat
     private val mutex = Mutex()
-    private val mutableState = MutableStateFlow<AppUpdateState>(
-        cachedAvailability() ?: AppUpdateState.Idle
-    )
+    private val mutableState = MutableStateFlow(cachedState())
     val state: StateFlow<AppUpdateState> = mutableState.asStateFlow()
     val enabled: Boolean =
         !BuildConfig.DEBUG && BuildConfig.FLAVOR_network == "zcashmainnet" &&
@@ -49,28 +51,44 @@ class AppUpdateRepository(context: Context, private val httpClientProvider: Http
     fun cachedNotice(): AppUpdateRelease? =
         UpdatePolicy.notice(cachedRelease(), installedCode, preferences.getInt("dismissed", 0))
 
+    internal fun currentOffer(): AppUpdateRelease? = cachedAvailability()?.release
+
+    internal fun nextCheckDelayMillis(): Long {
+        val elapsed = lastAttempt?.let { nowMillis() - it }
+        return if (elapsed != null && elapsed in 0 until UPDATE_INTERVAL_MILLIS) {
+            UPDATE_INTERVAL_MILLIS - elapsed
+        } else {
+            CHECK_BUSY_RETRY_MILLIS // An overlapping manual check or a clock change can leave automatic work due.
+        }
+    }
+
     suspend fun check(manual: Boolean = false) {
         // Drop overlapping checks rather than queueing repeated manual requests.
         if (!enabled || !mutex.tryLock()) return
         try {
-            val now = System.currentTimeMillis()
-            val last = if (preferences.contains("last_check")) preferences.getLong("last_check", 0) else null
+            val now = nowMillis()
+            val last = lastAttempt
             if (!UpdatePolicy.shouldCheck(now, last, manual)) return
+            val previous = mutableState.value
             preferences.edit().putLong("last_check", now).apply()
-            val previous = cachedAvailability()
             mutableState.value = AppUpdateState.Checking
             try {
                 val release = readLatestRelease()
-                preferences.edit().putString("release", encodeCache(release)).apply()
+                preferences.edit()
+                    .putString("release", encodeCache(release))
+                    .putLong("release_checked_at", nowMillis())
+                    .remove("last_check_failed")
+                    .apply()
                 mutableState.value = cachedAvailability() ?: AppUpdateState.Current
             } catch (cancelled: CancellationException) {
                 val editor = preferences.edit()
                 if (last == null) editor.remove("last_check") else editor.putLong("last_check", last)
                 editor.apply()
-                mutableState.value = previous ?: AppUpdateState.Idle
+                mutableState.value = if (previous is AppUpdateState.Available) cachedState() else previous
                 throw cancelled
             } catch (_: Exception) {
-                mutableState.value = previous ?: AppUpdateState.Failed
+                preferences.edit().putBoolean("last_check_failed", true).apply()
+                mutableState.value = AppUpdateState.Failed
             }
         } finally {
             mutex.unlock()
@@ -78,8 +96,9 @@ class AppUpdateRepository(context: Context, private val httpClientProvider: Http
     }
 
     suspend fun dismiss(versionCode: Int) = mutex.withLock {
+        if (currentOffer()?.versionCode != versionCode) return@withLock
         preferences.edit().putInt("dismissed", versionCode).apply()
-        mutableState.value = cachedAvailability() ?: AppUpdateState.Idle
+        mutableState.value = cachedState()
     }
 
     /** Native client disposal can block after cancellation; keep its whole lifetime off Main. */
@@ -97,12 +116,24 @@ class AppUpdateRepository(context: Context, private val httpClientProvider: Http
         } ?: throw IOException("Update check deadline exceeded")
     }
 
-    private fun cachedRelease(): AppUpdateRelease? =
-        try {
+    private val lastAttempt: Long?
+        get() = preferences.getLong("last_check", -1L).takeIf { it >= 0 }
+
+    private fun cachedState(): AppUpdateState =
+        if (preferences.getBoolean("last_check_failed", false)) AppUpdateState.Failed
+        else cachedAvailability() ?: AppUpdateState.Idle
+
+    private fun cachedRelease(): AppUpdateRelease? {
+        val checkedAt = preferences.getLong("release_checked_at", -1L)
+        if (preferences.getBoolean("last_check_failed", false) || checkedAt < 0 ||
+            nowMillis() - checkedAt !in 0 until UPDATE_INTERVAL_MILLIS
+        ) return null
+        return try {
             preferences.getString("release", null)?.let(UpdatePolicy::parse)
         } catch (_: Exception) {
             null
         }
+    }
 
     private fun cachedAvailability(): AppUpdateState.Available? =
         UpdatePolicy.availability(cachedRelease(), installedCode, preferences.getInt("dismissed", 0))?.let {
@@ -133,6 +164,7 @@ class AppUpdateRepository(context: Context, private val httpClientProvider: Http
 
     private companion object {
         const val LATEST_RELEASE_URL = "https://api.github.com/repos/Codely-Solutions/zec-private/releases/latest"
+        const val CHECK_BUSY_RETRY_MILLIS = 1_000L
         const val REQUEST_DEADLINE_MILLIS = 30_000L
         const val HTTP_OK = 200
     }

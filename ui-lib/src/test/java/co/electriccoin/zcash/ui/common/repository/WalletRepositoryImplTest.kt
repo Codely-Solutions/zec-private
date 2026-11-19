@@ -47,6 +47,7 @@ import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.runCurrent
+import java.io.IOException
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -246,6 +247,64 @@ class WalletRepositoryImplTest {
 
             assertEquals(listOf("wallet", "restoring=RESTORING", "onboarding=3"), harness.events)
             coVerify(exactly = 0) { PersistableWallet.new(any(), any(), any(), any()) }
+        }
+
+    @Test
+    fun failedSeedWriteBlocksReadinessAndRetriesTheAcceptedWallet() =
+        runTest {
+            val (repository, harness) = newRepository(OnboardingState.NONE, null)
+            repository.useTestScope(testScheduler)
+            val walletProvider = harness.walletProvider as FakePersistableWalletProvider
+            walletProvider.failWrites = true
+
+            repository.createNewWallet()
+            advanceUntilIdle()
+
+            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
+            assertEquals("0", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
+            coVerify(exactly = 0) { harness.restoringProvider.store(any()) }
+            val accepted = walletProvider.requirePersistableWallet()
+
+            // A new process has no failed in-memory write and must remain in onboarding.
+            val (restarted, _) = newRepository(OnboardingState.NONE, null)
+            assertEquals(SecretState.NONE, restarted.secretState.first { it != SecretState.LOADING })
+
+            walletProvider.failWrites = false
+            repository.createNewWallet()
+            advanceUntilIdle()
+
+            assertEquals(accepted, walletProvider.requirePersistableWallet())
+            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            assertEquals("3", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
+            coVerify(exactly = 1) { PersistableWallet.new(any(), any(), any(), any()) }
+            assertEquals(listOf("wallet", "restoring=INITIATING", "onboarding=3"), harness.events)
+        }
+
+    @Test
+    fun failedRestoreSeedWritePreservesTheAcceptedRestoreForRetry() =
+        runTest {
+            val (repository, harness) = newRepository(OnboardingState.NONE, null)
+            repository.useTestScope(testScheduler)
+            val walletProvider = harness.walletProvider as FakePersistableWalletProvider
+            walletProvider.failWrites = true
+
+            repository.restoreFixture()
+            advanceUntilIdle()
+            val accepted = walletProvider.requirePersistableWallet()
+            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+            assertEquals("0", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
+            coVerify(exactly = 0) { harness.backupProvider.store(any()) }
+
+            walletProvider.failWrites = false
+            repository.createNewWallet()
+            advanceUntilIdle()
+
+            assertEquals(accepted, walletProvider.requirePersistableWallet())
+            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            assertEquals("3", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
+            coVerify(exactly = 0) { PersistableWallet.new(any(), any(), any(), any()) }
+            coVerify(exactly = 1) { harness.backupProvider.store(true) }
         }
 
     @Test
@@ -594,11 +653,14 @@ private class FakePersistableWalletProvider(
     private val events: MutableList<String>
 ) : PersistableWalletProvider {
     private val walletFlow = MutableStateFlow(initial)
+    var failWrites = false
 
     override val persistableWallet: Flow<PersistableWallet?> = walletFlow
 
     override suspend fun store(persistableWallet: PersistableWallet) {
         walletFlow.value = persistableWallet
+        // Android may update its memory cache even when commit reports a disk failure.
+        if (failWrites) throw IOException("Synthetic persistence failure")
         events += "wallet"
     }
 

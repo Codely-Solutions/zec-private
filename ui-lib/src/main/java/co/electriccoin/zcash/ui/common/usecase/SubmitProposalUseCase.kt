@@ -13,6 +13,7 @@ import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedExceptio
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRequest
@@ -31,6 +32,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 
 class SubmitProposalUseCase(
     private val navigationRouter: NavigationRouter,
@@ -46,6 +48,8 @@ class SubmitProposalUseCase(
     private val prefillSend: PrefillSendUseCase,
     private val navigateToError: NavigateToErrorUseCase,
 ) {
+    private val submissionMutex = Mutex()
+    private var lastApprovedSwapReference: String? = null
     @set:RestrictTo(RestrictTo.Scope.TESTS)
     @VisibleForTesting
     internal var scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -56,6 +60,7 @@ class SubmitProposalUseCase(
      * unsupported-operation error instead, before any proposal is read.
      */
     suspend operator fun invoke() {
+        if (!submissionMutex.tryLock()) return
         try {
             biometricRepository.requestBiometrics(
                 request =
@@ -76,20 +81,8 @@ class SubmitProposalUseCase(
                 )
                 return
             }
-            val proposal =
-                when (account) {
-                    is KeystoneAccount -> keystoneProposalRepository.getTransactionProposal()
-                    is LedgerAccount -> ledgerProposalPipeline.getTransactionProposal()
-                    is ViewOnlyAccount -> throw AccountOperationUnsupportedException.viewOnly()
-                    is ZodlAccount -> zashiProposalRepository.getTransactionProposal()
-                }
-            if (proposal is SwapTransactionProposal) {
-                val selectedSwapAsset = proposal.quote.destinationAsset
-                metadataRepository.addSwapAssetToHistory(
-                    tokenTicker = selectedSwapAsset.tokenTicker,
-                    chainTicker = selectedSwapAsset.chainTicker
-                )
-            }
+            val proposal = loadProposal(account)
+            if (proposal is SwapTransactionProposal) prepareSwapTracking(proposal)
             when (account) {
                 is KeystoneAccount -> {
                     navigationRouter.replace(SignKeystoneTransactionArgs)
@@ -113,7 +106,33 @@ class SubmitProposalUseCase(
             // do nothing
         } catch (_: BiometricsCancelledException) {
             // do nothing
+        } catch (e: IllegalStateException) {
+            navigateToError(ErrorArgs.General(e))
+        } finally {
+            submissionMutex.unlock()
         }
+    }
+
+    private suspend fun loadProposal(account: WalletAccount): TransactionProposal =
+        when (account) {
+            is KeystoneAccount -> keystoneProposalRepository.getTransactionProposal()
+            is LedgerAccount -> ledgerProposalPipeline.getTransactionProposal()
+            is ViewOnlyAccount -> throw AccountOperationUnsupportedException.viewOnly()
+            is ZodlAccount -> zashiProposalRepository.getTransactionProposal()
+        }
+
+    private suspend fun prepareSwapTracking(proposal: SwapTransactionProposal) {
+        val reference = proposal.destination.address
+        check(reference != lastApprovedSwapReference && metadataRepository.getSwapMetadata(reference) == null) {
+            "This swap is already tracked. Check its status before funding."
+        }
+        processSwapTransaction.persistBeforeFunding(proposal)
+        lastApprovedSwapReference = reference
+        val selectedSwapAsset = proposal.quote.destinationAsset
+        metadataRepository.addSwapAssetToHistory(
+            tokenTicker = selectedSwapAsset.tokenTicker,
+            chainTicker = selectedSwapAsset.chainTicker
+        )
     }
 
     private fun submitZashiProposal(proposal: TransactionProposal) {

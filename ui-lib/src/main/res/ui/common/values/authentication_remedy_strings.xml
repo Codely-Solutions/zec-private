@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="authentication_unavailable_remedy">Authentication unavailable. Check your device screen lock in Android Settings, then try again.</string>
+</resources>

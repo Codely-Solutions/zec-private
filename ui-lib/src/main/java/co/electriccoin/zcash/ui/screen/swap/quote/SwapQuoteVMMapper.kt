@@ -56,14 +56,18 @@ internal class SwapQuoteVMMapper {
                 primaryButton =
                     ButtonState(
                         text = when {
+                            Clock.System.now() >= quote.deadline -> stringRes(R.string.private_swap_fresh_quote)
                             priceCheck is IndependentPriceCheck.Compared && priceCheck.poor ->
                                 stringRes(if (quote.mode == EXACT_OUTPUT) R.string.private_pay_anyway
                                 else R.string.private_swap_anyway)
                             else -> stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm)
                         },
-                        isEnabled = priceCheck != IndependentPriceCheck.Checking,
+                        isEnabled =
+                            Clock.System.now() >= quote.deadline || priceCheck != IndependentPriceCheck.Checking,
                         onClick = {
-                            if (quote.destinationAsset.isZCashAsset) {
+                            if (Clock.System.now() >= quote.deadline) {
+                                onBack()
+                            } else if (quote.destinationAsset.isZCashAsset) {
                                 onNavigateToOnRampSwap()
                             } else {
                                 onSubmitQuoteClick()

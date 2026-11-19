@@ -67,5 +67,10 @@
   "v3.19.0-private.27": [
     "Keep the fiat estimate on Home as plain text, with a separate refresh button.",
     "Refresh an expired fiat rate automatically when you return to the app."
+  ],
+  "v3.19.0-private.28": [
+    "Make wallet setup more reliable and require valid authentication on devices with a screen lock.",
+    "Check swap asset identity, offer a fresh quote after expiry, and keep swap tracking available from the start.",
+    "Show when an update check fails and clarify gift redemption and Android backups."
   ]
 }

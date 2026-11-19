@@ -46,19 +46,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigDecimal
 import kotlin.time.Clock
-import kotlin.time.Duration.Companion.minutes
 
 internal class SwapQuoteVM(
     observeProposal: ObserveProposalUseCase,
     observeSelectedWalletAccount: ObserveSelectedWalletAccountUseCase,
-    applicationStateProvider: ApplicationStateProvider,
+    @Suppress("UNUSED_PARAMETER") applicationStateProvider: ApplicationStateProvider,
     private val swapRepository: SwapRepository,
     private val cancelSwapQuote: CancelSwapQuoteUseCase,
     private val cancelSwap: CancelSwapUseCase,
@@ -124,15 +121,6 @@ internal class SwapQuoteVM(
                     }
                 }
         }
-        applicationStateProvider
-            .observeOnForeground()
-            .onEach {
-                val quote = (swapRepository.quote.value as? SwapQuoteData.Success)?.quote ?: return@onEach
-
-                if ((Clock.System.now() - quote.timestamp) >= 3.minutes) {
-                    onBack()
-                }
-            }.launchIn(viewModelScope)
     }
 
     private fun createState(
@@ -147,8 +135,9 @@ internal class SwapQuoteVM(
         val assessment = check.current(quote.quote, fee, nowMillis)
         fun reviewedAction(action: () -> Unit) {
             val currentQuote = (swapRepository.quote.value as? SwapQuoteData.Success)?.quote
-            val current = priceCheck.value.current(quote.quote, fee, Clock.System.now().toEpochMilliseconds())
-            if (isClosing || currentQuote !== quote.quote) return
+            val now = Clock.System.now()
+            if (isClosing || currentQuote !== quote.quote || now >= quote.quote.deadline) return
+            val current = priceCheck.value.current(quote.quote, fee, now.toEpochMilliseconds())
             if (current != assessment || current == IndependentPriceCheck.Checking) return
             action()
         }

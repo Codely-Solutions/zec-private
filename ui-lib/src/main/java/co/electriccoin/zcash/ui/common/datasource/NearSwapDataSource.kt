@@ -215,14 +215,8 @@ class NearSwapDataSource(
         )
     }
 
-    // The 1Click API normalises asset IDs for routing (e.g. "nep141:btc.omft.near" →
-    // "1cs_v1:btc:native:coin"). Try an exact match first; fall back to extracting the ticker
-    // from the normalised "1cs_v1:<ticker>:..." format and matching by tokenTicker.
     private fun findAssetByEchoedId(supportedTokens: List<SwapAsset>, echoedId: String): SwapAsset? =
-        supportedTokens.find { it.assetId == echoedId }
-            ?: echoedId.split(":").getOrNull(1)?.let { ticker ->
-                supportedTokens.find { it.tokenTicker.equals(ticker, ignoreCase = true) }
-            }
+        co.electriccoin.zcash.ui.common.model.near.resolveNearAsset(supportedTokens, echoedId)
 
     private suspend fun getDepositAddress(response: QuoteResponseDto, originAsset: SwapAsset): SwapAddress {
         val address = response.quote.depositAddress

@@ -154,6 +154,43 @@ class GetSwapStatusUseCaseTest {
             coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved) }
         }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun retriesTransientStatusFailureAndAcceptsLateSettlement() = runTest {
+        val saved = mockk<TransactionSwapMetadata>()
+        val metadata = mockk<MetadataRepository>(relaxed = true) {
+            coEvery { getSwapMetadata("deposit") } returns saved
+        }
+        val pending = swapStatusResult(swapStatus = SwapStatus.PENDING)
+        val success = swapStatusResult(swapStatus = SwapStatus.SUCCESS)
+        var attempts = 0
+        val repository = mockk<SwapRepository> {
+            coEvery { checkSwapStatus(saved) } answers {
+                when (++attempts) {
+                    1 -> pending
+                    2 -> throw SwapAssetsUnavailableException()
+                    else -> success
+                }
+            }
+        }
+        val states = mutableListOf<SwapQuoteStatusData>()
+        backgroundScope.launch {
+            GetSwapStatusUseCase(metadata, repository).observe("deposit").collect { states.add(it) }
+        }
+        runCurrent()
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(pending, states.last().status)
+        assertIs<SwapAssetsUnavailableException>(states.last().error)
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertEquals(success, states.last().status)
+        assertNull(states.last().error)
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertEquals(3, attempts)
+    }
+
     private fun swapStatusResult(
         origin: SwapAsset = btc,
         destination: SwapAsset = zec,

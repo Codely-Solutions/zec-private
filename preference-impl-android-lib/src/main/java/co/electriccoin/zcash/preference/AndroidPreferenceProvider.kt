@@ -24,6 +24,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.CharConversionException
+import java.io.IOException
 import java.security.InvalidKeyException
 import java.security.KeyStore
 import java.security.KeyStoreException
@@ -67,7 +68,7 @@ class AndroidPreferenceProvider(
 
             editor.putString(key.key, value)
 
-            editor.commit()
+            editor.commitOrThrow()
 
             Unit
         }
@@ -83,7 +84,7 @@ class AndroidPreferenceProvider(
 
             editor.putStringSet(key.key, value)
 
-            editor.commit()
+            editor.commitOrThrow()
 
             Unit
         }
@@ -102,7 +103,7 @@ class AndroidPreferenceProvider(
             } else {
                 editor.remove(key.key)
             }
-            editor.commit()
+            editor.commitOrThrow()
             Unit
         }
     }
@@ -169,11 +170,16 @@ class AndroidPreferenceProvider(
 
             editor.remove(key.key)
 
-            editor.commit()
+            editor.commitOrThrow()
         }
     }
 
-    companion object Factory : AndroidPreferenceFactory by AndroidPreferenceFactoryImpl()
+    companion object Factory : AndroidPreferenceFactory by AndroidPreferenceFactoryImpl() {
+        // A failed disk commit can already have changed Android's in-memory value.
+        private fun SharedPreferences.Editor.commitOrThrow() {
+            if (!commit()) throw IOException("Preference write could not be persisted")
+        }
+    }
 }
 
 interface AndroidPreferenceFactory {
