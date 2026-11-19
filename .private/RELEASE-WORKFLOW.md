@@ -42,6 +42,14 @@ For a linked pre-claim recovery, the controller completes quote acceptance befor
 
 Pass the named environment secret references when invoking the reusable release workflow. Their values come from `production-signing` and `maintenance-integration` only in the jobs that select those environments. Keep repository-level copies absent.
 
+### Discovery delay and recovery monitoring
+
+The existing external six-hour heartbeat monitors `sync-upstream.yml`; keep the three-hour GitHub schedule and monthly release cutoff. Compare the latest scheduled start with current queued/in-progress runs and their job progress. A late scheduled start with completed controllers is a scheduler delay. A queued controller or a running controller with stalled job progress needs queue/job diagnosis. A healthy active run needs no duplicate dispatch.
+
+When discovery is over eight hours late and no discovery run is queued or active, the monitor may dispatch `sync-upstream.yml` on `main` once, then follow that exact run. Recheck the queue immediately before dispatch. Its existing concurrency group, candidate selection and closed-window checks retain idempotence; protected claim reservations and release gates remain authoritative. Record routine delay and successful catch-up quietly. Notify only when catch-up fails, access is unavailable, progress stays blocked or verification fails. A missed cron slot alone is not a stuck controller.
+
+For an unrecorded public release, the watcher searches retained release attestations across paginated repository artifacts, then invokes the existing exact-run resolver. Newer workflow runs do not displace the original publisher. The search is bounded to ten pages of 100 artifacts and stops with an explicit manual exact-run recovery instruction if that budget is exhausted. Expired attestations cannot authorize recovery. The resolver still binds the trusted publisher, live original attestation and unchanged public assets.
+
 ## Shared release preflight
 
 Hosted admission checks the exact candidate and changelog before one preflight job runs offline checks, the [live swap catalog check](INDEPENDENT-PRICES.md), fast regressions, acceptance selection, and strict Linux Gradle configuration plus release Detekt. The catalog check uses the controller's checker and the candidate's mappings. A mismatch or failed fetch stops the candidate before Gradle or APK assembly. The unsigned production, emulator and testnet APK jobs share that gate and can start together. The wallet and quote acceptance jobs can overlap when their respective APKs are ready. Artifact promotion and quote-only recovery reuse the original build evidence. Reconciliation of an already published release starts from its original attestation.

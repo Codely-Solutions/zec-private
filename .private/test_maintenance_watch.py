@@ -11,7 +11,7 @@ from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, main, pending
 
 
 class MaintenanceWatchTest(unittest.TestCase):
-    def test_overdue_timer_warns_without_blocking_live_discovery(self):
+    def test_delayed_timer_is_quiet_without_blocking_live_discovery(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             environment = {'GITHUB_OUTPUT': str(root/'output'), 'GITHUB_STEP_SUMMARY': str(root/'summary')}
@@ -21,7 +21,8 @@ class MaintenanceWatchTest(unittest.TestCase):
                           {'workflow_runs': []}, []]) as api, patch('builtins.print') as emit:
                 main()
                 self.assertEqual(api.call_count, 4)
-                self.assertIn('timer is overdue', emit.call_args.args[0])
+                self.assertIn('schedule is delayed', emit.call_args.args[0])
+                self.assertNotIn('::warning::', emit.call_args.args[0])
                 self.assertFalse((root/'output').exists())
 
     def test_wrapper_patch_requires_exact_official_coordinates_and_settings(self):
@@ -166,20 +167,59 @@ class MaintenanceWatchTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'outside the exact wrapper update'):
                 verify_promotion_revision(modified, base, root=root)
 
+    def test_recovery_pages_past_newer_runs_and_ignores_expired_attestations(self):
+        tag = 'v3.19.0-private.27'
+        latest = dict(tag_name=tag)
+        ordinary = dict(name='unrelated-build', expired=False, workflow_run={'id': 5})
+        expired = dict(name='release-attestation-1', expired=True, workflow_run={'id': 6})
+        publisher = dict(name='release-attestation-2', expired=False, workflow_run={'id': 4})
+        with tempfile.TemporaryDirectory() as temp:
+            with patch('maintenance_watch.api', side_effect=[latest, {'artifacts': [ordinary]*99+[expired]},
+                                                            {'artifacts': [publisher]}]) as api:
+                resolved = []
+                def resolve(run):
+                    resolved.append(run)
+                    return {'release_tag': tag}
+                self.assertEqual(4, pending_recovery('repos/fork/wallet', Path(temp), resolve))
+                self.assertEqual(['4'], resolved)
+                self.assertIn('page=2', api.call_args.args[0])
+            with patch('maintenance_watch.api', side_effect=[latest]+[{'artifacts': [ordinary]*100}]*10):
+                with self.assertRaisesRegex(ValueError, '1000 artifacts'):
+                    pending_recovery('repos/fork/wallet', Path(temp), resolve)
+
+    def test_original_publisher_survives_more_than_eight_newer_attestations(self):
+        tag = 'v3.19.0-private.27'
+        artifacts = [dict(name='release-attestation-1', expired=False, workflow_run={'id': run})
+                     for run in range(20, 10, -1)]
+        with tempfile.TemporaryDirectory() as temp:
+            with patch('maintenance_watch.api', side_effect=[{'tag_name': tag}, {'artifacts': artifacts}]):
+                def resolve(run):
+                    if run == '12':
+                        raise ValueError('Untrusted publisher')
+                    return {'release_tag': tag if run == '11' else 'v3.19.0-private.26'}
+                self.assertEqual(11, pending_recovery('repos/fork/wallet', Path(temp), resolve))
+
+    def test_recovery_quote_failure_selects_the_blocker_notification(self):
+        workflow = (Path(__file__).resolve().parents[1]/'.github/workflows/build-release.yml').read_text()
+        failed = workflow.split('\n  failed:\n', 1)[1]
+        condition = failed.split('\n    needs:', 1)[0]
+        import re
+        checks = re.findall(r"needs\.([a-z_]+)\.result == 'failure'", condition)
+        self.assertIn('hosted_quotes', checks)
+        self.assertIn('recovery_quotes', checks)
+
     def test_automatic_recovery_requires_the_latest_exact_attestation(self):
         tag = 'v3.19.0-private.21'
         digest = 'a'*64
         latest = dict(tag_name=tag, published_at='2026-11-11T12:00:00Z',
                       assets=[dict(name='zec-private-latest.apk', digest='sha256:'+digest)])
-        run = dict(id=4, created_at='2026-11-11T11:00:00Z')
+        artifact = dict(name='release-attestation-1', expired=False, workflow_run={'id': 4})
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
-            with patch('maintenance_watch.api', side_effect=[latest, {'workflow_runs': [run]},
-                                                            {'workflow_runs': []}, {'workflow_runs': []}]):
+            with patch('maintenance_watch.api', side_effect=[latest, {'artifacts': [artifact]}]):
                 self.assertEqual(4, pending_recovery('repos/fork/wallet', directory,
                                                       lambda _: {'release_tag': tag}))
-            with patch('maintenance_watch.api', side_effect=[latest, {'workflow_runs': [run]},
-                                                            {'workflow_runs': []}, {'workflow_runs': []}]):
+            with patch('maintenance_watch.api', side_effect=[latest, {'artifacts': [artifact]}]):
                 with self.assertRaisesRegex(ValueError, 'no live matching publication proof'):
                     pending_recovery('repos/fork/wallet', directory,
                                      lambda _: {'release_tag': 'v3.19.0-private.20'})

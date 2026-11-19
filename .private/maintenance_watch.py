@@ -127,21 +127,28 @@ def pending_recovery(prefix, evidence_dir=RELEASE_EVIDENCE, resolve=None):
         return None
     if resolve is None:
         from reconcile_release import resolve
-    runs = []
-    for workflow in ('build-release.yml', 'sync-upstream.yml', 'custom-release.yml'):
-        runs.extend(api(f'{prefix}/actions/workflows/{workflow}/runs?branch=main&status=completed&per_page=8')
-                    ['workflow_runs'])
-    released_at = dt.datetime.fromisoformat(latest['published_at'])
-    earliest = released_at - dt.timedelta(days=2)
-    recent = sorted((run for run in runs if dt.datetime.fromisoformat(run['created_at']) >= earliest),
-                    key=lambda run: run['created_at'], reverse=True)[:8]
-    for run in recent:
-        try:
-            proof = resolve(str(run['id']))
-        except (ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            continue
-        if proof['release_tag'] == tag:
-            return run['id']
+    # Search retained attestations instead of a moving window of workflow runs.
+    # The resolver still verifies the exact trusted publisher, archive and assets.
+    seen = set()
+    for page in range(1, 11):
+        artifacts = api(f'{prefix}/actions/artifacts?per_page=100&page={page}')["artifacts"]
+        for artifact in artifacts:
+            if artifact['expired'] or not re.fullmatch(r'release-attestation-[1-9][0-9]*', artifact['name']):
+                continue
+            run_id = artifact['workflow_run']['id']
+            if run_id in seen:
+                continue
+            seen.add(run_id)
+            try:
+                proof = resolve(str(run_id))
+            except (ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                continue
+            if proof['release_tag'] == tag:
+                return run_id
+        if len(artifacts) < 100:
+            break
+    else:
+        raise ValueError('Publication proof search reached 1000 artifacts; recover the exact publisher run manually')
     raise ValueError('Latest wallet release is unrecorded and no live matching publication proof was found')
 
 
@@ -213,7 +220,7 @@ def main():
     if upstream['state'] != 'active':
         raise RuntimeError('Upstream discovery is disabled')
     if age is None or age > 8:
-        print('::warning::Upstream discovery timer is overdue. This run still checks current eligibility.', flush=True)
+        print('Upstream discovery schedule is delayed. This run still checks current eligibility.', flush=True)
     if eligible:
         with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as stream:
             _, number, head = max(eligible)

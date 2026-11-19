@@ -88,7 +88,7 @@ SDK error 3200 is a wrapper, not a root cause: it also represents an explicit se
 
 ## Upstream integration
 
-`sync-upstream.yml` requests stable-release discovery every three hours and supports manual dispatch. The watcher reports overdue timers while continuing candidate checks. Drafts and prereleases are excluded. `fork.patch` carries the reviewed source delta; `.private/` and trusted workflows are overlaid separately. Read [sync.py](sync.py) and [excluded-features.json](excluded-features.json) before regenerating the patch: separately sanitized provider content and removed project trees must stay out of it.
+`sync-upstream.yml` requests stable-release discovery every three hours and supports manual dispatch. The watcher records delayed schedules while continuing candidate checks. The [existing heartbeat procedure](RELEASE-WORKFLOW.md#discovery-delay-and-recovery-monitoring) distinguishes scheduler delay from stalled work and performs bounded catch-up. Drafts and prereleases are excluded. `fork.patch` carries the reviewed source delta; `.private/` and trusted workflows are overlaid separately. Read [sync.py](sync.py) and [excluded-features.json](excluded-features.json) before regenerating the patch: separately sanitized provider content and removed project trees must stay out of it.
 
 The controller resolves the exact upstream commit, checks critical differences, checks patch applicability and prepares an update branch. Relevant wallet, recovery, signing, swap, privacy and build-trust changes require review. Conflicts and failed acceptance preserve the last release. A reusable workflow explicitly chains build, validation, signing and publication.
 
