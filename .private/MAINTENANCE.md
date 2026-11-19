@@ -62,6 +62,12 @@ Use the applicable resource guard and project acceptance policy. Offline preflig
 
 Full evidence binds the source, workflow run, artifact digests and applicable wallet/quote acceptance. Static checks and a successful build alone do not authorize signing. Manifest, certificate, provider authority, license, architecture and 16 KiB ZIP alignment are inspected separately; ZIP alignment alone does not establish native runtime compatibility.
 
+### Hosted Gradle worker limit
+
+Keep the [production Gradle checks](release_checks.sh) at two workers on the current GitHub-hosted Ubuntu runner and toolchain. The matched Release 28 benchmark used the same CPU model, runner image, source, read-only cache, heap and checks. Two workers took 11m 46s and three took 12m 03s. [Benchmark run](https://github.com/Codely-Solutions/zec-private/actions/runs/44539025857)
+
+Start future speed investigations with the current Gradle task timings. Revisit the worker limit when the runner resources, toolchain, cache strategy or release workload materially change. Adopt a higher limit after repeated matched runs show a meaningful improvement and adequate memory headroom while preserving every release check.
+
 ## Prepare and verify acceptance evidence
 
 Bind each prepared emulator job to its exact artifact ID/digest, successful producer job, source SHA, package/version, baseline and applicable fingerprints from `acceptance_policy.py`. The containing workflow may still be finishing independent jobs; publication requires its final successful result. Use the seedless baseline and its matching instrumentation selected in `upgrade-baseline.json`. Prepare `upgradeBaselineInstrumentation` from its archive, source and APK hashes; new instrumentation may call APIs absent from the old app. The runner verifies the installed pair before each stage and replaces both APKs at upgrade. Future fixture archives preserve both original APKs. Read `core_testnet_driver.py` and the current UI scenario for other required manifest fields.
