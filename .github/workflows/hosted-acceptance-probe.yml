@@ -253,8 +253,24 @@ jobs:
       - name: Build the small isolated UI bridge
         timeout-minutes: 6
         run: |
+          set -euo pipefail
           chmod +x gradlew
-          ./gradlew -p .private/ui-bridge --no-daemon --no-watch-fs assembleDebug
+          bridge=(./gradlew -p .private/ui-bridge --no-daemon --no-watch-fs)
+          log=$(mktemp)
+          trap 'rm -f -- "$log"' EXIT
+          if ! "${bridge[@]}" assembleDebug 2>&1 | tee "$log"; then
+            # Refresh a negative resolution only when Central serves the exact missing bridge artifacts.
+            grep -Fq "Could not resolve all artifacts for configuration 'classpath'." "$log"
+            mapfile -t missing < <(sed -nE 's/^ +> Could not find org\.jetbrains\.kotlin:(kotlin-gradle-plugin-api|kotlin-gradle-plugins-bom):([0-9]+\.[0-9]+\.[0-9]+)\.$/\1 \2/p' "$log" | sort -u)
+            [[ ${#missing[@]} -ge 1 ]]
+            for coordinate in "${missing[@]}"; do
+              read -r artifact version <<< "$coordinate"
+              curl --fail --silent --show-error --max-time 15 --output /dev/null \
+                "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/$artifact/$version/$artifact-$version.pom"
+            done
+            echo "Maven Central serves the missing Kotlin POMs; refresh bridge dependencies once."
+            "${bridge[@]}" --refresh-dependencies assembleDebug
+          fi
           cp .private/ui-bridge/build/outputs/apk/debug/*.apk "$RUNNER_TEMP/zec-hosted-quotes/ui-bridge.apk"
       - name: Exercise unfunded production quotes over the selected app route
         run: |
