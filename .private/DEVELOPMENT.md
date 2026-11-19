@@ -4,7 +4,7 @@ Use [dev_session.py](dev_session.py) for related compilation/unit checks, with t
 
 ## Run related checks
 
-Write one task-owned manifest. `source` is an absolute repository path; each operation selects a full committed source SHA. Parameters are non-secret development inputs. Example structure:
+Write one task-owned manifest. `source` is an absolute repository path; each operation selects a full committed source SHA. Parameters are non-secret development inputs. For a change headed to release, include release-scoped Detekt alongside the first focused JVM tests in one Gradle invocation, before preview builds or hosted dispatch. Use the same release analysis script as hosted preflight. Example structure:
 
 ```json
 {
@@ -15,9 +15,9 @@ Write one task-owned manifest. `source` is an absolute repository path; each ope
     "source": "FULL_40_CHARACTER_COMMIT_SHA",
     "seconds": 600,
     "config": {
-      "tasks": [":ui-lib:testZcashmainnetFossDebugUnitTest"],
+      "tasks": [":detektAll", ":ui-lib:testZcashmainnetFossDebugUnitTest"],
       "tests": ["co.electriccoin.zcash.ui.common.model.RecipientAddressPolicyTest"],
-      "init_scripts": [".private/tor-ui-abi.gradle", ".private/robolectric-ci.gradle"]
+      "init_scripts": [".private/release-analysis.gradle", ".private/tor-ui-abi.gradle", ".private/robolectric-ci.gradle"]
     }
   }]
 }

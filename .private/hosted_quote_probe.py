@@ -11,6 +11,37 @@ from hosted_fixture import recorded_pair
 from release_metadata import Metadata, require
 
 
+BRIDGE_ARTIFACT = 'isolated-quote-bridge'
+
+
+def retained_bridge(run, controller, metadata):
+    from hosted_release import artifact
+
+    require(re.fullmatch(r'[1-9][0-9]*', run), 'Exact prior bridge run required')
+    matches = [row for row in metadata.pages(f'/actions/runs/{run}/artifacts', 'artifacts')
+               if row['name'] == BRIDGE_ARTIFACT and row['expired'] is False]
+    require(len(matches) <= 1, 'Ambiguous retained bridge')
+    if matches:
+        return artifact(metadata, matches[0]['id'], BRIDGE_ARTIFACT, run, controller)['id']
+    return None
+
+
+def stage_bridge(root, artifact_id, run):
+    from hosted_release import stage
+
+    require(re.fullmatch(r'[1-9][0-9]*', run), 'Exact bridge producer run required')
+    controller = os.environ['GITHUB_SHA']
+    producer = stage(root, artifact_id, BRIDGE_ARTIFACT, run=run, controller=controller)
+    apk = root/'ui-bridge.apk'
+    require({item.name for item in root.iterdir()} == {'ui-bridge.apk', 'source-sha.txt', 'producer.json'}
+            and (root/'source-sha.txt').read_text().strip() == controller,
+            'Bridge archive differs from the exact controller output')
+    binding = dict(producer=producer, run_id=int(run), controller=controller,
+                   apk_sha256=hashlib.sha256(apk.read_bytes()).hexdigest())
+    (root/'bridge-receipt.json').write_text(json.dumps(binding, indent=2) + '\n')
+    print('Verified quote bridge: ' + json.dumps(binding), flush=True)
+
+
 def stage_candidate(root, source, quote_id, production_id, original_run='', original_controller='', *, use_tor=True):
     from hosted_release import artifact, stage
     from release_inputs import version_code
@@ -85,8 +116,12 @@ def run(session, root, fixture):
     from tor_resident_ui_driver import run as quote_scenario
 
     manifest = json.loads((fixture/'quote-manifest.json').read_text())
-    apks = [fixture/name for name in ('quotes.apk', 'ui-bridge.apk')]
+    bridge = fixture.with_name('zec-quote-bridge')
+    bridge_binding = json.loads((bridge/'bridge-receipt.json').read_text())
+    apks = [fixture/'quotes.apk', bridge/'ui-bridge.apk']
     prepared = prepare(apks, root, SDK)
+    require(prepared['ui-bridge.apk']['originalSha256'] == bridge_binding['apk_sha256'],
+            'Prepared quote bridge came from different bytes')
     try:
         quote_scenario(session.adb, root, apks, manifest)
     except RuntimeError:
@@ -135,6 +170,7 @@ def run(session, root, fixture):
                       independent_comparisons=scenario['independentComparisons'], reference_states=scenario['referenceStates'],
                       production_artifact=manifest['production_artifact'], producer=manifest['producer'],
                       workflow_run_id=int(os.environ['GITHUB_RUN_ID']), artifact_run_id=manifest['artifact_run_id'],
+                      bridge=bridge_binding,
                       quote_controller_sha=os.environ['GITHUB_SHA'])
         validate_quotes(result, result['input_fingerprint'], use_tor=use_tor)
         (fixture/'hosted-quotes.json').write_text(json.dumps(result, indent=2) + '\n')

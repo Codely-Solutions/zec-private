@@ -13,6 +13,7 @@ from release_metadata import require
 
 RECOVERY_PATHS = {
     '.github/workflows/build-release.yml', '.github/workflows/custom-release.yml',
+    '.github/workflows/quote-bridge.yml',
     '.github/workflows/hosted-acceptance-probe.yml', '.github/workflows/sync-upstream.yml', '.private/quote_recovery.py',
     '.private/hosted_release.py', '.private/hosted_quote_probe.py', '.private/custom_release.py',
     '.private/publish.py', '.private/integrate_release.py', '.private/verify_public_release.py',

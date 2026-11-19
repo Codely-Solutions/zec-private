@@ -10,7 +10,7 @@ import zipfile
 
 import hosted_release
 from hosted_core import network_startup_diagnostics
-from hosted_quote_probe import stage_quote_apk
+from hosted_quote_probe import BRIDGE_ARTIFACT, retained_bridge, stage_bridge, stage_quote_apk
 from quote_recovery import (
     ARTIFACTS, OPERATOR_ID, REPOSITORY, WORKFLOW, require_transient_quote_failure,
     resolve, resolve_quotes, same_controller_retry, unused_reservation, verify_delta,
@@ -75,6 +75,53 @@ class QuoteRecoveryTests(unittest.TestCase):
             quote['artifact_run_id'] = 9
             with self.assertRaisesRegex(ValueError, 'different build'):
                 stage_quote_apk(root, 'v3.19.0-private.26')
+
+    def test_bridge_handoff_binds_run_role_controller_and_bytes(self):
+        payload = b'synthetic bridge bytes'
+        for marker, record, error in (
+            (MAIN, {}, None),
+            (OLD, {}, 'exact controller output'),
+            (MAIN, {'workflow_run': {'id': 8, 'head_sha': MAIN}}, 'exact trusted run and role'),
+            (MAIN, {'workflow_run': {'id': 7, 'head_sha': OLD}}, 'exact trusted run and role'),
+            (MAIN, {'digest': 'sha256:' + '0' * 64}, 'archive bytes differ'),
+        ):
+            with self.subTest(error=error), tempfile.TemporaryDirectory() as folder:
+                buffer = io.BytesIO()
+                with zipfile.ZipFile(buffer, 'w') as archive:
+                    archive.writestr('ui-bridge.apk', payload)
+                    archive.writestr('source-sha.txt', marker)
+                data = buffer.getvalue()
+                metadata = Mock(gh='gh', repo='repos/' + REPOSITORY)
+                metadata.api.return_value = dict(
+                    dict(id=54, name=BRIDGE_ARTIFACT, expired=False, size_in_bytes=len(data),
+                         digest='sha256:' + hashlib.sha256(data).hexdigest(),
+                         workflow_run={'id': 7, 'head_sha': MAIN}), **record)
+                root = Path(folder)/'bridge'
+                with patch.dict(os.environ, GITHUB_SHA=MAIN), patch('hosted_release.Metadata', return_value=metadata), \
+                        patch('hosted_release.subprocess.run', side_effect=lambda *_, stdout, **__: stdout.write(data)):
+                    if error:
+                        with self.assertRaisesRegex(ValueError, error):
+                            stage_bridge(root, '54', '7')
+                    else:
+                        stage_bridge(root, '54', '7')
+                        self.assertEqual((root/'ui-bridge.apk').read_bytes(), payload)
+                        receipt = json.loads((root/'bridge-receipt.json').read_text())
+                        self.assertEqual(receipt['apk_sha256'], hashlib.sha256(payload).hexdigest())
+                        self.assertEqual((receipt['producer']['id'], receipt['run_id'], receipt['controller']),
+                                         (54, 7, MAIN))
+
+    def test_retained_bridge_requires_a_single_live_artifact(self):
+        metadata = Mock()
+        live = dict(name=BRIDGE_ARTIFACT, id=54, expired=False)
+        metadata.pages.return_value = [dict(live, expired=True)]
+        self.assertIsNone(retained_bridge('7', MAIN, metadata))
+        metadata.pages.return_value.append(live)
+        with patch('hosted_release.artifact', return_value={'id': 54}) as lookup:
+            self.assertEqual(retained_bridge('7', MAIN, metadata), 54)
+            lookup.assert_called_once_with(metadata, 54, BRIDGE_ARTIFACT, '7', MAIN)
+        metadata.pages.return_value.append(live)
+        with self.assertRaisesRegex(ValueError, 'Ambiguous retained bridge'):
+            retained_bridge('7', MAIN, metadata)
 
     def test_transient_failure_requires_one_exact_trusted_marker(self):
         metadata = Mock(gh='gh', repo='repos/' + REPOSITORY)

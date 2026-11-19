@@ -117,6 +117,15 @@ jobs:
           if result.get('reuse_funded') == 'true':
               print('Funded evidence matches. Run the installed upgrade without a faucet claim.')
           PY
+  quote_bridge:
+    needs: admit_hosted
+    if: inputs.hosted && !inputs.preflight_only && needs.admit_hosted.result == 'success' && needs.admit_hosted.outputs.quote_receipt_id == ''
+    permissions:
+      actions: read
+      contents: read
+    uses: ./.github/workflows/quote-bridge.yml
+    with:
+      reuse_run_id: ${{ needs.admit_hosted.outputs.original_controller == github.sha && inputs.recover_run || '' }}
   preflight:
     needs: admit_hosted
     if: ${{ always() && !cancelled() && !inputs.reconciliation_run && (!inputs.hosted || needs.admit_hosted.result == 'success') }}
@@ -235,8 +244,8 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: bash .private/verify_signing_key.sh
   unsigned:
-    needs: [admit_hosted, preflight, signing_smoke]
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.candidate_run && !inputs.recover_run }}
+    needs: [admit_hosted, preflight, signing_smoke, quote_bridge]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (!inputs.hosted || inputs.preflight_only || needs.quote_bridge.result == 'success') && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.candidate_run && !inputs.recover_run }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     permissions:
@@ -309,8 +318,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
   emulator:
-    needs: [preflight, signing_smoke]
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.candidate_run && !inputs.recover_run && (inputs.build_emulator || inputs.hosted) }}
+    needs: [preflight, signing_smoke, quote_bridge]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (!inputs.hosted || inputs.preflight_only || needs.quote_bridge.result == 'success') && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.candidate_run && !inputs.recover_run && (inputs.build_emulator || inputs.hosted) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     permissions:
@@ -359,8 +368,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
   testnet_apk:
-    needs: [preflight, signing_smoke]
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && inputs.hosted && !inputs.recover_run && !inputs.candidate_run }}
+    needs: [preflight, signing_smoke, quote_bridge]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (!inputs.hosted || inputs.preflight_only || needs.quote_bridge.result == 'success') && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && inputs.hosted && !inputs.recover_run && !inputs.candidate_run }}
     permissions:
       contents: read
     uses: ./.github/workflows/core-validation.yml
@@ -387,8 +396,8 @@ jobs:
       reuse_funded: ${{ needs.admit_hosted.outputs.reuse_funded == 'true' }}
       prepared_id: ${{ needs.admit_hosted.outputs.prepared_id }}
   reserve_quote_retry:
-    needs: [admit_hosted, preflight, signing_smoke]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && inputs.recover_run && !inputs.preflight_only && needs.admit_hosted.outputs.same_controller_retry == 'true' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
+    needs: [admit_hosted, preflight, signing_smoke, quote_bridge]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && inputs.recover_run && !inputs.preflight_only && needs.admit_hosted.outputs.same_controller_retry == 'true' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && needs.quote_bridge.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     permissions:
@@ -412,8 +421,8 @@ jobs:
                                 os.environ['RECOVER_RUN'], Metadata())
           PY
   hosted_quotes:
-    needs: [admit_hosted, preflight, signing_smoke, unsigned, emulator, reserve_quote_retry]
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && inputs.hosted && !inputs.preflight_only && !inputs.preclaim_run && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.result == 'success' && (needs.admit_hosted.outputs.same_controller_retry != 'true' || (github.run_attempt == 1 && needs.reserve_quote_retry.result == 'success')) && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
+    needs: [admit_hosted, preflight, signing_smoke, quote_bridge, unsigned, emulator, reserve_quote_retry]
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && needs.quote_bridge.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && inputs.hosted && !inputs.preflight_only && !inputs.preclaim_run && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.result == 'success' && (needs.admit_hosted.outputs.same_controller_retry != 'true' || (github.run_attempt == 1 && needs.reserve_quote_retry.result == 'success')) && (inputs.recover_run || (needs.unsigned.result == 'success' && needs.emulator.result == 'success')) }}
     permissions:
       actions: read
       contents: read
@@ -425,10 +434,12 @@ jobs:
       production_id: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}
       original_run: ${{ inputs.recover_run }}
       original_controller: ${{ needs.admit_hosted.outputs.original_controller }}
+      bridge_id: ${{ needs.quote_bridge.outputs.artifact_id }}
+      bridge_run_id: ${{ needs.quote_bridge.outputs.artifact_run_id }}
       use_tor: false
   recovery_quotes:
-    needs: [admit_hosted, preflight, signing_smoke]
-    if: ${{ !cancelled() && inputs.preclaim_run && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.outputs.previous_reservation != '' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
+    needs: [admit_hosted, preflight, signing_smoke, quote_bridge]
+    if: ${{ !cancelled() && inputs.preclaim_run && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.outputs.previous_reservation != '' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && needs.quote_bridge.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
     permissions:
       actions: read
       contents: read
@@ -440,6 +451,8 @@ jobs:
       production_id: ${{ needs.admit_hosted.outputs.production_id }}
       original_run: ${{ inputs.recover_run }}
       original_controller: ${{ needs.admit_hosted.outputs.original_controller }}
+      bridge_id: ${{ needs.quote_bridge.outputs.artifact_id }}
+      bridge_run_id: ${{ needs.quote_bridge.outputs.artifact_run_id }}
       use_tor: false
   promotion:
     needs: [preflight, signing_smoke]
@@ -654,8 +667,8 @@ jobs:
           RELEASE_TAG: ${{ needs.publish.outputs.release_tag || needs.reconcile.outputs.release_tag }}
         run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
   failed:
-    if: ${{ always() && !inputs.preflight_only && github.ref == 'refs/heads/main' && (needs.admit_hosted.result == 'failure' || needs.preflight.result == 'failure' || needs.signing_smoke.result == 'failure' || needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.testnet_apk.result == 'failure' || needs.hosted_core.result == 'failure' || needs.hosted_quotes.result == 'failure' || needs.recovery_quotes.result == 'failure' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
-    needs: [admit_hosted, preflight, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, promotion, publish, reconcile, verify_publication, record_integration]
+    if: ${{ always() && !inputs.preflight_only && github.ref == 'refs/heads/main' && (needs.admit_hosted.result == 'failure' || needs.preflight.result == 'failure' || needs.quote_bridge.result == 'failure' || needs.signing_smoke.result == 'failure' || needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.testnet_apk.result == 'failure' || needs.hosted_core.result == 'failure' || needs.hosted_quotes.result == 'failure' || needs.recovery_quotes.result == 'failure' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
+    needs: [admit_hosted, preflight, quote_bridge, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, promotion, publish, reconcile, verify_publication, record_integration]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

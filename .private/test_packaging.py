@@ -51,9 +51,10 @@ class PackagingTests(unittest.TestCase):
             self.assertIn('!inputs.candidate_run', job)
             self.assertNotIn('secrets.', job)
             dependencies = [line.strip() for line in job.splitlines() if line.startswith('    needs:')]
-            self.assertEqual(['needs: [admit_hosted, preflight, signing_smoke]' if job is production else
-                              'needs: [preflight, signing_smoke]'], dependencies)
+            self.assertEqual(['needs: [admit_hosted, preflight, signing_smoke, quote_bridge]' if job is production else
+                              'needs: [preflight, signing_smoke, quote_bridge]'], dependencies)
             self.assertIn("needs.preflight.result == 'success'", job)
+            self.assertIn("!inputs.hosted || inputs.preflight_only || needs.quote_bridge.result == 'success'", job)
             self.assertIn("needs.signing_smoke.result == 'success'", job)
             self.assertNotIn('.private/preflight.py', job)
         for job in (production, emulator):
@@ -100,6 +101,23 @@ class PackagingTests(unittest.TestCase):
             self.assertIn('-I .private/task-timing.gradle', script)
         self.assertIn('artifact/task-timing.jsonl', production)
         self.assertIn('artifact/task-timing.jsonl', emulator)
+
+    def test_early_bridge_has_no_release_authority_and_quotes_receive_explicit_ids(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root/'.github/workflows/build-release.yml').read_text()
+        bridge = workflow.split('  quote_bridge:\n', 1)[1].split('  preflight:\n', 1)[0]
+        self.assertIn('needs: admit_hosted', bridge)
+        self.assertIn('!inputs.preflight_only', bridge)
+        self.assertIn("needs.admit_hosted.outputs.quote_receipt_id == ''", bridge)
+        self.assertNotIn('secrets:', bridge)
+        for job in ('hosted_quotes', 'recovery_quotes'):
+            part = workflow.split('  '+job+':\n', 1)[1].split('    with:\n', 1)
+            self.assertIn("needs.quote_bridge.result == 'success'", part[0])
+            self.assertIn('bridge_id: ${{ needs.quote_bridge.outputs.artifact_id }}', part[1])
+            self.assertIn('bridge_run_id: ${{ needs.quote_bridge.outputs.artifact_run_id }}', part[1])
+        probe = (root/'.github/workflows/hosted-acceptance-probe.yml').read_text()
+        self.assertIn('stage_bridge(target,', probe)
+        self.assertNotIn('assembleDebug', probe)
 
     def test_signing_policy_rejects_tags_and_wider_branch_access(self):
         metadata = Mock()
