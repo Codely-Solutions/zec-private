@@ -30,6 +30,14 @@ class QuoteRecoveryTests(unittest.TestCase):
         self.assertEqual(market_reference_state({'17.0% below market reference'}), 'warning')
         self.assertEqual(market_reference_state({'price check unavailable'}), 'unavailable')
 
+    def test_compact_market_row_requires_a_comparison_result(self):
+        for result in ('2.50% less value', '1.25% more value', 'in line with market'):
+            with self.subTest(result=result):
+                self.assertEqual(market_reference_state({'market comparison', result}), 'compared')
+        self.assertIsNone(market_reference_state({'market comparison', '(-3.47%)'}))
+        self.assertIsNone(market_reference_state({'2.50% less value'}))
+        self.assertEqual(market_reference_state({'market comparison', 'price check unavailable'}), 'unavailable')
+
     def test_loading_balance_does_not_hide_the_quote_footer_from_the_scenario(self):
         labels = {'from', 'to', 'loading'}
         self.assertTrue(quote_footer_needs_scroll(labels, quote_footer([

@@ -23,6 +23,10 @@ def quote_footer_needs_scroll(labels, footer):
 def market_reference_state(labels):
     if 'kraken' in labels:
         return 'compared'
+    if 'market comparison' in labels and any(
+            label == 'in line with market' or re.fullmatch(r'[0-9]+\.[0-9]{2}% (less|more) value', label)
+            for label in labels):
+        return 'compared'
     if 'price check unavailable' in labels:
         return 'unavailable'
     if any('below market reference' in label for label in labels):
@@ -125,7 +129,8 @@ def run(root, stop, quote_stage_records, *, use_tor=True):
         expanded = False
         scrolls = 0
         safe_labels = {'review quote', 'quote details', 'checking market price…', 'confirm', 'swap anyway',
-                       'market reference', 'reference difference', 'no market reference for this asset'}
+                       'market reference', 'reference difference', 'market comparison',
+                       'no market reference for this asset'}
         seen = set()
         while time.monotonic() < deadline:
             current = labels(state)
