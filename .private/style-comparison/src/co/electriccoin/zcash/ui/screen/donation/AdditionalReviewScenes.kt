@@ -154,7 +154,7 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                 )),
             ), mainAppBarState = appBar,
         )
-        "swap-review", "crosspay-review", "price-normal", "price-warning", "price-unavailable", "price-checking" -> SwapQuoteView(
+        "swap-review", "crosspay-review", "price-warning", "price-unavailable", "price-checking" -> SwapQuoteView(
             SwapQuoteState.Success(
                 title = stringRes(if (screen == "crosspay-review") "Pay now" else "Swap"), rotateIcon = screen == "swap-review",
                 from = SwapTokenAmountState(amount = stringRes("0.01"), fiatAmount = stringRes("$0.40"), chain = stringRes("Zcash"), token = stringRes("ZEC"), bigIcon = imageRes(R.drawable.ic_zec_round_full), smallIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_zec_shielded)),
@@ -178,15 +178,6 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                     "price-warning" -> PriceCheckNoticeState(
                         stringRes(R.string.private_price_poor, "24.8"),
                         stringRes(R.string.private_price_check_details), true,
-                    )
-                    "price-normal" -> PriceCheckNoticeState(
-                        stringRes(R.string.private_price_reference),
-                        stringRes(R.string.private_price_reference_details),
-                        showInline = false,
-                        detailItems = listOf(
-                            SwapQuoteInfoItem(stringRes(R.string.private_price_reference), styledStringResource("Kraken")),
-                            SwapQuoteInfoItem(stringRes(R.string.private_price_reference_difference), styledStringResource("-2.50%")),
-                        ),
                     )
                     "price-unavailable" -> PriceCheckNoticeState(
                         stringRes(R.string.private_price_unavailable),

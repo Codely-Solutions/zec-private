@@ -3,6 +3,8 @@ package co.electriccoin.zcash.ui.screen.donation
 import androidx.compose.runtime.Composable
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.appbar.ZashiMainTopAppBarState
+import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
+import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.design.component.*
 import co.electriccoin.zcash.ui.design.util.*
@@ -16,7 +18,7 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
     val zec = SwapTokenAmountState(stringRes("0.01"), stringRes("$0.40"), stringRes("ZEC"), stringRes("Zcash"), imageRes(R.drawable.ic_zec_round_full), imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_zec_shielded))
     val btc = SwapTokenAmountState(stringRes("0.000004"), stringRes("$0.39"), stringRes("BTC"), stringRes("Bitcoin"), imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc), imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc))
     when (screen) {
-        "sprint-mapper-crosspay", "sprint-mapper-missing" -> {
+        "sprint-mapper-crosspay", "sprint-mapper-missing", "price-normal" -> {
             val now = kotlin.time.Clock.System.now()
             val account = co.electriccoin.zcash.ui.common.model.ZodlAccount(
                 sdkAccount = cash.z.ecc.android.sdk.model.Account.new(cash.z.ecc.android.sdk.model.AccountUuid.new(ByteArray(16))),
@@ -37,7 +39,7 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                 override val destinationAddress = co.electriccoin.zcash.ui.common.model.DynamicSwapAddress("Synthetic destination")
                 override val refundAddress = depositAddress
                 override val provider = "synthetic"
-                override val mode = co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_OUTPUT
+                override val mode = if (screen == "price-normal") SwapMode.EXACT_INPUT else SwapMode.EXACT_OUTPUT
                 override val amountIn = java.math.BigDecimal("10000000")
                 override val amountInFormatted = java.math.BigDecimal("0.1")
                 override val amountInUsd = java.math.BigDecimal("10")
@@ -51,7 +53,14 @@ internal fun SwapSprintScene(screen: String, onBack: () -> Unit, appBar: ZashiMa
                 override val deadline = now + kotlin.time.Duration.parse("3m")
                 override val slippage = java.math.BigDecimal("0.5")
             }
-            SwapQuoteView(SwapQuoteVMMapper().createState(SwapQuoteInternalState(null, quote, account), onBack, {}, {}))
+            val priceCheck = if (screen == "price-normal") {
+                IndependentPriceCheck.Compared(java.math.BigDecimal("-2.50"), Long.MAX_VALUE)
+            } else {
+                null
+            }
+            SwapQuoteView(
+                SwapQuoteVMMapper().createState(SwapQuoteInternalState(null, quote, account), onBack, {}, {}, priceCheck)
+            )
         }
         "sprint-incoming", "sprint-missing", "sprint-long" -> {
             val incoming = screen == "sprint-incoming"
