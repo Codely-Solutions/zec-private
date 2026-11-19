@@ -16,7 +16,7 @@ Confirm exact identities using the [NEAR catalog](https://1click.chaindefuser.co
 
 Value the reviewed input at the reference bid and output at the ask. Include the separately known Zcash network fee for outgoing native ZEC. The reviewed EXACT_OUTPUT input already includes its allowance. Provider fiat estimates are separate from the independent comparison.
 
-A difference of −15% or worse shows an inline warning and uses the existing **Swap anyway** or **Pay anyway** action. Ordinary results and their sources appear in collapsed **Quote details**. **Price check unavailable** signals a timed-out, stale or rejected comparison. **No market reference for this asset** signals an unknown identity. Both leave the quote usable.
+A difference of −15% or worse shows an inline warning and uses the existing **Swap anyway** or **Pay anyway** action. Expand **Quote details** for the **Market comparison** row. It describes the value difference at independent prices, with sources under the info icon. The signed percentage beside the received fiat estimate uses the quote’s dollar estimates. **Price check unavailable** signals a timed-out, stale or rejected comparison. **No market reference for this asset** signals an unknown identity. Both leave the quote usable.
 
 ## Sources and freshness
 
@@ -27,4 +27,4 @@ A difference of −15% or worse shows an inline warning and uses the existing **
 - Reject observations aged 120 seconds or more, receipts aged 60 seconds or more and bands wider than 2%. Kraken-only comparisons require observations within 30 seconds of one another. For an on-chain market, each observation and its anchor must still meet the 120-second limit.
 - Review waits up to eight seconds. Cancel replaced checks and expire completed assessments. Space Kraken calls by at least one second, reuse fresh observations, and back off failed markets for 60 seconds without suppressing unrelated markets.
 
-Use focused policy, transport and quote mapper tests during development. Verify live public prices, unfunded app quotes and the relevant Tor modes before changing the source or mapping. Recheck publication if the live catalog changes between validation and dispatch.
+Use focused policy, transport and quote mapper tests during development. For changes to quote labels or disclosure, check the captured Android hierarchy against the [hosted quote scenario](size_workflow_ui_scenario.py) before dispatch. Verify live public prices, unfunded app quotes and the relevant Tor modes before changing the source or mapping. Recheck publication if the live catalog changes between validation and dispatch.
