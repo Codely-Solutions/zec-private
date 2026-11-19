@@ -126,7 +126,7 @@ def discover(cutoff=None):
     return max(stable,key=lambda r:r['published_at'],default=None)
 
 
-def main(latest=None, wrapper=None):
+def main(latest=None, wrapper=None, *, expected_commit=None):
     expected=json.loads((ROOT/'.private/source-state.json').read_text())
     if source_state(ROOT)!=expected:
         raise RuntimeError('Fork source changed outside maintained patch; preserve modifications and review patch state')
@@ -139,6 +139,8 @@ def main(latest=None, wrapper=None):
         raise RuntimeError('Unexpected upstream release repository')
     run('git','fetch','--no-tags',f'https://github.com/{OFFICIAL}.git',f'refs/tags/{tag}')
     commit=run('git','rev-parse','FETCH_HEAD^{commit}')
+    if expected_commit is not None and commit != expected_commit:
+        raise RuntimeError('Upstream tag changed after checking its stable SDK requirement')
     run('git','fetch','--no-tags',f'https://github.com/{OFFICIAL}.git',state['sha'])
     changes=run('git','diff','--name-only',state['sha'],commit).splitlines()
     unsafe=[p for p in changes if critical(p)]

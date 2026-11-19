@@ -1,3 +1,4 @@
+import base64
 import datetime as dt
 import hashlib
 import json
@@ -27,15 +28,20 @@ def release(date):
 
 
 class CadenceTest(unittest.TestCase):
-    def test_sdk_deferral_requires_the_reviewed_tag_and_exact_missing_artifact(self):
-        tag, commit = cadence.REVIEWED_SDK_BLOCK
-        api = Mock(return_value={'sha': commit})
+    def test_sdk_gate_reads_the_tagged_version_and_requires_every_stable_artifact(self):
+        tag = '3.21.0-3881'
+        properties = b'# ZCASH_SDK_VERSION=6.0.0\nZCASH_SDK_VERSION=8.1.0-SNAPSHOT\n'
+        encoded = base64.b64encode(properties).decode('ascii')
+        contents = dict(encoding='base64', content=encoded)
+        api = Mock(side_effect=lambda path: contents if '/contents/' in path else {'sha': SHA})
+        expected_version = '8.1.0'
         failure = None
 
         def central(request, *, timeout):
             self.assertEqual(request.get_method(), 'HEAD')
             self.assertEqual(timeout, 10)
-            self.assertIn('/8.0.0/', request.full_url)
+            self.assertIn(f'/{expected_version}/', request.full_url)
+            self.assertNotIn('-SNAPSHOT', request.full_url)
             if failure and request.full_url.endswith(failure[0]):
                 raise HTTPError(request.full_url, failure[1], 'fixture', {}, None)
             response = Mock(status=200)
@@ -45,23 +51,29 @@ class CadenceTest(unittest.TestCase):
             return manager
 
         with patch('maintenance_cadence.urlopen', side_effect=central) as maven:
-            self.assertFalse(cadence.defer_for_sdk('3.20.1-3808', api))
-            api.assert_not_called()
-            api.return_value = {'sha': SHA}
-            self.assertFalse(cadence.defer_for_sdk(tag, api))
-            maven.assert_not_called()
-            api.return_value = {'sha': commit}
-            self.assertFalse(cadence.defer_for_sdk(tag, api))
+            self.assertEqual(cadence.sdk_ready_commit(tag, api), SHA)
+            self.assertEqual([call.args[0] for call in api.call_args_list], [
+                f'repos/zodl-inc/zodl-android/commits/{tag}',
+                f'repos/zodl-inc/zodl-android/contents/gradle.properties?ref={SHA}',
+            ])
             self.assertEqual(maven.call_count, 2 * len(cadence.SDK_ARTIFACTS))
-            failure = ('lightwallet-client-8.0.0.aar', 404)
-            self.assertTrue(cadence.defer_for_sdk(tag, api))
-            failure = ('lightwallet-client-8.0.0.aar', 503)
+            failure = ('lightwallet-client-8.1.0.aar', 404)
+            self.assertIsNone(cadence.sdk_ready_commit(tag, api))
+            failure = ('lightwallet-client-8.1.0.aar', 503)
             with self.assertRaises(HTTPError):
-                cadence.defer_for_sdk(tag, api)
+                cadence.sdk_ready_commit(tag, api)
 
-    def test_reviewed_sdk_deferral_leaves_due_gradle_proposal_independent(self):
-        tag, _ = cadence.REVIEWED_SDK_BLOCK
-        latest = dict(tag_name=tag, published_at='2026-11-12T07:52:42Z')
+            expected_version = '9.2.4'
+            contents['content'] = base64.b64encode(b'ZCASH_SDK_VERSION=9.2.4\n').decode('ascii')
+            self.assertEqual(cadence.sdk_ready_commit('3.22.0-4000', api), SHA)
+            contents['content'] = base64.b64encode(b'ZCASH_SDK_VERSION=9.2.4-rc.1\n').decode('ascii')
+            maven.reset_mock()
+            with self.assertRaisesRegex(ValueError, 'SDK version requires review'):
+                cadence.sdk_ready_commit('3.22.0-4000', api)
+            maven.assert_not_called()
+
+    def test_sdk_deferral_leaves_due_gradle_proposal_independent(self):
+        latest = dict(tag_name='3.21.0-3881', published_at='2026-11-18T11:11:00Z')
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             state = root / '.private/upstream.json'
@@ -72,12 +84,12 @@ class CadenceTest(unittest.TestCase):
                     patch('sync.ROOT', root), patch('sync.discover', return_value=latest), \
                     patch('maintenance_cadence.security_review', return_value=None), \
                     patch('maintenance_cadence.routine_window', return_value=None) as window, \
-                    patch('maintenance_cadence.defer_for_sdk', return_value=True) as deferred, \
+                    patch('maintenance_cadence.sdk_ready_commit', return_value=None) as readiness, \
                     patch('prepare_maintenance.prepare', return_value=SHA) as wrapper, \
                     patch('maintenance_watch.verified_wrapper', return_value=('9.9.2', 'verified properties')), \
                     patch('release_metadata.Metadata'), patch('sync.main') as upstream, patch('sync.output') as output:
                 cadence.main()
-                deferred.assert_not_called()
+                readiness.assert_not_called()
                 wrapper.assert_not_called()
                 window.return_value = cadence.FIRST_WINDOW
                 cadence.main()
@@ -88,11 +100,11 @@ class CadenceTest(unittest.TestCase):
                     cadence.main()
                 wrapper.assert_called_once()
                 output.assert_called_once()
-                deferred.return_value = False
+                readiness.return_value = SHA
                 upstream.side_effect = RuntimeError('Critical upstream changes require review')
                 with self.assertRaisesRegex(RuntimeError, 'Critical upstream changes'):
                     cadence.main()
-                upstream.assert_called_once_with(latest, ('9.9.2', 'verified properties', SHA))
+                upstream.assert_called_once_with(latest, ('9.9.2', 'verified properties', SHA), expected_commit=SHA)
                 wrapper.assert_called_once()
 
     def test_window_rollover_missed_poll_and_one_routine_publication(self):
@@ -125,6 +137,7 @@ class CadenceTest(unittest.TestCase):
                                          'GITHUB_EVENT_NAME': 'schedule'}), \
                     patch('sync.ROOT', root), patch('sync.discover', side_effect=lambda cutoff=None: old if cutoff else new), \
                     patch('maintenance_cadence.security_review', return_value=None), patch('sync.main') as upstream, \
+                    patch('maintenance_cadence.sdk_ready_commit', return_value=SHA), \
                     patch('prepare_maintenance.prepare') as wrapper, patch('release_metadata.Metadata'), \
                     patch('maintenance_watch.verified_wrapper', return_value=('9.9.2', 'verified properties')), \
                     patch('maintenance_cadence.routine_window', return_value=None) as window:
@@ -133,7 +146,7 @@ class CadenceTest(unittest.TestCase):
                 wrapper.assert_not_called()
                 window.return_value = cadence.FIRST_WINDOW
                 cadence.main()
-                upstream.assert_called_once_with(old, ('9.9.2', 'verified properties', SHA))
+                upstream.assert_called_once_with(old, ('9.9.2', 'verified properties', SHA), expected_commit=SHA)
                 wrapper.assert_not_called()
 
     def test_routine_admission_rejects_a_post_cutoff_candidate(self):

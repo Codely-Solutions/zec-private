@@ -163,6 +163,14 @@ class SyncTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'Critical upstream changes'): sync.main()
         self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
 
+    def test_sdk_gate_commit_must_match_the_fetched_tag(self):
+        with patch.object(sync,'source_state',return_value=json.loads(
+                (sync.ROOT/'.private/source-state.json').read_bytes())), \
+                patch.object(sync,'run',side_effect=['',self.state['sha']]) as git:
+            with self.assertRaisesRegex(RuntimeError,'Upstream tag changed'):
+                sync.main(self.release(self.next_tag), expected_commit='a'*40)
+            self.assertEqual(git.call_count,2)
+
     def test_changed_excluded_upstream_tree_is_removed_before_integration(self):
         original=sync.run
         writes=[]
@@ -198,7 +206,7 @@ class SyncTests(unittest.TestCase):
                     release = f'{installed[1]}.{installed[2]}.{int(installed[3]) + 1}'
                     combined = wrapper.replace(installed[0], f'gradle-{release}-bin.zip')
                     combined = re.sub(r'(?m)^distributionSha256Sum=.*$', 'distributionSha256Sum=' + 'a'*64, combined)
-                    sync.main(wrapper=(release, combined, 'a' * 40))
+                    sync.main(wrapper=(release, combined, 'a' * 40), expected_commit=changed_sha)
                     tree=original('git','ls-tree','-r','--name-only',output.call_args.kwargs['source_sha']).splitlines()
                     self.assertFalse(any(name.startswith('feature-voting/') for name in tree))
                     self.assertIn('.github/dependabot.yml',tree)

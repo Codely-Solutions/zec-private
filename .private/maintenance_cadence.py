@@ -1,4 +1,5 @@
 """Calendar and reviewed security eligibility for hosted maintenance releases."""
+import base64
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -17,8 +18,6 @@ REVIEW = '.private/security-maintenance.json'
 PATCH = '.private/security-maintenance.patch'
 MARKER = '.private/maintenance-candidate.json'
 WALLET_TAG = re.compile(r'v\d+\.\d+\.\d+-private\.[1-9]\d*')
-REVIEWED_SDK_BLOCK = ('3.20.0-3807', '168d3c3dbe4bf202adea0c1e7cc68953f42f0e59')
-REQUIRED_SDK_VERSION = '8.0.0'
 SDK_ARTIFACTS = ('zcash-android-sdk', 'zcash-android-backend', 'zcash-android-sdk-incubator', 'lightwallet-client')
 SDK_REPOSITORY = 'https://repo.maven.apache.org/maven2/com/zodl/android'
 
@@ -54,14 +53,24 @@ def routine_window(root, metadata, now=None):
     return cutoff
 
 
-def defer_for_sdk(tag, upstream_api):
-    reviewed_tag, reviewed_commit = REVIEWED_SDK_BLOCK
-    if tag != reviewed_tag or upstream_api(f'repos/zodl-inc/zodl-android/commits/{tag}')['sha'] != reviewed_commit:
-        return False
+def sdk_ready_commit(tag, upstream_api):
+    from sync import OFFICIAL
+
+    repository = f'repos/{OFFICIAL}'
+    commit = upstream_api(f'{repository}/commits/{tag}')['sha']
+    require(re.fullmatch(r'[a-f0-9]{40}', commit), 'Expected an exact upstream commit')
+    properties = upstream_api(f'{repository}/contents/gradle.properties?ref={commit}')
+    require(properties.get('encoding') == 'base64', 'Expected upstream Gradle properties as base64')
+    text = base64.b64decode(''.join(properties['content'].splitlines()), validate=True).decode('utf-8')
+    versions = re.findall(r'^ZCASH_SDK_VERSION[ \t]*=[ \t]*([^\r\n]*)', text, re.MULTILINE)
+    require(len(versions) == 1, 'Expected one upstream SDK version')
+    version = re.fullmatch(r'([0-9]+\.[0-9]+\.[0-9]+)(?:-SNAPSHOT)?', versions[0].strip())
+    require(version is not None, 'Upstream SDK version requires review')
+    stable = version[1]
     for artifact in SDK_ARTIFACTS:
         for extension in ('pom', 'aar'):
-            name = f'{artifact}-{REQUIRED_SDK_VERSION}.{extension}'
-            url = f'{SDK_REPOSITORY}/{artifact}/{REQUIRED_SDK_VERSION}/{name}'
+            name = f'{artifact}-{stable}.{extension}'
+            url = f'{SDK_REPOSITORY}/{artifact}/{stable}/{name}'
             try:
                 with urlopen(Request(url, method='HEAD'), timeout=10) as response:
                     require(response.status == 200 and response.geturl() == url,
@@ -71,8 +80,8 @@ def defer_for_sdk(tag, upstream_api):
                     if error.code != 404 or error.url != url:
                         raise
                 print(f'Upstream {tag} remains queued. Maven Central has not published {name}.')
-                return True
-    return False
+                return None
+    return commit
 
 
 def security_review(root, metadata, advisory_api):
@@ -223,12 +232,14 @@ def main():
     if latest and datetime.fromisoformat(latest['published_at']) > cutoff:
         latest = sync.discover(cutoff)
     proposal, head = os.environ['PROPOSAL'], os.environ['PROPOSAL_HEAD']
-    if (latest and sync.version(latest['tag_name']) > sync.version(current)
-            and not defer_for_sdk(latest['tag_name'], sync.gh)):
+    upstream_commit = None
+    if latest and sync.version(latest['tag_name']) > sync.version(current):
+        upstream_commit = sdk_ready_commit(latest['tag_name'], sync.gh)
+    if upstream_commit:
         wrapper = None
         if proposal:
             wrapper = (*verified_wrapper(metadata.repo, int(proposal), controller, head, metadata.api('')['id']), head)
-        sync.main(latest, wrapper)
+        sync.main(latest, wrapper, expected_commit=upstream_commit)
     elif proposal:
         sync.output(source_sha=prepare(proposal, head, controller))
 
