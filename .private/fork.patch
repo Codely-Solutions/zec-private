@@ -43398,10 +43398,10 @@ index 000000000..83383e97a
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVMTest.kt
 new file mode 100644
-index 000000000..ece63fe97
+index 000000000..94b7bc988
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVMTest.kt
-@@ -0,0 +1,204 @@
+@@ -0,0 +1,209 @@
 +package co.electriccoin.zcash.ui.screen.transactionhistory
 +
 +import androidx.lifecycle.ViewModelStore
@@ -43449,6 +43449,7 @@ index 000000000..ece63fe97
 +import kotlinx.coroutines.test.runTest
 +import kotlinx.coroutines.test.setMain
 +import kotlinx.coroutines.withTimeout
++import kotlinx.coroutines.withContext
 +import java.math.BigDecimal
 +import java.time.Instant
 +import kotlin.test.AfterTest
@@ -43602,7 +43603,11 @@ index 000000000..ece63fe97
 +            updateSwapActivityMetadata = updateMetadata
 +        )
 +        store.put("history", vm)
-+        val state = withTimeout(10_000) { vm.state.filterIsInstance<ActivityHistoryState.Data>().first() }
++        // The VM explicitly maps on Dispatchers.Default. Bound that real dispatcher without
++        // advancing a virtual timeout ahead of its work.
++        val state = withContext(Dispatchers.Default) {
++            withTimeout(10_000) { vm.state.filterIsInstance<ActivityHistoryState.Data>().first() }
++        }
 +        return state.items.filterIsInstance<ActivityHistoryItem.Activity>().single().state
 +    }
 +}

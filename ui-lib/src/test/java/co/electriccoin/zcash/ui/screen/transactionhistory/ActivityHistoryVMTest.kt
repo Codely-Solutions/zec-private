@@ -45,6 +45,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 import java.time.Instant
 import kotlin.test.AfterTest
@@ -198,7 +199,11 @@ class ActivityHistoryVMTest {
             updateSwapActivityMetadata = updateMetadata
         )
         store.put("history", vm)
-        val state = withTimeout(10_000) { vm.state.filterIsInstance<ActivityHistoryState.Data>().first() }
+        // The VM explicitly maps on Dispatchers.Default. Bound that real dispatcher without
+        // advancing a virtual timeout ahead of its work.
+        val state = withContext(Dispatchers.Default) {
+            withTimeout(10_000) { vm.state.filterIsInstance<ActivityHistoryState.Data>().first() }
+        }
         return state.items.filterIsInstance<ActivityHistoryItem.Activity>().single().state
     }
 }

@@ -2962,7 +2962,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/SwapAssetIconTest.kt": "3e142f45aa1587a2b35792ab1494aead31a41a8018eb49e475a6ad59cdd8413a",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt": "e75cc0b81c8fbb1597e31ebd9d21cdc370d6307a13614c499d1b7071228f1fbf",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt": "b6044bb2cfe81e7eb70052f639f15590aca9ef4e7413bfc343a89b7bdb29c6ef",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVMTest.kt": "0dbbed4788cfbdedeb570465fa2873729ad39abe18e203a2d90753a543571478",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityHistoryVMTest.kt": "91c867068288aefa3aa54a7252efcad7545a81926333bf42885cbbb150f52557",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionnote/viewmodel/TransactionNoteViewModelTest.kt": "b2efe4d91ba24dbca29a5b514d9723fedc5ee92412eb63bd34331c1e045844df",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactionprogress/TransactionProgressPendingDescriptionTest.kt": "b39bf8cc849477e0e728a3fb4c64d20f818a4d5dfbbfc0eb14d98fe698cfc994",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/updates/AppUpdateRepositoryTest.kt": "9b4c365406442f35d40cdd3a5a0211a71e28753eb20f26ad6b095abd09dd54bb",
