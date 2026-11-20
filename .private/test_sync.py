@@ -6,6 +6,14 @@ from unittest.mock import Mock, patch
 spec=importlib.util.spec_from_file_location('sync',Path(__file__).with_name('sync.py'))
 sync=importlib.util.module_from_spec(spec);spec.loader.exec_module(sync)
 
+class RunEnvironmentTests(unittest.TestCase):
+    def test_child_preserves_empty_git_environment_values(self):
+        with patch.dict(os.environ, {'GIT_CONFIG_VALUE_0': ''}), \
+                patch.object(subprocess, 'check_output', return_value='ready\n') as command:
+            self.assertEqual('ready', sync.run('git', 'status'))
+            self.assertEqual('', command.call_args.kwargs['env']['GIT_CONFIG_VALUE_0'])
+
+
 class RefreshPatchTests(unittest.TestCase):
     def test_index_patch_preserves_crlf_hunks_across_checkout_modes(self):
         import refresh_source

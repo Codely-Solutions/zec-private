@@ -15,7 +15,7 @@ BRANDING_ASSETS = {
 def run(*args,cwd=ROOT):
     if args[0]=='python3':
         args=(sys.executable,*args[1:])
-    return subprocess.check_output(args,cwd=cwd,text=True).strip()
+    return subprocess.check_output(args,cwd=cwd,text=True,env=dict(os.environ)).strip()
 def gh(path): return json.loads(run('gh','api',path))
 def fork_release_versions():
     return wallet_release_versions(Metadata().api('/releases?per_page=100', paginated=True))
