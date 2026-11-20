@@ -6,6 +6,7 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -46,6 +47,8 @@ class GetSwapStatusUseCase(
                     }
                     return@launch
                 }
+
+                data.update { it.copy(savedMetadata = expectedMetadata) }
 
                 while (true) {
                     try {
@@ -88,6 +91,7 @@ data class SwapQuoteStatusData(
     val status: SwapQuoteStatus? = null,
     val isLoading: Boolean = true,
     val error: Exception? = null,
+    val savedMetadata: TransactionSwapMetadata? = null,
 ) {
     val originAsset = status?.originAsset
     val destinationAsset = status?.destinationAsset

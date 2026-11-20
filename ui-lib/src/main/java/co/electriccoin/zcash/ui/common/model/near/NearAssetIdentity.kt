@@ -18,6 +18,8 @@ internal fun requireNearAssetIdentity(expected: SwapAsset, echoedId: String, typ
 }
 
 internal fun resolveNearAsset(supported: List<SwapAsset>, echoedId: String): SwapAsset? {
+    val exact = supported.filter { it.assetId == echoedId }
+    if (exact.isNotEmpty()) return exact.singleOrNull()
     val matches = supported.filter { canonicalNearAssetId(it.assetId) == canonicalNearAssetId(echoedId) }
     return matches.singleOrNull()
 }

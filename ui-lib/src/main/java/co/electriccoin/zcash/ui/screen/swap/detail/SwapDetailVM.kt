@@ -18,6 +18,7 @@ import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.SwapData
 import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.loadingImageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -51,6 +52,7 @@ class SwapDetailVM(
         getReloadableSwapQuote
             .observe(args.depositAddress)
             .map { swapData ->
+                val hasDetails = swapData.status != null || swapData.savedMetadata != null
                 SwapDetailState(
                     transactionHeader = createTransactionHeaderState(swapData),
                     quoteHeader =
@@ -62,8 +64,14 @@ class SwapDetailVM(
                             ),
                     status =
                         TransactionDetailSwapStatusRowState(
-                            title = stringRes(R.string.swapAndPay_status),
-                            status = swapData.status?.status,
+                            title = stringRes(
+                                if (hasDetails && (swapData.status == null || swapData.error != null)) {
+                                    R.string.private_swap_saved_status
+                                } else {
+                                    R.string.swapAndPay_status
+                                }
+                            ),
+                            status = swapData.status?.status ?: swapData.savedMetadata?.status,
                             mode = SWAP_INTO_ZEC
                         ),
                     depositTo =
@@ -78,10 +86,15 @@ class SwapDetailVM(
                     maxSlippage = createSlippageState(swapData),
                     timestamp =
                         TransactionDetailInfoRowState(
-                            title = stringRes(R.string.transactionHistory_timestamp),
+                            title = stringRes(
+                                if (swapData.status == null && hasDetails) {
+                                    R.string.private_swap_saved_update
+                                } else {
+                                    R.string.transactionHistory_timestamp
+                                }
+                            ),
                             message =
-                                swapData.status
-                                    ?.timestamp
+                                (swapData.status?.timestamp ?: swapData.savedMetadata?.lastUpdated)
                                     ?.atZone(ZoneId.systemDefault())
                                     ?.let {
                                         stringResByDateTime(
@@ -91,12 +104,16 @@ class SwapDetailVM(
                                     }?.withStyle(),
                         ),
                     message = getSwapMessage.getMessage(swapData.status),
-                    errorFooter = mapper.createTransactionDetailErrorFooter(swapData.error),
-                    infoFooter =
-                        stringRes(R.string.deposits_info)
-                            .takeIf { swapData.status?.status == PENDING },
+                    errorFooter = mapper.createTransactionDetailErrorFooter(swapData.error).takeUnless { hasDetails },
+                    infoFooter = when {
+                        hasDetails && swapData.error != null -> stringRes(R.string.private_swap_refresh_unavailable)
+                        hasDetails && swapData.isLoading -> stringRes(R.string.private_swap_refreshing)
+                        swapData.status?.status == PENDING -> stringRes(R.string.deposits_info)
+                        else -> null
+                    },
                     primaryButton = createPrimaryButtonState(swapData, swapData.error),
                     onBack = ::onBack,
+                    showLiveDetails = swapData.status != null || !hasDetails && swapData.error == null,
                     explorerLinks = swapData.status?.let { status ->
                         val testnet = co.electriccoin.zcash.ui.common.model.VersionInfo.NETWORK ==
                             cash.z.ecc.android.sdk.model.ZcashNetwork.Testnet
@@ -186,6 +203,13 @@ class SwapDetailVM(
         swapData: SwapData,
         error: Exception?
     ): ButtonState? {
+        if (swapData.error != null && (swapData.status != null || swapData.savedMetadata != null)) {
+            return ButtonState(
+                text = stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
+                onClick = { swapData.handle.requestReload() },
+                style = ButtonStyle.SECONDARY,
+            )
+        }
         val supportButton =
             getSwapMessage.getButton(swapData.status) {
                 onContactSupport(it)
@@ -211,14 +235,16 @@ class SwapDetailVM(
     private fun createTransactionHeaderState(swapData: SwapData): TransactionDetailHeaderState =
         TransactionDetailHeaderState(
             title =
-                when (swapData.status?.status) {
+                when (swapData.status?.status ?: swapData.savedMetadata?.status) {
                     EXPIRED -> stringRes(R.string.swapStatus_swapExpired)
                     PENDING -> stringRes(R.string.swapAndPay_status_pendingDeposit)
                     INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
                     PROCESSING -> stringRes(R.string.swapToZec_swapProcessing)
                     SUCCESS ->
                         stringRes(
-                            if (swapData.status.executedAmountOut != null) {
+                            if (swapData.status == null) {
+                                R.string.private_swap_saved_output
+                            } else if (swapData.status.executedAmountOut != null) {
                                 R.string.private_provider_output
                             } else {
                                 R.string.private_estimated_output
@@ -229,14 +255,13 @@ class SwapDetailVM(
                     null -> null
                 },
             amount =
-                swapData.status
-                    ?.amountOutFormatted
+                (swapData.status?.amountOutFormatted ?: swapData.savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 })
                     ?.let { stringResByNumber(it) },
             icons =
                 listOf(
                     swapData.status
                         ?.originAsset
-                        ?.tokenIcon ?: loadingImageRes(),
+                        ?.tokenIcon ?: swapData.savedMetadata?.origin?.tokenIcon ?: loadingImageRes(),
                     imageRes(R.drawable.ic_transaction_received),
                     imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_zec),
                 ),

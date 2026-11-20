@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
 import co.electriccoin.zcash.ui.common.model.near.ErrorDto
 import co.electriccoin.zcash.ui.common.model.near.NearTokenDto
+import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
 import co.electriccoin.zcash.ui.common.model.near.QuoteRequest
 import co.electriccoin.zcash.ui.common.model.near.QuoteResponseDto
 import co.electriccoin.zcash.ui.common.model.near.SubmitDepositTransactionRequest
@@ -26,6 +27,7 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -440,6 +442,56 @@ class NearSwapDataSourceTest {
             assertEquals("hash", request.captured.txHash)
             assertEquals("deposit", request.captured.depositAddress)
         }
+
+    @Test
+    fun incomingBitcoinStatusUsesExactIdentityWhenBothCatalogEntriesExist() = runBlocking {
+        val btc = (origin as NearSwapAsset).copy(assetId = "nep141:btc.omft.near", tokenTicker = "BTC")
+        val omni = btc.copy(assetId = "1cs_v1:btc:native:coin", tokenTicker = "BTC(OMNI)")
+        val nativeZec = (zec as NearSwapAsset).copy(assetId = "nep141:zec.omft.near")
+        val synchronizer = mockk<Synchronizer>()
+        coEvery { synchronizer.validateAddress("synthetic-zec-recipient") } returns AddressType.Shielded
+        coEvery { synchronizerProvider.getSynchronizer() } returns synchronizer
+        for (catalog in listOf(listOf(btc, omni, nativeZec), listOf(nativeZec, omni, btc))) {
+            for (selected in listOf(btc, omni)) {
+                for (status in co.electriccoin.zcash.ui.common.model.near.SwapStatus.entries) {
+                    coEvery { nearApiProvider.checkSwapStatus("synthetic-deposit") } returns
+                        Json.decodeFromString<SwapStatusResponseDto>("""
+                            {
+                              "status":"${status.apiValue}", "updatedAt":"2026-11-20T00:00:00Z",
+                              "quoteResponse": {
+                                "timestamp":"2026-11-20T00:00:00Z",
+                                "quoteRequest": {
+                                  "dry":false, "swapType":"FLEX_INPUT", "slippageTolerance":100,
+                                  "originAsset":"${selected.assetId}",
+                                  "destinationAsset":"nep141:zec.omft.near", "amount":"100000",
+                                  "refundTo":"synthetic-btc-refund", "recipient":"synthetic-zec-recipient",
+                                  "deadline":"2026-11-21T00:00:00Z", "appFees":[]
+                                },
+                                "quote": {
+                                  "depositAddress":"synthetic-deposit", "amountIn":"100000",
+                                  "amountInFormatted":"0.001", "amountInUsd":"60", "minAmountIn":"99000",
+                                  "amountOut":"10000000", "amountOutFormatted":"0.1",
+                                  "amountOutUsd":"59", "minAmountOut":"9900000",
+                                  "deadline":"2026-11-21T00:00:00Z"
+                                }
+                              }
+                            }
+                        """.trimIndent())
+                    val result = dataSource.checkSwapStatus("synthetic-deposit", catalog)
+                    assertEquals(selected, result.originAsset)
+                    assertEquals(nativeZec, result.destinationAsset)
+                    assertEquals(SwapMode.FLEX_INPUT, result.mode)
+                    val expectedStatus = when (status) {
+                        co.electriccoin.zcash.ui.common.model.near.SwapStatus.KNOWN_DEPOSIT_TX,
+                        co.electriccoin.zcash.ui.common.model.near.SwapStatus.PENDING_DEPOSIT -> "PENDING"
+                        else -> status.name
+                    }
+                    assertEquals(expectedStatus, result.status.name)
+                    assertEquals(BigDecimal("0.1"), result.amountOutFormatted)
+                }
+            }
+        }
+    }
 
     @Test
     fun checkSwapStatusThrowsWhenOriginTokenNotSupported() {

@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.ui.common.model.SwapAsset
+import co.electriccoin.zcash.ui.common.datasource.AssetNotFoundException
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
@@ -15,6 +16,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
@@ -26,6 +28,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 /**
  * [GetSwapStatusUseCase.invoke] emits the first non-loading [SwapQuoteStatusData]: it looks up the
@@ -68,6 +71,46 @@ class GetSwapStatusUseCaseTest {
                 )
             }
         }
+
+    @Test
+    fun firstRefreshFailureRetainsSavedMetadataForPendingAndCompletedSwaps() = runTest {
+        for (status in listOf(SwapStatus.PENDING, SwapStatus.SUCCESS)) {
+            val saved = mockk<TransactionSwapMetadata> { every { this@mockk.status } returns status }
+            val metadata = mockk<MetadataRepository>(relaxed = true) {
+                coEvery { getSwapMetadata("deposit") } returns saved
+            }
+            val failure = AssetNotFoundException("nep141:btc.omft.near")
+            val repository = mockk<SwapRepository> {
+                coEvery { checkSwapStatus(saved) } throws failure
+            }
+            val result = GetSwapStatusUseCase(metadata, repository)("deposit")
+            assertSame(saved, result.savedMetadata)
+            assertEquals(status, result.savedMetadata?.status)
+            assertSame(failure, result.error)
+            assertNull(result.status)
+            verify(exactly = 0) { metadata.updateSwap(any(), any(), any(), any(), any(), any()) }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun savedDetailsAreAvailableBeforeTheProviderFinishesAndCancellationStopsPolling() = runTest {
+        val saved = mockk<TransactionSwapMetadata>()
+        val metadata = mockk<MetadataRepository> { coEvery { getSwapMetadata("deposit") } returns saved }
+        val delayed = CompletableDeferred<SwapQuoteStatus>()
+        val repository = mockk<SwapRepository> { coEvery { checkSwapStatus(saved) } coAnswers { delayed.await() } }
+        val states = mutableListOf<SwapQuoteStatusData>()
+        val observer = backgroundScope.launch {
+            GetSwapStatusUseCase(metadata, repository).observe("deposit").collect { states.add(it) }
+        }
+        runCurrent()
+        assertSame(saved, states.last().savedMetadata)
+        assertEquals(true, states.last().isLoading)
+        observer.cancel()
+        advanceTimeBy(60_000)
+        runCurrent()
+        coVerify(exactly = 1) { repository.checkSwapStatus(saved) }
+    }
 
     @Test
     fun surfacesErrorAndSkipsMetadataWhenStatusLookupFails() =

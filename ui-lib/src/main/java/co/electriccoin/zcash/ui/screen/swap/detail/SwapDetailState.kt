@@ -26,4 +26,5 @@ data class SwapDetailState(
     val explorerLinks: List<co.electriccoin.zcash.ui.screen.transactiondetail.TransactionExplorerLink> = emptyList(),
     val refundedAmount: TransactionDetailInfoRowState? = null,
     val donationBasisZec: String? = null,
+    val showLiveDetails: Boolean = true,
 )

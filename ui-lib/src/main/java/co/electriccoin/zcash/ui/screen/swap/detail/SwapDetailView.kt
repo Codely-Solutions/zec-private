@@ -144,8 +144,10 @@ fun SwapDetailView(
                 Column(
                     modifier = Modifier.scaffoldPadding(paddingValues, top = 24.dp),
                 ) {
-                    ZashiSwapQuoteHeader(state.quoteHeader)
-                    Spacer(20.dp)
+                    if (state.showLiveDetails) {
+                        ZashiSwapQuoteHeader(state.quoteHeader)
+                        Spacer(20.dp)
+                    }
                     TransactionDetailRowHeader(
                         title = stringRes(R.string.swapToZec_swapDetails),
                         isExpanded = isExpanded,
@@ -162,17 +164,21 @@ fun SwapDetailView(
                             Column {
                                 ZashiHorizontalDivider()
                                 TransactionDetailInfoRow(state.depositTo)
-                                ZashiHorizontalDivider()
-                                TransactionDetailInfoRow(state.recipient)
+                                if (state.showLiveDetails) {
+                                    ZashiHorizontalDivider()
+                                    TransactionDetailInfoRow(state.recipient)
+                                }
                                 state.refundedAmount?.let {
                                     ZashiHorizontalDivider()
                                     TransactionDetailInfoRow(it)
                                 }
-                                ZashiHorizontalDivider()
-                                TransactionDetailInfoRow(state.totalFees)
-                                ZashiHorizontalDivider()
-                                CompositionLocalProvider(LocalBalancesAvailable provides true) {
-                                    TransactionDetailInfoRow(state.maxSlippage)
+                                if (state.showLiveDetails) {
+                                    ZashiHorizontalDivider()
+                                    TransactionDetailInfoRow(state.totalFees)
+                                    ZashiHorizontalDivider()
+                                    CompositionLocalProvider(LocalBalancesAvailable provides true) {
+                                        TransactionDetailInfoRow(state.maxSlippage)
+                                    }
                                 }
                             }
                         }

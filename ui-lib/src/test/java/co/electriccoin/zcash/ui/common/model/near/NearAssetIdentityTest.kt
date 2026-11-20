@@ -27,6 +27,29 @@ class NearAssetIdentityTest {
     }
 
     @Test
+    fun coexistingBitcoinCatalogEntriesKeepTheirExactIdentityInEitherOrder() {
+        val btc = asset("nep141:btc.omft.near")
+        val omni = asset("1cs_v1:btc:native:coin")
+        for (catalog in listOf(listOf(btc, omni), listOf(omni, btc))) {
+            assertSame(btc, resolveNearAsset(catalog, btc.assetId))
+            assertSame(omni, resolveNearAsset(catalog, omni.assetId))
+        }
+    }
+
+    @Test
+    fun exactDuplicateRemainsRejectedEvenWithAnAliasAvailable() {
+        val btc = asset("nep141:btc.omft.near")
+        val omni = asset("1cs_v1:btc:native:coin")
+        assertNull(resolveNearAsset(listOf(btc, asset(btc.assetId), omni), btc.assetId))
+    }
+
+    @Test
+    fun ambiguousAliasFallbackRemainsRejected() {
+        val btc = asset("nep141:btc.omft.near")
+        assertNull(resolveNearAsset(listOf(btc, asset(btc.assetId)), "1cs_v1:btc:native:coin"))
+    }
+
+    @Test
     fun unresolvedAndAmbiguousIdentitiesRemainUnavailable() {
         val btc = asset("nep141:btc.omft.near")
         assertNull(resolveNearAsset(listOf(btc), "1cs_v1:btc:unknown:coin"))

@@ -56,4 +56,5 @@ data class SwapData(
     val status: SwapQuoteStatus? = data.status
     val isLoading: Boolean = data.isLoading
     val error: Exception? = data.error
+    val savedMetadata = data.savedMetadata
 }

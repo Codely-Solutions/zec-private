@@ -1450,4 +1450,9 @@
     <string name="accountName_duplicate">An account with this name already exists</string>
     <string name="editAccount_save">Save changes</string>
 
+    <string name="private_swap_saved_status">Saved status</string>
+    <string name="private_swap_saved_update">Last saved update</string>
+    <string name="private_swap_saved_output">Saved output</string>
+    <string name="private_swap_refresh_unavailable">Status refresh unavailable.</string>
+    <string name="private_swap_refreshing">Refreshing status…</string>
 </resources>
