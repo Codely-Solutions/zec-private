@@ -1,11 +1,15 @@
 package co.electriccoin.zcash.ui.screen.swap.detail
 
+import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
+import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
+import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
+import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
@@ -15,7 +19,6 @@ import co.electriccoin.zcash.ui.common.usecase.ReloadHandle
 import co.electriccoin.zcash.ui.common.usecase.SwapData
 import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
-import co.electriccoin.zcash.ui.design.component.SwapQuoteHeaderState
 import co.electriccoin.zcash.ui.design.component.ZashiMessageState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
@@ -24,11 +27,12 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetail
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
-import io.mockk.spyk
 import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -49,6 +53,8 @@ import kotlin.test.assertNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SwapDetailVMTest {
+    private val harnesses = mutableListOf<Harness>()
+
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -59,6 +65,8 @@ class SwapDetailVMTest {
 
     @AfterTest
     fun tearDown() {
+        harnesses.forEach(Harness::close)
+        harnesses.clear()
         unmockkObject(FiatCurrency.USD)
         Dispatchers.resetMain()
     }
@@ -131,6 +139,64 @@ class SwapDetailVMTest {
     }
 
     @Test
+    fun savedIncomingSwapsKeepTheirOutputAndRecoverAfterARefreshFailure() = runTest {
+        val zec = SwapCatalogTestFixture.nativeZec
+        val executedOutput = BigDecimal("1.23456788")
+        for (origin in SwapCatalogTestFixture.externalAssets) {
+            val assetId = origin.assetId
+            val saved = saved(
+                SwapStatus.PROCESSING,
+                SwapCatalogTestFixture.simple(origin),
+                SwapCatalogTestFixture.simple(zec),
+            )
+            val loading = SwapQuoteStatusData(isLoading = true, savedMetadata = saved)
+            val harness = harness(loading)
+
+            val refreshing = harness.state(assetId)
+            assertSaved(refreshing, saved, assetId)
+            assertEquals(stringRes(R.string.private_swap_refreshing), refreshing.infoFooter, assetId)
+            assertNull(refreshing.primaryButton, assetId)
+
+            harness.emit(loading.copy(isLoading = false, error = unavailable()))
+            runCurrent()
+
+            val failedRefresh = harness.state(assetId)
+            assertSaved(failedRefresh, saved, assetId)
+            assertEquals(stringRes(R.string.private_swap_refresh_unavailable), failedRefresh.infoFooter, assetId)
+            val retry = assertNotNull(failedRefresh.primaryButton, assetId)
+            assertEquals(
+                stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
+                retry.text,
+                assetId,
+            )
+            assertEquals(ButtonStyle.SECONDARY, retry.style, assetId)
+            retry.onClick()
+            assertEquals(1, harness.reloadRequests(), assetId)
+
+            harness.emit(
+                loading.copy(status = status(SwapStatus.SUCCESS, origin, zec, executedOutput), isLoading = false)
+            )
+            runCurrent()
+
+            val recovered = harness.state(assetId)
+            assertEquals(SwapStatus.SUCCESS, recovered.status.status, assetId)
+            assertEquals(stringRes(R.string.swapAndPay_status), recovered.status.title, assetId)
+            assertEquals(stringResByNumber(executedOutput), recovered.transactionHeader.amount, assetId)
+            assertEquals(origin.tokenIcon, recovered.transactionHeader.icons.first(), assetId)
+            val quoteOrigin = assertNotNull(recovered.quoteHeader.from, assetId)
+            assertEquals(origin.tokenIcon, quoteOrigin.bigIcon, assetId)
+            assertEquals(origin.chainIcon, quoteOrigin.smallIcon, assetId)
+            val quoteDestination = assertNotNull(recovered.quoteHeader.to, assetId)
+            assertEquals(stringRes(zec.tokenTicker), quoteDestination.token, assetId)
+            assertEquals(stringResByNumber(executedOutput), quoteDestination.amount, assetId)
+            assertNull(recovered.errorFooter, assetId)
+            assertNull(recovered.infoFooter, assetId)
+            assertNull(recovered.primaryButton, assetId)
+            harness.close()
+        }
+    }
+
+    @Test
     fun unknownSwapKeepsTheLookupErrorAndRetry() = runTest {
         val harness = harness(SwapQuoteStatusData(isLoading = false, error = unavailable()))
 
@@ -170,11 +236,12 @@ class SwapDetailVMTest {
         assertNull(harness.state().errorFooter)
     }
 
-    private fun assertSaved(state: SwapDetailState, saved: TransactionSwapMetadata) {
-        assertEquals(saved.status, state.status.status)
-        assertEquals(stringResByNumber(saved.amountOutFormatted), state.transactionHeader.amount)
-        assertEquals(saved.origin.tokenIcon, state.transactionHeader.icons.first())
-        assertNull(state.errorFooter)
+    private fun assertSaved(state: SwapDetailState, saved: TransactionSwapMetadata, assetId: String? = null) {
+        assertEquals(saved.status, state.status.status, assetId)
+        assertEquals(stringRes(R.string.private_swap_saved_status), state.status.title, assetId)
+        assertEquals(stringResByNumber(saved.amountOutFormatted), state.transactionHeader.amount, assetId)
+        assertEquals(saved.origin.tokenIcon, state.transactionHeader.icons.first(), assetId)
+        assertNull(state.errorFooter, assetId)
     }
 
     private fun assertNeutralRetry(harness: Harness) {
@@ -182,24 +249,21 @@ class SwapDetailVMTest {
     }
 
     private fun TestScope.harness(initial: SwapQuoteStatusData): Harness {
-        val reload = mockk<ReloadHandle>(relaxed = true)
+        var requests = 0
+        val reload = mockk<ReloadHandle> {
+            every { requestReload() } answers { requests += 1 }
+        }
         val upstream = MutableStateFlow(SwapData(initial, reload))
         val source = mockk<GetReloadableSwapQuoteUseCase> {
             every { observe(DEPOSIT) } returns upstream
         }
         val router = mockk<NavigationRouter>(relaxed = true)
-        val mapper = spyk(CommonTransactionDetailMapper())
-        // Quote-row mapping has separate mapper/rendering coverage; keep this fixture focused
-        // on detail state, saved metadata and refresh actions.
-        every {
-            mapper.createTransactionDetailQuoteHeaderState(any(), any(), any())
-        } returns
-            SwapQuoteHeaderState(null, null)
         val vm = SwapDetailVM(
-            source, SwapDetailArgs(DEPOSIT), router, mockk(relaxed = true), mapper, SwapSupportMapper()
+            source, SwapDetailArgs(DEPOSIT), router, mockk(relaxed = true),
+            CommonTransactionDetailMapper(), SwapSupportMapper()
         )
-        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
-        return Harness(vm, upstream, reload, router)
+        val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
+        return Harness(vm, upstream, reload, router, collector) { requests }.also(harnesses::add)
     }
 
     private data class Harness(
@@ -207,38 +271,57 @@ class SwapDetailVMTest {
         val upstream: MutableStateFlow<SwapData>,
         val reload: ReloadHandle,
         val router: NavigationRouter,
+        val collector: Job,
+        val reloadRequests: () -> Int,
     ) {
-        fun state(): SwapDetailState = assertNotNull(vm.state.value)
+        fun state(assetId: String? = null): SwapDetailState = assertNotNull(vm.state.value, assetId)
         fun emit(data: SwapQuoteStatusData) {
             upstream.value = SwapData(data, reload)
         }
+
+        fun close() {
+            collector.cancel()
+            vm.viewModelScope.cancel()
+        }
     }
 
-    private fun saved(status: SwapStatus) = TransactionSwapMetadata(
+    private fun saved(
+        status: SwapStatus,
+        origin: SimpleSwapAsset = SwapAssetTestFixture.simpleAsset(),
+        destination: SimpleSwapAsset = SwapAssetTestFixture.zecSimpleAsset(),
+    ) = TransactionSwapMetadata(
         depositAddress = DEPOSIT,
         provider = "test-provider",
         totalFees = Zatoshi(0),
         totalFeesUsd = BigDecimal.ZERO,
         lastUpdated = Instant.EPOCH,
-        origin = SwapAssetTestFixture.simpleAsset(),
-        destination = SwapAssetTestFixture.zecSimpleAsset(),
+        origin = origin,
+        destination = destination,
         mode = SwapMode.EXACT_INPUT,
         recordedStatus = status,
         amountOutFormatted = OUTPUT,
     )
 
-    private fun status(value: SwapStatus): SwapQuoteStatus = mockk {
-        every { originAsset } returns SwapAssetTestFixture.asset()
-        every { destinationAsset } returns SwapAssetTestFixture.zecAsset()
+    private fun status(
+        value: SwapStatus,
+        origin: SwapAsset = SwapAssetTestFixture.asset(),
+        destination: SwapAsset = SwapAssetTestFixture.zecAsset(),
+        output: BigDecimal = OUTPUT,
+    ): SwapQuoteStatus = mockk {
+        every { originAsset } returns origin
+        every { destinationAsset } returns destination
         every { depositAddress } returns mockk { every { address } returns DEPOSIT }
         every { destinationAddress } returns mockk { every { address } returns "test-zec-recipient" }
         every { timestamp } returns Instant.EPOCH
         every { status } returns value
         every { isSlippageRealized } returns false
         every { maxSlippage } returns BigDecimal.ONE
-        every { amountOutFormatted } returns OUTPUT
+        every { amountOutFormatted } returns output
+        every { amountInFormatted } returns BigDecimal.ONE
+        every { amountInUsd } returns BigDecimal("30")
+        every { amountOutUsd } returns BigDecimal("29")
         every { quotedAmountOut } returns OUTPUT
-        every { executedAmountOut } returns OUTPUT.takeIf { value == SwapStatus.SUCCESS }
+        every { executedAmountOut } returns output.takeIf { value == SwapStatus.SUCCESS }
         every { originTransactionIds } returns emptyList()
         every { destinationTransactionIds } returns emptyList()
         every { refundedFormatted } returns BigDecimal("0.001").takeIf { value == SwapStatus.REFUNDED }

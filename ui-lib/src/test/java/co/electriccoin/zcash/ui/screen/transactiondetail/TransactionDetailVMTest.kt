@@ -1,16 +1,19 @@
 package co.electriccoin.zcash.ui.screen.transactiondetail
 
 import androidx.lifecycle.ViewModelStore
+import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.TransactionId
 import cash.z.ecc.android.sdk.model.TransactionOverview
-import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.Zip318Kind
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
+import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
+import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
+import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
@@ -26,6 +29,7 @@ import co.electriccoin.zcash.ui.common.usecase.ReloadHandle
 import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.design.util.TickerLocation.HIDDEN
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.design.util.stringResByTransactionId
 import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.ReceiveTransparentState
@@ -38,6 +42,8 @@ import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -45,6 +51,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import java.math.BigDecimal
 import java.time.Instant
 import kotlin.test.AfterTest
@@ -167,27 +174,71 @@ class TransactionDetailVMTest {
     }
 
     @Test
-    fun actualProviderFailureShowsFailureAndRoutesToSwapSupport() = runTest(dispatcher) {
-        val origin = SwapAssetTestFixture.zecAsset()
-        val destination = SwapAssetTestFixture.asset()
-        val remote = object : SwapQuoteStatus {
-            override val originAsset = origin
-            override val destinationAsset = destination
-            override val depositAddress = DynamicSwapAddress("fixture-deposit")
-            override val destinationAddress = DynamicSwapAddress("fixture-btc-recipient")
-            override val timestamp = Instant.EPOCH
-            override val deadline = kotlin.time.Instant.fromEpochSeconds(0)
-            override val status = SwapStatus.FAILED
-            override val mode = SwapMode.EXACT_INPUT
-            override val amountInFormatted = BigDecimal.ONE
-            override val amountOutFormatted = BigDecimal("0.0001")
-            override val amountInUsd = BigDecimal("30")
-            override val amountOutUsd = BigDecimal("29")
-            override val refundedFormatted: BigDecimal? = null
-            override val depositedAmountFormatted = BigDecimal.ONE
-            override val maxSlippage = BigDecimal.ONE
-            override val isSlippageRealized = false
+    fun outgoingSwapsKeepLocalFundingDetailsAndRecoverAfterAProviderOutage() = runTest(dispatcher) {
+        val zec = SwapCatalogTestFixture.nativeZec
+        for (destination in SwapCatalogTestFixture.externalAssets) {
+            val assetId = destination.assetId
+            var reloadRequests = 0
+            val reloadHandle = mockk<ReloadHandle> {
+                every { requestReload() } answers { reloadRequests += 1 }
+            }
+            val metadata = swapMetadata(
+                SwapStatus.PENDING,
+                SwapCatalogTestFixture.simple(zec),
+                SwapCatalogTestFixture.simple(destination),
+            )
+            val unavailable = data(
+                sent,
+                metadata,
+                SwapQuoteStatusData(isLoading = false, error = IllegalStateException("fixture-provider-unavailable")),
+            ).copy(reloadHandle = reloadHandle)
+            val upstream = MutableStateFlow(unavailable)
+            val vm = viewModel(unavailable, upstream)
+            val failedRefresh = assertNotNull(
+                withTimeoutOrNull(10_000) { vm.state.first { it.info != null } },
+                assetId,
+            )
+
+            assertLocalFunding(failedRefresh, assetId)
+            val savedInfo = assertIs<SendSwapState>(failedRefresh.info, assetId)
+            assertNull(savedInfo.status, assetId)
+            assertNull(savedInfo.donationBasisZec, assetId)
+            assertNotNull(failedRefresh.errorFooter, assetId)
+            val retry = assertNotNull(failedRefresh.primaryButton, assetId)
+            assertEquals(
+                stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
+                retry.text,
+                assetId,
+            )
+            retry.onClick()
+            assertEquals(1, reloadRequests, assetId)
+
+            val fresh = status(SwapStatus.SUCCESS, zec, destination)
+            upstream.value = unavailable.copy(swap = SwapQuoteStatusData(fresh, isLoading = false))
+            val recovered = assertNotNull(
+                withTimeoutOrNull(10_000) {
+                    vm.state.first { (it.info as? SendSwapState)?.status == SwapStatus.SUCCESS }
+                },
+                assetId,
+            )
+
+            assertLocalFunding(recovered, assetId)
+            val liveInfo = assertIs<SendSwapState>(recovered.info, assetId)
+            val quoteDestination = assertNotNull(liveInfo.quoteHeader.to, assetId)
+            assertEquals(destination.tokenIcon, quoteDestination.bigIcon, assetId)
+            assertEquals(destination.chainIcon, quoteDestination.smallIcon, assetId)
+            assertEquals(stringRes(destination.tokenTicker), quoteDestination.token, assetId)
+            assertEquals(stringResByNumber(fresh.amountOutFormatted), quoteDestination.amount, assetId)
+            assertNull(recovered.errorFooter, assetId)
+            assertNull(recovered.primaryButton, assetId)
+            store.clear()
         }
+        verify(exactly = 0) { router.forward(any()) }
+    }
+
+    @Test
+    fun actualProviderFailureShowsFailureAndRoutesToSwapSupport() = runTest(dispatcher) {
+        val remote = status(SwapStatus.FAILED, SwapAssetTestFixture.zecAsset(), SwapAssetTestFixture.asset())
         val state = state(data(sent, swapMetadata(SwapStatus.PENDING), SwapQuoteStatusData(remote, false)))
         assertEquals(stringRes(R.string.swapStatus_swapFailed), state.header.title)
         assertEquals(stringRes(sent.amount, HIDDEN), state.header.amount)
@@ -203,14 +254,46 @@ class TransactionDetailVMTest {
         verify(exactly = 0) { reload.requestReload() }
     }
 
-    private fun swapMetadata(status: SwapStatus) = TransactionSwapMetadata(
+    private fun assertLocalFunding(state: TransactionDetailState, assetId: String) {
+        assertEquals(stringRes(sent.amount, HIDDEN), state.header.amount, assetId)
+        val info = assertIs<SendSwapState>(state.info, assetId)
+        assertEquals(stringRes(Zatoshi(10_000)), info.totalFees, assetId)
+        assertEquals(stringResByTransactionId(sent.id.txIdString(), abbreviated = true), info.transactionId, assetId)
+        assertEquals(listOf(sent.id.txIdString()), state.explorerLinks.map { it.transactionId }, assetId)
+    }
+
+    private fun status(value: SwapStatus, origin: SwapAsset, destination: SwapAsset): SwapQuoteStatus =
+        object : SwapQuoteStatus {
+            override val originAsset = origin
+            override val destinationAsset = destination
+            override val depositAddress = DynamicSwapAddress("fixture-deposit")
+            override val destinationAddress = DynamicSwapAddress("fixture-recipient")
+            override val timestamp = Instant.EPOCH
+            override val deadline = kotlin.time.Instant.fromEpochSeconds(0)
+            override val status = value
+            override val mode = SwapMode.EXACT_INPUT
+            override val amountInFormatted = BigDecimal.ONE
+            override val amountOutFormatted = BigDecimal("0.0001")
+            override val executedAmountOut = amountOutFormatted.takeIf { value == SwapStatus.SUCCESS }
+            override val amountInUsd = BigDecimal("30")
+            override val amountOutUsd = BigDecimal("29")
+            override val refundedFormatted: BigDecimal? = null
+            override val depositedAmountFormatted = BigDecimal.ONE
+            override val maxSlippage = BigDecimal.ONE
+            override val isSlippageRealized = false
+        }
+    private fun swapMetadata(
+        status: SwapStatus,
+        origin: SimpleSwapAsset = SwapAssetTestFixture.zecSimpleAsset(),
+        destination: SimpleSwapAsset = SwapAssetTestFixture.simpleAsset(),
+    ) = TransactionSwapMetadata(
         depositAddress = "fixture-deposit",
         provider = "near",
         totalFees = Zatoshi(10_000),
         totalFeesUsd = BigDecimal("0.01"),
         lastUpdated = Instant.EPOCH,
-        origin = SwapAssetTestFixture.zecSimpleAsset(),
-        destination = SwapAssetTestFixture.simpleAsset(),
+        origin = origin,
+        destination = destination,
         mode = SwapMode.EXACT_INPUT,
         recordedStatus = status,
         amountOutFormatted = BigDecimal("0.0001")
@@ -230,9 +313,12 @@ class TransactionDetailVMTest {
         recipient = null
     )
 
-    private suspend fun state(data: DetailedTransactionData): TransactionDetailState {
+    private suspend fun state(data: DetailedTransactionData): TransactionDetailState =
+        withTimeout(10_000) { viewModel(data, flowOf(data)).state.first { it.info != null } }
+
+    private fun viewModel(data: DetailedTransactionData, upstream: Flow<DetailedTransactionData>): TransactionDetailVM {
         val details = mockk<GetTransactionDetailByIdUseCase> {
-            every { observe(data.transaction.id.txIdString()) } returns flowOf(data)
+            every { observe(data.transaction.id.txIdString()) } returns upstream
         }
         val vm = TransactionDetailVM(
             getTransactionDetailById = details,
@@ -246,6 +332,6 @@ class TransactionDetailVMTest {
             getSwapMessage = SwapSupportMapper()
         )
         store.put("detail", vm)
-        return withTimeout(10_000) { vm.state.first { it.info != null } }
+        return vm
     }
 }

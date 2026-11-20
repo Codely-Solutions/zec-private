@@ -35720,6 +35720,321 @@ index 5c72d78d5..56231bdf6 100644
 +        }
 +    }
 +
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt
+new file mode 100644
+index 000000000..469b93df5
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt
+@@ -0,0 +1,309 @@
++package co.electriccoin.zcash.ui.common.datasource
++
++import cash.z.ecc.android.sdk.Synchronizer
++import cash.z.ecc.android.sdk.type.AddressType
++import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
++import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
++import co.electriccoin.zcash.ui.common.model.SwapMode
++import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
++import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
++import co.electriccoin.zcash.ui.common.model.SwapStatus
++import co.electriccoin.zcash.ui.common.model.ZcashShieldedSwapAddress
++import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
++import co.electriccoin.zcash.ui.common.model.near.NearTokenDto
++import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
++import co.electriccoin.zcash.ui.common.model.near.QuoteRequest
++import co.electriccoin.zcash.ui.common.model.near.QuoteResponseDto
++import co.electriccoin.zcash.ui.common.model.near.SwapStatusResponseDto
++import co.electriccoin.zcash.ui.common.model.near.SwapType
++import co.electriccoin.zcash.ui.common.provider.NearApiProvider
++import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import io.mockk.coEvery
++import io.mockk.mockk
++import io.mockk.slot
++import kotlinx.coroutines.runBlocking
++import kotlinx.serialization.json.Json
++import java.math.BigDecimal
++import java.math.RoundingMode
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++import kotlin.test.assertIs
++import kotlin.test.assertTrue
++import co.electriccoin.zcash.ui.common.model.near.SwapStatus as ProviderSwapStatus
++
++class NearSwapCatalogTest {
++    private val catalog = SwapCatalogTestFixture.assets
++    private val zec = SwapCatalogTestFixture.nativeZec
++    private val externalAssets = SwapCatalogTestFixture.externalAssets
++    private val bitcoin = externalAssets.single { it.assetId == "nep141:btc.omft.near" }
++    private val omni = bitcoin.copy(assetId = "1cs_v1:btc:native:coin", tokenTicker = "BTC(OMNI)")
++    private val nearApiProvider = mockk<NearApiProvider>()
++    private val synchronizer = mockk<Synchronizer>()
++    private val synchronizerProvider = mockk<SynchronizerProvider>()
++    private val dataSource = NearSwapDataSource(
++        nearApiProvider,
++        SwapCatalogTestFixture.tokenIcons,
++        SwapCatalogTestFixture.tokenNames,
++        SwapCatalogTestFixture.blockchains,
++        synchronizerProvider
++    )
++
++    init {
++        coEvery { synchronizerProvider.getSynchronizer() } returns synchronizer
++        coEvery { synchronizer.validateAddress(ZEC_DEPOSIT) } returns AddressType.Shielded
++        coEvery { synchronizer.validateAddress(ZEC_RECIPIENT) } returns AddressType.Shielded
++        coEvery { synchronizer.validateAddress(ZEC_REFUND) } returns AddressType.Shielded
++    }
++
++    @Test
++    fun catalogDecoderAndMapperPreserveEverySupportedIdentityWithExtraProviderEntries() = runBlocking {
++        val frozen = checkNotNull(javaClass.getResourceAsStream("/swap-catalog.json"))
++            .bufferedReader().use { it.readText() }
++        val entries = Json.decodeFromString<List<NearTokenDto>>(frozen)
++        val btc = entries.single { it.assetId == bitcoin.assetId }
++        val extra = listOf(
++            btc.copy(assetId = omni.assetId, symbol = "BTC(OMNI)"),
++            btc.copy(assetId = "test:other-token", symbol = "OTHER"),
++        )
++        for (order in listOf(entries + extra, (entries + extra).reversed())) {
++            coEvery { nearApiProvider.getSupportedTokens() } returns order
++            val mapped = dataSource.getSupportedTokens()
++            for (asset in catalog) {
++                val selected = mapped.single { it.assetId == asset.assetId }
++                assertEquals(asset.copy(usdPrice = null), selected, asset.assetId)
++            }
++            assertEquals(omni.assetId, mapped.single { it.tokenTicker == "BTC(OMNI)" }.assetId)
++        }
++    }
++
++    @Test
++    fun quoteRequestsPreserveCatalogIdentityAndNormalizeTheFixedSide() =
++        runBlocking {
++            for (asset in externalAssets) {
++                assertQuoteRequest(Route(asset, zec, SwapType.FLEX_INPUT), SwapMode.FLEX_INPUT)
++                assertQuoteRequest(Route(zec, asset, SwapType.EXACT_INPUT), SwapMode.EXACT_INPUT)
++                assertQuoteRequest(Route(zec, asset, SwapType.EXACT_OUTPUT), SwapMode.EXACT_OUTPUT)
++            }
++        }
++
++    @Test
++    fun successfulStatusesPreserveAmountsAndAssetIdentityInEitherCatalogOrder() =
++        runBlocking {
++            val statusCatalog = catalog + omni
++            val orders = listOf(statusCatalog, statusCatalog.reversed())
++            for (asset in externalAssets + omni) {
++                assertSuccessfulStatus(Route(asset, zec, SwapType.FLEX_INPUT), orders)
++                assertSuccessfulStatus(Route(zec, asset, SwapType.EXACT_INPUT), orders)
++            }
++        }
++
++    @Test
++    fun outgoingStatusesMapEachProviderState() =
++        runBlocking {
++            val route = Route(zec, bitcoin, SwapType.EXACT_INPUT)
++            val cases = mapOf(
++                ProviderSwapStatus.KNOWN_DEPOSIT_TX to SwapStatus.PENDING,
++                ProviderSwapStatus.PENDING_DEPOSIT to SwapStatus.PENDING,
++                ProviderSwapStatus.INCOMPLETE_DEPOSIT to SwapStatus.INCOMPLETE_DEPOSIT,
++                ProviderSwapStatus.PROCESSING to SwapStatus.PROCESSING,
++                ProviderSwapStatus.SUCCESS to SwapStatus.SUCCESS,
++                ProviderSwapStatus.REFUNDED to SwapStatus.REFUNDED,
++                ProviderSwapStatus.FAILED to SwapStatus.FAILED,
++                ProviderSwapStatus.EXPIRED to SwapStatus.EXPIRED
++            )
++            assertEquals(ProviderSwapStatus.entries.toSet(), cases.keys)
++            for ((providerStatus, expectedStatus) in cases) {
++                coEvery { nearApiProvider.checkSwapStatus(route.deposit) } returns statusResponse(route, providerStatus)
++                val result = dataSource.checkSwapStatus(route.deposit, catalog)
++                assertEquals(expectedStatus, result.status, "${route.label}, $providerStatus")
++                assertEquals(SwapMode.EXACT_INPUT, result.mode, route.label)
++            }
++        }
++
++    @Test
++    fun statusRejectsMissingOrDuplicateAssetIdentities() =
++        runBlocking {
++            // Use a non-aliased asset so the Bitcoin legacy identity cannot replace the missing entry.
++            val asset = externalAssets.single { it.assetId == "nep141:eth.omft.near" }
++            for (route in listOf(Route(asset, zec, SwapType.FLEX_INPUT), Route(zec, asset, SwapType.EXACT_OUTPUT))) {
++                coEvery { nearApiProvider.checkSwapStatus(route.deposit) } returns
++                    statusResponse(route, ProviderSwapStatus.PENDING_DEPOSIT)
++                for (supported in listOf(catalog - asset, catalog + asset.copy())) {
++                    val exception = assertFailsWith<AssetNotFoundException>(route.label) {
++                        dataSource.checkSwapStatus(route.deposit, supported)
++                    }
++                    assertTrue(exception.message.orEmpty().contains(asset.assetId), route.label)
++                }
++            }
++        }
++
++    @Test
++    fun quoteRejectsAnEchoWithADifferentAssetIdentity() =
++        runBlocking {
++            val bridgedBitcoin = externalAssets.single { it.assetId == "nep141:nbtc.bridge.near" }
++            val incoming = Route(bitcoin, zec, SwapType.FLEX_INPUT)
++            val outgoing = Route(zec, bitcoin, SwapType.EXACT_OUTPUT)
++            coEvery { nearApiProvider.requestQuote(any()) } returns
++                Json.decodeFromString<QuoteResponseDto>(quoteJson(incoming.copy(origin = bridgedBitcoin)))
++            val rejectedOrigin = assertFailsWith<SwapQuoteMismatchException.Rejected>(incoming.label) {
++                requestQuote(incoming, SwapMode.FLEX_INPUT)
++            }
++            assertEquals(SwapQuoteMismatchType.ORIGIN_ASSET, rejectedOrigin.type, incoming.label)
++
++            coEvery { nearApiProvider.requestQuote(any()) } returns
++                Json.decodeFromString<QuoteResponseDto>(quoteJson(outgoing.copy(destination = bridgedBitcoin)))
++            val rejectedDestination = assertFailsWith<SwapQuoteMismatchException.Rejected>(outgoing.label) {
++                requestQuote(outgoing, SwapMode.EXACT_OUTPUT)
++            }
++            assertEquals(SwapQuoteMismatchType.DESTINATION_ASSET, rejectedDestination.type, outgoing.label)
++        }
++
++    private suspend fun assertSuccessfulStatus(route: Route, orders: List<List<NearSwapAsset>>) {
++        val response = statusResponse(route, ProviderSwapStatus.SUCCESS)
++        coEvery { nearApiProvider.checkSwapStatus(route.deposit) } returns response
++        for ((order, supported) in orders.withIndex()) {
++            val label = "${route.label}, catalog order $order"
++            val result = assertIs<NearSwapQuoteStatus>(dataSource.checkSwapStatus(route.deposit, supported), label)
++            assertEquals(SwapStatus.SUCCESS, result.status, label)
++            assertEquals(route.origin, result.originAsset, label)
++            assertEquals(route.destination, result.destinationAsset, label)
++            assertEquals(route.originAmount.atomic, result.quote.amountIn, label)
++            assertEquals(route.destinationAmount.atomic, result.quote.amountOut, label)
++            assertEquals(route.originAmount.formatted, result.quote.amountInFormatted, label)
++            assertEquals(route.destinationAmount.formatted, result.quotedAmountOut, label)
++            assertEquals(route.originAmount.formatted, result.depositedAmountFormatted, label)
++            assertEquals(route.originAmount.formatted, result.executedAmountIn, label)
++            assertEquals(route.destinationAmount.afterExecution, result.executedAmountOut, label)
++            assertEquals(route.destinationAmount.afterExecution, result.amountOutFormatted, label)
++            assertEquals(route.deposit, result.depositAddress.address, label)
++            assertEquals(route.recipient, result.destinationAddress.address, label)
++            assertEquals(route.refund, result.refundAddress.address, label)
++            if (route.outgoing) {
++                assertIs<ZcashShieldedSwapAddress>(result.depositAddress, label)
++                assertIs<DynamicSwapAddress>(result.destinationAddress, label)
++                assertIs<ZcashShieldedSwapAddress>(result.refundAddress, label)
++            } else {
++                assertIs<DynamicSwapAddress>(result.depositAddress, label)
++                assertIs<ZcashShieldedSwapAddress>(result.destinationAddress, label)
++                assertIs<DynamicSwapAddress>(result.refundAddress, label)
++            }
++        }
++    }
++
++    private suspend fun assertQuoteRequest(route: Route, mode: SwapMode) {
++        val request = slot<QuoteRequest>()
++        coEvery { nearApiProvider.requestQuote(capture(request)) } returns
++            Json.decodeFromString<QuoteResponseDto>(quoteJson(route))
++
++        val quote = requestQuote(route, mode)
++
++        assertEquals(route.type, request.captured.swapType, route.label)
++        assertEquals(route.origin.assetId, request.captured.originAsset, route.label)
++        assertEquals(route.destination.assetId, request.captured.destinationAsset, route.label)
++        assertEquals(0, route.fixedAmount.atomic.compareTo(request.captured.amount), route.label)
++        assertEquals(route.refund, request.captured.refundTo, route.label)
++        assertEquals(route.recipient, request.captured.recipient, route.label)
++        assertEquals(SLIPPAGE_BPS, request.captured.slippageTolerance, route.label)
++        assertEquals(mode, quote.mode, route.label)
++        assertEquals(route.origin, quote.originAsset, route.label)
++        assertEquals(route.destination, quote.destinationAsset, route.label)
++        assertEquals(route.originAmount.atomic, quote.amountIn, route.label)
++        assertEquals(route.destinationAmount.atomic, quote.amountOut, route.label)
++    }
++
++    private suspend fun requestQuote(route: Route, mode: SwapMode) =
++        dataSource.requestQuote(
++            swapMode = mode,
++            amount = ENTERED_AMOUNT,
++            refundAddress = route.refund,
++            originAsset = route.origin,
++            destinationAddress = route.recipient,
++            destinationAsset = route.destination,
++            slippage = BigDecimal.ONE
++        )
++
++    private fun statusResponse(route: Route, status: ProviderSwapStatus): SwapStatusResponseDto {
++        val details = if (status == ProviderSwapStatus.SUCCESS) {
++            """
++            ,"swapDetails": {
++                "depositedAmount": "${route.originAmount.atomic}",
++                "depositedAmountFormatted": "${route.originAmount.formatted.toPlainString()}",
++                "amountIn": "${route.originAmount.atomic}",
++                "amountOut": "${route.destinationAmount.executedAtomic}"
++            }
++            """.trimIndent()
++        } else {
++            ""
++        }
++        return Json.decodeFromString(
++            """
++            {
++                "status": "${status.apiValue}",
++                "updatedAt": "2026-11-20T00:00:00Z",
++                "quoteResponse": ${quoteJson(route)}$details
++            }
++            """.trimIndent()
++        )
++    }
++
++    private fun quoteJson(route: Route): String =
++        """
++        {
++            "timestamp": "2026-11-20T00:00:00Z",
++            "quoteRequest": {
++                "dry": false,
++                "swapType": "${route.type.apiValue}",
++                "slippageTolerance": $SLIPPAGE_BPS,
++                "originAsset": "${route.origin.assetId}",
++                "destinationAsset": "${route.destination.assetId}",
++                "amount": "${route.fixedAmount.atomic}",
++                "refundTo": "${route.refund}",
++                "recipient": "${route.recipient}",
++                "deadline": "2026-11-21T00:00:00Z",
++                "appFees": []
++            },
++            "quote": {
++                "depositAddress": "${route.deposit}",
++                "amountIn": "${route.originAmount.atomic}",
++                "amountInFormatted": "${route.originAmount.formatted.toPlainString()}",
++                "amountInUsd": "60",
++                "minAmountIn": "${route.originAmount.atomic}",
++                "amountOut": "${route.destinationAmount.atomic}",
++                "amountOutFormatted": "${route.destinationAmount.formatted.toPlainString()}",
++                "amountOutUsd": "59",
++                "minAmountOut": "${route.destinationAmount.atomic}",
++                "deadline": "2026-11-21T00:00:00Z"
++            }
++        }
++        """.trimIndent()
++
++    private data class Route(val origin: NearSwapAsset, val destination: NearSwapAsset, val type: SwapType) {
++        val outgoing = type != SwapType.FLEX_INPUT
++        val label = "${origin.assetId} to ${destination.assetId} ($type)"
++        val deposit = if (outgoing) ZEC_DEPOSIT else "synthetic-external-deposit"
++        val recipient = if (outgoing) "synthetic-external-recipient" else ZEC_RECIPIENT
++        val refund = if (outgoing) ZEC_REFUND else "synthetic-external-refund"
++        val originAmount =
++            Amount(if (type == SwapType.EXACT_OUTPUT) COUNTER_AMOUNT else ENTERED_AMOUNT, origin.decimals)
++        val destinationAmount =
++            Amount(if (type == SwapType.EXACT_OUTPUT) ENTERED_AMOUNT else COUNTER_AMOUNT, destination.decimals)
++        val fixedAmount = if (type == SwapType.EXACT_OUTPUT) destinationAmount else originAmount
++    }
++
++    private class Amount(value: BigDecimal, decimals: Int) {
++        val formatted: BigDecimal = value.setScale(decimals, RoundingMode.DOWN)
++        val atomic: BigDecimal = formatted.movePointRight(decimals)
++        val executedAtomic: BigDecimal = atomic.add(BigDecimal.ONE)
++        val afterExecution: BigDecimal = executedAtomic.movePointLeft(decimals)
++    }
++
++    private companion object {
++        val ENTERED_AMOUNT = BigDecimal("1.1234567890123456789012349")
++        val COUNTER_AMOUNT = BigDecimal("2.2345678901234567890123459")
++        const val SLIPPAGE_BPS = 100
++        const val ZEC_DEPOSIT = "synthetic-zec-deposit"
++        const val ZEC_RECIPIENT = "synthetic-zec-recipient"
++        const val ZEC_REFUND = "synthetic-zec-refund"
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceGiftCardLinkTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceGiftCardLinkTest.kt
 index da0613aca..d1521bb2d 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceGiftCardLinkTest.kt
@@ -36532,6 +36847,190 @@ index 000000000..3650f1216
 +        return alphabet.first().toString().repeat(bytes.takeWhile { it == 0.toByte() }.size) + result
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapCatalogRecipientTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapCatalogRecipientTest.kt
+new file mode 100644
+index 000000000..c2d1c1d86
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapCatalogRecipientTest.kt
+@@ -0,0 +1,102 @@
++package co.electriccoin.zcash.ui.common.model
++
++import java.math.BigInteger
++import java.security.MessageDigest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertNull
++import kotlin.test.assertTrue
++
++class SwapCatalogRecipientTest {
++    @Test
++    fun everySelectedAssetUsesItsNetworkWithoutInferringATokenFromRawSyntax() {
++        for (asset in SwapCatalogTestFixture.assets) {
++            val address = address(asset.chainTicker)
++            val result = validateSwapRecipient(address, asset.chainTicker, asset.tokenTicker)
++
++            assertTrue(result.isValid, asset.assetId)
++            assertEquals(
++                RecipientAddressPolicy.normalize(address, asset.chainTicker), result.input?.address, asset.assetId
++            )
++            assertNull(result.input?.network, asset.assetId)
++            assertNull(result.input?.asset, asset.assetId)
++        }
++    }
++
++    @Test
++    fun contactNetworkMismatchBlocksEveryAssetUntilCorrected() {
++        for (asset in SwapCatalogTestFixture.assets) {
++            val address = address(asset.chainTicker)
++            val otherNetwork = if (asset.chainTicker == "eth") "base" else "eth"
++            val invalid = validateSwapRecipient(address, asset.chainTicker, asset.tokenTicker, otherNetwork)
++            val corrected = validateSwapRecipient(address, asset.chainTicker, asset.tokenTicker, asset.chainTicker)
++
++            assertFalse(invalid.isValid, asset.assetId)
++            assertEquals(SwapRecipientError.NETWORK, invalid.error, asset.assetId)
++            assertTrue(corrected.isValid, asset.assetId)
++            assertEquals(
++                RecipientAddressPolicy.normalize(address, asset.chainTicker), corrected.input?.address, asset.assetId
++            )
++        }
++    }
++
++    @Test
++    fun invalidRawAddressBlocksEveryCatalogCombination() {
++        for (asset in SwapCatalogTestFixture.assets) {
++            val result = validateSwapRecipient("!invalid-address", asset.chainTicker, asset.tokenTicker)
++            assertFalse(result.isValid, asset.assetId)
++            assertEquals(SwapRecipientError.ADDRESS, result.error, asset.assetId)
++        }
++    }
++
++    @Test
++    fun explicitEthereumQrNetworkCannotBeReinterpretedForAnotherSelectedNetwork() {
++        val uri = "ethereum:$EVM_ADDRESS@1"
++        for (asset in SwapCatalogTestFixture.assets.filter { it.chainTicker != "eth" }) {
++            val result = validateSwapRecipient(uri, asset.chainTicker, asset.tokenTicker)
++            assertFalse(result.isValid, asset.assetId)
++            assertEquals(SwapRecipientError.NETWORK, result.error, asset.assetId)
++        }
++    }
++
++    // Reuse the published vectors and synthetic, keyless payloads in RecipientAddressPolicyTest.
++    private fun address(network: String): String = when (network) {
++        "arb", "avax", "base", "bsc", "eth", "pol" -> EVM_ADDRESS
++        "btc" -> "bc1qw508d6qejxtdg4y5r3zarvary0c5xw7kv8f3t4"
++        "bch" -> "qpm2qsznhks23z7629mms6s4cwef74vcwvy22gdx6a"
++        "sol" -> "11111111111111111111111111111111"
++        "sui" -> "0x2"
++        "near" -> "alice.near"
++        "xrp" -> "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh"
++        "ltc", "dash", "tron", "zec" -> encodedAddress(network)
++        else -> error("Add a public recipient-format fixture for $network")
++    }
++
++    @Suppress("MagicNumber")
++    private fun encodedAddress(network: String): String {
++        val prefix = when (network) {
++            "ltc" -> byteArrayOf(48)
++            "dash" -> byteArrayOf(76)
++            "tron" -> byteArrayOf(65)
++            "zec" -> byteArrayOf(0x1c, 0xb8.toByte())
++            else -> error(network)
++        }
++        val payload = prefix + ByteArray(20) { 7 }
++        val digest = MessageDigest.getInstance("SHA-256")
++        val bytes = payload + digest.digest(digest.digest(payload)).take(4).toByteArray()
++        var number = BigInteger(1, bytes)
++        val result = StringBuilder()
++        while (number > BigInteger.ZERO) {
++            val division = number.divideAndRemainder(BigInteger.valueOf(58))
++            result.append(BASE58[division[1].toInt()])
++            number = division[0]
++        }
++        return result.reverse().toString()
++    }
++
++    private companion object {
++        const val EVM_ADDRESS = "0x52908400098527886E0F7030069857D2E4169EE7"
++        const val BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapCatalogTestFixture.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapCatalogTestFixture.kt
+new file mode 100644
+index 000000000..a560efb62
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapCatalogTestFixture.kt
+@@ -0,0 +1,70 @@
++package co.electriccoin.zcash.ui.common.model
++
++import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
++import co.electriccoin.zcash.ui.common.provider.BlockchainProvider
++import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProviderImpl
++import co.electriccoin.zcash.ui.common.provider.TokenIconProvider
++import co.electriccoin.zcash.ui.common.provider.TokenNameProvider
++import co.electriccoin.zcash.ui.design.util.imageRes
++import co.electriccoin.zcash.ui.design.util.stringRes
++import kotlinx.serialization.Serializable
++import kotlinx.serialization.json.Json
++import java.math.BigDecimal
++
++/** Frozen selectable asset identities. Prices and display resources are synthetic. */
++object SwapCatalogTestFixture {
++    val blockchains: BlockchainProvider = object : BlockchainProvider {
++        override fun getBlockchain(ticker: String) =
++            SwapBlockchain(
++                chainTicker = ticker,
++                chainName = stringRes(ticker),
++                chainIcon = imageRes(drawableId("chain:$ticker")),
++            )
++
++        override fun getZcashBlockchain() = getBlockchain(ZEC_TICKER)
++    }
++
++    val tokenIcons: TokenIconProvider = object : TokenIconProvider {
++        override fun getIcon(ticker: String) = imageRes(drawableId("token:$ticker"))
++    }
++
++    val tokenNames: TokenNameProvider = object : TokenNameProvider {
++        override fun getName(ticker: String) = stringRes(ticker)
++    }
++
++    private val simpleAssets = SimpleSwapAssetProviderImpl(tokenIcons, tokenNames, blockchains)
++
++    val assets: List<NearSwapAsset> by lazy {
++        val catalog = checkNotNull(javaClass.getResourceAsStream("/swap-catalog.json"))
++            .bufferedReader()
++            .use { it.readText() }
++        Json.decodeFromString<List<AssetEntry>>(catalog).map { entry ->
++            NearSwapAsset(
++                tokenTicker = entry.symbol,
++                tokenName = tokenNames.getName(entry.symbol),
++                tokenIcon = tokenIcons.getIcon(entry.symbol),
++                usdPrice = BigDecimal.ONE,
++                assetId = entry.assetId,
++                decimals = entry.decimals,
++                blockchain = blockchains.getBlockchain(entry.blockchain),
++                contractAddress = entry.contractAddress,
++            )
++        }
++    }
++
++    val nativeZec: NearSwapAsset by lazy { assets.single { it.isZCashAsset } }
++    val externalAssets: List<NearSwapAsset> by lazy { assets.filter { it != nativeZec } }
++
++    fun simple(asset: SwapAsset): SimpleSwapAsset = simpleAssets.get(asset.tokenTicker, asset.chainTicker)
++
++    private fun drawableId(key: String): Int = (key.hashCode() and Int.MAX_VALUE).coerceAtLeast(1)
++
++    @Serializable
++    private data class AssetEntry(
++        val assetId: String,
++        val symbol: String,
++        val blockchain: String,
++        val decimals: Int,
++        val contractAddress: String?,
++    )
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapRecipientValidationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapRecipientValidationTest.kt
 new file mode 100644
 index 000000000..57ac7cfd6
@@ -37070,6 +37569,230 @@ index b8e862cdd..5e59b5613 100644
 +            SwapType.EXACT_OUTPUT, BigDecimal("100000000000000000000000000000000000001"), A_THOUSAND,
 +            BigDecimal("99500000000000000000000000000000000000"), A_THOUSAND, 50
 +        )
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/SwapCatalogContractTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/SwapCatalogContractTest.kt
+new file mode 100644
+index 000000000..d458ada00
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/SwapCatalogContractTest.kt
+@@ -0,0 +1,218 @@
++package co.electriccoin.zcash.ui.common.model.near
++
++import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
++import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
++import co.electriccoin.zcash.ui.common.model.SwapPriceMarkets
++import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
++import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
++import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProviderImpl
++import kotlinx.serialization.json.Json
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.JsonPrimitive
++import kotlinx.serialization.json.jsonObject
++import java.math.BigDecimal
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++import kotlin.test.assertNotNull
++import kotlin.test.assertNull
++import kotlin.test.assertSame
++import kotlin.time.Instant
++
++class SwapCatalogContractTest {
++    private val fixture = SwapCatalogTestFixture
++    private val assets = fixture.assets
++
++    @Test
++    fun fixtureCoversEveryCuratedWalletPairExactlyOnce() {
++        val provider = SimpleSwapAssetProviderImpl(fixture.tokenIcons, fixture.tokenNames, fixture.blockchains)
++        val curated = provider.getCuratedSwapAssets().map { it.tokenTicker to it.chainTicker }
++        val frozen = assets.map { it.tokenTicker to it.chainTicker }
++
++        assertEquals(curated.toSet(), frozen.toSet())
++        assertEquals(curated.size, frozen.size)
++        assertEquals(frozen.size, frozen.toSet().size, "Duplicate selectable pair")
++        assertEquals(assets.size, assets.map { it.assetId }.toSet().size, "Duplicate provider identity")
++    }
++
++    @Test
++    fun exactIdentityResolvesWithDistractorsInEitherOrder() {
++        val btc = assets.single { it.tokenTicker == "BTC" && it.chainTicker == "btc" }
++        val omni = btc.copy(assetId = "1cs_v1:btc:native:coin", tokenTicker = "BTC(OMNI)")
++        val unrelated = btc.copy(
++            assetId = "test:unrelated",
++            tokenTicker = "TEST",
++            blockchain = fixture.blockchains.getBlockchain("test"),
++        )
++        val sameDisplayPair = btc.copy(assetId = "test:same-btc-pair")
++        val supported = listOf(omni, sameDisplayPair) + assets + unrelated
++
++        supported.forEach { asset ->
++            assertSame(asset, resolveNearAsset(supported, asset.assetId), asset.label)
++            assertSame(asset, resolveNearAsset(supported.asReversed(), asset.assetId), asset.label)
++            requireNearAssetIdentity(asset, asset.assetId, SwapQuoteMismatchType.ORIGIN_ASSET)
++        }
++    }
++
++    @Test
++    fun duplicateAndUnknownIdsFailClosed() {
++        assets.forEach { asset ->
++            assertNull(resolveNearAsset(assets + asset.copy(), asset.assetId), asset.label)
++            assertNull(resolveNearAsset(assets, "test:unknown:${asset.assetId}"), asset.label)
++        }
++    }
++
++    @Test
++    fun exactQuoteIdentitySeparatesNetworksSharingASymbol() {
++        assets.groupBy { it.tokenTicker }.values.forEach { bySymbol ->
++            bySymbol.zipWithNext().forEach { (first, second) ->
++                assertIdentityMismatch(first, second)
++                assertIdentityMismatch(second, first)
++            }
++        }
++    }
++
++    @Test
++    fun exactQuoteIdentitySeparatesWrappedAndNativeAssets() {
++        val btc = assets.single { it.tokenTicker == "BTC" && it.chainTicker == "btc" }
++        val wbtc = assets.single { it.tokenTicker == "WBTC" }
++        val wrappedNear = assets.single { it.tokenTicker == "wNEAR" }
++        val syntheticNativeNear = wrappedNear.copy(
++            assetId = "test:near:native",
++            tokenTicker = "NEAR",
++            contractAddress = null,
++        )
++
++        assertIdentityMismatch(btc, wbtc)
++        assertIdentityMismatch(wbtc, btc)
++        assertIdentityMismatch(wrappedNear, syntheticNativeNear)
++        assertIdentityMismatch(syntheticNativeNear, wrappedNear)
++    }
++
++    @Test
++    fun independentPriceMarketRequiresPinnedMetadata() {
++        val otherNetwork = fixture.blockchains.getBlockchain("test")
++        assets.forEach { asset ->
++            assertNotNull(SwapPriceMarkets.reference(asset), asset.label)
++            assertNull(SwapPriceMarkets.reference(asset.copy(blockchain = otherNetwork)), "${asset.label} network")
++            assertNull(SwapPriceMarkets.reference(asset.copy(decimals = asset.decimals + 1)), "${asset.label} decimals")
++            val changedContract = asset.copy(contractAddress = "test:other-contract")
++            assertNull(SwapPriceMarkets.reference(changedContract), "${asset.label} contract")
++        }
++    }
++
++    @Test
++    fun quotePreservesOneBaseUnitAndLargeAmountsAtCatalogPrecision() {
++        val representatives = assets.distinctBy { it.decimals }
++        val paired = representatives.drop(1) + representatives.first()
++        representatives.zip(paired).forEach { (origin, destination) ->
++            listOf(BigDecimal.ONE, LARGE_BASE_UNITS).forEach { units ->
++                val response = response(origin, destination, units)
++                val quote = quote(origin, destination, response)
++                assertEquals(units, quote.amountIn, origin.label)
++                assertEquals(units.movePointLeft(origin.decimals), quote.amountInFormatted, origin.label)
++                assertEquals(units, quote.amountOut, destination.label)
++                assertEquals(units.movePointLeft(destination.decimals), quote.amountOutFormatted, destination.label)
++            }
++        }
++    }
++
++    @Test
++    fun quoteRejectsAtomicMismatchAndSubatomicAmountsAtCatalogPrecision() {
++        assets.distinctBy { it.decimals }.forEach { asset ->
++            val origin = fixture.nativeZec
++            val response = response(origin, asset, LARGE_BASE_UNITS)
++            val details = response.quote
++            val badOutputs = listOf(
++                "one base unit mismatch" to details.copy(amountOut = details.amountOut + BigDecimal.ONE),
++                "fractional raw base unit" to details.copy(amountOut = details.amountOut + HALF_BASE_UNIT),
++                "subatomic formatted amount" to details.copy(
++                    amountOutFormatted = details.amountOutFormatted + HALF_BASE_UNIT.movePointLeft(asset.decimals)
++                ),
++            )
++            badOutputs.forEach { (case, altered) ->
++                val label = "${asset.label} at ${asset.decimals} decimals, $case"
++                val error = assertFailsWith<SwapQuoteMismatchException.AmountInconsistency>(label) {
++                    quote(origin, asset, response.copy(quote = altered))
++                }
++                assertEquals(SwapQuoteMismatchType.OUTPUT_AMOUNT, error.type, label)
++                assertEquals(asset.decimals, error.decimals, label)
++            }
++        }
++    }
++
++    @Test
++    fun quoteDetailsRejectMalformedRawAndFormattedAmounts() {
++        val asset = fixture.externalAssets.first()
++        val details = response(fixture.nativeZec, asset, LARGE_BASE_UNITS).quote
++        val serializer = QuoteDetails.serializer()
++        val encoded = Json.encodeToJsonElement(serializer, details).jsonObject
++
++        listOf("amountIn", "amountInFormatted", "amountOut", "amountOutFormatted").forEach { field ->
++            val malformed = JsonObject(encoded + (field to JsonPrimitive("1.2.3")))
++            assertFailsWith<IllegalArgumentException>(field) {
++                Json.decodeFromJsonElement(serializer, malformed)
++            }
++        }
++    }
++
++    private fun assertIdentityMismatch(expected: NearSwapAsset, other: NearSwapAsset) {
++        val label = "${expected.label} vs ${other.label}"
++        val error = assertFailsWith<SwapQuoteMismatchException>(label) {
++            requireNearAssetIdentity(expected, other.assetId, SwapQuoteMismatchType.DESTINATION_ASSET)
++        }
++        assertEquals(SwapQuoteMismatchType.DESTINATION_ASSET, error.type, label)
++    }
++
++    private fun response(origin: NearSwapAsset, destination: NearSwapAsset, units: BigDecimal) =
++        QuoteResponseDto(
++            timestamp = EPOCH,
++            quoteRequest = QuoteRequest(
++                dry = true,
++                swapType = SwapType.EXACT_INPUT,
++                slippageTolerance = 0,
++                originAsset = origin.assetId,
++                destinationAsset = destination.assetId,
++                amount = units,
++                refundTo = REFUND_ADDRESS,
++                recipient = DESTINATION_ADDRESS,
++                deadline = EPOCH,
++                appFees = emptyList(),
++            ),
++            quote = QuoteDetails(
++                depositAddress = DEPOSIT_ADDRESS,
++                amountIn = units,
++                amountInFormatted = units.movePointLeft(origin.decimals),
++                amountInUsd = BigDecimal.ZERO,
++                minAmountIn = units,
++                amountOut = units,
++                amountOutFormatted = units.movePointLeft(destination.decimals),
++                amountOutUsd = BigDecimal.ZERO,
++                minAmountOut = units,
++                deadline = EPOCH,
++            ),
++        )
++
++    private fun quote(origin: NearSwapAsset, destination: NearSwapAsset, response: QuoteResponseDto) =
++        NearSwapQuote(
++            response = response,
++            originAsset = origin,
++            destinationAsset = destination,
++            depositAddress = DynamicSwapAddress(DEPOSIT_ADDRESS),
++            destinationAddress = DynamicSwapAddress(DESTINATION_ADDRESS),
++            refundAddress = DynamicSwapAddress(REFUND_ADDRESS),
++            expectedSlippageToleranceBps = 0,
++        )
++
++    private val NearSwapAsset.label: String
++        get() = "$tokenTicker/$chainTicker ($assetId)"
++
++    private companion object {
++        const val DEPOSIT_ADDRESS = "test-deposit"
++        const val DESTINATION_ADDRESS = "test-destination"
++        const val REFUND_ADDRESS = "test-refund"
++        val EPOCH = Instant.fromEpochSeconds(0)
++        val HALF_BASE_UNIT = BigDecimal("0.5")
++        val LARGE_BASE_UNITS = BigDecimal("9007199254740993000000000000000001")
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt
 new file mode 100644
 index 000000000..2a71971b1
@@ -42232,18 +42955,22 @@ index 000000000..f12495eaa
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVMTest.kt
 new file mode 100644
-index 000000000..2083cb4e7
+index 000000000..a3d99413b
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVMTest.kt
-@@ -0,0 +1,253 @@
+@@ -0,0 +1,336 @@
 +package co.electriccoin.zcash.ui.screen.swap.detail
 +
++import androidx.lifecycle.viewModelScope
 +import cash.z.ecc.android.sdk.model.FiatCurrency
 +import cash.z.ecc.android.sdk.model.Zatoshi
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
++import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
++import co.electriccoin.zcash.ui.common.model.SwapAsset
 +import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
++import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 +import co.electriccoin.zcash.ui.common.model.SwapMode
 +import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 +import co.electriccoin.zcash.ui.common.model.SwapStatus
@@ -42253,7 +42980,6 @@ index 000000000..2083cb4e7
 +import co.electriccoin.zcash.ui.common.usecase.SwapData
 +import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 +import co.electriccoin.zcash.ui.design.component.ButtonStyle
-+import co.electriccoin.zcash.ui.design.component.SwapQuoteHeaderState
 +import co.electriccoin.zcash.ui.design.component.ZashiMessageState
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.design.util.stringResByNumber
@@ -42262,11 +42988,12 @@ index 000000000..2083cb4e7
 +import io.mockk.every
 +import io.mockk.mockk
 +import io.mockk.mockkObject
-+import io.mockk.spyk
 +import io.mockk.unmockkObject
 +import io.mockk.verify
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.cancel
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.test.TestScope
@@ -42287,6 +43014,8 @@ index 000000000..2083cb4e7
 +
 +@OptIn(ExperimentalCoroutinesApi::class)
 +class SwapDetailVMTest {
++    private val harnesses = mutableListOf<Harness>()
++
 +    @BeforeTest
 +    fun setUp() {
 +        Dispatchers.setMain(UnconfinedTestDispatcher())
@@ -42297,6 +43026,8 @@ index 000000000..2083cb4e7
 +
 +    @AfterTest
 +    fun tearDown() {
++        harnesses.forEach(Harness::close)
++        harnesses.clear()
 +        unmockkObject(FiatCurrency.USD)
 +        Dispatchers.resetMain()
 +    }
@@ -42369,6 +43100,64 @@ index 000000000..2083cb4e7
 +    }
 +
 +    @Test
++    fun savedIncomingSwapsKeepTheirOutputAndRecoverAfterARefreshFailure() = runTest {
++        val zec = SwapCatalogTestFixture.nativeZec
++        val executedOutput = BigDecimal("1.23456788")
++        for (origin in SwapCatalogTestFixture.externalAssets) {
++            val assetId = origin.assetId
++            val saved = saved(
++                SwapStatus.PROCESSING,
++                SwapCatalogTestFixture.simple(origin),
++                SwapCatalogTestFixture.simple(zec),
++            )
++            val loading = SwapQuoteStatusData(isLoading = true, savedMetadata = saved)
++            val harness = harness(loading)
++
++            val refreshing = harness.state(assetId)
++            assertSaved(refreshing, saved, assetId)
++            assertEquals(stringRes(R.string.private_swap_refreshing), refreshing.infoFooter, assetId)
++            assertNull(refreshing.primaryButton, assetId)
++
++            harness.emit(loading.copy(isLoading = false, error = unavailable()))
++            runCurrent()
++
++            val failedRefresh = harness.state(assetId)
++            assertSaved(failedRefresh, saved, assetId)
++            assertEquals(stringRes(R.string.private_swap_refresh_unavailable), failedRefresh.infoFooter, assetId)
++            val retry = assertNotNull(failedRefresh.primaryButton, assetId)
++            assertEquals(
++                stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
++                retry.text,
++                assetId,
++            )
++            assertEquals(ButtonStyle.SECONDARY, retry.style, assetId)
++            retry.onClick()
++            assertEquals(1, harness.reloadRequests(), assetId)
++
++            harness.emit(
++                loading.copy(status = status(SwapStatus.SUCCESS, origin, zec, executedOutput), isLoading = false)
++            )
++            runCurrent()
++
++            val recovered = harness.state(assetId)
++            assertEquals(SwapStatus.SUCCESS, recovered.status.status, assetId)
++            assertEquals(stringRes(R.string.swapAndPay_status), recovered.status.title, assetId)
++            assertEquals(stringResByNumber(executedOutput), recovered.transactionHeader.amount, assetId)
++            assertEquals(origin.tokenIcon, recovered.transactionHeader.icons.first(), assetId)
++            val quoteOrigin = assertNotNull(recovered.quoteHeader.from, assetId)
++            assertEquals(origin.tokenIcon, quoteOrigin.bigIcon, assetId)
++            assertEquals(origin.chainIcon, quoteOrigin.smallIcon, assetId)
++            val quoteDestination = assertNotNull(recovered.quoteHeader.to, assetId)
++            assertEquals(stringRes(zec.tokenTicker), quoteDestination.token, assetId)
++            assertEquals(stringResByNumber(executedOutput), quoteDestination.amount, assetId)
++            assertNull(recovered.errorFooter, assetId)
++            assertNull(recovered.infoFooter, assetId)
++            assertNull(recovered.primaryButton, assetId)
++            harness.close()
++        }
++    }
++
++    @Test
 +    fun unknownSwapKeepsTheLookupErrorAndRetry() = runTest {
 +        val harness = harness(SwapQuoteStatusData(isLoading = false, error = unavailable()))
 +
@@ -42408,11 +43197,12 @@ index 000000000..2083cb4e7
 +        assertNull(harness.state().errorFooter)
 +    }
 +
-+    private fun assertSaved(state: SwapDetailState, saved: TransactionSwapMetadata) {
-+        assertEquals(saved.status, state.status.status)
-+        assertEquals(stringResByNumber(saved.amountOutFormatted), state.transactionHeader.amount)
-+        assertEquals(saved.origin.tokenIcon, state.transactionHeader.icons.first())
-+        assertNull(state.errorFooter)
++    private fun assertSaved(state: SwapDetailState, saved: TransactionSwapMetadata, assetId: String? = null) {
++        assertEquals(saved.status, state.status.status, assetId)
++        assertEquals(stringRes(R.string.private_swap_saved_status), state.status.title, assetId)
++        assertEquals(stringResByNumber(saved.amountOutFormatted), state.transactionHeader.amount, assetId)
++        assertEquals(saved.origin.tokenIcon, state.transactionHeader.icons.first(), assetId)
++        assertNull(state.errorFooter, assetId)
 +    }
 +
 +    private fun assertNeutralRetry(harness: Harness) {
@@ -42420,24 +43210,21 @@ index 000000000..2083cb4e7
 +    }
 +
 +    private fun TestScope.harness(initial: SwapQuoteStatusData): Harness {
-+        val reload = mockk<ReloadHandle>(relaxed = true)
++        var requests = 0
++        val reload = mockk<ReloadHandle> {
++            every { requestReload() } answers { requests += 1 }
++        }
 +        val upstream = MutableStateFlow(SwapData(initial, reload))
 +        val source = mockk<GetReloadableSwapQuoteUseCase> {
 +            every { observe(DEPOSIT) } returns upstream
 +        }
 +        val router = mockk<NavigationRouter>(relaxed = true)
-+        val mapper = spyk(CommonTransactionDetailMapper())
-+        // Quote-row mapping has separate mapper/rendering coverage; keep this fixture focused
-+        // on detail state, saved metadata and refresh actions.
-+        every {
-+            mapper.createTransactionDetailQuoteHeaderState(any(), any(), any())
-+        } returns
-+            SwapQuoteHeaderState(null, null)
 +        val vm = SwapDetailVM(
-+            source, SwapDetailArgs(DEPOSIT), router, mockk(relaxed = true), mapper, SwapSupportMapper()
++            source, SwapDetailArgs(DEPOSIT), router, mockk(relaxed = true),
++            CommonTransactionDetailMapper(), SwapSupportMapper()
 +        )
-+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
-+        return Harness(vm, upstream, reload, router)
++        val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
++        return Harness(vm, upstream, reload, router, collector) { requests }.also(harnesses::add)
 +    }
 +
 +    private data class Harness(
@@ -42445,38 +43232,57 @@ index 000000000..2083cb4e7
 +        val upstream: MutableStateFlow<SwapData>,
 +        val reload: ReloadHandle,
 +        val router: NavigationRouter,
++        val collector: Job,
++        val reloadRequests: () -> Int,
 +    ) {
-+        fun state(): SwapDetailState = assertNotNull(vm.state.value)
++        fun state(assetId: String? = null): SwapDetailState = assertNotNull(vm.state.value, assetId)
 +        fun emit(data: SwapQuoteStatusData) {
 +            upstream.value = SwapData(data, reload)
 +        }
++
++        fun close() {
++            collector.cancel()
++            vm.viewModelScope.cancel()
++        }
 +    }
 +
-+    private fun saved(status: SwapStatus) = TransactionSwapMetadata(
++    private fun saved(
++        status: SwapStatus,
++        origin: SimpleSwapAsset = SwapAssetTestFixture.simpleAsset(),
++        destination: SimpleSwapAsset = SwapAssetTestFixture.zecSimpleAsset(),
++    ) = TransactionSwapMetadata(
 +        depositAddress = DEPOSIT,
 +        provider = "test-provider",
 +        totalFees = Zatoshi(0),
 +        totalFeesUsd = BigDecimal.ZERO,
 +        lastUpdated = Instant.EPOCH,
-+        origin = SwapAssetTestFixture.simpleAsset(),
-+        destination = SwapAssetTestFixture.zecSimpleAsset(),
++        origin = origin,
++        destination = destination,
 +        mode = SwapMode.EXACT_INPUT,
 +        recordedStatus = status,
 +        amountOutFormatted = OUTPUT,
 +    )
 +
-+    private fun status(value: SwapStatus): SwapQuoteStatus = mockk {
-+        every { originAsset } returns SwapAssetTestFixture.asset()
-+        every { destinationAsset } returns SwapAssetTestFixture.zecAsset()
++    private fun status(
++        value: SwapStatus,
++        origin: SwapAsset = SwapAssetTestFixture.asset(),
++        destination: SwapAsset = SwapAssetTestFixture.zecAsset(),
++        output: BigDecimal = OUTPUT,
++    ): SwapQuoteStatus = mockk {
++        every { originAsset } returns origin
++        every { destinationAsset } returns destination
 +        every { depositAddress } returns mockk { every { address } returns DEPOSIT }
 +        every { destinationAddress } returns mockk { every { address } returns "test-zec-recipient" }
 +        every { timestamp } returns Instant.EPOCH
 +        every { status } returns value
 +        every { isSlippageRealized } returns false
 +        every { maxSlippage } returns BigDecimal.ONE
-+        every { amountOutFormatted } returns OUTPUT
++        every { amountOutFormatted } returns output
++        every { amountInFormatted } returns BigDecimal.ONE
++        every { amountInUsd } returns BigDecimal("30")
++        every { amountOutUsd } returns BigDecimal("29")
 +        every { quotedAmountOut } returns OUTPUT
-+        every { executedAmountOut } returns OUTPUT.takeIf { value == SwapStatus.SUCCESS }
++        every { executedAmountOut } returns output.takeIf { value == SwapStatus.SUCCESS }
 +        every { originTransactionIds } returns emptyList()
 +        every { destinationTransactionIds } returns emptyList()
 +        every { refundedFormatted } returns BigDecimal("0.001").takeIf { value == SwapStatus.REFUNDED }
@@ -43176,23 +43982,26 @@ index 000000000..4cafec370
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
 new file mode 100644
-index 000000000..5e88a6566
+index 000000000..565e968ac
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
-@@ -0,0 +1,251 @@
+@@ -0,0 +1,337 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
 +import androidx.lifecycle.ViewModelStore
++import cash.z.ecc.android.sdk.model.FiatCurrency
 +import cash.z.ecc.android.sdk.model.TransactionId
 +import cash.z.ecc.android.sdk.model.TransactionOverview
-+import cash.z.ecc.android.sdk.model.FiatCurrency
 +import cash.z.ecc.android.sdk.model.Zatoshi
 +import cash.z.ecc.android.sdk.model.Zip318Kind
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
 +import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
++import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
++import co.electriccoin.zcash.ui.common.model.SwapAsset
 +import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
++import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 +import co.electriccoin.zcash.ui.common.model.SwapMode
 +import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 +import co.electriccoin.zcash.ui.common.model.SwapStatus
@@ -43208,6 +44017,7 @@ index 000000000..5e88a6566
 +import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 +import co.electriccoin.zcash.ui.design.util.TickerLocation.HIDDEN
 +import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.design.util.stringResByNumber
 +import co.electriccoin.zcash.ui.design.util.stringResByTransactionId
 +import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
 +import co.electriccoin.zcash.ui.screen.transactiondetail.info.ReceiveTransparentState
@@ -43220,6 +44030,8 @@ index 000000000..5e88a6566
 +import io.mockk.verify
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.test.StandardTestDispatcher
@@ -43227,6 +44039,7 @@ index 000000000..5e88a6566
 +import kotlinx.coroutines.test.runTest
 +import kotlinx.coroutines.test.setMain
 +import kotlinx.coroutines.withTimeout
++import kotlinx.coroutines.withTimeoutOrNull
 +import java.math.BigDecimal
 +import java.time.Instant
 +import kotlin.test.AfterTest
@@ -43349,27 +44162,71 @@ index 000000000..5e88a6566
 +    }
 +
 +    @Test
-+    fun actualProviderFailureShowsFailureAndRoutesToSwapSupport() = runTest(dispatcher) {
-+        val origin = SwapAssetTestFixture.zecAsset()
-+        val destination = SwapAssetTestFixture.asset()
-+        val remote = object : SwapQuoteStatus {
-+            override val originAsset = origin
-+            override val destinationAsset = destination
-+            override val depositAddress = DynamicSwapAddress("fixture-deposit")
-+            override val destinationAddress = DynamicSwapAddress("fixture-btc-recipient")
-+            override val timestamp = Instant.EPOCH
-+            override val deadline = kotlin.time.Instant.fromEpochSeconds(0)
-+            override val status = SwapStatus.FAILED
-+            override val mode = SwapMode.EXACT_INPUT
-+            override val amountInFormatted = BigDecimal.ONE
-+            override val amountOutFormatted = BigDecimal("0.0001")
-+            override val amountInUsd = BigDecimal("30")
-+            override val amountOutUsd = BigDecimal("29")
-+            override val refundedFormatted: BigDecimal? = null
-+            override val depositedAmountFormatted = BigDecimal.ONE
-+            override val maxSlippage = BigDecimal.ONE
-+            override val isSlippageRealized = false
++    fun outgoingSwapsKeepLocalFundingDetailsAndRecoverAfterAProviderOutage() = runTest(dispatcher) {
++        val zec = SwapCatalogTestFixture.nativeZec
++        for (destination in SwapCatalogTestFixture.externalAssets) {
++            val assetId = destination.assetId
++            var reloadRequests = 0
++            val reloadHandle = mockk<ReloadHandle> {
++                every { requestReload() } answers { reloadRequests += 1 }
++            }
++            val metadata = swapMetadata(
++                SwapStatus.PENDING,
++                SwapCatalogTestFixture.simple(zec),
++                SwapCatalogTestFixture.simple(destination),
++            )
++            val unavailable = data(
++                sent,
++                metadata,
++                SwapQuoteStatusData(isLoading = false, error = IllegalStateException("fixture-provider-unavailable")),
++            ).copy(reloadHandle = reloadHandle)
++            val upstream = MutableStateFlow(unavailable)
++            val vm = viewModel(unavailable, upstream)
++            val failedRefresh = assertNotNull(
++                withTimeoutOrNull(10_000) { vm.state.first { it.info != null } },
++                assetId,
++            )
++
++            assertLocalFunding(failedRefresh, assetId)
++            val savedInfo = assertIs<SendSwapState>(failedRefresh.info, assetId)
++            assertNull(savedInfo.status, assetId)
++            assertNull(savedInfo.donationBasisZec, assetId)
++            assertNotNull(failedRefresh.errorFooter, assetId)
++            val retry = assertNotNull(failedRefresh.primaryButton, assetId)
++            assertEquals(
++                stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
++                retry.text,
++                assetId,
++            )
++            retry.onClick()
++            assertEquals(1, reloadRequests, assetId)
++
++            val fresh = status(SwapStatus.SUCCESS, zec, destination)
++            upstream.value = unavailable.copy(swap = SwapQuoteStatusData(fresh, isLoading = false))
++            val recovered = assertNotNull(
++                withTimeoutOrNull(10_000) {
++                    vm.state.first { (it.info as? SendSwapState)?.status == SwapStatus.SUCCESS }
++                },
++                assetId,
++            )
++
++            assertLocalFunding(recovered, assetId)
++            val liveInfo = assertIs<SendSwapState>(recovered.info, assetId)
++            val quoteDestination = assertNotNull(liveInfo.quoteHeader.to, assetId)
++            assertEquals(destination.tokenIcon, quoteDestination.bigIcon, assetId)
++            assertEquals(destination.chainIcon, quoteDestination.smallIcon, assetId)
++            assertEquals(stringRes(destination.tokenTicker), quoteDestination.token, assetId)
++            assertEquals(stringResByNumber(fresh.amountOutFormatted), quoteDestination.amount, assetId)
++            assertNull(recovered.errorFooter, assetId)
++            assertNull(recovered.primaryButton, assetId)
++            store.clear()
 +        }
++        verify(exactly = 0) { router.forward(any()) }
++    }
++
++    @Test
++    fun actualProviderFailureShowsFailureAndRoutesToSwapSupport() = runTest(dispatcher) {
++        val remote = status(SwapStatus.FAILED, SwapAssetTestFixture.zecAsset(), SwapAssetTestFixture.asset())
 +        val state = state(data(sent, swapMetadata(SwapStatus.PENDING), SwapQuoteStatusData(remote, false)))
 +        assertEquals(stringRes(R.string.swapStatus_swapFailed), state.header.title)
 +        assertEquals(stringRes(sent.amount, HIDDEN), state.header.amount)
@@ -43385,14 +44242,46 @@ index 000000000..5e88a6566
 +        verify(exactly = 0) { reload.requestReload() }
 +    }
 +
-+    private fun swapMetadata(status: SwapStatus) = TransactionSwapMetadata(
++    private fun assertLocalFunding(state: TransactionDetailState, assetId: String) {
++        assertEquals(stringRes(sent.amount, HIDDEN), state.header.amount, assetId)
++        val info = assertIs<SendSwapState>(state.info, assetId)
++        assertEquals(stringRes(Zatoshi(10_000)), info.totalFees, assetId)
++        assertEquals(stringResByTransactionId(sent.id.txIdString(), abbreviated = true), info.transactionId, assetId)
++        assertEquals(listOf(sent.id.txIdString()), state.explorerLinks.map { it.transactionId }, assetId)
++    }
++
++    private fun status(value: SwapStatus, origin: SwapAsset, destination: SwapAsset): SwapQuoteStatus =
++        object : SwapQuoteStatus {
++            override val originAsset = origin
++            override val destinationAsset = destination
++            override val depositAddress = DynamicSwapAddress("fixture-deposit")
++            override val destinationAddress = DynamicSwapAddress("fixture-recipient")
++            override val timestamp = Instant.EPOCH
++            override val deadline = kotlin.time.Instant.fromEpochSeconds(0)
++            override val status = value
++            override val mode = SwapMode.EXACT_INPUT
++            override val amountInFormatted = BigDecimal.ONE
++            override val amountOutFormatted = BigDecimal("0.0001")
++            override val executedAmountOut = amountOutFormatted.takeIf { value == SwapStatus.SUCCESS }
++            override val amountInUsd = BigDecimal("30")
++            override val amountOutUsd = BigDecimal("29")
++            override val refundedFormatted: BigDecimal? = null
++            override val depositedAmountFormatted = BigDecimal.ONE
++            override val maxSlippage = BigDecimal.ONE
++            override val isSlippageRealized = false
++        }
++    private fun swapMetadata(
++        status: SwapStatus,
++        origin: SimpleSwapAsset = SwapAssetTestFixture.zecSimpleAsset(),
++        destination: SimpleSwapAsset = SwapAssetTestFixture.simpleAsset(),
++    ) = TransactionSwapMetadata(
 +        depositAddress = "fixture-deposit",
 +        provider = "near",
 +        totalFees = Zatoshi(10_000),
 +        totalFeesUsd = BigDecimal("0.01"),
 +        lastUpdated = Instant.EPOCH,
-+        origin = SwapAssetTestFixture.zecSimpleAsset(),
-+        destination = SwapAssetTestFixture.simpleAsset(),
++        origin = origin,
++        destination = destination,
 +        mode = SwapMode.EXACT_INPUT,
 +        recordedStatus = status,
 +        amountOutFormatted = BigDecimal("0.0001")
@@ -43412,9 +44301,12 @@ index 000000000..5e88a6566
 +        recipient = null
 +    )
 +
-+    private suspend fun state(data: DetailedTransactionData): TransactionDetailState {
++    private suspend fun state(data: DetailedTransactionData): TransactionDetailState =
++        withTimeout(10_000) { viewModel(data, flowOf(data)).state.first { it.info != null } }
++
++    private fun viewModel(data: DetailedTransactionData, upstream: Flow<DetailedTransactionData>): TransactionDetailVM {
 +        val details = mockk<GetTransactionDetailByIdUseCase> {
-+            every { observe(data.transaction.id.txIdString()) } returns flowOf(data)
++            every { observe(data.transaction.id.txIdString()) } returns upstream
 +        }
 +        val vm = TransactionDetailVM(
 +            getTransactionDetailById = details,
@@ -43428,7 +44320,7 @@ index 000000000..5e88a6566
 +            getSwapMessage = SwapSupportMapper()
 +        )
 +        store.put("detail", vm)
-+        return withTimeout(10_000) { vm.state.first { it.info != null } }
++        return vm
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionExplorerLinksTest.kt
@@ -44173,6 +45065,245 @@ index 000000000..62b0800ea
 +        assertEquals("1234567", copied)
 +    }
 +}
+diff --git a/ui-lib/src/test/resources/swap-catalog.json b/ui-lib/src/test/resources/swap-catalog.json
+new file mode 100644
+index 000000000..4e48f8ba0
+--- /dev/null
++++ b/ui-lib/src/test/resources/swap-catalog.json
+@@ -0,0 +1,233 @@
++[
++  {
++    "assetId": "nep141:zec.omft.near",
++    "symbol": "ZEC",
++    "blockchain": "zec",
++    "decimals": 8,
++    "contractAddress": null
++  },
++  {
++    "assetId": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
++    "symbol": "USDC",
++    "blockchain": "eth",
++    "decimals": 6,
++    "contractAddress": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
++  },
++  {
++    "assetId": "nep141:tron-d28a265909efecdcee7c5028585214ea0b96f015.omft.near",
++    "symbol": "USDT",
++    "blockchain": "tron",
++    "decimals": 6,
++    "contractAddress": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
++  },
++  {
++    "assetId": "nep141:sol-5ce3bf3a31af18be40ba30f721101b4341690186.omft.near",
++    "symbol": "USDC",
++    "blockchain": "sol",
++    "decimals": 6,
++    "contractAddress": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
++  },
++  {
++    "assetId": "nep141:eth-0xdac17f958d2ee523a2206206994597c13d831ec7.omft.near",
++    "symbol": "USDT",
++    "blockchain": "eth",
++    "decimals": 6,
++    "contractAddress": "0xdac17f958d2ee523a2206206994597c13d831ec7"
++  },
++  {
++    "assetId": "nep141:btc.omft.near",
++    "symbol": "BTC",
++    "blockchain": "btc",
++    "decimals": 8,
++    "contractAddress": null
++  },
++  {
++    "assetId": "nep141:eth.omft.near",
++    "symbol": "ETH",
++    "blockchain": "eth",
++    "decimals": 18,
++    "contractAddress": null
++  },
++  {
++    "assetId": "nep141:sol.omft.near",
++    "symbol": "SOL",
++    "blockchain": "sol",
++    "decimals": 9,
++    "contractAddress": null
++  },
++  {
++    "assetId": "nep141:bnb-0x55d398326f99059ff775485246999027b3197955.omdep.near",
++    "symbol": "USDT",
++    "blockchain": "bsc",
++    "decimals": 18,
++    "contractAddress": "0x55d398326f99059ff775485246999027b3197955"
++  },
++  {
++    "assetId": "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near",
++    "symbol": "USDC",
++    "blockchain": "base",
++    "decimals": 6,
++    "contractAddress": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
++  },
++  {
++    "assetId": "nep141:sol-c800a4bd850783ccb82c2b2c7e84175443606352.omft.near",
++    "symbol": "USDT",
++    "blockchain": "sol",
++    "decimals": 6,
++    "contractAddress": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"
++  },
++  {
++    "assetId": "nep141:arb-0xaf88d065e77c8cc2239327c5edb3a432268e5831.omft.near",
++    "symbol": "USDC",
++    "blockchain": "arb",
++    "decimals": 6,
++    "contractAddress": "0xaf88d065e77c8cc2239327c5edb3a432268e5831"
++  },
++  {
++    "assetId": "nep141:sui-c1b81ecaf27933252d31a963bc5e9458f13c18ce.omft.near",
++    "symbol": "USDC",
++    "blockchain": "sui",
++    "decimals": 6,
++    "contractAddress": "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC"
++  },
++  {
++    "assetId": "nep141:wrap.near",
++    "symbol": "wNEAR",
++    "blockchain": "near",
++    "decimals": 24,
++    "contractAddress": "wrap.near"
++  },
++  {
++    "assetId": "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1",
++    "symbol": "USDC",
++    "blockchain": "near",
++    "decimals": 6,
++    "contractAddress": "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1"
++  },
++  {
++    "assetId": "nep141:pol-0xc2132d05d31c914a87c6611c10748aeb04b58e8f.omdep.near",
++    "symbol": "USDT",
++    "blockchain": "pol",
++    "decimals": 6,
++    "contractAddress": "0xc2132d05d31c914a87c6611c10748aeb04b58e8f"
++  },
++  {
++    "assetId": "nep141:eth-0x2260fac5e5542a773aa44fbcfedf7c193bc2c599.omft.near",
++    "symbol": "WBTC",
++    "blockchain": "eth",
++    "decimals": 8,
++    "contractAddress": "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599"
++  },
++  {
++    "assetId": "nep141:nbtc.bridge.near",
++    "symbol": "BTC",
++    "blockchain": "near",
++    "decimals": 8,
++    "contractAddress": "nbtc.bridge.near"
++  },
++  {
++    "assetId": "nep141:eth-0x6b175474e89094c44da98b954eedeac495271d0f.omft.near",
++    "symbol": "DAI",
++    "blockchain": "eth",
++    "decimals": 18,
++    "contractAddress": "0x6b175474e89094c44da98b954eedeac495271d0f"
++  },
++  {
++    "assetId": "nep141:ltc.omft.near",
++    "symbol": "LTC",
++    "blockchain": "ltc",
++    "decimals": 8,
++    "contractAddress": null
++  },
++  {
++    "assetId": "nep141:tron.omft.near",
++    "symbol": "TRX",
++    "blockchain": "tron",
++    "decimals": 6,
++    "contractAddress": null
++  },
++  {
++    "assetId": "nep141:usdt.tether-token.near",
++    "symbol": "USDT",
++    "blockchain": "near",
++    "decimals": 6,
++    "contractAddress": "usdt.tether-token.near"
++  },
++  {
++    "assetId": "nep141:bnb.omdep.near",
++    "symbol": "BNB",
++    "blockchain": "bsc",
++    "decimals": 18,
++    "contractAddress": null
++  },
++  {
++    "assetId": "nep141:avax.omdep.near",
++    "symbol": "AVAX",
++    "blockchain": "avax",
++    "decimals": 18,
++    "contractAddress": null
++  },
++  {
++    "assetId": "nep141:arb-0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9.omft.near",
++    "symbol": "USDT0",
++    "blockchain": "arb",
++    "decimals": 6,
++    "contractAddress": "0xfd086bc7cd5c481dcc9c85ebe478a1c0b69fcbb9"
++  },
++  {
++    "assetId": "nep141:arb.omft.near",
++    "symbol": "ETH",
++    "blockchain": "arb",
++    "decimals": 18,
++    "contractAddress": null
++  },
++  {
++    "assetId": "nep141:pol-0x3c499c542cef5e3811e1192ce70d8cc03d5c3359.omdep.near",
++    "symbol": "USDC",
++    "blockchain": "pol",
++    "decimals": 6,
++    "contractAddress": "0x3c499c542cef5e3811e1192ce70d8cc03d5c3359"
++  },
++  {
++    "assetId": "nep141:xrp.omft.near",
++    "symbol": "XRP",
++    "blockchain": "xrp",
++    "decimals": 6,
++    "contractAddress": null
++  },
++  {
++    "assetId": "nep141:base.omft.near",
++    "symbol": "ETH",
++    "blockchain": "base",
++    "decimals": 18,
++    "contractAddress": null
++  },
++  {
++    "assetId": "nep141:dash.omft.near",
++    "symbol": "DASH",
++    "blockchain": "dash",
++    "decimals": 8,
++    "contractAddress": null
++  },
++  {
++    "assetId": "nep141:bch.omft.near",
++    "symbol": "BCH",
++    "blockchain": "bch",
++    "decimals": 8,
++    "contractAddress": null
++  },
++  {
++    "assetId": "1cs_v1:sol:spl:A7bdiYdS5GjqGFtxf17ppRHtDKPkkRqbKtR27dxvQXaS",
++    "symbol": "ZEC",
++    "blockchain": "sol",
++    "decimals": 8,
++    "contractAddress": "A7bdiYdS5GjqGFtxf17ppRHtDKPkkRqbKtR27dxvQXaS"
++  },
++  {
++    "assetId": "1cs_v1:near:nep141:zec.omft.near",
++    "symbol": "ZEC",
++    "blockchain": "near",
++    "decimals": 8,
++    "contractAddress": "zec.omft.near"
++  }
++]
 diff --git a/ui-screenshot-test/build.gradle.kts b/ui-screenshot-test/build.gradle.kts
 index 21de45f4b..19d32de49 100644
 --- a/ui-screenshot-test/build.gradle.kts
