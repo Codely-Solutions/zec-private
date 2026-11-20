@@ -1,3 +1,18 @@
+pluginManagement {
+    repositories {
+        mavenCentral {
+            content {
+                includeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?")
+            }
+        }
+        gradlePluginPortal {
+            content {
+                excludeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?")
+            }
+        }
+    }
+}
+
 @Suppress("UnstableApiUsage")
 dependencyResolutionManagement {
     repositories {

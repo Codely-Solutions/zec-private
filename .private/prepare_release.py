@@ -63,7 +63,8 @@ def prepare(source, sha, candidate_run, core_run, owner, out, *, baseline_path=N
         upgradeBaseline=dict(baseline['artifact'], source_sha=baseline['source_sha']),
         upgradeBaselineInstrumentation=dict(baseline['instrumentation']['artifact'],
             source_sha=baseline['source_sha'], apk_sha256=baseline['instrumentation']['apk_sha256']))
-    recipes = ['.github/workflows/build-release.yml', '.private/emulator_checks.sh', '.private/tor-ui-abi.gradle',
+    recipes = ['.github/workflows/build-release.yml', '.private/emulator_checks.sh', '.private/gradle_resolution.py',
+               '.private/tor-ui-abi.gradle',
                '.private/task-timing.gradle', '.private/donation-review/include.gradle', '.private/style-comparison/include.gradle']
     recipe_ids = dict(zip(recipes, git(source, 'rev-parse', *[sha + ':' + p for p in recipes]).splitlines()))
     ui.update(common, artifactProducer=ui_proof, workflow_run_id=candidate_run, probeKind='ui', package=baseline['package'].replace('.testnet', ''),

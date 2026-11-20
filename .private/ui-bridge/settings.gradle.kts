@@ -5,7 +5,11 @@ pluginManagement {
     plugins {
         id("com.android.application") version androidGradlePlugin
     }
-    repositories { google(); mavenCentral(); gradlePluginPortal() }
+    repositories {
+        google { content { excludeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?") } }
+        mavenCentral()
+        gradlePluginPortal { content { excludeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?") } }
+    }
 }
 dependencyResolutionManagement { repositories { google(); mavenCentral() } }
 rootProject.name="UiBridge"

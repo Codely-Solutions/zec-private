@@ -9,7 +9,10 @@ on:
       - gradle/verification-metadata.xml
       - '**/gradle.lockfile'
       - '**/build.gradle.kts'
-      - settings.gradle.kts
+      - '**/settings.gradle.kts'
+      - .private/gradle_resolution.py
+      - .private/gradle_resolution_probe.py
+      - .private/test_toolchain_policy.py
       - buildSrc/**
       - .github/dependabot.yml
       - .github/workflows/**
@@ -17,6 +20,10 @@ on:
     inputs:
       metadata_proposal:
         description: Resolve dependency metadata and upload proposed checksums for review
+        type: boolean
+        default: false
+      resolution_probe:
+        description: Verify Kotlin configuration and cached-miss recovery without assembling APKs
         type: boolean
         default: false
 permissions:
@@ -45,7 +52,34 @@ jobs:
         if: ${{ !inputs.metadata_proposal }}
         run: |
           chmod +x gradlew
-          ./gradlew help :feature-viewing-key:compileZcashmainnetFossDebugLibraryResources --warning-mode all --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process
+          python3 -B .private/gradle_resolution.py -- ./gradlew help :feature-viewing-key:compileZcashmainnetFossDebugLibraryResources --dependency-verification strict --warning-mode all --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx3g -XX:MaxMetaspaceSize=1g' -Pkotlin.compiler.execution.strategy=in-process
+      - name: Check included-build and bridge plugin configurations
+        if: ${{ inputs.resolution_probe && !inputs.metadata_proposal }}
+        run: |
+          python3 -B .private/gradle_resolution.py -- ./gradlew -p build-conventions-secant help --dependency-verification strict --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx2g -XX:MaxMetaspaceSize=1g'
+          python3 -B .private/gradle_resolution.py -- ./gradlew -p .private/ui-bridge help --dependency-verification strict --no-daemon --no-watch-fs --max-workers=2 -Dorg.gradle.jvmargs='-Xmx2g -XX:MaxMetaspaceSize=1g'
+      - name: Exercise a real Gradle missing-metadata cache and checksum rejection
+        if: ${{ inputs.resolution_probe && !inputs.metadata_proposal }}
+        run: python3 -B .private/gradle_resolution_probe.py --out "$RUNNER_TEMP/gradle-resolution-probe"
+      - name: Preserve bounded resolution diagnostics
+        if: ${{ always() && inputs.resolution_probe && !inputs.metadata_proposal }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: gradle-resolution-probe
+          path: ${{ runner.temp }}/gradle-resolution-probe/
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Remove resolution probe staging
+        if: ${{ always() && inputs.resolution_probe && !inputs.metadata_proposal }}
+        run: |
+          python3 -B - <<'PY'
+          import os, shutil
+          from pathlib import Path
+          target = Path(os.environ['RUNNER_TEMP']) / 'gradle-resolution-probe'
+          if target.exists():
+              assert target.resolve().parent == Path(os.environ['RUNNER_TEMP']).resolve()
+              shutil.rmtree(target)
+          PY
       - name: Propose dependency verification metadata
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.metadata_proposal }}
         run: |

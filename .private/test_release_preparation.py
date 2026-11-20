@@ -40,7 +40,7 @@ class ReleaseTests(unittest.TestCase):
 
     def fake_git(self, source, *args):
         if args[0] == 'rev-parse':
-            return SHA if args[1:] == ('HEAD',) else '\n'.join([DIGEST]*6)
+            return SHA if args[1:] == ('HEAD',) else '\n'.join([DIGEST] * len(args[1:]))
         if args[0] in ('diff','ls-files'): return ''
         if args[-1].endswith('maintenance-assets.json'):
             return json.dumps(dict(ui_bridge=BASELINE['artifact']))
@@ -173,8 +173,8 @@ class ReleaseTests(unittest.TestCase):
         (policy_root/'.private/upgrade-baseline.json').write_text(json.dumps(dict(source_sha=core['baseline_source_sha'],
             version_code=core['baseline_version_code'],instrumentation=dict(apk_sha256=core['baseline_instrumentation_apk_sha256']))))
         original_validate=assembly.validate_core
-        def isolated_validate(receipt, expected, root=None):
-            return original_validate(receipt,expected,root=policy_root)
+        def isolated_validate(receipt, expected, root=None, **kwargs):
+            return original_validate(receipt,expected,root=policy_root,**kwargs)
         out=self.root/'assembled'
         argv=['assemble_release.py','--source-sha',SHA,'--candidate-run','1','--reuse-core',str(core_path),
               '--reuse-quote',str(quote_path),'--task-root',str(self.root),'--out',str(out)]
