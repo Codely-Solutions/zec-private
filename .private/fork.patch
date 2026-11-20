@@ -28988,7 +28988,7 @@ index a874453ef..2ba20a119 100644
 +        }
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
-index 48d3039d5..f5778ba74 100644
+index 48d3039d5..9cb98722e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailView.kt
 @@ -71,0 +72 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionErrorFooter
@@ -29023,6 +29023,9 @@ index 48d3039d5..f5778ba74 100644
 +                                    CompositionLocalProvider(LocalBalancesAvailable provides true) {
 +                                        TransactionDetailInfoRow(state.maxSlippage)
 +                                    }
+@@ -175 +186 @@ fun SwapDetailView(
+-                        TransactionDetailInfoRow(state = state.timestamp)
++                        TransactionDetailInfoRow(state = state.timestamp, wrapMessage = true)
 @@ -180,0 +192,4 @@ fun SwapDetailView(
 +                    if (state.explorerLinks.isNotEmpty()) {
 +                        Spacer(8.dp)
@@ -30171,6 +30174,15 @@ index 553c98db2..52c82ce4f 100644
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/info/TransactionDetailInfoState.kt
 @@ -40,0 +41 @@ data class SendSwapState(
 +    val donationBasisZec: String? = null,
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailInfoRow.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailInfoRow.kt
+index d9b22b066..3d99d9553 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailInfoRow.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/infoitems/TransactionDetailInfoRow.kt
+@@ -49,0 +50 @@ fun TransactionDetailInfoRow(
++    wrapMessage: Boolean = false,
+@@ -68 +69 @@ fun TransactionDetailInfoRow(
+-                    maxLines = 1,
++                    maxLines = if (wrapMessage) Int.MAX_VALUE else 1,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityStateFixture.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityStateFixture.kt
 index b1f6403cd..30ee1cd5d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactionhistory/ActivityStateFixture.kt
@@ -43041,6 +43053,76 @@ index 3027e6cda..3018ad12d 100644
 +            submitProposal = submit,
 @@ -132,0 +285 @@ class SwapQuoteVMTest {
 +            independentPrices = prices,
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
+new file mode 100644
+index 000000000..4cafec370
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailRowLayoutTest.kt
+@@ -0,0 +1,64 @@
++package co.electriccoin.zcash.ui.screen.transactiondetail
++
++import androidx.compose.foundation.layout.width
++import androidx.compose.runtime.CompositionLocalProvider
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalDensity
++import androidx.compose.ui.semantics.SemanticsActions
++import androidx.compose.ui.test.junit4.v2.createComposeRule
++import androidx.compose.ui.test.onNodeWithText
++import androidx.compose.ui.test.performSemanticsAction
++import androidx.compose.ui.text.TextLayoutResult
++import androidx.compose.ui.unit.Density
++import androidx.compose.ui.unit.dp
++import co.electriccoin.zcash.ui.design.theme.ZcashTheme
++import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
++import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.design.util.withStyle
++import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRow
++import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRowState
++import org.junit.Rule
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import org.robolectric.annotation.GraphicsMode
++import kotlin.test.Test
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], qualifiers = "w360dp-h800dp")
++@GraphicsMode(GraphicsMode.Mode.NATIVE)
++class TransactionDetailRowLayoutTest {
++    @get:Rule
++    val compose = createComposeRule()
++
++    @Test
++    fun savedUpdateRemainsCompleteAtLargeTextAndNarrowWidth() {
++        val timestamp = "20 November 2026, 12:00"
++        compose.setContent {
++            val density = LocalDensity.current
++            CompositionLocalProvider(
++                LocalDensity provides Density(density.density, 1.3f),
++                LocalBalancesAvailable provides true,
++            ) {
++                ZcashTheme {
++                    TransactionDetailInfoRow(
++                        state = TransactionDetailInfoRowState(
++                            stringRes("Last saved update"), stringRes(timestamp).withStyle()
++                        ),
++                        modifier = Modifier.width(360.dp),
++                        wrapMessage = true,
++                    )
++                }
++            }
++        }
++        val layouts = mutableListOf<TextLayoutResult>()
++        compose.onNodeWithText(timestamp).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action ->
++            action(layouts)
++        }
++        val layout = layouts.single()
++        assertTrue(layout.lineCount > 1)
++        assertFalse(layout.hasVisualOverflow, "The saved update timestamp must remain complete")
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
 new file mode 100644
 index 000000000..5e88a6566

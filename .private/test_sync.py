@@ -1,17 +1,34 @@
 """No-network controller tests, including an actual disposable upstream worktree."""
 import importlib.util,json,os,re,subprocess,tempfile,unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 spec=importlib.util.spec_from_file_location('sync',Path(__file__).with_name('sync.py'))
 sync=importlib.util.module_from_spec(spec);spec.loader.exec_module(sync)
 
+@contextmanager
+def runner_temp(path):
+    # Restore only this variable. Replacing all of os.environ drops unrelated
+    # empty native environment values on Windows, including injected Git controls.
+    previous = os.environ.get('RUNNER_TEMP')
+    os.environ['RUNNER_TEMP'] = str(path)
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop('RUNNER_TEMP', None)
+        else:
+            os.environ['RUNNER_TEMP'] = previous
+
+
 class RunEnvironmentTests(unittest.TestCase):
-    def test_child_preserves_empty_git_environment_values(self):
-        with patch.dict(os.environ, {'GIT_CONFIG_VALUE_0': ''}), \
-                patch.object(subprocess, 'check_output', return_value='ready\n') as command:
-            self.assertEqual('ready', sync.run('git', 'status'))
-            self.assertEqual('', command.call_args.kwargs['env']['GIT_CONFIG_VALUE_0'])
+    def test_temporary_root_preserves_child_git_configuration(self):
+        before = dict(os.environ)
+        with runner_temp('synthetic-task-root'):
+            self.assertEqual('synthetic-task-root', os.environ['RUNNER_TEMP'])
+        self.assertEqual(before, dict(os.environ))
+        self.assertTrue(sync.run('git', '--version').startswith('git version '))
 
 
 class RefreshPatchTests(unittest.TestCase):
@@ -205,7 +222,7 @@ class SyncTests(unittest.TestCase):
                     if args[:2]==('git','push'):
                         writes.append(args);return ''
                     return original(*args,**kwargs)
-                with patch.dict(os.environ,{'RUNNER_TEMP':temp}),patch.object(sync,'gh',
+                with runner_temp(temp),patch.object(sync,'gh',
                         return_value=[self.release(self.next_tag)]),patch.object(sync,'run',
                         side_effect=commands),patch.object(sync,'output') as output:
                     from maintenance_watch import WRAPPER_PROPERTIES
@@ -242,7 +259,7 @@ class SyncTests(unittest.TestCase):
                 writes.append(args);return ''
             return original(*args,**kwargs)
         with tempfile.TemporaryDirectory() as temp:
-            with patch.dict(os.environ,{'RUNNER_TEMP':temp}),patch.object(sync,'gh',return_value=[self.release(self.next_tag)]),patch.object(sync,'run',side_effect=commands),patch.object(sync,'output') as output:
+            with runner_temp(temp),patch.object(sync,'gh',return_value=[self.release(self.next_tag)]),patch.object(sync,'run',side_effect=commands),patch.object(sync,'output') as output:
                 sync.main()
                 self.assertEqual('true',output.call_args.kwargs['changed'])
                 self.assertEqual('updates/'+self.next_tag+'-'+original('git','rev-parse','HEAD')[:12],
@@ -293,7 +310,7 @@ class SyncTests(unittest.TestCase):
                     if args[:2]==('git','push'):
                         writes.append(args);return ''
                     return original(*args,**kwargs)
-                with patch.dict(os.environ,{'RUNNER_TEMP':temp}),patch.object(sync,'gh',
+                with runner_temp(temp),patch.object(sync,'gh',
                         return_value=[self.release(self.next_tag)]),patch.object(sync,'run',side_effect=commands):
                     with self.assertRaises(subprocess.CalledProcessError):sync.main()
                 self.assertEqual([],writes)

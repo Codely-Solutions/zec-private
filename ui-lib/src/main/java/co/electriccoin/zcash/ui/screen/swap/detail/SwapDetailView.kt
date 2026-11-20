@@ -183,7 +183,7 @@ fun SwapDetailView(
                             }
                         }
                         ZashiHorizontalDivider()
-                        TransactionDetailInfoRow(state = state.timestamp)
+                        TransactionDetailInfoRow(state = state.timestamp, wrapMessage = true)
                     }
                     state.message?.let {
                         Spacer(8.dp)

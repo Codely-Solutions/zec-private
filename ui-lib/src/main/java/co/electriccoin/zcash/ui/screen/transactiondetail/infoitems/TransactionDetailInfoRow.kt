@@ -47,6 +47,7 @@ fun TransactionDetailInfoRow(
     state: TransactionDetailInfoRowState,
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
+    wrapMessage: Boolean = false,
 ) {
     TransactionDetailRowSurface(
         onClick = state.onClick,
@@ -65,7 +66,7 @@ fun TransactionDetailInfoRow(
                 modifier = Modifier.weight(1f),
             ) {
                 Text(
-                    maxLines = 1,
+                    maxLines = if (wrapMessage) Int.MAX_VALUE else 1,
                     text =
                         state.message orHiddenString
                             stringRes(co.electriccoin.zcash.ui.design.R.string.general_hideBalancesMost),
