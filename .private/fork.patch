@@ -671,7 +671,7 @@ index af7fd10ac..b4f20ef88 100644
 +org.tensorflow:tensorflow-lite-metadata:0.2.0=precompiledScriptPluginAccessorsGenerationClasspath,runtimeClasspath,testRuntimeClasspath
 +empty=annotationProcessor,implementationDependenciesMetadata,kotlinCompilerPluginClasspath,kotlinNativeCompilerPluginClasspath,kotlinScriptDefExtensions,testAnnotationProcessor,testImplementationDependenciesMetadata,testKotlinScriptDefExtensions
 diff --git a/build-conventions-secant/settings.gradle.kts b/build-conventions-secant/settings.gradle.kts
-index 463d07ab8..8a49ca15f 100644
+index 463d07ab8..78a1e433d 100644
 --- a/build-conventions-secant/settings.gradle.kts
 +++ b/build-conventions-secant/settings.gradle.kts
 @@ -0,0 +1,15 @@
@@ -679,12 +679,12 @@ index 463d07ab8..8a49ca15f 100644
 +    repositories {
 +        mavenCentral {
 +            content {
-+                includeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?")
++                includeGroup("org.jetbrains.kotlin")
 +            }
 +        }
 +        gradlePluginPortal {
 +            content {
-+                excludeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?")
++                excludeGroup("org.jetbrains.kotlin")
 +            }
 +        }
 +    }
@@ -1060,7 +1060,7 @@ index 35fdf9ac6..24aee1350 100644
 -org.slf4j:slf4j-api:2.0.17=buildScriptClasspath,compileClasspath
 +org.slf4j:slf4j-api:2.0.18=buildScriptClasspath,compileClasspath
 diff --git a/buildSrc/settings.gradle.kts b/buildSrc/settings.gradle.kts
-index 29744ec1b..1d8f64681 100644
+index 29744ec1b..c22ef3052 100644
 --- a/buildSrc/settings.gradle.kts
 +++ b/buildSrc/settings.gradle.kts
 @@ -0,0 +1,15 @@
@@ -1068,12 +1068,12 @@ index 29744ec1b..1d8f64681 100644
 +    repositories {
 +        mavenCentral {
 +            content {
-+                includeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?")
++                includeGroup("org.jetbrains.kotlin")
 +            }
 +        }
 +        gradlePluginPortal {
 +            content {
-+                excludeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?")
++                excludeGroup("org.jetbrains.kotlin")
 +            }
 +        }
 +    }
@@ -14853,19 +14853,19 @@ index d94c54a63..cc03febb0 100644
 +    api(platform(libs.okhttp.bom))
 +    api(libs.okhttp)
 diff --git a/settings.gradle.kts b/settings.gradle.kts
-index 5831568a4..1d038dbff 100644
+index 5831568a4..e8cea8d0a 100644
 --- a/settings.gradle.kts
 +++ b/settings.gradle.kts
 @@ -28,0 +29,6 @@ pluginManagement {
 +        // Resolve Kotlin directly from its publisher's repository, including plugin classpaths.
 +        mavenCentral {
 +            content {
-+                includeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?")
++                includeGroup("org.jetbrains.kotlin")
 +            }
 +        }
 @@ -29,0 +36,3 @@ pluginManagement {
 +            content {
-+                excludeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?")
++                excludeGroup("org.jetbrains.kotlin")
 +            }
 @@ -50 +59 @@ pluginManagement {
 -        id("com.github.ben-manes.versions") version (extra["GRADLE_VERSIONS_PLUGIN_VERSION"].toString()) apply false

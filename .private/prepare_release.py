@@ -66,7 +66,7 @@ def prepare(source, sha, candidate_run, core_run, owner, out, *, baseline_path=N
     recipes = ['.github/workflows/build-release.yml', '.private/emulator_checks.sh', '.private/gradle_resolution.py',
                '.private/tor-ui-abi.gradle',
                '.private/task-timing.gradle', '.private/donation-review/include.gradle', '.private/style-comparison/include.gradle']
-    recipe_ids = dict(zip(recipes, git(source, 'rev-parse', *[sha + ':' + p for p in recipes]).splitlines()))
+    recipe_ids = dict(zip(recipes, git(source, 'rev-parse', *[sha + ':' + p for p in recipes]).splitlines(), strict=True))
     ui.update(common, artifactProducer=ui_proof, workflow_run_id=candidate_run, probeKind='ui', package=baseline['package'].replace('.testnet', ''),
         expectedVersionCode=version, phase1Scenario=True, sizeWorkflowScenario=True, residentUiBridge=bridge,
         uiBuildInputs=dict(profile='production-quotes', input_fingerprint=fp['production-quotes'], recipes=recipe_ids))

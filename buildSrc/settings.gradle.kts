@@ -2,12 +2,12 @@ pluginManagement {
     repositories {
         mavenCentral {
             content {
-                includeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?")
+                includeGroup("org.jetbrains.kotlin")
             }
         }
         gradlePluginPortal {
             content {
-                excludeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?")
+                excludeGroup("org.jetbrains.kotlin")
             }
         }
     }

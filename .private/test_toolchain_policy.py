@@ -141,7 +141,8 @@ class GradleResolutionTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertIn('pluginManagement', text)
                 self.assertLess(text.index('mavenCentral'), text.index('gradlePluginPortal'))
-                self.assertIn('excludeGroupByRegex("org\\\\.jetbrains\\\\.kotlin(\\\\..*)?")', text)
+                self.assertIn('excludeGroup("org.jetbrains.kotlin")', text)
+                self.assertNotIn('includeGroupByRegex("org\\\\.jetbrains\\\\.kotlin', text)
 
 
 if __name__=='__main__':unittest.main()

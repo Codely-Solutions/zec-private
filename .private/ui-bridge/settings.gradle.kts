@@ -6,9 +6,9 @@ pluginManagement {
         id("com.android.application") version androidGradlePlugin
     }
     repositories {
-        google { content { excludeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?") } }
+        google { content { excludeGroup("org.jetbrains.kotlin") } }
         mavenCentral()
-        gradlePluginPortal { content { excludeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?") } }
+        gradlePluginPortal { content { excludeGroup("org.jetbrains.kotlin") } }
     }
 }
 dependencyResolutionManagement { repositories { google(); mavenCentral() } }

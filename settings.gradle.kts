@@ -29,12 +29,12 @@ pluginManagement {
         // Resolve Kotlin directly from its publisher's repository, including plugin classpaths.
         mavenCentral {
             content {
-                includeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?")
+                includeGroup("org.jetbrains.kotlin")
             }
         }
         gradlePluginPortal {
             content {
-                excludeGroupByRegex("org\\.jetbrains\\.kotlin(\\..*)?")
+                excludeGroup("org.jetbrains.kotlin")
             }
             if (isRepoRestrictionEnabled) {
                 content {
