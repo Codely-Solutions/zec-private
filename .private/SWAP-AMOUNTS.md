@@ -8,6 +8,8 @@ For EXACT_OUTPUT, `amountIn` is the deposit including the input allowance; `minA
 
 Status output comes from the provider's settled amount when available, including raw base-unit output when the formatted field is absent. Otherwise the displayed value remains explicitly quoted. Provider output is not an independently measured wallet credit. The wallet's received transaction records its own scanned net value. A provider/bridge reporting difference must not be silently corrected with a guessed constant.
 
+Resolve a status response by its complete exact provider asset ID first. Use a documented alias only when the exact ID is absent and the alias resolves uniquely. Coexisting exact and aliased catalog entries remain distinct selections; genuinely duplicated exact IDs and ambiguous fallback matches remain errors. Saved swap metadata provides display-only recovery while a fresh status is unavailable. Mark it as saved and retain request/response identity checks for new data.
+
 The fork submits no app fees. Current unauthenticated 1Click requests use EXACT_INPUT, EXACT_OUTPUT or FLEX_INPUT. NEAR documents a 0.25% platform charge on non-ANY_INPUT quotes, included in the returned quote. This is not the total swap cost. Protocol, route and bridge costs or favourable execution may also affect output. Do not subtract an included fee a second time or infer aggregate fees from independently priced fiat values.
 
 The review omits a wallet fee for externally funded incoming swaps. Outgoing swaps retain the wallet proposal fee; completed outgoing details use the actual wallet transaction fee rather than historical aggregate metadata. Legacy stored fee fields remain readable for compatibility.

@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.swap.detail
 
+import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
@@ -22,7 +23,9 @@ import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
 import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
 import io.mockk.spyk
+import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -49,10 +52,14 @@ class SwapDetailVMTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(UnconfinedTestDispatcher())
+        // Currency-number builders also resolve the default ticker position through Android ICU.
+        mockkObject(FiatCurrency.USD)
+        every { FiatCurrency.USD.symbol } returns "$"
     }
 
     @AfterTest
     fun tearDown() {
+        unmockkObject(FiatCurrency.USD)
         Dispatchers.resetMain()
     }
 
@@ -182,8 +189,8 @@ class SwapDetailVMTest {
         }
         val router = mockk<NavigationRouter>(relaxed = true)
         val mapper = spyk(CommonTransactionDetailMapper())
-        // Quote-row currency formatting is covered by mapper/rendering tests. Keep Android's
-        // FiatCurrency symbol lookup outside this coroutine-only screen-state fixture.
+        // Quote-row mapping has separate mapper/rendering coverage; keep this fixture focused
+        // on detail state, saved metadata and refresh actions.
         every {
             mapper.createTransactionDetailQuoteHeaderState(any(), any(), any())
         } returns

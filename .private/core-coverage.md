@@ -1,10 +1,11 @@
 # Core acceptance coverage
 
-Status: revision 20 is signed and independently verified. Its installed-update acceptance used paired revision 19; paired revision 20 is now selected for the next candidate and paired revision 19 remains rollback. Historical receipts retain their executed baseline. `core-validation-summary.json` binds execution; `release-evidence/v3.19.0-private.20.json` binds publication.
+Current publication evidence is selected by [the release procedure](RELEASE-WORKFLOW.md) and `upgrade-baseline.json`. Each `release-evidence/vX.Y.Z-private.N.json` binds its original checks and artifacts. Historical receipts retain their executed baseline and scope. This document describes the covered boundaries; passing acceptance does not establish every screen, provider response or settlement case.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
-| Quote dismissal poisons the next request; stale callbacks overwrite state | Existing deterministic cancellation tests and real unfunded production quote UI receipt | Reuse only while the relevant production source/build inputs match; short Tor session when invalidated. |
+| Quote dismissal poisons the next request; stale callbacks overwrite state | Existing deterministic cancellation tests and real unfunded production quote UI receipt | Reuse only while the relevant source/build inputs match. Routine acceptance follows the direct app route; native Tor execution follows changed transport inputs. |
+| Coexisting provider IDs make valid saved swaps unreadable | `NearAssetIdentityTest`, `NearSwapDataSourceTest`, saved-status observer tests and `SwapDetailVMTest` | JVM fixtures preserve the real resolver/decoder and include both native BTC catalog entries, both catalog orders, pending and terminal results, failure/retry and saved-state fallback. No funding or network is needed. |
 | Wallet cannot receive or spend; wrong recipient, amount, memo or fee | Installed testnet app graph, real faucet payment, app proposal creation/submission and sender/recipient history | One small transfer reused by the other core assertions; no exhaustive asset matrix. |
 | Installed update loses wallet or transaction data | Verified prior-release testnet fixture selected in `upgrade-baseline.json`, updated in place to the candidate; seed identity, funded balance and account behavior checked | Same isolated guest and funding fixture; dedicated disposable test certificate, separate permanent release checks. |
 | Restart loses transaction state or recovery fails | Process restart followed by clean target-data erase and seed/birthday restoration into recipient wallet | Reuse the same test transaction; restoration cannot reuse the populated target database. |
@@ -50,6 +51,23 @@ Representative unit cases cover 0/6/8/18 decimal atomic units across all three q
 The bounded sandbox review is recorded in `core-provider-review.json`. Tidepool advertises a 1Click-compatible testnet service, but its detailed documentation described the TAZ bridge as disabled, and the published OpenAPI did not establish a shielded Zcash route. Tor compatibility and actual BTC/TAZ settlement were not verified. Adoption is deferred; this prerequisite does not claim testnet cross-chain settlement or a live provider refund.
 
 Production Detekt retains its rules and existing baseline. Its release-only init excludes the procedural private instrumentation source, which is outside the shipped source sets and separately compiled by the core producer. That harness is checked through exact source/APK bindings, review and real execution. This does not exempt production Kotlin or the ordinary unit tests from analysis.
+
+## Fast screen and provider checks
+
+These cases run on the JVM with MockK and virtual coroutine time. They use real screen-state builders and mock external I/O. The full `ui-lib` release JVM task includes them automatically. Use the development session's filters to run affected cases first and `*VMTest` / `*MapperTest` for a broader pass in the same checkout.
+
+| Surface | Existing fast checks and additions | Evidence boundary |
+|---|---|---|
+| Swap form, CrossPay, quote and deposit | `SwapVMTest`, `PayVMTest`, `SwapQuoteVMTest`, `SwapQuoteVMMapperTest`, `ORSwapConfirmationVMTest`, recipient, quote-lifecycle and funding use-case tests | Form validation, request/review bindings, exact amounts, cancellation, expiry and actions. Quote layout tests use Robolectric for Android resources and representative rendering. |
+| Incoming swap detail | `SwapDetailVMTest`, `GetSwapStatusUseCaseTest`, `GetReloadableSwapQuoteUseCaseTest` | Saved pending/completed state survives a failed first refresh; known data survives loading/error; retry and Back remain available; real failed/refunded statuses preserve support actions. |
+| Local transaction and outgoing swap detail | `TransactionDetailVMTest`, explorer-link and icon tests | Local amount, fee and transaction remain available if provider status fails; retry and support navigation use the right reference. |
+| Activity/history | `ActivityHistoryVMTest`, `SwapActivityStatusTest`, `GetFilteredActivitiesUseCaseTest` | Pending, completed, failed and refunded incoming rows preserve exact output and route to incoming details; outgoing rows preserve debit and route to local transaction details. |
+| Receive and Home | `ReceiveVMTest`, `HomeVMButtonsTest`, balance/fiat policy tests | Existing state/actions and refresh policies. These tests cover their named scenarios rather than every Home or Receive arrangement. |
+| Provider catalog/status mapping | `NearAssetIdentityTest`, `NearSwapDataSourceTest`, repository and quote/status model tests | Coexisting native BTC and BTC(OMNI), both catalog orders and exact echoed IDs, genuine duplicates, unknown IDs, status decoding and precise units. The fixture models the public catalog observed on November 20, 2026, with synthetic addresses and amounts. |
+
+The mock boundary belongs outside the behavior being checked. A successful quote-review test does not exercise opening a saved Activity row, and a mocked asset result cannot establish catalog resolution. When provider behavior changes, retain a small sanitized fixture and add its state transition at the consumer that failed. Keep independent live catalog checks for drift; offline fixtures describe only the response shapes they contain.
+
+Gaps remain in complete visual combinations, less-used settings/onboarding flows, physical authentication/hardware and actual cross-chain settlement/refunds. Add cases when changing those boundaries, prioritizing state/action assertions over large screenshot matrices. Native SDK signing, persistence across Android restarts, fail-closed routing and third-party execution still use their existing native acceptance. A test count or code-coverage percentage alone does not establish those behaviors.
 
 ## Current release evidence
 

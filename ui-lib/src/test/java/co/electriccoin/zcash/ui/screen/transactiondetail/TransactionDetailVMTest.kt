@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.transactiondetail
 import androidx.lifecycle.ViewModelStore
 import cash.z.ecc.android.sdk.model.TransactionId
 import cash.z.ecc.android.sdk.model.TransactionOverview
+import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.Zip318Kind
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -32,6 +33,8 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendShieldedState
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendSwapState
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,6 +44,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
 import java.math.BigDecimal
 import java.time.Instant
 import kotlin.test.AfterTest
@@ -70,11 +74,14 @@ class TransactionDetailVMTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        mockkObject(FiatCurrency.USD)
+        every { FiatCurrency.USD.symbol } returns "$"
     }
 
     @AfterTest
     fun tearDown() {
         store.clear()
+        unmockkObject(FiatCurrency.USD)
         Dispatchers.resetMain()
     }
 
@@ -163,22 +170,23 @@ class TransactionDetailVMTest {
     fun actualProviderFailureShowsFailureAndRoutesToSwapSupport() = runTest(dispatcher) {
         val origin = SwapAssetTestFixture.zecAsset()
         val destination = SwapAssetTestFixture.asset()
-        val remote = mockk<SwapQuoteStatus> {
-            every { originAsset } returns origin
-            every { destinationAsset } returns destination
-            every { depositAddress } returns DynamicSwapAddress("fixture-deposit")
-            every { destinationAddress } returns DynamicSwapAddress("fixture-btc-recipient")
-            every { status } returns SwapStatus.FAILED
-            every { amountInFormatted } returns BigDecimal.ONE
-            every { amountOutFormatted } returns BigDecimal("0.0001")
-            every { amountInUsd } returns BigDecimal("30")
-            every { amountOutUsd } returns BigDecimal("29")
-            every { executedAmountOut } returns null
-            every { refundedFormatted } returns null
-            every { maxSlippage } returns BigDecimal.ONE
-            every { isSlippageRealized } returns false
-            every { originTransactionIds } returns emptyList()
-            every { destinationTransactionIds } returns emptyList()
+        val remote = object : SwapQuoteStatus {
+            override val originAsset = origin
+            override val destinationAsset = destination
+            override val depositAddress = DynamicSwapAddress("fixture-deposit")
+            override val destinationAddress = DynamicSwapAddress("fixture-btc-recipient")
+            override val timestamp = Instant.EPOCH
+            override val deadline = kotlin.time.Instant.fromEpochSeconds(0)
+            override val status = SwapStatus.FAILED
+            override val mode = SwapMode.EXACT_INPUT
+            override val amountInFormatted = BigDecimal.ONE
+            override val amountOutFormatted = BigDecimal("0.0001")
+            override val amountInUsd = BigDecimal("30")
+            override val amountOutUsd = BigDecimal("29")
+            override val refundedFormatted: BigDecimal? = null
+            override val depositedAmountFormatted = BigDecimal.ONE
+            override val maxSlippage = BigDecimal.ONE
+            override val isSlippageRealized = false
         }
         val state = state(data(sent, swapMetadata(SwapStatus.PENDING), SwapQuoteStatusData(remote, false)))
         assertEquals(stringRes(R.string.swapStatus_swapFailed), state.header.title)
@@ -238,6 +246,6 @@ class TransactionDetailVMTest {
             getSwapMessage = SwapSupportMapper()
         )
         store.put("detail", vm)
-        return vm.state.first { it.info != null }
+        return withTimeout(10_000) { vm.state.first { it.info != null } }
     }
 }

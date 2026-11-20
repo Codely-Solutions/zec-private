@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.transactionhistory
 import androidx.lifecycle.ViewModelStore
 import cash.z.ecc.android.sdk.model.TransactionId
 import cash.z.ecc.android.sdk.model.TransactionOverview
+import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.Zip318Kind
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -31,6 +32,8 @@ import io.mockk.coEvery
 import io.mockk.confirmVerified
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,6 +44,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.withTimeout
 import java.math.BigDecimal
 import java.time.Instant
 import kotlin.test.AfterTest
@@ -60,11 +64,14 @@ class ActivityHistoryVMTest {
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(dispatcher)
+        mockkObject(FiatCurrency.USD)
+        every { FiatCurrency.USD.symbol } returns "$"
     }
 
     @AfterTest
     fun tearDown() {
         store.clear()
+        unmockkObject(FiatCurrency.USD)
         Dispatchers.resetMain()
     }
 
@@ -191,7 +198,7 @@ class ActivityHistoryVMTest {
             updateSwapActivityMetadata = updateMetadata
         )
         store.put("history", vm)
-        val state = vm.state.filterIsInstance<ActivityHistoryState.Data>().first()
+        val state = withTimeout(10_000) { vm.state.filterIsInstance<ActivityHistoryState.Data>().first() }
         return state.items.filterIsInstance<ActivityHistoryItem.Activity>().single().state
     }
 }
