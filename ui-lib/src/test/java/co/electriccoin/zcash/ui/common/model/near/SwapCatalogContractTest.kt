@@ -65,9 +65,10 @@ class SwapCatalogContractTest {
     @Test
     fun exactQuoteIdentitySeparatesNetworksSharingASymbol() {
         assets.groupBy { it.tokenTicker }.values.forEach { bySymbol ->
-            bySymbol.zipWithNext().forEach { (first, second) ->
-                assertIdentityMismatch(first, second)
-                assertIdentityMismatch(second, first)
+            bySymbol.forEach { expected ->
+                bySymbol.filter { it.assetId != expected.assetId }.forEach { other ->
+                    assertIdentityMismatch(expected, other)
+                }
             }
         }
     }
@@ -91,13 +92,24 @@ class SwapCatalogContractTest {
 
     @Test
     fun independentPriceMarketRequiresPinnedMetadata() {
-        val otherNetwork = fixture.blockchains.getBlockchain("test")
         assets.forEach { asset ->
             assertNotNull(SwapPriceMarkets.reference(asset), asset.label)
+            val otherNetwork = assets.first { it.chainTicker != asset.chainTicker }.blockchain
             assertNull(SwapPriceMarkets.reference(asset.copy(blockchain = otherNetwork)), "${asset.label} network")
             assertNull(SwapPriceMarkets.reference(asset.copy(decimals = asset.decimals + 1)), "${asset.label} decimals")
             val changedContract = asset.copy(contractAddress = "test:other-contract")
             assertNull(SwapPriceMarkets.reference(changedContract), "${asset.label} contract")
+            val otherContract = assets.firstOrNull {
+                it.chainTicker == asset.chainTicker && it.contractAddress != null &&
+                    it.contractAddress != asset.contractAddress
+            }
+            otherContract?.let {
+                val swappedContract = asset.copy(contractAddress = it.contractAddress)
+                assertNull(SwapPriceMarkets.reference(swappedContract), "${asset.label} another supported contract")
+            }
+            if (asset.contractAddress != null) {
+                assertNull(SwapPriceMarkets.reference(asset.copy(contractAddress = null)), "${asset.label} missing contract")
+            }
         }
     }
 
