@@ -1,13 +1,13 @@
 # Core acceptance coverage
 
-Current publication evidence is selected by [the release procedure](RELEASE-WORKFLOW.md) and `upgrade-baseline.json`. Each `release-evidence/vX.Y.Z-private.N.json` binds its original checks and artifacts. Historical receipts retain their executed baseline and scope. This document describes the covered boundaries; passing acceptance does not establish every screen, provider response or settlement case.
+Current publication evidence is selected by [the release procedure](RELEASE-WORKFLOW.md). Hosted releases use the verified pair in [hosted-fixture.json](hosted-fixture.json); [upgrade-baseline.json](upgrade-baseline.json) retains the local acceptance baseline. Each `release-evidence/vX.Y.Z-private.N.json` binds its original checks and artifacts. Historical receipts retain their executed baseline and scope. This document describes the covered boundaries; passing acceptance does not establish every screen, provider response or settlement case.
 
 | Production failure | Evidence producer | Trigger and cost control |
 |---|---|---|
 | Quote dismissal poisons the next request; stale callbacks overwrite state | Existing deterministic cancellation tests and real unfunded production quote UI receipt | Reuse only while the relevant source/build inputs match. Routine acceptance follows the direct app route; native Tor execution follows changed transport inputs. |
 | Coexisting provider IDs make valid saved swaps unreadable | `NearAssetIdentityTest`, `NearSwapDataSourceTest`, saved-status observer tests and `SwapDetailVMTest` | JVM fixtures preserve the real resolver/decoder and include both native BTC catalog entries, both catalog orders, pending and terminal results, failure/retry and saved-state fallback. No funding or network is needed. |
 | Wallet cannot receive or spend; wrong recipient, amount, memo or fee | Installed testnet app graph, real faucet payment, app proposal creation/submission and sender/recipient history | One small transfer reused by the other core assertions; no exhaustive asset matrix. |
-| Installed update loses wallet or transaction data | Verified prior-release testnet fixture selected in `upgrade-baseline.json`, updated in place to the candidate; seed identity, funded balance and account behavior checked | Same isolated guest and funding fixture; dedicated disposable test certificate, separate permanent release checks. |
+| Installed update loses wallet or transaction data | Verified prior-release testnet pair selected for the hosted or local path, updated in place to the candidate; seed identity, funded balance and account behavior checked | Same isolated guest and funding fixture; dedicated disposable test certificate, separate permanent release checks. |
 | Restart loses transaction state or recovery fails | Process restart followed by clean target-data erase and seed/birthday restoration into recipient wallet | Reuse the same test transaction; restoration cannot reuse the populated target database. |
 | SDK rejects supported viewing-key components | [Native viewing-key cases](../feature-viewing-key/src/androidTest/java/co/electriccoin/zcash/ui/common/usecase/TransparentAndOrchardKeySdkTest.kt) describe and derive from public vectors; isolated import/reopen covers changed persistence | Run the affected native boundary when SDK or viewing-key inputs change; these checks need no funding and add no unconditional release scenario. |
 | Tor interruption causes direct fallback or unrecoverable state | App-native Tor request during a controlled app-UID outage; dual-stack egress enforcement and rejection counters | One interruption before broadcast, with bounded recovery; retain deterministic failure/race tests for diagnosis. |
@@ -69,7 +69,9 @@ The mock boundary belongs outside the behavior being checked. A successful quote
 
 Gaps remain in complete visual combinations, less-used settings/onboarding flows, physical authentication/hardware and actual cross-chain settlement/refunds. Add cases when changing those boundaries, prioritizing state/action assertions over large screenshot matrices. Native SDK signing, persistence across Android restarts, fail-closed routing and third-party execution still use their existing native acceptance. A test count or code-coverage percentage alone does not establish those behaviors.
 
-## Current release evidence
+## Historical funded coverage
+
+See [published status](STATUS.md) for the current release and its bound acceptance record.
 
 Revision 19 executed confirmed testnet receipt, revision-18 installed-update preservation, controlled native Tor interruption/recovery, one shielded manual donation/send, restart and clean recipient seed/birthday restoration. The 0.01-TAZ payment and reviewed memo were recovered at mined height 4,604,225; the recipient's app state was Pending, not fully confirmed. The incoming funding transaction reached Confirmed before spending. Send accounting included its 0.0001-TAZ network fee. Review/cancel produced no submission; one approval submitted once. Clipboard ownership checks and unsupported multi-recipient rejection passed.
 

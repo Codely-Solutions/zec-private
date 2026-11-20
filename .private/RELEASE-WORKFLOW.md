@@ -20,6 +20,8 @@ If preparation or recovery changes the SHA, compare the replacement with the app
 
 Identify the last verified stage and keep the original run, candidate SHA and artifact IDs. Use the original artifacts while their digests and provenance still match.
 
+For missing pinned Gradle metadata, check the exact coordinates at the declared repository and compare the failing job's restored cache entries with passing peers. When the coordinates are available and the failure is confined to restored dependency state, retire only the implicated cache entries and retry the failed job after the run finishes. Retain passing producers and receipts, keep dependency verification strict, and diagnose any remaining failure before retrying again.
+
 | Last verified stage | Next action and required evidence |
 | --- | --- |
 | Before a faucet POST | Fix the failed readiness boundary and use the unfunded probe when needed. If the wallet job never ran, recover the original artifacts and reuse its quote receipt if available. If a protected reservation exists, pass the original or failed wallet recovery run as `preclaim_run` after reviewing the newer controller. Admission requires positive no-POST evidence at startup or pre-claim readiness and permits one linked reservation. The original reservation stays protected. |
