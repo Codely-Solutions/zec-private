@@ -20,7 +20,7 @@ If preparation or recovery changes the SHA, compare the replacement with the app
 
 Identify the last verified stage and keep the original run, candidate SHA and artifact IDs. Use the original artifacts while their digests and provenance still match.
 
-For missing pinned Gradle metadata, check the exact coordinates at the declared repository and compare the failing job's restored cache entries with passing peers. When the coordinates are available and the failure is confined to restored dependency state, retire only the implicated cache entries and retry the failed job after the run finishes. Retain passing producers and receipts, keep dependency verification strict, and diagnose any remaining failure before retrying again.
+Use the [Kotlin resolution procedure](DEVELOPMENT.md#kotlin-plugin-resolution) for missing build-plugin metadata. The emulator and bridge can recover a verified miss within their existing job. If recovery fails, diagnose the exact repository, coordinate and restored cache before retrying. Retain passing producers and receipts; retire only proven stale entries when necessary.
 
 | Last verified stage | Next action and required evidence |
 | --- | --- |

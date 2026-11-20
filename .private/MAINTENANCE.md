@@ -11,6 +11,7 @@ Use this entry for the checkout; local task state lives in the surrounding works
 | Design or change UI | [UI-STANDARDS.md](UI-STANDARDS.md) | Component choices, hierarchy, wording and accessibility defaults. |
 | Inspect UI / capture screenshots | [UI-REVIEW.md](UI-REVIEW.md) | Established capture/control components; artifact/state orchestration must match the current task. |
 | Reuse local development state | [DEVELOPMENT.md](DEVELOPMENT.md), [dev_session.py](dev_session.py) | Related pinned checks in one bounded isolated workspace; no production release assembly. |
+| Diagnose Kotlin plugin dependency resolution | [Kotlin resolution](DEVELOPMENT.md#kotlin-plugin-resolution) | Canonical repository scopes, pinned same-job recovery and configuration-only hosted regression. |
 | Prepare/admit/assemble release acceptance | [RELEASE-WORKFLOW.md](RELEASE-WORKFLOW.md) | Verified producers, paired baseline, explicit ownership and selective execution; no signing. |
 | Hold, check or publish a custom change | [Hosted custom releases](RELEASE-WORKFLOW.md#hosted-custom-releases) | Release-scope approval, exact commit binding, and shared hosted acceptance and recovery. |
 | Select quick checks and release checks | Build section below; [core coverage](core-coverage.md) | Coverage records identify their executed revision; current evidence must match inputs. |

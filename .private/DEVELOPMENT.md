@@ -45,6 +45,14 @@ For a cold CI metadata proposal, manually dispatch the existing `toolchain-revie
 
 All checkout/build/guest scratch is removed when its guard ends. There is no long-lived daemon or cross-session workspace store. On pause, finish the session and retain only named offline artifacts/evidence; the next session recreates missing state.
 
+## Kotlin plugin resolution
+
+Plugin classpaths have their own repositories. Root, `buildSrc`, convention-build and bridge settings route the exact `org.jetbrains.kotlin` implementation group to Maven Central. Plugin marker groups retain the Portal and their existing checksum pins. Keep these scopes distinct when changing repositories; marker POMs can differ between publishers.
+
+The emulator and quote bridge use [gradle_resolution.py](gradle_resolution.py). On a known Kotlin configuration miss, it checks exact committed coordinates, confirms POM availability and verifies the pinned POM or Gradle module metadata from Central, then refreshes the original command once. Healthy commands run Gradle once. Task, checksum, lock, unknown-coordinate, offline and mixed transport failures retain their failure. Keep dependency verification, command options and immutable artifact bindings intact.
+
+For this boundary, dispatch `toolchain-review.yml` with `resolution_probe=true`. It runs the normal root configuration/resource check, standalone included-build/bridge configuration and a loopback Maven fixture. The root composite uses the checked-in verification file; standalone checks establish configuration only. The fixture records whether Gradle retains a miss or re-fetches it, rejects an invalid checksum, and removes its server and disposable state. It assembles no app APK and uses no signing or wallet credentials. [Gradle cache semantics](https://docs.gradle.org/current/userguide/dependency_caching.html) explain why repository identities and missing entries matter. Diagnose a failed probe before another run.
+
 ## Reuse artifacts and guest state
 
 Use [prepared_apks.py](prepared_apks.py) for verified original/prepared APK identities and [UI review](UI-REVIEW.md) for capture-specific setup. For a prepared receipt retained by its registered consumer, set `CODEX_EMULATOR_PREPARED_RECEIPT` to its absolute path and `CODEX_EMULATOR_PREPARED_SHA256` to its verified digest. The runner checks the entire manifest binding, original/prepared hashes, payload preservation, ABI and test-signing compatibility before reuse. Keep the manifest unchanged while reusing that receipt; changed configuration needs fresh preparation. Keep the current candidate and required baseline until their final capture/acceptance consumer ends, then retire the binaries and preserve immutable evidence separately.
