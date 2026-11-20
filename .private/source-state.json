@@ -2774,7 +2774,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteStatusTest.kt": "54a5ad416001d417d03dda695885441d74547325e216a60975c315d7ce07c7f2",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteTest.kt": "e74d2e2fd8fff6b8f8a358585133bfa111598c56d745012d06a8fd7d31ca5ce0",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuoteValidationTest.kt": "1d801035dfa36ae3fe74d3b0355df5cd2597a26a9d9fdb002e50f62379b2ed85",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/SwapCatalogContractTest.kt": "5c3fb5537d3f7524de9413097ea0cb6ac82892c490195344f7efd333e027374c",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/SwapCatalogContractTest.kt": "a474a700ac0b7ed786d94ee31e783a17c1ac5251c602592cc1e96464d82f58fe",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/CMCApiProviderTest.kt": "dfe65a081b7fe11724b2b16e6d8dc424732940acb565241944b9bf4bc0f36aa7",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/HttpClientProviderTorFailureTest.kt": "c42eea43eca9ea353a461819b24fa7065a4ae229d4e29e7ffc53ac41e5562325",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/IsBackgroundExecutionAvailableProviderTest.kt": "c9078e0d7fce31e3d223f8368afb7e805470797188a2ee6a719899191a120e5b",

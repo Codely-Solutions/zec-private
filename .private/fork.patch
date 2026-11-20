@@ -37571,10 +37571,10 @@ index b8e862cdd..5e59b5613 100644
 +        )
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/SwapCatalogContractTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/SwapCatalogContractTest.kt
 new file mode 100644
-index 000000000..de526f448
+index 000000000..98d1274e7
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/near/SwapCatalogContractTest.kt
-@@ -0,0 +1,230 @@
+@@ -0,0 +1,231 @@
 +package co.electriccoin.zcash.ui.common.model.near
 +
 +import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
@@ -37685,7 +37685,8 @@ index 000000000..de526f448
 +                assertNull(SwapPriceMarkets.reference(swappedContract), "${asset.label} another supported contract")
 +            }
 +            if (asset.contractAddress != null) {
-+                assertNull(SwapPriceMarkets.reference(asset.copy(contractAddress = null)), "${asset.label} missing contract")
++                val missingContract = asset.copy(contractAddress = null)
++                assertNull(SwapPriceMarkets.reference(missingContract), "${asset.label} missing contract")
 +            }
 +        }
 +    }

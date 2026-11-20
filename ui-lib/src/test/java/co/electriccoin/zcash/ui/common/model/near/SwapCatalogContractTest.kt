@@ -108,7 +108,8 @@ class SwapCatalogContractTest {
                 assertNull(SwapPriceMarkets.reference(swappedContract), "${asset.label} another supported contract")
             }
             if (asset.contractAddress != null) {
-                assertNull(SwapPriceMarkets.reference(asset.copy(contractAddress = null)), "${asset.label} missing contract")
+                val missingContract = asset.copy(contractAddress = null)
+                assertNull(SwapPriceMarkets.reference(missingContract), "${asset.label} missing contract")
             }
         }
     }
