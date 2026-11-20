@@ -76,5 +76,10 @@
   "v3.19.0-private.29": [
     "Show the independent market comparison on one row in Quote details, with price sources available on tap.",
     "Clarify how the percentage beside the received dollar amount is calculated."
+  ],
+  "v3.19.0-private.30": [
+    "Fix incoming BTC swap details when the provider lists multiple BTC assets.",
+    "Keep saved swap amounts and status visible when refreshing is unavailable, with an option to retry.",
+    "Display long swap timestamps without truncation."
   ]
 }
