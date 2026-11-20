@@ -184,9 +184,13 @@ class SwapDetailVMTest {
         val mapper = spyk(CommonTransactionDetailMapper())
         // Quote-row currency formatting is covered by mapper/rendering tests. Keep Android's
         // FiatCurrency symbol lookup outside this coroutine-only screen-state fixture.
-        every { mapper.createTransactionDetailQuoteHeaderState(any(), any(), any()) } returns
+        every {
+            mapper.createTransactionDetailQuoteHeaderState(any(), any(), any())
+        } returns
             SwapQuoteHeaderState(null, null)
-        val vm = SwapDetailVM(source, SwapDetailArgs(DEPOSIT), router, mockk(relaxed = true), mapper, SwapSupportMapper())
+        val vm = SwapDetailVM(
+            source, SwapDetailArgs(DEPOSIT), router, mockk(relaxed = true), mapper, SwapSupportMapper()
+        )
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
         return Harness(vm, upstream, reload, router)
     }

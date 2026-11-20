@@ -21,6 +21,7 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.loadingImageRes
+import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByAddress
 import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
@@ -220,7 +221,7 @@ class SwapDetailVM(
             }
 
             swapData.error != null && swapData.status == null -> {
-                return mapper.createTransactionDetailErrorButtonState(
+                mapper.createTransactionDetailErrorButtonState(
                     error = error,
                     reloadHandle = swapData.handle
                 )
@@ -234,28 +235,10 @@ class SwapDetailVM(
 
     private fun createTransactionHeaderState(swapData: SwapData): TransactionDetailHeaderState =
         TransactionDetailHeaderState(
-            title =
-                when (swapData.status?.status ?: swapData.savedMetadata?.status) {
-                    EXPIRED -> stringRes(R.string.swapStatus_swapExpired)
-                    PENDING -> stringRes(R.string.swapAndPay_status_pendingDeposit)
-                    INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
-                    PROCESSING -> stringRes(R.string.swapToZec_swapProcessing)
-                    SUCCESS ->
-                        stringRes(
-                            if (swapData.status == null) {
-                                R.string.private_swap_saved_output
-                            } else if (swapData.status.executedAmountOut != null) {
-                                R.string.private_provider_output
-                            } else {
-                                R.string.private_estimated_output
-                            }
-                        )
-                    REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
-                    FAILED -> stringRes(R.string.swapStatus_swapFailed)
-                    null -> null
-                },
+            title = createHeaderTitle(swapData),
             amount =
-                (swapData.status?.amountOutFormatted ?: swapData.savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 })
+                (swapData.status?.amountOutFormatted
+                    ?: swapData.savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 })
                     ?.let { stringResByNumber(it) },
             icons =
                 listOf(
@@ -266,6 +249,27 @@ class SwapDetailVM(
                     imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_zec),
                 ),
         )
+
+    private fun createHeaderTitle(swapData: SwapData): StringResource? =
+        when (swapData.status?.status ?: swapData.savedMetadata?.status) {
+            EXPIRED -> stringRes(R.string.swapStatus_swapExpired)
+            PENDING -> stringRes(R.string.swapAndPay_status_pendingDeposit)
+            INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
+            PROCESSING -> stringRes(R.string.swapToZec_swapProcessing)
+            SUCCESS ->
+                stringRes(
+                    if (swapData.status == null) {
+                        R.string.private_swap_saved_output
+                    } else if (swapData.status.executedAmountOut != null) {
+                        R.string.private_provider_output
+                    } else {
+                        R.string.private_estimated_output
+                    }
+                )
+            REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
+            FAILED -> stringRes(R.string.swapStatus_swapFailed)
+            null -> null
+        }
 
     private fun onBack() = navigationRouter.back()
 
