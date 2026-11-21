@@ -172,7 +172,7 @@ class SwapRepositoryAssetRefreshTest {
         }
 
     @Test
-    fun successfulRefreshDoesNotCacheAssetsMissingLivePrices() =
+    fun successfulRefreshKeepsUnpricedRecoveryIdentitiesWithoutOfferingThem() =
         runTest {
             val unpriced =
                 SwapAssetTestFixture.asset(
@@ -189,7 +189,9 @@ class SwapRepositoryAssetRefreshTest {
 
             repository.requestRefreshAssetsOnce()
 
-            coVerify(exactly = 1) { cache.store(listOf(zec, btc)) }
+            coVerify(exactly = 1) { cache.store(listOf(zec, btc, unpriced)) }
+            assertEquals(listOf(btc), repository.assets.value.data)
+            assertEquals(listOf(zec, btc, unpriced), repository.assets.value.recoveryAssets)
         }
 
     private fun TestScope.repository(

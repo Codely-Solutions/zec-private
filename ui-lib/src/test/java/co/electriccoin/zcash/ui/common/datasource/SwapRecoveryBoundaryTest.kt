@@ -146,7 +146,7 @@ class SwapRecoveryBoundaryTest {
         repository.requestRefreshAssetsOnce()
         assertNull(repository.assets.value.zecAsset)
         assertEquals(1, repository.assets.value.recoveryAssets?.size)
-        assertIs<java.io.IOException>(repository.assets.value.error)
+        kotlin.test.assertTrue(repository.assets.value.error is java.io.IOException)
     }
 
     @Test

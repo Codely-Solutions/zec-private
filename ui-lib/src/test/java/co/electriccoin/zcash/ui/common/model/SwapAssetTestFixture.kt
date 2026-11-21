@@ -29,7 +29,11 @@ object SwapAssetTestFixture {
             tokenName = stringRes(tokenTicker.uppercase()),
             tokenIcon = imageRes(0),
             usdPrice = usdPrice,
-            assetId = "$tokenTicker-$chainTicker",
+            assetId = if (tokenTicker.equals("zec", true) && chainTicker.equals("zec", true)) {
+                "nep141:zec.omft.near"
+            } else {
+                "$tokenTicker-$chainTicker"
+            },
             decimals = decimals,
             blockchain = blockchain(chainTicker)
         )

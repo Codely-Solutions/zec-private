@@ -36,7 +36,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 /**
- * [NearSwapDataSource] maps the 1Click API: de-duplicating supported tokens and mapping them to
+ * [NearSwapDataSource] maps the 1Click API: preserving complete supported identities and mapping them to
  * `SwapAsset` models, building the quote request (slippage in bps, amount normalized to the asset's
  * decimals, asset ids/addresses), and translating NEAR error responses into typed exceptions.
  */
@@ -126,21 +126,21 @@ class NearSwapDataSourceTest {
         }
 
     @Test
-    fun getSupportedTokensDeduplicatesAndMapsTokens() =
+    fun getSupportedTokensPreservesSameDisplayIdentitiesAndMapsTokens() =
         runBlocking {
             coEvery { nearApiProvider.getSupportedTokens() } returns
                 listOf(
                     token(assetId = "a1", symbol = "btc", blockchain = "btc", decimals = 8, price = "100000"),
-                    // Duplicate symbol + blockchain + decimals -> dropped by distinctBy.
+                    // A distinct exact identity retains its own recovery meaning.
                     token(assetId = "a2", symbol = "btc", blockchain = "btc", decimals = 8, price = "100000"),
                     token(assetId = "e1", symbol = "eth", blockchain = "eth", decimals = 18, price = "3000"),
                 )
 
             val result = dataSource.getSupportedTokens()
 
-            assertEquals(2, result.size)
-            // The first of the duplicate pair (assetId "a1") is kept, with the token's fields mapped through.
-            val btc = result.single { it.tokenTicker == "btc" }
+            assertEquals(3, result.size)
+            assertEquals(listOf("a1", "a2"), result.filter { it.tokenTicker == "btc" }.map { it.assetId })
+            val btc = result.single { it.assetId == "a1" }
             assertEquals("a1", btc.assetId)
             assertEquals(8, btc.decimals)
             assertEquals(0, BigDecimal("100000").compareTo(btc.usdPrice))
@@ -529,6 +529,7 @@ class NearSwapDataSourceTest {
         mockk {
             every { quoteResponse } returns
                 mockk {
+                    every { quote } returns mockk { every { depositAddress } returns "deposit" }
                     every { quoteRequest } returns
                         mockk {
                             every { originAsset } returns originAssetId
