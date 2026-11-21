@@ -72,7 +72,7 @@ fun AppAccessAuthentication(
     modifier: Modifier = Modifier,
 ) {
     WelcomeScreenView(
-        animationState = welcomeAnimVisibility,
+        animationState = welcomeAnimVisibility || showAuthLogo,
         onRetry = onRetry,
         showAuthLogo = showAuthLogo,
         modifier = modifier.testTag(WELCOME_ANIM_TEST_TAG),

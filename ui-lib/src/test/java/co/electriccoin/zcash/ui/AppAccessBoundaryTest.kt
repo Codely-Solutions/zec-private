@@ -6,9 +6,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
@@ -23,9 +26,11 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -68,6 +73,50 @@ class AppAccessBoundaryTest {
         compose.runOnIdle { session.unlock() }
         compose.onNodeWithTag("wallet-action").performTouchInput { click() }
         compose.runOnIdle { assertEquals(1, callbackCount) }
+    }
+
+    @Test
+    fun retryRemainsDrawnAndActionableAfterTheWelcomeAnimation() {
+        val session = AppAccessSession().apply { unlock() }
+        val context = RuntimeEnvironment.getApplication()
+        val retryDescription =
+            context.getString(
+                R.string.authentication_failed_welcome_icon_cont_desc,
+                context.getString(R.string.app_name)
+            )
+        var retryCount = 0
+        compose.setContent {
+            ZcashTheme {
+                BlankSurface(Modifier.fillMaxSize()) {
+                    AppAccessBoundary(
+                        session = session,
+                        lockedContent = {
+                            AppAccessAuthentication(
+                                onRetry = { retryCount++ },
+                                showAuthLogo = true,
+                                welcomeAnimVisibility = false,
+                            )
+                        }
+                    ) {
+                        Button(onClick = {}, modifier = Modifier.testTag("wallet-action")) { Text("Wallet action") }
+                    }
+                }
+            }
+        }
+        compose.onNodeWithTag("wallet-action").assertExists()
+        compose.runOnIdle { session.lock() }
+        compose.onNodeWithTag("wallet-action", useUnmergedTree = true).assertDoesNotExist()
+
+        val retry = compose.onNodeWithContentDescription(retryDescription)
+        val pixels = retry.captureToImage().toPixelMap()
+        val background = pixels[0, 0]
+        val hasGlyph = (0 until pixels.height).any { y ->
+            (0 until pixels.width).any { x -> pixels[x, y] != background }
+        }
+        assertTrue(hasGlyph, "The retry control must draw its key glyph")
+        retry.performTouchInput { click() }
+        compose.runOnIdle { assertEquals(1, retryCount) }
+        compose.onNodeWithTag("wallet-action", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
