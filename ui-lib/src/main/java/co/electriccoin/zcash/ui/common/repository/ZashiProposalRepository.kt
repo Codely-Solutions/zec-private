@@ -59,7 +59,7 @@ interface ZashiProposalRepository {
      */
     fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi)
 
-    suspend fun submit(): SubmitResult
+    suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult
 
     suspend fun getTransactionProposal(): TransactionProposal
 
@@ -139,7 +139,7 @@ class ZashiProposalRepositoryImpl(
     }
 
     @Suppress("TooGenericExceptionCaught", "UseCheckOrError")
-    override suspend fun submit(): SubmitResult =
+    override suspend fun submit(expectedProposal: TransactionProposal?): SubmitResult =
         scope
             .async {
                 val transactionProposal = transactionProposal.value
@@ -150,6 +150,14 @@ class ZashiProposalRepositoryImpl(
                 } else {
                     submitState.update { SubmitProposalState.Submitting }
                     try {
+                        check(expectedProposal == null || transactionProposal === expectedProposal) {
+                            "The reviewed transaction changed before submission."
+                        }
+                        val swapWasReviewed = transactionProposal !is SwapTransactionProposal ||
+                            transactionProposal === expectedProposal
+                        check(swapWasReviewed) {
+                            "Review the prepared swap transaction before sending."
+                        }
                         val spendingKey = zashiSpendingKeyDataSource.getZashiSpendingKey()
                         if (transactionProposal is RegularTransactionProposal && transactionProposal.isDonation) {
                             require(transactionProposal.destination.address ==
@@ -166,6 +174,9 @@ class ZashiProposalRepositoryImpl(
                         }
                         if (transactionProposal is SwapTransactionProposal) {
                             ZecSwapComposition.validate(transactionProposal.quote)
+                        }
+                        check(this@ZashiProposalRepositoryImpl.transactionProposal.value === transactionProposal) {
+                            "The transaction changed before submission."
                         }
                         val result =
                             proposalDataSource.submitTransaction(

@@ -37,14 +37,4 @@ class NavigateToRedeemGiftCardUseCase(
         navigationRouter.replaceFrom(ScanGiftCardArgs::class, redeemArgs(link))
 
     private fun redeemArgs(link: String) = RedeemGiftArgs(giftCardLinkStore.stash(link))
-
-    /**
-     * Opens the gift card scanner, asking the user to scan the card in the app, if a gift card link arrived from
-     * outside the app. That link itself is never redeemed, see [HandleExternalLinkUseCase].
-     */
-    fun openRequestedInAppScan() {
-        if (giftCardLinkStore.consumeInAppScanRequest()) {
-            navigationRouter.forward(ScanGiftCardArgs(isFromExternalLink = true))
-        }
-    }
 }

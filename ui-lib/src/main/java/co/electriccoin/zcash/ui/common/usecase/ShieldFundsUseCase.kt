@@ -98,6 +98,7 @@ class ShieldFundsUseCase(
         try {
             keystoneProposalRepository.createShieldProposal()
             keystoneProposalRepository.createPCZTFromProposal()
+            keystoneProposalRepository.approveForSigning()
             navigationRouter.forward(SignKeystoneTransactionArgs)
         } catch (e: Exception) {
             keystoneProposalRepository.clear()
@@ -114,6 +115,7 @@ class ShieldFundsUseCase(
         try {
             ledgerProposalPipeline.createShieldProposal()
             ledgerProposalPipeline.createPCZTFromProposal()
+            ledgerProposalPipeline.approveForSigning()
             ledgerNavigator.forwardToSign()
         } catch (e: CancellationException) {
             ledgerProposalPipeline.clear()

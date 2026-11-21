@@ -36,19 +36,19 @@ class SubmitKSProposalUseCaseTest {
             val proposal = swapProposal()
             val submitResult = mockk<SubmitResult>(relaxed = true)
             coEvery { fx.keystoneProposalRepository.getTransactionProposal() } returns proposal
-            coEvery { fx.keystoneProposalRepository.submit() } returns submitResult
+            coEvery { fx.keystoneProposalRepository.submit(any()) } returns submitResult
 
             fx.useCase()
 
             verify(exactly = 1) { fx.swapRepository.clear() }
-            coVerify(exactly = 1) { fx.keystoneProposalRepository.submit() }
+            coVerify(exactly = 1) { fx.keystoneProposalRepository.submit(any()) }
             coVerify(exactly = 1) { fx.processSwapTransaction(proposal, submitResult) }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
             verify(exactly = 1) { fx.prefillSend.clear() }
             // Swap state is cleared before submitting, and navigation happens after submit is kicked off.
             coVerifyOrder {
                 fx.swapRepository.clear()
-                fx.keystoneProposalRepository.submit()
+                fx.keystoneProposalRepository.submit(any())
                 fx.navigationRouter.replace(TransactionProgressArgs)
             }
         }
@@ -58,12 +58,12 @@ class SubmitKSProposalUseCaseTest {
         runTest {
             val fx = useCase()
             coEvery { fx.keystoneProposalRepository.getTransactionProposal() } returns mockk<TransactionProposal>()
-            coEvery { fx.keystoneProposalRepository.submit() } returns mockk(relaxed = true)
+            coEvery { fx.keystoneProposalRepository.submit(any()) } returns mockk(relaxed = true)
 
             fx.useCase()
 
             verify(exactly = 1) { fx.swapRepository.clear() }
-            coVerify(exactly = 1) { fx.keystoneProposalRepository.submit() }
+            coVerify(exactly = 1) { fx.keystoneProposalRepository.submit(any()) }
             coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
             verify(exactly = 1) { fx.prefillSend.clear() }
@@ -74,7 +74,7 @@ class SubmitKSProposalUseCaseTest {
         runTest {
             val fx = useCase()
             coEvery { fx.keystoneProposalRepository.getTransactionProposal() } returns swapProposal()
-            coEvery { fx.keystoneProposalRepository.submit() } throws RuntimeException("boom")
+            coEvery { fx.keystoneProposalRepository.submit(any()) } throws RuntimeException("boom")
 
             fx.useCase()
 

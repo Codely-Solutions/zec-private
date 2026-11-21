@@ -6,6 +6,7 @@ import co.electriccoin.zcash.configuration.AndroidConfigurationFactory
 import co.electriccoin.zcash.global.invoke
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
+import co.electriccoin.zcash.ui.LaunchNavigationRequests
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.NavigationRouterImpl
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
@@ -20,6 +21,7 @@ val coreModule =
         singleOf(::EncryptedPreferenceProvider)
         single { BiometricManager.from(get()) }
         singleOf(::AppAccessSession)
+        singleOf(::LaunchNavigationRequests)
         factory { AndroidConfigurationFactory.new() }
         singleOf(::NavigationRouterImpl) bind NavigationRouter::class
     }

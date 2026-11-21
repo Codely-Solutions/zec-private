@@ -63,6 +63,8 @@ interface LedgerProposalPipeline {
     )
     suspend fun createPCZTFromProposal()
 
+    fun approveForSigning(expectedProposal: TransactionProposal? = null)
+
     fun clear()
 
     suspend fun getTransactionProposal(): TransactionProposal

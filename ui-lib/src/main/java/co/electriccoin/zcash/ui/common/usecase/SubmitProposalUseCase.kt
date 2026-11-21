@@ -88,13 +88,18 @@ class SubmitProposalUseCase(
             check(proposal !is SwapTransactionProposal || reviewedProposal === proposal) {
                 "Review the prepared swap transaction before sending."
             }
+            check(proposal !is SwapTransactionProposal || kotlin.time.Clock.System.now() < proposal.quote.deadline) {
+                "The swap quote expired. Request a fresh quote before sending."
+            }
             if (proposal is SwapTransactionProposal) prepareSwapTracking(proposal)
             when (account) {
                 is KeystoneAccount -> {
+                    keystoneProposalRepository.approveForSigning(proposal)
                     navigationRouter.replace(SignKeystoneTransactionArgs)
                 }
 
                 is LedgerAccount -> {
+                    ledgerProposalPipeline.approveForSigning(proposal)
                     ledgerNavigator.forwardToSign()
                 }
 
@@ -144,7 +149,7 @@ class SubmitProposalUseCase(
     private fun submitZashiProposal(proposal: TransactionProposal) {
         scope.launch {
             try {
-                val result = zashiProposalRepository.submit()
+                val result = zashiProposalRepository.submit(proposal)
                 if (proposal is SwapTransactionProposal) {
                     processSwapTransaction(proposal, result)
                 }

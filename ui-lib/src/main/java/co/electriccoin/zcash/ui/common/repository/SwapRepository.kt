@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
+import co.electriccoin.zcash.ui.common.model.SwapPriceMarkets
 import co.electriccoin.zcash.ui.common.model.isZCashAsset
 import co.electriccoin.zcash.ui.common.model.near.requireMatchingAsset
 import co.electriccoin.zcash.ui.common.model.near.requireQuoteMatchesUserAmount
@@ -226,7 +227,7 @@ class SwapRepositoryImpl(
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun refreshAssetsInternal() {
-        fun findZecSwapAsset(assets: List<SwapAsset>) = assets.find { asset -> asset.isZCashAsset }
+        fun findZecSwapAsset(assets: List<SwapAsset>) = assets.singleOrNull { it.isCanonicalNativeZec }
 
         fun filterSwapAssets(assets: List<SwapAsset>) =
             assets
@@ -281,7 +282,7 @@ class SwapRepositoryImpl(
         assets.update {
             it.copy(
                 data = cachedAssets.filterNot(SwapAsset::isZCashAsset),
-                zecAsset = cachedAssets.find(SwapAsset::isZCashAsset),
+                zecAsset = cachedAssets.singleOrNull { asset -> asset.isCanonicalNativeZec },
                 error = null,
                 isLoading = true,
                 recoveryAssets = cachedAssets,
@@ -500,11 +501,7 @@ class SwapRepositoryImpl(
 
     override suspend fun checkSwapStatus(swapMetadata: TransactionSwapMetadata): SwapQuoteStatus {
         val recovery = swapMetadata.requireNearRecovery()
-        val result =
-            swapDataSource.checkSwapStatus(
-                depositAddress = recovery.reference,
-                supportedTokens = getSupportedTokensForStatus()
-            )
+        val result = checkStatusUsingCatalog(recovery.reference)
         require(result.depositAddress.address == recovery.reference) { "Swap status reference mismatch" }
         requireMatchingAsset(
             name = "origin",
@@ -522,6 +519,15 @@ class SwapRepositoryImpl(
         )
         return result
     }
+
+    private suspend fun checkStatusUsingCatalog(reference: String): SwapQuoteStatus =
+        try {
+            swapDataSource.checkSwapStatus(reference, getSupportedTokensForStatus())
+        } catch (_: AssetNotFoundException) {
+            // A partial historical cache must not prevent recovery when the live catalog returns.
+            requestRefreshAssetsOnce()
+            swapDataSource.checkSwapStatus(reference, getSupportedTokensForStatus())
+        }
 
     /**
      * Resolves the supported-token list the status lookup needs to map asset ids back to [SwapAsset]s.
@@ -597,6 +603,9 @@ class SwapRepositoryImpl(
 
 private fun mergeRecoveryAssets(current: List<SwapAsset>, previous: List<SwapAsset>): List<SwapAsset> =
     current + previous.filter { old -> current.none { it.assetId == old.assetId } }
+
+private val SwapAsset.isCanonicalNativeZec: Boolean
+    get() = isZCashAsset && SwapPriceMarkets.reference(this) != null
 
 private fun SwapAssetsData.statusAssets(): List<SwapAsset>? =
     recoveryAssets?.takeIf { tokens -> tokens.any { it.isZCashAsset } }

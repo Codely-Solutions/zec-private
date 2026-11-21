@@ -237,6 +237,7 @@ class ViewOnlySpendGuardTest {
                     zashiProposalRepository = zashiProposalRepository,
                     biometricRepository = biometricRepository,
                     ephemeralAddressRepository = mockk(relaxed = true),
+                    keystoneProposalRepository = mockk(relaxed = true),
                 )
 
             assertViewOnly(assertFailsWith { useCase() })

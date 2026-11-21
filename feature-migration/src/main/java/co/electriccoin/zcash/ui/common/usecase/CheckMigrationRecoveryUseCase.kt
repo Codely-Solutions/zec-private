@@ -69,7 +69,9 @@ class CheckMigrationRecoveryUseCase(
      */
     private val scheduleNow: suspend (String) -> Unit = { MigrationScheduler(context).schedule(it, Duration.ZERO) },
 ) {
-    suspend operator fun invoke() {
+    suspend operator fun invoke(
+        requestSendingScreen: () -> Unit = { navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs) },
+    ) {
         // Three independent triggers exist (MainActivity.onStart, RootNavGraph unlock, and any
         // future caller); without a throttle they cascade — each replaceAll builds a fresh Home
         // entry whose composition can re-trigger recovery, observed live as 7 redirects (and 3
@@ -187,7 +189,7 @@ class CheckMigrationRecoveryUseCase(
                     // sendOnce() logic already forwards to MigrationTorFailureArgs — no need to duplicate
                     // that routing here.
                     migrationLog("MigrationRecovery: pending background Tor failure — redirecting to Sending.")
-                    navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs)
+                    requestSendingScreen()
                 } else {
                     migrationLog(
                         "MigrationRecovery: pending background Tor failure flag is stale " +

@@ -512,6 +512,7 @@ class MigrationReviewVM(
                 // the already-created PCZT (createPCZTEncoder() reads KeystoneProposalRepository's
                 // cached proposalPczt); it never calls createPCZTFromProposal() itself.
                 keystoneProposalRepository.createPCZTFromProposal()
+                keystoneProposalRepository.approveForSigning()
                 navigationRouter.forward(SignKeystoneTransactionArgs)
             } else {
                 zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)

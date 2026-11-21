@@ -40,7 +40,7 @@ object SwapAssetTestFixture {
             tokenName = stringRes("ZEC"),
             tokenIcon = imageRes(0),
             usdPrice = BigDecimal("30"),
-            assetId = "zec-zec",
+            assetId = "nep141:zec.omft.near",
             decimals = 8,
             blockchain = blockchain("zec")
         )

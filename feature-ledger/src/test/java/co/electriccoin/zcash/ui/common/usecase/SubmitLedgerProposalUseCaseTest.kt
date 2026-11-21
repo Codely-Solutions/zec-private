@@ -37,7 +37,7 @@ class SubmitLedgerProposalUseCaseTest {
 
             fx.useCase()
 
-            coVerify(exactly = 1) { fx.ledgerProposalRepository.submit() }
+            coVerify(exactly = 1) { fx.ledgerProposalRepository.submit(any()) }
             verify(exactly = 1) { fx.swapRepository.clear() }
             verify(exactly = 1) { fx.navigationRouter.replaceAll(TransactionProgressArgs) }
         }
@@ -54,7 +54,7 @@ class SubmitLedgerProposalUseCaseTest {
             submitState.value = SubmitProposalState.Result(mockk(relaxed = true))
             fx.useCase()
 
-            coVerify(exactly = 2) { fx.ledgerProposalRepository.submit() }
+            coVerify(exactly = 2) { fx.ledgerProposalRepository.submit(any()) }
             verify(exactly = 2) { fx.navigationRouter.replaceAll(TransactionProgressArgs) }
         }
 
@@ -67,7 +67,7 @@ class SubmitLedgerProposalUseCaseTest {
             fx.useCase()
 
             coVerify(exactly = 0) { fx.ledgerProposalRepository.getTransactionProposal() }
-            coVerify(exactly = 0) { fx.ledgerProposalRepository.submit() }
+            coVerify(exactly = 0) { fx.ledgerProposalRepository.submit(any()) }
             verify(exactly = 0) { fx.navigationRouter.replaceAll(*anyVararg()) }
             verify(exactly = 1) { fx.ledgerProposalRepository.failSignedSessionWithoutProposal() }
         }
@@ -101,7 +101,7 @@ class SubmitLedgerProposalUseCaseTest {
         runTest {
             val fx = useCase()
             fx.givenProposal(mockk<TransactionProposal>())
-            coEvery { fx.ledgerProposalRepository.submit() } throws RuntimeException("boom")
+            coEvery { fx.ledgerProposalRepository.submit(any()) } throws RuntimeException("boom")
 
             fx.useCase()
 
@@ -114,7 +114,7 @@ class SubmitLedgerProposalUseCaseTest {
         submitResult: SubmitResult = mockk(relaxed = true),
     ) {
         every { ledgerProposalRepository.transactionProposal } returns MutableStateFlow(proposal)
-        coEvery { ledgerProposalRepository.submit() } returns submitResult
+        coEvery { ledgerProposalRepository.submit(any()) } returns submitResult
     }
 
     /** Pins the use case's off-thread submit scope to the test scheduler so it runs eagerly. */

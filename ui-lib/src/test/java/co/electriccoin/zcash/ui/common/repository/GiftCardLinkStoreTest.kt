@@ -106,21 +106,6 @@ class GiftCardLinkStoreTest {
     }
 
     @Test
-    fun inAppScanRequestIsConsumedOnce() {
-        val store = GiftCardLinkStoreImpl()
-        assertFalse(store.isInAppScanRequested.value)
-        assertFalse(store.consumeInAppScanRequest())
-
-        store.requestInAppScan()
-        store.requestInAppScan()
-
-        assertTrue(store.isInAppScanRequested.value)
-        assertTrue(store.consumeInAppScanRequest())
-        assertFalse(store.consumeInAppScanRequest())
-        assertFalse(store.isInAppScanRequested.value)
-    }
-
-    @Test
     fun prefixCheckAcceptsOnlyGiftCardLinks() {
         assertTrue(GiftCardLinkPrefixes.matches(LINK))
         assertTrue(GiftCardLinkPrefixes.matches("  $LINK "))

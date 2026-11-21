@@ -46,7 +46,7 @@ class SubmitLedgerProposalUseCase(
     private fun submitLedgerProposal(proposal: TransactionProposal) {
         scope.launch {
             try {
-                val result = ledgerProposalRepository.submit()
+                val result = ledgerProposalRepository.submit(proposal)
                 if (proposal is SwapTransactionProposal) {
                     processSwapTransaction(proposal, result)
                 }

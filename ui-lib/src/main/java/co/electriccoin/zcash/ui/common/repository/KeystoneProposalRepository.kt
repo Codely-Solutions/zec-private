@@ -36,11 +36,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Suppress("TooManyFunctions")
@@ -86,6 +84,8 @@ interface KeystoneProposalRepository {
     )
     suspend fun createPCZTFromProposal()
 
+    fun approveForSigning(expectedProposal: TransactionProposal? = null)
+
     @Throws(IllegalStateException::class)
     suspend fun createPCZTEncoder(): UREncoder
 
@@ -99,7 +99,7 @@ interface KeystoneProposalRepository {
     @Throws(ParsePCZTException::class)
     suspend fun parsePCZT(ur: UR)
 
-    suspend fun submit(): SubmitResult
+    suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult
 
     fun clear()
 
@@ -142,9 +142,7 @@ class KeystoneProposalRepositoryImpl(
 
     override val submitState = MutableStateFlow<SubmitProposalState?>(null)
 
-    private val pcztWithProofs = MutableStateFlow(PcztState(isLoading = false, pczt = null))
-    private var proposalPczt: Pczt? = null
-    private var pcztWithSignatures: Pczt? = null
+    private val hardwareProposal = HardwareProposalBinding()
 
     private var pcztWithProofsJob: Job? = null
 
@@ -212,34 +210,26 @@ class KeystoneProposalRepositoryImpl(
             } catch (e: PcztException.MultiStepProposalUnsupportedException) {
                 if (transactionProposal.paysTexAddress()) throw TexUnsupportedOnKSException() else throw e
             }
-        proposalPczt = result
-        addProofsToPczt(result)
+        check(this.transactionProposal.value === transactionProposal) { "The transaction changed during preparation." }
+        val prepared = hardwareProposal.prepare(transactionProposal, result)
+        pcztWithProofsJob?.cancel()
+        pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
     }
+
+    override fun approveForSigning(expectedProposal: TransactionProposal?) =
+        hardwareProposal.approve(transactionProposal.value, expectedProposal)
 
     private fun TransactionProposal.paysTexAddress(): Boolean =
         this is SendTransactionProposal && destination is WalletAddress.Tex
 
-    private fun addProofsToPczt(proposalPczt: Pczt) {
-        pcztWithProofsJob?.cancel()
-        pcztWithProofsJob =
-            scope.launch {
-                pcztWithProofs.update { PcztState(isLoading = true, pczt = null) }
-                try {
-                    val result = proposalDataSource.addProofsToPczt(proposalPczt.clonePczt())
-                    pcztWithProofs.update { PcztState(isLoading = false, pczt = result) }
-                } catch (e: PcztException.AddProofsToPcztException) {
-                    Twig.error(e) { "Failed to add proofs to PCZT" }
-                    pcztWithProofs.update { PcztState(isLoading = false, pczt = null, error = e) }
-                }
-            }
-    }
-
-    @Suppress("UseCheckOrError")
     override suspend fun createPCZTEncoder(): UREncoder =
         withContext(Dispatchers.IO) {
-            val pczt = proposalPczt ?: throw IllegalStateException("Proposal not created")
-            val redactedPczt = proposalDataSource.redactPcztForSigner(pczt.clonePczt())
+            val prepared = hardwareProposal.requireApproved(transactionProposal.value)
+            val redactedPczt = proposalDataSource.redactPcztForSigner(prepared.pczt.clonePczt())
             try {
+                check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
+                    "The reviewed transaction changed before signing."
+                }
                 keystoneSDKProvider.generatePczt(pczt = redactedPczt.toByteArray())
             } catch (e: KeystoneSDKException) {
                 throw IllegalStateException("Failed to generate PCZT encoder", e)
@@ -248,6 +238,7 @@ class KeystoneProposalRepositoryImpl(
 
     override suspend fun parsePCZT(ur: UR) =
         withContext(Dispatchers.IO) {
+            val prepared = hardwareProposal.requireApproved(transactionProposal.value)
             val parsed =
                 try {
                     keystoneSDKProvider.parsePczt(ur)
@@ -269,64 +260,49 @@ class KeystoneProposalRepositoryImpl(
                 Twig.info(logMessage)
             }
 
-            pcztWithSignatures = Pczt(parsed)
+            check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
+                "The reviewed transaction changed during signing."
+            }
+            prepared.signatures = Pczt(parsed)
         }
 
-    @Suppress("UseCheckOrError", "ThrowingExceptionsWithoutMessageOrCause", "TooGenericExceptionCaught")
-    override suspend fun submit(): SubmitResult =
-        scope
-            .async {
-                val transactionProposal = transactionProposal.value
-                val pcztWithSignatures = pcztWithSignatures
-
-                if (transactionProposal == null || pcztWithSignatures == null) {
-                    val cause = IllegalStateException("Transaction proposal is null")
-                    submitState.update { SubmitProposalState.Result(SubmitResult.Error(cause)) }
-                    throw cause
-                } else {
-                    submitState.update { SubmitProposalState.Submitting }
-                    val pcztWithProofsState = pcztWithProofs.filter { !it.isLoading }.first()
-                    val pcztWithProofs = pcztWithProofsState.pczt
-                    if (pcztWithProofs == null) {
-                        val cause =
-                            pcztWithProofsState.error
-                                ?: IllegalStateException("PCZT with proofs is null")
-                        submitState.update { SubmitProposalState.Result(SubmitResult.Error(cause)) }
-                        throw cause
-                    } else {
-                        try {
-                            if (transactionProposal is SwapTransactionProposal) {
-                                ZecSwapComposition.validate(transactionProposal.quote)
-                            }
-                            val result =
-                                proposalDataSource.submitTransaction(
-                                    pcztWithProofs = pcztWithProofs,
-                                    pcztWithSignatures = pcztWithSignatures
-                                )
-                            submitState.update { SubmitProposalState.Result(result) }
-                            result
-                        } catch (e: Exception) {
-                            val result = SubmitResult.Error(e)
-                            submitState.update { SubmitProposalState.Result(result) }
-                            throw e
-                        }
-                    }
+    @Suppress("TooGenericExceptionCaught")
+    override suspend fun submit(expectedProposal: TransactionProposal?): SubmitResult =
+        scope.async {
+            try {
+                val prepared = hardwareProposal.requireApproved(transactionProposal.value, expectedProposal)
+                val signed = checkNotNull(prepared.signatures) { "The reviewed transaction has not been signed." }
+                submitState.update { SubmitProposalState.Submitting }
+                val proofs = prepared.proofs.await()
+                check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
+                    "The reviewed transaction changed before submission."
                 }
-            }.await()
+                val proposal = prepared.proposal
+                if (proposal is SwapTransactionProposal) ZecSwapComposition.validate(proposal.quote)
+                val result =
+                    proposalDataSource.submitTransaction(
+                        pcztWithProofs = proofs,
+                        pcztWithSignatures = signed
+                    )
+                submitState.update { SubmitProposalState.Result(result) }
+                result
+            } catch (e: Exception) {
+                submitState.update { SubmitProposalState.Result(SubmitResult.Error(e)) }
+                throw e
+            }
+        }.await()
 
     override suspend fun getTransactionProposal(): TransactionProposal = transactionProposal.filterNotNull().first()
 
-    override fun getProposalPCZT(): Pczt? = proposalPczt
+    override fun getProposalPCZT(): Pczt? = hardwareProposal.getPrepared(transactionProposal.value)?.pczt
 
     override fun clear() {
         pcztWithProofsJob?.cancel()
         pcztWithProofsJob = null
-        pcztWithProofs.update { PcztState(isLoading = false, pczt = null) }
 
         transactionProposal.update { null }
         submitState.update { null }
-        proposalPczt = null
-        pcztWithSignatures = null
+        hardwareProposal.clear()
     }
 
     private inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
@@ -346,9 +322,3 @@ class KeystoneProposalRepositoryImpl(
         return proposal
     }
 }
-
-private data class PcztState(
-    val isLoading: Boolean,
-    val pczt: Pczt?,
-    val error: Exception? = null
-)

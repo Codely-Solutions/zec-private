@@ -38,15 +38,16 @@ class ZashiProposalRepositoryTest {
         val quote = object : SwapQuote by quote() {
             override val deadline: Instant get() = currentDeadline
         }
-        repository.transactionProposal.value = ExactInputSwapTransactionProposal(
+        val reviewed = ExactInputSwapTransactionProposal(
             WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""), mockk<Proposal>(), quote
         )
+        repository.transactionProposal.value = reviewed
         coEvery { keys.getZashiSpendingKey() } answers {
             currentDeadline = Instant.parse("2000-01-01T00:00:00Z")
             mockk<UnifiedSpendingKey>()
         }
 
-        val error = assertFailsWith<IllegalArgumentException> { repository.submit() }
+        val error = assertFailsWith<IllegalArgumentException> { repository.submit(reviewed) }
 
         coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
         val result = assertIs<SubmitProposalState.Result>(repository.submitState.value)
@@ -66,6 +67,21 @@ class ZashiProposalRepositoryTest {
 
         assertEquals(expected, repository.submit())
         coVerify(exactly = 1) { proposals.submitTransaction(proposal, key) }
+    }
+
+    @Test
+    fun reviewedSwapCannotSubmitAReplacementFromTheRepository() = runBlocking {
+        val reviewed = ExactInputSwapTransactionProposal(
+            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""), mockk<Proposal>(), quote()
+        )
+        repository.transactionProposal.value = RegularTransactionProposal(
+            WalletAddress.Unified.new("synthetic-recipient"), Zatoshi(1), Memo(""), mockk<Proposal>()
+        )
+
+        assertFailsWith<IllegalStateException> { repository.submit(reviewed) }
+
+        coVerify(exactly = 0) { keys.getZashiSpendingKey() }
+        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
     }
 
     private fun quote() = FakeSwapQuote(

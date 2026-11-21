@@ -1,7 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
-import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStore
+import co.electriccoin.zcash.ui.LaunchNavigationRequests
 import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
 
 /**
@@ -9,13 +8,10 @@ import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
  * could have altered it on its way in. As with ZIP 321 `zcash:` URIs, which go to [ThirdPartyScan] and from there to
  * the app's own scanner, the user is asked to scan the code again with the app.
  *
- * A gift card link opens the gift card scanner once the wallet is ready, see
- * [NavigateToRedeemGiftCardUseCase.openRequestedInAppScan]. Only the link's host is looked at to tell the two apart.
+ * A gift card link opens the gift card scanner once the authorized wallet is ready. Only the host distinguishes
+ * gift links from other links. Navigation receives the scanner request without any part of the URI.
  */
-class HandleExternalLinkUseCase(
-    private val giftCardLinkStore: GiftCardLinkStore,
-    private val navigationRouter: NavigationRouter,
-) {
+class HandleExternalLinkUseCase(private val launchNavigation: LaunchNavigationRequests) {
     /**
      * @param host the link's host, which is all that is needed to route it.
      * @param isRedelivery whether the intent is one that was already handled (a recreated activity, a relaunch from
@@ -27,10 +23,10 @@ class HandleExternalLinkUseCase(
         isRedelivery: Boolean
     ): Boolean =
         if (host.equals(GIFT_CARD_HOST, ignoreCase = true)) {
-            if (!isRedelivery) giftCardLinkStore.requestInAppScan()
+            if (!isRedelivery) launchNavigation.requestGiftScan()
             true
         } else {
-            navigationRouter.forward(ThirdPartyScan)
+            launchNavigation.requestThirdPartyScan()
             false
         }
 

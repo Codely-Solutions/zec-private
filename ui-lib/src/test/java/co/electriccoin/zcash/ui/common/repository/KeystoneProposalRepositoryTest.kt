@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.repository
 
 import cash.z.ecc.android.sdk.exception.PcztException
 import cash.z.ecc.android.sdk.model.Memo
+import cash.z.ecc.android.sdk.model.Pczt
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
@@ -13,21 +14,26 @@ import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 
 class KeystoneProposalRepositoryTest {
     private val accountDataSource = mockk<AccountDataSource>()
     private val proposalDataSource = mockk<ProposalDataSource>()
+    private val signer = mockk<KeystoneSDKProvider>()
 
     private val repository: KeystoneProposalRepository =
         KeystoneProposalRepositoryImpl(
             accountDataSource = accountDataSource,
             proposalDataSource = proposalDataSource,
-            keystoneSDKProvider = mockk<KeystoneSDKProvider>(),
+            keystoneSDKProvider = signer,
         )
 
     @Test
@@ -91,6 +97,34 @@ class KeystoneProposalRepositoryTest {
 
             Unit
         }
+
+    @Test
+    fun replacementDuringRedactionCannotBeHandedToKeystone() = runBlocking {
+        givenCurrentProposalPays(WalletAddress.Unified.new(RECIPIENT))
+        val approved = repository.getTransactionProposal()
+        coEvery { proposalDataSource.createPcztFromProposal(any(), any()) } returns Pczt(byteArrayOf(1))
+        coEvery { proposalDataSource.addProofsToPczt(any()) } returns Pczt(byteArrayOf(2))
+        repository.createPCZTFromProposal()
+        repository.approveForSigning(approved)
+        val redactionStarted = CompletableDeferred<Unit>()
+        val finishRedaction = CompletableDeferred<Unit>()
+        coEvery { proposalDataSource.redactPcztForSigner(any()) } coAnswers {
+            redactionStarted.complete(Unit)
+            finishRedaction.await()
+            Pczt(byteArrayOf(3))
+        }
+
+        val encoding = async { runCatching { repository.createPCZTEncoder() } }
+        redactionStarted.await()
+        givenCurrentProposalPays(WalletAddress.Unified.new("replacement"))
+        finishRedaction.complete(Unit)
+
+        assertIs<IllegalStateException>(encoding.await().exceptionOrNull())
+        coVerify(exactly = 0) { signer.generatePczt(any()) }
+        repository.createPCZTFromProposal()
+        assertFailsWith<IllegalStateException> { repository.createPCZTEncoder() }
+        Unit
+    }
 
     private suspend fun givenCurrentProposalPays(destination: WalletAddress) {
         coEvery { accountDataSource.getSelectedAccount() } returns mockk(relaxed = true)

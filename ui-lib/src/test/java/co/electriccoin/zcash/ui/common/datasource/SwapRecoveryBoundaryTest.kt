@@ -122,6 +122,53 @@ class SwapRecoveryBoundaryTest {
         verify(exactly = 1) { metadata.updateSwap(any(), any(), any(), any(), any(), any()) }
     }
 
+    @Test
+    fun localZecSelectionUsesPinnedIdentityInEitherOrderAndRejectsDuplicateExactIds() = runBlocking {
+        val twin = zec.dto().copy(assetId = "synthetic:zec-twin")
+        for (order in listOf(listOf(twin, zec.dto()), listOf(zec.dto(), twin))) {
+            coEvery { api.getSupportedTokens() } returns order
+            val repository = SwapRepositoryImpl(dataSource, cache).also { it.scope = this }
+            repository.requestRefreshAssetsOnce()
+            assertEquals(zec.assetId, repository.assets.value.zecAsset?.assetId)
+            assertEquals(2, repository.assets.value.recoveryAssets?.size)
+        }
+        coEvery { api.getSupportedTokens() } returns listOf(zec.dto(), zec.dto())
+        val repository = SwapRepositoryImpl(dataSource, cache).also { it.scope = this }
+        repository.requestRefreshAssetsOnce()
+        assertNull(repository.assets.value.zecAsset)
+    }
+
+    @Test
+    fun unverifiedCachedNativeTwinCannotSupplyTheLocalQuoteLeg() = runBlocking {
+        coEvery { cache.get() } returns listOf(zec.copy(assetId = "synthetic:zec-twin", usdPrice = null))
+        coEvery { api.getSupportedTokens() } throws java.io.IOException("Synthetic catalog outage")
+        val repository = SwapRepositoryImpl(dataSource, cache).also { it.scope = this }
+        repository.requestRefreshAssetsOnce()
+        assertNull(repository.assets.value.zecAsset)
+        assertEquals(1, repository.assets.value.recoveryAssets?.size)
+        assertIs<java.io.IOException>(repository.assets.value.error)
+    }
+
+    @Test
+    fun aPartialOldCacheCanRecoverWhenCatalogConnectivityReturns() = runBlocking {
+        coEvery { cache.get() } returns listOf(zec.copy(usdPrice = null))
+        coEvery { api.getSupportedTokens() } throws java.io.IOException("Synthetic catalog outage")
+        coEvery { api.checkSwapStatus("tracked-deposit") } returns response("tracked-deposit")
+        coEvery { metadata.getSwapMetadata("tracked-deposit") } returns stored
+        val repository = SwapRepositoryImpl(dataSource, cache).also { it.scope = this }
+        val status = GetSwapStatusUseCase(metadata, repository)
+        val offline = status("tracked-deposit")
+        assertIs<AssetNotFoundException>(offline.error)
+        assertEquals(stored, offline.savedMetadata)
+        verify(exactly = 0) { metadata.updateSwap(any(), any(), any(), any(), any(), any()) }
+
+        coEvery { api.getSupportedTokens() } returns listOf(zec.dto(), eth.dto())
+        val recovered = status("tracked-deposit")
+        assertNull(recovered.error)
+        assertEquals(SwapStatus.SUCCESS, recovered.status?.status)
+        verify(exactly = 1) { metadata.updateSwap(any(), any(), any(), any(), any(), any()) }
+    }
+
     private suspend fun readStatus(echoedAddress: String = "tracked-deposit", scope: CoroutineScope) =
         SwapRepositoryImpl(dataSource, cache).also { it.scope = scope }.let { repository ->
             coEvery { metadata.getSwapMetadata("tracked-deposit") } returns stored

@@ -49,7 +49,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
@@ -103,7 +102,7 @@ interface LedgerProposalRepository : LedgerProposalPipeline {
      */
     fun failSignedSessionWithoutProposal()
 
-    suspend fun submit(): SubmitResult
+    suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult
 
     fun getProposalPCZT(): Pczt?
 }
@@ -124,13 +123,8 @@ class LedgerProposalRepositoryImpl(
 
     override val signingState = MutableStateFlow<LedgerSigningState?>(null)
 
-    private val pcztWithProofs = MutableStateFlow(LedgerPcztState(isLoading = false, pczt = null))
 
-    @Volatile
-    private var proposalPczt: Pczt? = null
-
-    @Volatile
-    private var pcztWithSignatures: Pczt? = null
+    private val hardwareProposal = HardwareProposalBinding()
 
     private var pcztWithProofsJob: Job? = null
 
@@ -228,33 +222,22 @@ class LedgerProposalRepositoryImpl(
             }
         cancelSigning()
         submitState.update { null }
-        pcztWithSignatures = null
-        proposalPczt = result
-        addProofsToPczt(result)
+        check(this.transactionProposal.value === transactionProposal) { "The transaction changed during preparation." }
+        val prepared = hardwareProposal.prepare(transactionProposal, result)
+        pcztWithProofsJob?.cancel()
+        pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
     }
+
+    override fun approveForSigning(expectedProposal: TransactionProposal?) =
+        hardwareProposal.approve(transactionProposal.value, expectedProposal)
 
     private fun TransactionProposal.paysTexAddress(): Boolean =
         this is SendTransactionProposal && destination is WalletAddress.Tex
 
-    private fun addProofsToPczt(proposalPczt: Pczt) {
-        pcztWithProofsJob?.cancel()
-        pcztWithProofsJob =
-            scope.launch {
-                pcztWithProofs.update { LedgerPcztState(isLoading = true, pczt = null) }
-                try {
-                    val result = proposalDataSource.addProofsToPczt(proposalPczt.clonePczt())
-                    pcztWithProofs.update { LedgerPcztState(isLoading = false, pczt = result) }
-                } catch (e: PcztException.AddProofsToPcztException) {
-                    Twig.error(e) { "Failed to add proofs to PCZT" }
-                    pcztWithProofs.update { LedgerPcztState(isLoading = false, pczt = null, error = e) }
-                }
-            }
-    }
-
     override fun startSigning() {
         if (sessionJob?.isActive == true) return
-        val pczt = proposalPczt
-        if (pczt == null) {
+        val prepared = hardwareProposal.getApproved(transactionProposal.value)
+        if (prepared == null) {
             Twig.warn { "Ledger signing: no PCZT to sign" }
             signingState.update { LedgerSigningState.Failed(LedgerIssue.unknownWithoutRetry) }
             return
@@ -264,7 +247,7 @@ class LedgerProposalRepositoryImpl(
         sessionJob =
             scope.launch {
                 pendingClose?.join()
-                runSession(session, pczt)
+                runSession(session, prepared)
             }
     }
 
@@ -280,7 +263,7 @@ class LedgerProposalRepositoryImpl(
     @Suppress("TooGenericExceptionCaught")
     private suspend fun runSession(
         session: Int,
-        pczt: Pczt
+        prepared: PreparedHardwareProposal
     ) {
         try {
             val account = accountDataSource.getSelectedAccount()
@@ -290,7 +273,7 @@ class LedgerProposalRepositoryImpl(
                 return
             }
             if (ledgerSigningDataSource.isLinked || scanAndConnect(session)) {
-                sign(session, pczt, account)
+                sign(session, prepared, account)
             }
         } catch (e: CancellationException) {
             throw e
@@ -499,18 +482,24 @@ class LedgerProposalRepositoryImpl(
 
     private suspend fun sign(
         session: Int,
-        pczt: Pczt,
+        prepared: PreparedHardwareProposal,
         account: LedgerAccount
     ) {
+        check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
+            "The reviewed transaction changed before signing."
+        }
         Twig.info { "Ledger signing: stage Preparing" }
         publish(session, LedgerSigningState.Preparing)
         val signed =
-            ledgerSigningDataSource.sign(pczt.clonePczt(), account) { progress ->
+            ledgerSigningDataSource.sign(prepared.pczt.clonePczt(), account) { progress ->
                 publish(session, progress.toSigningState())
             }
         synchronized(lock) {
             if (generation != session) return
-            pcztWithSignatures = signed
+            check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
+                "The reviewed transaction changed during signing."
+            }
+            prepared.signatures = signed
         }
         Twig.info { "Ledger signing: stage Signed" }
         publish(session, LedgerSigningState.Signed)
@@ -540,7 +529,7 @@ class LedgerProposalRepositoryImpl(
         sessionJob?.cancel()
         sessionJob = null
         selection = null
-        pcztWithSignatures = null
+        hardwareProposal.getPrepared(transactionProposal.value)?.signatures = null
         signingState.update { null }
         val previousClose = closeJob
         closeJob =
@@ -558,51 +547,35 @@ class LedgerProposalRepositoryImpl(
         }
     }
 
-    @Suppress("UseCheckOrError", "ThrowingExceptionsWithoutMessageOrCause", "TooGenericExceptionCaught")
-    override suspend fun submit(): SubmitResult =
-        scope
-            .async {
-                val transactionProposal = transactionProposal.value
-                val pcztWithSignatures = pcztWithSignatures
-
-                if (transactionProposal == null || pcztWithSignatures == null) {
-                    val cause = IllegalStateException("Transaction proposal is null")
-                    submitState.update { SubmitProposalState.Result(SubmitResult.Error(cause)) }
-                    throw cause
-                } else {
-                    submitState.update { SubmitProposalState.Submitting }
-                    val pcztWithProofsState = pcztWithProofs.filter { !it.isLoading }.first()
-                    val pcztWithProofs = pcztWithProofsState.pczt
-                    if (pcztWithProofs == null) {
-                        val cause =
-                            pcztWithProofsState.error
-                                ?: IllegalStateException("PCZT with proofs is null")
-                        submitState.update { SubmitProposalState.Result(SubmitResult.Error(cause)) }
-                        throw cause
-                    } else {
-                        try {
-                            if (transactionProposal is SwapTransactionProposal) {
-                                ZecSwapComposition.validate(transactionProposal.quote)
-                            }
-                            val result =
-                                proposalDataSource.submitTransaction(
-                                    pcztWithProofs = pcztWithProofs,
-                                    pcztWithSignatures = pcztWithSignatures
-                                )
-                            submitState.update { SubmitProposalState.Result(result) }
-                            result
-                        } catch (e: Exception) {
-                            val result = SubmitResult.Error(e)
-                            submitState.update { SubmitProposalState.Result(result) }
-                            throw e
-                        }
-                    }
+    @Suppress("TooGenericExceptionCaught")
+    override suspend fun submit(expectedProposal: TransactionProposal?): SubmitResult =
+        scope.async {
+            try {
+                val prepared = hardwareProposal.requireApproved(transactionProposal.value, expectedProposal)
+                val signed = checkNotNull(prepared.signatures) { "The reviewed transaction has not been signed." }
+                submitState.update { SubmitProposalState.Submitting }
+                val proofs = prepared.proofs.await()
+                check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
+                    "The reviewed transaction changed before submission."
                 }
-            }.await()
+                val proposal = prepared.proposal
+                if (proposal is SwapTransactionProposal) ZecSwapComposition.validate(proposal.quote)
+                val result =
+                    proposalDataSource.submitTransaction(
+                        pcztWithProofs = proofs,
+                        pcztWithSignatures = signed
+                    )
+                submitState.update { SubmitProposalState.Result(result) }
+                result
+            } catch (e: Exception) {
+                submitState.update { SubmitProposalState.Result(SubmitResult.Error(e)) }
+                throw e
+            }
+        }.await()
 
     override suspend fun getTransactionProposal(): TransactionProposal = transactionProposal.filterNotNull().first()
 
-    override fun getProposalPCZT(): Pczt? = proposalPczt
+    override fun getProposalPCZT(): Pczt? = hardwareProposal.getPrepared(transactionProposal.value)?.pczt
 
     override fun clear() {
         cancelSigning()
@@ -610,12 +583,10 @@ class LedgerProposalRepositoryImpl(
 
         pcztWithProofsJob?.cancel()
         pcztWithProofsJob = null
-        pcztWithProofs.update { LedgerPcztState(isLoading = false, pczt = null) }
 
         transactionProposal.update { null }
         submitState.update { null }
-        proposalPczt = null
-        pcztWithSignatures = null
+        hardwareProposal.clear()
     }
 
     private val isIdle: Boolean
@@ -665,9 +636,3 @@ private fun LedgerSigningProgress.toSigningState(): LedgerSigningState =
         LedgerSigningProgress.Signing,
         LedgerSigningProgress.Complete -> LedgerSigningState.Signing
     }
-
-private data class LedgerPcztState(
-    val isLoading: Boolean,
-    val pczt: Pczt?,
-    val error: Exception? = null
-)

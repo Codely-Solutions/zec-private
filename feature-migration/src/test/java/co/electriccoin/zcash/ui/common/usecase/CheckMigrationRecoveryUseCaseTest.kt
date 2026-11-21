@@ -28,6 +28,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import java.util.UUID
 import kotlin.test.Test
+import kotlin.test.assertEquals
 
 class CheckMigrationRecoveryUseCaseTest {
     // A single test account — mirrors the pattern used across the other migration VM/use-case
@@ -142,9 +143,14 @@ class CheckMigrationRecoveryUseCaseTest {
                 }
             val router = mockk<NavigationRouter>(relaxed = true)
 
-            useCase(sdk = sdk, navigationRouter = router, pendingMigrationTorFailure = true).invoke()
+            val recovery = useCase(sdk = sdk, navigationRouter = router, pendingMigrationTorFailure = true)
+            recovery()
+            CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
+            var deferredRequests = 0
+            recovery { deferredRequests++ }
 
             coVerify(exactly = 1) { router.replaceAll(HomeArgs, MigrationSendingArgs) }
+            assertEquals(1, deferredRequests)
         }
 
     @Test

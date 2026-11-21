@@ -1,8 +1,10 @@
 package co.electriccoin.zcash.ui
 
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.VKType
 import co.electriccoin.zcash.ui.screen.exportvk.ExportVKArgs
 import co.electriccoin.zcash.ui.screen.exportvk.detail.VKDetailArgs
+import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -18,6 +20,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * The `replaceFrom` command the Full Viewing Key consent sheet relies on (MOB-1883): it reaches the pipeline
@@ -76,10 +79,39 @@ class NavigationRouterImplTest {
             )
         }
 
+    @Test
+    fun lockedWalletDropsOldCallbacksButRetainsAnExplicitLaunchRequest() =
+        runTest(dispatcher) {
+            val session = AppAccessSession()
+            val launchNavigation = LaunchNavigationRequests()
+            val router = NavigationRouterImpl()
+            val requestedProgress = NavigationCommand.ReplaceAll(listOf(HomeArgs, TestMigrationProgress))
+            val delivered = mutableListOf<NavigationCommand>()
+            val authorized = { session.permits(session.grant.value) }
+
+            router.forward(ExportVKArgs)
+            runCurrent()
+            launchNavigation.requestMigrationProgress(requestedProgress)
+            launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { delivered += it }
+            assertTrue(delivered.isEmpty())
+
+            session.unlock()
+            val genericCallbacks = collectedCommands(router)
+            launchNavigation.deliver(walletReady = false, hasAppAccess = authorized) { delivered += it }
+            assertTrue(delivered.isEmpty())
+            launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { delivered += it }
+            launchNavigation.deliver(walletReady = true, hasAppAccess = authorized) { delivered += it }
+
+            assertEquals(listOf<NavigationCommand>(requestedProgress), delivered)
+            assertTrue(genericCallbacks.isEmpty())
+        }
+
     private fun TestScope.collectedCommands(router: NavigationRouter): List<BaseNavigationCommand> {
         val commands = mutableListOf<BaseNavigationCommand>()
         backgroundScope.launch { router.observePipeline().collect { commands += it } }
         runCurrent()
         return commands
     }
+
+    private data object TestMigrationProgress
 }

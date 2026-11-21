@@ -37,7 +37,7 @@ class SubmitKSProposalUseCase(
     private fun submitKSProposal(proposal: TransactionProposal) {
         scope.launch {
             try {
-                val result = keystoneProposalRepository.submit()
+                val result = keystoneProposalRepository.submit(proposal)
                 if (proposal is SwapTransactionProposal) {
                     processSwapTransaction(proposal, result)
                 }

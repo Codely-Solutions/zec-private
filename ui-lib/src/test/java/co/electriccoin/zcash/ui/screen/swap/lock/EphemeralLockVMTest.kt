@@ -96,6 +96,7 @@ class EphemeralLockVMTest {
                     zashiProposalRepository = zashiProposalRepository,
                     biometricRepository = biometricRepository,
                     ephemeralAddressRepository = mockk(relaxed = true),
+                    keystoneProposalRepository = mockk(relaxed = true),
                 )
             val vm =
                 vm(

@@ -6,6 +6,8 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import cash.z.ecc.android.sdk.InternalTestingApi
+import co.electriccoin.zcash.ui.LaunchNavigationRequests
+import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
@@ -133,7 +135,7 @@ class MigrationSyncedHookImpl(
 class MigrationAppHooksImpl(
     private val checkMigrationRecovery: CheckMigrationRecoveryUseCase,
     private val debugStartMigrationE2E: DebugStartMigrationE2EUseCase,
-    private val navigationRouter: NavigationRouter,
+    private val launchNavigation: LaunchNavigationRequests,
     private val accountDataSource: AccountDataSource,
     private val migrationNotifier: MigrationNotifier,
     private val context: Context,
@@ -156,7 +158,7 @@ class MigrationAppHooksImpl(
                 // account, so a Keystone notification tapped with Zodl selected must switch.
                 scope.launch {
                     selectNotificationAccount(intent)
-                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
+                    requestProgressScreen()
                 }
                 true
             }
@@ -173,7 +175,7 @@ class MigrationAppHooksImpl(
                         migrationLog("AppHooks: step-due tap — kicking the worker for $key")
                         MigrationScheduler(context).schedule(key, kotlin.time.Duration.ZERO)
                     }
-                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
+                    requestProgressScreen()
                 }
                 true
             }
@@ -182,6 +184,9 @@ class MigrationAppHooksImpl(
                 false
             }
         }
+
+    private fun requestProgressScreen() =
+        launchNavigation.requestMigrationProgress(NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs)))
 
     /**
      * Selects the account the tapped notification belongs to (its storage-key id travels in
@@ -214,7 +219,12 @@ class MigrationAppHooksImpl(
         }
     }
 
-    override suspend fun checkRecovery() = checkMigrationRecovery()
+    override suspend fun checkRecovery() =
+        checkMigrationRecovery {
+            launchNavigation.requestMigrationRecovery(
+                NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs))
+            )
+        }
 
     override suspend fun cancelMigrationWork(accountKeyId: String?) {
         val keys =

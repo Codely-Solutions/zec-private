@@ -137,7 +137,7 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         Twig.debug { "Activity state: Start" }
         authenticationViewModel.runAuthenticationRequiredCheck()
-        if (authenticationViewModel.appAccessSession.grant.value != null) checkMigrationRecoveryOnStart()
+        checkMigrationRecoveryOnStart()
         super.onStart()
     }
 

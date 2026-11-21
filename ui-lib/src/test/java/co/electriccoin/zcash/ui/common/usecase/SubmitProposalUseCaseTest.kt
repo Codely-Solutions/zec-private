@@ -1,9 +1,12 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.model.Proposal
+import cash.z.ecc.android.sdk.model.UnifiedSpendingKey
 import cash.z.ecc.android.sdk.model.WalletAddress
 
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
@@ -21,7 +24,9 @@ import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import co.electriccoin.zcash.ui.common.repository.SubmitProposalState
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
+import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepositoryImpl
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressArgs
 import io.mockk.coEvery
@@ -30,12 +35,17 @@ import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertIs
 
 /**
  * [SubmitProposalUseCase] is gated by a biometric prompt and then branches on account type:
@@ -58,7 +68,7 @@ class SubmitProposalUseCaseTest {
             fx.useCase()
 
             coVerify(exactly = 0) { fx.accountDataSource.getSelectedAccount() }
-            coVerify(exactly = 0) { fx.zashiProposalRepository.submit() }
+            coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any()) }
             verify(exactly = 0) { fx.navigationRouter.replace(*anyVararg()) }
         }
 
@@ -86,13 +96,14 @@ class SubmitProposalUseCaseTest {
             verify(exactly = 1) { fx.metadataRepository.addSwapAssetToHistory("eth", "eth") }
             verify(exactly = 1) { fx.navigationRouter.replace(SignKeystoneTransactionArgs) }
             coVerifyOrder {
-                fx.processSwapTransaction.persistBeforeFunding(any())
+                fx.processSwapTransaction.persistBeforeFunding(proposal)
+                fx.keystoneProposalRepository.approveForSigning(proposal)
                 fx.navigationRouter.replace(SignKeystoneTransactionArgs)
             }
             // Keystone defers submission to the PCZT flow — nothing is cleared, submitted, processed,
             // or prefill-cleared on this path.
             verify(exactly = 0) { fx.swapRepository.clear() }
-            coVerify(exactly = 0) { fx.zashiProposalRepository.submit() }
+            coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any()) }
             coVerify(exactly = 0) { fx.keystoneProposalRepository.submit() }
             coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
             verify(exactly = 0) { fx.prefillSend.clear() }
@@ -137,7 +148,7 @@ class SubmitProposalUseCaseTest {
 
             verify(exactly = 1) { fx.metadataRepository.addSwapAssetToHistory("eth", "eth") }
             verify(exactly = 1) { fx.swapRepository.clear() }
-            coVerify(exactly = 1) { fx.zashiProposalRepository.submit() }
+            coVerify(exactly = 1) { fx.zashiProposalRepository.submit(any()) }
             coVerify(exactly = 1) { fx.processSwapTransaction(proposal, submitResult) }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
             verify(exactly = 1) { fx.prefillSend.clear() }
@@ -145,7 +156,7 @@ class SubmitProposalUseCaseTest {
             coVerifyOrder {
                 fx.processSwapTransaction.persistBeforeFunding(proposal)
                 fx.swapRepository.clear()
-                fx.zashiProposalRepository.submit()
+                fx.zashiProposalRepository.submit(proposal)
                 fx.navigationRouter.replace(TransactionProgressArgs)
             }
         }
@@ -160,7 +171,7 @@ class SubmitProposalUseCaseTest {
 
             verify(exactly = 0) { fx.metadataRepository.addSwapAssetToHistory(any(), any()) }
             verify(exactly = 1) { fx.swapRepository.clear() }
-            coVerify(exactly = 1) { fx.zashiProposalRepository.submit() }
+            coVerify(exactly = 1) { fx.zashiProposalRepository.submit(any()) }
             coVerify(exactly = 0) { fx.processSwapTransaction(any(), any()) }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
             verify(exactly = 1) { fx.prefillSend.clear() }
@@ -174,7 +185,7 @@ class SubmitProposalUseCaseTest {
         fx.useCase(proposal)
         fx.useCase(proposal)
         coVerify(exactly = 1) { fx.processSwapTransaction.persistBeforeFunding(any()) }
-        coVerify(exactly = 1) { fx.zashiProposalRepository.submit() }
+        coVerify(exactly = 1) { fx.zashiProposalRepository.submit(any()) }
     }
 
     @Test
@@ -185,7 +196,7 @@ class SubmitProposalUseCaseTest {
         coEvery { fx.metadataRepository.getSwapMetadata(any()) } returns mockk<TransactionSwapMetadata>()
         fx.useCase(proposal)
         coVerify(exactly = 0) { fx.processSwapTransaction.persistBeforeFunding(any()) }
-        coVerify(exactly = 0) { fx.zashiProposalRepository.submit() }
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any()) }
     }
 
     @Test
@@ -195,7 +206,7 @@ class SubmitProposalUseCaseTest {
             coEvery { fx.accountDataSource.getSelectedAccount() } returns spendable<ZodlAccount>()
             val proposal = swapProposal(tokenTicker = "eth", chainTicker = "eth")
             coEvery { fx.zashiProposalRepository.getTransactionProposal() } returns proposal
-            coEvery { fx.zashiProposalRepository.submit() } throws RuntimeException("boom")
+            coEvery { fx.zashiProposalRepository.submit(any()) } throws RuntimeException("boom")
 
             fx.useCase(proposal)
 
@@ -216,9 +227,35 @@ class SubmitProposalUseCaseTest {
             fx.givenZashi(replacement)
         }
         fx.useCase(reviewed)
-        coVerify(exactly = 0) { fx.zashiProposalRepository.submit() }
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any()) }
         coVerify(exactly = 0) { fx.processSwapTransaction.persistBeforeFunding(any()) }
         verify(exactly = 0) { fx.navigationRouter.replace(*anyVararg()) }
+    }
+
+    @Test
+    fun replacementDuringSwapTrackingCannotReachTheSdkSubmission() = runTest {
+        val sdk = mockk<ProposalDataSource>()
+        val actualRepository = ZashiProposalRepositoryImpl(mockk(), sdk, mockk())
+        val fx = useCase(actualRepository)
+        coEvery { fx.accountDataSource.getSelectedAccount() } returns spendable<ZodlAccount>()
+        val reviewed = swapProposal("eth", "eth")
+        actualRepository.transactionProposal.value = reviewed
+        val trackingStarted = CompletableDeferred<Unit>()
+        val finishTracking = CompletableDeferred<Unit>()
+        coEvery { fx.processSwapTransaction.persistBeforeFunding(reviewed) } coAnswers {
+            trackingStarted.complete(Unit)
+            finishTracking.await()
+        }
+
+        val approval = launch { fx.useCase(reviewed) }
+        trackingStarted.await()
+        actualRepository.transactionProposal.value = swapProposal("btc", "btc")
+        finishTracking.complete(Unit)
+        approval.join()
+
+        val result = actualRepository.submitState.filterIsInstance<SubmitProposalState.Result>().first()
+        assertIs<IllegalStateException>(assertIs<SubmitResult.Error>(result.submitResult).cause)
+        coVerify(exactly = 0) { sdk.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
     }
 
     @Test
@@ -226,7 +263,20 @@ class SubmitProposalUseCaseTest {
         val fx = useCase()
         fx.givenZashi(swapProposal("eth", "eth"))
         fx.useCase()
-        coVerify(exactly = 0) { fx.zashiProposalRepository.submit() }
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any()) }
+        coVerify(exactly = 0) { fx.processSwapTransaction.persistBeforeFunding(any()) }
+    }
+
+    @Test
+    fun expirationDuringAuthenticationCannotStartFunding() = runTest {
+        val fx = useCase()
+        val proposal = swapProposal("eth", "eth")
+        fx.givenZashi(proposal)
+        coEvery { fx.biometricRepository.requestBiometrics(any()) } coAnswers {
+            every { proposal.quote.deadline } returns kotlin.time.Instant.fromEpochMilliseconds(0)
+        }
+        fx.useCase(proposal)
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any()) }
         coVerify(exactly = 0) { fx.processSwapTransaction.persistBeforeFunding(any()) }
     }
 
@@ -241,6 +291,7 @@ class SubmitProposalUseCaseTest {
                 mockk {
                     every { destinationAsset } returns
                         SwapAssetTestFixture.asset(tokenTicker = tokenTicker, chainTicker = chainTicker)
+                    every { deadline } returns kotlin.time.Instant.fromEpochMilliseconds(Long.MAX_VALUE)
                 }
         }
     }
@@ -261,21 +312,22 @@ class SubmitProposalUseCaseTest {
     ) {
         coEvery { accountDataSource.getSelectedAccount() } returns spendable<ZodlAccount>()
         coEvery { zashiProposalRepository.getTransactionProposal() } returns proposal
-        coEvery { zashiProposalRepository.submit() } returns submitResult
+        coEvery { zashiProposalRepository.submit(proposal) } returns submitResult
     }
 
     /** Builds the use case with the off-thread submit scope pinned to the test scheduler. */
-    private fun TestScope.useCase(): Fixtures {
-        val fx = Fixtures()
+    private fun TestScope.useCase(
+        repository: ZashiProposalRepository = mockk(relaxed = true)
+    ): Fixtures {
+        val fx = Fixtures(repository)
         // The use case launches submission on its own scope; run it eagerly on the test scheduler.
         fx.useCase.scope = CoroutineScope(UnconfinedTestDispatcher(testScheduler))
         return fx
     }
 
-    private class Fixtures {
+    private class Fixtures(val zashiProposalRepository: ZashiProposalRepository) {
         val navigationRouter = mockk<NavigationRouter>(relaxed = true)
         val accountDataSource = mockk<AccountDataSource>(relaxed = true)
-        val zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true)
         val keystoneProposalRepository = mockk<KeystoneProposalRepository>(relaxed = true)
         val ledgerProposalPipeline = mockk<LedgerProposalPipeline>(relaxed = true)
         val ledgerNavigator = mockk<LedgerNavigator>(relaxed = true)

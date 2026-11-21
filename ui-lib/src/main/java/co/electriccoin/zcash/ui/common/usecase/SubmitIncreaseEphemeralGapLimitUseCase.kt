@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.common.repository.BiometricRequest
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.repository.EphemeralAddressRepository
+import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
@@ -27,7 +28,8 @@ class SubmitIncreaseEphemeralGapLimitUseCase(
     private val accountDataSource: AccountDataSource,
     private val zashiProposalRepository: ZashiProposalRepository,
     private val biometricRepository: BiometricRepository,
-    private val ephemeralAddressRepository: EphemeralAddressRepository
+    private val ephemeralAddressRepository: EphemeralAddressRepository,
+    private val keystoneProposalRepository: KeystoneProposalRepository
 ) {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -45,6 +47,7 @@ class SubmitIncreaseEphemeralGapLimitUseCase(
             )
             when (accountDataSource.getSelectedAccount()) {
                 is KeystoneAccount -> {
+                    keystoneProposalRepository.approveForSigning()
                     navigationRouter.replace(SignKeystoneTransactionArgs)
                 }
 

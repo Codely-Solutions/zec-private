@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.LedgerDeviceDataSource
 import co.electriccoin.zcash.ui.common.datasource.LedgerSigningDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
+import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import io.mockk.coEvery
@@ -64,6 +65,7 @@ abstract class LedgerProposalRepositoryTestBase {
         proofsError: PcztException.AddProofsToPcztException? = null,
         proofsGate: CompletableDeferred<Unit>? = null,
         onProofsCancelled: () -> Unit = {},
+        proposal: TransactionProposal? = null,
     ): Pczt {
         coEvery { accountDataSource.getSelectedAccount() } returns account
         coEvery { proposalDataSource.createProposal(any(), any()) } returns
@@ -92,7 +94,9 @@ abstract class LedgerProposalRepositoryTestBase {
                 proposal = null
             )
         )
+        if (proposal != null) repository.transactionProposal.value = proposal
         repository.createPCZTFromProposal()
+        repository.approveForSigning(repository.getTransactionProposal())
         return pczt
     }
 
