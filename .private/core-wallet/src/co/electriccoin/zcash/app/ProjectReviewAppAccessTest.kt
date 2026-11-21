@@ -13,6 +13,8 @@ import android.view.KeyEvent
 import android.view.WindowManager
 import android.view.Window
 import android.view.MotionEvent
+import android.view.ViewGroup
+import android.view.WindowInsets
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import androidx.test.platform.app.InstrumentationRegistry
@@ -280,6 +282,23 @@ class ProjectReviewAppAccessTest {
         val activity = onMain {
             ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
                 .filterIsInstance<MainActivity>().single()
+        }
+        onMain {
+            val content = activity.findViewById<ViewGroup>(android.R.id.content)
+            val compose = content.getChildAt(0)
+            val visible = Rect()
+            val isVisible = compose.getGlobalVisibleRect(visible)
+            val geometry = JSONObject().put("phase", "reveal_view_geometry").put("reveal", revealNumber)
+                .put("content_height", content.height).put("compose_height", compose.height)
+                .put("compose_width", compose.width).put("compose_visible", isVisible)
+                .put("compose_visible_bounds", visible.toShortString())
+                .put("decor_height", activity.window.decorView.height)
+                .put("window_flags", activity.window.attributes.flags)
+            if (Build.VERSION.SDK_INT >= 30) {
+                geometry.put("ime_visible", compose.rootWindowInsets?.isVisible(WindowInsets.Type.ime()))
+                    .put("ime_bottom", compose.rootWindowInsets?.getInsets(WindowInsets.Type.ime())?.bottom)
+            }
+            android.util.Log.i("ProjectReviewAppAccess", geometry.toString())
         }
         val original = onMain { checkNotNull(activity.window.callback) }
         val observer = object : Window.Callback by original {
