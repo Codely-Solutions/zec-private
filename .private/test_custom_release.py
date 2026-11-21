@@ -1,9 +1,9 @@
 import json
-import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+from test_support import patch_environment
 
 import custom_release
 from maintenance_cadence import admit_cadence
@@ -31,7 +31,7 @@ class CustomReleaseTests(unittest.TestCase):
             event = Path(directory) / 'event.json'
             environment = dict(GITHUB_REPOSITORY=custom_release.REPOSITORY, GITHUB_REF='refs/heads/main',
                                GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_RUN_ID='7', GITHUB_EVENT_PATH=str(event))
-            with patch.dict(os.environ, environment), patch('maintenance_cadence.changed_marker',
+            with patch_environment(environment), patch('maintenance_cadence.changed_marker',
                                                             return_value={'kind': 'custom', 'controller': MAIN}):
                 for operation, selected, run_fields, current, rejection in cases:
                     with self.subTest(operation=operation, source=selected, run=run_fields, main=current):

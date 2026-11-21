@@ -1,9 +1,9 @@
 import json
-import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+from test_support import patch_environment
 
 import hosted_claim
 import hosted_core
@@ -123,7 +123,7 @@ class HostedReleaseTests(unittest.TestCase):
                                                     production_id=5, core_id=6, quote_id=7, metadata=Mock(),
                                                     direct_core_id=8)
 
-            with patch.dict(os.environ, {'GITHUB_RUN_ID': str(RUN)}), patch.object(hosted_release, 'ROOT', directory), \
+            with patch_environment({'GITHUB_RUN_ID': str(RUN)}), patch.object(hosted_release, 'ROOT', directory), \
                     patch.object(hosted_release, 'version_code', return_value=VERSION), \
                     patch.object(hosted_release, 'artifact', side_effect=lambda _, i, *a: {5: production, 6: producer, 7: quotes, 8: prepared}[i]), \
                     patch.object(hosted_release, 'verify'), patch.object(hosted_release, 'validate_core_sources'), \
@@ -164,7 +164,7 @@ class HostedReleaseTests(unittest.TestCase):
                                                     production_id=1, core_id=2, quote_id=3, metadata=Mock(),
                                                     direct_core_id=direct_core_id, reuse_funded=True, recovery=recovery)
 
-            with patch.dict(os.environ, {'GITHUB_RUN_ID': str(RUN)}), \
+            with patch_environment({'GITHUB_RUN_ID': str(RUN)}), \
                     patch.object(hosted_release, 'ROOT', directory), \
                     patch.object(hosted_release, 'version_code', return_value=VERSION), \
                     patch('funded_reuse.select', return_value=selected) as select, \

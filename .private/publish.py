@@ -263,12 +263,12 @@ def main():
         verify_tag(tag, expected)
         from verify_public_release import payload, unsigned_proof
 
-        checked_apk, checked_proof, checked_artifact = unsigned_proof(dict(
+        checked_apk, checked_proof, checked_artifact, producer_job_id = unsigned_proof(dict(
             source_sha=expected, controller_sha=controller, artifact_run_id=proof['workflow_run_id'],
             **origin, **archive_binding))
         require(checked_proof == proof and checked_apk == apk.read_bytes(),
                 'Signing input differs from the verified original archive')
-        archive_binding = {'production_artifact': checked_artifact}
+        archive_binding = {'production_artifact': checked_artifact, 'production_job_id': producer_job_id}
     if proof.get('architecture') != check_apk(apk):
         raise RuntimeError('Release architecture evidence mismatch')
     tools=Path(os.environ['ANDROID_HOME'])/'build-tools/36.0.0'

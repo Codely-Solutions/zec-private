@@ -153,7 +153,7 @@ def resume_draft(run_id, attempt, artifact_id):
     # archive and both payloads before publishing its retained signed bytes.
     from verify_public_release import payload as apk_payload
 
-    unsigned, frozen, _ = unsigned_proof(proof)
+    unsigned, frozen, _, _ = unsigned_proof(proof)
     require(frozen['release_tag'] == proof['release_tag'], 'Attestation names a different unsigned release')
     with tempfile.TemporaryDirectory(dir=os.environ['RUNNER_TEMP']) as scratch:
         dist = Path(scratch)

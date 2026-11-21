@@ -1,10 +1,10 @@
 import json
-import os
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+from test_support import patch_environment
 
 from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, main, pending_recovery, trusted_proposal,
                                verified_wrapper, wrapper_patch)
@@ -16,7 +16,7 @@ class MaintenanceWatchTest(unittest.TestCase):
             root = Path(temp)
             environment = {'GITHUB_OUTPUT': str(root/'output'), 'GITHUB_STEP_SUMMARY': str(root/'summary')}
             repository = {'has_pull_requests': True, 'pull_request_creation_policy': 'collaborators_only'}
-            with patch.dict(os.environ, environment), patch('maintenance_watch.pending_recovery', return_value=None), \
+            with patch_environment(environment), patch('maintenance_watch.pending_recovery', return_value=None), \
                     patch('maintenance_watch.api', side_effect=[repository, {'state': 'active'},
                           {'workflow_runs': []}, []]) as api, patch('builtins.print') as emit:
                 main()
@@ -132,7 +132,7 @@ class MaintenanceWatchTest(unittest.TestCase):
                 from refresh_source import generate_patch, patch_paths
                 (root/'.private/fork.patch').write_bytes(generate_patch(root, upstream, patch_paths([])))
 
-            with patch.dict(os.environ, environment), patch.object(prepare, 'ROOT', root), \
+            with patch_environment(environment), patch.object(prepare, 'ROOT', root), \
                     patch.object(prepare, 'git', side_effect=remote_git), \
                     patch.object(prepare.Metadata, 'api', side_effect=lambda path, **_: (
                         {'id': 7} if not path else [[{'tag_name': 'v3.19.0-private.21'}]])), \

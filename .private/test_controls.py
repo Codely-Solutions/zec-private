@@ -2,6 +2,8 @@ import contextlib, importlib.util, json, os, tempfile, unittest
 from pathlib import Path
 import shutil
 import re
+import subprocess
+import sys
 from urllib.parse import parse_qs, unquote, urlsplit
 
 spec=importlib.util.spec_from_file_location('forkcheck',Path(__file__).with_name('check.py'))
@@ -19,6 +21,42 @@ def fixture_directory():
             yield temp
 
 class ControlsTest(unittest.TestCase):
+    def test_environment_patch_restores_empty_entries_for_child_processes(self):
+        code = """
+import json
+import os
+import subprocess
+import sys
+from test_support import patch_environment
+
+keys = ('ZEC_TEST_EMPTY', 'ZEC_TEST_ORIGINAL', 'ZEC_TEST_UNRELATED', 'ZEC_TEST_ADDED')
+read_child = 'import json, os, sys; print(json.dumps([os.getenv(key) for key in sys.argv[1:]]))'
+
+def inherited():
+    return json.loads(subprocess.check_output([sys.executable, '-B', '-c', read_child, *keys], timeout=10))
+
+original = ['', 'original', 'unrelated', None]
+assert inherited() == original
+for clear in (False, True):
+    try:
+        with patch_environment({keys[1]: 'updated'}, clear=clear, ZEC_TEST_ADDED='new') as environment:
+            assert environment is os.environ
+            assert environment[keys[1]] == 'updated'
+            assert environment[keys[3]] == 'new'
+            assert environment.get(keys[2]) == (None if clear else 'unrelated')
+            if clear:
+                raise RuntimeError('test cleanup after failure')
+    except RuntimeError as error:
+        assert str(error) == 'test cleanup after failure'
+    assert [os.getenv(key) for key in keys] == original
+    assert inherited() == original
+"""
+        environment = dict(os.environ, ZEC_TEST_EMPTY='', ZEC_TEST_ORIGINAL='original',
+                           ZEC_TEST_UNRELATED='unrelated')
+        environment.pop('ZEC_TEST_ADDED', None)
+        subprocess.run([sys.executable, '-B', '-c', code], cwd=Path(__file__).resolve().parent,
+                       env=environment, timeout=30, check=True)
+
     def test_active_repository_references_follow_transfer(self):
         legacy='Sammy'+'-Lastre/zec-private'
         root=checks.ROOT

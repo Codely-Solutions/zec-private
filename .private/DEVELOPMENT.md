@@ -53,6 +53,8 @@ All checkout/build/guest scratch is removed when its guard ends. There is no lon
 
 Run the affected Python suites offline with `PYTHONPATH=.private` from a coherent checkout. For hosted Linux validation, dispatch [automation-test.yml](../.github/workflows/automation-test.yml) on the reviewed branch. A non-main dispatch runs the offline controller suites and real disposable Git fixtures with read-only permissions. The release controllers are tested with synthetic metadata and mocked publication calls.
 
+Use `patch_environment` from [test_support.py](test_support.py) for test environment changes. It restores empty Windows variables for subprocesses, including Git configuration overrides with empty values.
+
 ## Kotlin plugin resolution
 
 Plugin classpaths have their own repositories. Root, `buildSrc`, convention-build and bridge settings route the exact `org.jetbrains.kotlin` implementation group to Maven Central. Plugin marker groups retain the Portal and their existing checksum pins. Keep these scopes distinct when changing repositories; marker POMs can differ between publishers.

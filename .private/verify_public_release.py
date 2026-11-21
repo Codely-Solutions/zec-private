@@ -1,5 +1,6 @@
 """Verify the latest public wallet APK from the original unsigned artifact."""
 import base64
+from datetime import datetime
 import hashlib
 import io
 import json
@@ -97,6 +98,29 @@ def payload(data):
                 if not re.fullmatch(r'META-INF/[^/]+\.(RSA|DSA|EC|SF|MF)', item, re.I)}
 
 
+def unsigned_producer_job(jobs, asset, expected_id=None):
+    def timestamp(value):
+        require(isinstance(value, str), 'Missing GitHub artifact or job timestamp')
+        parsed = datetime.fromisoformat(value)
+        require(parsed.tzinfo is not None, 'GitHub artifact or job timestamp must include timezone')
+        return parsed
+
+    created = timestamp(asset.get('created_at'))
+    matches = []
+    for job in jobs:
+        started = job.get('started_at')
+        completed = job.get('completed_at')
+        if started and timestamp(started) <= created and (completed is None or created <= timestamp(completed)):
+            matches.append(job)
+    require(len(matches) == 1 and matches[0]['status'] == 'completed' and matches[0]['conclusion'] == 'success',
+            'Expected one successful unsigned producer job when the selected artifact was uploaded')
+    job = matches[0]
+    require(type(job.get('id')) is int and job['id'] > 0 and job.get('completed_at')
+            and (expected_id is None or (type(expected_id) is int and job['id'] == expected_id)),
+            'Unsigned artifact differs from the exact attested producer job')
+    return job['id']
+
+
 def unsigned_proof(evidence):
     from custom_release import WORKFLOW as CUSTOM_WORKFLOW
 
@@ -113,26 +137,34 @@ def unsigned_proof(evidence):
                 and run['head_sha'] == build_controller)
     custom = (run['path'] == CUSTOM_WORKFLOW and run['event'] == 'workflow_dispatch'
               and run['head_sha'] == build_controller and evidence.get('maintenance', {}).get('kind') == 'custom')
-    require(run['head_branch'] == 'main' and run.get('head_repository', {}).get('full_name') == REPO
+    require(run['id'] == int(run_id) and run['head_branch'] == 'main'
+            and run.get('head_repository', {}).get('full_name') == REPO
             and (direct or upstream or custom),
             'Expected a main-branch release producer')
     job_pages = gh(f'actions/runs/{run_id}/jobs?filter=all&per_page=100', '--paginate', '--slurp')
-    successful = [job for page in job_pages for job in page['jobs']
-                  if job['name'].rsplit(' / ', 1)[-1] == 'unsigned' and job['conclusion'] == 'success'
-                  and job['run_id'] == int(run_id) and job['head_sha'] == run['head_sha']]
-    require(len(successful) == 1, 'Expected one successful unsigned producer job')
+    label = 'unsigned' if direct else 'build / unsigned'
+    jobs = [job for page in job_pages for job in page['jobs'] if job['name'] == label
+            and job['run_id'] == int(run_id) and job['head_sha'] == run['head_sha']]
     pages = gh(f'actions/runs/{run_id}/artifacts?per_page=100', '--paginate', '--slurp')
     assets = [item for page in pages for item in page['artifacts'] if item['name'] == 'validated-unsigned-apk']
+    accepted = evidence.get('production_artifact')
+    if 'production_artifact' in evidence:
+        require(isinstance(accepted, dict) and type(accepted.get('id')) is int and accepted['id'] > 0,
+                'Invalid accepted unsigned artifact ID')
+        assets = [asset for asset in assets if asset['id'] == accepted['id']]
     require(len(assets) == 1 and not assets[0]['expired'], 'Expected one live validated unsigned artifact')
     asset = assets[0]
     compressed, expanded = ARCHIVE_LIMITS['validated-unsigned-apk']
-    require(asset['workflow_run']['id'] == int(run_id) and asset['workflow_run']['head_sha'] == run['head_sha']
+    require(type(asset.get('id')) is int and asset['id'] > 0
+            and asset['workflow_run']['id'] == int(run_id) and asset['workflow_run']['head_sha'] == run['head_sha']
             and 0 < asset['size_in_bytes'] <= compressed,
             'Unsigned artifact run or size mismatch')
-    if 'production_artifact' in evidence:
-        require(all(asset[key] == evidence['production_artifact'][key]
-                    for key in ('id', 'digest', 'size_in_bytes')),
+    if accepted is not None:
+        require(all(asset[key] == accepted.get(key) for key in ('id', 'digest', 'size_in_bytes')),
                 'Public verification did not resolve the accepted unsigned artifact')
+    require('production_job_id' not in evidence or evidence['production_job_id'] is not None,
+            'Missing attested unsigned producer job ID')
+    job_id = unsigned_producer_job(jobs, asset, evidence.get('production_job_id'))
     data = subprocess.check_output(['gh', 'api', f'{API}/actions/artifacts/{asset["id"]}/zip'], timeout=90)
     require(len(data) == asset['size_in_bytes'] and asset['digest'] == 'sha256:' + digest(data),
             'Unsigned artifact digest or size mismatch')
@@ -143,7 +175,7 @@ def unsigned_proof(evidence):
         pass
     require(proof['source_sha'] == source and str(proof['workflow_run_id']) == run_id
             and proof['apk_sha256'] == digest(raw), 'Unsigned APK does not match recorded source and producer')
-    return raw, proof, {key: asset[key] for key in ('id', 'digest', 'size_in_bytes')}
+    return raw, proof, {key: asset[key] for key in ('id', 'digest', 'size_in_bytes')}, job_id
 
 
 def main():
@@ -174,7 +206,7 @@ def main():
         ref = gh(f'git/tags/{ref["sha"]}')['object']
     require(release_tag_matches(tag, evidence['source_sha'], sha, release['id'], ref, gh),
             'Public tag does not identify the validated source')
-    unsigned, proof, original_artifact = unsigned_proof(evidence)
+    unsigned, proof, original_artifact, producer_job_id = unsigned_proof(evidence)
     require(proof['release_tag'] == tag and payload(signed) == payload(unsigned),
             'Public APK payload differs from the validated candidate')
     version_lines = [line for line in (release['body'] or '').splitlines()
@@ -199,6 +231,7 @@ def main():
     print(json.dumps({'tag': tag, 'apk_sha256': sha, 'version_code': proof['versionCode'],
                       'source_sha': evidence['source_sha'], 'public_tag_source_sha': ref['sha'],
                       'unsigned_artifact_id': original_artifact['id'],
+                      'unsigned_producer_job_id': producer_job_id,
                       'public_discovery_verified': True, 'public_discovery_route': discovery_route,
                       'signed_payload_matches': True}))
 

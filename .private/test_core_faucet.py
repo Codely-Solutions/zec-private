@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
+from test_support import patch_environment
 from core_faucet import TorHTTPS,FAUCET,verify_unavailable_proxy,bundle_archive
 import core_faucet
 from contextlib import contextmanager
@@ -60,7 +61,7 @@ class ReadinessTest(unittest.TestCase):
             claim.assert_not_called()
 
     def test_existing_ledger_stops_before_tor(self):
-        with tempfile.TemporaryDirectory() as root,patch.dict(os.environ,{},clear=True),patch('core_faucet.owned_tor') as tor:
+        with tempfile.TemporaryDirectory() as root,patch_environment({},clear=True),patch('core_faucet.owned_tor') as tor:
             ledger=Path(root)/'funding-claim-ledger.json'
             ledger.write_text('prior uncertain claim')
             with self.assertRaises(RuntimeError):core_faucet.readiness(root)
@@ -127,7 +128,7 @@ class ClaimTest(unittest.TestCase):
             value=replies.pop(0)
             if isinstance(value,Exception):raise value
             return value[0],json.dumps(value[1]).encode()
-        with patch.dict(os.environ,{},clear=True),patch('core_faucet.TorHTTPS') as client,patch('core_faucet.request',side_effect=request),patch('core_faucet.solve_work',return_value=dict(nonce='0',seconds=.1,workers=2)),patch('core_faucet.time.time',return_value=100):
+        with patch_environment({},clear=True),patch('core_faucet.TorHTTPS') as client,patch('core_faucet.request',side_effect=request),patch('core_faucet.solve_work',return_value=dict(nonce='0',seconds=.1,workers=2)),patch('core_faucet.time.time',return_value=100):
             client.return_value.sock=object()
             return core_faucet.claim(self.address,root,12345,True)
 
@@ -153,7 +154,7 @@ class ClaimTest(unittest.TestCase):
     def test_explicit_ledger_blocks_claim_without_transport(self):
         with tempfile.TemporaryDirectory() as root:
             ledger=Path(root)/'retained-ledger.json';ledger.write_text('uncertain prior attempt')
-            with patch.dict(os.environ,{'CORE_FAUCET_LEDGER':str(ledger)}),patch('core_faucet.TorHTTPS') as client:
+            with patch_environment({'CORE_FAUCET_LEDGER':str(ledger)}),patch('core_faucet.TorHTTPS') as client:
                 with self.assertRaisesRegex(RuntimeError,'already attempted'):
                     core_faucet.claim(self.address,root,12345,True)
             client.assert_not_called()

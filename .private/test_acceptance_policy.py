@@ -12,6 +12,7 @@ from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 import unittest
 from unittest.mock import patch
+from test_support import patch_environment
 from acceptance_policy import profile_input, changed_inputs, input_fingerprint, requirements, validate_core, validate_quotes, validate_binding, verify_promotion_revision, CORE_STAGES, CORE_TEST_SOURCE, CORE_BINDING, validate_core_sources, BASELINE_INSTRUMENTATION_STAGES, CANDIDATE_INSTRUMENTATION_STAGES
 from acceptance_policy import needs_live_tor_probe
 
@@ -232,7 +233,7 @@ class AcceptancePolicyTest(unittest.TestCase):
     def test_status_reports_required_profiles_and_changed_inputs(self):
         receipt = json.dumps({'build_source_sha': 'a'*40})
         with ExitStack() as stack:
-            stack.enter_context(patch.dict(os.environ, {'VALIDATION_ONLY': 'true'}))
+            stack.enter_context(patch_environment({'VALIDATION_ONLY': 'true'}))
             stack.enter_context(patch.object(Path, 'read_bytes', return_value=receipt.encode()))
             stack.enter_context(patch('acceptance_policy.input_fingerprint', return_value='current'))
             stack.enter_context(patch('acceptance_policy.validate_core_sources', side_effect=ValueError('stale core')))

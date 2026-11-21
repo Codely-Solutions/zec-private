@@ -3,7 +3,6 @@ import importlib.util
 import io
 import hashlib
 import json
-import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -11,10 +10,11 @@ import unittest
 import zipfile
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError
+from test_support import patch_environment
 
 spec=importlib.util.spec_from_file_location('private_publish',Path(__file__).with_name('publish.py'))
 publish=importlib.util.module_from_spec(spec)
-with patch.dict(os.environ,{'GITHUB_REPOSITORY':'example/zec-private'}):
+with patch_environment({'GITHUB_REPOSITORY':'example/zec-private'}):
     spec.loader.exec_module(publish)
     import integrate_release
     from integrate_release import state_commit
@@ -142,7 +142,7 @@ class PublishMetadataTest(unittest.TestCase):
             ('refs/heads/main', controller, 'b' * 40, False),
         ):
             with self.subTest(ref=ref, local=local, remote=remote), \
-                    patch.dict(os.environ, {'GITHUB_REF': ref}), \
+                    patch_environment({'GITHUB_REF': ref}), \
                     patch.object(publish, 'run', side_effect=(local, remote)):
                 if allowed:
                     publish.require_current_controller(controller)
@@ -209,7 +209,7 @@ class PublishMetadataTest(unittest.TestCase):
             'git/matching-refs/tags/' + tag: [{'ref': 'refs/tags/' + tag,
                                                 'object': {'sha': source, 'type': 'commit'}}],
         }
-        with patch.dict(os.environ, GITHUB_REPOSITORY='example/zec-private'), \
+        with patch_environment(GITHUB_REPOSITORY='example/zec-private'), \
                 patch.object(reconcile, 'gh', side_effect=lambda path, *_: routes[path]) as api, \
                 patch.object(reconcile.subprocess, 'check_output', return_value=raw):
             result = reconcile.resolve('7', '1', '53')
@@ -238,7 +238,7 @@ class PublishMetadataTest(unittest.TestCase):
             output.write_bytes(b'prior_output=retained\n')
             env = dict(GITHUB_OUTPUT=str(output), RECONCILIATION_RUN='7', RECONCILIATION_ATTEMPT='1',
                        RECONCILIATION_ARTIFACT='53')
-            with patch.dict(os.environ, env, clear=True), patch.object(reconcile, 'resolve', return_value=proof) as resolve:
+            with patch_environment(env, clear=True), patch.object(reconcile, 'resolve', return_value=proof) as resolve:
                 reconcile.main()
             resolve.assert_called_once_with('7', '1', '53')
             expected = {key: str(value) for key, value in proof.items()}
@@ -317,8 +317,8 @@ class PublishMetadataTest(unittest.TestCase):
                         if scenario == 'failed-smoke':
                             raise subprocess.CalledProcessError(1, command)
 
-                with patch.dict(os.environ, env), patch.object(reconcile, 'lookup', return_value=({}, proof, draft)), \
-                        patch.object(reconcile, 'unsigned_proof', return_value=(unsigned, proof, {})), \
+                with patch_environment(env), patch.object(reconcile, 'lookup', return_value=({}, proof, draft)), \
+                        patch.object(reconcile, 'unsigned_proof', return_value=(unsigned, proof, {}, 11)), \
                         patch.object(reconcile, 'verify_tag'), patch.object(reconcile, 'expose_release') as expose, \
                         patch.object(reconcile.subprocess, 'run', side_effect=run), \
                         patch.object(reconcile.subprocess, 'check_output', return_value=unsigned), \
@@ -378,7 +378,7 @@ class PublishMetadataTest(unittest.TestCase):
 
         role = 'validated-unsigned-apk'
         sha = 'a' * 40
-        run = dict(path='.github/workflows/build-release.yml', event='workflow_dispatch',
+        run = dict(id=7, path='.github/workflows/build-release.yml', event='workflow_dispatch',
                    head_branch='main', head_sha=sha, head_repository={'full_name': verify.REPO})
         production = dict(id=5, name=role, expired=False, size_in_bytes=ARCHIVE_LIMITS[role][0],
                           digest='sha256:' + 'b' * 64, workflow_run={'id': 7, 'head_sha': sha})
@@ -408,10 +408,13 @@ class PublishMetadataTest(unittest.TestCase):
             archive.writestr('oversized.log', b'0' * 64)
         raw = buffer.getvalue()
         asset = dict(id=5, name='validated-unsigned-apk', expired=False, size_in_bytes=len(raw),
+                     created_at='2026-11-21T00:10:00Z',
                      digest='sha256:' + hashlib.sha256(raw).hexdigest(), workflow_run={'id': 7, 'head_sha': sha})
-        run = dict(path='.github/workflows/build-release.yml', event='workflow_dispatch',
+        run = dict(id=7, path='.github/workflows/build-release.yml', event='workflow_dispatch',
                    head_branch='main', head_sha=sha, head_repository={'full_name': verify.REPO})
-        jobs = [{'jobs': [dict(name='unsigned', conclusion='success', run_id=7, head_sha=sha)]}]
+        job = dict(id=11, name='unsigned', conclusion='success', status='completed', run_id=7, head_sha=sha,
+                   started_at='2026-11-21T00:01:00Z', completed_at='2026-11-21T00:12:00Z')
+        jobs = [{'jobs': [job]}]
         metadata = [run, jobs, [{'artifacts': [asset]}]]
         evidence = dict(artifact_run_id=7, source_sha=sha, controller_sha=sha)
         with patch.dict(ARCHIVE_LIMITS, {'validated-unsigned-apk': (len(raw), 63)}), \
@@ -424,12 +427,88 @@ class PublishMetadataTest(unittest.TestCase):
         import verify_public_release as verify
 
         sha = 'a' * 40
-        run = dict(path='.github/workflows/sync-upstream.yml', event='push', head_branch='main', head_sha=sha)
+        run = dict(id=7, path='.github/workflows/sync-upstream.yml', event='push', head_branch='main', head_sha=sha)
         evidence = dict(artifact_run_id=7, source_sha=sha, controller_sha=sha, maintenance={'kind': 'routine'})
         with patch.object(verify, 'gh', return_value=run) as gh:
             with self.assertRaisesRegex(ValueError, 'main-branch release producer'):
                 verify.unsigned_proof(evidence)
             gh.assert_called_once_with('actions/runs/7')
+
+    def test_public_verification_retains_the_exact_unsigned_producer_after_later_attempt(self):
+        import verify_public_release as verify
+
+        source, controller = 'a' * 40, 'b' * 40
+        run = dict(id=7, run_attempt=2, path='.github/workflows/sync-upstream.yml', event='schedule',
+                   head_branch='main', head_sha=controller, head_repository={'full_name': verify.REPO})
+        candidate = io.BytesIO()
+        with zipfile.ZipFile(candidate, 'w') as apk:
+            apk.writestr('AndroidManifest.xml', b'original validated APK')
+        apk = candidate.getvalue()
+        proof = dict(source_sha=source, workflow_run_id='7', apk_sha256=verify.digest(apk))
+        producer = dict(id=11, name='build / unsigned', conclusion='success', status='completed',
+                        run_id=7, head_sha=controller, started_at='2026-11-21T00:00:00Z',
+                        completed_at='2026-11-21T00:31:00Z')
+        later_producer = dict(producer, id=12, started_at='2026-11-21T01:00:00Z',
+                              completed_at='2026-11-21T01:31:00Z')
+
+        def archive(artifact_id, created_at, raw_proof):
+            buffer = io.BytesIO()
+            with zipfile.ZipFile(buffer, 'w') as outer:
+                outer.writestr('zec-private-unsigned.apk', apk)
+                outer.writestr('proof.json', json.dumps(raw_proof).encode())
+            data = buffer.getvalue()
+            asset = dict(id=artifact_id, name='validated-unsigned-apk', expired=False, size_in_bytes=len(data),
+                         digest='sha256:' + verify.digest(data), created_at=created_at,
+                         workflow_run={'id': 7, 'head_sha': controller})
+            return asset, data
+
+        def binding(asset):
+            return {key: asset[key] for key in ('id', 'digest', 'size_in_bytes')}
+
+        original, raw = archive(53, '2026-11-21T00:30:00Z', proof)
+        later, _ = archive(54, '2026-11-21T01:30:00Z', proof)
+        wrong_source, wrong_raw = archive(53, original['created_at'], dict(proof, source_sha='c' * 40))
+        jobs = [producer, later_producer]
+        artifacts = [later, original]
+        legacy = dict(artifact_run_id=7, source_sha=source, controller_sha=controller,
+                      production_artifact=binding(original))
+        exact = dict(legacy, production_job_id=11)
+        for attestation in (legacy, exact):
+            with self.subTest(attestation=attestation), \
+                    patch.object(verify, 'gh', side_effect=[run, [{'jobs': jobs}], [{'artifacts': artifacts}]]), \
+                    patch.object(verify.subprocess, 'check_output', return_value=raw) as download:
+                self.assertEqual(verify.unsigned_proof(attestation), (apk, proof, binding(original), 11))
+                self.assertTrue(download.call_args.args[0][-1].endswith('/actions/artifacts/53/zip'))
+
+        bad_creator = dict(original, workflow_run={'id': 7, 'head_sha': 'c' * 40})
+        unbound_legacy = {key: value for key, value in legacy.items() if key != 'production_artifact'}
+        cases = (
+            (unbound_legacy, jobs, artifacts, 'one live validated unsigned artifact'),
+            (dict(exact, production_artifact=dict(binding(original), id=55)), jobs, artifacts,
+             'one live validated unsigned artifact'),
+            (dict(exact, production_artifact=dict(binding(original), digest='sha256:' + '0' * 64)),
+             jobs, artifacts, 'accepted unsigned artifact'),
+            (exact, jobs, [later, bad_creator], 'artifact run or size mismatch'),
+            (exact, jobs, [original, dict(original), later], 'one live validated unsigned artifact'),
+            (exact, [*jobs, dict(producer)], artifacts, 'one successful unsigned producer job'),
+            (dict(exact, production_artifact=binding(later)), jobs, artifacts, 'exact attested producer job'),
+            (dict(legacy, production_artifact=binding(later)),
+             [producer, dict(later_producer, conclusion='failure')], artifacts,
+             'one successful unsigned producer job'),
+        )
+        for attestation, reported_jobs, reported_artifacts, error in cases:
+            with self.subTest(error=error, attestation=attestation), \
+                    patch.object(verify, 'gh', side_effect=[run, [{'jobs': reported_jobs}],
+                                                           [{'artifacts': reported_artifacts}]]), \
+                    patch.object(verify.subprocess, 'check_output') as download:
+                with self.assertRaisesRegex(ValueError, error):
+                    verify.unsigned_proof(attestation)
+                download.assert_not_called()
+
+        with patch.object(verify, 'gh', side_effect=[run, [{'jobs': jobs}], [{'artifacts': [wrong_source, later]}]]), \
+                patch.object(verify.subprocess, 'check_output', return_value=wrong_raw):
+            with self.assertRaisesRegex(ValueError, 'does not match recorded source'):
+                verify.unsigned_proof(dict(exact, production_artifact=binding(wrong_source)))
 
     def test_public_discovery_uses_a_matching_public_redirect_on_rate_limit(self):
         import verify_public_release as verify

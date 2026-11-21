@@ -2,12 +2,12 @@ import base64
 import datetime as dt
 import hashlib
 import json
-import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import MagicMock, Mock, patch
 from urllib.error import HTTPError
+from test_support import patch_environment
 
 import maintenance_cadence as cadence
 
@@ -79,7 +79,7 @@ class CadenceTest(unittest.TestCase):
             state = root / '.private/upstream.json'
             state.parent.mkdir()
             state.write_text('{"tag":"3.19.0-3234"}')
-            with patch.dict(os.environ, {'PROPOSAL': '7', 'PROPOSAL_HEAD': SHA, 'GITHUB_SHA': SHA,
+            with patch_environment({'PROPOSAL': '7', 'PROPOSAL_HEAD': SHA, 'GITHUB_SHA': SHA,
                                          'GITHUB_EVENT_NAME': 'schedule'}), \
                     patch('sync.ROOT', root), patch('sync.discover', return_value=latest), \
                     patch('maintenance_cadence.security_review', return_value=None), \
@@ -96,7 +96,7 @@ class CadenceTest(unittest.TestCase):
                 upstream.assert_not_called()
                 wrapper.assert_called_once_with('7', SHA, SHA)
                 output.assert_called_once_with(source_sha=SHA)
-                with patch.dict(os.environ, {'PROPOSAL': ''}):
+                with patch_environment({'PROPOSAL': ''}):
                     cadence.main()
                 wrapper.assert_called_once()
                 output.assert_called_once()
@@ -133,7 +133,7 @@ class CadenceTest(unittest.TestCase):
             state.write_text('{"tag":"3.19.0-3234"}')
             old = dict(tag_name='3.19.1-3235', published_at='2026-11-30T10:00:00Z')
             new = dict(tag_name='3.19.2-3236', published_at='2026-12-02T10:00:00Z')
-            with patch.dict(os.environ, {'PROPOSAL': '7', 'PROPOSAL_HEAD': SHA, 'GITHUB_SHA': SHA,
+            with patch_environment({'PROPOSAL': '7', 'PROPOSAL_HEAD': SHA, 'GITHUB_SHA': SHA,
                                          'GITHUB_EVENT_NAME': 'schedule'}), \
                     patch('sync.ROOT', root), patch('sync.discover', side_effect=lambda cutoff=None: old if cutoff else new), \
                     patch('maintenance_cadence.security_review', return_value=None), patch('sync.main') as upstream, \
@@ -151,14 +151,14 @@ class CadenceTest(unittest.TestCase):
 
     def test_routine_admission_rejects_a_post_cutoff_candidate(self):
         upstream = {'published_at': '2026-12-02T09:00:00Z'}
-        with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'schedule'}), \
+        with patch_environment({'GITHUB_EVENT_NAME': 'schedule'}), \
                 patch('maintenance_cadence.changed_marker', side_effect=[{}, {}, upstream]), \
                 patch('maintenance_cadence.routine_window', return_value=cadence.FIRST_WINDOW):
             with self.assertRaisesRegex(ValueError, 'after the monthly cutoff'):
                 cadence.admit_cadence(Path('.'), SHA, SHA, Mock(), Mock())
 
     def test_review_push_cannot_admit_routine_maintenance(self):
-        with patch.dict(os.environ, {'GITHUB_EVENT_NAME': 'push'}), \
+        with patch_environment({'GITHUB_EVENT_NAME': 'push'}), \
                 patch('maintenance_cadence.changed_marker', side_effect=[{}, {'kind': 'gradle-wrapper-patch'}]), \
                 patch('maintenance_cadence.routine_window') as window:
             with self.assertRaisesRegex(ValueError, 'cannot admit routine'):
@@ -252,7 +252,7 @@ class CadenceTest(unittest.TestCase):
 
             metadata = Mock()
             metadata.api.side_effect = [[[]], [{'ref': 'refs/heads/testnet-claims/release-3234022'}]]
-            with patch.dict(os.environ, {'RUNNER_TEMP': str(root.parent)}), \
+            with patch_environment({'RUNNER_TEMP': str(root.parent)}), \
                     patch('prepare_maintenance.ROOT', root), patch('refresh_source.ROOT', root), patch('sync.ROOT', root), \
                     patch('prepare_maintenance.git', side_effect=stage_git), \
                     patch('prepare_maintenance.api', return_value={'sha': controller}):

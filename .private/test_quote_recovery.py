@@ -1,12 +1,12 @@
 import hashlib
 import io
 import json
-import os
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
 import zipfile
+from test_support import patch_environment
 
 import hosted_release
 from hosted_core import network_startup_diagnostics
@@ -105,7 +105,7 @@ class QuoteRecoveryTests(unittest.TestCase):
                          digest='sha256:' + hashlib.sha256(data).hexdigest(),
                          workflow_run={'id': 7, 'head_sha': MAIN}), **record)
                 root = Path(folder)/'bridge'
-                with patch.dict(os.environ, GITHUB_SHA=MAIN), patch('hosted_release.Metadata', return_value=metadata), \
+                with patch_environment(GITHUB_SHA=MAIN), patch('hosted_release.Metadata', return_value=metadata), \
                         patch('hosted_release.subprocess.run', side_effect=lambda *_, stdout, **__: stdout.write(data)):
                     if error:
                         with self.assertRaisesRegex(ValueError, error):
@@ -172,15 +172,15 @@ class QuoteRecoveryTests(unittest.TestCase):
 
         metadata.api.side_effect = api
         with patch('hosted_claim.post_ref', side_effect=post), \
-                patch.dict(os.environ, {'GITHUB_RUN_ID': '8', 'GITHUB_RUN_ATTEMPT': '1'}):
+                patch_environment({'GITHUB_RUN_ID': '8', 'GITHUB_RUN_ATTEMPT': '1'}):
             same_controller_retry(SOURCE, MAIN, '7', metadata)
             same_controller_retry(SOURCE, MAIN, '7', metadata, signing=True)
-            with patch.dict(os.environ, {'GITHUB_RUN_ID': '9'}):
+            with patch_environment({'GITHUB_RUN_ID': '9'}):
                 with self.assertRaisesRegex(RuntimeError, 'already exists'):
                     same_controller_retry(SOURCE, MAIN, '7', metadata)
                 with self.assertRaisesRegex(ValueError, 'different inputs'):
                     same_controller_retry(SOURCE, MAIN, '7', metadata, signing=True)
-            with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '2'}):
+            with patch_environment({'GITHUB_RUN_ATTEMPT': '2'}):
                 with self.assertRaisesRegex(ValueError, 'initial dispatch'):
                     same_controller_retry(SOURCE, MAIN, '7', metadata)
 
@@ -198,7 +198,7 @@ class QuoteRecoveryTests(unittest.TestCase):
              for i, (name, state) in enumerate(states.items())],
             [dict(id=i, name=name) for i, name in enumerate(ARTIFACTS.values(), 1)],
         ]
-        with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '1'}), \
+        with patch_environment({'GITHUB_RUN_ATTEMPT': '1'}), \
                 patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_build_candidate'), \
                 patch('quote_recovery.require_transient_quote_failure') as failure, \
                 patch.object(hosted_release, 'artifact', side_effect=lambda _, i, *args: {'id': i}) as artifact:
@@ -407,7 +407,7 @@ class QuoteRecoveryTests(unittest.TestCase):
             (root / 'artifact/proof.json').write_text('{}')
             env = dict(GITHUB_REPOSITORY=REPOSITORY, SOURCE_SHA=SOURCE, CONTROLLER_SHA=MAIN,
                        RECOVER_RUN='7', HOSTED_ACCEPTANCE='true')
-            with patch.dict(os.environ, env):
+            with patch_environment(env):
                 import publish
 
                 with patch.object(publish, 'ROOT', root), patch.object(publish, 'require_current_controller'), \
@@ -425,7 +425,7 @@ class QuoteRecoveryTests(unittest.TestCase):
             (root / 'hosted-core.json').write_text(json.dumps(dict(shared, workflow_run_id=7)))
             (root / 'hosted-quotes.json').write_text(json.dumps(dict(
                 shared, workflow_run_id=8, artifact_run_id=7, quote_controller_sha=OLD)))
-            with patch.dict(os.environ, {'GITHUB_RUN_ID': '8'}), patch.object(hosted_release, 'ROOT', root), \
+            with patch_environment({'GITHUB_RUN_ID': '8'}), patch.object(hosted_release, 'ROOT', root), \
                     patch.object(hosted_release, 'version_code', return_value=42), \
                     patch.object(hosted_release, 'artifact', return_value=original_apk):
                 with self.assertRaisesRegex(ValueError, 'different execution inputs'):
@@ -543,7 +543,7 @@ class QuoteRecoveryTests(unittest.TestCase):
                      ('7', dict(states, **{'build / hosted_core / wallet': 'failure'}), 'wallet'),
                      ('7', dict(states, **{'build / publish': 'failure'}), 'publish')]
             for authorized, outcomes, error in cases:
-                with self.subTest(authorized=authorized, error=error), patch.dict(os.environ, env), \
+                with self.subTest(authorized=authorized, error=error), patch_environment(env), \
                         patch('quote_recovery.verify_delta'), \
                         patch.object(hosted_release, 'artifact', side_effect=lambda _, i, *args: {'id': i}):
                     event.write_text(json.dumps({'inputs': {'source_sha': SOURCE, 'operation': 'recover',
