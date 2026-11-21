@@ -11,7 +11,7 @@ import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 
@@ -34,10 +34,14 @@ internal operator fun WalletCoordinator.Companion.invoke(
 
 /**
  * Erasure needs the current network. Once verified, keep the SDK closed until preferences are
- * cleared, including when a pending reset is resumed after process death.
+ * cleared, including when a pending reset is resumed after process death. Reopen the cold wallet
+ * flow after clearing so the SDK reads the current store even if a prior observer missed an update.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 internal fun Flow<PersistableWallet?>.hideErasedWallet(resetProgressStore: ResetProgressStore) =
-    combine(resetProgressStore.isSdkErased) { wallet, sdkErased -> wallet.takeUnless { sdkErased } }
+    resetProgressStore.isSdkErased
+        .flatMapLatest { sdkErased -> if (sdkErased) flowOf(null) else this }
+        .buffer(0)
 
 /**
  * [OrchardMigrationSdk.new] needs the wallet's network and endpoint, which only exist once a
