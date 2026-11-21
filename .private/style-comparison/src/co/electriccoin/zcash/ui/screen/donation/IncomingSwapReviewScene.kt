@@ -39,7 +39,7 @@ internal fun IncomingSwapReviewScene(screen: String): Boolean {
                 mode = TransactionDetailSwapStatusRowState.Mode.SWAP_INTO_ZEC,
             ),
             depositTo = TransactionDetailInfoRowState(
-                stringRes(R.string.swapToZec_depositTo), stringRes("Sample deposit").withStyle()
+                stringRes(R.string.private_swap_deposit_reference), stringRes("Sample deposit").withStyle()
             ),
             recipient = empty,
             totalFees = empty,

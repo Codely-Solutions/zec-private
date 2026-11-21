@@ -73,6 +73,7 @@ class StyleComparisonActivity : ComponentActivity() {
 @Suppress("LongMethod", "MagicNumber")
 @Composable
 private fun ComparisonScreens(requested: String) {
+    if (ProjectReviewScene(requested)) return
     var screen by remember { mutableStateOf(requested) }
     val exchangeRate = remember {
         ObserveFiatCurrencyResultFixture.new(isLoading = false, isStale = false, isRefreshEnabled = true)

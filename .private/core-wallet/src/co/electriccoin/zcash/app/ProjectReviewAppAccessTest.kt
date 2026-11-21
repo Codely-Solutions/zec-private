@@ -77,7 +77,8 @@ class ProjectReviewAppAccessTest {
         val elapsed = SystemClock.elapsedRealtime() - wentToBackground
         check(elapsed >= BACKGROUND_MILLIS)
 
-        shell("am start -W -n ${context.packageName}/${MainActivity::class.java.name}")
+        val launcher = checkNotNull(launchIntent().component).flattenToShortString()
+        shell("am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $launcher")
         waitForCredentialEntry()
         assertWalletAbsent(walletWords)
         pressBack()
