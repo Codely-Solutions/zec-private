@@ -104,7 +104,8 @@ class ProjectReviewAppAccessTest {
         check(arguments.getString("securedGuest") == "disposable-emulator")
         val pin = checkNotNull(arguments.getString("fixturePin"))
         check(pin.matches(Regex("[0-9]{6}")))
-        check(checkNotNull(context.getSystemService(KeyguardManager::class.java)).isDeviceSecure)
+        val keyguard = checkNotNull(context.getSystemService(KeyguardManager::class.java))
+        check(keyguard.isDeviceSecure && !keyguard.isDeviceLocked) { "The secured test guest must be unlocked" }
         check(!dependency<GetVersionInfoProvider>()().isRunningUnderTestService)
         val preferences = dependency<StandardPreferenceProvider>()()
         check(StandardPreferenceKeys.IS_APP_ACCESS_AUTHENTICATION.getValue(preferences))
@@ -122,8 +123,8 @@ class ProjectReviewAppAccessTest {
         val repository = dependency<WalletRepository>()
         repository.markIronwoodAnnouncementShown()
         val createWalletLabel = context.getString(R.string.plainOnboarding_button_createNewWallet)
-        val createWallet = waitForBounds("onboarding wallet creation") {
-            matchesLabel(it, createWalletLabel) && it.isClickable
+        val createWallet = waitForBounds("onboarding wallet creation", requireClick = true) {
+            matchesLabel(it, createWalletLabel)
         }
         tap(createWallet)
         withTimeout(WALLET_TIMEOUT_MILLIS) { repository.secretState.first { it == SecretState.READY } }
@@ -152,7 +153,9 @@ class ProjectReviewAppAccessTest {
     private suspend fun retryUnlock(pin: String) {
         val description =
             context.getString(R.string.authentication_failed_welcome_icon_cont_desc, context.getString(R.string.app_name))
-        val retry = waitForBounds("app unlock retry") { it.contentDescription?.toString() == description }
+        val retry = waitForBounds("app unlock retry", requireClick = true) {
+            it.contentDescription?.toString() == description
+        }
         tap(retry)
         waitForCredentialEntry()
         enterPin(pin)
@@ -160,7 +163,7 @@ class ProjectReviewAppAccessTest {
 
     private suspend fun revealBackup(pin: String, walletWords: Set<String>) {
         scrollToReveal()
-        val reveal = waitForBounds("recovery reveal action") { matchesLabel(it, revealLabel) && it.isClickable }
+        val reveal = waitForBounds("recovery reveal action", requireClick = true) { matchesLabel(it, revealLabel) }
         tap(reveal)
         waitForCredentialEntry()
         enterPin(pin)
@@ -171,7 +174,7 @@ class ProjectReviewAppAccessTest {
 
     private suspend fun scrollToReveal() {
         repeat(MAX_SCROLLS) {
-            if (findBounds { matchesLabel(it, revealLabel) && it.isClickable } != null) return
+            if (findBounds(requireClick = true) { matchesLabel(it, revealLabel) } != null) return
             swipeRecoveryScreen(towardTop = false)
             delay(POLL_MILLIS)
         }
@@ -237,11 +240,12 @@ class ProjectReviewAppAccessTest {
 
     private suspend fun waitForBounds(
         label: String,
+        requireClick: Boolean = false,
         match: (AccessibilityNodeInfo) -> Boolean,
     ): Rect {
         var result: Rect? = null
         waitFor(label) {
-            result = findBounds(match)
+            result = findBounds(requireClick, match)
             result != null
         }
         return checkNotNull(result)
@@ -257,10 +261,36 @@ class ProjectReviewAppAccessTest {
     }
 
     @Suppress("DEPRECATION")
-    private fun findBounds(match: (AccessibilityNodeInfo) -> Boolean): Rect? {
+    private fun findBounds(requireClick: Boolean = false, match: (AccessibilityNodeInfo) -> Boolean): Rect? {
+        fun clickBounds(node: AccessibilityNodeInfo): Rect? {
+            val labelBounds = Rect().also(node::getBoundsInScreen)
+            var control: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
+            try {
+                repeat(4) {
+                    val current = control ?: return null
+                    if (!current.isEnabled || current.packageName != context.packageName) return null
+                    if (current.isClickable) {
+                        val bounds = Rect().also(current::getBoundsInScreen)
+                        val density = context.resources.displayMetrics.density
+                        val bounded = bounds.height() >= 24 * density &&
+                            bounds.height() <= 192 * density && bounds.contains(labelBounds)
+                        val clickAction = current.actionList.any {
+                            it.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK.id
+                        }
+                        return bounds.takeIf { current.isVisibleToUser && bounded && clickAction }
+                    }
+                    control = current.parent
+                    current.recycle()
+                }
+            } finally {
+                control?.recycle()
+            }
+            return null
+        }
+
         fun search(node: AccessibilityNodeInfo): Rect? = try {
             if (node.isVisibleToUser && match(node)) {
-                Rect().also(node::getBoundsInScreen).takeUnless(Rect::isEmpty)
+                if (requireClick) clickBounds(node) else Rect().also(node::getBoundsInScreen).takeUnless(Rect::isEmpty)
             } else {
                 (0 until node.childCount).firstNotNullOfOrNull { index -> node.getChild(index)?.let(::search) }
             }
