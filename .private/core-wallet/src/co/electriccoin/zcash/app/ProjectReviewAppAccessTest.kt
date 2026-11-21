@@ -41,7 +41,7 @@ class ProjectReviewAppAccessTest {
     private val automation get() = instrumentation.uiAutomation
     private val arguments = InstrumentationRegistry.getArguments()
     private val lockedTitle get() = context.getString(R.string.splash_authTitle)
-    private val backupTitle get() = context.getString(R.string.recoveryPhraseDisplay_screenTitle)
+    private val backupTitle get() = context.getString(R.string.recoveryPhraseDisplay_screenTitle).uppercase()
     private val revealLabel get() = context.getString(R.string.recoveryPhraseDisplay_reveal)
     private val hideLabel get() = context.getString(R.string.recoveryPhraseDisplay_hide)
     private val copyLabel get() = context.getString(R.string.recovery_copy_phrase)
