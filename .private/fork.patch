@@ -39255,7 +39255,7 @@ index da0613aca..d1521bb2d 100644
 -        affiliateAddress = "affiliate"
 +        slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
-index c0be20563..c95ad8e21 100644
+index c0be20563..fd759ffa7 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.datasource
@@ -39265,8 +39265,11 @@ index c0be20563..c95ad8e21 100644
 +import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
 @@ -26,0 +30 @@ import kotlinx.coroutines.runBlocking
 +import kotlinx.serialization.json.Json
-@@ -56,0 +61,67 @@ class NearSwapDataSourceTest {
-+    @Test
+@@ -35 +39 @@ import kotlin.test.assertNull
+- * [NearSwapDataSource] maps the 1Click API: de-duplicating supported tokens and mapping them to
++ * [NearSwapDataSource] maps the 1Click API: preserving complete supported identities and mapping them to
+@@ -58 +62,68 @@ class NearSwapDataSourceTest {
+-    fun getSupportedTokensDeduplicatesAndMapsTokens() =
 +    fun externalAddressFamiliesKeepTheirExactRecipientAndRefundEncoding() =
 +        runBlocking {
 +            val addresses = listOf(
@@ -39333,6 +39336,18 @@ index c0be20563..c95ad8e21 100644
 +            }
 +        }
 +
++    @Test
++    fun getSupportedTokensPreservesSameDisplayIdentitiesAndMapsTokens() =
+@@ -63 +134 @@ class NearSwapDataSourceTest {
+-                    // Duplicate symbol + blockchain + decimals -> dropped by distinctBy.
++                    // A distinct exact identity retains its own recovery meaning.
+@@ -70,3 +141,3 @@ class NearSwapDataSourceTest {
+-            assertEquals(2, result.size)
+-            // The first of the duplicate pair (assetId "a1") is kept, with the token's fields mapped through.
+-            val btc = result.single { it.tokenTicker == "btc" }
++            assertEquals(3, result.size)
++            assertEquals(listOf("a1", "a2"), result.filter { it.tokenTicker == "btc" }.map { it.assetId })
++            val btc = result.single { it.assetId == "a1" }
 @@ -96,2 +167 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
@@ -39465,6 +39480,8 @@ index c0be20563..c95ad8e21 100644
 +        }
 +    }
 +
+@@ -389,0 +532 @@ class NearSwapDataSourceTest {
++                    every { quote } returns mockk { every { depositAddress } returns "deposit" }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/OptionalTransparentReceiverTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/OptionalTransparentReceiverTest.kt
 new file mode 100644
 index 000000000..6dbf3b69f
@@ -39568,7 +39585,7 @@ index 4c13e2085..1a88b2241 100644
 +        const val ZIP321_RECIPIENT = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt
 new file mode 100644
-index 000000000..417f32aea
+index 000000000..6acbb55d6
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt
 @@ -0,0 +1,217 @@
@@ -39720,7 +39737,7 @@ index 000000000..417f32aea
 +        repository.requestRefreshAssetsOnce()
 +        assertNull(repository.assets.value.zecAsset)
 +        assertEquals(1, repository.assets.value.recoveryAssets?.size)
-+        assertIs<java.io.IOException>(repository.assets.value.error)
++        kotlin.test.assertTrue(repository.assets.value.error is java.io.IOException)
 +    }
 +
 +    @Test
@@ -40282,10 +40299,17 @@ index 000000000..3650f1216
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapAssetTestFixture.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapAssetTestFixture.kt
-index 9ecc07561..83410697e 100644
+index 9ecc07561..16575db82 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapAssetTestFixture.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapAssetTestFixture.kt
-@@ -43 +43 @@ object SwapAssetTestFixture {
+@@ -32 +32,5 @@ object SwapAssetTestFixture {
+-            assetId = "$tokenTicker-$chainTicker",
++            assetId = if (tokenTicker.equals("zec", true) && chainTicker.equals("zec", true)) {
++                "nep141:zec.omft.near"
++            } else {
++                "$tokenTicker-$chainTicker"
++            },
+@@ -43 +47 @@ object SwapAssetTestFixture {
 -            assetId = "zec-zec",
 +            assetId = "nep141:zec.omft.near",
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapCatalogRecipientTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/SwapCatalogRecipientTest.kt
@@ -42636,6 +42660,18 @@ index 000000000..0acfa7afa
 +        """.trimIndent()
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryAssetRefreshTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryAssetRefreshTest.kt
+index fb0bd4b18..c3ec06f61 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryAssetRefreshTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryAssetRefreshTest.kt
+@@ -175 +175 @@ class SwapRepositoryAssetRefreshTest {
+-    fun successfulRefreshDoesNotCacheAssetsMissingLivePrices() =
++    fun successfulRefreshKeepsUnpricedRecoveryIdentitiesWithoutOfferingThem() =
+@@ -192 +192,3 @@ class SwapRepositoryAssetRefreshTest {
+-            coVerify(exactly = 1) { cache.store(listOf(zec, btc)) }
++            coVerify(exactly = 1) { cache.store(listOf(zec, btc, unpriced)) }
++            assertEquals(listOf(btc), repository.assets.value.data)
++            assertEquals(listOf(zec, btc, unpriced), repository.assets.value.recoveryAssets)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 index d55620b20..0cec066c2 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
