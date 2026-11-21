@@ -57,6 +57,8 @@ jobs:
     with:
       source_sha: ${{ needs.prepare.outputs.source_sha }}
       reconciliation_run: ${{ needs.maintenance.outputs.reconciliation_run }}
+      reconciliation_attempt: ${{ needs.maintenance.outputs.reconciliation_attempt }}
+      reconciliation_artifact: ${{ needs.maintenance.outputs.reconciliation_artifact }}
       hosted: ${{ needs.maintenance.outputs.reconciliation_run == '' }}
     secrets:
       NTFY_URL: ${{ secrets.NTFY_URL }}

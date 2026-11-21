@@ -13,14 +13,24 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - name: Fee and authentication regression simulations
+        if: github.ref == 'refs/heads/main'
         run: python3 .private/test_controls.py
       - name: Product branding and compatibility exceptions
+        if: github.ref == 'refs/heads/main'
         run: python3 -B .private/test_branding.py
       - name: Simulated stable update and incompatible-change checks
+        if: github.ref == 'refs/heads/main'
         run: python3 .private/test_sync.py
       - name: Test push delivery acceptance
+        if: github.ref == 'refs/heads/main'
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GH_TOKEN: ${{ github.token }}
           NTFY_URL: ${{ secrets.NTFY_URL }}
         run: python3 .private/notify.py "ZEC Private automation test passed. This is a test notification; no APK was published."
+      - name: Run offline release-controller suites
+        if: github.ref != 'refs/heads/main'
+        run: |
+          PYTHONPATH=.private python3 -B -m unittest -v \
+            test_quote_recovery test_hosted_release test_publish test_maintenance_watch \
+            test_maintenance_cadence test_packaging test_sync

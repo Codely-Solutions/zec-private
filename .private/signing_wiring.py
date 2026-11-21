@@ -15,6 +15,9 @@ PATHS = (
     '.github/workflows/sync-upstream.yml',
     '.github/workflows/verify-signing-environment.yml',
     '.private/publish.py',
+    '.private/reconcile_release.py',
+    '.private/verify_public_release.py',
+    '.private/release_metadata.py',
     '.private/signing_wiring.py',
     '.private/verify_signing_key.sh',
 )

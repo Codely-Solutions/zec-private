@@ -44,7 +44,7 @@ class PackagingTests(unittest.TestCase):
         workflow = (root / '.github/workflows/build-release.yml').read_text()
         production = workflow.split('  unsigned:\n', 1)[1].split('  emulator:\n', 1)[0]
         emulator = workflow.split('  emulator:\n', 1)[1].split('  testnet_apk:\n', 1)[0]
-        publish = workflow.split('  publish:\n', 1)[1].split('  reconcile:\n', 1)[0]
+        publish = workflow.split('  publish:\n', 1)[1].split('  resume_draft:\n', 1)[0]
         testnet = workflow.split('  testnet_apk:\n', 1)[1].split('  hosted_core:\n', 1)[0]
         preflight = workflow.split('  preflight:\n', 1)[1].split('  signing_smoke:\n', 1)[0]
         for job in (production, emulator, testnet):
@@ -91,6 +91,8 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(1, debug.count('./gradlew '))
         self.assertIn(':app:assembleZcashmainnetFossRelease', release)
         self.assertIn(':ui-lib:testZcashmainnetFossReleaseUnitTest', release)
+        self.assertIn(':ui-design-lib:testReleaseUnitTest', release)
+        self.assertNotIn('--tests', release)
         self.assertIn(':wallet-foundation-lib:test', release)
         self.assertIn(':feature-ledger:testZcashmainnetFossReleaseUnitTest', release)
         self.assertIn(':app:assembleZcashmainnetFossDebug', debug)

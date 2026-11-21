@@ -199,7 +199,7 @@ class QuoteRecoveryTests(unittest.TestCase):
             [dict(id=i, name=name) for i, name in enumerate(ARTIFACTS.values(), 1)],
         ]
         with patch.dict(os.environ, {'GITHUB_RUN_ATTEMPT': '1'}), \
-                patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_custom_child'), \
+                patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_build_candidate'), \
                 patch('quote_recovery.require_transient_quote_failure') as failure, \
                 patch.object(hosted_release, 'artifact', side_effect=lambda _, i, *args: {'id': i}) as artifact:
             result = resolve(Path('.'), SOURCE, MAIN, '7', metadata)
@@ -363,7 +363,7 @@ class QuoteRecoveryTests(unittest.TestCase):
     def test_funded_recovery_delta_rejects_quote_runner_changes(self):
         for path, allowed in ((b'.private/funded_reuse.py\0', True),
                               (b'.private/tor_resident_ui_driver.py\0', False)):
-            with self.subTest(path=path), patch('quote_recovery.verify_custom_child'), \
+            with self.subTest(path=path), patch('quote_recovery.verify_build_candidate'), \
                     patch('quote_recovery.git', side_effect=[OLD.encode(), path]):
                 if allowed:
                     verify_delta(Path('.'), SOURCE, OLD, MAIN, funded=True)
@@ -435,17 +435,96 @@ class QuoteRecoveryTests(unittest.TestCase):
 
     def test_recovery_rejects_product_and_wallet_harness_changes(self):
         for changed in (b'gradle.properties\0', b'.private/core_testnet_driver.py\0'):
-            with patch('quote_recovery.verify_custom_child'), \
+            with patch('quote_recovery.verify_build_candidate'), \
                     patch('acceptance_policy.needs_live_tor_probe', return_value=True), \
                     patch('quote_recovery.git', side_effect=[OLD.encode(), changed]):
                 with self.assertRaisesRegex(ValueError, 'outside quote recovery paths'):
                     verify_delta(Path('.'), SOURCE, OLD, MAIN)
 
     def test_direct_recovery_accepts_controller_only_instrumentation_preparation(self):
-        with patch('quote_recovery.verify_custom_child'), \
+        with patch('quote_recovery.verify_build_candidate'), \
                 patch('acceptance_policy.needs_live_tor_probe', return_value=False), \
                 patch('quote_recovery.git', side_effect=[OLD.encode(), b'.private/prepare_direct_core.py\0']):
             verify_delta(Path('.'), SOURCE, OLD, MAIN)
+
+    def test_recovery_uses_the_last_verified_stage(self):
+        original = dict(id=7, path=WORKFLOW, event='workflow_dispatch', head_branch='main',
+                        head_sha=OLD, head_repository={'full_name': REPOSITORY}, actor={'id': OPERATOR_ID},
+                        status='completed', conclusion='failure', run_attempt=1)
+        producers = {'admit_hosted': 'success', 'unsigned': 'success', 'emulator': 'success',
+                     'testnet_apk / testnet': 'success', 'hosted_quotes / quote-cycles': 'success'}
+        cases = (
+            ('signer', 'success', 'success', 'success', 'failure', 'hosted-core-receipt', '', False, {}),
+            ('no POST', 'failure', 'success', 'success', 'skipped', None, '7', False,
+             {'run_missing_core': 'true', 'previous_reservation': 'e' * 40}),
+            ('prepare', 'skipped', 'skipped', 'failure', 'skipped', None, '', False,
+             {'run_missing_core': 'true'}),
+            ('unfunded retry', 'failure', 'skipped', 'success', 'skipped', None, '', True,
+             {'reuse_funded': 'true', 'prepared_id': '5'}),
+            ('unfunded receipt', 'success', 'skipped', 'success', 'failure', 'hosted-upgrade-receipt', '', True,
+             {'reuse_funded': 'true', 'prepared_id': '5', 'core_receipt_id': '6'}),
+        )
+        for name, wallet, reserve, prepare, publish, receipt, preclaim, funded, expected in cases:
+            with self.subTest(stage=name):
+                states = dict(producers, **{'hosted_core / wallet': wallet, 'hosted_core / reserve': reserve,
+                                          'hosted_core / prepare-direct': prepare, 'publish': publish})
+                names = [*list(ARTIFACTS.values())[:3], 'hosted-quote-receipt', 'core-direct-candidate', receipt]
+                artifacts = [dict(name=value, id=i, expired=False) for i, value in enumerate(names, 1) if value]
+                metadata = Mock()
+                metadata.api.side_effect = [original, []]
+                metadata.pages.side_effect = [
+                    [dict(name='build / ' + job, conclusion=result, head_sha=OLD, run_id=7)
+                     for job, result in states.items()], artifacts]
+                with patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_delta'), \
+                        patch('quote_recovery.unused_reservation', return_value='e' * 40), \
+                        patch('release_inputs.version_code', return_value=42), \
+                        patch('funded_reuse.select', return_value={'core': {}} if funded else None), \
+                        patch.object(hosted_release, 'artifact', side_effect=lambda _, i, *args: {'id': i}):
+                    result = resolve(Path('.'), SOURCE, MAIN, '7', metadata, preclaim_run=preclaim)
+                self.assertEqual(result['quote_receipt_id'], '4')
+                self.assertEqual(result['quote_run'], 7)
+                for key, value in expected.items():
+                    self.assertEqual(result[key], value)
+                if receipt is None:
+                    self.assertNotIn('core_receipt_id', result)
+
+    def test_unpublished_maintenance_requires_proven_producer_and_current_cadence(self):
+        run = dict(id=7, path='.github/workflows/sync-upstream.yml', event='schedule', head_branch='main',
+                   head_sha=OLD, head_repository={'full_name': REPOSITORY}, status='completed',
+                   conclusion='failure', run_attempt=1)
+        states = dict(admit_hosted='success', unsigned='success', emulator='success', publish='failure')
+        states.update({'testnet_apk / testnet': 'success', 'hosted_core / wallet': 'success',
+                       'hosted_quotes / quote-cycles': 'success'})
+        jobs = [dict(name='build / ' + name, conclusion=state, head_sha=OLD, run_id=7)
+                for name, state in states.items()]
+        names = [*ARTIFACTS.values(), 'hosted-quote-receipt']
+        artifacts = [dict(name=name, id=i, expired=False) for i, name in enumerate(names, 1)]
+        for event, marker, prior_attestation, error in (
+            ('schedule', {}, False, None),
+            ('push', {}, False, 'cannot recover routine'),
+            ('pull_request', {}, False, 'trusted custom run or maintenance run'),
+            ('push', {'kind': 'security'}, False, None),
+            ('schedule', {}, True, 'retained publication attestation'),
+        ):
+            with self.subTest(event=event, marker=marker, error=error):
+                metadata = Mock()
+                current = dict(run, event=event)
+                metadata.api.return_value = current
+                metadata.pages.side_effect = [
+                    jobs, artifacts + ([dict(name='release-attestation-1', id=70)] if prior_attestation else [])]
+                with patch('quote_recovery.require_dispatch') as dispatch, patch('quote_recovery.verify_delta'), \
+                        patch('quote_recovery.changed_marker', side_effect=({}, marker)), \
+                        patch('maintenance_cadence.admit_cadence') as cadence, \
+                        patch.object(hosted_release, 'artifact', side_effect=lambda _, i, *args: {'id': i}):
+                    if error:
+                        with self.assertRaisesRegex(ValueError, error):
+                            resolve(Path('.'), SOURCE, MAIN, '7', metadata)
+                    else:
+                        result = resolve(Path('.'), SOURCE, MAIN, '7', metadata)
+                        self.assertEqual(result['core_receipt_id'], '4')
+                        self.assertEqual(result['quote_receipt_id'], '5')
+                        cadence.assert_called_once()
+                    dispatch.assert_called_once()
 
     def test_recovery_requires_authorized_exact_run_and_completed_original_wallet(self):
         original = dict(id=7, path=WORKFLOW, event='workflow_dispatch', head_branch='main',

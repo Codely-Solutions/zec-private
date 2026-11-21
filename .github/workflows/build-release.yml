@@ -15,15 +15,33 @@ on:
         type: string
         default: ''
       reconciliation_run:
-        description: Verify and record an already published release from its original signing run
+        description: Resolve a release from its original signing run
         type: string
         default: ''
+      reconciliation_attempt:
+        description: Original publisher attempt, required for draft recovery
+        type: string
+        default: ''
+      reconciliation_artifact:
+        description: Exact attestation artifact ID, required for draft recovery
+        type: string
+        default: ''
+      resume_draft:
+        description: Publish an authorized interrupted draft using the original signed APK digest
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       source_sha:
         type: string
         default: ''
       reconciliation_run:
+        type: string
+        default: ''
+      reconciliation_attempt:
+        type: string
+        default: ''
+      reconciliation_artifact:
         type: string
         default: ''
       preflight_only:
@@ -378,7 +396,7 @@ jobs:
       preflight_only: ${{ inputs.preflight_only }}
   hosted_core:
     needs: [admit_hosted, preflight, signing_smoke, unsigned, testnet_apk, recovery_quotes]
-    if: ${{ !cancelled() && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && ((!inputs.recover_run && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success') || (inputs.recover_run && (needs.admit_hosted.outputs.reuse_funded == 'true' || (needs.admit_hosted.outputs.run_missing_core == 'true' && (!inputs.preclaim_run || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != ''))))) }}
+    if: ${{ !cancelled() && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && ((!inputs.recover_run && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success') || (inputs.recover_run && ((needs.admit_hosted.outputs.reuse_funded == 'true' && needs.admit_hosted.outputs.core_receipt_id == '') || (needs.admit_hosted.outputs.run_missing_core == 'true' && (!inputs.preclaim_run || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != ''))))) }}
     permissions:
       actions: read
       contents: write
@@ -474,7 +492,7 @@ jobs:
           CANDIDATE_RUN: ${{ inputs.candidate_run }}
         run: python3 .private/promotion.py
   publish:
-    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != '') && (needs.hosted_core.result == 'success' || needs.admit_hosted.outputs.core_receipt_id != '')) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
+    if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && !inputs.resume_draft && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != '') && (needs.hosted_core.result == 'success' || needs.admit_hosted.outputs.core_receipt_id != '')) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
     needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, admit_hosted]
     environment: production-signing
     runs-on: ubuntu-24.04
@@ -551,7 +569,7 @@ jobs:
           HOSTED_ACCEPTANCE: ${{ inputs.hosted || false }}
           PRODUCTION_ID: ${{ needs.admit_hosted.outputs.production_id || needs.unsigned.outputs.artifact_id }}
           CORE_ID: ${{ needs.admit_hosted.outputs.core_id || needs.testnet_apk.outputs.artifact_id }}
-          DIRECT_CORE_ID: ${{ needs.hosted_core.outputs.direct_core_id }}
+          DIRECT_CORE_ID: ${{ needs.admit_hosted.outputs.prepared_id || needs.hosted_core.outputs.direct_core_id }}
           REUSE_FUNDED: ${{ needs.admit_hosted.outputs.reuse_funded == 'true' }}
           QUOTE_ID: ${{ needs.admit_hosted.outputs.quote_id || needs.emulator.outputs.artifact_id }}
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
@@ -571,8 +589,33 @@ jobs:
           ATTESTATION_DIGEST: ${{ steps.publication.outputs.attestation_digest }}
           PUBLISH_SIGNED_RELEASE: 'true'
         run: python3 -B .private/publish.py
+  resume_draft:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.resume_draft && inputs.reconciliation_run && inputs.reconciliation_attempt && inputs.reconciliation_artifact && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only && vars.PRODUCTION_SIGNING_READY == 'true'
+    environment: production-signing
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Restore the exact attested draft assets and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECONCILIATION_RUN: ${{ inputs.reconciliation_run }}
+          RECONCILIATION_ATTEMPT: ${{ inputs.reconciliation_attempt }}
+          RECONCILIATION_ARTIFACT: ${{ inputs.reconciliation_artifact }}
+          RESUME_DRAFT: 'true'
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: python3 -B .private/reconcile_release.py
   reconcile:
-    if: github.ref == 'refs/heads/main' && inputs.reconciliation_run && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only && !inputs.preflight_only
+    needs: resume_draft
+    if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && inputs.reconciliation_run && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only && !inputs.preflight_only && (!inputs.resume_draft || needs.resume_draft.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     permissions:
@@ -592,6 +635,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RECONCILIATION_RUN: ${{ inputs.reconciliation_run }}
+          RECONCILIATION_ATTEMPT: ${{ inputs.reconciliation_attempt }}
+          RECONCILIATION_ARTIFACT: ${{ inputs.reconciliation_artifact }}
         run: python3 -B .private/reconcile_release.py
   verify_publication:
     if: ${{ always() && !cancelled() && (needs.publish.result == 'success' || needs.reconcile.result == 'success') }}
@@ -667,8 +712,8 @@ jobs:
           RELEASE_TAG: ${{ needs.publish.outputs.release_tag || needs.reconcile.outputs.release_tag }}
         run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
   failed:
-    if: ${{ always() && !inputs.preflight_only && github.ref == 'refs/heads/main' && (needs.admit_hosted.result == 'failure' || needs.preflight.result == 'failure' || needs.quote_bridge.result == 'failure' || needs.signing_smoke.result == 'failure' || needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.testnet_apk.result == 'failure' || needs.hosted_core.result == 'failure' || needs.hosted_quotes.result == 'failure' || needs.recovery_quotes.result == 'failure' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
-    needs: [admit_hosted, preflight, quote_bridge, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, promotion, publish, reconcile, verify_publication, record_integration]
+    if: ${{ always() && !inputs.preflight_only && github.ref == 'refs/heads/main' && (needs.admit_hosted.result == 'failure' || needs.preflight.result == 'failure' || needs.quote_bridge.result == 'failure' || needs.signing_smoke.result == 'failure' || needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.testnet_apk.result == 'failure' || needs.hosted_core.result == 'failure' || needs.hosted_quotes.result == 'failure' || needs.recovery_quotes.result == 'failure' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.resume_draft.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
+    needs: [admit_hosted, preflight, quote_bridge, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, promotion, publish, resume_draft, reconcile, verify_publication, record_integration]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

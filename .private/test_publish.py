@@ -1,5 +1,6 @@
 """Release display metadata checks; no signing, build or publication."""
 import importlib.util
+import io
 import hashlib
 import json
 import os
@@ -7,6 +8,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError
 
@@ -19,19 +21,49 @@ with patch.dict(os.environ,{'GITHUB_REPOSITORY':'example/zec-private'}):
 
 
 class PublishMetadataTest(unittest.TestCase):
-    def test_publication_recovery_requires_original_ancestry_and_control_only_changes(self):
-        candidate, original, controller = ('a' * 40, 'b' * 40, 'c' * 40)
-        root = Path.cwd()
-        with patch.object(integrate_release, 'verify_promotion_revision', return_value=True) as verify:
-            self.assertEqual(integrate_release.integration_base(candidate, original, original, root), original)
-            with patch.object(integrate_release.subprocess, 'check_output', side_effect=(
-                    b'', b'', b'.private/reconcile_release.py\0.github/workflows/build-release.yml\0')):
-                self.assertEqual(integrate_release.integration_base(candidate, controller, original, root), controller)
-            with patch.object(integrate_release.subprocess, 'check_output', side_effect=(
-                    b'', b'', b'gradle.properties\0')):
-                with self.assertRaisesRegex(RuntimeError, 'outside publication recovery controls'):
-                    integrate_release.integration_base(candidate, controller, original, root)
-            verify.assert_called_with(candidate, original, root)
+    def test_publication_recovery_integrates_actual_sibling_graph(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+
+            def git(*args):
+                return subprocess.check_output(
+                    ['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid',
+                     '-c', 'core.autocrlf=false', *args], cwd=root, text=True, timeout=30).strip()
+
+            def commit(message):
+                git('add', '-A')
+                git('commit', '-qm', message)
+                return git('rev-parse', 'HEAD')
+
+            git('init', '-q')
+            private = root / '.private'
+            private.mkdir()
+            properties = root / 'gradle.properties'
+            properties.write_bytes(b'ZCASH_VERSION_NAME=3.19.0\nZCASH_VERSION_CODE=3234033\n')
+            upstream = commit('upstream')
+            (private / 'upstream.json').write_text(
+                json.dumps(dict(tag='3.19.0-3234', versionCode=3234033, sha=upstream)))
+            (private / 'excluded-features.json').write_text('{"forbidden_projects":[]}')
+            (private / 'release-revision.json').write_text('{"private_revision":30}')
+            original = commit('original controller')
+            (private / 'custom-candidate.json').write_text(json.dumps(dict(kind='custom', controller=original)))
+            (private / 'fork.patch').touch()
+            (private / 'release-revision.json').write_text('{"private_revision":31}')
+            properties.write_bytes(b'ZCASH_VERSION_NAME=3.19.0\nZCASH_VERSION_CODE=3234034\n')
+            candidate = commit('published candidate')
+            self.assertEqual(integrate_release.integration_base(candidate, original, original, root), candidate)
+            git('checkout', '-q', '--detach', original)
+            (private / 'verify_public_release.py').write_text('# verifier repair')
+            controller = commit('recovery-only controller repair')
+            result = integrate_release.integration_base(candidate, controller, original, root)
+            self.assertEqual(git('rev-list', '--parents', '-n', '1', result).split(), [result, controller, candidate])
+            self.assertEqual(git('show', f'{result}:.private/verify_public_release.py'), '# verifier repair')
+            self.assertIn('ZCASH_VERSION_CODE=3234034', git('show', f'{result}:gradle.properties'))
+            self.assertEqual(git('rev-parse', 'HEAD'), controller)
+            properties.write_bytes(properties.read_bytes() + b'UNREVIEWED_SETTING=true\n')
+            advanced = commit('unrelated main update')
+            with self.assertRaisesRegex(RuntimeError, 'outside publication recovery controls'):
+                integrate_release.integration_base(candidate, advanced, original, root)
 
     def test_attestation_requires_exact_bytes(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -144,6 +176,249 @@ class PublishMetadataTest(unittest.TestCase):
         for change in ({'name': 'publish'}, {'conclusion': 'skipped'}, {'head_sha': 'b'*40}):
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'publisher job'):
                 publisher_job(run, [dict(job, **change)], 7, repo)
+
+    def test_resolver_uses_the_retained_original_attempt_and_exact_asset_bytes(self):
+        import reconcile_release as reconcile
+
+        source = 'a' * 40
+        controller = 'b' * 40
+        tag = 'v3.19.0-private.31'
+        apk_digest = 'c' * 64
+        proof = dict(release_tag=tag, source_sha=source, versionCode=3234034, apk_sha256=apk_digest,
+                     controller_sha=controller, maintenance={'kind': 'routine'})
+        buffer = io.BytesIO()
+        proof_bytes = json.dumps(proof).encode()
+        with zipfile.ZipFile(buffer, 'w') as archive:
+            archive.writestr('release-attestation.json', proof_bytes)
+        raw = buffer.getvalue()
+        artifact = dict(id=53, name='release-attestation-1', expired=False,
+                        workflow_run=dict(id=7, head_sha=controller), size_in_bytes=len(raw),
+                        digest='sha256:' + hashlib.sha256(raw).hexdigest())
+        run = dict(id=7, run_attempt=1, path='.github/workflows/sync-upstream.yml', event='schedule',
+                   head_branch='main', head_repository={'full_name': 'example/zec-private'},
+                   status='completed', head_sha=controller)
+        job = dict(name='build / publish', conclusion='success', status='completed', run_id=7, head_sha=controller)
+        live = self.draft(proof)
+        live['draft'] = False
+        live['assets'] = self.assets(proof)
+        routes = {
+            'actions/runs/7/artifacts?per_page=100': [{'artifacts': [artifact]}],
+            'actions/runs/7/attempts/1': run,
+            'actions/runs/7/attempts/1/jobs?per_page=100': [{'jobs': [job]}],
+            'releases/tags/' + tag: live,
+            'git/matching-refs/tags/' + tag: [{'ref': 'refs/tags/' + tag,
+                                                'object': {'sha': source, 'type': 'commit'}}],
+        }
+        with patch.dict(os.environ, GITHUB_REPOSITORY='example/zec-private'), \
+                patch.object(reconcile, 'gh', side_effect=lambda path, *_: routes[path]) as api, \
+                patch.object(reconcile.subprocess, 'check_output', return_value=raw):
+            result = reconcile.resolve('7', '1', '53')
+            self.assertEqual((result['attestation_attempt'], result['attestation_id']), (1, 53))
+            self.assertEqual(reconcile.resolve('7'), result)
+            self.assertNotIn('actions/runs/7', [call.args[0] for call in api.call_args_list])
+            for attempt, artifact_id in (('2', '53'), ('1', '54'), ('', '53')):
+                with self.subTest(attempt=attempt, artifact_id=artifact_id), self.assertRaises(ValueError):
+                    reconcile.resolve('7', attempt, artifact_id)
+            live['assets'][1]['digest'] = 'sha256:' + '0' * 64
+            with self.assertRaisesRegex(ValueError, 'differs from the original publisher'):
+                reconcile.resolve('7', '1', '53')
+
+    def test_reconciliation_main_writes_each_actions_output_on_its_own_line(self):
+        import reconcile_release as reconcile
+
+        proof = {
+            'release_tag': 'v3.19.0-private.31',
+            'attestation_id': 53,
+            'attestation_digest': 'a' * 64,
+            'attestation_attempt': 1,
+            'controller_sha': 'b' * 40,
+        }
+        with tempfile.TemporaryDirectory() as scratch:
+            output = Path(scratch) / 'github-output'
+            output.write_bytes(b'prior_output=retained\n')
+            env = dict(GITHUB_OUTPUT=str(output), RECONCILIATION_RUN='7', RECONCILIATION_ATTEMPT='1',
+                       RECONCILIATION_ARTIFACT='53')
+            with patch.dict(os.environ, env, clear=True), patch.object(reconcile, 'resolve', return_value=proof) as resolve:
+                reconcile.main()
+            resolve.assert_called_once_with('7', '1', '53')
+            expected = {key: str(value) for key, value in proof.items()}
+            self.assertEqual(output.read_bytes(), b'prior_output=retained\n' +
+                             b''.join(f'{key}={value}\n'.encode() for key, value in expected.items()))
+            self.assertEqual(dict(line.split('=', 1) for line in output.read_text().splitlines()),
+                             {'prior_output': 'retained', **expected})
+
+    @staticmethod
+    def draft(proof):
+        return dict(id=43, tag_name=proof['release_tag'], prerelease=False, draft=True,
+                    body=f'Android versionCode: {proof["versionCode"]}\n', assets=[])
+
+    @staticmethod
+    def assets(proof):
+        checksum = publish.checksum_bytes(proof['apk_sha256'])
+        return [dict(id=1, name=publish.APK, state='uploaded', size=9, digest='sha256:' + proof['apk_sha256']),
+                dict(id=2, name=publish.CHECKSUM, state='uploaded', size=len(checksum),
+                     digest='sha256:' + hashlib.sha256(checksum).hexdigest())]
+
+    def test_interrupted_draft_upload_reuses_exact_existing_apk_and_finishes_release(self):
+        proof = dict(release_tag='v3.19.0-private.31', source_sha='a' * 40, versionCode=3234034,
+                     apk_sha256='c' * 64)
+        draft = self.draft(proof)
+        complete = dict(draft, assets=self.assets(proof))
+        draft['assets'] = [complete['assets'][0], dict(id=3, name=publish.CHECKSUM, state='starter', size=0)]
+        with tempfile.TemporaryDirectory() as scratch, \
+                patch.object(publish, 'release_for_tag', side_effect=[draft, complete]), \
+                patch.object(publish, 'require_current_controller'), patch.object(publish, 'verify_release_identity'), \
+                patch.object(publish, 'require_advancing_version'), \
+                patch.object(publish, 'verify_tag', return_value={'type': 'commit', 'sha': proof['source_sha']}), \
+                patch.object(publish, 'release_api', return_value=dict(complete, draft=False)) as api, \
+                patch.object(publish, 'run') as cli:
+            dist = Path(scratch)
+            publish.expose_release(proof, dist, controller='b' * 40, existing=draft)
+            self.assertFalse((dist / publish.APK).exists())
+            self.assertEqual((dist / publish.CHECKSUM).read_bytes(), publish.checksum_bytes(proof['apk_sha256']))
+            self.assertEqual([call.args[:3] for call in cli.call_args_list],
+                             [('gh', 'api', '-X'), ('gh', 'release', 'upload')])
+            self.assertNotIn('--clobber', cli.call_args.args)
+            api.assert_called_once_with('releases/43', method='PATCH', data={'draft': False, 'make_latest': 'true'})
+
+    def test_draft_missing_apk_requires_byte_exact_protected_signing(self):
+        import reconcile_release as reconcile
+
+        raw = io.BytesIO()
+        with zipfile.ZipFile(raw, 'w') as bundle:
+            bundle.writestr('synthetic.apk-entry', 'unsigned payload')
+        unsigned = raw.getvalue()
+        proof = dict(release_tag='v3.19.0-private.31', source_sha='a' * 40, controller_sha='b' * 40,
+                     versionCode=3234034, apk_sha256=hashlib.sha256(unsigned).hexdigest())
+        inputs = dict(resume_draft='true', reconciliation_run='7', reconciliation_attempt='1',
+                      reconciliation_artifact='53')
+        smoke = ['bash', '.private/verify_signing_key.sh']
+        for scenario in ('failed-smoke', 'different-digest', 'matching-digest', 'already-uploaded'):
+            with self.subTest(scenario=scenario), tempfile.TemporaryDirectory() as scratch:
+                draft = self.draft(proof)
+                if scenario == 'already-uploaded':
+                    draft['assets'] = [dict(self.assets(proof)[0], size=len(unsigned))]
+                event = Path(scratch) / 'event.json'
+                event.write_text(json.dumps(dict(sender={'id': reconcile.OPERATOR_ID}, inputs=inputs)))
+                env = dict(GITHUB_REPOSITORY=reconcile.REPOSITORY, GITHUB_REF='refs/heads/main',
+                           GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_EVENT_PATH=str(event),
+                           GITHUB_SHA='b' * 40, RUNNER_TEMP=scratch, ANDROID_HOME=scratch)
+                key_checks = []
+
+                def sign(_, path, _tools):
+                    key_checks.append('sign')
+                    path.write_bytes(unsigned if scenario == 'matching-digest' else unsigned + b'tampered')
+
+                def run(command, **kwargs):
+                    if command == smoke:
+                        self.assertTrue(kwargs['check'])
+                        self.assertEqual(kwargs['timeout'], 60)
+                        key_checks.append('smoke')
+                        if scenario == 'failed-smoke':
+                            raise subprocess.CalledProcessError(1, command)
+
+                with patch.dict(os.environ, env), patch.object(reconcile, 'lookup', return_value=({}, proof, draft)), \
+                        patch.object(reconcile, 'unsigned_proof', return_value=(unsigned, proof, {})), \
+                        patch.object(reconcile, 'verify_tag'), patch.object(reconcile, 'expose_release') as expose, \
+                        patch.object(reconcile.subprocess, 'run', side_effect=run), \
+                        patch.object(reconcile.subprocess, 'check_output', return_value=unsigned), \
+                        patch.object(integrate_release, 'integration_base'), \
+                        patch('publish.require_current_controller'), patch('publish.sign_apk', side_effect=sign), \
+                        patch('signing_wiring.environment_wiring', side_effect=lambda _: key_checks.append('wiring')):
+                    if scenario in ('matching-digest', 'already-uploaded'):
+                        reconcile.resume_draft('7', '1', '53')
+                        expose.assert_called_once()
+                    elif scenario == 'failed-smoke':
+                        with self.assertRaises(subprocess.CalledProcessError):
+                            reconcile.resume_draft('7', '1', '53')
+                        expose.assert_not_called()
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'differs from the original'):
+                            reconcile.resume_draft('7', '1', '53')
+                        expose.assert_not_called()
+                expected = {
+                    'failed-smoke': ['wiring', 'smoke'],
+                    'different-digest': ['wiring', 'smoke', 'sign'],
+                    'matching-digest': ['wiring', 'smoke', 'sign'],
+                    'already-uploaded': [],
+                }
+                self.assertEqual(key_checks, expected[scenario])
+
+    def test_draft_with_wrong_asset_and_public_assets_are_immutable(self):
+        proof = dict(release_tag='v3.19.0-private.31', source_sha='a' * 40, versionCode=3234034,
+                     apk_sha256='c' * 64)
+        for is_draft, failure in ((True, 'differs from'), (False, 'exact unpublished')):
+            draft = dict(self.draft(proof), draft=is_draft)
+            draft['assets'] = [dict(self.assets(proof)[0], digest='sha256:' + '0' * 64)]
+            with tempfile.TemporaryDirectory() as scratch, \
+                    patch.object(publish, 'release_for_tag', return_value=draft), \
+                    patch.object(publish, 'require_advancing_version'), \
+                    patch.object(publish, 'verify_release_identity'), patch.object(publish, 'run') as cli:
+                with self.subTest(is_draft=is_draft), self.assertRaisesRegex(ValueError, failure):
+                    publish.expose_release(proof, Path(scratch), controller='b' * 40, existing=draft)
+                cli.assert_not_called()
+
+    def test_orphan_tags_must_point_to_the_exact_attested_commit(self):
+        tag = 'v3.19.0-private.31'
+        source = 'a' * 40
+        matching = [{'ref': 'refs/tags/' + tag, 'object': {'sha': source, 'type': 'commit'}}]
+        api = MagicMock(side_effect=[[], matching[0], matching])
+        self.assertEqual(publish.verify_tag(tag, source, api=api, create=True), matching[0]['object'])
+        self.assertEqual(api.call_args_list[1].kwargs, {
+            'method': 'POST', 'data': {'ref': 'refs/tags/' + tag, 'sha': source}})
+        api = MagicMock(return_value=matching)
+        with self.assertRaisesRegex(ValueError, 'points to a different source'):
+            publish.verify_tag(tag, 'b' * 40, api=api, create=True)
+        api.assert_called_once()
+
+    def test_unsigned_archive_uses_the_same_compressed_budget_before_and_after_signing(self):
+        import hosted_release
+        import verify_public_release as verify
+        from release_metadata import ARCHIVE_LIMITS
+
+        role = 'validated-unsigned-apk'
+        sha = 'a' * 40
+        run = dict(path='.github/workflows/build-release.yml', event='workflow_dispatch',
+                   head_branch='main', head_sha=sha, head_repository={'full_name': verify.REPO})
+        production = dict(id=5, name=role, expired=False, size_in_bytes=ARCHIVE_LIMITS[role][0],
+                          digest='sha256:' + 'b' * 64, workflow_run={'id': 7, 'head_sha': sha})
+        jobs = [{'jobs': [dict(name='unsigned', conclusion='success', run_id=7, head_sha=sha)]}]
+        artifact_response = [{'artifacts': [production]}]
+        evidence = dict(artifact_run_id=7, source_sha=sha, controller_sha=sha)
+        metadata = MagicMock()
+        metadata.api.return_value = production
+        self.assertEqual(hosted_release.artifact(metadata, 5, role, 7, sha)['size_in_bytes'],
+                         ARCHIVE_LIMITS[role][0])
+        production['size_in_bytes'] += 1
+        with self.assertRaisesRegex(ValueError, 'exact trusted run and role'):
+            hosted_release.artifact(metadata, 5, role, 7, sha)
+        with patch.object(verify, 'gh', side_effect=[run, jobs, artifact_response]), \
+                patch.object(verify.subprocess, 'check_output') as download:
+            with self.assertRaisesRegex(ValueError, 'Unsigned artifact run or size mismatch'):
+                verify.unsigned_proof(evidence)
+            download.assert_not_called()
+
+    def test_unsigned_archive_checks_expanded_entries_before_reading_proof(self):
+        import verify_public_release as verify
+        from release_metadata import ARCHIVE_LIMITS
+
+        sha = 'a' * 40
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w') as archive:
+            archive.writestr('oversized.log', b'0' * 64)
+        raw = buffer.getvalue()
+        asset = dict(id=5, name='validated-unsigned-apk', expired=False, size_in_bytes=len(raw),
+                     digest='sha256:' + hashlib.sha256(raw).hexdigest(), workflow_run={'id': 7, 'head_sha': sha})
+        run = dict(path='.github/workflows/build-release.yml', event='workflow_dispatch',
+                   head_branch='main', head_sha=sha, head_repository={'full_name': verify.REPO})
+        jobs = [{'jobs': [dict(name='unsigned', conclusion='success', run_id=7, head_sha=sha)]}]
+        metadata = [run, jobs, [{'artifacts': [asset]}]]
+        evidence = dict(artifact_run_id=7, source_sha=sha, controller_sha=sha)
+        with patch.dict(ARCHIVE_LIMITS, {'validated-unsigned-apk': (len(raw), 63)}), \
+                patch.object(verify.subprocess, 'check_output', return_value=raw), \
+                patch.object(verify, 'gh', side_effect=metadata):
+            with self.assertRaisesRegex(ValueError, 'oversized archive entries'):
+                verify.unsigned_proof(evidence)
 
     def test_public_verification_rejects_routine_receipt_from_a_security_review_push(self):
         import verify_public_release as verify

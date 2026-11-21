@@ -2,7 +2,7 @@
 # One Gradle invocation for release tests, lint and assembly after preflight.
 set -euo pipefail
 chmod +x gradlew
-tasks=(:wallet-foundation-lib:test :ui-design-lib:testReleaseUnitTest --tests '*MaterialThemeRolesTest' :preference-impl-android-lib:testReleaseUnitTest :feature-ledger:testZcashmainnetFossReleaseUnitTest :feature-viewing-key:testZcashmainnetFossReleaseUnitTest :feature-migration:testZcashmainnetFossReleaseUnitTest :app:privateRuntimeInventory :ui-lib:testZcashmainnetFossReleaseUnitTest :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease)
+tasks=(:wallet-foundation-lib:test :ui-design-lib:testReleaseUnitTest :preference-impl-android-lib:testReleaseUnitTest :feature-ledger:testZcashmainnetFossReleaseUnitTest :feature-viewing-key:testZcashmainnetFossReleaseUnitTest :feature-migration:testZcashmainnetFossReleaseUnitTest :app:privateRuntimeInventory :ui-lib:testZcashmainnetFossReleaseUnitTest :app:lintZcashmainnetFossRelease :app:assembleZcashmainnetFossRelease)
 init=(-I .private/runtime-inventory.gradle -I .private/robolectric-ci.gradle -I .private/task-timing.gradle)
 start=$(date +%s)
 mkdir -p artifact

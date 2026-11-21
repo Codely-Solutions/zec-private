@@ -172,16 +172,18 @@ class MaintenanceWatchTest(unittest.TestCase):
         latest = dict(tag_name=tag)
         ordinary = dict(name='unrelated-build', expired=False, workflow_run={'id': 5})
         expired = dict(name='release-attestation-1', expired=True, workflow_run={'id': 6})
-        publisher = dict(name='release-attestation-2', expired=False, workflow_run={'id': 4})
+        publisher = dict(id=40, name='release-attestation-2', expired=False, workflow_run={'id': 4})
         with tempfile.TemporaryDirectory() as temp:
             with patch('maintenance_watch.api', side_effect=[latest, {'artifacts': [ordinary]*99+[expired]},
                                                             {'artifacts': [publisher]}]) as api:
                 resolved = []
-                def resolve(run):
-                    resolved.append(run)
+                def resolve(run, attempt, artifact, *, target):
+                    resolved.append((run, attempt, artifact))
+                    self.assertEqual(latest, target)
                     return {'release_tag': tag}
-                self.assertEqual(4, pending_recovery('repos/fork/wallet', Path(temp), resolve))
-                self.assertEqual(['4'], resolved)
+                self.assertEqual(dict(reconciliation_run='4', reconciliation_attempt='2', reconciliation_artifact='40'),
+                                 pending_recovery('repos/fork/wallet', Path(temp), resolve))
+                self.assertEqual([('4', '2', '40')], resolved)
                 self.assertIn('page=2', api.call_args.args[0])
             with patch('maintenance_watch.api', side_effect=[latest]+[{'artifacts': [ordinary]*100}]*10):
                 with self.assertRaisesRegex(ValueError, '1000 artifacts'):
@@ -189,15 +191,16 @@ class MaintenanceWatchTest(unittest.TestCase):
 
     def test_original_publisher_survives_more_than_eight_newer_attestations(self):
         tag = 'v3.19.0-private.27'
-        artifacts = [dict(name='release-attestation-1', expired=False, workflow_run={'id': run})
+        artifacts = [dict(id=run * 10, name='release-attestation-1', expired=False, workflow_run={'id': run})
                      for run in range(20, 10, -1)]
         with tempfile.TemporaryDirectory() as temp:
             with patch('maintenance_watch.api', side_effect=[{'tag_name': tag}, {'artifacts': artifacts}]):
-                def resolve(run):
+                def resolve(run, attempt, artifact, *, target):
                     if run == '12':
                         raise ValueError('Untrusted publisher')
                     return {'release_tag': tag if run == '11' else 'v3.19.0-private.26'}
-                self.assertEqual(11, pending_recovery('repos/fork/wallet', Path(temp), resolve))
+                self.assertEqual(dict(reconciliation_run='11', reconciliation_attempt='1', reconciliation_artifact='110'),
+                                 pending_recovery('repos/fork/wallet', Path(temp), resolve))
 
     def test_recovery_quote_failure_selects_the_blocker_notification(self):
         workflow = (Path(__file__).resolve().parents[1]/'.github/workflows/build-release.yml').read_text()
@@ -213,16 +216,17 @@ class MaintenanceWatchTest(unittest.TestCase):
         digest = 'a'*64
         latest = dict(tag_name=tag, published_at='2026-11-11T12:00:00Z',
                       assets=[dict(name='zec-private-latest.apk', digest='sha256:'+digest)])
-        artifact = dict(name='release-attestation-1', expired=False, workflow_run={'id': 4})
+        artifact = dict(id=42, name='release-attestation-1', expired=False, workflow_run={'id': 4})
         with tempfile.TemporaryDirectory() as temp:
             directory = Path(temp)
             with patch('maintenance_watch.api', side_effect=[latest, {'artifacts': [artifact]}]):
-                self.assertEqual(4, pending_recovery('repos/fork/wallet', directory,
-                                                      lambda _: {'release_tag': tag}))
+                self.assertEqual(dict(reconciliation_run='4', reconciliation_attempt='1', reconciliation_artifact='42'),
+                                 pending_recovery('repos/fork/wallet', directory,
+                                                  lambda *_args, **_kwargs: {'release_tag': tag}))
             with patch('maintenance_watch.api', side_effect=[latest, {'artifacts': [artifact]}]):
-                with self.assertRaisesRegex(ValueError, 'no live matching publication proof'):
+                with self.assertRaisesRegex(ValueError, 'one live matching publication attestation'):
                     pending_recovery('repos/fork/wallet', directory,
-                                     lambda _: {'release_tag': 'v3.19.0-private.20'})
+                                     lambda *_args, **_kwargs: {'release_tag': 'v3.19.0-private.20'})
             (directory/(tag+'.json')).write_text(json.dumps({'apk_sha256': digest}))
             with patch('maintenance_watch.api', return_value=latest):
                 self.assertIsNone(pending_recovery('repos/fork/wallet', directory))

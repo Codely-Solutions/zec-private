@@ -49,6 +49,10 @@ For a cold CI metadata proposal, manually dispatch the existing `toolchain-revie
 
 All checkout/build/guest scratch is removed when its guard ends. There is no long-lived daemon or cross-session workspace store. On pause, finish the session and retain only named offline artifacts/evidence; the next session recreates missing state.
 
+## Release controller checks
+
+Run the affected Python suites offline with `PYTHONPATH=.private` from a coherent checkout. For hosted Linux validation, dispatch [automation-test.yml](../.github/workflows/automation-test.yml) on the reviewed branch. A non-main dispatch runs the offline controller suites and real disposable Git fixtures with read-only permissions. The release controllers are tested with synthetic metadata and mocked publication calls.
+
 ## Kotlin plugin resolution
 
 Plugin classpaths have their own repositories. Root, `buildSrc`, convention-build and bridge settings route the exact `org.jetbrains.kotlin` implementation group to Maven Central. Plugin marker groups retain the Portal and their existing checksum pins. Keep these scopes distinct when changing repositories; marker POMs can differ between publishers.

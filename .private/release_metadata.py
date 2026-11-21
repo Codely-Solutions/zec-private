@@ -1,6 +1,23 @@
 """Bounded read-only verification of release producer and fixture identities."""
 import json,os,re,subprocess,time
 GH=r"C:\Program Files\GitHub CLI\gh.exe" if os.name == 'nt' else 'gh'
+MIB = 1024**2
+ARCHIVE_LIMITS = {
+    # Maximum compressed and expanded bytes for each artifact role.
+    'validated-unsigned-apk': (64 * MIB, 192 * MIB),
+    'core-testnet-candidate': (160 * MIB, 192 * MIB),
+    'core-direct-candidate': (160 * MIB, 192 * MIB),
+    'isolated-ui-repro-apk': (160 * MIB, 192 * MIB),
+    'isolated-quote-bridge': (160 * MIB, 192 * MIB),
+    'hosted-upgrade-receipt': (300 * 1024, 256 * 1024),
+    'hosted-core-receipt': (300 * 1024, 256 * 1024),
+    'hosted-quote-receipt': (64 * 1024, 64 * 1024),
+    'release-attestation': (300 * 1024, 256 * 1024),
+}
+PUBLIC_APK_LIMIT = 96 * MIB
+APK_PAYLOAD_LIMIT = 256 * MIB
+
+
 def require(condition, message):
     if not condition:
         raise ValueError(message)

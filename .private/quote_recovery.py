@@ -1,4 +1,4 @@
-"""Resume an interrupted custom release on its original build."""
+"""Resume an unpublished hosted release on its original build."""
 import hashlib
 import io
 import json
@@ -8,7 +8,7 @@ import subprocess
 import zipfile
 
 from custom_release import OPERATOR_ID, REPOSITORY, WORKFLOW, require_dispatch, verify_custom_child
-from maintenance_cadence import git
+from maintenance_cadence import MARKER as MAINTENANCE_MARKER, changed_marker, git
 from release_metadata import require
 
 RECOVERY_PATHS = {
@@ -38,6 +38,17 @@ FUNDED_RECOVERY_PATHS = {
     '.private/test_hosted_fixture.py', '.private/test_core_instrumentation_pairing.py',
     '.private/quote_recovery.py', '.private/test_quote_recovery.py', '.private/test_packaging.py',
     '.private/RELEASE-WORKFLOW.md', '.private/core-coverage.md',
+}
+
+MAINTENANCE_WORKFLOW = '.github/workflows/sync-upstream.yml'
+PUBLICATION_PATHS = {
+    '.github/workflows/build-release.yml', '.github/workflows/custom-release.yml', MAINTENANCE_WORKFLOW,
+    '.github/workflows/maintenance-watch.yml', '.github/workflows/verify-public-release.yml',
+    '.private/custom_release.py', '.private/quote_recovery.py', '.private/hosted_release.py', '.private/publish.py',
+    '.private/release_metadata.py', '.private/signing_wiring.py', '.private/reconcile_release.py', '.private/verify_public_release.py',
+    '.private/integrate_release.py', '.private/maintenance_watch.py', '.private/test_maintenance_watch.py',
+    '.private/test_publish.py', '.private/test_packaging.py', '.private/test_quote_recovery.py',
+    '.private/RELEASE-WORKFLOW.md', '.private/MAINTENANCE.md',
 }
 
 ARTIFACTS = {
@@ -73,16 +84,53 @@ def same_controller_retry(source, controller, original_run, metadata, *, signing
         reserve_ref(ref, value, metadata, lambda path, data: post_ref(metadata, path, data))
 
 
+def trusted_producer(run, run_id, *, maintenance=False):
+    custom = run['path'] == WORKFLOW and run['event'] == 'workflow_dispatch' and run['actor']['id'] == OPERATOR_ID
+    automatic = (maintenance and run['path'] == MAINTENANCE_WORKFLOW
+                 and run['event'] in ('schedule', 'workflow_dispatch', 'push'))
+    return ((custom or automatic) and run['id'] == int(run_id) and run['head_branch'] == 'main'
+            and run['head_repository']['full_name'] == REPOSITORY and run['status'] == 'completed'
+            and re.fullmatch(r'[a-f0-9]{40}', run['head_sha']))
+
+
+def verify_build_candidate(root, source, original):
+    from acceptance_policy import verify_promotion_revision
+    from custom_release import MARKER as CUSTOM_MARKER
+
+    require(source != original, 'Recovery requires the original hosted candidate child')
+    if changed_marker(root, source, original, CUSTOM_MARKER):
+        verify_custom_child(source, original, root)
+        return
+    require(git(root, 'rev-parse', source + '^1').decode().strip() == original
+            and (changed_marker(root, source, original, MAINTENANCE_MARKER)
+                 or changed_marker(root, source, original, '.private/candidate.json')),
+            'Expected the exact original maintenance candidate')
+    verify_promotion_revision(source, original, root)
+
+
+def verify_maintenance_recovery(root, source, original, run, metadata):
+    from custom_release import MARKER as CUSTOM_MARKER
+    from maintenance_cadence import admit_cadence
+    from maintenance_watch import api
+
+    require(not changed_marker(root, source, original, CUSTOM_MARKER),
+            'Maintenance producers cannot recover a custom candidate')
+    maintenance = changed_marker(root, source, original, MAINTENANCE_MARKER)
+    require(run['event'] != 'push' or maintenance.get('kind') == 'security',
+            'Security review push cannot recover routine maintenance')
+    admit_cadence(root, source, original, metadata, api)
+
+
 def verify_delta(root, source, original, controller, *, funded=False):
-    verify_custom_child(source, original, root)
+    verify_build_candidate(root, source, original)
     require(original != controller and git(root, 'merge-base', original, controller).decode().strip() == original,
             'Quote recovery requires a descendant controller')
     delta = git(root, 'diff', '--no-renames', '--name-only', '-z', original, controller)
     paths = set(filter(None, delta.decode().split('\0')))
     if funded:
-        require(paths <= FUNDED_RECOVERY_PATHS, 'Controller changed outside funded recovery paths')
+        require(paths <= FUNDED_RECOVERY_PATHS | PUBLICATION_PATHS, 'Controller changed outside funded recovery paths')
         return
-    changed = paths - RECOVERY_PATHS
+    changed = paths - RECOVERY_PATHS - PUBLICATION_PATHS
     if changed:
         require(changed <= DIRECT_RECOVERY_PATHS, 'Controller changed outside quote recovery paths')
         from acceptance_policy import needs_live_tor_probe
@@ -98,58 +146,87 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
                      preclaim_run=preclaim_run)
     run = metadata.api('/actions/runs/' + run_id)
     original = run['head_sha']
-    require(run['id'] == int(run_id) and run['path'] == WORKFLOW and run['event'] == 'workflow_dispatch'
-            and run['head_branch'] == 'main' and run['head_repository']['full_name'] == REPOSITORY
-            and run['actor']['id'] == OPERATOR_ID and run['status'] == 'completed'
-            and run['conclusion'] in ('cancelled', 'failure', 'success') and re.fullmatch(r'[a-f0-9]{40}', original),
-            'Expected the original trusted custom run before publication')
+    require(trusted_producer(run, run_id, maintenance=True)
+            and run['conclusion'] in ('cancelled', 'failure', 'success'),
+            'Expected the original trusted custom run or maintenance run before publication')
+    if run['path'] == MAINTENANCE_WORKFLOW:
+        verify_maintenance_recovery(root, source, original, run, metadata)
     same = original == controller
     if same:
         require(run['run_attempt'] == 1 and os.environ['GITHUB_RUN_ATTEMPT'] == '1'
                 and not preclaim_run and not quote_run,
-                'Same-controller recovery is limited to one original quote failure')
-        verify_custom_child(source, original, root)
+                'Same-controller recovery requires the initial dispatch and exact original run')
+        verify_build_candidate(root, source, original)
+
     jobs = metadata.pages(f'/actions/runs/{run_id}/attempts/{run["run_attempt"]}/jobs', 'jobs')
-    states = {job['name']: job['conclusion'] for job in jobs
-              if job['run_id'] == int(run_id) and job['head_sha'] == original}
-    wallet = states.get('build / hosted_core / wallet')
+
+    def state(name, allowed=None):
+        matching = [job for job in jobs if job['name'] == 'build / ' + name]
+        if not matching and allowed is None:
+            return None
+        require(len(matching) == 1 and matching[0]['run_id'] == int(run_id)
+                and matching[0]['head_sha'] == original and
+                (allowed is None or matching[0]['conclusion'] in allowed),
+                'Original job did not reach the required boundary: build / ' + name)
+        return matching[0]['conclusion']
+
+    for name in ('admit_hosted', 'unsigned', 'emulator', 'testnet_apk / testnet'):
+        state(name, ('success',))
+    wallet = state('hosted_core / wallet')
+    reserve = state('hosted_core / reserve')
+    prepared = state('hosted_core / prepare-direct')
+    publisher = state('publish')
+    quote_result = state('hosted_quotes / quote-cycles')
+    original_preclaim = preclaim_run == run_id
+    require(publisher in ('skipped', 'failure', 'cancelled', None),
+            'Original job did not reach the required boundary: build / publish')
+    artifacts = metadata.pages(f'/actions/runs/{run_id}/artifacts', 'artifacts')
+    require(not any(row['name'].startswith('release-attestation-') for row in artifacts),
+            'Resolve the retained publication attestation before another signing attempt')
+    approved_upgrade = wallet == 'success' and reserve == 'skipped' and any(
+        row['name'] == 'hosted-upgrade-receipt' for row in artifacts)
     funded = False
+    if approved_upgrade:
+        from funded_reuse import select
+
+        require(not preclaim_run and select(source, controller, metadata, root=root) is not None,
+                'Passing installed upgrade requires matching funded provenance')
+        state('hosted_core / prepare-direct', ('success',))
+        funded = True
     if (not same and not preclaim_run and not quote_run and run['run_attempt'] == 1
-            and (run['conclusion'] == 'cancelled' or (run['conclusion'] == 'failure' and wallet == 'failure'))):
+            and (run['conclusion'] == 'cancelled' or (run['conclusion'] == 'failure'
+                 and (wallet == 'failure' or (wallet == 'skipped' and prepared == 'failure'))))):
         from funded_reuse import select
 
         funded = select(source, controller, metadata, root=root) is not None
     require(funded or run['conclusion'] != 'cancelled', 'Cancelled original requires qualified funded reuse')
     if not same:
         verify_delta(root, source, original, controller, funded=funded)
-    required = {'build / admit_hosted': 'success', 'build / unsigned': 'success', 'build / emulator': 'success',
-                'build / testnet_apk / testnet': 'success'}
-    if not funded:
-        required['build / publish'] = 'skipped'
-    for name, conclusion in required.items():
-        matching = [job for job in jobs if job['name'] == name]
-        require(len(matching) == 1 and matching[0]['conclusion'] == conclusion
-                and matching[0]['run_id'] == int(run_id) and matching[0]['head_sha'] == original,
-                'Original job did not reach the required boundary: ' + name)
-    missing_core = any(job['name'] == 'build / hosted_core' and job['conclusion'] == 'skipped'
-                       and job['run_id'] == int(run_id) and job['head_sha'] == original for job in jobs)
-    original_preclaim = preclaim_run == run_id
-    quote_result = states.get('build / hosted_quotes / quote-cycles')
-    artifacts = metadata.pages(f'/actions/runs/{run_id}/artifacts', 'artifacts')
     outputs = {'original_controller': original}
     expected_artifacts = dict(ARTIFACTS)
-    if funded:
+    if approved_upgrade:
+        require(publisher in ('skipped', 'failure', 'cancelled') and quote_result in ('success', 'failure'),
+                'Recovery requires a passing upgrade and a verified quote or publisher boundary')
+        expected_artifacts.update(core_receipt_id='hosted-upgrade-receipt', prepared_id='core-direct-candidate')
+        outputs['reuse_funded'] = 'true'
+    elif funded:
         expected_artifacts.pop('core_receipt_id')
         expected_artifacts.update(funded_recovery_artifacts(root, source, run, jobs, artifacts, metadata))
         outputs['reuse_funded'] = 'true'
-        if 'quote_receipt_id' in expected_artifacts:
-            outputs.update(quote_controller=original, quote_run=int(run_id))
-    elif missing_core or original_preclaim:
-        require(not same, 'Same-controller recovery requires a passing original wallet receipt')
-        require(not any(row['name'] == 'hosted-core-receipt' for row in artifacts)
-                and (not quote_run or bool(preclaim_run)) and quote_result in ('success', 'failure'),
-                'Wallet recovery requires no previous wallet receipt')
-        if not original_preclaim:
+    elif wallet == 'success':
+        require(not preclaim_run and quote_result in ('success', 'failure')
+                and ((publisher == 'skipped' and quote_result == 'failure')
+                     or (publisher in ('skipped', 'failure', 'cancelled') and quote_result == 'success')),
+                'Recovery requires a passing wallet and a verified quote or publisher boundary')
+    else:
+        missing_core = state('hosted_core') == 'skipped'
+        stopped_before_wallet = (wallet == 'skipped' and reserve == 'skipped' and prepared == 'failure')
+        require(not same and (missing_core or original_preclaim or stopped_before_wallet),
+                'Original job did not reach the required boundary: wallet')
+        require(publisher == 'skipped' and quote_result in ('success', 'failure', 'skipped')
+                and not any(row['name'] in ('hosted-core-receipt', 'hosted-upgrade-receipt') for row in artifacts),
+                'Wallet recovery requires a stopped publisher and no previous wallet receipt')
+        if missing_core and not original_preclaim:
             require(not any(job['name'].startswith('build / hosted_core /') for job in jobs),
                     'Skipped-wallet recovery requires no previous wallet execution')
         from hosted_claim import PREFIX
@@ -161,26 +238,18 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
                                                                  preclaim_run, metadata)
         elif not signing:
             reservations = metadata.api('/git/matching-refs/' + ref.removeprefix('refs/'))
-            require(not any(row['ref'] == ref for row in reservations),
+            require(not any(row['ref'] in (ref, ref + '-preclaim-recovery') for row in reservations),
                     'This release already has a protected funding reservation')
         expected_artifacts.pop('core_receipt_id')
         outputs['run_missing_core'] = 'true'
-        if quote_result == 'success':
-            require(not preclaim_run, 'Pre-claim recovery requires a fresh quote run')
-            expected_artifacts['quote_receipt_id'] = 'hosted-quote-receipt'
-            outputs.update(quote_controller=original, quote_run=int(run_id))
-    else:
-        require(not preclaim_run, 'Pre-claim recovery requires a skipped original wallet')
-        require(states.get('build / hosted_core / wallet') == 'success',
-                'Original job did not reach the required boundary: wallet')
-        require(quote_result == 'failure' and run['conclusion'] == 'failure',
-                'Original job did not reach the required boundary: quote failure')
-        if same:
-            matching = [job for job in jobs if job['name'] == 'build / hosted_quotes / quote-cycles'
-                        and job['run_id'] == int(run_id) and job['head_sha'] == original]
-            require(len(matching) == 1, 'Expected exactly one original quote job')
-            require_transient_quote_failure(metadata, matching[0])
-            outputs['same_controller_retry'] = 'true'
+    if same and quote_result == 'failure':
+        original_quote = next(job for job in jobs if job['name'] == 'build / hosted_quotes / quote-cycles')
+        require_transient_quote_failure(metadata, original_quote)
+        outputs['same_controller_retry'] = 'true'
+    if quote_result == 'success':
+        require(not quote_run, 'The original run already has a passing quote receipt')
+        expected_artifacts['quote_receipt_id'] = 'hosted-quote-receipt'
+        outputs.update(quote_controller=original, quote_run=int(run_id))
     for key, name in expected_artifacts.items():
         matching = [row for row in artifacts if row['name'] == name]
         require(len(matching) == 1, 'Expected one original artifact: ' + name)
@@ -191,7 +260,7 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
                                                    outputs, metadata))
         else:
             outputs.update(resolve_quotes(root, source, controller, original, quote_run, metadata))
-    if signing and same:
+    if signing and outputs.get('same_controller_retry'):
         same_controller_retry(source, controller, run_id, metadata, signing=True)
     return outputs
 
@@ -210,15 +279,19 @@ def funded_recovery_artifacts(root, source, run, jobs, artifacts, metadata):
         return matching[0]['conclusion']
 
     cancelled = run['conclusion'] == 'cancelled'
-    wallet = state('hosted_core / wallet', ('failure', 'cancelled', 'skipped') if cancelled else ('failure',),
+    wallet = state('hosted_core / wallet', ('failure', 'cancelled', 'skipped') if cancelled else ('failure', 'skipped'),
                    optional=cancelled)
-    reserve = state('hosted_core / reserve', ('success', 'cancelled', 'skipped') if cancelled else ('success',),
+    reserve = state('hosted_core / reserve', ('success', 'skipped', 'cancelled') if cancelled else ('success', 'skipped'),
                     optional=cancelled)
     state('publish', ('skipped', 'cancelled') if cancelled else ('skipped',), optional=cancelled)
-    quote = state('hosted_quotes / quote-cycles', ('success',) if cancelled else ('success', 'failure'))
+    state('hosted_quotes / quote-cycles', ('success',) if cancelled else ('success', 'failure', 'skipped'))
     prepared = state('hosted_core / prepare-direct', ('success', 'failure', 'cancelled', 'skipped'), optional=True)
-    require(not any(row['name'] == 'hosted-core-receipt' or row['name'].startswith('release-attestation-')
-                    for row in artifacts), 'Funded recovery requires no previous wallet receipt or attestation')
+    require(not any(row['name'] in ('hosted-core-receipt', 'hosted-upgrade-receipt') for row in artifacts),
+            'Funded recovery requires no previous wallet receipt')
+    require(cancelled or wallet != 'skipped' or (prepared == 'failure' and reserve == 'skipped'),
+            'Skipped wallet requires a verified preparation failure')
+    require(reserve != 'skipped' or wallet != 'failure' or prepared == 'success',
+            'Unfunded wallet failure requires a passing direct preparation')
 
     value = binding(source, run['head_sha'], version_code(root, source), run['id'], False)
     ref = ref_for(value)
@@ -226,13 +299,11 @@ def funded_recovery_artifacts(root, source, run, jobs, artifacts, metadata):
     require(not any(row['ref'] == ref + '-preclaim-recovery' for row in reservations),
             'This release already has a linked funding reservation')
     existing = [row for row in reservations if row['ref'] == ref]
-    if reserve == 'success' or wallet == 'failure' or existing:
+    if reserve == 'success' or existing:
         require(len(existing) == 1, 'Expected the original protected funding reservation')
         verify(value, existing[0]['object']['sha'], metadata)
 
     result = {}
-    if quote == 'success':
-        result['quote_receipt_id'] = 'hosted-quote-receipt'
     candidates = [row for row in artifacts if row['name'] == 'core-direct-candidate']
     require(len(candidates) <= 1, 'Expected one original direct preparation artifact')
     if prepared == 'success' and candidates and candidates[0].get('expired') is False:
@@ -249,11 +320,8 @@ def unused_reservation(root, source, controller, original_run, original, prior_r
             'Exact prior pre-claim run required')
     run = metadata.api('/actions/runs/' + prior_run)
     prior = run['head_sha']
-    require(run['id'] == int(prior_run) and run['path'] == WORKFLOW and run['event'] == 'workflow_dispatch'
-            and run['head_branch'] == 'main' and run['head_repository']['full_name'] == REPOSITORY
-            and run['actor']['id'] == OPERATOR_ID and run['status'] == 'completed'
-            and run['conclusion'] == 'failure' and run['run_attempt'] == 1
-            and re.fullmatch(r'[a-f0-9]{40}', prior) and prior != controller
+    require(trusted_producer(run, prior_run, maintenance=prior_run == original_run)
+            and run['conclusion'] == 'failure' and run['run_attempt'] == 1 and prior != controller
             and git(root, 'merge-base', prior, controller).decode().strip() == prior,
             'Prior pre-claim run does not match the trusted recovery controller')
     if prior_run == original_run:
@@ -299,13 +367,7 @@ def resolve_quotes(root, source, controller, original, quote_run, metadata):
     require(git(root, 'merge-base', quote_controller, controller).decode().strip() == quote_controller,
             'Quote receipt controller is not an ancestor of the signer')
     delta = git(root, 'diff', '--no-renames', '--name-only', '-z', quote_controller, controller)
-    publication_paths = {
-        '.github/workflows/build-release.yml', '.github/workflows/custom-release.yml',
-        '.github/workflows/sync-upstream.yml', '.private/custom_release.py',
-        '.private/quote_recovery.py', '.private/hosted_release.py', '.private/publish.py',
-        '.private/test_packaging.py', '.private/test_quote_recovery.py', '.private/RELEASE-WORKFLOW.md',
-    }
-    require(set(filter(None, delta.decode().split('\0'))) <= publication_paths,
+    require(set(filter(None, delta.decode().split('\0'))) <= PUBLICATION_PATHS,
             'Quote execution inputs changed after the passing receipt')
     jobs = metadata.pages(f'/actions/runs/{quote_run}/attempts/{run["run_attempt"]}/jobs', 'jobs')
     for name, conclusion in (('build / admit_hosted', 'success'),

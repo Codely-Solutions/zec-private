@@ -127,29 +127,30 @@ def pending_recovery(prefix, evidence_dir=RELEASE_EVIDENCE, resolve=None):
         return None
     if resolve is None:
         from reconcile_release import resolve
-    # Search retained attestations instead of a moving window of workflow runs.
-    # The resolver still verifies the exact trusted publisher, archive and assets.
-    seen = set()
+    # Attestations survive later attempts of the same workflow run.
+    matches = set()
     for page in range(1, 11):
-        artifacts = api(f'{prefix}/actions/artifacts?per_page=100&page={page}')["artifacts"]
+        artifacts = api(f'{prefix}/actions/artifacts?per_page=100&page={page}')['artifacts']
         for artifact in artifacts:
-            if artifact['expired'] or not re.fullmatch(r'release-attestation-[1-9][0-9]*', artifact['name']):
+            match = re.fullmatch(r'release-attestation-([1-9][0-9]*)', artifact['name'])
+            if artifact['expired'] or match is None:
                 continue
-            run_id = artifact['workflow_run']['id']
-            if run_id in seen:
-                continue
-            seen.add(run_id)
+            run_id = str(artifact['workflow_run']['id'])
+            attempt, artifact_id = match[1], str(artifact['id'])
             try:
-                proof = resolve(str(run_id))
+                proof = resolve(run_id, attempt, artifact_id, target=latest)
             except (ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
                 continue
             if proof['release_tag'] == tag:
-                return run_id
+                matches.add((run_id, attempt, artifact_id))
         if len(artifacts) < 100:
             break
     else:
         raise ValueError('Publication proof search reached 1000 artifacts; recover the exact publisher run manually')
-    raise ValueError('Latest wallet release is unrecorded and no live matching publication proof was found')
+    if len(matches) != 1:
+        raise ValueError('Unrecorded public release requires one live matching publication attestation')
+    run, attempt, artifact = matches.pop()
+    return dict(reconciliation_run=run, reconciliation_attempt=attempt, reconciliation_artifact=artifact)
 
 
 def main():
@@ -168,9 +169,9 @@ def main():
     recovery = pending_recovery(prefix)
     if recovery:
         with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as stream:
-            stream.write(f'reconciliation_run={recovery}\n')
+            stream.writelines(f'{key}={value}\n' for key, value in recovery.items())
         with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as stream:
-            stream.write(f'Existing public release is awaiting reconciliation from run {recovery}.\n')
+            stream.write(f"Existing public release is awaiting reconciliation from run {recovery['reconciliation_run']}.\n")
         return
     proposals = api(f'{prefix}/pulls?state=open&base=main&per_page=30')
     if len(proposals) == 30:

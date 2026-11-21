@@ -11,26 +11,42 @@ from publish import read_attestation, release_title, require_current_controller,
 RECOVERY_CONTROLS = {
     '.github/workflows/build-release.yml', '.github/workflows/verify-public-release.yml',
     '.private/integrate_release.py', '.private/reconcile_release.py',
+    '.github/workflows/automation-test.yml', '.github/workflows/maintenance-watch.yml',
+    '.github/workflows/sync-upstream.yml', '.private/maintenance_watch.py', '.private/test_maintenance_watch.py',
+    '.private/release_metadata.py', '.private/publish.py', '.private/signing_wiring.py',
     '.private/verify_public_release.py', '.private/test_publish.py', '.private/MAINTENANCE.md',
 }
 
 
-def integration_base(candidate, controller, original, root):
-    late = verify_promotion_revision(candidate, original, root)
-    if original == controller:
-        return controller if late else candidate
-
+def integration_base(candidate, controller, original, root, *, recovery=None, funded=False):
     def git(*args):
         return subprocess.check_output(['git', *args], cwd=root, timeout=30)
 
-    # A published candidate already present on main can be recorded after an
-    # explicitly reviewed recovery-only controller update.
-    git('merge-base', '--is-ancestor', candidate, original)
-    git('merge-base', '--is-ancestor', original, controller)
-    changes = git('diff', '--no-renames', '--name-only', '-z', original, controller)
-    if set(filter(None, changes.decode().split('\0'))) - RECOVERY_CONTROLS:
-        raise RuntimeError('Main changed outside publication recovery controls')
-    return controller
+    build_controller = recovery['original_controller'] if recovery else original
+    if build_controller == original:
+        late = verify_promotion_revision(candidate, original, root)
+        if controller == original:
+            return controller if late else candidate
+    else:
+        from quote_recovery import verify_delta
+
+        verify_delta(root, candidate, build_controller, original, funded=funded)
+        late = False
+
+    if controller != original:
+        git('merge-base', '--is-ancestor', original, controller)
+        changes = git('diff', '--no-renames', '--name-only', '-z', original, controller)
+        if set(filter(None, changes.decode().split('\0'))) - RECOVERY_CONTROLS:
+            raise RuntimeError('Main changed outside publication recovery controls')
+    if late or candidate == build_controller:
+        return controller
+    if subprocess.run(['git', 'merge-base', '--is-ancestor', candidate, controller], cwd=root,
+                      timeout=30, check=False).returncode == 0:
+        return controller
+    tree = git('merge-tree', '--write-tree', controller, candidate).decode().strip()
+    return git('-c', 'user.name=ZEC Private automation', '-c', 'user.email=zec-private@users.noreply.github.com',
+               'commit-tree', tree, '-p', controller, '-p', candidate,
+               '-m', 'Integrate verified release candidate').decode().strip()
 
 
 def state_commit(base, attestation, scratch, root):
@@ -57,18 +73,6 @@ def state_commit(base, attestation, scratch, root):
                'commit-tree', tree, '-p', base, '-m', 'Record verified release ' + tag)
 
 
-def recovered_candidate_base(candidate, original, controller, root, *, funded=False):
-    from quote_recovery import verify_delta
-
-    verify_delta(root, candidate, original, controller, funded=funded)
-    tree = subprocess.check_output(['git', 'merge-tree', '--write-tree', controller, candidate],
-                                   cwd=root, text=True, timeout=30).strip()
-    return subprocess.check_output(
-        ['git', '-c', 'user.name=ZEC Private automation', '-c', 'user.email=zec-private@users.noreply.github.com',
-         'commit-tree', tree, '-p', controller, '-p', candidate, '-m', 'Integrate recovered validated candidate'],
-        cwd=root, text=True, timeout=30).strip()
-
-
 def main():
     runner_temp = Path(os.environ['RUNNER_TEMP'])
     proof = read_attestation(runner_temp / 'publication/release-attestation.json', os.environ['ATTESTATION_DIGEST'])
@@ -79,12 +83,8 @@ def main():
     require_current_controller(controller)
     candidate = proof['source_sha']
     root = Path(__file__).resolve().parents[1]
-    recovery = proof.get('quote_recovery')
-    if recovery and controller == original and recovery['original_controller'] != controller:
-        base = recovered_candidate_base(candidate, recovery['original_controller'], controller, root,
-                                        funded=bool(proof.get('funded_reuse')))
-    else:
-        base = integration_base(candidate, controller, original, root)
+    base = integration_base(candidate, controller, original, root, recovery=proof.get('quote_recovery'),
+                            funded=bool(proof.get('funded_reuse')))
     verify_release_identity(proof, candidate)
     with tempfile.TemporaryDirectory(dir=runner_temp) as scratch:
         commit = state_commit(base, proof, Path(scratch), root)

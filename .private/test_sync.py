@@ -177,14 +177,54 @@ class SyncTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertTrue(sync.critical(path))
 
+    def test_real_upstream_diff_includes_both_rename_ends_and_unicode(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+
+            def git(*args):
+                return subprocess.check_output(['git', '-c', 'user.name=Test', '-c',
+                                                'user.email=test@example.invalid', *args],
+                                               cwd=root, text=True, timeout=30).strip()
+
+            git('init', '-q')
+            critical = root / 'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/Original.kt'
+            critical.parent.mkdir(parents=True)
+            critical.write_bytes(b'original wallet code')
+            git('add', '-A')
+            git('commit', '-qm', 'baseline')
+            original = git('rev-parse', 'HEAD')
+            git('mv', critical.relative_to(root).as_posix(), 'unclassified.txt')
+            unicode = critical.with_name('\u00e9tablissement.kt')
+            unicode.write_bytes(b'new wallet code')
+            git('add', '-A')
+            git('commit', '-qm', 'rename and Unicode path')
+            paths = sync.changed_paths(original, 'HEAD', cwd=root)
+            self.assertEqual(set(paths), {path.relative_to(root).as_posix()
+                                         for path in (critical, unicode, root / 'unclassified.txt')})
+            self.assertEqual({path for path in paths if sync.critical(path)},
+                             {critical.relative_to(root).as_posix(), unicode.relative_to(root).as_posix()})
+
+            # Git trees can encode filenames that Windows cannot check out.
+            current = git('rev-parse', 'HEAD')
+            blob = bytes.fromhex(git('rev-parse', 'HEAD:unclassified.txt'))
+            for name, error in ((b'name\nwith-newline.txt', 'Unexpected upstream path'),
+                                (b'unknown-\xff.txt', 'paths are not UTF-8')):
+                tree = subprocess.check_output(['git', 'hash-object', '-t', 'tree', '-w', '--stdin'],
+                                               cwd=root, input=b'100644 ' + name + b'\0' + blob,
+                                               timeout=30).decode().strip()
+                with self.assertRaisesRegex(RuntimeError, error):
+                    sync.changed_paths(current, tree, cwd=root)
+
     def test_critical_change_blocks_before_candidate_or_publication(self):
         original=sync.run
         def commands(*args,**kwargs):
             if args[:2]==('git','fetch'): return ''
             if args[:2]==('git','rev-parse'): return self.state['sha']
-            if args[:3]==('git','diff','--name-only'): return 'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt'
             return original(*args,**kwargs)
-        with patch.object(sync,'gh',return_value=[self.release(self.next_tag)]),patch.object(sync,'run',side_effect=commands):
+        with patch.object(sync, 'gh', return_value=[self.release(self.next_tag)]), \
+                patch.object(sync, 'run', side_effect=commands), \
+                patch.object(sync, 'changed_paths', return_value=[
+                    'ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt']):
             with self.assertRaisesRegex(RuntimeError,'Critical upstream changes'): sync.main()
         self.assertEqual(self.before,(sync.ROOT/'.private/upstream.json').read_bytes())
 

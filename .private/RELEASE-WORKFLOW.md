@@ -24,9 +24,12 @@ Use the [Kotlin resolution procedure](DEVELOPMENT.md#kotlin-plugin-resolution) f
 
 | Last verified stage | Next action and required evidence |
 | --- | --- |
-| Before a faucet POST | Fix the failed readiness boundary and use the unfunded probe when needed. If the wallet job never ran, recover the original artifacts and reuse its quote receipt if available. If a protected reservation exists, pass the original or failed wallet recovery run as `preclaim_run` after reviewing the newer controller. Admission requires positive no-POST evidence at startup or pre-claim readiness and permits one linked reservation. The original reservation stays protected. |
+| Before a faucet POST | Fix the failed readiness boundary and use the unfunded probe when needed. If preparation failed before reservation and wallet execution, resume those stages using the original APKs. Reuse the parallel quote receipt when it passed. If a protected reservation exists, pass the original or failed wallet recovery run as `preclaim_run` after reviewing the newer controller. Admission requires positive no-POST evidence at startup or pre-claim readiness and permits one linked reservation. The original reservation stays protected. A passing original quote receipt can precede the linked reservation. |
 | Claim sent or uncertain | Preserve the reservation and reconcile the original claim. If the disposable wallet is gone and acceptance cannot resume, document the cause and prepare a reviewed replacement after correction. From current main, run `python3 -B .private/release_inputs.py --replacement-of ABANDONED_VERSION_CODE` for unused version coordinates. This read-only command does not change the candidate or advance the maintenance timer. |
 | Wallet receipt passed | Recover the quote job against the original emulator APK and wallet receipt. An unchanged controller can retry once when the original job identifies a Tor HTTP transport or independent market timeout. A trusted job creates `testnet-claims/quote-recovery-ORIGINAL_RUN_ID` atomically. Leave it protected so repeated dispatches cannot reuse the retry. For a test/controller defect, review the narrow controller repair first. |
+| Funded provenance qualifies and the unfunded installed upgrade failed | Keep the protected original claim, reuse the passing quote receipt and compatible prepared pair, and rerun the installed upgrade without a faucet call. |
+| Wallet and quote receipts passed | Reuse the original receipts and APKs for signing when no publication attestation exists. |
+| Draft or orphan tag after signing | Use [publication reconciliation](MAINTENANCE.md#signing-and-publication) with the original run, attempt and attestation ID. |
 | APK public | Use [publication reconciliation](MAINTENANCE.md#signing-and-publication) with the original attestation and run. Preserve the original public assets and accepted testnet pair. |
 
 ```sh
@@ -34,7 +37,9 @@ gh workflow run custom-release.yml --repo Codely-Solutions/zec-private --ref mai
 gh workflow run custom-release.yml --repo Codely-Solutions/zec-private --ref main -f operation=recover -f source_sha=FULL_REVIEWED_SHA -f recover_run=ORIGINAL_RUN_ID -f preclaim_run=FAILED_WALLET_RUN_ID
 ```
 
-Recovery requires successful APK producers, a skipped publisher and live artifacts. The signer rechecks candidate and artifact digests, both acceptance run identities, the funding reservation and, for an unchanged controller, the exact retry reservation. The existing release authorization applies.
+Recovery requires successful APK producers and live bound artifacts. Use the same authorized dispatch for an unpublished automatic upstream, Gradle wrapper or reviewed security run. Pass its exact prepared candidate SHA and original `sync-upstream.yml` run. Admission rechecks the original maintenance provenance and the current eligibility of that maintenance revision.
+
+The signer verifies both acceptance run identities and the applicable protected reservation before reading its signing credentials. For a same-controller transient quote retry it also checks the exact retry reservation. A retained attestation moves the release to publication reconciliation.
 
 If that recovery passes quotes and the signer fails before creating an attestation, diagnose and fix signing, then add `quote_run=PASSING_QUOTE_RUN_ID` to reuse the passing quote receipt. The controller checks that the quote execution inputs match, and signing checks all three run identities. Reconcile an existing public release through its original attestation.
 
@@ -50,7 +55,7 @@ The existing external six-hour heartbeat monitors `sync-upstream.yml`; keep the 
 
 The heartbeat is read-only. When discovery is over eight hours late and no run is queued or active, an authorized maintainer can dispatch `sync-upstream.yml` on `main` once and follow that exact run. Recheck the queue immediately before dispatch. Existing concurrency, candidate selection and closed-window checks preserve idempotence. Protected claim reservations and release gates remain authoritative. The heartbeat reports an actionable blockage and treats routine delays, inconclusive data and successful catch-up as quiet outcomes.
 
-For an unrecorded public release, the watcher searches retained release attestations across paginated repository artifacts, then invokes the existing exact-run resolver. Newer workflow runs do not displace the original publisher. The search is bounded to ten pages of 100 artifacts and stops with an explicit manual exact-run recovery instruction if that budget is exhausted. Expired attestations cannot authorize recovery. The resolver still binds the trusted publisher, live original attestation and unchanged public assets.
+For an unrecorded public release, the watcher searches retained release attestations across paginated repository artifacts, then passes the exact publisher run, attempt and attestation artifact ID into reconciliation. A later attempt can fail while the original publisher's attempt and attestation remain available. The search is bounded to ten pages of 100 artifacts and stops with an explicit manual exact-run recovery instruction if that budget is exhausted. Expired attestations cannot authorize recovery. The resolver requires a unique attestation matching the trusted attempt, source tag, APK and checksum.
 
 ## Shared release preflight
 

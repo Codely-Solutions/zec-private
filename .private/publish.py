@@ -6,12 +6,13 @@ from apk_architecture import check_apk
 from acceptance_policy import input_fingerprint, validate_core, validate_quotes, validate_binding, verify_promotion_revision, validate_core_sources, CORE_BINDING
 from foundation_architecture import validate_graph_binding
 from release_changelog import changes_for, hosted_changes
-from release_metadata import Metadata, wallet_release_versions
+from release_metadata import ARCHIVE_LIMITS, Metadata, PUBLIC_APK_LIMIT, require, wallet_release_versions
 
 ROOT=Path(__file__).resolve().parents[1]
 REPO=os.environ['GITHUB_REPOSITORY']
 CERT='410174e0d680638d19647f46e0e4b41ea6253c2351adfa84c5d9b1788d2da168'
-def run(*args): return subprocess.check_output(args,text=True).strip()
+def run(*args):
+    return subprocess.check_output(args, text=True, timeout=120).strip()
 
 
 def require_current_controller(controller):
@@ -25,7 +26,7 @@ def require_current_controller(controller):
 def read_attestation(path, expected_digest):
     with path.open('rb') as stream:
         data = stream.read(256 * 1024 + 1)
-    if len(data) > 256 * 1024 or hashlib.sha256(data).hexdigest() != expected_digest:
+    if len(data) > ARCHIVE_LIMITS['release-attestation'][1] or hashlib.sha256(data).hexdigest() != expected_digest:
         raise RuntimeError('Publication attestation digest or size mismatch')
     return json.loads(data)
 
@@ -117,6 +118,41 @@ def simulation_receipt(proof, signed, digest, dist):
                  disposable_state_advanced=True,real_state_unchanged=True,remote_publication=False)
     (dist/'simulation-receipt.json').write_text(json.dumps(receipt,indent=2)+'\n')
     print('Simulated upgrade signed and verified; real release/state unchanged.')
+def sign_apk(apk, signed, tools):
+    for name in ('RELEASE_KEYSTORE_BASE64', 'RELEASE_STORE_PASSWORD', 'RELEASE_KEY_PASSWORD'):
+        if not os.environ.get(name):
+            raise RuntimeError('Production signing environment did not provide ' + name)
+    with tempfile.TemporaryDirectory() as scratch:
+        temp = Path(scratch)
+        key = temp / 'release.p12'
+        key.write_bytes(base64.b64decode(os.environ['RELEASE_KEYSTORE_BASE64'], validate=True))
+        key.chmod(0o600)
+        aligned = temp / 'aligned.apk'
+        run(str(tools / 'zipalign'), '-f', '-P', '16', '4', str(apk), str(aligned))
+        run(str(tools / 'apksigner'), 'sign', '--ks', str(key), '--ks-key-alias', 'zec-private',
+            '--ks-pass', 'env:RELEASE_STORE_PASSWORD', '--key-pass', 'env:RELEASE_KEY_PASSWORD',
+            '--out', str(signed), str(aligned))
+    report = run(str(tools / 'apksigner'), 'verify', '--verbose', '--print-certs', str(signed))
+    fingerprints = re.findall(r'Signer #\d+ certificate SHA-256 digest: ([0-9a-f]+)', report)
+    require(fingerprints == [CERT], 'Signing certificate mismatch')
+    run(str(tools / 'zipalign'), '-c', '-P', '16', '4', str(signed))
+
+
+def publication_origin(source, controller, recovery, hosted):
+    if not hosted:
+        return {}
+    from custom_release import MARKER as CUSTOM_MARKER
+    from maintenance_cadence import MARKER, changed_marker
+
+    build_controller = recovery['original_controller'] if recovery else controller
+    maintenance = changed_marker(ROOT, source, build_controller, MARKER)
+    if changed_marker(ROOT, source, build_controller, CUSTOM_MARKER):
+        maintenance = {'kind': 'custom'}
+    elif maintenance.get('kind') != 'security':
+        maintenance = {'kind': 'routine'}
+    return {'maintenance': maintenance}
+
+
 def main():
     if not json.loads((ROOT/'.private/release-policy.json').read_text())['publication_enabled']:
         raise RuntimeError('Publication gated: initial acceptance and immutable wallet SDK evidence required')
@@ -215,12 +251,24 @@ def main():
         changes = hosted_changes(ROOT, expected, recovery['original_controller'] if recovery else controller)
     notes_text = release_notes(proof, changes)
     # Existing published tags/assets are immutable, including duplicate polling.
-    existing=subprocess.run(['gh','release','view',tag,'--repo',REPO],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    if existing.returncode==0:
-        raise RuntimeError('Release tag already exists; refusing to replace immutable assets')
-    history=wallet_release_versions(Metadata(repo=REPO).api('/releases?per_page=100', paginated=True))
-    if history and proof['versionCode']<=max(code for _, code in history):
-        raise RuntimeError('Android versionCode must increase')
+    origin = publication_origin(expected, controller, recovery, hosted)
+    if recovery:
+        origin['quote_recovery'] = {'original_controller': recovery['original_controller'],
+                                    'quote_run_id': quote['workflow_run_id']}
+    archive_binding = {'production_artifact': quote['production_artifact']} if hosted else {}
+    if os.environ.get('SIMULATION') != 'true':
+        if release_for_tag(tag):
+            raise RuntimeError('Release already exists; use reconciliation with its original attestation')
+        require_advancing_version(proof['versionCode'], tag)
+        verify_tag(tag, expected)
+        from verify_public_release import payload, unsigned_proof
+
+        checked_apk, checked_proof, checked_artifact = unsigned_proof(dict(
+            source_sha=expected, controller_sha=controller, artifact_run_id=proof['workflow_run_id'],
+            **origin, **archive_binding))
+        require(checked_proof == proof and checked_apk == apk.read_bytes(),
+                'Signing input differs from the verified original archive')
+        archive_binding = {'production_artifact': checked_artifact}
     if proof.get('architecture') != check_apk(apk):
         raise RuntimeError('Release architecture evidence mismatch')
     tools=Path(os.environ['ANDROID_HOME'])/'build-tools/36.0.0'
@@ -238,21 +286,14 @@ def main():
             raise RuntimeError('Signing job rejected missing or altered license')
     dist=ROOT/'dist';dist.mkdir(exist_ok=True)
     signed=dist/'zec-private-latest.apk'
-    for name in ('RELEASE_KEYSTORE_BASE64', 'RELEASE_STORE_PASSWORD', 'RELEASE_KEY_PASSWORD'):
-        if not os.environ.get(name):
-            raise RuntimeError('Production signing environment did not provide ' + name)
-    with tempfile.TemporaryDirectory() as temp:
-        temp=Path(temp)
-        key=temp/'release.p12';key.write_bytes(base64.b64decode(os.environ['RELEASE_KEYSTORE_BASE64'],validate=True));key.chmod(0o600)
-        aligned=temp/'aligned.apk'
-        run(str(tools/'zipalign'),'-f','-P','16','4',str(apk),str(aligned))
-        run(str(tools/'apksigner'),'sign','--ks',str(key),'--ks-key-alias','zec-private','--ks-pass','env:RELEASE_STORE_PASSWORD','--key-pass','env:RELEASE_KEY_PASSWORD','--out',str(signed),str(aligned))
-        report=run(str(tools/'apksigner'),'verify','--verbose','--print-certs',str(signed))
-        fingerprint=re.search(r'certificate SHA-256 digest: ([0-9a-f]+)',report)
-        if fingerprint is None or fingerprint[1]!=CERT: raise RuntimeError('Signing certificate mismatch')
-        run(str(tools/'zipalign'),'-c','-P','16','4',str(signed))
-    digest=hashlib.sha256(signed.read_bytes()).hexdigest()
-    checksum=dist/'SHA256SUMS';checksum.write_text(digest+'  zec-private-latest.apk\n')
+    sign_apk(apk, signed, tools)
+    signed_bytes = signed.read_bytes()
+    if os.environ.get('SIMULATION') != 'true':
+        require(0 < len(signed_bytes) <= PUBLIC_APK_LIMIT and payload(signed_bytes) == payload(checked_apk),
+                'Signed APK exceeds the public budget or differs from the validated payload')
+    digest = hashlib.sha256(signed_bytes).hexdigest()
+    checksum = dist / 'SHA256SUMS'
+    checksum.write_bytes(checksum_bytes(digest))
     notes=dist/'release-notes.md'
     notes.write_text(notes_text, encoding='utf-8')
     if os.environ.get('SIMULATION')=='true':
@@ -266,39 +307,162 @@ def main():
                        upstream=proof['upstream'], source_sha=expected, controller_sha=controller,
                        artifact_run_id=proof['workflow_run_id'], apk_sha256=digest, core=core,
                        production_quotes=quote, production_arm_executed=False, real_funds_used=False)
-    if hosted:
-        attestation['production_artifact'] = quote['production_artifact']
-        if reused_evidence:
-            attestation.update(reused_evidence[0])
-        from maintenance_cadence import MARKER, changed_marker
-
-        build_controller = recovery['original_controller'] if recovery else controller
-        maintenance = changed_marker(ROOT, expected, build_controller, MARKER)
-        attestation['maintenance'] = maintenance if maintenance.get('kind') == 'security' else {'kind': 'routine'}
-        from custom_release import MARKER as CUSTOM_MARKER
-
-        if changed_marker(ROOT, expected, build_controller, CUSTOM_MARKER):
-            attestation['maintenance'] = {'kind': 'custom'}
-        if recovery:
-            attestation['quote_recovery'] = {'original_controller': build_controller,
-                                             'quote_run_id': quote['workflow_run_id']}
+    attestation.update(origin, **archive_binding)
+    if reused_evidence:
+        attestation.update(reused_evidence[0])
+    attestation['release_notes'] = notes_text
+    attestation['notes_sha256'] = hashlib.sha256(notes_text.strip().encode('utf-8')).hexdigest()
     data = (json.dumps(attestation, indent=2) + '\n').encode()
-    if len(data) > 256 * 1024:
+    if len(data) > ARCHIVE_LIMITS['release-attestation'][1]:
         raise RuntimeError('Publication attestation exceeds its size budget')
     (dist/'release-attestation.json').write_bytes(data)
     with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as output:
         output.write(f'release_tag={tag}\nattestation_digest={hashlib.sha256(data).hexdigest()}\n')
 
 
+APK = 'zec-private-latest.apk'
+CHECKSUM = 'SHA256SUMS'
+NOTES = 'release-notes.md'
+
+
+def release_api(path, *, data=None, method=None):
+    command = ['gh', 'api', f'repos/{REPO}/{path}']
+    if data is not None:
+        command += ['-X', method, '--input', '-']
+    return json.loads(subprocess.check_output(command, text=True, timeout=45,
+                                              input=json.dumps(data) if data is not None else None))
+
+
+def release_for_tag(tag, *, releases=None):
+    release_title(tag)
+    if releases is None:
+        releases = Metadata(repo=REPO).api('/releases?per_page=100', paginated=True)
+    matches = [release for page in releases for release in page if release['tag_name'] == tag]
+    require(len(matches) <= 1, 'Release tag is ambiguous')
+    return matches[0] if matches else None
+
+
+def tag_object(tag, api):
+    release_title(tag)
+    exact = 'refs/tags/' + tag
+    refs = [ref for ref in api('git/matching-refs/tags/' + tag) if ref['ref'] == exact]
+    require(len(refs) <= 1, 'Release tag is ambiguous')
+    if not refs:
+        return None
+    obj = refs[0]['object']
+    for _ in range(4):
+        if obj['type'] != 'tag':
+            break
+        obj = api('git/tags/' + obj['sha'])['object']
+    return obj
+
+
+def verify_tag(tag, source, *, api=release_api, create=False):
+    obj = tag_object(tag, api)
+    if obj is None and create:
+        api('git/refs', method='POST', data={'ref': 'refs/tags/' + tag, 'sha': source})
+        obj = tag_object(tag, api)
+        require(obj is not None, 'Expected the exact release tag after creation')
+    if obj is not None:
+        require(obj['type'] == 'commit' and obj['sha'] == source, 'Release tag points to a different source')
+    return obj
+
+
+def checksum_bytes(digest):
+    require(isinstance(digest, str) and re.fullmatch(r'[a-f0-9]{64}', digest), 'Invalid attested APK digest')
+    return f'{digest}  {APK}\n'.encode('ascii')
+
+
+def exact_assets(release, proof, *, complete):
+    tag = proof['release_tag']
+    require(release['tag_name'] == tag and release['prerelease'] is False,
+            'Unexpected release state or tag')
+    version = [line for line in (release['body'] or '').splitlines() if line.startswith('Android versionCode:')]
+    require(version == [f'Android versionCode: {proof["versionCode"]}'],
+            'Release notes differ from the validated version')
+    if proof.get('notes_sha256'):
+        require(hashlib.sha256(release['body'].strip().encode('utf-8')).hexdigest() == proof['notes_sha256'],
+                'Release notes differ from the original publisher')
+    expected_checksum = checksum_bytes(proof['apk_sha256'])
+    expected = {APK: (proof['apk_sha256'], PUBLIC_APK_LIMIT),
+                CHECKSUM: (hashlib.sha256(expected_checksum).hexdigest(), len(expected_checksum))}
+    assets = {asset['name']: asset for asset in release['assets']}
+    require(len(assets) == len(release['assets']) and assets.keys() <= expected.keys()
+            and (not complete or assets.keys() == expected.keys()), 'Unexpected or incomplete release assets')
+    uploaded = {}
+    for name, asset in assets.items():
+        if not complete and release['draft'] is True and asset['state'] == 'starter' and asset['size'] == 0:
+            continue
+        sha, maximum = expected[name]
+        require(0 < asset['size'] <= maximum and asset['state'] == 'uploaded'
+                and asset.get('digest') == 'sha256:' + sha, 'Release asset differs from the original publisher: ' + name)
+        uploaded[name] = asset
+    return uploaded
+
+
+def require_advancing_version(version_code, own_tag):
+    history = Metadata(repo=REPO).api('/releases?per_page=100', paginated=True)
+    versions = wallet_release_versions([[release for page in history for release in page if release['tag_name'] != own_tag]])
+    require(not versions or version_code > max(code for _, code in versions), 'Android versionCode must increase')
+
+
+def expose_release(proof, dist, *, controller, existing=None):
+    tag = proof['release_tag']
+    source = proof['source_sha']
+    verify_release_identity(proof, source)
+    current = release_for_tag(tag)
+    require((current is None and existing is None) or
+            (current is not None and existing is not None and current['id'] == existing['id']
+             and current['draft'] is True), 'Expected the exact unpublished release state')
+    require_advancing_version(proof['versionCode'], tag)
+    assets = exact_assets(current, proof, complete=False) if current else {}
+    if APK not in assets:
+        signed = dist / APK
+        require(signed.is_file() and 0 < signed.stat().st_size <= PUBLIC_APK_LIMIT
+                and hashlib.sha256(signed.read_bytes()).hexdigest() == proof['apk_sha256'],
+                'Recovery needs the exact original signed APK')
+    if CHECKSUM not in assets:
+        (dist / CHECKSUM).write_bytes(checksum_bytes(proof['apk_sha256']))
+    if not current:
+        notes = dist / NOTES
+        require(notes.is_file() and proof.get('notes_sha256') ==
+                hashlib.sha256(notes.read_text(encoding='utf-8').strip().encode('utf-8')).hexdigest(),
+                'Draft creation needs the exact original release notes')
+    require_current_controller(controller)
+    verify_tag(tag, source, create=True)
+    if not current:
+        run('gh', 'release', 'create', tag, '--repo', REPO, '--draft', '--verify-tag', '--target', source,
+            '--title', release_title(tag), '--notes-file', str(notes))
+        current = release_for_tag(tag)
+        require(current is not None and current['draft'] is True, 'Expected a draft before uploading APK assets')
+        assets = exact_assets(current, proof, complete=False)
+    # A failed GitHub upload can leave an empty placeholder in a draft.
+    # The placeholder carries no release bytes.
+    for asset in current['assets']:
+        if asset['name'] not in assets:
+            require(type(asset['id']) is int and asset['id'] > 0, 'Unexpected draft asset ID')
+            run('gh', 'api', '-X', 'DELETE', f'repos/{REPO}/releases/assets/{asset["id"]}')
+    for name in (APK, CHECKSUM):
+        if name not in assets:
+            run('gh', 'release', 'upload', tag, str(dist / name), '--repo', REPO)
+
+    final = release_for_tag(tag)
+    require(final is not None and final['id'] == current['id'] and final['draft'] is True,
+            'Draft identity changed during publication')
+    exact_assets(final, proof, complete=True)
+    require(verify_tag(tag, source) is not None, 'Release tag disappeared before publication')
+    require_current_controller(controller)
+    result = release_api(f'releases/{final["id"]}', method='PATCH', data={'draft': False, 'make_latest': 'true'})
+    require(result['id'] == final['id'] and result['draft'] is False, 'Expected the exact release to be public')
+    exact_assets(result, proof, complete=True)
+    print('Published signed release ' + tag + ' SHA256 ' + proof['apk_sha256'])
+
+
 def publish_release():
     dist = ROOT / 'dist'
     proof = read_attestation(dist / 'release-attestation.json', os.environ['ATTESTATION_DIGEST'])
-    require_current_controller(proof['controller_sha'])
-    tag = proof['release_tag']
-    run('gh', 'release', 'create', tag, str(dist / 'zec-private-latest.apk'), str(dist / 'SHA256SUMS'),
-        '--repo', REPO, '--target', proof['source_sha'], '--title', release_title(tag),
-        '--notes-file', str(dist / 'release-notes.md'))
-    print('Published signed release ' + tag + ' SHA256 ' + proof['apk_sha256'])
+    expose_release(proof, dist, controller=proof['controller_sha'])
+
 
 if __name__=='__main__':
     if os.environ.get('PUBLISH_SIGNED_RELEASE') == 'true':

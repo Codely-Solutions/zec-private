@@ -14,6 +14,10 @@ The fork submits no app fees. Current unauthenticated 1Click requests use EXACT_
 
 The review omits a wallet fee for externally funded incoming swaps. Outgoing swaps retain the wallet proposal fee; completed outgoing details use the actual wallet transaction fee rather than historical aggregate metadata. Legacy stored fee fields remain readable for compatibility.
 
+Provider success becomes review-ready only after local funding preparation succeeds. The request and cancel-sheet dismissal share one navigation claim. Outgoing review requires the matching prepared proposal, and submission rechecks that exact proposal after authentication. A changed or missing proposal requires a fresh review. Incoming externally funded swaps retain their separate confirmation path.
+
+Keep complete provider identities for status recovery independently of live prices and the curated offer list. New selections must match the pinned ID, symbol, network, decimals and contract in `SwapPriceMarkets`; historical exact identities and the existing unique alias fallback remain available for recovery. Validate the echoed deposit reference before mapping or persisting a status. Activity details show a non-actionable **Deposit reference**; current funding controls belong to the expiring deposit screen.
+
 The signed **Value difference** compares received USD with total USD to fund, including known separately paid wallet fees. Quoted costs are already reflected once. It uses the coherent quote snapshot, includes an EXACT_OUTPUT allowance and assumes no future refund. It excludes unknown external-wallet fees, hides on missing/non-positive values or quote expiry, and is not independent market-price verification.
 
 Show only positive provider-reported refunds, including successful swaps. Never derive a refund from deposit minus execution. The provider reports origin/destination transaction lists without a dedicated refund-hash field; retain neutral chain labels for ambiguous origin transactions, preserve the wallet-known deposit separately, and keep copy-ID for unsupported explorer chains.

@@ -10,9 +10,7 @@ import zipfile
 from acceptance_policy import ROOT, input_fingerprint, validate_core_sources, validate_quotes, verify_promotion_revision
 from hosted_claim import binding, verify
 from release_inputs import version_code
-from release_metadata import Metadata, require
-
-MAX_ARCHIVE = 160 * 1024**2
+from release_metadata import ARCHIVE_LIMITS, Metadata, require
 
 
 def artifact(metadata, artifact_id, name, run, controller):
@@ -21,7 +19,7 @@ def artifact(metadata, artifact_id, name, run, controller):
     producer = value['workflow_run']
     require(value['id'] == int(artifact_id) and value['name'] == name and value['expired'] is False
             and producer['id'] == int(run) and producer['head_sha'] == controller
-            and 0 < value['size_in_bytes'] <= MAX_ARCHIVE
+            and 0 < value['size_in_bytes'] <= ARCHIVE_LIMITS[name][0]
             and re.fullmatch(r'sha256:[a-f0-9]{64}', value.get('digest', '')),
             'Artifact does not belong to the exact trusted run and role')
     return {key: value[key] for key in ('id', 'digest', 'size_in_bytes')}
@@ -45,7 +43,7 @@ def stage(directory, artifact_id, name, *, metadata=None, run=None, controller=N
         extra = {'direct-preparation.json', 'baseline-instrumentation.bin'} if name == 'core-direct-candidate' else set()
         require(len(names) == len(set(names)) <= 8 and
                 all(n in extra or re.fullmatch(r'[A-Za-z0-9_.-]+\.apk|source-sha\.txt|SHA256SUMS', n) for n in names)
-                and sum(item.file_size for item in archive.infolist()) <= 192 * 1024**2,
+                and sum(item.file_size for item in archive.infolist()) <= ARCHIVE_LIMITS[name][1],
                 'Unexpected or excessive APK archive entries')
         archive.extractall(directory)
     path.unlink()
@@ -89,7 +87,9 @@ def read_receipts(directory, *, proof, source, controller, production_id, core_i
         producer = artifact(metadata, direct_core_id, 'core-direct-candidate', producer_run, producer_controller)
         upgrade = json.loads((directory / 'hosted-upgrade.json').read_text())
         validate_upgrade(upgrade, source=source, version=version, production=production, producer=producer,
-                         original_core=original_core, fixture=selected['fixture'], run=int(run), controller=controller,
+                         original_core=original_core, fixture=selected['fixture'],
+                         run=int(core_run if recovery and recovery.get('core_receipt_id') else run),
+                         controller=core_controller if recovery and recovery.get('core_receipt_id') else controller,
                          producer_run=int(producer_run), producer_controller=producer_controller)
         quote['producer_controller_sha'] = build_controller
         return selected['core'], quote, {'funded_reuse': selected['origin'], 'installed_upgrade': upgrade}

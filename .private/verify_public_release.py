@@ -16,13 +16,13 @@ import zipfile
 from apk_architecture import check_apk
 from published_history import release_tag_matches
 from publish import CERT, REPO, read_attestation
+from release_metadata import APK_PAYLOAD_LIMIT, ARCHIVE_LIMITS, MIB, PUBLIC_APK_LIMIT
 
 
 APK = 'zec-private-latest.apk'
 CHECKSUM = 'SHA256SUMS'
 PUBLIC = f'https://github.com/{REPO}'
 API = f'repos/{REPO}'
-MIB = 1024 * 1024
 
 
 def require(value, message):
@@ -92,7 +92,7 @@ def bounded_zip(data, maximum):
 
 
 def payload(data):
-    with bounded_zip(data, 256 * MIB) as archive:
+    with bounded_zip(data, APK_PAYLOAD_LIMIT) as archive:
         return {item: digest(archive.read(item)) for item in archive.namelist()
                 if not re.fullmatch(r'META-INF/[^/]+\.(RSA|DSA|EC|SF|MF)', item, re.I)}
 
@@ -108,23 +108,26 @@ def unsigned_proof(evidence):
               and run['head_sha'] == source)
     hosted_event = (run['event'] in ('schedule', 'workflow_dispatch') or
                     (run['event'] == 'push' and evidence.get('maintenance', {}).get('kind') == 'security'))
+    build_controller = evidence.get('quote_recovery', {}).get('original_controller', evidence['controller_sha'])
     upstream = (run['path'] == '.github/workflows/sync-upstream.yml' and hosted_event
-                and run['head_sha'] == evidence['controller_sha'])
-    custom_controller = evidence.get('quote_recovery', {}).get('original_controller', evidence['controller_sha'])
+                and run['head_sha'] == build_controller)
     custom = (run['path'] == CUSTOM_WORKFLOW and run['event'] == 'workflow_dispatch'
-              and run['head_sha'] == custom_controller and evidence.get('maintenance', {}).get('kind') == 'custom')
-    require(run['head_branch'] == 'main' and (direct or upstream or custom),
+              and run['head_sha'] == build_controller and evidence.get('maintenance', {}).get('kind') == 'custom')
+    require(run['head_branch'] == 'main' and run.get('head_repository', {}).get('full_name') == REPO
+            and (direct or upstream or custom),
             'Expected a main-branch release producer')
-    jobs = gh(f'actions/runs/{run_id}/jobs?per_page=100')['jobs']
-    successful = [job for job in jobs if job['name'].rsplit(' / ', 1)[-1] == 'unsigned'
-                  and job['conclusion'] == 'success']
+    job_pages = gh(f'actions/runs/{run_id}/jobs?filter=all&per_page=100', '--paginate', '--slurp')
+    successful = [job for page in job_pages for job in page['jobs']
+                  if job['name'].rsplit(' / ', 1)[-1] == 'unsigned' and job['conclusion'] == 'success'
+                  and job['run_id'] == int(run_id) and job['head_sha'] == run['head_sha']]
     require(len(successful) == 1, 'Expected one successful unsigned producer job')
     pages = gh(f'actions/runs/{run_id}/artifacts?per_page=100', '--paginate', '--slurp')
     assets = [item for page in pages for item in page['artifacts'] if item['name'] == 'validated-unsigned-apk']
     require(len(assets) == 1 and not assets[0]['expired'], 'Expected one live validated unsigned artifact')
     asset = assets[0]
+    compressed, expanded = ARCHIVE_LIMITS['validated-unsigned-apk']
     require(asset['workflow_run']['id'] == int(run_id) and asset['workflow_run']['head_sha'] == run['head_sha']
-            and 0 < asset['size_in_bytes'] <= 64 * MIB,
+            and 0 < asset['size_in_bytes'] <= compressed,
             'Unsigned artifact run or size mismatch')
     if 'production_artifact' in evidence:
         require(all(asset[key] == evidence['production_artifact'][key]
@@ -133,12 +136,14 @@ def unsigned_proof(evidence):
     data = subprocess.check_output(['gh', 'api', f'{API}/actions/artifacts/{asset["id"]}/zip'], timeout=90)
     require(len(data) == asset['size_in_bytes'] and asset['digest'] == 'sha256:' + digest(data),
             'Unsigned artifact digest or size mismatch')
-    with bounded_zip(data, 192 * MIB) as archive:
+    with bounded_zip(data, expanded) as archive:
         raw = archive.read('zec-private-unsigned.apk')
         proof = json.loads(archive.read('proof.json'))
+    with bounded_zip(raw, APK_PAYLOAD_LIMIT):
+        pass
     require(proof['source_sha'] == source and str(proof['workflow_run_id']) == run_id
             and proof['apk_sha256'] == digest(raw), 'Unsigned APK does not match recorded source and producer')
-    return raw, proof, asset['id']
+    return raw, proof, {key: asset[key] for key in ('id', 'digest', 'size_in_bytes')}
 
 
 def main():
@@ -148,7 +153,7 @@ def main():
     require(not release['draft'] and not release['prerelease'], 'Expected a public stable release')
     assets = {item['name']: item for item in release['assets']}
     require(len(release['assets']) == 2 and set(assets) == {APK, CHECKSUM}, 'Unexpected public asset set')
-    signed = published_asset(tag, assets[APK], 96 * MIB)
+    signed = published_asset(tag, assets[APK], PUBLIC_APK_LIMIT)
     sha = digest(signed)
     checksum = published_asset(tag, assets[CHECKSUM], 1024)
     require(checksum.decode().strip() == f'{sha}  {APK}', 'Public checksum file mismatch')
@@ -169,7 +174,7 @@ def main():
         ref = gh(f'git/tags/{ref["sha"]}')['object']
     require(release_tag_matches(tag, evidence['source_sha'], sha, release['id'], ref, gh),
             'Public tag does not identify the validated source')
-    unsigned, proof, artifact_id = unsigned_proof(evidence)
+    unsigned, proof, original_artifact = unsigned_proof(evidence)
     require(proof['release_tag'] == tag and payload(signed) == payload(unsigned),
             'Public APK payload differs from the validated candidate')
     version_lines = [line for line in (release['body'] or '').splitlines()
@@ -193,7 +198,7 @@ def main():
             'Public APK manifest or architecture mismatch')
     print(json.dumps({'tag': tag, 'apk_sha256': sha, 'version_code': proof['versionCode'],
                       'source_sha': evidence['source_sha'], 'public_tag_source_sha': ref['sha'],
-                      'unsigned_artifact_id': artifact_id,
+                      'unsigned_artifact_id': original_artifact['id'],
                       'public_discovery_verified': True, 'public_discovery_route': discovery_route,
                       'signed_payload_matches': True}))
 

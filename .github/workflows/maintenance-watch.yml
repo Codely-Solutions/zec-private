@@ -9,6 +9,10 @@ on:
       reconciliation_run:
         description: Exact trusted run for an existing public release awaiting verification
         value: ${{ jobs.watch.outputs.reconciliation_run }}
+      reconciliation_attempt:
+        value: ${{ jobs.watch.outputs.reconciliation_attempt }}
+      reconciliation_artifact:
+        value: ${{ jobs.watch.outputs.reconciliation_artifact }}
   pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
@@ -29,6 +33,8 @@ jobs:
       proposal: ${{ steps.classify.outputs.proposal }}
       head: ${{ steps.classify.outputs.proposal_head }}
       reconciliation_run: ${{ steps.classify.outputs.reconciliation_run }}
+      reconciliation_attempt: ${{ steps.classify.outputs.reconciliation_attempt }}
+      reconciliation_artifact: ${{ steps.classify.outputs.reconciliation_artifact }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

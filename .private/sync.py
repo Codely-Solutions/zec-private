@@ -25,6 +25,22 @@ def version(tag):
     match=re.fullmatch(r'(\d+)\.(\d+)\.(\d+)-(\d+)',tag)
     if not match: raise RuntimeError('Unsupported upstream version format; review required')
     return tuple(map(int,match.groups()))
+def changed_paths(before, after, *, cwd=None):
+    data = subprocess.check_output(['git', 'diff', '--no-renames', '--name-only', '-z', before, after],
+                                   cwd=cwd or ROOT, timeout=30)
+    if not data:
+        return []
+    try:
+        paths = data.decode('utf-8').split('\0')
+    except UnicodeDecodeError as error:
+        raise RuntimeError('Upstream paths are not UTF-8; review required') from error
+    if paths[-1] or any(not path or any(ord(char) < 32 or ord(char) == 127 for char in path)
+                            or any(part in ('', '.', '..') for part in path.split('/'))
+                        for path in paths[:-1]):
+        raise RuntimeError('Unexpected upstream path; review required')
+    return paths[:-1]
+
+
 def critical(path):
     # Changes confined to a removed project cannot execute in the candidate.
     # Its root, shared wiring and every retained feature remain review-gated.
@@ -142,7 +158,7 @@ def main(latest=None, wrapper=None, *, expected_commit=None):
     if expected_commit is not None and commit != expected_commit:
         raise RuntimeError('Upstream tag changed after checking its stable SDK requirement')
     run('git','fetch','--no-tags',f'https://github.com/{OFFICIAL}.git',state['sha'])
-    changes=run('git','diff','--name-only',state['sha'],commit).splitlines()
+    changes=changed_paths(state['sha'], commit)
     unsafe=[p for p in changes if critical(p)]
     if 'gradle.properties' in changes:
         old=run('git','show',state['sha']+':gradle.properties')
@@ -167,7 +183,10 @@ def main(latest=None, wrapper=None, *, expected_commit=None):
         if wrapper:
             from maintenance_watch import WRAPPER_PROPERTIES
             path = candidate / WRAPPER_PROPERTIES
-            if path.read_bytes() != (ROOT / WRAPPER_PROPERTIES).read_bytes():
+            # Compare committed bytes using the candidate's Git clean rules.
+            base = run('git', 'rev-parse', f'{controller}:{WRAPPER_PROPERTIES}')
+            current = run('git', 'hash-object', '--path', WRAPPER_PROPERTIES, WRAPPER_PROPERTIES, cwd=candidate)
+            if current != base:
                 raise RuntimeError('Upstream patch changed the verified Gradle wrapper base')
             path.write_text(wrapper[1], encoding='ascii', newline='\n')
         shutil.copy2(ROOT/'README.md',candidate/'README.md')
