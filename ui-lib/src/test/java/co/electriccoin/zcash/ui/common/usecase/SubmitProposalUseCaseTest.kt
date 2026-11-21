@@ -20,6 +20,7 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
+import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressArgs
 import io.mockk.coEvery

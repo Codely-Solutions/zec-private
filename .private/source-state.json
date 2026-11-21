@@ -2895,7 +2895,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SendEmailUseCaseTest.kt": "5c5ef86852eef4add204b24e890b59f6420703216d47611b6766c56113e3ad90",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ShieldFundsUseCaseTest.kt": "9dfafbbfef8e8be742c092be58bfbe65560df657691a84308f319c7d2e532651",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitKSProposalUseCaseTest.kt": "9771eeacd67e99f4050303863772e13efa5ea72ba6b7d3292058aad37f249858",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitProposalUseCaseTest.kt": "c7f052409b862ed2eb37ae2ed3020196062f86ddb22f53a236c0e6161ba5cb87",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitProposalUseCaseTest.kt": "591562ec518984f57cb2811497528037cecb0a9f1f0d82112e0cf99ef24c60c5",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt": "638eaa8ebabbc6335848220921d2e8aa68c42082031589d602090466c0ce844a",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SweepOrphanedGiftCardWalletsUseCaseTest.kt": "6a1f889848d15b3e106346c640ec9cad6fc30e59a6798148e739dd5a5b38511b",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/TransactionMetadataEditUseCaseTest.kt": "b4d30ef27288203d38b7dd25940da966eacc3dabc1974ad897595e517c2361c9",
