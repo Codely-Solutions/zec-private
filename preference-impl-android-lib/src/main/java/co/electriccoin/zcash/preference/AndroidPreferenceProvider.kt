@@ -15,10 +15,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -49,7 +50,7 @@ class AndroidPreferenceProvider(
     private val sharedPreferences: SharedPreferences,
     private val dispatcher: CoroutineDispatcher
 ) : PreferenceProvider {
-    private val clearPipeline = MutableSharedFlow<Unit>()
+    private val clearRevision = MutableStateFlow(0L)
 
     private val mutex = Mutex()
 
@@ -130,13 +131,15 @@ class AndroidPreferenceProvider(
     @SuppressLint("ApplySharedPref")
     override suspend fun clearPreferences() =
         withContext(dispatcher) {
-            val editor = sharedPreferences.edit()
-
-            editor.clear()
-
-            clearPipeline.emit(Unit)
-
-            return@withContext editor.commit()
+            mutex.withLock {
+                try {
+                    sharedPreferences.edit().clear().commit()
+                } finally {
+                    // AndroidX does not notify key listeners for clear-only editors. Even a failed
+                    // disk commit can change Android's in-memory preferences.
+                    clearRevision.update { it + 1 }
+                }
+            }
         }
 
     override fun observe(key: PreferenceKey): Flow<String?> =
@@ -149,13 +152,10 @@ class AndroidPreferenceProvider(
             sharedPreferences.registerOnSharedPreferenceChangeListener(listener)
 
             this.launch {
-                clearPipeline.collect {
+                clearRevision.collect {
                     send(Unit)
                 }
             }
-
-            // Kickstart the emissions
-            trySend(Unit)
 
             awaitClose {
                 sharedPreferences.unregisterOnSharedPreferenceChangeListener(listener)
@@ -166,11 +166,9 @@ class AndroidPreferenceProvider(
     @SuppressLint("ApplySharedPref")
     override suspend fun remove(key: PreferenceKey) {
         withContext(dispatcher) {
-            val editor = sharedPreferences.edit()
-
-            editor.remove(key.key)
-
-            editor.commitOrThrow()
+            mutex.withLock {
+                sharedPreferences.edit().remove(key.key).commitOrThrow()
+            }
         }
     }
 
