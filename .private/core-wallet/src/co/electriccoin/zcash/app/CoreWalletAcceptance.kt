@@ -1291,7 +1291,6 @@ class CoreWalletAcceptance {
         }
     }
 
-    @Suppress("DEPRECATION")
     private suspend fun settingsResetAndRestore(useTor: Boolean) {
         val walletProvider = dependency<PersistableWalletProvider>()
         check(walletProvider.getPersistableWallet() == null) { "Reset probe requires a fresh app install" }
@@ -1339,6 +1338,7 @@ class CoreWalletAcceptance {
         check(syncProvider.getSynchronizer().getUnifiedAddress(restoredAccount.sdkAccount) == address)
     }
 
+    @Suppress("DEPRECATION")
     @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun createWallet(role: String) {
         check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)
