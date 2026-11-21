@@ -76,7 +76,7 @@ class RestoreTorVM(
     private fun onRestoreWalletClick(isChecked: Boolean) {
         if (restoreLce.state.value.loading) return
         restoreLce.execute {
-            val seed = seedEntry.resolveSession(args.sessionId)
+            val seed = seedEntry.restoreSession.resolve(args.sessionId)
             if (seed == null) {
                 navigationRouter.backTo(RestoreSeedArgs::class)
             } else {

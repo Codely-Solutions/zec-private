@@ -43,7 +43,7 @@ class RestoreSeedVM(
     private val clearClipboard: ClearClipboardUseCase
 ) : ViewModel() {
     private val pasteError = MutableStateFlow(false)
-    private val restoreSession = RestoreSession()
+    internal val restoreSession = RestoreSession()
 
     private val suggestions =
         flow {
@@ -55,7 +55,16 @@ class RestoreSeedVM(
             initialValue = null
         )
 
-    private val seedWords = MutableStateFlow(emptySeedWords())
+    private val emptySeedWords =
+        List(SEED_WORD_COUNT) { index ->
+            SeedWordTextFieldState(
+                innerState = SeedWordInnerTextFieldState(""),
+                onValueChange = { onValueChange(index, it) },
+                isError = false
+            )
+        }
+
+    private val seedWords = MutableStateFlow(emptySeedWords)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val seedValidations =
@@ -126,7 +135,10 @@ class RestoreSeedVM(
                             word.copy(isError = !seedValidations[index])
                         }
             ),
-        onBack = ::onBack,
+        onBack = {
+            clearSeed()
+            navigationRouter.back()
+        },
         pasteButton =
             ButtonState(
                 text = stringRes(R.string.restore_seed_paste),
@@ -145,18 +157,9 @@ class RestoreSeedVM(
             ).takeIf { seedPhrase != null }
     )
 
-    private fun onBack() {
-        clearSeed()
-        navigationRouter.back()
-    }
-
-    internal fun resolveSession(id: String): SeedPhrase? = restoreSession.resolve(id)
-
     internal fun completeRestore(id: String) {
         if (restoreSession.resolve(id) != null) clearSeed()
     }
-
-    internal fun cancelBirthdayEntry(id: String) = restoreSession.clear(id)
 
     override fun onCleared() {
         clearSeed()
@@ -165,17 +168,8 @@ class RestoreSeedVM(
 
     private fun clearSeed() {
         restoreSession.clear()
-        seedWords.value = emptySeedWords()
+        seedWords.value = emptySeedWords
     }
-
-    private fun emptySeedWords() =
-        List(SEED_WORD_COUNT) { index ->
-            SeedWordTextFieldState(
-                innerState = SeedWordInnerTextFieldState(""),
-                onValueChange = { onValueChange(index, it) },
-                isError = false
-            )
-        }
 
     private fun onInfoButtonClick() {
         navigationRouter.forward(SeedInfo)

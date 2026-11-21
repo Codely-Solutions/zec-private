@@ -111,7 +111,9 @@ class GiftCardContactGuardTest {
         runTest {
             assertEquals(
                 ABContactSaveResult.Saved,
-                SaveABContactUseCase(addressBookRepository, navigationRouter)(name = "A", address = "u1new", chain = null)
+                SaveABContactUseCase(addressBookRepository, navigationRouter)(
+                    name = "A", address = "u1new", chain = null
+                )
             )
             assertEquals(
                 ABContactSaveResult.Saved,

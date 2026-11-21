@@ -42,6 +42,7 @@ import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import kotlin.time.Duration.Companion.seconds
 
+@Suppress("TooManyFunctions")
 interface SwapRepository {
     val assets: StateFlow<SwapAssetsData>
 
@@ -529,19 +530,10 @@ class SwapRepositoryImpl(
      * so both sides of a swap resolve.
      */
     private suspend fun getSupportedTokensForStatus(): List<SwapAsset> {
-        val loaded = assets.value
-        loaded.recoveryAssets?.takeIf { tokens -> tokens.any { it.isZCashAsset } }?.let { return it }
-        if (loaded.data != null && loaded.zecAsset != null) {
-            return loaded.data + loaded.zecAsset
-        }
+        assets.value.statusAssets()?.let { return it }
         requestRefreshAssetsOnce()
         val refreshed = assets.firstOrNull { !it.isLoading }
-        refreshed?.recoveryAssets?.takeIf { tokens -> tokens.any { it.isZCashAsset } }?.let { return it }
-        if (refreshed?.data != null && refreshed.zecAsset != null) {
-            return refreshed.data + refreshed.zecAsset
-        }
-        refreshed?.error?.let { throw it }
-        throw SwapAssetsUnavailableException()
+        return refreshed?.statusAssets() ?: throw (refreshed?.error ?: SwapAssetsUnavailableException())
     }
 
     override fun clear() {
@@ -605,6 +597,10 @@ class SwapRepositoryImpl(
 
 private fun mergeRecoveryAssets(current: List<SwapAsset>, previous: List<SwapAsset>): List<SwapAsset> =
     current + previous.filter { old -> current.none { it.assetId == old.assetId } }
+
+private fun SwapAssetsData.statusAssets(): List<SwapAsset>? =
+    recoveryAssets?.takeIf { tokens -> tokens.any { it.isZCashAsset } }
+        ?: data?.let { tokens -> zecAsset?.let { tokens + it } }
 
 val DEFAULT_SLIPPAGE = BigDecimal("2")
 

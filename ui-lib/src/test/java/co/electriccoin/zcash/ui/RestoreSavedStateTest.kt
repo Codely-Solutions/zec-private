@@ -75,13 +75,14 @@ class RestoreSavedStateTest {
         navigatorProvider.addNavigator(ComposeNavigator())
     }
 
-    private fun restoreGraph(controller: NavHostController) = controller.createGraph(startDestination = RestoreSeedArgs) {
-        composable<RestoreSeedArgs> { }
-        composable<RestoreHeight> { }
-        composable<RestoreDateArgs> { }
-        composable<RestoreEstimationArgs> { }
-        composable<RestoreTorArgs> { }
-    }
+    private fun restoreGraph(controller: NavHostController) =
+        controller.createGraph(startDestination = RestoreSeedArgs) {
+            composable<RestoreSeedArgs> { }
+            composable<RestoreHeight> { }
+            composable<RestoreDateArgs> { }
+            composable<RestoreEstimationArgs> { }
+            composable<RestoreTorArgs> { }
+        }
 
     private companion object {
         const val BLOCK_HEIGHT = 500_000L

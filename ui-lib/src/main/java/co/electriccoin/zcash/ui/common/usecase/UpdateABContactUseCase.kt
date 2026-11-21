@@ -29,7 +29,12 @@ class UpdateABContactUseCase(
         if (recipient != null && !recipient.isValid) return ABContactSaveResult.InvalidAddress
         val receivingAddress = recipient?.input?.address ?: address
         return persistABContact(navigationRouter) {
-            addressBookRepository.updateContact(contact = contact, name = name, address = receivingAddress, chain = chain)
+            addressBookRepository.updateContact(
+                contact = contact,
+                name = name,
+                address = receivingAddress,
+                chain = chain
+            )
         }
     }
 }

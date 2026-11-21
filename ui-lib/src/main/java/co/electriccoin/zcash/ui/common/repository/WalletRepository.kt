@@ -490,7 +490,8 @@ class WalletRepositoryImpl(
                 val canRetry = error != null && error !is WalletInitializationConflictException
                 if (!canRetry) acceptedInitialization = null
                 activeInitialization = null
-                initialization.value = if (canRetry) WalletInitializationState.FAILED else WalletInitializationState.IDLE
+                initialization.value =
+                    if (canRetry) WalletInitializationState.FAILED else WalletInitializationState.IDLE
             }
             if (error == null) result.complete(Unit) else result.completeExceptionally(error)
         }
@@ -519,7 +520,8 @@ class WalletRepositoryImpl(
     }
 }
 
-class WalletInitializationConflictException : IllegalStateException("A different wallet setup already owns initialization")
+class WalletInitializationConflictException :
+    IllegalStateException("A different wallet setup already owns initialization")
 
 enum class WalletInitializationState {
     IDLE,

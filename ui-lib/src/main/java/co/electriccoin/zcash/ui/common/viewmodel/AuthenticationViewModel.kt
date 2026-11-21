@@ -311,7 +311,8 @@ class AuthenticationViewModel(
                             // The device does not have pin, pattern, or password set up
                             BiometricPrompt.ERROR_NO_DEVICE_CREDENTIAL -> {
                                 val isDeviceSecure =
-                                    ContextCompat.getSystemService(activity, KeyguardManager::class.java)?.isDeviceSecure
+                                    ContextCompat.getSystemService(activity, KeyguardManager::class.java)
+                                        ?.isDeviceSecure
                                 val capability = biometricManager.canAuthenticate(allowedAuthenticators)
                                 resultFlow.value =
                                     if (permitsUnsecuredDeviceAccess(capability, isDeviceSecure)) {

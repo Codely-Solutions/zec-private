@@ -46,7 +46,14 @@ class ResetZashiVM(
             errorStateMapper.mapToState(error, message = stringRes(R.string.wallet_reset_failed))
         }.stateIn(
             this,
-            LceState(content = createState(isKeepFilesChecked.value, null, resetZashi.isRunning.value, resetZashi.isPending.value))
+            LceState(
+                content = createState(
+                    isKeepFilesChecked = isKeepFilesChecked.value,
+                    confirmationDialog = null,
+                    isLoading = resetZashi.isRunning.value,
+                    isPending = resetZashi.isPending.value,
+                )
+            )
         )
 
     private fun createState(

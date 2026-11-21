@@ -360,7 +360,8 @@ class PasteGiftCardLinkVMTest {
         val vm =
             PasteGiftCardLinkVM(
                 navigateToRedeemGiftCard = navigateToRedeemGiftCard(store, router),
-                readClipboardText = mockk<ReadClipboardTextUseCase> { every { this@mockk.invoke() } answers { clipboard } },
+                readClipboardText =
+                    mockk<ReadClipboardTextUseCase> { every { this@mockk.invoke() } answers { clipboard } },
                 clearClipboard = clearClipboard,
                 navigationRouter = router
             )

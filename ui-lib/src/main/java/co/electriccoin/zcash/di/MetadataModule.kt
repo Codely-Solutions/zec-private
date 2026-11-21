@@ -25,7 +25,9 @@ val metadataModule =
         singleOf(::MetadataSerializer)
         singleOf(::MetadataEncryptorImpl) bind MetadataEncryptor::class
         factoryOf(::MetadataKeyStorageProviderImpl) bind MetadataKeyStorageProvider::class
-        factory { MetadataStorageProviderImpl(context = get(), directorySync = get()) } bind MetadataStorageProvider::class
+        factory {
+            MetadataStorageProviderImpl(context = get(), directorySync = get())
+        } bind MetadataStorageProvider::class
         factoryOf(::OsDirectorySync) bind DirectorySync::class
         factoryOf(::MetadataProviderImpl) bind MetadataProvider::class
         single {

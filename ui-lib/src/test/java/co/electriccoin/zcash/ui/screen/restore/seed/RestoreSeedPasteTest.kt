@@ -97,14 +97,14 @@ class RestoreSeedPasteTest {
         verify(exactly = 1) { navigation.forward(capture(route)) }
         val sessionId = route.captured.sessionId
         assertFalse(sessionId.contains(words.first()))
-        assertEquals(phrase, vm.resolveSession(sessionId))
+        assertEquals(phrase, vm.restoreSession.resolve(sessionId))
 
         vm.completeRestore(sessionId)
         val cleared =
             vm.state.first { state ->
                 state != null && state.nextButton == null && state.seed.values.all { it.innerState.value.isEmpty() }
             }!!
-        assertNull(vm.resolveSession(sessionId))
+        assertNull(vm.restoreSession.resolve(sessionId))
         assertNull(cleared.nextButton)
     }
 
@@ -119,9 +119,9 @@ class RestoreSeedPasteTest {
         advanceUntilIdle()
         val route = slot<RestoreHeight>()
         verify(exactly = 1) { navigation.forward(capture(route)) }
-        vm.cancelBirthdayEntry(route.captured.sessionId)
+        vm.restoreSession.clear(route.captured.sessionId)
 
-        assertNull(vm.resolveSession(route.captured.sessionId))
+        assertNull(vm.restoreSession.resolve(route.captured.sessionId))
         assertEquals(words, vm.state.first { it?.nextButton != null }!!.seed.values.map { it.innerState.value })
     }
 

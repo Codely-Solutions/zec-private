@@ -97,7 +97,7 @@ private fun NavGraphBuilder.restoreScreens() {
     composable<RestoreHeight> { entry ->
         val args = entry.toRoute<RestoreHeight>()
         WithRestoreSession(entry, args.sessionId) { seedEntry ->
-            AndroidRestoreHeight(args) { seedEntry.cancelBirthdayEntry(args.sessionId) }
+            AndroidRestoreHeight(args) { seedEntry.restoreSession.clear(args.sessionId) }
         }
     }
     composable<RestoreDateArgs> { entry ->
@@ -124,7 +124,7 @@ private fun WithRestoreSession(
     val navController = LocalNavController.current
     val owner = navController.previousRestoreSeedEntry()
     val seedEntry = owner?.let { koinViewModel<RestoreSeedVM>(viewModelStoreOwner = it) }
-    if (seedEntry?.resolveSession(sessionId) != null) {
+    if (seedEntry?.restoreSession?.resolve(sessionId) != null) {
         content(seedEntry)
     } else {
         LaunchedEffect(entry) {

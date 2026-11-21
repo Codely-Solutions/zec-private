@@ -63,9 +63,7 @@ internal class SwapQuoteVMMapper {
                             else -> stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm)
                         },
                         isEnabled =
-                            Clock.System.now() >= quote.deadline ||
-                                (quote.destinationAsset.isZCashAsset || proposal?.quote === quote) &&
-                                priceCheck != IndependentPriceCheck.Checking,
+                            Clock.System.now() >= quote.deadline || canReview(priceCheck),
                         onClick = {
                             if (Clock.System.now() >= quote.deadline) {
                                 onBack()
@@ -78,6 +76,10 @@ internal class SwapQuoteVMMapper {
                     )
             )
         }
+
+    private fun SwapQuoteInternalState.canReview(priceCheck: IndependentPriceCheck?): Boolean =
+        (quote.destinationAsset.isZCashAsset || proposal?.quote === quote) &&
+            priceCheck != IndependentPriceCheck.Checking
 
     @Suppress("MagicNumber")
     private fun SwapQuoteInternalState.createInfoText(): StringResource? {

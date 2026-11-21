@@ -24,6 +24,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.StateFlow
@@ -34,11 +35,13 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import java.io.IOException
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 /**
@@ -145,6 +148,49 @@ class ContactGiftCardLinkRefusalTest {
 
             assertRefused(state())
             coVerify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
+        }
+
+    @Test
+    fun addingAContactWaitsForStorageAndCanRetryTheSameFormAfterFailure() =
+        runTest {
+            val allowWrite = CompletableDeferred<Unit>()
+            coEvery { addressBookRepository.saveContact(any(), any(), any()) } coAnswers {
+                allowWrite.await()
+                throw IOException("Synthetic contact write failure")
+            }
+            val vm =
+                AddGenericABContactVM(
+                    args = AddGenericABContactArgs(address = null),
+                    blockchainProvider = blockchainProvider,
+                    validateZashiABContactAddress = validateZashiAddress,
+                    validateSwapABContactAddress = validateSwapAddress,
+                    validateGenericABContactName = validateName,
+                    saveABContact = SaveABContactUseCase(addressBookRepository, navigationRouter),
+                    navigationRouter = navigationRouter,
+                    navigateToSelectSwapBlockchain = mockk(relaxed = true)
+                )
+            val state = observe(vm.state)
+            state().walletAddress.onValueChange("synthetic-destination")
+            state().contactName.onValueChange("Synthetic")
+            runCurrent()
+            state().positiveButton.onClick()
+            runCurrent()
+
+            assertTrue(state().positiveButton.isLoading)
+            verify(exactly = 0) { navigationRouter.back() }
+            allowWrite.complete(Unit)
+            runCurrent()
+
+            assertFalse(state().positiveButton.isLoading)
+            assertTrue(state().positiveButton.isEnabled)
+            assertEquals(stringRes(R.string.contact_error_saveFailed), state().operationError)
+            assertEquals(stringRes("synthetic-destination"), state().walletAddress.value)
+            verify(exactly = 0) { navigationRouter.back() }
+
+            coEvery { addressBookRepository.saveContact(any(), any(), any()) } returns Unit
+            state().positiveButton.onClick()
+            runCurrent()
+            verify(exactly = 1) { navigationRouter.back() }
         }
 
     /** Keeps [flow] collected for the rest of the test, and returns a reader of its current, non-null state. */

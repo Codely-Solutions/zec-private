@@ -42,6 +42,7 @@ import co.electriccoin.zcash.ui.screen.texunsupported.TEXUnsupportedArgs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 
@@ -196,7 +197,7 @@ class RequestSwapQuoteUseCase(
     ) = withContext(Dispatchers.Default) {
         requestQuote()
 
-        val result = swapRepository.quote.first { it !in listOf(null, SwapQuoteData.Loading) }
+        val result = swapRepository.quote.filterNotNull().first { it != SwapQuoteData.Loading }
 
         val mismatchArgs = (result as? SwapQuoteData.Error)?.toMismatchArgs()
         if (mismatchArgs != null) {
@@ -250,7 +251,11 @@ class RequestSwapQuoteUseCase(
             }
         }
 
-        if (result is SwapQuoteData.Success && !swapRepository.markReviewReady(result)) return@withContext
+        navigateToPreparedReview(result, canNavigateToSwapQuote)
+    }
+
+    private fun navigateToPreparedReview(result: SwapQuoteData, canNavigateToSwapQuote: () -> Boolean) {
+        if (result is SwapQuoteData.Success && !swapRepository.markReviewReady(result)) return
         if (canNavigateToSwapQuote() && swapRepository.consumeReview(result) != null) {
             navigationRouter.forward(SwapQuoteArgs)
         }

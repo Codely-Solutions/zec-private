@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.common.provider.ADDRESS_BOOK_TEMP_FILE_SUFFIX
 import co.electriccoin.zcash.ui.common.provider.AddressBookProvider
 import co.electriccoin.zcash.ui.common.provider.AddressBookStorageProvider
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
+import co.electriccoin.zcash.ui.common.serialization.ADDRESS_BOOK_SERIALIZATION_V2
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -112,14 +113,18 @@ class AddressBookDataSourceImpl(
 
     private fun getAddressBookInternal(addressBookKey: AddressBookKey): AddressBook {
         val encrypted = addressBookStorageProvider.getStorageFile(addressBookKey)
-        if (encrypted != null) return addressBookProvider.readAddressBookFromFile(encrypted, addressBookKey)
-
-        val legacy = addressBookStorageProvider.getLegacyUnencryptedStorageFile()
-            ?: return AddressBook(lastUpdated = getTimestampNow(), contacts = emptyList())
-        val book = addressBookProvider.readLegacyUnencryptedAddressBookFromFile(legacy)
-        writeToLocalStorage(book, addressBookKey)
-        if (!legacy.delete()) Twig.warn { "Unable to remove migrated address book" }
-        return book
+        val legacy = if (encrypted == null) addressBookStorageProvider.getLegacyUnencryptedStorageFile() else null
+        return when {
+            encrypted != null -> addressBookProvider.readAddressBookFromFile(encrypted, addressBookKey)
+            legacy != null -> {
+                val book = addressBookProvider.readLegacyUnencryptedAddressBookFromFile(legacy)
+                    .copy(version = ADDRESS_BOOK_SERIALIZATION_V2)
+                writeToLocalStorage(book, addressBookKey)
+                if (!legacy.delete()) Twig.warn { "Unable to remove migrated address book" }
+                book
+            }
+            else -> AddressBook(lastUpdated = getTimestampNow(), contacts = emptyList())
+        }
     }
 
     private fun writeToLocalStorage(addressBook: AddressBook, key: AddressBookKey) {
@@ -142,18 +147,18 @@ class AddressBookDataSourceImpl(
             revision.update { it + 1 }
         }
     }
-
-    private fun newContact(name: String, address: String, chain: String?) =
-        AddressBookContact(
-            name = name.trim(),
-            address = address.trim(),
-            chain = chain?.trim()?.takeIf { it.isNotEmpty() },
-            lastUpdated = getTimestampNow(),
-        )
-
-    private fun AddressBookContact.hasSameDetails(other: AddressBookContact) =
-        name == other.name && address == other.address && chain == other.chain
-
-    private fun getTimestampNow(): Instant =
-        Instant.fromEpochMilliseconds(Clock.System.now().toEpochMilliseconds())
 }
+
+private fun newContact(name: String, address: String, chain: String?) =
+    AddressBookContact(
+        name = name.trim(),
+        address = address.trim(),
+        chain = chain?.trim()?.takeIf { it.isNotEmpty() },
+        lastUpdated = getTimestampNow(),
+    )
+
+private fun AddressBookContact.hasSameDetails(other: AddressBookContact) =
+    name == other.name && address == other.address && chain == other.chain
+
+private fun getTimestampNow(): Instant =
+    Instant.fromEpochMilliseconds(Clock.System.now().toEpochMilliseconds())
