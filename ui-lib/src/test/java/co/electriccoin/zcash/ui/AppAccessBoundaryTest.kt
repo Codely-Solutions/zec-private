@@ -59,6 +59,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.koin.compose.KoinApplication
 import org.koin.core.module.dsl.viewModel
+import org.koin.dsl.koinConfiguration
 import org.koin.dsl.module
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -220,7 +221,7 @@ class AppAccessBoundaryTest {
         val copyLabel = context.getString(R.string.recovery_copy_phrase)
         lateinit var navController: NavHostController
         compose.setContent {
-            KoinApplication(application = { modules(testModule) }) {
+            KoinApplication(configuration = koinConfiguration { modules(testModule) }) {
                 ZcashTheme {
                     navController = rememberNavController()
                     AppAccessBoundary(session, lockedContent = { Text("Locked") }) {
