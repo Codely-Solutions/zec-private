@@ -308,6 +308,7 @@ class ProjectReviewAppAccessTest {
                     android.util.Log.i("ProjectReviewAppAccess", JSONObject()
                         .put("phase", "reveal_touch_dispatch").put("reveal", revealNumber)
                         .put("action", event.actionMasked).put("flags", event.flags)
+                        .put("gesture_elapsed_ms", event.eventTime - event.downTime)
                         .put("handled", handled).toString())
                 }
                 return handled
@@ -463,7 +464,12 @@ class ProjectReviewAppAccessTest {
         }
     }
 
-    private fun tap(bounds: Rect) = shell("input tap ${bounds.centerX()} ${bounds.centerY()}")
+    private fun tap(bounds: Rect) {
+        // Android's `input tap` gives DOWN and UP the same event time. Use a real short press instead.
+        val x = bounds.centerX()
+        val y = bounds.centerY()
+        shell("input touchscreen swipe $x $y $x $y 100")
+    }
 
     private fun shell(command: String) {
         ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)).use { input ->
