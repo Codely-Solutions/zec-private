@@ -1331,6 +1331,10 @@ class CoreWalletAcceptance {
         check(!contacts.exists() && metadataFiles.none { it.exists() })
         val restore = context.getString(co.electriccoin.zcash.ui.R.string.plainOnboarding_button_restoreWallet)
         waitUi(restore, "reset_returned_to_onboarding")
+        val transportPreference = dependency<IsTorEnabledStorageProvider>()
+        check(transportPreference.get() == null) { "Reset retained the previous transport preference" }
+        // Reset deliberately clears preferences. Select this isolated probe's transport again before restore.
+        transportPreference.store(useTor)
         dependency<RestoreWalletUseCase>()(wallet.seedPhrase, useTor, checkNotNull(wallet.birthday))
         val restored = walletProvider.persistableWallet.filterNotNull().first()
         check(restored.seedPhrase == wallet.seedPhrase && restored.birthday == wallet.birthday)
