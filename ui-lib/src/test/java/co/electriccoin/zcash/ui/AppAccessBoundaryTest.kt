@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toPixelMap
@@ -16,12 +18,20 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.window.Dialog
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navigation
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.model.SensitiveReveal
 import co.electriccoin.zcash.ui.design.component.BlankSurface
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.screen.authentication.AppAccessBoundary
 import co.electriccoin.zcash.ui.screen.authentication.view.AppAccessAuthentication
 import co.electriccoin.zcash.ui.screen.authentication.view.WelcomeAnimationAutostart
+import co.electriccoin.zcash.ui.screen.home.HomeArgs
+import co.electriccoin.zcash.ui.screen.walletbackup.WalletBackup
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -150,5 +160,49 @@ class AppAccessBoundaryTest {
         compose.runOnIdle { staleAction() }
         compose.onNodeWithTag("wallet-dialog-action").performTouchInput { click() }
         compose.runOnIdle { assertEquals(2, callbackCount) }
+    }
+
+    @Test
+    fun relockKeepsTheRecoveryDestinationButRequiresANewReveal() {
+        val session = AppAccessSession().apply { unlock() }
+        val reveal = SensitiveReveal(session)
+        lateinit var navController: NavHostController
+        compose.setContent {
+            ZcashTheme {
+                navController = rememberNavController()
+                AppAccessBoundary(session, lockedContent = { Text("Locked") }) { grant ->
+                    NavHost(navController, startDestination = MainAppGraph) {
+                        navigation<MainAppGraph>(startDestination = HomeArgs) {
+                            composable<HomeArgs> { Text("Wallet home", Modifier.testTag("wallet-home")) }
+                            composable<WalletBackup> {
+                                val revealGrant by reveal.changes.collectAsState(initial = null)
+                                Button(
+                                    onClick = { reveal.reveal(grant) },
+                                    modifier = Modifier.testTag("recovery-reveal")
+                                ) { Text("Reveal recovery details") }
+                                if (revealGrant != null) {
+                                    Text("Synthetic recovery details", Modifier.testTag("recovery-details"))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        compose.onNodeWithTag("wallet-home").assertExists()
+        compose.runOnIdle { navController.navigate(WalletBackup(false)) }
+        compose.onNodeWithTag("recovery-reveal").performTouchInput { click() }
+        compose.onNodeWithTag("recovery-details").assertExists()
+
+        compose.runOnIdle { session.lock() }
+        compose.onNodeWithTag("recovery-reveal").assertDoesNotExist()
+        compose.onNodeWithTag("recovery-details").assertDoesNotExist()
+        compose.onNodeWithTag("wallet-home").assertDoesNotExist()
+
+        compose.runOnIdle { session.unlock() }
+        compose.onNodeWithTag("recovery-reveal").assertExists()
+        compose.onNodeWithTag("recovery-details").assertDoesNotExist()
+        compose.onNodeWithTag("recovery-reveal").performTouchInput { click() }
+        compose.onNodeWithTag("recovery-details").assertExists()
     }
 }
