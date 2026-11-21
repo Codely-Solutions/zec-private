@@ -99,6 +99,25 @@ class AndroidPreferenceWriteTest {
     }
 
     @Test
+    fun exceptionalClearInvalidatesChangedMemoryAndCanBeRetried() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val preferences = ClearedWithoutListeners(true)
+        val provider = AndroidPreferenceProvider(preferences.preferences, dispatcher)
+        val observed = mutableListOf<String?>()
+        backgroundScope.launch(dispatcher) { provider.observe(PreferenceKey("synthetic")).collect { observed += it } }
+        runCurrent()
+        preferences.onCommit = { throw IOException("Synthetic commit failure after memory changed") }
+
+        assertFailsWith<IOException> { provider.clearPreferences() }
+        runCurrent()
+        assertEquals(listOf("before", null), observed)
+
+        preferences.onCommit = {}
+        assertEquals(true, provider.clearPreferences())
+        assertNull(provider.getString(PreferenceKey("synthetic")))
+    }
+
+    @Test
     fun clearWaitsForTheWriteHoldingTheMutex() = runTest {
         val dispatcher = StandardTestDispatcher(testScheduler)
         val preferences = ClearedWithoutListeners(true)

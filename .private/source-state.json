@@ -812,7 +812,7 @@
   "preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/PreferenceHolder.kt": "19e7324ef9b71ce8d77df6c2595155645c4200b2091394688852444e8244c8ae",
   "preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/PreferenceProviderCache.kt": "16818f307080267dbeb480c5404fdf844595da1cbf4b7fc3848a9d1cb4deb013",
   "preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/StandardPreferenceProvider.kt": "696942422d6c9219cae5c6619884b367440adadf0699ea3c0f49f2df6e1f1575",
-  "preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/AndroidPreferenceWriteTest.kt": "125684b5e6520795a6a985ccdd4a8e68bcb612ca10b54df33e7680e3d836d2c7",
+  "preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/AndroidPreferenceWriteTest.kt": "1e00b6888e30876de98ced307ad991c3f3c8a450c2efbcb517dc0dd7670436bf",
   "preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/EncryptedPreferenceQuarantineTest.kt": "2338cf380f29e846d10b5e98026235ae0467ee125e99633814ab2456124a0604",
   "preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/EncryptedPreferenceRecoveryTest.kt": "da1dbd1dacab49f9edd30c97b36af996d8a6a00e33b387fac8bba6a6d508ad50",
   "preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/FakePreferenceProvider.kt": "05fc203620875adccaf392345b9e4dc5dd1e90e22a6e6a091ae511385da09d2d",

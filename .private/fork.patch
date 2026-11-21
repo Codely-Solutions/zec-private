@@ -15095,10 +15095,10 @@ index cea420a26..2b2438bad 100644
 +    withContext(Dispatchers.IO) { quarantineDir.deleteRecursively() }
 diff --git a/preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/AndroidPreferenceWriteTest.kt b/preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/AndroidPreferenceWriteTest.kt
 new file mode 100644
-index 000000000..72b1419c9
+index 000000000..37c8fb5fa
 --- /dev/null
 +++ b/preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/AndroidPreferenceWriteTest.kt
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,187 @@
 +package co.electriccoin.zcash.preference
 +
 +import android.content.SharedPreferences
@@ -15197,6 +15197,25 @@ index 000000000..72b1419c9
 +        runCurrent()
 +
 +        assertEquals(listOf("before", null), observed)
++    }
++
++    @Test
++    fun exceptionalClearInvalidatesChangedMemoryAndCanBeRetried() = runTest {
++        val dispatcher = StandardTestDispatcher(testScheduler)
++        val preferences = ClearedWithoutListeners(true)
++        val provider = AndroidPreferenceProvider(preferences.preferences, dispatcher)
++        val observed = mutableListOf<String?>()
++        backgroundScope.launch(dispatcher) { provider.observe(PreferenceKey("synthetic")).collect { observed += it } }
++        runCurrent()
++        preferences.onCommit = { throw IOException("Synthetic commit failure after memory changed") }
++
++        assertFailsWith<IOException> { provider.clearPreferences() }
++        runCurrent()
++        assertEquals(listOf("before", null), observed)
++
++        preferences.onCommit = {}
++        assertEquals(true, provider.clearPreferences())
++        assertNull(provider.getString(PreferenceKey("synthetic")))
 +    }
 +
 +    @Test
