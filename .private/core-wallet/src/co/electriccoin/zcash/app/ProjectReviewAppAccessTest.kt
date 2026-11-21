@@ -22,6 +22,7 @@ import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
+import co.electriccoin.zcash.ui.common.viewmodel.AuthenticationViewModel
 import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 import co.electriccoin.zcash.ui.screen.home.HomeTags
 import co.electriccoin.zcash.ui.screen.walletbackup.WalletBackup
@@ -47,7 +48,13 @@ class ProjectReviewAppAccessTest {
     private val copyLabel get() = context.getString(R.string.recovery_copy_phrase)
 
     @Test
-    fun cancellationAndBackgroundRelock() = runBlocking {
+    fun cancellationAndBackgroundRelock() = verifyBackgroundRelock(forceTimeout = false)
+
+    /** Diagnostic only: exercise the real lifecycle with a backdated monotonic checkpoint. */
+    @Test
+    fun cancellationAndForcedTimeoutDiagnostic() = verifyBackgroundRelock(forceTimeout = true)
+
+    private fun verifyBackgroundRelock(forceTimeout: Boolean) = runBlocking {
         val pin = prepareSecuredGuest()
         report("secured_guest_verified")
         val walletWords = createIsolatedWalletWithForegroundSetup()
@@ -79,26 +86,51 @@ class ProjectReviewAppAccessTest {
         withTimeout(UI_TIMEOUT_MILLIS) { applicationState.isInForeground.first { !it } }
         val wentToBackground = SystemClock.elapsedRealtime()
         report("background_wait_started")
-        delay(BACKGROUND_MILLIS)
+        if (forceTimeout) {
+            check(arguments.getString("forcedTimeoutDiagnostic") == "backdated-checkpoint")
+            onMain {
+                val field = AuthenticationViewModel::class.java
+                    .getDeclaredField("latestAppBackgroundedElapsedRealtimeMillis")
+                    .apply { isAccessible = true }
+                val model = androidx.lifecycle.ViewModelProvider(activity)[AuthenticationViewModel::class.java]
+                val recorded = checkNotNull(field.get(model) as Long?)
+                field.set(model, recorded - BACKGROUND_MILLIS)
+            }
+            report("diagnostic_checkpoint_backdated")
+        } else {
+            delay(BACKGROUND_MILLIS)
+        }
         val elapsed = SystemClock.elapsedRealtime() - wentToBackground
-        check(elapsed >= BACKGROUND_MILLIS)
+        check(forceTimeout || elapsed >= BACKGROUND_MILLIS)
 
         val launcher = checkNotNull(launchIntent().component).flattenToShortString()
         shell("am start -W -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n $launcher")
         waitForCredentialEntry()
         assertWalletAbsent(walletWords)
+        report("return_credential_prompt")
         pressBack()
-        waitForLabel(lockedTitle)
+        reportState("return_cancel_sent", walletWords)
+        try {
+            waitForLabel(lockedTitle)
+        } finally {
+            reportState("return_cancel_settled", walletWords)
+        }
         assertWalletAbsent(walletWords)
+        report("return_authentication_cancelled")
         check(onMain { !activity.isDestroyed }) { "Original activity was destroyed while backgrounded" }
 
         retryUnlock(pin)
-        waitForLabel(backupTitle)
+        report("return_pin_entered")
+        try {
+            waitForLabel(backupTitle)
+        } finally {
+            reportState("return_unlock_settled", walletWords)
+        }
         scrollToTop()
         check(!hasLabel(copyLabel)) { "Recovery copy remained available after relock" }
         check(!hasWalletWord(walletWords)) { "Recovery words remained exposed after relock" }
         revealBackup(pin, walletWords)
-        report("passed", elapsed)
+        report(if (forceTimeout) "diagnostic_passed" else "passed", elapsed)
     }
 
     private suspend fun prepareSecuredGuest(): String {
@@ -231,7 +263,7 @@ class ProjectReviewAppAccessTest {
     }
 
     private suspend fun waitForLabel(label: String) {
-        waitFor("expected app label") { hasLabel(label) }
+        waitFor("app label: $label") { hasLabel(label) }
     }
 
     private fun hasLabel(label: String) = findBounds { matchesLabel(it, label) } != null
@@ -316,6 +348,16 @@ class ProjectReviewAppAccessTest {
 
     private fun report(phase: String, elapsed: Long? = null) {
         val receipt = JSONObject().put("phase", phase).put("background_ms", elapsed)
+        android.util.Log.i("ProjectReviewAppAccess", receipt.toString())
+    }
+
+    private fun reportState(phase: String, words: Set<String>) {
+        val receipt = JSONObject().put("phase", phase)
+            .put("locked_title", hasLabel(lockedTitle))
+            .put("backup_title", hasLabel(backupTitle))
+            .put("wallet_action", hasWalletAction())
+            .put("phrase_visible", hasWalletWord(words))
+            .put("copy_visible", hasLabel(copyLabel))
         android.util.Log.i("ProjectReviewAppAccess", receipt.toString())
     }
 
