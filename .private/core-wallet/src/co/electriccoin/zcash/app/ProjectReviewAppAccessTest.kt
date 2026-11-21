@@ -33,6 +33,10 @@ import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
+import co.electriccoin.zcash.ui.common.repository.BiometricRepository
+import co.electriccoin.zcash.ui.common.repository.BiometricRequest
+import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
+import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.common.viewmodel.AuthenticationViewModel
 import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
@@ -65,6 +69,8 @@ class ProjectReviewAppAccessTest {
     private val hideLabel get() = context.getString(R.string.recoveryPhraseDisplay_hide)
     private val copyLabel get() = context.getString(R.string.recovery_copy_phrase)
     private val biometricCreations = AtomicInteger()
+    private val biometricRequests = AtomicInteger()
+    private var actualBiometrics: BiometricRepository? = null
     private var diagnosticMode = false
     private var diagnosticFallbackUsed = false
     private var revealNumber = 0
@@ -75,11 +81,39 @@ class ProjectReviewAppAccessTest {
     @Before
     fun observeBiometricActivity() = onMain {
         ActivityLifecycleMonitorRegistry.getInstance().addLifecycleCallback(lifecycleCallback)
+        val koin = GlobalContext.get()
+        val actual = koin.get<BiometricRepository>()
+        actualBiometrics = actual
+        val observer = object : BiometricRepository by actual {
+            override suspend fun requestBiometrics(request: BiometricRequest) {
+                val number = biometricRequests.incrementAndGet()
+                report("biometric_request_$number")
+                try {
+                    actual.requestBiometrics(request)
+                    report("biometric_request_${number}_approved")
+                } catch (error: Exception) {
+                    val outcome = when (error) {
+                        is BiometricsCancelledException -> "cancelled"
+                        is BiometricsFailureException -> "failed"
+                        is kotlinx.coroutines.CancellationException -> "coroutine_cancelled"
+                        else -> "error"
+                    }
+                    report("biometric_request_${number}_$outcome")
+                    throw error
+                }
+            }
+        }
+        koin.declare<BiometricRepository>(observer, allowOverride = true)
     }
 
     @After
     fun stopObservingBiometricActivity() = onMain {
         ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(lifecycleCallback)
+        actualBiometrics?.let { actual ->
+            val koin = GlobalContext.get()
+            koin.declare<BiometricRepository>(actual, allowOverride = true)
+            check(koin.get<BiometricRepository>() === actual)
+        }
     }
 
     @Test
@@ -244,10 +278,10 @@ class ProjectReviewAppAccessTest {
 
     private suspend fun revealBackup(pin: String, walletWords: Set<String>) {
         scrollToReveal()
-        settleRecoveryTouch()
         revealNumber++
         val reveal = waitForBounds("recovery reveal action", requireClick = true) { matchesLabel(it, revealLabel) }
         val before = biometricCreations.get()
+        val requestsBefore = biometricRequests.get()
         traceRevealTap(reveal)
         val deadline = SystemClock.elapsedRealtime() + 3_000
         while (SystemClock.elapsedRealtime() < deadline &&
@@ -259,6 +293,7 @@ class ProjectReviewAppAccessTest {
             .put("display_height", context.resources.displayMetrics.heightPixels)
             .put("ime_visible", automation.windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD })
             .put("biometric_activity_created", biometricCreations.get() > before)
+            .put("biometric_requests", biometricRequests.get() - requestsBefore)
             .put("credential_focused", hasFocusedCredentialEntry())
             .toString())
         if (diagnosticMode && biometricCreations.get() == before && !hasFocusedCredentialEntry()) {
@@ -370,35 +405,32 @@ class ProjectReviewAppAccessTest {
     private suspend fun scrollToReveal() {
         repeat(MAX_SCROLLS) {
             if (findBounds(requireClick = true) { matchesLabel(it, revealLabel) } != null) return
-            swipeRecoveryScreen(towardTop = false)
+            check(scrollRecovery(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)) { "Reveal is not reachable by scrolling" }
             delay(POLL_MILLIS)
         }
     }
 
     private suspend fun scrollToTop() {
         repeat(MAX_SCROLLS) {
-            swipeRecoveryScreen(towardTop = true)
+            if (!scrollRecovery(AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD)) return
             delay(POLL_MILLIS)
         }
     }
 
-    private fun swipeRecoveryScreen(towardTop: Boolean) {
-        val scroll = findBounds { it.packageName == context.packageName && it.isScrollable } ?: return
-        val x = scroll.centerX()
-        val upper = scroll.top + scroll.height() / 4
-        val lower = scroll.top + scroll.height() * 3 / 4
-        val from = if (towardTop) upper else lower
-        val to = if (towardTop) lower else upper
-        shell("input swipe $x $from $x $to 500")
-        automation.waitForIdle(400, 5_000)
-    }
-
-    private fun settleRecoveryTouch() {
-        val scroll = findBounds { it.packageName == context.packageName && it.isScrollable } ?: return
-        // A coordinate tap can stop the native scroll/fling without invoking its target. Stop it in padding first.
-        val padding = (8 * context.resources.displayMetrics.density).toInt()
-        shell("input tap ${scroll.left + padding} ${scroll.centerY()}")
-        automation.waitForIdle(500, 5_000)
+    @Suppress("DEPRECATION")
+    private fun scrollRecovery(action: Int): Boolean {
+        fun scroll(node: AccessibilityNodeInfo): Boolean = try {
+            if (node.packageName == context.packageName && node.isVisibleToUser && node.isScrollable &&
+                node.actionList.any { it.id == action }
+            ) {
+                node.performAction(action)
+            } else {
+                (0 until node.childCount).any { index -> node.getChild(index)?.let(::scroll) == true }
+            }
+        } finally { node.recycle() }
+        val moved = automation.windows.any { it.root?.let(::scroll) == true }
+        if (moved) automation.waitForIdle(500, 5_000)
+        return moved
     }
 
     private suspend fun waitForCredentialEntry() {
