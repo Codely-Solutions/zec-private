@@ -1,8 +1,8 @@
 package co.electriccoin.zcash.ui.common.repository
 
 import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
-import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
+import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
 import io.mockk.coEvery
@@ -23,8 +23,11 @@ class SwapReviewReadinessTest {
     private val zec = SwapAssetTestFixture.zecAsset()
     private val btc = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc")
 
-    private fun quote() = FakeSwapQuote(originAsset = zec, destinationAsset = btc,
-        amountInFormatted = BigDecimal.ONE, destinationAddress = "destination", refundAddress = "refund")
+    private fun quote() = FakeSwapQuote(
+        originAsset = zec, destinationAsset = btc, mode = SwapMode.EXACT_INPUT,
+        amountIn = BigDecimal("100"), amountInFormatted = BigDecimal.ONE, amountOutFormatted = BigDecimal.ONE,
+        depositAddress = "deposit", destinationAddress = "destination", refundAddress = "refund",
+    )
 
     private suspend fun preparedRepository(scope: TestScope): SwapRepositoryImpl {
         val source = mockk<SwapDataSource> {

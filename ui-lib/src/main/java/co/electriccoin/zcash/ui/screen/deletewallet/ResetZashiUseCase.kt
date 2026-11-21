@@ -59,8 +59,8 @@ class ResetZashiUseCase(
                 if (stage != ResetStage.CLEAR_PREFERENCES) {
                     closeSynchronizer()
                     clearSDK()
-                    progressStore.store(ResetStage.CLEAR_PREFERENCES)
                 }
+                progressStore.store(ResetStage.CLEAR_PREFERENCES)
                 clearSharedPrefs()
                 homeMessageCacheRepository.reset()
                 progressStore.store(null)

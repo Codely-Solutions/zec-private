@@ -3,11 +3,15 @@ package co.electriccoin.zcash.global
 import android.content.Context
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.WalletCoordinator
+import cash.z.ecc.android.sdk.model.PersistableWallet
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.provider.IsExchangeRateEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 
@@ -16,16 +20,24 @@ internal operator fun WalletCoordinator.Companion.invoke(
     persistableWalletProvider: PersistableWalletProvider,
     isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
     isExchangeRateEnabledStorageProvider: IsExchangeRateEnabledStorageProvider,
+    resetProgressStore: ResetProgressStore,
 ): WalletCoordinator =
     WalletCoordinator(
         context = context,
-        persistableWallet = persistableWalletProvider.persistableWallet,
+        persistableWallet = persistableWalletProvider.persistableWallet.hideErasedWallet(resetProgressStore),
         accountName = context.getString(R.string.accounts_zashi),
         keySource = "zashi",
         isTorEnabled = isTorEnabledStorageProvider.observe(),
         isExchangeRateEnabled = isExchangeRateEnabledStorageProvider.observe(),
         isSyncBlocked = isSyncBlocked(context, persistableWalletProvider),
     )
+
+/**
+ * Erasure needs the current network. Once verified, keep the SDK closed until preferences are
+ * cleared, including when a pending reset is resumed after process death.
+ */
+internal fun Flow<PersistableWallet?>.hideErasedWallet(resetProgressStore: ResetProgressStore) =
+    combine(resetProgressStore.isSdkErased) { wallet, sdkErased -> wallet.takeUnless { sdkErased } }
 
 /**
  * [OrchardMigrationSdk.new] needs the wallet's network and endpoint, which only exist once a

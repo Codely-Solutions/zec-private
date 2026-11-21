@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
@@ -40,6 +41,7 @@ import co.electriccoin.zcash.ui.screen.restore.tor.RestoreTorArgs
 import co.electriccoin.zcash.ui.screen.restore.tor.RestoreTorScreen
 import co.electriccoin.zcash.ui.screen.scan.thirdparty.AndroidThirdPartyScan
 import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
+import kotlinx.coroutines.flow.first
 import org.koin.androidx.compose.koinViewModel
 
 fun NavGraphBuilder.onboardingNavGraph(
@@ -128,7 +130,11 @@ private fun WithRestoreSession(
         content(seedEntry)
     } else {
         LaunchedEffect(entry) {
-            if (navController.currentBackStackEntry == entry) navController.returnToRestoreSeed()
+            navController.currentBackStackEntryFlow.first { current ->
+                current == entry ||
+                    (current.destination.hasRoute<SeedInfo>() && navController.previousBackStackEntry == entry)
+            }
+            navController.returnToRestoreSeed()
         }
     }
 }

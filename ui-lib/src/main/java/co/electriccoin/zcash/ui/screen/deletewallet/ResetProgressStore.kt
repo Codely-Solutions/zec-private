@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.deletewallet
 
 import android.content.Context
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,15 +26,20 @@ class ResetProgressStore(context: Context, private val directorySync: DirectoryS
     private val pending = MutableStateFlow(!Files.notExists(file.toPath()))
 
     private var lastStage: ResetStage? = null
+    private val sdkErased = MutableStateFlow(
+        pending.value && runCatchingRecoverable { readStage() }.getOrNull() == ResetStage.CLEAR_PREFERENCES
+    )
 
     val isPending = pending.asStateFlow()
+    val isSdkErased = sdkErased.asStateFlow()
 
     suspend fun getStage(): ResetStage? =
         withContext(Dispatchers.IO) {
-            if (Files.notExists(file.toPath())) lastStage else ResetStage.valueOf(file.readText())
+            if (sdkErased.value) ResetStage.CLEAR_PREFERENCES else readStage() ?: lastStage
         }
 
     suspend fun store(stage: ResetStage?) {
+        if (stage == ResetStage.CLEAR_PREFERENCES) sdkErased.value = true
         withContext(Dispatchers.IO) {
             val directory = checkNotNull(file.parentFile)
             if (stage == null) {
@@ -55,7 +61,11 @@ class ResetProgressStore(context: Context, private val directorySync: DirectoryS
             }
             directorySync.sync(directory)
             lastStage = stage
+            if (stage == null) sdkErased.value = false
             pending.value = stage != null
         }
     }
+
+    private fun readStage(): ResetStage? =
+        if (Files.notExists(file.toPath())) null else ResetStage.valueOf(file.readText())
 }
