@@ -7,6 +7,7 @@ allprojects { app ->
             app.dependencies.add('androidTestImplementation', app.dependencies.project(path: ':sdk-ext-lib'))
             def libs=app.extensions.getByType(org.gradle.api.artifacts.VersionCatalogsExtension).named('libs')
             app.dependencies.add('androidTestImplementation',libs.findLibrary('zcash-sdk-backend').get())
+            app.dependencies.add('androidTestImplementation',libs.findLibrary('tink').get())
             app.dependencies.add('androidTestImplementation','com.google.protobuf:protobuf-javalite:4.34.0')
         }
     }

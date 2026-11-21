@@ -1,11 +1,14 @@
 package co.electriccoin.zcash.app
 
 import androidx.test.platform.app.InstrumentationRegistry
+import android.app.KeyguardManager
 import android.content.Intent
 import android.os.Build
 import android.view.accessibility.AccessibilityNodeInfo
 import android.accessibilityservice.AccessibilityService
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiArgs
 import co.electriccoin.zcash.ui.screen.updates.AppUpdateRepository
 import co.electriccoin.zcash.ui.screen.send.Send
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
@@ -36,11 +39,17 @@ import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.model.SubmitResult
+import co.electriccoin.zcash.ui.common.provider.AddressBookKeyStorageProvider
+import co.electriccoin.zcash.ui.common.provider.AddressBookStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.provider.MetadataKeyStorageProvider
+import co.electriccoin.zcash.ui.common.provider.MetadataStorageProvider
 import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
+import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
 import co.electriccoin.zcash.ui.common.repository.TransactionRepository
@@ -339,6 +348,7 @@ class CoreWalletAcceptance {
                             .put("restoreTransactionState", transaction.overview.transactionState.toString()))
                     }
                 }
+                "settingsReset" -> settingsResetAndRestore(useTor)
                 "transport", "transportProbe" -> try {
                     runTransport(probeOnly = stage == "transportProbe")
                 } catch (error: Exception) {
@@ -973,7 +983,13 @@ class CoreWalletAcceptance {
     }
 
     @Suppress("DEPRECATION")
-    private fun findUi(text: String, exact: Boolean, clickable: Boolean, probe: UiProbe): AccessibilityNodeInfo? {
+    private fun findUi(
+        text: String,
+        exact: Boolean,
+        clickable: Boolean,
+        probe: UiProbe,
+        maxControlDp: Int = 96,
+    ): AccessibilityNodeInfo? {
         val root = instrumentation.uiAutomation.rootInActiveWindow ?: return null
         probe.rootPresent = true
         val pending = java.util.ArrayDeque<AccessibilityNodeInfo>()
@@ -1010,7 +1026,7 @@ class CoreWalletAcceptance {
                                     node.getBoundsInScreen(labelBounds)
                                     val density = context.resources.displayMetrics.density
                                     val boundedControl = bounds.height() >= 24 * density &&
-                                        bounds.height() <= 96 * density && bounds.contains(labelBounds)
+                                        bounds.height() <= maxControlDp * density && bounds.contains(labelBounds)
                                     val clickAction = current.actionList.any {
                                         it.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK.id
                                     }
@@ -1206,13 +1222,14 @@ class CoreWalletAcceptance {
         label: String,
         exact: Boolean = true,
         clickable: Boolean = false,
+        maxControlDp: Int = 96,
     ): AccessibilityNodeInfo {
         val probe = UiProbe()
         val node = withTimeoutOrNull(60_000) {
-            var found = findUi(text, exact, clickable, probe)
+            var found = findUi(text, exact, clickable, probe, maxControlDp)
             while (found == null) {
                 delay(200)
-                found = findUi(text, exact, clickable, probe)
+                found = findUi(text, exact, clickable, probe, maxControlDp)
             }
             found
         }
@@ -1229,8 +1246,8 @@ class CoreWalletAcceptance {
     }
 
     @Suppress("DEPRECATION")
-    private suspend fun clickUi(text: String, label: String) {
-        val node = awaitUi(text, label, clickable = true)
+    private suspend fun clickUi(text: String, label: String, exact: Boolean = true, maxControlDp: Int = 96) {
+        val node = awaitUi(text, label, exact = exact, clickable = true, maxControlDp = maxControlDp)
         try {
             // Use the exposed accessibility action for this read-only review control.
             if (label == "form_review") {
@@ -1275,6 +1292,53 @@ class CoreWalletAcceptance {
     }
 
     @Suppress("DEPRECATION")
+    private suspend fun settingsResetAndRestore(useTor: Boolean) {
+        val walletProvider = dependency<PersistableWalletProvider>()
+        check(walletProvider.getPersistableWallet() == null) { "Reset probe requires a fresh app install" }
+        check(Build.HARDWARE in setOf("ranchu", "goldfish"))
+        check(!checkNotNull(context.getSystemService(KeyguardManager::class.java)).isDeviceSecure)
+        val repository = dependency<WalletRepository>()
+        repository.markIronwoodAnnouncementShown()
+        repository.createNewWallet()
+
+        val wallet = withTimeout(120_000) { walletProvider.persistableWallet.filterNotNull().first() }
+        val syncProvider = dependency<SynchronizerProvider>()
+        val account = withTimeout(120_000) { dependency<AccountDataSource>().getZashiAccount() }
+        val address = syncProvider.getSynchronizer().getUnifiedAddress(account.sdkAccount)
+        val walletDb = File(syncProvider.getVotingWalletDbPath())
+        check(walletDb.isFile)
+
+        dependency<AddressBookRepository>().saveContact("Synthetic reset contact", address, null)
+        check(dependency<MetadataRepository>().createOrUpdateTxNote("0".repeat(64), "Synthetic reset note"))
+        val contactKey = checkNotNull(dependency<AddressBookKeyStorageProvider>().getAddressBookKey())
+        val contacts = checkNotNull(dependency<AddressBookStorageProvider>().getStorageFile(contactKey))
+        val metadataKey = checkNotNull(dependency<MetadataKeyStorageProvider>().get(account.sdkAccount.accountUuid))
+        val metadataFiles = dependency<MetadataStorageProvider>().getStorageFiles(metadataKey)
+        check(contacts.isFile && metadataFiles.isNotEmpty())
+
+        dependency<NavigationRouter>().forward(ResetZashiArgs)
+        val keep = context.getString(co.electriccoin.zcash.ui.R.string.deleteWallet_metadataWarn1)
+        val confirm = context.getString(co.electriccoin.zcash.ui.design.R.string.general_confirm)
+        scrollToText(confirm)
+        clickUi(keep, "reset_remove_local_files", exact = false, maxControlDp = 180)
+        clickUi(confirm, "reset_request_confirmation")
+        clickUi(context.getString(co.electriccoin.zcash.ui.R.string.deleteWallet_actionButtonTitle), "reset_confirm")
+        withTimeout(90_000) {
+            walletProvider.persistableWallet.first { it == null }
+            dependency<ResetProgressStore>().isPending.first { !it }
+        }
+
+        check(!walletDb.exists()) { "The settings reset left the SDK wallet database on disk" }
+        check(!contacts.exists() && metadataFiles.none { it.exists() })
+        val restore = context.getString(co.electriccoin.zcash.ui.R.string.plainOnboarding_button_restoreWallet)
+        waitUi(restore, "reset_returned_to_onboarding")
+        dependency<RestoreWalletUseCase>()(wallet.seedPhrase, useTor, checkNotNull(wallet.birthday))
+        val restored = walletProvider.persistableWallet.filterNotNull().first()
+        check(restored.seedPhrase == wallet.seedPhrase && restored.birthday == wallet.birthday)
+        val restoredAccount = withTimeout(120_000) { dependency<AccountDataSource>().getZashiAccount() }
+        check(syncProvider.getSynchronizer().getUnifiedAddress(restoredAccount.sdkAccount) == address)
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     private suspend fun createWallet(role: String) {
         check(dependency<PersistableWalletProvider>().getPersistableWallet() == null)

@@ -1,0 +1,295 @@
+package co.electriccoin.zcash.app
+
+import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.KeyguardManager
+import android.content.Intent
+import android.content.pm.ApplicationInfo
+import android.graphics.Rect
+import android.os.Build
+import android.os.ParcelFileDescriptor
+import android.os.SystemClock
+import android.view.KeyEvent
+import android.view.accessibility.AccessibilityNodeInfo
+import androidx.test.platform.app.InstrumentationRegistry
+import cash.z.ecc.android.sdk.model.ZcashNetwork
+import cash.z.ecc.sdk.type.fromResources
+import co.electriccoin.zcash.preference.StandardPreferenceProvider
+import co.electriccoin.zcash.ui.MainActivity
+import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
+import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
+import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.ui.common.repository.WalletRepository
+import co.electriccoin.zcash.ui.common.viewmodel.SecretState
+import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
+import co.electriccoin.zcash.ui.screen.home.HomeTags
+import co.electriccoin.zcash.ui.screen.walletbackup.WalletBackup
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import org.json.JSONObject
+import org.junit.Test
+import org.koin.core.context.GlobalContext
+import java.util.concurrent.TimeUnit
+
+/** Runs against a blank, PIN-secured emulator with the opt-in core-wallet instrumentation. */
+class ProjectReviewAppAccessTest {
+    private val instrumentation = InstrumentationRegistry.getInstrumentation()
+    private val context = instrumentation.targetContext
+    private val automation get() = instrumentation.uiAutomation
+    private val arguments = InstrumentationRegistry.getArguments()
+    private val lockedTitle get() = context.getString(R.string.splash_authTitle)
+    private val backupTitle get() = context.getString(R.string.recoveryPhraseDisplay_screenTitle)
+    private val revealLabel get() = context.getString(R.string.recoveryPhraseDisplay_reveal)
+    private val hideLabel get() = context.getString(R.string.recoveryPhraseDisplay_hide)
+    private val copyLabel get() = context.getString(R.string.recovery_copy_phrase)
+
+    @Test
+    fun cancellationAndBackgroundRelock() = runBlocking {
+        val pin = prepareSecuredGuest()
+        val walletWords = createIsolatedWalletWithForegroundSetup()
+        val activity = instrumentation.startActivitySync(launchIntent()) as MainActivity
+        waitForCredentialEntry()
+        assertWalletAbsent(walletWords)
+
+        pressBack()
+        waitForLabel(lockedTitle)
+        assertWalletAbsent(walletWords)
+        // Use harmless routing while locked to check that the wallet command consumer is absent.
+        dependency<NavigationRouter>().forward(WalletBackup(false))
+        delay(400)
+        assertWalletAbsent(walletWords)
+        retryUnlock(pin)
+        waitFor("authenticated wallet action") { hasWalletAction() }
+        dependency<NavigationRouter>().forward(WalletBackup(false))
+        waitForLabel(backupTitle)
+        revealBackup(pin, walletWords)
+        report("reveal_before_background")
+
+        shell("input keyevent ${KeyEvent.KEYCODE_HOME}")
+        val applicationState = dependency<ApplicationStateProvider>()
+        withTimeout(UI_TIMEOUT_MILLIS) { applicationState.isInForeground.first { !it } }
+        val wentToBackground = SystemClock.elapsedRealtime()
+        report("background_wait_started")
+        delay(BACKGROUND_MILLIS)
+        val elapsed = SystemClock.elapsedRealtime() - wentToBackground
+        check(elapsed >= BACKGROUND_MILLIS)
+
+        shell("am start -W -n ${context.packageName}/${MainActivity::class.java.name}")
+        waitForCredentialEntry()
+        assertWalletAbsent(walletWords)
+        pressBack()
+        waitForLabel(lockedTitle)
+        assertWalletAbsent(walletWords)
+        check(onMain { !activity.isDestroyed }) { "Original activity was destroyed while backgrounded" }
+
+        retryUnlock(pin)
+        waitForLabel(backupTitle)
+        scrollToTop()
+        check(!hasLabel(copyLabel)) { "Recovery copy remained available after relock" }
+        check(!hasWalletWord(walletWords)) { "Recovery words remained exposed after relock" }
+        revealBackup(pin, walletWords)
+        report("passed", elapsed)
+    }
+
+    private suspend fun prepareSecuredGuest(): String {
+        check(context.packageName == "com.personal.zecprivate.testnet.foss.debug")
+        check(context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
+        check(Build.HARDWARE in setOf("ranchu", "goldfish"))
+        check(ZcashNetwork.fromResources(context) == ZcashNetwork.Testnet)
+        check(arguments.getString("isolatedTestnet") == "valueless-coins-only")
+        check(arguments.getString("securedGuest") == "disposable-emulator")
+        val pin = checkNotNull(arguments.getString("fixturePin"))
+        check(pin.matches(Regex("[0-9]{6}")))
+        check(checkNotNull(context.getSystemService(KeyguardManager::class.java)).isDeviceSecure)
+        check(!dependency<GetVersionInfoProvider>()().isRunningUnderTestService)
+        val preferences = dependency<StandardPreferenceProvider>()()
+        check(StandardPreferenceKeys.IS_APP_ACCESS_AUTHENTICATION.getValue(preferences))
+        automation.serviceInfo = automation.serviceInfo.apply {
+            flags = flags or AccessibilityServiceInfo.FLAG_REPORT_VIEW_IDS or
+                AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+        }
+        return pin
+    }
+
+    private suspend fun createIsolatedWalletWithForegroundSetup(): Set<String> {
+        val walletProvider = dependency<PersistableWalletProvider>()
+        check(walletProvider.getPersistableWallet() == null) { "A fresh emulator wallet is required" }
+        val activity = instrumentation.startActivitySync(launchIntent()) as MainActivity
+        val repository = dependency<WalletRepository>()
+        repository.markIronwoodAnnouncementShown()
+        val createWalletLabel = context.getString(R.string.plainOnboarding_button_createNewWallet)
+        val createWallet = waitForBounds("onboarding wallet creation") {
+            matchesLabel(it, createWalletLabel) && it.isClickable
+        }
+        tap(createWallet)
+        withTimeout(WALLET_TIMEOUT_MILLIS) { repository.secretState.first { it == SecretState.READY } }
+        val wallet = checkNotNull(walletProvider.getPersistableWallet())
+        check(wallet.network == ZcashNetwork.Testnet)
+        onMain { activity.finish() }
+        waitFor("wallet setup activity to finish") { onMain { activity.isDestroyed } }
+        return wallet.seedPhrase.split.toSet()
+    }
+
+    private fun launchIntent(): Intent =
+        checkNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+
+    private fun assertWalletAbsent(walletWords: Set<String>) {
+        check(!hasLabel(backupTitle) && !hasLabel(copyLabel) && !hasWalletWord(walletWords))
+        check(!hasWalletAction()) {
+            "Wallet action was accessible while app access was locked"
+        }
+    }
+
+    private fun hasWalletAction() = findBounds {
+        it.packageName == context.packageName && it.viewIdResourceName?.substringAfterLast('/') in walletActionTags
+    } != null
+
+    private suspend fun retryUnlock(pin: String) {
+        val description =
+            context.getString(R.string.authentication_failed_welcome_icon_cont_desc, context.getString(R.string.app_name))
+        val retry = waitForBounds("app unlock retry") { it.contentDescription?.toString() == description }
+        tap(retry)
+        waitForCredentialEntry()
+        enterPin(pin)
+    }
+
+    private suspend fun revealBackup(pin: String, walletWords: Set<String>) {
+        scrollToReveal()
+        val reveal = waitForBounds("recovery reveal action") { matchesLabel(it, revealLabel) && it.isClickable }
+        tap(reveal)
+        waitForCredentialEntry()
+        enterPin(pin)
+        waitFor("authorized recovery reveal") { hasLabel(hideLabel) || hasLabel(copyLabel) }
+        scrollToTop()
+        waitFor("revealed recovery phrase and copy control") { hasWalletWord(walletWords) && hasLabel(copyLabel) }
+    }
+
+    private suspend fun scrollToReveal() {
+        repeat(MAX_SCROLLS) {
+            if (findBounds { matchesLabel(it, revealLabel) && it.isClickable } != null) return
+            swipeRecoveryScreen(towardTop = false)
+            delay(POLL_MILLIS)
+        }
+    }
+
+    private suspend fun scrollToTop() {
+        repeat(MAX_SCROLLS) {
+            swipeRecoveryScreen(towardTop = true)
+            delay(POLL_MILLIS)
+        }
+    }
+
+    private fun swipeRecoveryScreen(towardTop: Boolean) {
+        val scroll = findBounds { it.packageName == context.packageName && it.isScrollable } ?: return
+        val x = scroll.centerX()
+        val upper = scroll.top + scroll.height() / 4
+        val lower = scroll.top + scroll.height() * 3 / 4
+        val from = if (towardTop) upper else lower
+        val to = if (towardTop) lower else upper
+        shell("input swipe $x $from $x $to 250")
+    }
+
+    private suspend fun waitForCredentialEntry() {
+        waitFor("system PIN entry") {
+            findBounds { node ->
+                node.packageName != context.packageName &&
+                    (node.isPassword || node.viewIdResourceName?.endsWith(":id/pinEntry") == true)
+            } != null
+        }
+    }
+
+    private fun enterPin(pin: String) {
+        shell("input text $pin")
+        shell("input keyevent ${KeyEvent.KEYCODE_ENTER}")
+    }
+
+    private fun pressBack() = shell("input keyevent ${KeyEvent.KEYCODE_BACK}")
+
+    private fun tap(bounds: Rect) = shell("input tap ${bounds.centerX()} ${bounds.centerY()}")
+
+    private fun shell(command: String) {
+        ParcelFileDescriptor.AutoCloseInputStream(automation.executeShellCommand(command)).use { input ->
+            val buffer = ByteArray(1024)
+            while (input.read(buffer) != -1) {
+                // Shell output is drained inside the guest.
+            }
+        }
+    }
+
+    private suspend fun waitForLabel(label: String) {
+        waitFor("expected app label") { hasLabel(label) }
+    }
+
+    private fun hasLabel(label: String) = findBounds { matchesLabel(it, label) } != null
+
+    private fun matchesLabel(node: AccessibilityNodeInfo, label: String): Boolean =
+        node.packageName == context.packageName &&
+            (node.text?.toString() == label || node.contentDescription?.toString() == label)
+
+    private fun hasWalletWord(words: Set<String>) = findBounds {
+        it.packageName == context.packageName && it.text?.toString() in words
+    } != null
+
+    private suspend fun waitForBounds(
+        label: String,
+        match: (AccessibilityNodeInfo) -> Boolean,
+    ): Rect {
+        var result: Rect? = null
+        waitFor(label) {
+            result = findBounds(match)
+            result != null
+        }
+        return checkNotNull(result)
+    }
+
+    private suspend fun waitFor(label: String, predicate: () -> Boolean) {
+        val deadline = SystemClock.elapsedRealtime() + UI_TIMEOUT_MILLIS
+        while (SystemClock.elapsedRealtime() < deadline) {
+            if (predicate()) return
+            delay(POLL_MILLIS)
+        }
+        error("Timed out waiting for $label")
+    }
+
+    @Suppress("DEPRECATION")
+    private fun findBounds(match: (AccessibilityNodeInfo) -> Boolean): Rect? {
+        fun search(node: AccessibilityNodeInfo): Rect? = try {
+            if (node.isVisibleToUser && match(node)) {
+                Rect().also(node::getBoundsInScreen).takeUnless(Rect::isEmpty)
+            } else {
+                (0 until node.childCount).firstNotNullOfOrNull { index -> node.getChild(index)?.let(::search) }
+            }
+        } finally {
+            node.recycle()
+        }
+
+        return automation.windows.firstNotNullOfOrNull { it.root?.let(::search) }
+            ?: automation.rootInActiveWindow?.let(::search)
+    }
+
+    private fun <T> onMain(block: () -> T): T {
+        var result: Result<T>? = null
+        instrumentation.runOnMainSync { result = runCatching(block) }
+        return checkNotNull(result).getOrThrow()
+    }
+
+    private fun report(phase: String, elapsed: Long? = null) {
+        val receipt = JSONObject().put("phase", phase).put("background_ms", elapsed)
+        android.util.Log.i("ProjectReviewAppAccess", receipt.toString())
+    }
+
+    private inline fun <reified T : Any> dependency(): T = GlobalContext.get().get()
+
+    private companion object {
+        val BACKGROUND_MILLIS = TimeUnit.MINUTES.toMillis(15) + 2_000
+        const val UI_TIMEOUT_MILLIS = 25_000L
+        const val WALLET_TIMEOUT_MILLIS = 120_000L
+        const val POLL_MILLIS = 200L
+        const val MAX_SCROLLS = 8
+        val walletActionTags = setOf(HomeTags.SEND, HomeTags.RECEIVE, HomeTags.PAY, HomeTags.SWAP)
+    }
+}
