@@ -8,8 +8,10 @@ import android.graphics.Rect
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.graphics.Bitmap
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.Lifecycle
 import cash.z.ecc.android.sdk.model.ZcashNetwork
@@ -36,6 +38,7 @@ import org.json.JSONObject
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 import java.util.concurrent.TimeUnit
+import java.io.File
 
 /** Runs against a blank, PIN-secured emulator with the opt-in core-wallet instrumentation. */
 class ProjectReviewAppAccessTest {
@@ -66,7 +69,7 @@ class ProjectReviewAppAccessTest {
         assertWalletAbsent(walletWords)
         report("initial_credential_prompt")
 
-        pressBack()
+        cancelCredentialEntry(captureInitialLayer = true)
         try {
             waitForLabel(lockedTitle)
         } finally {
@@ -114,7 +117,7 @@ class ProjectReviewAppAccessTest {
         waitForCredentialEntry()
         assertWalletAbsent(walletWords)
         report("return_credential_prompt")
-        pressBack()
+        cancelCredentialEntry(captureInitialLayer = false)
         reportState("return_cancel_sent", walletWords, activity)
         try {
             waitForLabel(lockedTitle)
@@ -242,21 +245,25 @@ class ProjectReviewAppAccessTest {
     }
 
     private suspend fun waitForCredentialEntry() {
-        waitFor("system PIN entry") {
-            automation.windows.any { window ->
-                window.isActive && window.isFocused && window.root?.let { root ->
-                    try {
-                        root.packageName != context.packageName && containsCredentialEntry(root)
-                    } finally {
-                        @Suppress("DEPRECATION")
-                        root.recycle()
-                    }
-                } == true
-            }
-        }
+        waitFor("system PIN entry") { hasFocusedCredentialEntry() }
         // A visible node during the credential Activity's entry transition cannot yet receive Back/PIN.
         automation.waitForIdle(250, 5_000)
     }
+
+    private fun hasFocusedCredentialEntry(): Boolean = focusedCredentialWindowId() != null
+
+    private fun focusedCredentialWindowId(): Int? =
+        automation.windows.firstNotNullOfOrNull { window ->
+            val credential = window.isActive && window.isFocused && window.root?.let { root ->
+                try {
+                    root.packageName != context.packageName && containsCredentialEntry(root)
+                } finally {
+                    @Suppress("DEPRECATION")
+                    root.recycle()
+                }
+            } == true
+            window.id.takeIf { credential }
+        }
 
     private fun containsCredentialEntry(node: AccessibilityNodeInfo): Boolean {
         if (node.isVisibleToUser &&
@@ -280,6 +287,35 @@ class ProjectReviewAppAccessTest {
     }
 
     private fun pressBack() = shell("input keyevent ${KeyEvent.KEYCODE_BACK}")
+
+    private suspend fun cancelCredentialEntry(captureInitialLayer: Boolean) {
+        val credentialWindow = checkNotNull(focusedCredentialWindowId())
+        val imeBefore = automation.windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
+        pressBack()
+        delay(750)
+        // Back may first dismiss the credential screen's IME. Cancel the credential Activity itself too.
+        if (focusedCredentialWindowId() == credentialWindow &&
+            context.getSystemService(KeyguardManager::class.java)?.isDeviceLocked == false
+        ) {
+            android.util.Log.i("ProjectReviewAppAccess", JSONObject()
+                .put("phase", "credential_window_remained_after_back")
+                .put("same_window", true)
+                .put("ime_before", imeBefore)
+                .put("ime_after", automation.windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD })
+                .toString())
+            if (captureInitialLayer) {
+                // No recovery route or reveal has run at this point in the isolated scenario.
+                automation.takeScreenshot()?.let { bitmap ->
+                    try {
+                        File(context.cacheDir, "initial-credential-back-layer.png").outputStream().use { output ->
+                            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+                        }
+                    } finally { bitmap.recycle() }
+                }
+            }
+            pressBack()
+        }
+    }
 
     private fun tap(bounds: Rect) = shell("input tap ${bounds.centerX()} ${bounds.centerY()}")
 
