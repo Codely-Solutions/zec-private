@@ -1,7 +1,13 @@
 name: Test update controls without publication
 on:
   workflow_dispatch:
+    inputs:
+      verify_existing_release:
+        description: Reverify this already published latest tag with read-only access
+        type: string
+        default: ''
 permissions:
+  actions: read
   contents: read
 jobs:
   simulate:
@@ -34,3 +40,10 @@ jobs:
           PYTHONPATH=.private python3 -B -m unittest -v \
             test_quote_recovery test_hosted_release test_publish test_maintenance_watch \
             test_maintenance_cadence test_packaging test_sync
+      - name: Reverify an existing public release without signing or publication
+        if: github.ref != 'refs/heads/main' && inputs.verify_existing_release != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERIFY_RELEASE_TAG: ${{ inputs.verify_existing_release }}
+        run: python3 -B .private/verify_public_release.py | tee -a "$GITHUB_STEP_SUMMARY"

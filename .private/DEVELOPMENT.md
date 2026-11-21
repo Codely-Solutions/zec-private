@@ -55,6 +55,8 @@ Run the affected Python suites offline with `PYTHONPATH=.private` from a coheren
 
 Use `patch_environment` from [test_support.py](test_support.py) for test environment changes. It restores empty Windows variables for subprocesses, including Git configuration overrides with empty values.
 
+Set the validation workflow's optional `verify_existing_release` input to the current published tag when changing public verification or producer resolution. On a review branch this reads the public APK and exact original unsigned archive, checks their metadata, certificate and payload, and records the original producer job. It receives read-only access and performs no signing or publication. The original archive must still be retained; offline recovery fixtures cover expired or rejected identities.
+
 ## Kotlin plugin resolution
 
 Plugin classpaths have their own repositories. Root, `buildSrc`, convention-build and bridge settings route the exact `org.jetbrains.kotlin` implementation group to Maven Central. Plugin marker groups retain the Portal and their existing checksum pins. Keep these scopes distinct when changing repositories; marker POMs can differ between publishers.
