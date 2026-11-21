@@ -5,10 +5,12 @@ import android.app.KeyguardManager
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Rect
+import android.graphics.Bitmap
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.view.KeyEvent
+import android.view.WindowManager
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import androidx.test.platform.app.InstrumentationRegistry
@@ -32,6 +34,7 @@ import co.electriccoin.zcash.ui.common.viewmodel.AuthenticationViewModel
 import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 import co.electriccoin.zcash.ui.screen.home.HomeTags
 import co.electriccoin.zcash.ui.screen.walletbackup.WalletBackup
+import co.electriccoin.zcash.ui.screen.walletbackup.WalletBackupViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
@@ -44,6 +47,7 @@ import org.junit.After
 import org.koin.core.context.GlobalContext
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.io.File
 
 /** Runs against a blank, PIN-secured emulator with the opt-in core-wallet instrumentation. */
 class ProjectReviewAppAccessTest {
@@ -59,6 +63,7 @@ class ProjectReviewAppAccessTest {
     private val biometricCreations = AtomicInteger()
     private var diagnosticMode = false
     private var diagnosticFallbackUsed = false
+    private var revealNumber = 0
     private val lifecycleCallback = ActivityLifecycleCallback { activity, stage ->
         if (activity is BiometricActivity && stage == Stage.CREATED) biometricCreations.incrementAndGet()
     }
@@ -236,6 +241,10 @@ class ProjectReviewAppAccessTest {
     private suspend fun revealBackup(pin: String, walletWords: Set<String>) {
         scrollToReveal()
         settleRecoveryTouch()
+        revealNumber++
+        if (diagnosticMode && arguments.getString("maskedFrames") == "allow-only-masked-recovery") {
+            captureMaskedRecovery(walletWords)
+        }
         val reveal = waitForBounds("recovery reveal action", requireClick = true) { matchesLabel(it, revealLabel) }
         val before = biometricCreations.get()
         tap(reveal)
@@ -247,6 +256,7 @@ class ProjectReviewAppAccessTest {
             .put("phase", "reveal_physical_tap")
             .put("bounds", reveal.toShortString())
             .put("display_height", context.resources.displayMetrics.heightPixels)
+            .put("ime_visible", automation.windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD })
             .put("biometric_activity_created", biometricCreations.get() > before)
             .put("credential_focused", hasFocusedCredentialEntry())
             .toString())
@@ -262,6 +272,45 @@ class ProjectReviewAppAccessTest {
         waitFor("authorized recovery reveal") { hasLabel(hideLabel) || hasLabel(copyLabel) }
         scrollToTop()
         waitFor("revealed recovery phrase and copy control") { hasWalletWord(walletWords) && hasLabel(copyLabel) }
+    }
+
+    private suspend fun captureMaskedRecovery(words: Set<String>) {
+        val activity = onMain {
+            ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
+                .filterIsInstance<MainActivity>().single()
+        }
+        fun assertMasked() = onMain {
+            val entry = checkNotNull(activity.navControllerForTesting.currentBackStackEntry)
+            val model = androidx.lifecycle.ViewModelProvider(entry)[WalletBackupViewModel::class.java]
+            val state = checkNotNull(model.state.value)
+            check(!state.seed.isRevealed && state.copyPhrase == null)
+        }
+        assertMasked()
+        check(!hasWalletWord(words) && !hasLabel(copyLabel))
+        val originalFlags = onMain { activity.window.attributes.flags }
+        try {
+            onMain { activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+            delay(750)
+            assertMasked()
+            check(!hasWalletWord(words) && !hasLabel(copyLabel))
+            automation.takeScreenshot()?.let { bitmap ->
+                try {
+                    File(context.cacheDir, "masked-recovery-$revealNumber.png").outputStream().use {
+                        check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it))
+                    }
+                } finally { bitmap.recycle() }
+            }
+        } finally {
+            onMain {
+                if (originalFlags and WindowManager.LayoutParams.FLAG_SECURE != 0) {
+                    activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                } else {
+                    activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                }
+                check(activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE ==
+                    originalFlags and WindowManager.LayoutParams.FLAG_SECURE)
+            }
+        }
     }
 
     private suspend fun scrollToReveal() {
