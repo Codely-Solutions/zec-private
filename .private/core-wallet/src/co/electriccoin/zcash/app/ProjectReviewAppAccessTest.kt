@@ -107,12 +107,14 @@ class ProjectReviewAppAccessTest {
     }
 
     @After
-    fun stopObservingBiometricActivity() = onMain {
-        ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(lifecycleCallback)
-        actualBiometrics?.let { actual ->
-            val koin = GlobalContext.get()
-            koin.declare<BiometricRepository>(actual, allowOverride = true)
-            check(koin.get<BiometricRepository>() === actual)
+    fun stopObservingBiometricActivity() {
+        onMain {
+            ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(lifecycleCallback)
+            actualBiometrics?.let { actual ->
+                val koin = GlobalContext.get()
+                koin.declare<BiometricRepository>(actual, allowOverride = true)
+                check(koin.get<BiometricRepository>() === actual)
+            }
         }
     }
 
