@@ -28093,6 +28093,22 @@ index 56175c546..19e25c993 100644
 @@ -220 +223 @@ private fun WrapAppAccessAuth(
 -            onFail()
 +            LaunchedEffect(authenticationResult) { onFail() }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/authentication/view/WelcomeAnimation.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/authentication/view/WelcomeAnimation.kt
+index 52cff1bff..5246e6232 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/authentication/view/WelcomeAnimation.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/authentication/view/WelcomeAnimation.kt
+@@ -28,0 +29 @@ import androidx.compose.ui.draw.drawWithContent
++import androidx.compose.ui.graphics.ColorFilter
+@@ -42 +42,0 @@ import co.electriccoin.zcash.ui.design.theme.ZcashTheme
+-import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
+@@ -175,0 +176 @@ fun WelcomeScreenView(
++                            colorFilter = ColorFilter.tint(ZcashTheme.colors.textPrimary),
+@@ -193 +194 @@ fun WelcomeScreenView(
+-                            color = ZashiColors.NoTheme.welcomeText,
++                            color = ZcashTheme.colors.textPrimary,
+@@ -203 +204 @@ fun WelcomeScreenView(
+-                            color = ZashiColors.NoTheme.welcomeText,
++                            color = ZcashTheme.colors.textPrimary,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceState.kt
 index 6cd19d8e3..3e71a62f9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceState.kt

@@ -1788,7 +1788,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/authentication/AuthenticationUseCase.kt": "edabfdca345817c380e4f14957342989ed0b3bfcbc911e649c475760d078a7ba",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/authentication/view/AuthenticationView.kt": "8a9eea1b6444fcf08f94007abbd6709753f4dd3e2f7d3a7c9c3d9485539021d8",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/authentication/view/DynamicChartLine.kt": "ec755608b0733fafde167a6cf70d3b0d85e711f7f5902a1725bde844409dbaa4",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/authentication/view/WelcomeAnimation.kt": "5ba4c75542fc5259dd97193c83c412e98068e8f04c04aca3f2932981678643df",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/authentication/view/WelcomeAnimation.kt": "c8adbd91de9596a611ec9f8d31e3a23c8eb70b4f8c9bfabcbabac26ab43976b2",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/BalanceTag.kt": "1b79339492e3fbe5d615bca90dcc1c2947fe05656b1bcfd1b46ae2a7c82fbda7",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/BalanceWidget.kt": "4a7fc549b2855ff542f2e8c8c626a58e0be83026ac92758cecd2f8fa4a6ff778",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/balances/BalanceWidgetButton.kt": "e06dd223ae3a684255ba7725ca4728981da4c65c91c0beb994a256a54a5e0e4c",

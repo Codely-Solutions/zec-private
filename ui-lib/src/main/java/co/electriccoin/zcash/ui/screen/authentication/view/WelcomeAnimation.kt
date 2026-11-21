@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.painter.ColorPainter
@@ -39,7 +40,6 @@ import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
-import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.theme.dimensions.ZashiDimensions
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 import co.electriccoin.zcash.ui.screen.authentication.view.AnimationConstants.ANIMATION_DURATION
@@ -173,6 +173,7 @@ fun WelcomeScreenView(
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.ic_auth_key),
+                            colorFilter = ColorFilter.tint(ZcashTheme.colors.textPrimary),
                             contentDescription =
                                 stringResource(
                                     id = R.string.authentication_failed_welcome_icon_cont_desc,
@@ -190,7 +191,7 @@ fun WelcomeScreenView(
                             stringResource(id = R.string.splash_authTitle),
                             style = ZashiTypography.textXl,
                             fontWeight = FontWeight.SemiBold,
-                            color = ZashiColors.NoTheme.welcomeText,
+                            color = ZcashTheme.colors.textPrimary,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -200,7 +201,7 @@ fun WelcomeScreenView(
                         Text(
                             stringResource(id = R.string.authentication_failed_welcome_subtitle),
                             style = ZashiTypography.textSm,
-                            color = ZashiColors.NoTheme.welcomeText,
+                            color = ZcashTheme.colors.textPrimary,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth()
                         )
