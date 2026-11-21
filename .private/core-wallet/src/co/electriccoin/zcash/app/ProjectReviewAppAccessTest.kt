@@ -11,6 +11,7 @@ import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.lifecycle.Lifecycle
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
@@ -28,6 +29,7 @@ import co.electriccoin.zcash.ui.screen.home.HomeTags
 import co.electriccoin.zcash.ui.screen.walletbackup.WalletBackup
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
@@ -65,7 +67,11 @@ class ProjectReviewAppAccessTest {
         report("initial_credential_prompt")
 
         pressBack()
-        waitForLabel(lockedTitle)
+        try {
+            waitForLabel(lockedTitle)
+        } finally {
+            reportState("initial_cancel_settled", walletWords, activity)
+        }
         assertWalletAbsent(walletWords)
         report("initial_authentication_cancelled")
         // Use harmless routing while locked to check that the wallet command consumer is absent.
@@ -109,11 +115,11 @@ class ProjectReviewAppAccessTest {
         assertWalletAbsent(walletWords)
         report("return_credential_prompt")
         pressBack()
-        reportState("return_cancel_sent", walletWords)
+        reportState("return_cancel_sent", walletWords, activity)
         try {
             waitForLabel(lockedTitle)
         } finally {
-            reportState("return_cancel_settled", walletWords)
+            reportState("return_cancel_settled", walletWords, activity)
         }
         assertWalletAbsent(walletWords)
         report("return_authentication_cancelled")
@@ -124,7 +130,7 @@ class ProjectReviewAppAccessTest {
         try {
             waitForLabel(backupTitle)
         } finally {
-            reportState("return_unlock_settled", walletWords)
+            reportState("return_unlock_settled", walletWords, activity)
         }
         scrollToTop()
         check(!hasLabel(copyLabel)) { "Recovery copy remained available after relock" }
@@ -237,10 +243,34 @@ class ProjectReviewAppAccessTest {
 
     private suspend fun waitForCredentialEntry() {
         waitFor("system PIN entry") {
-            findBounds { node ->
-                node.packageName != context.packageName &&
-                    (node.isPassword || node.viewIdResourceName?.endsWith(":id/pinEntry") == true)
-            } != null
+            automation.windows.any { window ->
+                window.isActive && window.isFocused && window.root?.let { root ->
+                    try {
+                        root.packageName != context.packageName && containsCredentialEntry(root)
+                    } finally {
+                        @Suppress("DEPRECATION")
+                        root.recycle()
+                    }
+                } == true
+            }
+        }
+        // A visible node during the credential Activity's entry transition cannot yet receive Back/PIN.
+        automation.waitForIdle(250, 5_000)
+    }
+
+    private fun containsCredentialEntry(node: AccessibilityNodeInfo): Boolean {
+        if (node.isVisibleToUser &&
+            (node.isPassword || node.viewIdResourceName?.endsWith(":id/pinEntry") == true)
+        ) return true
+        return (0 until node.childCount).any { index ->
+            node.getChild(index)?.let { child ->
+                try {
+                    containsCredentialEntry(child)
+                } finally {
+                    @Suppress("DEPRECATION")
+                    child.recycle()
+                }
+            } == true
         }
     }
 
@@ -351,13 +381,36 @@ class ProjectReviewAppAccessTest {
         android.util.Log.i("ProjectReviewAppAccess", receipt.toString())
     }
 
-    private fun reportState(phase: String, words: Set<String>) {
+    private fun reportState(phase: String, words: Set<String>, activity: MainActivity) {
         val receipt = JSONObject().put("phase", phase)
             .put("locked_title", hasLabel(lockedTitle))
             .put("backup_title", hasLabel(backupTitle))
             .put("wallet_action", hasWalletAction())
             .put("phrase_visible", hasWalletWord(words))
             .put("copy_visible", hasLabel(copyLabel))
+        onMain {
+            receipt.put("activity_resumed", activity.lifecycle.currentState == Lifecycle.State.RESUMED)
+                .put("activity_destroyed", activity.isDestroyed)
+                .put("activity_focused", activity.hasWindowFocus())
+            if (!activity.isDestroyed) {
+                val model = androidx.lifecycle.ViewModelProvider(activity)[AuthenticationViewModel::class.java]
+                fun value(name: String): Any? = AuthenticationViewModel::class.java.getDeclaredField(name)
+                    .apply { isAccessible = true }.get(model).let { (it as StateFlow<*>).value }
+                receipt.put("auth_state", value("appAccessAuthenticationResultState")?.javaClass?.simpleName)
+                    .put("auth_result", value("appAccessResult")?.javaClass?.simpleName)
+                    .put("auth_failed", value("authFailed"))
+                    .put("welcome_animation", value("showWelcomeAnimation"))
+            }
+        }
+        receipt.put("device_locked", context.getSystemService(KeyguardManager::class.java)?.isDeviceLocked)
+        receipt.put("app_active_window", automation.windows.any { window ->
+            window.isActive && window.root?.let { root ->
+                try { root.packageName == context.packageName } finally {
+                    @Suppress("DEPRECATION")
+                    root.recycle()
+                }
+            } == true
+        })
         android.util.Log.i("ProjectReviewAppAccess", receipt.toString())
     }
 
