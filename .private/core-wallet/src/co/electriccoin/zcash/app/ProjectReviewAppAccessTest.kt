@@ -11,6 +11,8 @@ import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.WindowManager
+import android.view.Window
+import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import androidx.test.platform.app.InstrumentationRegistry
@@ -242,12 +244,9 @@ class ProjectReviewAppAccessTest {
         scrollToReveal()
         settleRecoveryTouch()
         revealNumber++
-        if (diagnosticMode && arguments.getString("maskedFrames") == "allow-only-masked-recovery") {
-            captureMaskedRecovery(walletWords)
-        }
         val reveal = waitForBounds("recovery reveal action", requireClick = true) { matchesLabel(it, revealLabel) }
         val before = biometricCreations.get()
-        tap(reveal)
+        traceRevealTap(reveal)
         val deadline = SystemClock.elapsedRealtime() + 3_000
         while (SystemClock.elapsedRealtime() < deadline &&
             biometricCreations.get() == before && !hasFocusedCredentialEntry()
@@ -263,6 +262,9 @@ class ProjectReviewAppAccessTest {
         if (diagnosticMode && biometricCreations.get() == before && !hasFocusedCredentialEntry()) {
             diagnosticFallbackUsed = true
             check(!hasWalletWord(walletWords) && !hasLabel(copyLabel))
+            if (arguments.getString("maskedFrames") == "allow-only-masked-recovery") {
+                captureMaskedRecovery(walletWords)
+            }
             val accepted = findBounds(requireClick = true, performClick = true) { matchesLabel(it, revealLabel) } != null
             android.util.Log.i("ProjectReviewAppAccess", JSONObject()
                 .put("phase", "diagnostic_reveal_accessibility_click").put("accepted", accepted).toString())
@@ -272,6 +274,35 @@ class ProjectReviewAppAccessTest {
         waitFor("authorized recovery reveal") { hasLabel(hideLabel) || hasLabel(copyLabel) }
         scrollToTop()
         waitFor("revealed recovery phrase and copy control") { hasWalletWord(walletWords) && hasLabel(copyLabel) }
+    }
+
+    private fun traceRevealTap(bounds: Rect) {
+        val activity = onMain {
+            ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED)
+                .filterIsInstance<MainActivity>().single()
+        }
+        val original = onMain { checkNotNull(activity.window.callback) }
+        val observer = object : Window.Callback by original {
+            override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+                val handled = original.dispatchTouchEvent(event)
+                if (event.actionMasked == MotionEvent.ACTION_DOWN || event.actionMasked == MotionEvent.ACTION_UP) {
+                    android.util.Log.i("ProjectReviewAppAccess", JSONObject()
+                        .put("phase", "reveal_touch_dispatch").put("reveal", revealNumber)
+                        .put("action", event.actionMasked).put("flags", event.flags)
+                        .put("handled", handled).toString())
+                }
+                return handled
+            }
+        }
+        onMain { activity.window.callback = observer }
+        try {
+            tap(bounds)
+        } finally {
+            onMain {
+                if (activity.window.callback === observer) activity.window.callback = original
+                check(activity.window.callback === original) { "Unexpected concurrent window callback change" }
+            }
+        }
     }
 
     private suspend fun captureMaskedRecovery(words: Set<String>) {
