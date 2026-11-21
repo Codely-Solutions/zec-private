@@ -24,6 +24,7 @@ import co.electriccoin.zcash.ui.common.model.KeystoneFirmwareVersion
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
+import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import co.electriccoin.zcash.ui.common.model.readKeystoneFwStamp
 import co.electriccoin.zcash.ui.common.provider.KeystoneSDKException
 import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider
@@ -97,7 +98,7 @@ interface KeystoneProposalRepository {
      * at all) before they can reach submission.
      */
     @Throws(ParsePCZTException::class)
-    suspend fun parsePCZT(ur: UR)
+    suspend fun parsePCZT(ur: UR): TransactionProposal
 
     suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult
 
@@ -135,6 +136,7 @@ class KeystoneProposalRepositoryImpl(
     private val accountDataSource: AccountDataSource,
     private val proposalDataSource: ProposalDataSource,
     private val keystoneSDKProvider: KeystoneSDKProvider,
+    private val processSwapTransaction: ProcessSwapTransactionUseCase,
 ) : KeystoneProposalRepository {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -264,6 +266,7 @@ class KeystoneProposalRepositoryImpl(
                 "The reviewed transaction changed during signing."
             }
             prepared.signatures = Pczt(parsed)
+            prepared.proposal
         }
 
     @Suppress("TooGenericExceptionCaught")
@@ -274,11 +277,15 @@ class KeystoneProposalRepositoryImpl(
                 val signed = checkNotNull(prepared.signatures) { "The reviewed transaction has not been signed." }
                 submitState.update { SubmitProposalState.Submitting }
                 val proofs = prepared.proofs.await()
-                check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
-                    "The reviewed transaction changed before submission."
-                }
                 val proposal = prepared.proposal
-                if (proposal is SwapTransactionProposal) ZecSwapComposition.validate(proposal.quote)
+                if (proposal is SwapTransactionProposal) {
+                    processSwapTransaction.reserveFunding(proposal) {
+                        requireCurrentApproval(prepared)
+                        ZecSwapComposition.validate(proposal.quote)
+                    }
+                    ZecSwapComposition.validate(proposal.quote)
+                }
+                requireCurrentApproval(prepared)
                 val result =
                     proposalDataSource.submitTransaction(
                         pcztWithProofs = proofs,
@@ -291,6 +298,12 @@ class KeystoneProposalRepositoryImpl(
                 throw e
             }
         }.await()
+
+    private fun requireCurrentApproval(prepared: PreparedHardwareProposal) {
+        check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
+            "The reviewed transaction changed before submission."
+        }
+    }
 
     override suspend fun getTransactionProposal(): TransactionProposal = transactionProposal.filterNotNull().first()
 

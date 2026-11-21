@@ -20,6 +20,7 @@ import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
+import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -71,6 +72,7 @@ class ZashiProposalRepositoryImpl(
     private val accountDataSource: AccountDataSource,
     private val proposalDataSource: ProposalDataSource,
     private val zashiSpendingKeyDataSource: ZashiSpendingKeyDataSource,
+    private val processSwapTransaction: ProcessSwapTransactionUseCase,
 ) : ZashiProposalRepository {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -173,11 +175,13 @@ class ZashiProposalRepositoryImpl(
                             )
                         }
                         if (transactionProposal is SwapTransactionProposal) {
+                            processSwapTransaction.reserveFunding(transactionProposal) {
+                                requireCurrentProposal(transactionProposal)
+                                ZecSwapComposition.validate(transactionProposal.quote)
+                            }
                             ZecSwapComposition.validate(transactionProposal.quote)
                         }
-                        check(this@ZashiProposalRepositoryImpl.transactionProposal.value === transactionProposal) {
-                            "The transaction changed before submission."
-                        }
+                        requireCurrentProposal(transactionProposal)
                         val result =
                             proposalDataSource.submitTransaction(
                                 proposal = transactionProposal.proposal,
@@ -191,6 +195,10 @@ class ZashiProposalRepositoryImpl(
                     }
                 }
             }.await()
+
+    private fun requireCurrentProposal(expected: TransactionProposal) {
+        check(transactionProposal.value === expected) { "The transaction changed before submission." }
+    }
 
     override suspend fun getTransactionProposal(): TransactionProposal = transactionProposal.filterNotNull().first()
 

@@ -17,8 +17,8 @@ class ParseKeystonePCZTUseCase(
     keystoneSDKProvider: KeystoneSDKProvider,
 ) : BaseKeystoneScanner(keystoneSDKProvider) {
     override suspend fun onSuccess(ur: UR) {
-        keystoneProposalRepository.parsePCZT(ur)
-        submitKSProposal()
+        val proposal = keystoneProposalRepository.parsePCZT(ur)
+        submitKSProposal(proposal)
     }
 }
 

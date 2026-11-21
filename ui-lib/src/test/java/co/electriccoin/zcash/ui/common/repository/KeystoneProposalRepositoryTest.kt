@@ -34,6 +34,7 @@ class KeystoneProposalRepositoryTest {
             accountDataSource = accountDataSource,
             proposalDataSource = proposalDataSource,
             keystoneSDKProvider = signer,
+            processSwapTransaction = mockk(relaxed = true),
         )
 
     @Test

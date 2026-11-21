@@ -16,6 +16,8 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -56,7 +58,78 @@ class ProcessSwapTransactionUseCaseTest {
         coEvery {
             fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
         } returns false
-        assertFailsWith<IllegalStateException> { fx.useCase.persistBeforeFunding(swapProposal()) }
+        val proposal = swapProposal()
+        assertFailsWith<IllegalStateException> { fx.useCase.reserveFunding(proposal) {} }
+        coEvery {
+            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } returns true
+        fx.useCase.reserveFunding(proposal) {}
+    }
+
+    @Test
+    fun concurrentReservationsForTheSameDepositCannotBothFund() = runTest {
+        val fx = Fixtures()
+        val firstWriteStarted = CompletableDeferred<Unit>()
+        val finishFirstWrite = CompletableDeferred<Unit>()
+        coEvery {
+            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            firstWriteStarted.complete(Unit)
+            finishFirstWrite.await()
+            true
+        }
+
+        val first = async { fx.useCase.reserveFunding(swapProposal()) {} }
+        firstWriteStarted.await()
+        val duplicate = async {
+            assertFailsWith<IllegalStateException> { fx.useCase.reserveFunding(swapProposal()) {} }
+        }
+        finishFirstWrite.complete(Unit)
+        first.await()
+        duplicate.await()
+
+        coVerify(exactly = 1) {
+            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+        }
+    }
+
+    @Test
+    fun existingDurableTrackingRejectsAFundingAttemptAfterRestart() = runTest {
+        val fx = Fixtures()
+        coEvery { fx.metadataRepository.getSwapMetadata(any()) } returns mockk<TransactionSwapMetadata>()
+
+        assertFailsWith<IllegalStateException> { fx.useCase.reserveFunding(swapProposal()) {} }
+
+        coVerify(exactly = 0) {
+            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+        }
+    }
+
+    @Test
+    fun supersededProposalDuringMetadataLookupNeverReservesFunding() = runTest {
+        val fx = Fixtures()
+        val lookupStarted = CompletableDeferred<Unit>()
+        val finishLookup = CompletableDeferred<Unit>()
+        var stillReviewed = true
+        coEvery { fx.metadataRepository.getSwapMetadata(any()) } coAnswers {
+            lookupStarted.complete(Unit)
+            finishLookup.await()
+            null
+        }
+        val reservation = async {
+            assertFailsWith<IllegalStateException> {
+                fx.useCase.reserveFunding(swapProposal()) { check(stillReviewed) }
+            }
+        }
+
+        lookupStarted.await()
+        stillReviewed = false
+        finishLookup.complete(Unit)
+        reservation.await()
+
+        coVerify(exactly = 0) {
+            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+        }
     }
 
     @Test

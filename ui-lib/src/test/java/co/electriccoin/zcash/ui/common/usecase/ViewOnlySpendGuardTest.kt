@@ -257,7 +257,6 @@ class ViewOnlySpendGuardTest {
                     ledgerNavigator = mockk(relaxed = true),
                     biometricRepository = biometricRepository,
                     swapRepository = mockk(relaxed = true),
-                    metadataRepository = mockk(relaxed = true),
                     processSwapTransaction = mockk(relaxed = true),
                     prefillSend = mockk(relaxed = true),
                     navigateToError = navigateToError,
@@ -266,7 +265,7 @@ class ViewOnlySpendGuardTest {
             useCase()
 
             verifyViewOnlyErrorShown()
-            coVerify(exactly = 0) { zashiProposalRepository.getTransactionProposal() }
+            verify(exactly = 0) { zashiProposalRepository.transactionProposal }
             coVerify(exactly = 0) { zashiProposalRepository.submit() }
             verify(exactly = 0) { navigationRouter.replace(*anyVararg()) }
         }

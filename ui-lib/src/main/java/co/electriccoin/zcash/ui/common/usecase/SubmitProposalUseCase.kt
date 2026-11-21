@@ -20,7 +20,6 @@ import co.electriccoin.zcash.ui.common.repository.BiometricRequest
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
-import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -43,13 +42,11 @@ class SubmitProposalUseCase(
     private val ledgerNavigator: LedgerNavigator,
     private val biometricRepository: BiometricRepository,
     private val swapRepository: SwapRepository,
-    private val metadataRepository: MetadataRepository,
     private val processSwapTransaction: ProcessSwapTransactionUseCase,
     private val prefillSend: PrefillSendUseCase,
     private val navigateToError: NavigateToErrorUseCase,
 ) {
     private val submissionMutex = Mutex()
-    private var lastApprovedSwapReference: String? = null
     @set:RestrictTo(RestrictTo.Scope.TESTS)
     @VisibleForTesting
     internal var scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -81,7 +78,9 @@ class SubmitProposalUseCase(
                 )
                 return
             }
-            val proposal = loadProposal(account)
+            val proposal = checkNotNull(currentProposal(account)) {
+                "The reviewed transaction is unavailable. Review it again before sending."
+            }
             check(reviewedProposal == null || proposal === reviewedProposal) {
                 "The reviewed transaction changed. Review it again before sending."
             }
@@ -91,7 +90,6 @@ class SubmitProposalUseCase(
             check(proposal !is SwapTransactionProposal || kotlin.time.Clock.System.now() < proposal.quote.deadline) {
                 "The swap quote expired. Request a fresh quote before sending."
             }
-            if (proposal is SwapTransactionProposal) prepareSwapTracking(proposal)
             when (account) {
                 is KeystoneAccount -> {
                     keystoneProposalRepository.approveForSigning(proposal)
@@ -124,27 +122,13 @@ class SubmitProposalUseCase(
         }
     }
 
-    private suspend fun loadProposal(account: WalletAccount): TransactionProposal =
+    private fun currentProposal(account: WalletAccount): TransactionProposal? =
         when (account) {
-            is KeystoneAccount -> keystoneProposalRepository.getTransactionProposal()
-            is LedgerAccount -> ledgerProposalPipeline.getTransactionProposal()
+            is KeystoneAccount -> keystoneProposalRepository.transactionProposal.value
+            is LedgerAccount -> ledgerProposalPipeline.transactionProposal.value
             is ViewOnlyAccount -> throw AccountOperationUnsupportedException.viewOnly()
-            is ZodlAccount -> zashiProposalRepository.getTransactionProposal()
+            is ZodlAccount -> zashiProposalRepository.transactionProposal.value
         }
-
-    private suspend fun prepareSwapTracking(proposal: SwapTransactionProposal) {
-        val reference = proposal.destination.address
-        check(reference != lastApprovedSwapReference && metadataRepository.getSwapMetadata(reference) == null) {
-            "This swap is already tracked. Check its status before funding."
-        }
-        processSwapTransaction.persistBeforeFunding(proposal)
-        lastApprovedSwapReference = reference
-        val selectedSwapAsset = proposal.quote.destinationAsset
-        metadataRepository.addSwapAssetToHistory(
-            tokenTicker = selectedSwapAsset.tokenTicker,
-            chainTicker = selectedSwapAsset.chainTicker
-        )
-    }
 
     private fun submitZashiProposal(proposal: TransactionProposal) {
         scope.launch {

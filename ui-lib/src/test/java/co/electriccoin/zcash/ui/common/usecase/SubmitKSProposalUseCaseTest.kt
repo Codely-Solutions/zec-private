@@ -16,10 +16,12 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertFailsWith
 
 /**
  * [SubmitKSProposalUseCase] submits an already-prepared Keystone proposal: it clears swap state,
@@ -35,10 +37,10 @@ class SubmitKSProposalUseCaseTest {
             val fx = useCase()
             val proposal = swapProposal()
             val submitResult = mockk<SubmitResult>(relaxed = true)
-            coEvery { fx.keystoneProposalRepository.getTransactionProposal() } returns proposal
+            every { fx.keystoneProposalRepository.transactionProposal } returns MutableStateFlow(proposal)
             coEvery { fx.keystoneProposalRepository.submit(any()) } returns submitResult
 
-            fx.useCase()
+            fx.useCase(proposal)
 
             verify(exactly = 1) { fx.swapRepository.clear() }
             coVerify(exactly = 1) { fx.keystoneProposalRepository.submit(any()) }
@@ -57,10 +59,11 @@ class SubmitKSProposalUseCaseTest {
     fun nonSwapProposalSubmitsWithoutProcessingSwap() =
         runTest {
             val fx = useCase()
-            coEvery { fx.keystoneProposalRepository.getTransactionProposal() } returns mockk<TransactionProposal>()
+            val proposal = mockk<TransactionProposal>()
+            every { fx.keystoneProposalRepository.transactionProposal } returns MutableStateFlow(proposal)
             coEvery { fx.keystoneProposalRepository.submit(any()) } returns mockk(relaxed = true)
 
-            fx.useCase()
+            fx.useCase(proposal)
 
             verify(exactly = 1) { fx.swapRepository.clear() }
             coVerify(exactly = 1) { fx.keystoneProposalRepository.submit(any()) }
@@ -73,10 +76,11 @@ class SubmitKSProposalUseCaseTest {
     fun submitFailureStillClearsPrefillAndStillNavigates() =
         runTest {
             val fx = useCase()
-            coEvery { fx.keystoneProposalRepository.getTransactionProposal() } returns swapProposal()
+            val proposal = swapProposal()
+            every { fx.keystoneProposalRepository.transactionProposal } returns MutableStateFlow(proposal)
             coEvery { fx.keystoneProposalRepository.submit(any()) } throws RuntimeException("boom")
 
-            fx.useCase()
+            fx.useCase(proposal)
 
             // The submit failure is swallowed: no swap processing, but the prefill is still cleared
             // (finally) and navigation to progress happens regardless of the async outcome.
@@ -84,6 +88,19 @@ class SubmitKSProposalUseCaseTest {
             verify(exactly = 1) { fx.prefillSend.clear() }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
         }
+
+    @Test
+    fun aSignedScanCannotSubmitTheReplacementProposal() = runTest {
+        val fx = useCase()
+        val signed = swapProposal()
+        every { fx.keystoneProposalRepository.transactionProposal } returns MutableStateFlow(swapProposal())
+
+        assertFailsWith<IllegalStateException> { fx.useCase(signed) }
+
+        coVerify(exactly = 0) { fx.keystoneProposalRepository.submit(any()) }
+        verify(exactly = 0) { fx.swapRepository.clear() }
+        verify(exactly = 0) { fx.navigationRouter.replace(TransactionProgressArgs) }
+    }
 
     private fun swapProposal(): SwapTransactionProposal =
         mockk {

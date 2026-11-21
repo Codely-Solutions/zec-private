@@ -27,8 +27,10 @@ class SubmitKSProposalUseCase(
     /**
      * Submit a prepared Keystone proposal and navigate to Transaction Progress screen.
      */
-    suspend operator fun invoke() {
-        val proposal = keystoneProposalRepository.getTransactionProposal()
+    operator fun invoke(proposal: TransactionProposal) {
+        check(keystoneProposalRepository.transactionProposal.value === proposal) {
+            "The reviewed transaction changed before submission."
+        }
         swapRepository.clear()
         submitKSProposal(proposal)
         navigationRouter.replace(TransactionProgressArgs)

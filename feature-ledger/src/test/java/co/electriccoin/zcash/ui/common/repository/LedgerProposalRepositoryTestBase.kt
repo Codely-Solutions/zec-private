@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
+import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -42,6 +43,7 @@ abstract class LedgerProposalRepositoryTestBase {
     protected val proposalDataSource = mockk<ProposalDataSource>()
     protected val ledgerDeviceDataSource = mockk<LedgerDeviceDataSource>()
     protected val ledgerSigningDataSource = mockk<LedgerSigningDataSource>(relaxed = true)
+    protected val processSwapTransaction = mockk<ProcessSwapTransactionUseCase>(relaxed = true)
 
     protected val devices = MutableStateFlow<List<LedgerBluetoothDevice>>(emptyList())
 
@@ -51,6 +53,7 @@ abstract class LedgerProposalRepositoryTestBase {
             proposalDataSource = proposalDataSource,
             ledgerDeviceDataSource = ledgerDeviceDataSource,
             ledgerSigningDataSource = ledgerSigningDataSource,
+            processSwapTransaction = processSwapTransaction,
         ).apply { scope = CoroutineScope(dispatcher) }
 
     init {

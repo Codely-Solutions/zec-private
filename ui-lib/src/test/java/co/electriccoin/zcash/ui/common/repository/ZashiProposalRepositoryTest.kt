@@ -15,22 +15,32 @@ import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuote
+import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
+import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertSame
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 class ZashiProposalRepositoryTest {
     private val proposals = mockk<ProposalDataSource>()
     private val keys = mockk<ZashiSpendingKeyDataSource>()
-    private val repository = ZashiProposalRepositoryImpl(mockk<AccountDataSource>(), proposals, keys)
+    private val metadata = mockk<MetadataRepository>(relaxed = true)
+    private val repository = ZashiProposalRepositoryImpl(
+        mockk<AccountDataSource>(), proposals, keys, ProcessSwapTransactionUseCase(metadata, mockk())
+    )
 
     @Test
     fun quoteExpiringDuringSpendingKeyAcquisitionCannotBroadcast() = runBlocking {
@@ -83,6 +93,63 @@ class ZashiProposalRepositoryTest {
         coVerify(exactly = 0) { keys.getZashiSpendingKey() }
         coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
     }
+
+    @Test
+    fun durableTrackingCompletesBeforeTheSdkCanFundTheReview() = runBlocking {
+        val key = mockk<UnifiedSpendingKey>()
+        val reviewed = swapProposal()
+        val expected = SubmitResult.Success(listOf("synthetic-tx"))
+        repository.transactionProposal.value = reviewed
+        coEvery { keys.getZashiSpendingKey() } returns key
+        coEvery { metadata.getSwapMetadata(any()) } returns null
+        coEvery { metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns true
+        coEvery { proposals.submitTransaction(reviewed.proposal, key) } returns expected
+
+        assertEquals(expected, repository.submit(reviewed))
+
+        coVerifyOrder {
+            metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            proposals.submitTransaction(reviewed.proposal, key)
+        }
+    }
+
+    @Test
+    fun replacementDuringDurableTrackingCannotReachTheSdkSubmission() = runBlocking {
+        val reviewed = swapProposal()
+        repository.transactionProposal.value = reviewed
+        coEvery { keys.getZashiSpendingKey() } returns mockk()
+        coEvery { metadata.getSwapMetadata(any()) } returns null
+        val trackingStarted = CompletableDeferred<Unit>()
+        val finishTracking = CompletableDeferred<Unit>()
+        coEvery {
+            metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+        } coAnswers {
+            trackingStarted.complete(Unit)
+            finishTracking.await()
+            true
+        }
+
+        val approval = async {
+            assertFailsWith<IllegalStateException> { repository.submit(reviewed) }
+        }
+        try {
+            withTimeout(5.seconds) { trackingStarted.await() }
+            repository.transactionProposal.value = swapProposal()
+        } finally {
+            finishTracking.complete(Unit)
+        }
+        approval.await()
+
+        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
+    }
+
+    private suspend fun swapProposal() = ExactInputSwapTransactionProposal(
+        WalletAddress.Unified.new("synthetic-deposit"),
+        Zatoshi(100000000),
+        Memo(""),
+        mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(1000) },
+        quote()
+    )
 
     private fun quote() = FakeSwapQuote(
         originAsset = SwapAssetTestFixture.zecAsset(),

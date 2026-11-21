@@ -285,6 +285,30 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         }
 
     @Test
+    fun cancelBeforeDeviceSigningAllowsReapprovalWithoutReservingFunding() = runTest(dispatcher) {
+        val reviewed = ExactInputSwapTransactionProposal(
+            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100), Memo(""), mockk(), mockk()
+        )
+        givenPczt(ledgerAccount(), proposal = reviewed)
+        repository.startSigning()
+        runCurrent()
+        assertEquals(LedgerSigningState.Scanning, repository.signingState.value)
+
+        repository.cancelSigning()
+        runCurrent()
+        assertSame(reviewed, repository.transactionProposal.value)
+        repository.approveForSigning(reviewed)
+        every { ledgerSigningDataSource.isLinked } returns true
+        coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+        repository.startSigning()
+        runCurrent()
+
+        assertEquals(LedgerSigningState.Signed, repository.signingState.value)
+        coVerify(exactly = 0) { processSwapTransaction.reserveFunding(any(), any()) }
+        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>()) }
+    }
+
+    @Test
     fun cancellingOrClearingWithNoSessionOrLinkLeavesTheLinkAlone() =
         runTest(dispatcher) {
             repository.cancelSigning()

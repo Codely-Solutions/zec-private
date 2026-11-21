@@ -33,6 +33,7 @@ import co.electriccoin.zcash.ui.common.model.LedgerSigningState
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
+import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import co.electriccoin.zcash.ui.common.model.toLedgerIssue
 import co.electriccoin.zcash.ui.common.provider.LEDGER_SCAN_TIMEOUT
 import kotlinx.coroutines.CancellationException
@@ -113,6 +114,7 @@ class LedgerProposalRepositoryImpl(
     private val proposalDataSource: ProposalDataSource,
     private val ledgerDeviceDataSource: LedgerDeviceDataSource,
     private val ledgerSigningDataSource: LedgerSigningDataSource,
+    private val processSwapTransaction: ProcessSwapTransactionUseCase,
 ) : LedgerProposalRepository {
     @VisibleForTesting
     internal var scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -555,11 +557,15 @@ class LedgerProposalRepositoryImpl(
                 val signed = checkNotNull(prepared.signatures) { "The reviewed transaction has not been signed." }
                 submitState.update { SubmitProposalState.Submitting }
                 val proofs = prepared.proofs.await()
-                check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
-                    "The reviewed transaction changed before submission."
-                }
                 val proposal = prepared.proposal
-                if (proposal is SwapTransactionProposal) ZecSwapComposition.validate(proposal.quote)
+                if (proposal is SwapTransactionProposal) {
+                    processSwapTransaction.reserveFunding(proposal) {
+                        requireCurrentApproval(prepared)
+                        ZecSwapComposition.validate(proposal.quote)
+                    }
+                    ZecSwapComposition.validate(proposal.quote)
+                }
+                requireCurrentApproval(prepared)
                 val result =
                     proposalDataSource.submitTransaction(
                         pcztWithProofs = proofs,
@@ -572,6 +578,12 @@ class LedgerProposalRepositoryImpl(
                 throw e
             }
         }.await()
+
+    private fun requireCurrentApproval(prepared: PreparedHardwareProposal) {
+        check(hardwareProposal.getApproved(transactionProposal.value) === prepared) {
+            "The reviewed transaction changed before submission."
+        }
+    }
 
     override suspend fun getTransactionProposal(): TransactionProposal = transactionProposal.filterNotNull().first()
 

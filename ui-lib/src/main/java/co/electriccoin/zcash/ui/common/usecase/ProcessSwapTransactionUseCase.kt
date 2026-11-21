@@ -6,6 +6,8 @@ import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.yield
 
 class ProcessSwapTransactionUseCase(
@@ -13,8 +15,36 @@ class ProcessSwapTransactionUseCase(
     private val swapRepository: SwapRepository,
     // private val ephemeralAddressRepository: EphemeralAddressRepository,
 ) {
+    private val fundingMutex = Mutex()
+    // The selected-account observation can lag a successful durable write.
+    private val reservedReferences = mutableSetOf<String>()
+
+    suspend fun reserveFunding(
+        transactionProposal: SwapTransactionProposal,
+        validateFunding: () -> Unit,
+    ) = fundingMutex.withLock {
+        validateFunding()
+        val reference = transactionProposal.destination.address
+        check(reference !in reservedReferences && metadataRepository.getSwapMetadata(reference) == null) {
+            "This swap is already tracked. Check its status before funding."
+        }
+        validateFunding()
+        writePendingTracking(transactionProposal)
+        reservedReferences += reference
+        val selectedSwapAsset = transactionProposal.quote.destinationAsset
+        metadataRepository.addSwapAssetToHistory(
+            tokenTicker = selectedSwapAsset.tokenTicker,
+            chainTicker = selectedSwapAsset.chainTicker
+        )
+    }
+
     suspend operator fun invoke(transactionProposal: SwapTransactionProposal, result: SubmitResult) {
-        persistBeforeFunding(transactionProposal)
+        fundingMutex.withLock {
+            val reference = transactionProposal.destination.address
+            if (reference !in reservedReferences && metadataRepository.getSwapMetadata(reference) == null) {
+                writePendingTracking(transactionProposal)
+            }
+        }
         // invalidateEphemeralAddress(result)
         submitDepositTransactions(transactionProposal, result)
     }
@@ -31,8 +61,7 @@ class ProcessSwapTransactionUseCase(
     //     }
     // }
 
-    suspend fun persistBeforeFunding(transactionProposal: SwapTransactionProposal) {
-        if (metadataRepository.getSwapMetadata(transactionProposal.destination.address) != null) return
+    private suspend fun writePendingTracking(transactionProposal: SwapTransactionProposal) {
         check(metadataRepository.markTxAsSwap(
             depositAddress = transactionProposal.destination.address,
             provider = transactionProposal.quote.provider,
