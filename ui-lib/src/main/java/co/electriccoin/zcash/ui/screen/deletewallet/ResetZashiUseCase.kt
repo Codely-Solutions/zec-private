@@ -120,8 +120,9 @@ class ResetZashiUseCase(
 
     private suspend fun clearSharedPrefs() {
         check(standardPreferenceProvider().clearPreferences()) { "Could not clear wallet settings" }
+        val encryptedPreferences = encryptedPreferenceProvider()
         check(encryptedPreferenceProvider.purgeQuarantine()) { "Could not remove encrypted preference quarantine" }
-        check(encryptedPreferenceProvider().clearPreferences()) { "Could not clear encrypted wallet preferences" }
+        check(encryptedPreferences.clearPreferences()) { "Could not clear encrypted wallet preferences" }
     }
 
     companion object {

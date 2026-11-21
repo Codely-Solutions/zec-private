@@ -148,7 +148,7 @@ class RestoreSeedVM(
         dialogButton =
             IconButtonState(
                 icon = R.drawable.ic_help,
-                onClick = ::onInfoButtonClick
+                onClick = { navigationRouter.forward(SeedInfo) }
             ),
         nextButton =
             ButtonState(
@@ -169,10 +169,6 @@ class RestoreSeedVM(
     private fun clearSeed() {
         restoreSession.clear()
         seedWords.value = emptySeedWords
-    }
-
-    private fun onInfoButtonClick() {
-        navigationRouter.forward(SeedInfo)
     }
 
     private fun onNextClicked() {

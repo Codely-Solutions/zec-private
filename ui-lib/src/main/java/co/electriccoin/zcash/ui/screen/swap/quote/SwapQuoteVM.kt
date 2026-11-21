@@ -141,7 +141,8 @@ internal class SwapQuoteVM(
             val currentQuote = (swapRepository.quote.value as? SwapQuoteData.Success)?.quote
             val now = Clock.System.now()
             val proposalChanged = quote.quote.requiresLocalProposal && proposals.value !== proposal
-            if (isClosing || currentQuote !== quote.quote || now >= quote.quote.deadline || proposalChanged) return
+            val invalidReview = currentQuote !== quote.quote || now >= quote.quote.deadline || proposalChanged
+            if (isClosing || invalidReview) return
             val current = priceCheck.value.current(quote.quote, fee, now.toEpochMilliseconds())
             if (current != assessment || current == IndependentPriceCheck.Checking) return
             action()

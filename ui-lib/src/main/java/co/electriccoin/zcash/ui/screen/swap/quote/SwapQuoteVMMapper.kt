@@ -64,15 +64,7 @@ internal class SwapQuoteVMMapper {
                         },
                         isEnabled =
                             Clock.System.now() >= quote.deadline || canReview(priceCheck),
-                        onClick = {
-                            if (Clock.System.now() >= quote.deadline) {
-                                onBack()
-                            } else if (quote.destinationAsset.isZCashAsset) {
-                                onNavigateToOnRampSwap()
-                            } else if (proposal?.quote === quote) {
-                                onSubmitQuoteClick()
-                            }
-                        }
+                        onClick = { reviewAction(onBack, onNavigateToOnRampSwap, onSubmitQuoteClick) }
                     )
             )
         }
@@ -80,6 +72,14 @@ internal class SwapQuoteVMMapper {
     private fun SwapQuoteInternalState.canReview(priceCheck: IndependentPriceCheck?): Boolean =
         (quote.destinationAsset.isZCashAsset || proposal?.quote === quote) &&
             priceCheck != IndependentPriceCheck.Checking
+
+    private fun SwapQuoteInternalState.reviewAction(onBack: () -> Unit, onIncoming: () -> Unit, onLocal: () -> Unit) {
+        when {
+            Clock.System.now() >= quote.deadline -> onBack()
+            quote.destinationAsset.isZCashAsset -> onIncoming()
+            proposal?.quote === quote -> onLocal()
+        }
+    }
 
     @Suppress("MagicNumber")
     private fun SwapQuoteInternalState.createInfoText(): StringResource? {
