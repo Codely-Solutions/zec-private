@@ -23,7 +23,7 @@ internal fun ProjectReviewScene(screen: String): Boolean {
             session = androidx.compose.runtime.remember { AppAccessSession() },
             lockedContent = {
                 WelcomeAnimationAutostart(showAuthLogo = true, onRetry = {})
-                AppAccessAuthentication(onRetry = {}, showAuthLogo = true, welcomeAnimVisibility = true)
+                AppAccessAuthentication(onRetry = {}, showAuthLogo = true, welcomeAnimVisibility = false)
             },
             walletContent = {},
         )
