@@ -106,9 +106,9 @@ class AndroidPreferenceWriteTest {
         val observed = mutableListOf<String?>()
         backgroundScope.launch(dispatcher) { provider.observe(PreferenceKey("synthetic")).collect { observed += it } }
         runCurrent()
-        preferences.onCommit = { throw IOException("Synthetic commit failure after memory changed") }
+        preferences.onCommit = { throw IllegalStateException("Synthetic commit failure after memory changed") }
 
-        assertFailsWith<IOException> { provider.clearPreferences() }
+        assertFailsWith<IllegalStateException> { provider.clearPreferences() }
         runCurrent()
         assertEquals(listOf("before", null), observed)
 
