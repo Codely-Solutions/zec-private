@@ -410,9 +410,10 @@ class PublishMetadataTest(unittest.TestCase):
         asset = dict(id=5, name='validated-unsigned-apk', expired=False, size_in_bytes=len(raw),
                      created_at='2026-11-21T00:10:00Z',
                      digest='sha256:' + hashlib.sha256(raw).hexdigest(), workflow_run={'id': 7, 'head_sha': sha})
-        run = dict(id=7, path='.github/workflows/build-release.yml', event='workflow_dispatch',
+        run = dict(id=7, run_attempt=1, run_started_at='2026-11-21T00:00:00Z',
+                   path='.github/workflows/build-release.yml', event='workflow_dispatch',
                    head_branch='main', head_sha=sha, head_repository={'full_name': verify.REPO})
-        job = dict(id=11, name='unsigned', conclusion='success', status='completed', run_id=7, head_sha=sha,
+        job = dict(id=11, name='unsigned', conclusion='success', status='completed', run_id=7, run_attempt=1, head_sha=sha,
                    started_at='2026-11-21T00:01:00Z', completed_at='2026-11-21T00:12:00Z')
         jobs = [{'jobs': [job]}]
         metadata = [run, jobs, [{'artifacts': [asset]}]]
@@ -438,17 +439,19 @@ class PublishMetadataTest(unittest.TestCase):
         import verify_public_release as verify
 
         source, controller = 'a' * 40, 'b' * 40
-        run = dict(id=7, run_attempt=2, path='.github/workflows/sync-upstream.yml', event='schedule',
+        run = dict(id=7, run_attempt=2, run_started_at='2026-11-21T00:55:00Z',
+                   path='.github/workflows/sync-upstream.yml', event='schedule',
                    head_branch='main', head_sha=controller, head_repository={'full_name': verify.REPO})
+        first_attempt = dict(run, run_attempt=1, run_started_at='2026-11-21T00:00:00Z')
         candidate = io.BytesIO()
         with zipfile.ZipFile(candidate, 'w') as apk:
             apk.writestr('AndroidManifest.xml', b'original validated APK')
         apk = candidate.getvalue()
         proof = dict(source_sha=source, workflow_run_id='7', apk_sha256=verify.digest(apk))
         producer = dict(id=11, name='build / unsigned', conclusion='success', status='completed',
-                        run_id=7, head_sha=controller, started_at='2026-11-21T00:00:00Z',
+                        run_id=7, run_attempt=1, head_sha=controller, started_at='2026-11-21T00:01:00Z',
                         completed_at='2026-11-21T00:31:00Z')
-        later_producer = dict(producer, id=12, started_at='2026-11-21T01:00:00Z',
+        later_producer = dict(producer, id=12, run_attempt=2, started_at='2026-11-21T01:00:00Z',
                               completed_at='2026-11-21T01:31:00Z')
 
         def archive(artifact_id, created_at, raw_proof):
@@ -475,7 +478,8 @@ class PublishMetadataTest(unittest.TestCase):
         exact = dict(legacy, production_job_id=11)
         for attestation in (legacy, exact):
             with self.subTest(attestation=attestation), \
-                    patch.object(verify, 'gh', side_effect=[run, [{'jobs': jobs}], [{'artifacts': artifacts}]]), \
+                    patch.object(verify, 'gh', side_effect=[run, [{'jobs': jobs}], [{'artifacts': artifacts}],
+                                                           first_attempt]), \
                     patch.object(verify.subprocess, 'check_output', return_value=raw) as download:
                 self.assertEqual(verify.unsigned_proof(attestation), (apk, proof, binding(original), 11))
                 self.assertTrue(download.call_args.args[0][-1].endswith('/actions/artifacts/53/zip'))
@@ -490,7 +494,7 @@ class PublishMetadataTest(unittest.TestCase):
              jobs, artifacts, 'accepted unsigned artifact'),
             (exact, jobs, [later, bad_creator], 'artifact run or size mismatch'),
             (exact, jobs, [original, dict(original), later], 'one live validated unsigned artifact'),
-            (exact, [*jobs, dict(producer)], artifacts, 'one successful unsigned producer job'),
+            (exact, [*jobs, dict(producer)], artifacts, 'one record per matching unsigned producer job'),
             (dict(exact, production_artifact=binding(later)), jobs, artifacts, 'exact attested producer job'),
             (dict(legacy, production_artifact=binding(later)),
              [producer, dict(later_producer, conclusion='failure')], artifacts,
@@ -499,16 +503,46 @@ class PublishMetadataTest(unittest.TestCase):
         for attestation, reported_jobs, reported_artifacts, error in cases:
             with self.subTest(error=error, attestation=attestation), \
                     patch.object(verify, 'gh', side_effect=[run, [{'jobs': reported_jobs}],
-                                                           [{'artifacts': reported_artifacts}]]), \
+                                                           [{'artifacts': reported_artifacts}], first_attempt]), \
                     patch.object(verify.subprocess, 'check_output') as download:
                 with self.assertRaisesRegex(ValueError, error):
                     verify.unsigned_proof(attestation)
                 download.assert_not_called()
 
-        with patch.object(verify, 'gh', side_effect=[run, [{'jobs': jobs}], [{'artifacts': [wrong_source, later]}]]), \
+        with patch.object(verify, 'gh', side_effect=[run, [{'jobs': jobs}], [{'artifacts': [wrong_source, later]}],
+                                                    first_attempt]), \
                 patch.object(verify.subprocess, 'check_output', return_value=wrong_raw):
             with self.assertRaisesRegex(ValueError, 'does not match recorded source'):
                 verify.unsigned_proof(dict(exact, production_artifact=binding(wrong_source)))
+
+    def test_copied_unsigned_job_resolves_only_to_the_original_execution(self):
+        import verify_public_release as verify
+
+        first = dict(id=7, run_attempt=1, head_sha='a' * 40, run_started_at='2026-11-20T19:00:36Z')
+        second = dict(first, run_attempt=2, run_started_at='2026-11-20T19:31:31Z')
+        artifact = {'created_at': '2026-11-20T19:16:13Z'}
+        original = dict(
+            id=11, run_attempt=1, status='completed', conclusion='success', runner_id=42,
+            started_at='2026-11-20T19:03:26Z', completed_at='2026-11-20T19:16:17Z',
+            steps=[dict(number=1, name='Build unsigned APK', started_at='2026-11-20T19:04:00Z',
+                        completed_at='2026-11-20T19:15:00Z', status='completed', conclusion='success')],
+        )
+        copied = dict(original, id=12, run_attempt=2)
+        with patch.object(verify, 'gh', return_value=first) as gh:
+            self.assertEqual(verify.unsigned_producer_job(second, [copied, original], artifact), 11)
+            gh.assert_called_once_with('actions/runs/7/attempts/1')
+            with self.assertRaisesRegex(ValueError, 'exact attested producer job'):
+                verify.unsigned_producer_job(second, [original, copied], artifact, expected_id=12)
+        with patch.object(verify, 'gh', return_value=first):
+            with self.assertRaisesRegex(ValueError, 'one successful unsigned producer'):
+                verify.unsigned_producer_job(second, [copied], artifact)
+            for altered in (dict(copied, runner_id=43), dict(copied, steps=[])):
+                with self.subTest(altered=altered), self.assertRaisesRegex(ValueError, 'Copied unsigned producer'):
+                    verify.unsigned_producer_job(second, [original, altered], artifact, expected_id=11)
+            overlapping = dict(second, run_started_at='2026-11-20T19:08:00Z')
+            genuine = dict(copied, started_at='2026-11-20T19:09:00Z', completed_at='2026-11-20T19:18:00Z')
+            with self.assertRaisesRegex(ValueError, 'one successful unsigned producer'):
+                verify.unsigned_producer_job(overlapping, [original, genuine], artifact, expected_id=11)
 
     def test_public_discovery_uses_a_matching_public_redirect_on_rate_limit(self):
         import verify_public_release as verify

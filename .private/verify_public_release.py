@@ -98,7 +98,7 @@ def payload(data):
                 if not re.fullmatch(r'META-INF/[^/]+\.(RSA|DSA|EC|SF|MF)', item, re.I)}
 
 
-def unsigned_producer_job(jobs, asset, expected_id=None):
+def unsigned_producer_job(run, jobs, asset, expected_id=None):
     def timestamp(value):
         require(isinstance(value, str), 'Missing GitHub artifact or job timestamp')
         parsed = datetime.fromisoformat(value)
@@ -108,15 +108,46 @@ def unsigned_producer_job(jobs, asset, expected_id=None):
     created = timestamp(asset.get('created_at'))
     matches = []
     for job in jobs:
-        started = job.get('started_at')
-        completed = job.get('completed_at')
-        if started and timestamp(started) <= created and (completed is None or created <= timestamp(completed)):
-            matches.append(job)
-    require(len(matches) == 1 and matches[0]['status'] == 'completed' and matches[0]['conclusion'] == 'success',
+        started = timestamp(job['started_at']) if job.get('started_at') else None
+        completed = timestamp(job['completed_at']) if job.get('completed_at') else None
+        if started is not None and started <= created and (completed is None or created <= completed):
+            matches.append((job, started, completed))
+    ids = [job.get('id') for job, _, _ in matches]
+    require(all(type(job_id) is int and job_id > 0 for job_id in ids) and len(ids) == len(set(ids)),
+            'Expected one record per matching unsigned producer job')
+
+    current = run['run_attempt']
+    attempts = {current: run}
+    producers, copies = [], []
+    for job, started, completed in matches:
+        number = job.get('run_attempt')
+        require(type(number) is int and 1 <= number <= current, 'Invalid unsigned producer attempt')
+        if number not in attempts:
+            attempt = gh(f'actions/runs/{run["id"]}/attempts/{number}')
+            require(attempt['id'] == run['id'] and attempt['run_attempt'] == number
+                    and attempt['head_sha'] == run['head_sha'], 'Unsigned producer attempt identity mismatch')
+            attempts[number] = attempt
+        attempt_started = timestamp(attempts[number].get('run_started_at'))
+        if started >= attempt_started:
+            producers.append(job)
+        else:
+            require(completed is not None and completed < attempt_started,
+                    'Unsigned producer overlaps the start of its reported attempt')
+            copies.append(job)
+
+    require(len(producers) == 1 and producers[0]['status'] == 'completed'
+            and producers[0]['conclusion'] == 'success' and producers[0].get('completed_at'),
             'Expected one successful unsigned producer job when the selected artifact was uploaded')
-    job = matches[0]
-    require(type(job.get('id')) is int and job['id'] > 0 and job.get('completed_at')
-            and (expected_id is None or (type(expected_id) is int and job['id'] == expected_id)),
+    job = producers[0]
+    if copies:
+        # GitHub reruns can copy a successful job into a later attempt under
+        # a new job ID. Its original execution finished before that attempt.
+        fields = ('status', 'conclusion', 'started_at', 'completed_at', 'runner_id', 'steps')
+        require(type(job.get('runner_id')) is int and job['runner_id'] > 0 and job.get('steps')
+                and all(copy['run_attempt'] > job['run_attempt']
+                        and all(copy.get(field) == job.get(field) for field in fields) for copy in copies),
+                'Copied unsigned producer does not match the original execution')
+    require(expected_id is None or (type(expected_id) is int and job['id'] == expected_id),
             'Unsigned artifact differs from the exact attested producer job')
     return job['id']
 
@@ -164,7 +195,7 @@ def unsigned_proof(evidence):
                 'Public verification did not resolve the accepted unsigned artifact')
     require('production_job_id' not in evidence or evidence['production_job_id'] is not None,
             'Missing attested unsigned producer job ID')
-    job_id = unsigned_producer_job(jobs, asset, evidence.get('production_job_id'))
+    job_id = unsigned_producer_job(run, jobs, asset, evidence.get('production_job_id'))
     data = subprocess.check_output(['gh', 'api', f'{API}/actions/artifacts/{asset["id"]}/zip'], timeout=90)
     require(len(data) == asset['size_in_bytes'] and asset['digest'] == 'sha256:' + digest(data),
             'Unsigned artifact digest or size mismatch')
