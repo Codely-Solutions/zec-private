@@ -13,11 +13,15 @@ import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.runner.lifecycle.ActivityLifecycleCallback
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
 import androidx.lifecycle.Lifecycle
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.ui.MainActivity
+import co.electriccoin.zcash.ui.BiometricActivity
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
@@ -36,9 +40,12 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 import org.junit.Test
+import org.junit.Before
+import org.junit.After
 import org.koin.core.context.GlobalContext
 import java.util.concurrent.TimeUnit
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Runs against a blank, PIN-secured emulator with the opt-in core-wallet instrumentation. */
 class ProjectReviewAppAccessTest {
@@ -51,6 +58,21 @@ class ProjectReviewAppAccessTest {
     private val revealLabel get() = context.getString(R.string.recoveryPhraseDisplay_reveal)
     private val hideLabel get() = context.getString(R.string.recoveryPhraseDisplay_hide)
     private val copyLabel get() = context.getString(R.string.recovery_copy_phrase)
+    private val biometricCreations = AtomicInteger()
+    private var diagnosticMode = false
+    private val lifecycleCallback = ActivityLifecycleCallback { activity, stage ->
+        if (activity is BiometricActivity && stage == Stage.CREATED) biometricCreations.incrementAndGet()
+    }
+
+    @Before
+    fun observeBiometricActivity() = onMain {
+        ActivityLifecycleMonitorRegistry.getInstance().addLifecycleCallback(lifecycleCallback)
+    }
+
+    @After
+    fun stopObservingBiometricActivity() = onMain {
+        ActivityLifecycleMonitorRegistry.getInstance().removeLifecycleCallback(lifecycleCallback)
+    }
 
     @Test
     fun cancellationAndBackgroundRelock() = verifyBackgroundRelock(forceTimeout = false)
@@ -60,6 +82,7 @@ class ProjectReviewAppAccessTest {
     fun cancellationAndForcedTimeoutDiagnostic() = verifyBackgroundRelock(forceTimeout = true)
 
     private fun verifyBackgroundRelock(forceTimeout: Boolean) = runBlocking {
+        diagnosticMode = forceTimeout
         val pin = prepareSecuredGuest()
         report("secured_guest_verified")
         val walletWords = createIsolatedWalletWithForegroundSetup()
@@ -211,7 +234,25 @@ class ProjectReviewAppAccessTest {
     private suspend fun revealBackup(pin: String, walletWords: Set<String>) {
         scrollToReveal()
         val reveal = waitForBounds("recovery reveal action", requireClick = true) { matchesLabel(it, revealLabel) }
+        val before = biometricCreations.get()
         tap(reveal)
+        val deadline = SystemClock.elapsedRealtime() + 3_000
+        while (SystemClock.elapsedRealtime() < deadline &&
+            biometricCreations.get() == before && !hasFocusedCredentialEntry()
+        ) delay(POLL_MILLIS)
+        android.util.Log.i("ProjectReviewAppAccess", JSONObject()
+            .put("phase", "reveal_physical_tap")
+            .put("bounds", reveal.toShortString())
+            .put("display_height", context.resources.displayMetrics.heightPixels)
+            .put("biometric_activity_created", biometricCreations.get() > before)
+            .put("credential_focused", hasFocusedCredentialEntry())
+            .toString())
+        if (diagnosticMode && biometricCreations.get() == before && !hasFocusedCredentialEntry()) {
+            check(!hasWalletWord(walletWords) && !hasLabel(copyLabel))
+            val accepted = findBounds(requireClick = true, performClick = true) { matchesLabel(it, revealLabel) } != null
+            android.util.Log.i("ProjectReviewAppAccess", JSONObject()
+                .put("phase", "diagnostic_reveal_accessibility_click").put("accepted", accepted).toString())
+        }
         waitForCredentialEntry()
         enterPin(pin)
         waitFor("authorized recovery reveal") { hasLabel(hideLabel) || hasLabel(copyLabel) }
@@ -365,7 +406,11 @@ class ProjectReviewAppAccessTest {
     }
 
     @Suppress("DEPRECATION")
-    private fun findBounds(requireClick: Boolean = false, match: (AccessibilityNodeInfo) -> Boolean): Rect? {
+    private fun findBounds(
+        requireClick: Boolean = false,
+        performClick: Boolean = false,
+        match: (AccessibilityNodeInfo) -> Boolean
+    ): Rect? {
         fun clickBounds(node: AccessibilityNodeInfo): Rect? {
             val labelBounds = Rect().also(node::getBoundsInScreen)
             var control: AccessibilityNodeInfo? = AccessibilityNodeInfo.obtain(node)
@@ -381,7 +426,10 @@ class ProjectReviewAppAccessTest {
                         val clickAction = current.actionList.any {
                             it.id == AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK.id
                         }
-                        return bounds.takeIf { current.isVisibleToUser && bounded && clickAction }
+                        return bounds.takeIf {
+                            current.isVisibleToUser && bounded && clickAction &&
+                                (!performClick || current.performAction(AccessibilityNodeInfo.ACTION_CLICK))
+                        }
                     }
                     control = current.parent
                     current.recycle()
