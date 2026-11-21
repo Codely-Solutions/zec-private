@@ -49,22 +49,28 @@ class ProjectReviewAppAccessTest {
     @Test
     fun cancellationAndBackgroundRelock() = runBlocking {
         val pin = prepareSecuredGuest()
+        report("secured_guest_verified")
         val walletWords = createIsolatedWalletWithForegroundSetup()
+        report("isolated_wallet_created")
         val activity = instrumentation.startActivitySync(launchIntent()) as MainActivity
         waitForCredentialEntry()
         assertWalletAbsent(walletWords)
+        report("initial_credential_prompt")
 
         pressBack()
         waitForLabel(lockedTitle)
         assertWalletAbsent(walletWords)
+        report("initial_authentication_cancelled")
         // Use harmless routing while locked to check that the wallet command consumer is absent.
         dependency<NavigationRouter>().forward(WalletBackup(false))
         delay(400)
         assertWalletAbsent(walletWords)
         retryUnlock(pin)
         waitFor("authenticated wallet action") { hasWalletAction() }
+        report("initial_app_access_unlocked")
         dependency<NavigationRouter>().forward(WalletBackup(false))
         waitForLabel(backupTitle)
+        report("backup_screen_ready")
         revealBackup(pin, walletWords)
         report("reveal_before_background")
 

@@ -1861,10 +1861,10 @@ index 000000000..cdadb0a3b
 +See the [wallet guide](WALLET-GUIDE.md) for instructions and [privacy](PRIVACY.md) before sharing diagnostics.
 diff --git a/docs/WALLET-GUIDE.md b/docs/WALLET-GUIDE.md
 new file mode 100644
-index 000000000..ee16df9bd
+index 000000000..53a6da422
 --- /dev/null
 +++ b/docs/WALLET-GUIDE.md
-@@ -0,0 +1,57 @@
+@@ -0,0 +1,61 @@
 +# ZEC Private: Android Zcash wallet guide
 +
 +## Installation and updates
@@ -1908,6 +1908,10 @@ index 000000000..ee16df9bd
 +## Recovery and migration
 +
 +Keep your recovery phrase and wallet birthday secure. Never enter a hardware-wallet recovery phrase into this app or share it with anyone.
++
++When app lock is enabled, canceling Android authentication keeps the wallet locked. Tap the key icon to try again. Recovery words and viewing keys require fresh approval after the app locks.
++
++Reset is complete when the app returns to onboarding. If it asks you to finish resetting the wallet, tap **Try again** to complete the pending reset.
 +
 +For Ironwood migration, review the plan, fees and privacy warnings before approving. Transfers between pools can reveal amounts and timing. Scheduled transfers need connectivity and Android background access; reopen the app to check pending work. If a migration stalls, inspect its status before resetting anything.
 +
@@ -15014,24 +15018,62 @@ index 245c01c78..24b627df4 100644
 @@ -3 +2,0 @@ plugins {
 -    kotlin("android")
 diff --git a/preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/AndroidPreferenceProvider.kt b/preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/AndroidPreferenceProvider.kt
-index 482d6da57..176174272 100644
+index 482d6da57..bfaa054ba 100644
 --- a/preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/AndroidPreferenceProvider.kt
 +++ b/preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/AndroidPreferenceProvider.kt
-@@ -26,0 +27 @@ import java.io.CharConversionException
+@@ -18 +18 @@ import kotlinx.coroutines.flow.Flow
+-import kotlinx.coroutines.flow.MutableSharedFlow
++import kotlinx.coroutines.flow.MutableStateFlow
+@@ -21,0 +22 @@ import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.flow.update
+@@ -26,0 +28 @@ import java.io.CharConversionException
 +import java.io.IOException
-@@ -70 +71 @@ class AndroidPreferenceProvider(
+@@ -51 +53 @@ class AndroidPreferenceProvider(
+-    private val clearPipeline = MutableSharedFlow<Unit>()
++    private val clearRevision = MutableStateFlow(0L)
+@@ -70 +72 @@ class AndroidPreferenceProvider(
 -            editor.commit()
 +            editor.commitOrThrow()
-@@ -86 +87 @@ class AndroidPreferenceProvider(
+@@ -86 +88 @@ class AndroidPreferenceProvider(
 -            editor.commit()
 +            editor.commitOrThrow()
-@@ -105 +106 @@ class AndroidPreferenceProvider(
+@@ -105 +107 @@ class AndroidPreferenceProvider(
 -            editor.commit()
 +            editor.commitOrThrow()
-@@ -172 +173 @@ class AndroidPreferenceProvider(
+@@ -132,7 +134,9 @@ class AndroidPreferenceProvider(
+-            val editor = sharedPreferences.edit()
+-
+-            editor.clear()
+-
+-            clearPipeline.emit(Unit)
+-
+-            return@withContext editor.commit()
++            mutex.withLock {
++                try {
++                    sharedPreferences.edit().clear().commit()
++                } finally {
++                    // AndroidX does not notify key listeners for clear-only editors. Even a failed
++                    // disk commit can change Android's in-memory preferences.
++                    clearRevision.update { it + 1 }
++                }
++            }
+@@ -151 +155 @@ class AndroidPreferenceProvider(
+-                clearPipeline.collect {
++                clearRevision.collect {
+@@ -156,3 +159,0 @@ class AndroidPreferenceProvider(
+-            // Kickstart the emissions
+-            trySend(Unit)
+-
+@@ -168,5 +169,3 @@ class AndroidPreferenceProvider(
+-            val editor = sharedPreferences.edit()
+-
+-            editor.remove(key.key)
+-
 -            editor.commit()
-+            editor.commitOrThrow()
-@@ -176 +177,6 @@ class AndroidPreferenceProvider(
++            mutex.withLock {
++                sharedPreferences.edit().remove(key.key).commitOrThrow()
++            }
+@@ -176 +175,6 @@ class AndroidPreferenceProvider(
 -    companion object Factory : AndroidPreferenceFactory by AndroidPreferenceFactoryImpl()
 +    companion object Factory : AndroidPreferenceFactory by AndroidPreferenceFactoryImpl() {
 +        // A failed disk commit can already have changed Android's in-memory value.
@@ -15053,22 +15095,28 @@ index cea420a26..2b2438bad 100644
 +    withContext(Dispatchers.IO) { quarantineDir.deleteRecursively() }
 diff --git a/preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/AndroidPreferenceWriteTest.kt b/preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/AndroidPreferenceWriteTest.kt
 new file mode 100644
-index 000000000..6a9a8d30d
+index 000000000..72b1419c9
 --- /dev/null
 +++ b/preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/AndroidPreferenceWriteTest.kt
-@@ -0,0 +1,51 @@
+@@ -0,0 +1,168 @@
 +package co.electriccoin.zcash.preference
 +
 +import android.content.SharedPreferences
 +import co.electriccoin.zcash.preference.model.entry.PreferenceKey
++import kotlinx.coroutines.CoroutineStart
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.launch
 +import kotlinx.coroutines.test.StandardTestDispatcher
++import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.runTest
 +import java.io.IOException
 +import java.lang.reflect.Proxy
 +import kotlin.test.Test
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
++import kotlin.test.assertNull
 +
++@OptIn(ExperimentalCoroutinesApi::class)
 +class AndroidPreferenceWriteTest {
 +    @Test
 +    fun failedWritesPropagateAndCanBeRetried() = runTest {
@@ -15106,6 +15154,117 @@ index 000000000..6a9a8d30d
 +            write()
 +        }
 +        assertEquals(writes.size * 2, commits)
++    }
++
++    @Test
++    fun clearObserversReadAfterTheCommitAndTheCallerReceivesItsResult() = runTest {
++        val dispatcher = StandardTestDispatcher(testScheduler)
++        listOf(true, false).forEach { commitSucceeds ->
++            val preferences = ClearedWithoutListeners(commitSucceeds)
++            val provider = AndroidPreferenceProvider(preferences.preferences, dispatcher)
++            val first = mutableListOf<String?>()
++            val second = mutableListOf<String?>()
++            val key = PreferenceKey("synthetic")
++            val firstObserver = backgroundScope.launch(dispatcher) { provider.observe(key).collect { first += it } }
++            val secondObserver = backgroundScope.launch(dispatcher) { provider.observe(key).collect { second += it } }
++            runCurrent()
++            assertEquals(listOf<String?>("before"), first)
++            assertEquals(listOf<String?>("before"), second)
++
++            assertEquals(commitSucceeds, provider.clearPreferences())
++            runCurrent()
++
++            assertEquals(listOf("before", null), first)
++            assertEquals(listOf("before", null), second)
++            firstObserver.cancel()
++            secondObserver.cancel()
++        }
++    }
++
++    @Test
++    fun clearCommittedDuringCallerCancellationStillInvalidatesObservers() = runTest {
++        val dispatcher = StandardTestDispatcher(testScheduler)
++        val preferences = ClearedWithoutListeners(true)
++        val provider = AndroidPreferenceProvider(preferences.preferences, dispatcher)
++        val observed = mutableListOf<String?>()
++        backgroundScope.launch(dispatcher) { provider.observe(PreferenceKey("synthetic")).collect { observed += it } }
++        runCurrent()
++        val clearing = launch(dispatcher, start = CoroutineStart.LAZY) { provider.clearPreferences() }
++        preferences.onCommit = { clearing.cancel() }
++
++        clearing.start()
++        clearing.join()
++        runCurrent()
++
++        assertEquals(listOf("before", null), observed)
++    }
++
++    @Test
++    fun clearWaitsForTheWriteHoldingTheMutex() = runTest {
++        val dispatcher = StandardTestDispatcher(testScheduler)
++        val preferences = ClearedWithoutListeners(true)
++        val provider = AndroidPreferenceProvider(preferences.preferences, dispatcher)
++        val key = PreferenceKey("synthetic")
++        val order = mutableListOf<String>()
++        preferences.onPutCommit = {
++            order += "put started"
++            // Start an overlapping clear inside the synchronous commit, while put still owns the mutex.
++            launch(dispatcher, start = CoroutineStart.UNDISPATCHED) { provider.clearPreferences() }
++            order += "put finished"
++        }
++        preferences.onCommit = { order += "clear committed" }
++
++        provider.putString(key, "replacement")
++        runCurrent()
++
++        assertEquals(listOf("put started", "put finished", "clear committed"), order)
++        assertNull(provider.getString(key))
++    }
++
++    /** Models AndroidX clear-only commits, which skip listener callbacks and update memory on false. */
++    private class ClearedWithoutListeners(private val commitSucceeds: Boolean) {
++        private var storedValue: String? = "before"
++        var onCommit: () -> Unit = {}
++        var onPutCommit: () -> Unit = {}
++
++        private fun editor(): SharedPreferences.Editor {
++            var updatedValue: String? = null
++            var clearing = false
++            return Proxy.newProxyInstance(
++                SharedPreferences.Editor::class.java.classLoader,
++                arrayOf(SharedPreferences.Editor::class.java)
++            ) { proxy, method, arguments ->
++                when (method.name) {
++                    "clear" -> {
++                        clearing = true
++                        proxy
++                    }
++                    "putString" -> {
++                        updatedValue = checkNotNull(arguments)[1] as String?
++                        proxy
++                    }
++                    "commit" -> {
++                        if (!clearing) onPutCommit()
++                        storedValue = updatedValue
++                        if (clearing) onCommit()
++                        commitSucceeds
++                    }
++                    else -> error("Unexpected editor method")
++                }
++            } as SharedPreferences.Editor
++        }
++
++        val preferences = Proxy.newProxyInstance(
++            SharedPreferences::class.java.classLoader,
++            arrayOf(SharedPreferences::class.java)
++        ) { _, method, _ ->
++            when (method.name) {
++                "edit" -> editor()
++                "getString" -> storedValue
++                "registerOnSharedPreferenceChangeListener", "unregisterOnSharedPreferenceChangeListener" -> null
++                else -> error("Unexpected preferences method")
++            }
++        } as SharedPreferences
 +    }
 +}
 diff --git a/scripts/check-swap-price-catalog.py b/scripts/check-swap-price-catalog.py
@@ -21898,7 +22057,7 @@ index 50bcc0da8..904bf2920 100644
 @@ -141 +135,0 @@ val viewModelModule =
 -        viewModelOf(::FeedbackVM)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt b/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt
-index 7ae52a552..ad306ff65 100644
+index 7ae52a552..aa5028fda 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/global/WalletCoordinatorFactory.kt
 @@ -5,0 +6 @@ import cash.z.ecc.android.sdk.WalletCoordinator
@@ -21907,19 +22066,23 @@ index 7ae52a552..ad306ff65 100644
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 @@ -10,0 +13,2 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.Flow
-+import kotlinx.coroutines.flow.combine
++import kotlinx.coroutines.flow.buffer
 @@ -18,0 +23 @@ internal operator fun WalletCoordinator.Companion.invoke(
 +    resetProgressStore: ResetProgressStore,
 @@ -22 +27 @@ internal operator fun WalletCoordinator.Companion.invoke(
 -        persistableWallet = persistableWalletProvider.persistableWallet,
 +        persistableWallet = persistableWalletProvider.persistableWallet.hideErasedWallet(resetProgressStore),
-@@ -29,0 +35,7 @@ internal operator fun WalletCoordinator.Companion.invoke(
+@@ -29,0 +35,11 @@ internal operator fun WalletCoordinator.Companion.invoke(
 +/**
 + * Erasure needs the current network. Once verified, keep the SDK closed until preferences are
-+ * cleared, including when a pending reset is resumed after process death.
++ * cleared, including when a pending reset is resumed after process death. Reopen the cold wallet
++ * flow after clearing so the SDK reads the current store even if a prior observer missed an update.
 + */
++@OptIn(ExperimentalCoroutinesApi::class)
 +internal fun Flow<PersistableWallet?>.hideErasedWallet(resetProgressStore: ResetProgressStore) =
-+    combine(resetProgressStore.isSdkErased) { wallet, sdkErased -> wallet.takeUnless { sdkErased } }
++    resetProgressStore.isSdkErased
++        .flatMapLatest { sdkErased -> if (sdkErased) flowOf(null) else this }
++        .buffer(0)
 +
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
 new file mode 100644
@@ -46058,10 +46221,10 @@ index 000000000..bd2ec8216
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletCoordinatorResetGateTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletCoordinatorResetGateTest.kt
 new file mode 100644
-index 000000000..bb55a61ee
+index 000000000..040b01863
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletCoordinatorResetGateTest.kt
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,104 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -46070,8 +46233,11 @@ index 000000000..bb55a61ee
 +import co.electriccoin.zcash.ui.common.provider.DirectorySync
 +import io.mockk.every
 +import io.mockk.mockk
++import kotlinx.coroutines.channels.Channel
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.flow.flow
++import kotlinx.coroutines.launch
 +import kotlinx.coroutines.test.runTest
 +import org.junit.Rule
 +import org.junit.rules.TemporaryFolder
@@ -46080,6 +46246,7 @@ index 000000000..bb55a61ee
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
 +import kotlin.test.assertNull
++import kotlin.test.assertSame
 +import kotlin.test.assertTrue
 +
 +class WalletCoordinatorResetGateTest {
@@ -46129,6 +46296,31 @@ index 000000000..bb55a61ee
 +        store.store(ResetStage.CLEAR_PREFERENCES)
 +        assertEquals(ResetStage.CLEAR_PREFERENCES, progressStore().getStage())
 +        assertNull(preferences.hideErasedWallet(progressStore()).first())
++    }
++
++    @Test
++    fun releasingTheGateReadsStorageBeforeAnyDelayedPreferenceNotification() = runTest {
++        val store = progressStore()
++        val original = mockk<PersistableWallet>()
++        var storedWallet: PersistableWallet? = original
++        val revision = MutableStateFlow(0)
++        val preferences = flow { revision.collect { emit(storedWallet) } }
++        val observed = Channel<PersistableWallet?>(Channel.UNLIMITED)
++        backgroundScope.launch { preferences.hideErasedWallet(store).collect { observed.send(it) } }
++
++        assertSame(original, observed.receive())
++        store.store(ResetStage.CLEAR_PREFERENCES)
++        assertNull(observed.receive())
++
++        storedWallet = null
++        store.store(null)
++        // Opening the gate must read the cleared store despite the delayed notification.
++        assertNull(observed.receive())
++
++        val restored = mockk<PersistableWallet>()
++        storedWallet = restored
++        revision.value += 1
++        assertSame(restored, observed.receive())
 +    }
 +
 +    private fun progressStore(sync: DirectorySync = DirectorySync {}): ResetProgressStore =

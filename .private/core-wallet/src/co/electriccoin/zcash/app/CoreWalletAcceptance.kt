@@ -9,6 +9,7 @@ import android.accessibilityservice.AccessibilityService
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiArgs
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiUseCase
 import co.electriccoin.zcash.ui.screen.updates.AppUpdateRepository
 import co.electriccoin.zcash.ui.screen.send.Send
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
@@ -67,6 +68,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.withTimeoutOrNull
@@ -1291,7 +1293,7 @@ class CoreWalletAcceptance {
         }
     }
 
-    private suspend fun settingsResetAndRestore(useTor: Boolean) {
+    private suspend fun settingsResetAndRestore(useTor: Boolean) = kotlinx.coroutines.coroutineScope {
         val walletProvider = dependency<PersistableWalletProvider>()
         check(walletProvider.getPersistableWallet() == null) { "Reset probe requires a fresh app install" }
         check(Build.HARDWARE in setOf("ranchu", "goldfish"))
@@ -1315,31 +1317,77 @@ class CoreWalletAcceptance {
         val metadataFiles = dependency<MetadataStorageProvider>().getStorageFiles(metadataKey)
         check(contacts.isFile && metadataFiles.isNotEmpty())
 
-        dependency<NavigationRouter>().forward(ResetZashiArgs)
-        val keep = context.getString(co.electriccoin.zcash.ui.R.string.deleteWallet_metadataWarn1)
-        val confirm = context.getString(co.electriccoin.zcash.ui.design.R.string.general_confirm)
-        scrollToText(confirm)
-        clickUi(keep, "reset_remove_local_files", exact = false, maxControlDp = 180)
-        clickUi(confirm, "reset_request_confirmation")
-        clickUi(context.getString(co.electriccoin.zcash.ui.R.string.deleteWallet_actionButtonTitle), "reset_confirm")
-        withTimeout(90_000) {
-            walletProvider.persistableWallet.first { it == null }
-            dependency<ResetProgressStore>().isPending.first { !it }
+        val observedWalletPresent = kotlinx.coroutines.flow.MutableStateFlow(true)
+        val observerReady = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val observer = launch {
+            walletProvider.persistableWallet.collect {
+                observedWalletPresent.value = it != null
+                observerReady.complete(Unit)
+            }
+        }
+        withTimeout(10_000) { observerReady.await() }
+        val progress = dependency<ResetProgressStore>()
+        val reset = dependency<ResetZashiUseCase>()
+        suspend fun trace(phase: String, error: Exception? = null) {
+            val freshWallet = runCatching { walletProvider.getPersistableWallet() != null }.getOrNull()
+            val stage = runCatching { progress.getStage()?.name }.getOrNull()
+            android.util.Log.i("ProjectReviewReset", JSONObject()
+                .put("phase", phase)
+                .put("fresh_wallet_present", freshWallet ?: JSONObject.NULL)
+                .put("observed_wallet_present", observedWalletPresent.value)
+                .put("pending", progress.isPending.value)
+                .put("stage", stage ?: "none")
+                .put("running", reset.isRunning.value)
+                .put("sdk_open", syncProvider.synchronizer.value != null)
+                .put("sdk_file_present", walletDb.exists())
+                .put("contacts_present", contacts.exists())
+                .put("metadata_files_present", metadataFiles.count { it.exists() })
+                .put("error_type", error?.javaClass?.simpleName ?: "none").toString())
         }
 
-        check(!walletDb.exists()) { "The settings reset left the SDK wallet database on disk" }
-        check(!contacts.exists() && metadataFiles.none { it.exists() })
-        val restore = context.getString(co.electriccoin.zcash.ui.R.string.plainOnboarding_button_restoreWallet)
-        waitUi(restore, "reset_returned_to_onboarding")
-        val transportPreference = dependency<IsTorEnabledStorageProvider>()
-        check(transportPreference.get() == null) { "Reset retained the previous transport preference" }
-        // Reset deliberately clears preferences. Select this isolated probe's transport again before restore.
-        transportPreference.store(useTor)
-        dependency<RestoreWalletUseCase>()(wallet.seedPhrase, useTor, checkNotNull(wallet.birthday))
-        val restored = walletProvider.persistableWallet.filterNotNull().first()
-        check(restored.seedPhrase == wallet.seedPhrase && restored.birthday == wallet.birthday)
-        val restoredAccount = withTimeout(120_000) { dependency<AccountDataSource>().getZashiAccount() }
-        check(syncProvider.getSynchronizer().getUnifiedAddress(restoredAccount.sdkAccount) == address)
+        try {
+            trace("metadata_and_observer_ready")
+            dependency<NavigationRouter>().forward(ResetZashiArgs)
+            val keep = context.getString(co.electriccoin.zcash.ui.R.string.deleteWallet_metadataWarn1)
+            val confirm = context.getString(co.electriccoin.zcash.ui.design.R.string.general_confirm)
+            scrollToText(confirm)
+            clickUi(keep, "reset_remove_local_files", exact = false, maxControlDp = 180)
+            clickUi(confirm, "reset_request_confirmation")
+            clickUi(context.getString(co.electriccoin.zcash.ui.R.string.deleteWallet_actionButtonTitle), "reset_confirm")
+            trace("confirmation_tapped")
+            withTimeout(10_000) {
+                combine(observedWalletPresent, progress.isPending, reset.isRunning) { present, pending, running ->
+                    !present || pending || running
+                }.first { it }
+            }
+            trace("reset_started_or_finished")
+            withTimeout(90_000) {
+                observedWalletPresent.first { !it }
+                progress.isPending.first { !it }
+            }
+            trace("reset_completed")
+
+            check(!walletDb.exists()) { "The settings reset left the SDK wallet database on disk" }
+            check(!contacts.exists() && metadataFiles.none { it.exists() })
+            val restore = context.getString(co.electriccoin.zcash.ui.R.string.plainOnboarding_button_restoreWallet)
+            waitUi(restore, "reset_returned_to_onboarding")
+            val transportPreference = dependency<IsTorEnabledStorageProvider>()
+            check(transportPreference.get() == null) { "Reset retained the previous transport preference" }
+            // Reset deliberately clears preferences. Select this isolated probe's transport again before restore.
+            transportPreference.store(useTor)
+            dependency<RestoreWalletUseCase>()(wallet.seedPhrase, useTor, checkNotNull(wallet.birthday))
+            val restored = walletProvider.persistableWallet.filterNotNull().first()
+            check(restored.seedPhrase == wallet.seedPhrase && restored.birthday == wallet.birthday)
+            val restoredAccount = withTimeout(120_000) { dependency<AccountDataSource>().getZashiAccount() }
+            check(syncProvider.getSynchronizer().getUnifiedAddress(restoredAccount.sdkAccount) == address)
+            trace("same_identity_restored")
+        } catch (error: Exception) {
+            trace("failed", error)
+            throw error
+        } finally {
+            observer.cancel()
+            observer.join()
+        }
     }
 
     @Suppress("DEPRECATION")

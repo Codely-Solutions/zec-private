@@ -42,6 +42,10 @@ Quoted output is an estimate; execution can differ. Completed swap details show 
 
 Keep your recovery phrase and wallet birthday secure. Never enter a hardware-wallet recovery phrase into this app or share it with anyone.
 
+When app lock is enabled, canceling Android authentication keeps the wallet locked. Tap the key icon to try again. Recovery words and viewing keys require fresh approval after the app locks.
+
+Reset is complete when the app returns to onboarding. If it asks you to finish resetting the wallet, tap **Try again** to complete the pending reset.
+
 For Ironwood migration, review the plan, fees and privacy warnings before approving. Transfers between pools can reveal amounts and timing. Scheduled transfers need connectivity and Android background access; reopen the app to check pending work. If a migration stalls, inspect its status before resetting anything.
 
 Hardware firmware may call its companion app “Zodl”; that label is used in pairing instructions.
