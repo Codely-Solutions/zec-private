@@ -127,7 +127,7 @@ interface MetadataRepository {
     /** Stores [color] as [account]'s icon colour and returns whether it was saved; see [flipTxBookmark]. */
     suspend fun setAccountColor(account: WalletAccount, color: Color): Boolean
 
-    fun delete()
+    suspend fun delete()
 }
 
 @Suppress("TooManyFunctions")
@@ -323,19 +323,10 @@ class MetadataRepositoryImpl(
     override suspend fun setAccountColor(account: WalletAccount, color: Color): Boolean =
         updateMetadataAndAwait(account) { metadataDataSource.setAccountColor(color = color, key = it) }
 
-    @Suppress("TooGenericExceptionCaught")
-    override fun delete() {
-        scope.launch {
-            mutex.withLock {
-                accountDataSource.getAllAccounts().forEach {
-                    try {
-                        val key = getMetadataKey(it)
-                        metadataDataSource.delete(key)
-                    } catch (e: Exception) {
-                        Twig.error(e) { "Unable to delete Metadata" }
-                    }
-                }
-            }
+    override suspend fun delete() {
+        mutex.withLock {
+            val keys = accountDataSource.getAllAccounts().map { getMetadataKey(it) }
+            keys.forEach { metadataDataSource.delete(it) }
         }
     }
 

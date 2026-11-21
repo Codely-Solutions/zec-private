@@ -7,6 +7,7 @@ import androidx.biometric.BiometricManager
 import co.electriccoin.zcash.spackle.AndroidApiVersion
 import co.electriccoin.zcash.ui.BiometricActivity
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.getString
 import kotlinx.coroutines.CoroutineScope
@@ -55,7 +56,8 @@ class BiometricsCancelledException : Exception()
 
 class BiometricRepositoryImpl(
     private val context: Context,
-    private val biometricManager: BiometricManager
+    private val biometricManager: BiometricManager,
+    private val appAccessSession: AppAccessSession
 ) : BiometricRepository {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -94,9 +96,13 @@ class BiometricRepositoryImpl(
     }
 
     override suspend fun requestBiometrics(request: BiometricRequest) {
+        val grant = appAccessSession.grant.value ?: throw BiometricsCancelledException()
         val capability = biometricManager.canAuthenticate(allowedAuthenticators)
         val keyguard = context.getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
-        if (permitsUnsecuredDeviceAccess(capability, keyguard?.isDeviceSecure)) return
+        if (permitsUnsecuredDeviceAccess(capability, keyguard?.isDeviceSecure)) {
+            if (!appAccessSession.permits(grant)) throw BiometricsCancelledException()
+            return
+        }
         if (capability != BiometricManager.BIOMETRIC_SUCCESS) {
             withContext(Dispatchers.Main) {
                 Toast.makeText(context, R.string.authentication_unavailable_remedy, Toast.LENGTH_LONG).show()
@@ -123,7 +129,7 @@ class BiometricRepositoryImpl(
             }
 
             is BiometricResult.Success -> {
-                // do nothing
+                if (!appAccessSession.permits(grant)) throw BiometricsCancelledException()
             }
         }
     }

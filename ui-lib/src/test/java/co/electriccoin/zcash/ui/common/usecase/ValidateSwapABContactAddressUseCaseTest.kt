@@ -5,9 +5,9 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.repository.GiftCardSecretFixture
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -47,7 +47,7 @@ class ValidateSwapABContactAddressUseCaseTest {
                 assertEquals(ContactAddressValidationResult.GiftCardLink, validate(link, btc), name)
                 assertEquals(ContactAddressValidationResult.GiftCardLink, validate(link, null), name)
             }
-            verify(exactly = 0) { addressBookRepository.contacts }
+            coVerify(exactly = 0) { addressBookRepository.contacts }
         }
 
     @Test
@@ -66,7 +66,7 @@ class ValidateSwapABContactAddressUseCaseTest {
             ContactAddressValidationResult.Invalid,
             validate("ethereum:0x1111111111111111111111111111111111111111@1", btc)
         )
-        verify(exactly = 0) { addressBookRepository.contacts }
+        coVerify(exactly = 0) { addressBookRepository.contacts }
     }
 
     @Test
@@ -80,7 +80,7 @@ class ValidateSwapABContactAddressUseCaseTest {
             ContactAddressValidationResult.Invalid,
             validate("bitcoin:${existing.address}?amount=1", btc)
         )
-        verify(exactly = 0) { addressBookRepository.contacts }
+        coVerify(exactly = 0) { addressBookRepository.contacts }
     }
 
     @Test
@@ -90,7 +90,7 @@ class ValidateSwapABContactAddressUseCaseTest {
         every { addressBookRepository.contacts } returns contacts
         assertEquals(ContactAddressValidationResult.Invalid, validate(legacy.address, btc))
         assertEquals(listOf(legacy), contacts.value)
-        verify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
-        verify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
+        coVerify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
     }
 }

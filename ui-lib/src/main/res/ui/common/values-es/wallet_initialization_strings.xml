@@ -2,4 +2,5 @@
 <resources>
     <string name="wallet_initialization_failed">No se pudo terminar la configuración de la billetera. Inténtalo de nuevo para continuar con la misma configuración.</string>
     <string name="wallet_initialization_retry">Intentar de nuevo</string>
+    <string name="wallet_initialization_conflict">Ya se inició otra configuración de billetera. Vuelve a la pantalla de bienvenida para completarla o vuelve a intentarlo con su frase y opciones de recuperación originales.</string>
 </resources>

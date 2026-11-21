@@ -27,6 +27,7 @@ class MetadataStorageProviderTest {
     private val metadataDir = File(filesDir, "metadata")
     private val provider: MetadataStorageProvider =
         MetadataStorageProviderImpl(
+            directorySync = DirectorySync {},
             context =
                 mockk<Context> {
                     every { filesDir } returns this@MetadataStorageProviderTest.filesDir
@@ -214,7 +215,7 @@ class MetadataStorageProviderTest {
         try {
             assumeTrue(metadataDir.setReadable(false) && metadataDir.listFiles() == null)
 
-            provider.deleteStorageFiles(key)
+            assertFailsWith<IOException> { provider.deleteStorageFiles(key) }
         } finally {
             metadataDir.setReadable(true)
         }
@@ -238,24 +239,24 @@ class MetadataStorageProviderTest {
         File(undeletable, "child").writeText("keeps the directory non-empty")
         val legacyFile = metadataFile(key.fileIdentifiers()[1], contents = "legacy")
 
-        provider.deleteStorageFiles(key)
+        assertFailsWith<IOException> { provider.deleteStorageFiles(key) }
 
         assertTrue(undeletable.exists())
         assertFalse(legacyFile.exists())
     }
 
-    /** deleteStorageFiles logs a failure and never throws, so this passes by returning normally. */
     @Test
-    fun deleteStorageFilesNeverThrowsWhenTheStorageIsUnavailable() {
+    fun deleteStorageFilesReportsUnavailableStorage() {
         val failingProvider =
             MetadataStorageProviderImpl(
+                directorySync = DirectorySync {},
                 context =
                     mockk<Context> {
                         every { filesDir } throws IllegalStateException("no storage")
                     }
             )
 
-        failingProvider.deleteStorageFiles(metadataKey(0, 1))
+        assertFailsWith<IllegalStateException> { failingProvider.deleteStorageFiles(metadataKey(0, 1)) }
     }
 
     private fun metadataFile(identifier: String, contents: String = ""): File {

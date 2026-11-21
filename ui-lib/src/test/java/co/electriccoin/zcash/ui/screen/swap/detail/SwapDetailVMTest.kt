@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
+import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.ReloadHandle
 import co.electriccoin.zcash.ui.common.usecase.SwapData
@@ -236,6 +237,26 @@ class SwapDetailVMTest {
         assertNull(harness.state().errorFooter)
     }
 
+    @Test
+    fun expiredAndSavedOnlyPendingDetailsKeepANonActionableDepositReference() = runTest {
+        val copy = mockk<CopyToClipboardUseCase>(relaxed = true)
+        val pending = status(SwapStatus.PENDING)
+        every { pending.deadline } returns kotlin.time.Instant.parse("2000-01-01T00:00:00Z")
+        val harness = harness(SwapQuoteStatusData(status = pending, isLoading = false), copy)
+
+        assertEquals(stringRes(R.string.private_swap_deposit_reference), harness.state().depositTo.title)
+        assertNull(harness.state().depositTo.onClick)
+        assertNull(harness.state().depositTo.trailingIcon)
+
+        harness.emit(
+            SwapQuoteStatusData(isLoading = false, error = unavailable(), savedMetadata = saved(SwapStatus.PENDING))
+        )
+        runCurrent()
+        assertEquals(stringRes(R.string.private_swap_deposit_reference), harness.state().depositTo.title)
+        assertNull(harness.state().depositTo.onClick)
+        verify(exactly = 0) { copy(DEPOSIT) }
+    }
+
     private fun assertSaved(state: SwapDetailState, saved: TransactionSwapMetadata, assetId: String? = null) {
         assertEquals(saved.status, state.status.status, assetId)
         assertEquals(stringRes(R.string.private_swap_saved_status), state.status.title, assetId)
@@ -248,7 +269,10 @@ class SwapDetailVMTest {
         assertNotEquals(ButtonStyle.DESTRUCTIVE1, assertNotNull(harness.state().primaryButton).style)
     }
 
-    private fun TestScope.harness(initial: SwapQuoteStatusData): Harness {
+    private fun TestScope.harness(
+        initial: SwapQuoteStatusData,
+        clipboard: CopyToClipboardUseCase = mockk(relaxed = true),
+    ): Harness {
         var requests = 0
         val reload = mockk<ReloadHandle> {
             every { requestReload() } answers { requests += 1 }
@@ -259,7 +283,7 @@ class SwapDetailVMTest {
         }
         val router = mockk<NavigationRouter>(relaxed = true)
         val vm = SwapDetailVM(
-            source, SwapDetailArgs(DEPOSIT), router, mockk(relaxed = true),
+            source, SwapDetailArgs(DEPOSIT), router, clipboard,
             CommonTransactionDetailMapper(), SwapSupportMapper()
         )
         val collector = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }

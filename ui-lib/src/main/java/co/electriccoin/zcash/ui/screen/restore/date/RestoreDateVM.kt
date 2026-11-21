@@ -79,7 +79,7 @@ class RestoreDateVM(
                     date = instant,
                     network = VersionInfo.NETWORK
                 )
-            navigationRouter.forward(RestoreEstimationArgs(seed = args.seed, blockHeight = bday.value))
+            navigationRouter.forward(RestoreEstimationArgs(sessionId = args.sessionId, blockHeight = bday.value))
         }
 
     private fun onBack() = navigationRouter.back()

@@ -2,6 +2,18 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.type.AddressType
+import co.electriccoin.zcash.ui.BaseNavigationCommand
+import co.electriccoin.zcash.ui.NavigationCommand
+import co.electriccoin.zcash.ui.NavigationRouterImpl
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.FreshShieldedAddressUnavailableException
@@ -85,6 +97,84 @@ class RequestSwapQuoteUseCaseTest {
     @OptIn(ExperimentalCoroutinesApi::class)
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun dismissalWaitsForProposalAndNavigationIsConsumedOnce() = runTest(dispatcher) {
+        for (mode in listOf(SwapMode.EXACT_INPUT, SwapMode.EXACT_OUTPUT)) {
+        val quote = swapQuote(originAsset = zec, destinationAsset = btc, mode = mode)
+        val request = useCase(quote, zodl())
+        val quoteFlow = MutableStateFlow<SwapQuoteData?>(SwapQuoteData.Loading)
+        every { swapRepository.quote } returns quoteFlow
+        val readiness = co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl(mockk(), mockk())
+        every { swapRepository.markReviewReady(any()) } answers {
+            readiness.quote.value = quoteFlow.value
+            readiness.markReviewReady(firstArg())
+        }
+        every { swapRepository.consumeReview(any()) } answers { readiness.consumeReview(firstArg()) }
+        every { swapRepository.requestExactInputQuote(any(), any(), any(), any(), any()) } answers {
+            quoteFlow.value = SwapQuoteData.Success(quote)
+        }
+        every { swapRepository.requestExactOutputQuote(any(), any(), any(), any(), any()) } answers {
+            quoteFlow.value = SwapQuoteData.Success(quote)
+        }
+        val router = NavigationRouterImpl()
+        every { navigationRouter.forward(SwapQuoteArgs) } answers { router.forward(SwapQuoteArgs) }
+        val commands = mutableListOf<BaseNavigationCommand>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            router.observePipeline().collect { commands.add(it) }
+        }
+        val proposalStarted = CompletableDeferred<Unit>()
+        val finishProposal = CompletableDeferred<Unit>()
+        coEvery { zashiProposalRepository.createExactInputSwapProposal(any(), any()) } coAnswers {
+            proposalStarted.complete(Unit)
+            finishProposal.await()
+            mockk(relaxed = true)
+        }
+        coEvery { zashiProposalRepository.createExactOutputSwapProposal(any(), any()) } coAnswers {
+            proposalStarted.complete(Unit)
+            finishProposal.await()
+            mockk(relaxed = true)
+        }
+        val pendingRequest = launch {
+            if (mode == SwapMode.EXACT_INPUT) request.requestExactInput(
+                amount = BigDecimal.ONE,
+                address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+                selectedAsset = btc,
+                slippage = BigDecimal("2"),
+                canNavigateToSwapQuote = { true }
+            ) else request.requestExactOutput(
+                amount = BigDecimal.ONE,
+                address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+                selectedAsset = btc,
+                slippage = BigDecimal("2"),
+                canNavigateToSwapQuote = { true }
+            )
+        }
+        try {
+            proposalStarted.await()
+            val review: BaseNavigationCommand = NavigationCommand.Forward(listOf(SwapQuoteArgs))
+            // Recreate the dismissal call after the form has cleared its cancellation-sheet flag.
+            launch { NavigateToSwapQuoteIfAvailableUseCase(swapRepository, router).invoke { delay(350) } }
+            advanceTimeBy(350)
+            runCurrent()
+            assertEquals(emptyList(), commands)
+            assertFalse(pendingRequest.isCompleted)
+
+            advanceTimeBy(501)
+            finishProposal.complete(Unit)
+            pendingRequest.join()
+            runCurrent()
+            assertEquals(listOf(review), commands)
+            NavigateToSwapQuoteIfAvailableUseCase(swapRepository, router).invoke { }
+            assertEquals(listOf(review), commands)
+            advanceTimeBy(500)
+            runCurrent()
+        } finally {
+            finishProposal.complete(Unit)
+        }
+    }
+        }
 
     // region requestExactInput — proposal happy + failures
 
@@ -677,6 +767,8 @@ class RequestSwapQuoteUseCaseTest {
         selectedAccount: WalletAccount = zodl()
     ): RequestSwapQuoteUseCase {
         every { swapRepository.quote } returns MutableStateFlow(quoteData)
+        every { swapRepository.markReviewReady(any()) } returns true
+        every { swapRepository.consumeReview(any()) } returns quoteData
         every { swapRepository.assets } returns
             MutableStateFlow(SwapAssetsData(data = listOf(btc), zecAsset = zec))
 

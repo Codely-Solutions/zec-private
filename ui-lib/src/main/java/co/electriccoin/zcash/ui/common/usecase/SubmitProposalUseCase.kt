@@ -59,7 +59,7 @@ class SubmitProposalUseCase(
      * the Ledger sign sheet over the confirmation screen. An account that cannot spend gets the
      * unsupported-operation error instead, before any proposal is read.
      */
-    suspend operator fun invoke() {
+    suspend operator fun invoke(reviewedProposal: TransactionProposal? = null) {
         if (!submissionMutex.tryLock()) return
         try {
             biometricRepository.requestBiometrics(
@@ -82,6 +82,12 @@ class SubmitProposalUseCase(
                 return
             }
             val proposal = loadProposal(account)
+            check(reviewedProposal == null || proposal === reviewedProposal) {
+                "The reviewed transaction changed. Review it again before sending."
+            }
+            check(proposal !is SwapTransactionProposal || reviewedProposal === proposal) {
+                "Review the prepared swap transaction before sending."
+            }
             if (proposal is SwapTransactionProposal) prepareSwapTracking(proposal)
             when (account) {
                 is KeystoneAccount -> {

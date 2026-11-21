@@ -171,7 +171,8 @@ class AddSwapABContactVM(
             contactNameState,
             saveButtonState,
             blockChainPickerState,
-        ) { address, name, saveButton, picker ->
+            refusedGiftCardLink.storageError,
+        ) { address, name, saveButton, picker, storageError ->
             ABContactState(
                 info = null,
                 title = stringRes(R.string.addressBook_addNewContact),
@@ -180,6 +181,7 @@ class AddSwapABContactVM(
                 chain = picker,
                 negativeButton = null,
                 positiveButton = saveButton,
+                operationError = storageError,
                 onBack = ::onBack
             )
         }.stateIn(
@@ -198,7 +200,9 @@ class AddSwapABContactVM(
             }
         }
 
-    private fun onBack() = navigationRouter.back()
+    private fun onBack() {
+        if (!isSavingContact.value) navigationRouter.back()
+    }
 
     private fun onAddressChange(newValue: String) = contactAddress.update { newValue.trim() }
 

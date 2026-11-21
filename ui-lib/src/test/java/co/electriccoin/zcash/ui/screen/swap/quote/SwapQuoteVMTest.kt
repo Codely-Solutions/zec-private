@@ -1,11 +1,15 @@
 package co.electriccoin.zcash.ui.screen.swap.quote
 
 import cash.z.ecc.android.sdk.model.Account
+import cash.z.ecc.android.sdk.model.Proposal
+import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.QuoteLowAmountException
+import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
@@ -37,6 +41,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -159,9 +164,9 @@ class SwapQuoteVMTest {
         assertTrue(poor.priceCheck?.isWarning == true)
         assertEquals("Swap anyway", poor.primaryButton.text.getString(RuntimeEnvironment.getApplication(), Locale.US))
         checking.primaryButton.onClick()
-        coVerify(exactly = 0) { submit() }
+        coVerify(exactly = 0) { submit(any()) }
         poor.primaryButton.onClick()
-        coVerify(exactly = 1) { submit() }
+        coVerify(exactly = 1) { submit(any()) }
     }
 
     @Test
@@ -177,9 +182,39 @@ class SwapQuoteVMTest {
             FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
         )
         old.primaryButton.onClick()
-        coVerify(exactly = 0) { submit() }
+        coVerify(exactly = 0) { submit(any()) }
         (vm.state.value as SwapQuoteState.Success).primaryButton.onClick()
-        coVerify(exactly = 1) { submit() }
+        coVerify(exactly = 1) { submit(any()) }
+    }
+
+    @Test
+    fun missingAndReplacedLocalProposalsCannotBeReviewedOrApproved() = runTest {
+        val quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
+        val proposals = MutableStateFlow<TransactionProposal?>(null)
+        val submit = mockk<SubmitProposalUseCase>(relaxed = true)
+        val prices = mockk<IndependentPriceProvider> {
+            coEvery { check(any(), any()) } returns IndependentPriceCheck.Unavailable
+        }
+        val vm = vm(zashi(), proposals = proposals, quoteData = SwapQuoteData.Success(quote),
+            submit = submit, prices = prices)
+        collect(vm)
+        kotlin.test.assertNull(vm.state.value)
+        coVerify(exactly = 0) { prices.check(any(), any()) }
+        val sdkProposal = mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(10_000) }
+        val prepared = mockk<SwapTransactionProposal> {
+            every { this@mockk.quote } returns quote
+            every { proposal } returns sdkProposal
+        }
+        proposals.value = prepared
+        val reviewed = vm.state.value as SwapQuoteState.Success
+        assertTrue(reviewed.primaryButton.isEnabled)
+        proposals.value = null
+        reviewed.primaryButton.onClick()
+        coVerify(exactly = 0) { submit(any()) }
+        kotlin.test.assertNull(vm.state.value)
+        proposals.value = prepared
+        (vm.state.value as SwapQuoteState.Success).primaryButton.onClick()
+        coVerify(exactly = 1) { submit(prepared) }
     }
 
     @Test
@@ -258,11 +293,22 @@ class SwapQuoteVMTest {
         quoteData: SwapQuoteData = SwapQuoteData.Success(
             quote = FakeSwapQuote(destinationAsset = destinationAsset, mode = SwapMode.EXACT_INPUT)
         ),
-    ) =
-        SwapQuoteVM(
+        proposals: MutableStateFlow<TransactionProposal?>? = null,
+    ): SwapQuoteVM {
+        val quoteFlow = quotes ?: MutableStateFlow(quoteData)
+        val proposalFlow = proposals ?: quoteFlow.map { data ->
+            (data as? SwapQuoteData.Success)?.quote?.let { preparedQuote ->
+                val sdkProposal = mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(1_000) }
+                mockk<SwapTransactionProposal> {
+                    every { quote } returns preparedQuote
+                    every { proposal } returns sdkProposal
+                }
+            }
+        }
+        return SwapQuoteVM(
             observeProposal =
                 mockk {
-                    every { observeNullable() } returns flowOf(null)
+                    every { observeNullable() } returns proposalFlow
                 },
             observeSelectedWalletAccount =
                 mockk {
@@ -275,7 +321,7 @@ class SwapQuoteVMTest {
             swapRepository =
                 mockk<SwapRepository>(relaxed = true) {
                     every { quote } returns
-                        (quotes ?: MutableStateFlow(quoteData))
+                        quoteFlow
                 },
             cancelSwapQuote = cancelQuote,
             cancelSwap = mockk<CancelSwapUseCase>(relaxed = true),
@@ -284,6 +330,7 @@ class SwapQuoteVMTest {
             navigationRouter = mockk<NavigationRouter>(relaxed = true),
             independentPrices = prices,
         )
+    }
 
     private fun zashi(isSelected: Boolean = true) =
         ZodlAccount(

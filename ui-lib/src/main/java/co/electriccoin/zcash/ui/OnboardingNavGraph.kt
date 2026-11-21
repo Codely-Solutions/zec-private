@@ -1,9 +1,13 @@
 package co.electriccoin.zcash.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import androidx.navigation.navigation
 import androidx.navigation.toRoute
@@ -13,6 +17,7 @@ import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.spackle.FirebaseTestLabUtil
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
+import co.electriccoin.zcash.ui.design.util.LocalNavController
 import co.electriccoin.zcash.ui.screen.error.AndroidErrorBottomSheet
 import co.electriccoin.zcash.ui.screen.error.AndroidErrorDialog
 import co.electriccoin.zcash.ui.screen.error.ErrorBottomSheet
@@ -30,10 +35,12 @@ import co.electriccoin.zcash.ui.screen.restore.info.AndroidSeedInfo
 import co.electriccoin.zcash.ui.screen.restore.info.SeedInfo
 import co.electriccoin.zcash.ui.screen.restore.seed.RestoreSeedArgs
 import co.electriccoin.zcash.ui.screen.restore.seed.RestoreSeedScreen
+import co.electriccoin.zcash.ui.screen.restore.seed.RestoreSeedVM
 import co.electriccoin.zcash.ui.screen.restore.tor.RestoreTorArgs
 import co.electriccoin.zcash.ui.screen.restore.tor.RestoreTorScreen
 import co.electriccoin.zcash.ui.screen.scan.thirdparty.AndroidThirdPartyScan
 import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
+import org.koin.androidx.compose.koinViewModel
 
 fun NavGraphBuilder.onboardingNavGraph(
     activity: ComponentActivity,
@@ -78,14 +85,63 @@ fun NavGraphBuilder.onboardingNavGraph(
                 }
             )
         }
-        composable<RestoreSeedArgs> { RestoreSeedScreen() }
-        composable<RestoreHeight> { AndroidRestoreHeight(it.toRoute()) }
-        composable<RestoreDateArgs> { RestoreDateScreen(it.toRoute()) }
-        composable<RestoreEstimationArgs> { RestoreEstimationScreen(it.toRoute()) }
-        dialogComposable<SeedInfo> { AndroidSeedInfo() }
+        restoreScreens()
         composable<ThirdPartyScan> { AndroidThirdPartyScan() }
         dialogComposable<ErrorDialog> { AndroidErrorDialog() }
         dialogComposable<ErrorBottomSheet> { AndroidErrorBottomSheet() }
-        dialogComposable<RestoreTorArgs> { RestoreTorScreen(it.toRoute()) }
+    }
+}
+
+private fun NavGraphBuilder.restoreScreens() {
+    composable<RestoreSeedArgs> { RestoreSeedScreen() }
+    composable<RestoreHeight> { entry ->
+        val args = entry.toRoute<RestoreHeight>()
+        WithRestoreSession(entry, args.sessionId) { seedEntry ->
+            AndroidRestoreHeight(args) { seedEntry.cancelBirthdayEntry(args.sessionId) }
+        }
+    }
+    composable<RestoreDateArgs> { entry ->
+        val args = entry.toRoute<RestoreDateArgs>()
+        WithRestoreSession(entry, args.sessionId) { RestoreDateScreen(args) }
+    }
+    composable<RestoreEstimationArgs> { entry ->
+        val args = entry.toRoute<RestoreEstimationArgs>()
+        WithRestoreSession(entry, args.sessionId) { RestoreEstimationScreen(args) }
+    }
+    dialogComposable<SeedInfo> { AndroidSeedInfo() }
+    dialogComposable<RestoreTorArgs> { entry ->
+        val args = entry.toRoute<RestoreTorArgs>()
+        WithRestoreSession(entry, args.sessionId) { seedEntry -> RestoreTorScreen(args, seedEntry) }
+    }
+}
+
+@Composable
+private fun WithRestoreSession(
+    entry: NavBackStackEntry,
+    sessionId: String,
+    content: @Composable (RestoreSeedVM) -> Unit
+) {
+    val navController = LocalNavController.current
+    val owner = navController.previousRestoreSeedEntry()
+    val seedEntry = owner?.let { koinViewModel<RestoreSeedVM>(viewModelStoreOwner = it) }
+    if (seedEntry?.resolveSession(sessionId) != null) {
+        content(seedEntry)
+    } else {
+        LaunchedEffect(entry) {
+            if (navController.currentBackStackEntry == entry) navController.returnToRestoreSeed()
+        }
+    }
+}
+
+private fun NavHostController.previousRestoreSeedEntry(): NavBackStackEntry? =
+    try {
+        getBackStackEntry(RestoreSeedArgs)
+    } catch (_: IllegalArgumentException) {
+        null
+    }
+
+internal fun NavHostController.returnToRestoreSeed() {
+    if (!popBackStack(RestoreSeedArgs, inclusive = false)) {
+        navigate(RestoreSeedArgs) { popUpTo<Onboarding>() }
     }
 }

@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.screen.deletewallet
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -44,7 +45,7 @@ fun ResetZashiView(state: ResetZashiState) {
     BlankBgScaffold(
         topBar = {
             ResetZashiTopAppBar(
-                onBack = state.onBack,
+                onBack = state.onBack.takeUnless { state.isPending },
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -73,16 +74,14 @@ fun ResetZashiView(state: ResetZashiState) {
 
 @Composable
 private fun ResetZashiTopAppBar(
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     modifier: Modifier = Modifier
 ) {
     ZashiSmallTopAppBar(
         modifier = modifier,
         title = stringResource(R.string.deleteWallet_title),
         navigationAction = {
-            ZashiTopAppBarBackNavigation(
-                onBack = onBack
-            )
+            if (onBack != null) ZashiTopAppBarBackNavigation(onBack = onBack)
         },
         colors =
             ZcashTheme.colors.topAppBarColors.copyColors(
@@ -99,41 +98,59 @@ private fun ResetZashiContent(
     Column(
         modifier = modifier
     ) {
-        Text(
-            text = stringResource(R.string.deleteWallet_title),
-            style = ZashiTypography.header6,
-            color = ZashiColors.Text.textPrimary,
-            fontWeight = FontWeight.SemiBold
-        )
-
-        Spacer(8.dp)
-
-        Text(
-            text = stringResource(R.string.deleteWallet_message2),
-            style = ZashiTypography.textSm,
-            color = ZashiColors.Text.textTertiary,
-        )
-        Spacer(12.dp)
-        Text(
-            text = stringResource(R.string.delete_wallet_text_2),
-            style = ZashiTypography.textSm,
-            color = ZashiColors.Text.textTertiary,
-        )
-        Spacer(12.dp)
-        Text(
-            text = stringResource(R.string.deleteWallet_message4),
-            style = ZashiTypography.textSm,
-            color = ZashiColors.Text.textTertiary,
-        )
-        Spacer(24.dp)
-        Spacer(1f)
-        CheckboxCard(state.checkboxState)
-        Spacer(32.dp)
-        ZashiButton(
-            state = state.buttonState,
-            modifier = Modifier.fillMaxWidth()
-        )
+        if (state.isPending) {
+            Text(
+                text = stringResource(R.string.wallet_reset_pending),
+                style = ZashiTypography.textSm,
+                color = ZashiColors.Text.textPrimary
+            )
+            Spacer(24.dp)
+            ZashiButton(
+                state = state.buttonState,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            ResetZashiConfirmationContent(state)
+        }
     }
+}
+
+@Composable
+private fun ColumnScope.ResetZashiConfirmationContent(state: ResetZashiState) {
+    Text(
+        text = stringResource(R.string.deleteWallet_title),
+        style = ZashiTypography.header6,
+        color = ZashiColors.Text.textPrimary,
+        fontWeight = FontWeight.SemiBold
+    )
+
+    Spacer(8.dp)
+
+    Text(
+        text = stringResource(R.string.deleteWallet_message2),
+        style = ZashiTypography.textSm,
+        color = ZashiColors.Text.textTertiary,
+    )
+    Spacer(12.dp)
+    Text(
+        text = stringResource(R.string.delete_wallet_text_2),
+        style = ZashiTypography.textSm,
+        color = ZashiColors.Text.textTertiary,
+    )
+    Spacer(12.dp)
+    Text(
+        text = stringResource(R.string.deleteWallet_message4),
+        style = ZashiTypography.textSm,
+        color = ZashiColors.Text.textTertiary,
+    )
+    Spacer(24.dp)
+    Spacer(1f)
+    CheckboxCard(state.checkboxState)
+    Spacer(32.dp)
+    ZashiButton(
+        state = state.buttonState,
+        modifier = Modifier.fillMaxWidth()
+    )
 }
 
 @Composable

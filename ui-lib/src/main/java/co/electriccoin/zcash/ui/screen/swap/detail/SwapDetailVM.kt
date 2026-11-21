@@ -77,10 +77,8 @@ class SwapDetailVM(
                         ),
                     depositTo =
                         TransactionDetailInfoRowState(
-                            title = stringRes(R.string.swapToZec_depositTo),
+                            title = stringRes(R.string.private_swap_deposit_reference),
                             message = stringResByAddress(args.depositAddress),
-                            trailingIcon = R.drawable.ic_transaction_detail_info_copy,
-                            onClick = ::onCopyDepositAddressClick
                         ),
                     recipient = createRecipientState(swapData),
                     totalFees = createQuotedOutputState(swapData),
@@ -272,8 +270,6 @@ class SwapDetailVM(
         }
 
     private fun onBack() = navigationRouter.back()
-
-    private fun onCopyDepositAddressClick() = copyToClipboard(args.depositAddress)
 
     private fun onCopyRecipientAddressClick(recipient: String) = copyToClipboard(recipient)
 }

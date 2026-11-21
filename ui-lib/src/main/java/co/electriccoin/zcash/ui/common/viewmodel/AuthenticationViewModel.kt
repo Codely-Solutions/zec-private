@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.viewmodel
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.app.KeyguardManager
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricManager.Authenticators
 import androidx.biometric.BiometricPrompt
@@ -15,8 +16,10 @@ import co.electriccoin.zcash.preference.model.entry.BooleanPreferenceDefault
 import co.electriccoin.zcash.spackle.AndroidApiVersion
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.GetMonotonicTimeProvider
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
+import co.electriccoin.zcash.ui.common.repository.permitsUnsecuredDeviceAccess
 import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 import co.electriccoin.zcash.ui.screen.authentication.AuthenticationUseCase
 import kotlinx.coroutines.delay
@@ -44,12 +47,17 @@ class AuthenticationViewModel(
     private val getMonotonicTime: GetMonotonicTimeProvider,
     private val getVersionInfo: GetVersionInfoProvider,
     private val standardPreferenceProvider: StandardPreferenceProvider,
-    private val walletViewModel: WalletViewModel,
+    walletViewModel: WalletViewModel,
+    internal val appAccessSession: AppAccessSession,
 ) : AndroidViewModel(application) {
     private val executor: Executor by lazy { ContextCompat.getMainExecutor(application) }
-    private lateinit var biometricPrompt: BiometricPrompt
-    private lateinit var promptInfo: BiometricPrompt.PromptInfo
     private val versionInfo by lazy { getVersionInfo() }
+    private var authenticationAttempt = 0L
+    private var biometricPrompt: BiometricPrompt? = null
+
+    init {
+        appAccessSession.lock()
+    }
 
     // This provides [allowedAuthenticators] on the current user device according to Android Compatibility Definition
     // Document (CDD). See https://source.android.com/docs/compatibility/cdd
@@ -107,7 +115,8 @@ class AuthenticationViewModel(
             isAppAccessAuthenticationRequired.filterNotNull(),
             appAccessAuthentication,
             walletViewModel.secretState,
-        ) { required: Boolean, state: AuthenticationUIState, secretState: SecretState ->
+            showWelcomeAnimation,
+        ) { required, state, secretState, animate ->
             when {
                 (!required || versionInfo.isRunningUnderTestService) -> {
                     AuthenticationUIState.NotRequired
@@ -133,24 +142,43 @@ class AuthenticationViewModel(
                 else -> {
                     state
                 }
+            }.also { result ->
+                if (result == AuthenticationUIState.Successful ||
+                    (result == AuthenticationUIState.NotRequired && !animate)
+                ) {
+                    appAccessSession.unlock()
+                } else {
+                    appAccessSession.lock()
+                }
             }
         }.stateIn(
             viewModelScope,
-            SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
+            SharingStarted.Eagerly,
             AuthenticationUIState.Initial
         )
 
     private fun resetEntireAuthenticationState() {
+        authenticationAttempt++
+        biometricPrompt?.cancelAuthentication()
+        biometricPrompt = null
+        resetAuthenticationResult()
+        resetAppAccessResult()
+        authFailed.value = false
         appAccessAuthentication.value = AuthenticationUIState.Initial
         showWelcomeAnimation.value = true
+        appAccessSession.lock()
     }
 
     private var latestAppBackgroundedElapsedRealtimeMillis: Long? = null
 
     fun runAuthenticationRequiredCheck() {
         val latestAppBackgroundedElapsedRealtimeMillis = latestAppBackgroundedElapsedRealtimeMillis ?: return
+        this.latestAppBackgroundedElapsedRealtimeMillis = null
 
-        if ((getMonotonicTime() - latestAppBackgroundedElapsedRealtimeMillis) > AUTHENTICATE_TIMEOUT) {
+        if ((getMonotonicTime() - latestAppBackgroundedElapsedRealtimeMillis) > AUTHENTICATE_TIMEOUT &&
+            isAppAccessAuthenticationRequired.value != false &&
+            !versionInfo.isRunningUnderTestService
+        ) {
             resetEntireAuthenticationState()
         }
     }
@@ -165,8 +193,14 @@ class AuthenticationViewModel(
     internal val authenticationResult: MutableStateFlow<AuthenticationResult> =
         MutableStateFlow(AuthenticationResult.None)
 
+    internal val appAccessResult = MutableStateFlow<AuthenticationResult>(AuthenticationResult.None)
+
     internal fun resetAuthenticationResult() {
         authenticationResult.value = AuthenticationResult.None
+    }
+
+    internal fun resetAppAccessResult() {
+        appAccessResult.value = AuthenticationResult.None
     }
 
     fun authenticate(
@@ -174,6 +208,12 @@ class AuthenticationViewModel(
         initialAuthSystemWindowDelay: Duration = DEFAULT_INITIAL_DELAY.milliseconds,
         useCase: AuthenticationUseCase
     ) {
+        val attempt = ++authenticationAttempt
+        val resultFlow =
+            when (useCase) {
+                AuthenticationUseCase.AppAccess -> appAccessResult
+                AuthenticationUseCase.SendFunds -> authenticationResult
+            }
         val biometricsSupportResult = getBiometricAuthenticationSupport(allowedAuthenticators)
         Twig.debug { "Authentication getBiometricAuthenticationSupport: $biometricsSupportResult" }
 
@@ -188,7 +228,7 @@ class AuthenticationViewModel(
             }
         }
 
-        biometricPrompt =
+        val prompt =
             BiometricPrompt(
                 activity,
                 executor,
@@ -207,6 +247,7 @@ class AuthenticationViewModel(
                         errorString: CharSequence
                     ) {
                         super.onAuthenticationError(errorCode, errorString)
+                        if (attempt != authenticationAttempt) return
                         Twig.warn { "Authentication error: $errorCode: $errorString" }
 
                         // Note that we process most of the following authentication errors the same. A potential
@@ -246,7 +287,7 @@ class AuthenticationViewModel(
                             // A security vulnerability has been discovered with one or more hardware sensors. The
                             // affected sensor(s) are unavailable until a security update has addressed the issue
                             BiometricPrompt.ERROR_SECURITY_UPDATE_REQUIRED -> {
-                                authenticationResult.value =
+                                resultFlow.value =
                                     AuthenticationResult.Error(errorCode, errorString.toString())
                             }
 
@@ -255,27 +296,33 @@ class AuthenticationViewModel(
                             // returning to biometric authentication, such as a button. The operation was canceled
                             // because [BiometricPrompt.ERROR_LOCKOUT] occurred too many times.
                             BiometricPrompt.ERROR_USER_CANCELED -> {
-                                authenticationResult.value = AuthenticationResult.Canceled
-                                // The following values are just for testing purposes, so we can easier reproduce other
-                                // non-success results obtained from [BiometricPrompt]
-                                // = AuthenticationResult.Failed
-                                // = AuthenticationResult.Error(errorCode, errorString.toString())
+                                resultFlow.value = AuthenticationResult.Canceled
                             }
 
                             // The operation was canceled because the biometric sensor is unavailable. This may happen
                             // when user is switched, the device is locked, or another pending operation prevents it.
                             BiometricPrompt.ERROR_CANCELED -> {
                                 // We could consider splitting ERROR_CANCELED from ERROR_USER_CANCELED
-                                authenticationResult.value = AuthenticationResult.Canceled
+                                resultFlow.value = AuthenticationResult.Canceled
                             }
 
                             // The user does not have any biometrics enrolled
                             BiometricPrompt.ERROR_NO_BIOMETRICS,
                             // The device does not have pin, pattern, or password set up
                             BiometricPrompt.ERROR_NO_DEVICE_CREDENTIAL -> {
-                                // Allow unauthenticated access if no authentication method is available on the device
-                                // These 2 errors can come for a different Android SDK versions, but they mean the same
-                                authenticationResult.value = AuthenticationResult.Success
+                                val isDeviceSecure =
+                                    ContextCompat.getSystemService(activity, KeyguardManager::class.java)?.isDeviceSecure
+                                val capability = biometricManager.canAuthenticate(allowedAuthenticators)
+                                resultFlow.value =
+                                    if (permitsUnsecuredDeviceAccess(capability, isDeviceSecure)) {
+                                        AuthenticationResult.Success
+                                    } else {
+                                        AuthenticationResult.Error(errorCode, errorString.toString())
+                                    }
+                            }
+
+                            else -> {
+                                resultFlow.value = AuthenticationResult.Error(errorCode, errorString.toString())
                             }
                         }
                     }
@@ -291,8 +338,9 @@ class AuthenticationViewModel(
                      */
                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
                         super.onAuthenticationSucceeded(result)
+                        if (attempt != authenticationAttempt) return
                         Twig.info { "Authentication successful" }
-                        authenticationResult.value = AuthenticationResult.Success
+                        resultFlow.value = AuthenticationResult.Success
                     }
 
                     /**
@@ -301,13 +349,15 @@ class AuthenticationViewModel(
                      */
                     override fun onAuthenticationFailed() {
                         super.onAuthenticationFailed()
+                        if (attempt != authenticationAttempt) return
                         Twig.error { "Authentication failed" }
-                        authenticationResult.value = AuthenticationResult.Failed
+                        resultFlow.value = AuthenticationResult.Failed
                     }
                 }
             )
 
-        promptInfo =
+        biometricPrompt = prompt
+        val promptInfo =
             BiometricPrompt.PromptInfo
                 .Builder()
                 .setTitle(
@@ -340,7 +390,7 @@ class AuthenticationViewModel(
 
         viewModelScope.launch {
             delay(initialAuthSystemWindowDelay)
-            biometricPrompt.authenticate(promptInfo)
+            if (attempt == authenticationAttempt) prompt.authenticate(promptInfo)
         }
     }
 

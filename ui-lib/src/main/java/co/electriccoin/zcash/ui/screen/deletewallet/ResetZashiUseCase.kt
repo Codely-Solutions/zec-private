@@ -16,7 +16,12 @@ import co.electriccoin.zcash.ui.common.repository.GiftCardRepository
 import co.electriccoin.zcash.ui.common.repository.HomeMessageCacheRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.design.util.stringRes
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.internal.closeQuietly
 import kotlin.time.Duration.Companion.seconds
@@ -32,26 +37,56 @@ class ResetZashiUseCase(
     private val metadataRepository: MetadataRepository,
     private val migrationAppHooks: MigrationAppHooks,
     private val giftCardRepository: GiftCardRepository,
+    private val progressStore: ResetProgressStore,
 ) {
-    @Suppress("TooGenericExceptionCaught", "ThrowsCount")
+    private val resetMutex = Mutex()
+    private val running = MutableStateFlow(false)
+    val isRunning = running.asStateFlow()
+    val isPending = progressStore.isPending
+
+    @Suppress("TooGenericExceptionCaught", "ReturnCount")
     suspend operator fun invoke(keepFiles: Boolean) {
+        if (!resetMutex.tryLock()) return
+        running.value = true
         try {
-            requestBiometrics()
-            // Migration workers are self-rechaining OneTimeWork — a wallet wipe that leaves them
-            // scheduled produces zombie retries against a wallet that no longer exists (Milan,
-            // 2026-07-30). Cancel while the accounts are still resolvable.
+            val stage = progressStore.getStage()
+            if (stage == null) requestBiometrics()
+
+            // The pending screen can replace the initiating screen. Finish each confirmed attempt
+            // even if that transition cancels the first view model.
+            withContext(NonCancellable) {
+                if (stage == null) prepareReset(keepFiles)
+                if (stage != ResetStage.CLEAR_PREFERENCES) {
+                    closeSynchronizer()
+                    clearSDK()
+                    progressStore.store(ResetStage.CLEAR_PREFERENCES)
+                }
+                clearSharedPrefs()
+                homeMessageCacheRepository.reset()
+                progressStore.store(null)
+            }
+        } catch (_: BiometricsFailureException) {
+            // Wait for another confirmation.
+        } catch (_: BiometricsCancelledException) {
+            // Wait for another confirmation.
+        } finally {
+            running.value = false
+            resetMutex.unlock()
+        }
+    }
+
+    private suspend fun prepareReset(keepFiles: Boolean) {
+        val prepared = withTimeoutOrNull(PREPARE_RESET_TIMEOUT) {
             migrationAppHooks.cancelMigrationWork()
             giftCardRepository.closeAllSessions()
-            deleteLocalFiles(keepFiles)
-            closeSynchronizer()
-            clearSDK()
-            clearSharedPrefs()
-            clearInMemoryData()
-        } catch (_: BiometricsFailureException) {
-            // do nothing
-        } catch (_: BiometricsCancelledException) {
-            // do nothing
+            if (!keepFiles) {
+                addressBookRepository.delete()
+                metadataRepository.delete()
+            }
+            true
         }
+        check(prepared == true) { "Timed out preparing wallet reset" }
+        progressStore.store(ResetStage.ERASE_SDK)
     }
 
     private suspend fun requestBiometrics() {
@@ -70,7 +105,7 @@ class ResetZashiUseCase(
      * Waits for a synchronizer to close, bounded by [CLOSE_SYNCHRONIZER_TIMEOUT]. A latched seed
      * mismatch ([WalletCoordinator.isSeedMismatch]) keeps [SynchronizerProvider.getSynchronizer]'s
      * underlying flow null forever, which would otherwise hang this step indefinitely after
-     * [deleteLocalFiles] already ran. When no synchronizer materializes in time, this is a no-op —
+     * local files were already removed. When no synchronizer materializes in time, this is a no-op —
      * [clearSDK]'s lockout-aware erase still handles teardown of any lingering SDK state.
      */
     private suspend fun closeSynchronizer() {
@@ -78,28 +113,20 @@ class ResetZashiUseCase(
             ?.let { (it as CloseableSynchronizer).closeQuietly() }
     }
 
-    private fun deleteLocalFiles(keepFiles: Boolean) {
-        if (!keepFiles) {
-            addressBookRepository.delete()
-            metadataRepository.delete()
-        }
-    }
-
     private suspend fun clearSDK() {
-        walletCoordinator.deleteSdkDataFlow().first()
+        val erased = withTimeoutOrNull(ERASE_SDK_TIMEOUT) { walletCoordinator.deleteSdkDataFlow().first() }
+        check(erased == true) { "Could not erase wallet data" }
     }
 
     private suspend fun clearSharedPrefs() {
-        standardPreferenceProvider().clearPreferences()
-        encryptedPreferenceProvider().clearPreferences()
-        encryptedPreferenceProvider.purgeQuarantine()
-    }
-
-    private fun clearInMemoryData() {
-        homeMessageCacheRepository.reset()
+        check(standardPreferenceProvider().clearPreferences()) { "Could not clear wallet settings" }
+        check(encryptedPreferenceProvider.purgeQuarantine()) { "Could not remove encrypted preference quarantine" }
+        check(encryptedPreferenceProvider().clearPreferences()) { "Could not clear encrypted wallet preferences" }
     }
 
     companion object {
+        private val PREPARE_RESET_TIMEOUT = 30.seconds
+        private val ERASE_SDK_TIMEOUT = 30.seconds
         private val CLOSE_SYNCHRONIZER_TIMEOUT = 5.seconds
     }
 }

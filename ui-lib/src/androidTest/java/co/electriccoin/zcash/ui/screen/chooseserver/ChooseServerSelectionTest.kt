@@ -318,11 +318,14 @@ private class FakeWalletRepository(
 
     override fun createNewWallet() = Unit
 
+    override fun retryWalletInitialization() = Unit
+
     override fun restoreWallet(
         network: ZcashNetwork,
         seedPhrase: SeedPhrase,
-        birthday: BlockHeight
-    ) = Unit
+        birthday: BlockHeight,
+        enableTor: Boolean
+    ) = CompletableDeferred(Unit)
 
     override suspend fun updateWalletEndpoint(endpoint: LightWalletEndpoint) {
         updatedEndpoint = endpoint

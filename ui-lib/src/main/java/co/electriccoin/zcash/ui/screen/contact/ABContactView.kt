@@ -182,6 +182,14 @@ private fun ContactViewInternal(
         }
         Spacer(1f)
         Spacer(28.dp)
+        state.operationError?.let {
+            Text(
+                text = it.getValue(),
+                style = ZashiTypography.textSm,
+                color = ZashiColors.Text.textError
+            )
+            Spacer(8.dp)
+        }
         ZashiButton(
             state = state.positiveButton,
             modifier = Modifier.fillMaxWidth().testTag(ABContactTag.SAVE_BUTTON)

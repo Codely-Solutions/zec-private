@@ -25,7 +25,8 @@ class ShareQRUseCase(
         shareText: StringResource,
         sharePickerText: StringResource,
         filenamePrefix: String,
-        @DrawableRes centerIcon: Int? = null
+        @DrawableRes centerIcon: Int? = null,
+        isAllowed: () -> Boolean = { true }
     ) = withContext(Dispatchers.Default) {
         val qrCodePixelArray = JvmQrCodeGenerator.generate(data = qrData, sizePixels = QR_SIZE_PX)
         val bitmap =
@@ -64,6 +65,7 @@ class ShareQRUseCase(
             fileSuffix = ".png",
             shareText = shareText.getString(context),
             sharePickerText = sharePickerText.getString(context),
+            isAllowed = isAllowed,
         )
     }
 

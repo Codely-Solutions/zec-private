@@ -1,8 +1,10 @@
 package co.electriccoin.zcash.ui.common.repository
 
 import android.app.Application
+import android.content.res.Resources
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.WalletInitMode
+import cash.z.ecc.android.sdk.model.BlockHeight
 import cash.z.ecc.android.sdk.model.PersistableWallet
 import cash.z.ecc.android.sdk.fixture.WalletFixture
 import cash.z.ecc.android.sdk.model.SeedPhrase
@@ -23,6 +25,7 @@ import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryPr
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
+import co.electriccoin.zcash.ui.common.usecase.RestoreWalletUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 import io.mockk.coEvery
@@ -52,6 +55,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 /**
@@ -170,18 +174,21 @@ class WalletRepositoryImplTest {
         }
 
     @Test
-    fun restoreAfterRepositoryRecreationKeepsExistingWalletInsteadOfIncomingWallet() =
+    fun repositoryRecreationRejectsConflictingRestoreAndKeepsExistingWallet() =
         runTest {
             val storedWallet = fixtureWallet()
             val (repository, harness) = newRepository(OnboardingState.NONE, storedWallet)
             repository.useTestScope(testScheduler)
 
-            repository.restoreWallet(
-                ZcashNetwork.Mainnet,
-                storedWallet.seedPhrase,
-                WalletFixture.Alice.getBirthday(ZcashNetwork.Mainnet)
-            )
-            advanceUntilIdle()
+            assertFailsWith<WalletInitializationConflictException> {
+                repository.restoreWallet(
+                    ZcashNetwork.Mainnet,
+                    storedWallet.seedPhrase,
+                    WalletFixture.Alice.getBirthday(ZcashNetwork.Mainnet)
+                ).await()
+            }
+            assertEquals(emptyList(), harness.events)
+            repository.restoreFixture().await()
 
             val recovered = harness.walletProvider.requirePersistableWallet()
             assertTrue(recovered.seedPhrase == storedWallet.seedPhrase)
@@ -202,7 +209,7 @@ class WalletRepositoryImplTest {
             assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
 
             coEvery { harness.restoringProvider.store(any()) } returns Unit
-            repository.restoreFixture()
+            repository.retryWalletInitialization()
             advanceUntilIdle()
             assertTrue(harness.walletProvider.requirePersistableWallet().seedPhrase == storedWallet.seedPhrase)
             assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
@@ -297,7 +304,7 @@ class WalletRepositoryImplTest {
             coVerify(exactly = 0) { harness.backupProvider.store(any()) }
 
             walletProvider.failWrites = false
-            repository.createNewWallet()
+            repository.retryWalletInitialization()
             advanceUntilIdle()
 
             assertEquals(accepted, walletProvider.requirePersistableWallet())
@@ -320,7 +327,7 @@ class WalletRepositoryImplTest {
             val accepted = harness.walletProvider.getPersistableWallet()
 
             coEvery { harness.restoringProvider.store(any()) } returns Unit
-            repository.restoreFixture()
+            repository.retryWalletInitialization()
             advanceUntilIdle()
 
             assertEquals(accepted, harness.walletProvider.getPersistableWallet())
@@ -332,7 +339,7 @@ class WalletRepositoryImplTest {
         }
 
     @Test
-    fun failedRestoreMetadataRetriesTheAcceptedRestoreAfterCompetingCreate() =
+    fun failedRestoreMetadataRetriesTheAcceptedRestore() =
         runTest {
             val (repository, harness) = newRepository(OnboardingState.NONE, null)
             repository.useTestScope(testScheduler)
@@ -342,7 +349,7 @@ class WalletRepositoryImplTest {
             val acceptedSeed = harness.walletProvider.requirePersistableWallet().seedPhrase
 
             coEvery { harness.restoringProvider.store(any()) } returns Unit
-            repository.createNewWallet()
+            repository.retryWalletInitialization()
             advanceUntilIdle()
 
             assertTrue(harness.walletProvider.requirePersistableWallet().seedPhrase == acceptedSeed)
@@ -423,6 +430,36 @@ class WalletRepositoryImplTest {
             assertEquals(
                 listOf("onboarding=0", "erase", "wallet", "restoring=INITIATING", "onboarding=3"), harness.events
             )
+        }
+
+    @Test
+    fun conflictingRestoreIsRejectedAndTheOriginalRequestCanBeRetried() =
+        runTest {
+            val (repository, harness) = newRepository(OnboardingState.NONE, null)
+            repository.useTestScope(testScheduler)
+            val resources = mockk<Resources> {
+                every { getBoolean(any()) } returns true
+            }
+            val context = mockk<Application> {
+                every { this@mockk.resources } returns resources
+            }
+            val restore = RestoreWalletUseCase(repository, context)
+            val seed = SeedPhrase.new(WalletFixture.Alice.seedPhrase)
+            val original = WalletFixture.Alice.getBirthday(ZcashNetwork.Testnet)
+            val corrected = BlockHeight.new(original.value + 1)
+
+            coEvery { harness.restoringProvider.store(any()) } throws IOException("Synthetic setup failure")
+            assertFailsWith<IllegalStateException> { restore(seed, false, original) }
+            coEvery { harness.restoringProvider.store(any()) } returns Unit
+
+            assertFailsWith<WalletInitializationConflictException> { restore(seed, false, corrected) }
+            assertFailsWith<WalletInitializationConflictException> { restore(seed, true, original) }
+            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+            assertEquals(original, harness.walletProvider.requirePersistableWallet().birthday)
+
+            restore(seed, false, original)
+            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            assertEquals(original, harness.walletProvider.requirePersistableWallet().birthday)
         }
 
     private fun WalletRepositoryImpl.restoreFixture() =
@@ -619,6 +656,7 @@ class WalletRepositoryImplTest {
                 walletBackupFlagStorageProvider = walletBackupFlagStorageProvider,
                 isIronwoodAnnouncementShownStorageProvider = isIronwoodAnnouncementShownStorageProvider,
                 sdkEncryptedPreferenceRecoveryProvider = sdkEncryptedPreferenceRecoveryProvider,
+                isTorEnabledStorageProvider = mockk(relaxed = true),
             )
 
         fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())

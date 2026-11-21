@@ -10,16 +10,20 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun AndroidRestoreHeight(args: RestoreHeight) {
+fun AndroidRestoreHeight(args: RestoreHeight, cancelSession: () -> Unit) {
     val vm = koinViewModel<RestoreHeightVM> { parametersOf(args) }
     val state by vm.state.collectAsStateWithLifecycle()
     SecureScreen()
-    BackHandler { state.onBack() }
+    val onBack = {
+        cancelSession()
+        state.onBack()
+    }
+    BackHandler(onBack = onBack)
     co.electriccoin.zcash.ui.screen.common
-        .BlockHeightView(state)
+        .BlockHeightView(state.copy(onBack = onBack))
 }
 
 @Serializable
 data class RestoreHeight(
-    val seed: String
+    val sessionId: String
 )

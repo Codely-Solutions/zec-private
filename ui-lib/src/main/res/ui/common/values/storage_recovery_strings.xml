@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="contact_error_saveFailed">Could not save the contact. Try again.</string>
+    <string name="contact_error_deleteFailed">Could not delete the contact. Try again.</string>
+    <string name="wallet_reset_failed">Wallet reset could not finish. Try again.</string>
+    <string name="wallet_reset_pending">Finish resetting the wallet to continue.</string>
+</resources>

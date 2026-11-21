@@ -59,6 +59,36 @@ class SwapRepositoryImplTest {
         SwapRepositoryImpl(dataSource, mockk(relaxed = true)).apply { scope = testScope }
 
     @Test
+    fun providerSuccessNeedsPreparationAndItsNavigationCanOnlyBeConsumedOnce() = runTest {
+        val repository = loadedRepository(dataSourceReturning(fakeQuote()))
+        repository.requestExactInputQuote(BigDecimal.ONE, "destination", "refund", btc, BigDecimal("2"))
+        val current = assertIs<SwapQuoteData.Success>(repository.quote.value)
+        assertNull(repository.consumeReview())
+        kotlin.test.assertTrue(repository.markReviewReady(current))
+        assertEquals(current, repository.consumeReview(current))
+        assertFalse(repository.markReviewReady(current))
+        assertNull(repository.consumeReview())
+    }
+
+    @Test
+    fun clearedOrSupersededRequestsCannotPublishOrConsumeOldReviewReadiness() = runTest {
+        val repository = repository(mockk())
+        val old = SwapQuoteData.Success(fakeQuote())
+        val replacement = SwapQuoteData.Success(fakeQuote())
+        repository.quote.value = old
+        kotlin.test.assertTrue(repository.markReviewReady(old))
+        repository.quote.value = replacement
+        assertNull(repository.consumeReview(old))
+        assertFalse(repository.markReviewReady(old))
+        kotlin.test.assertTrue(repository.markReviewReady(replacement))
+        assertNull(repository.consumeReview(old))
+        assertEquals(replacement, repository.consumeReview(replacement))
+        repository.clearQuote()
+        assertFalse(repository.markReviewReady(replacement))
+        assertNull(repository.consumeReview())
+    }
+
+    @Test
     fun refreshDropsZecAndNonPricedAssetsAndExtractsZec() =
         runTest {
             val zeroPriced =
@@ -556,6 +586,7 @@ class SwapRepositoryImplTest {
             val status =
                 mockk<SwapQuoteStatus> {
                     every { originAsset } returns btc
+                    every { depositAddress } returns co.electriccoin.zcash.ui.common.model.DynamicSwapAddress("deposit-address")
                     every { destinationAsset } returns zec
                 }
             val dataSource =
@@ -570,7 +601,7 @@ class SwapRepositoryImplTest {
             assertEquals(status, result)
             // The repo supplies the tokens itself: the priced list plus the separately-kept ZEC asset.
             coVerify(exactly = 1) {
-                dataSource.checkSwapStatus(depositAddress = "deposit-address", supportedTokens = listOf(btc, zec))
+                dataSource.checkSwapStatus(depositAddress = "deposit-address", supportedTokens = listOf(zec, btc))
             }
         }
 
@@ -580,6 +611,7 @@ class SwapRepositoryImplTest {
             val status =
                 mockk<SwapQuoteStatus> {
                     every { originAsset } returns btc
+                    every { depositAddress } returns co.electriccoin.zcash.ui.common.model.DynamicSwapAddress("deposit-address")
                     every { destinationAsset } returns zec
                 }
             val dataSource =
@@ -594,7 +626,7 @@ class SwapRepositoryImplTest {
             assertEquals(status, result)
             coVerify(exactly = 1) { dataSource.getSupportedTokens() } // refreshed once on demand
             coVerify(exactly = 1) {
-                dataSource.checkSwapStatus(depositAddress = "deposit-address", supportedTokens = listOf(btc, zec))
+                dataSource.checkSwapStatus(depositAddress = "deposit-address", supportedTokens = listOf(zec, btc))
             }
         }
 
@@ -629,6 +661,7 @@ class SwapRepositoryImplTest {
             val status =
                 mockk<SwapQuoteStatus> {
                     every { originAsset } returns btc
+                    every { depositAddress } returns co.electriccoin.zcash.ui.common.model.DynamicSwapAddress("deposit-address")
                     every { destinationAsset } returns zec
                 }
             val dataSource =
@@ -649,6 +682,7 @@ class SwapRepositoryImplTest {
             val status =
                 mockk<SwapQuoteStatus> {
                     every { originAsset } returns btc
+                    every { depositAddress } returns co.electriccoin.zcash.ui.common.model.DynamicSwapAddress("deposit-address")
                     every { destinationAsset } returns zec
                 }
             val dataSource =

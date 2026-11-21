@@ -15,4 +15,5 @@ data class ABContactState(
     val negativeButton: ButtonState?,
     val positiveButton: ButtonState,
     val onBack: () -> Unit,
+    val operationError: StringResource? = null,
 )

@@ -9,4 +9,5 @@ data class ResetZashiState(
     val checkboxState: CheckboxState,
     val buttonState: ButtonState,
     val confirmationDialog: ZashiConfirmationState?,
+    val isPending: Boolean = false,
 )

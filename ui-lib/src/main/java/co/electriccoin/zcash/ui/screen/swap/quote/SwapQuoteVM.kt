@@ -71,6 +71,7 @@ internal class SwapQuoteVM(
 
     private var isClosing = false
     private val priceCheck = MutableStateFlow<BoundPriceCheck?>(null)
+    private val proposals = observeProposal.observeNullable().stateIn(viewModelScope, SharingStarted.Eagerly, null)
     private val clock = flow {
         while (true) {
             emit(Clock.System.now().toEpochMilliseconds())
@@ -81,7 +82,7 @@ internal class SwapQuoteVM(
     val state: StateFlow<SwapQuoteState?> =
         combine(
             swapRepository.quote.filterNotNull(),
-            observeProposal.observeNullable(),
+            proposals,
             observeSelectedWalletAccount.require(),
             priceCheck,
             clock,
@@ -89,7 +90,9 @@ internal class SwapQuoteVM(
             when (quote) {
                 SwapQuoteData.Loading -> null
                 is SwapQuoteData.Error -> createErrorState(quote)
-                is SwapQuoteData.Success -> createState(proposal, quote, account, check, now)
+                is SwapQuoteData.Success -> if (quote.quote.requiresLocalProposal &&
+                    (proposal as? SwapTransactionProposal)?.quote !== quote.quote) null
+                else createState(proposal, quote, account, check, now)
             }
         }.stateIn(
             scope = viewModelScope,
@@ -99,10 +102,11 @@ internal class SwapQuoteVM(
 
     init {
         viewModelScope.launch {
-            combine(swapRepository.quote, observeProposal.observeNullable()) { quote, proposal -> quote to proposal }
+            combine(swapRepository.quote, proposals) { quote, proposal -> quote to proposal }
                 .collectLatest { (result, proposal) ->
                     val quote = (result as? SwapQuoteData.Success)?.quote
-                    if (quote == null) {
+                    if (quote == null || quote.requiresLocalProposal &&
+                        (proposal as? SwapTransactionProposal)?.quote !== quote) {
                         priceCheck.value = null
                     } else {
                         val fee = quote.getTotalFeesZatoshi((proposal as? SwapTransactionProposal)?.proposal)
@@ -137,6 +141,8 @@ internal class SwapQuoteVM(
             val currentQuote = (swapRepository.quote.value as? SwapQuoteData.Success)?.quote
             val now = Clock.System.now()
             if (isClosing || currentQuote !== quote.quote || now >= quote.quote.deadline) return
+            if (quote.quote.requiresLocalProposal &&
+                (proposals.value as? SwapTransactionProposal) !== proposal) return
             val current = priceCheck.value.current(quote.quote, fee, now.toEpochMilliseconds())
             if (current != assessment || current == IndependentPriceCheck.Checking) return
             action()
@@ -144,7 +150,7 @@ internal class SwapQuoteVM(
         return swapQuoteSuccessMapper.createState(
             state = SwapQuoteInternalState(proposal as? SwapTransactionProposal, quote.quote, account),
             onBack = ::onBack,
-            onSubmitQuoteClick = { reviewedAction { onSubmitQuoteClick() } },
+            onSubmitQuoteClick = { reviewedAction { onSubmitQuoteClick(proposal) } },
             onNavigateToOnRampSwap = { reviewedAction { onNavigateToOnRampSwap() } },
             priceCheck = assessment,
         )
@@ -225,10 +231,14 @@ internal class SwapQuoteVM(
 
     private fun onBackDuringError() = onBack()
 
-    private fun onSubmitQuoteClick() = viewModelScope.launch { submitProposal() }
+    private fun onSubmitQuoteClick(proposal: TransactionProposal?) = viewModelScope.launch { submitProposal(proposal) }
 
     private fun onCancelPaymentClick() = closeQuote { cancelSwap() }
 }
+
+private val SwapQuote.requiresLocalProposal: Boolean
+    get() = co.electriccoin.zcash.ui.common.model.ZecSwapComposition.funding(mode) ==
+        co.electriccoin.zcash.wallet.foundation.FundingCapability.LOCAL_TRANSACTION
 
 internal data class SwapQuoteInternalState(
     val proposal: SwapTransactionProposal?,

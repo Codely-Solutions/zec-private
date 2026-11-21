@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.SwapBlockchain
 import co.electriccoin.zcash.ui.common.provider.BlockchainProvider
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
+import co.electriccoin.zcash.ui.common.usecase.ABContactSaveResult
 import co.electriccoin.zcash.ui.common.usecase.ContactAddressValidationResult
 import co.electriccoin.zcash.ui.common.usecase.DeleteABContactUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetABContactByIdUseCase
@@ -55,7 +56,6 @@ class UpdateGenericABContactVM(
 
     private val isUpdatingContact = MutableStateFlow(false)
     private val isDeletingContact = MutableStateFlow(false)
-    private val isLoadingContact = MutableStateFlow(true)
 
     private val refusedGiftCardLink = RefusedGiftCardLinkAddress()
 
@@ -225,9 +225,9 @@ class UpdateGenericABContactVM(
             nameState,
             updateButtonState,
             deleteButtonState,
-            isLoadingContact,
+            refusedGiftCardLink.storageError,
             blockChainPickerState,
-        ) { address, name, saveButton, deleteButton, isLoadingContact, blockchainPicker ->
+        ) { address, name, saveButton, deleteButton, storageError, blockchainPicker ->
             ABContactState(
                 info = null,
                 title = stringRes(R.string.update_contact_title),
@@ -236,6 +236,7 @@ class UpdateGenericABContactVM(
                 chain = blockchainPicker,
                 negativeButton = deleteButton,
                 positiveButton = saveButton,
+                operationError = storageError,
                 onBack = ::onBack
             )
         }.stateIn(
@@ -251,7 +252,6 @@ class UpdateGenericABContactVM(
             contactName.update { contact?.name.orEmpty() }
             originalContact.update { contact }
             selectedBlockchain.update { contact?.blockchain ?: zcashBlockchain }
-            isLoadingContact.update { false }
         }
     }
 
@@ -269,7 +269,9 @@ class UpdateGenericABContactVM(
             }
         }
 
-    private fun onBack() = navigationRouter.back()
+    private fun onBack() {
+        if (!isUpdatingContact.value && !isDeletingContact.value) navigationRouter.back()
+    }
 
     private fun onUpdateButtonClick() =
         viewModelScope.launch {
@@ -319,7 +321,13 @@ class UpdateGenericABContactVM(
             if (isDeletingContact.value || isUpdatingContact.value) return@launch
             originalContact.value?.let {
                 isDeletingContact.update { true }
-                deleteContact(it)
+                val result = deleteContact(it)
+                refusedGiftCardLink.storageError.value =
+                    if (result == ABContactSaveResult.StorageFailure) {
+                        stringRes(R.string.contact_error_deleteFailed)
+                    } else {
+                        null
+                    }
                 isDeletingContact.update { false }
             }
         }

@@ -1,7 +1,6 @@
 package co.electriccoin.zcash.ui.common.provider
 
 import android.content.Context
-import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataKey
 import kotlinx.coroutines.CancellationException
 import java.io.File
@@ -41,14 +40,14 @@ interface MetadataStorageProvider {
 
     /**
      * Deletes every file of [key]: each identifier's own file and its temporary write file by name,
-     * and the files set aside under it. A failure is logged, never thrown, and a failed listing
-     * leaves only the set-aside files behind.
+     * and the files set aside under it. Throws when any target could not be found or removed.
      */
     fun deleteStorageFiles(key: MetadataKey)
 }
 
 class MetadataStorageProviderImpl(
     private val context: Context,
+    private val directorySync: DirectorySync,
     private val currentTimeMillis: () -> Long = System::currentTimeMillis
 ) : MetadataStorageProvider {
     /**
@@ -99,18 +98,18 @@ class MetadataStorageProviderImpl(
         }
 
     override fun deleteStorageFiles(key: MetadataKey) {
-        runCatchingRecoverable {
-            val dir = getOrCreateMetadataDir()
-            val dirFiles = dir.listFiles()
-            if (dirFiles == null) Twig.error { "Failed to list metadata files for deletion" }
-            key.fileIdentifiers().forEach { identifier ->
-                val setAside =
-                    dirFiles.orEmpty().filter { it.isFile && it.name.startsWith(identifier + UNDECODABLE_INFIX) }
-                (listOf(File(dir, identifier), File(dir, identifier + METADATA_TEMP_FILE_SUFFIX)) + setAside)
-                    .filter { !it.delete() && it.exists() }
-                    .forEach { _ -> Twig.error { "Failed to delete a metadata file" } }
-            }
-        }.onFailure { e -> Twig.error(e) { "Failed to delete metadata files" } }
+        val dir = getOrCreateMetadataDir()
+        val dirFiles = dir.listFiles()
+        var failed = dirFiles == null
+        key.fileIdentifiers().forEach { identifier ->
+            val setAside = dirFiles.orEmpty().filter { it.name.startsWith(identifier + UNDECODABLE_INFIX) }
+            (listOf(File(dir, identifier), File(dir, identifier + METADATA_TEMP_FILE_SUFFIX)) + setAside)
+                .forEach { file ->
+                    if (runCatchingRecoverable { Files.deleteIfExists(file.toPath()) }.isFailure) failed = true
+                }
+        }
+        if (failed) throw IOException("Could not remove all wallet metadata")
+        directorySync.sync(dir)
     }
 
     private fun getOrCreateMetadataDir(): File {

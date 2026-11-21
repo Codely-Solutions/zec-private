@@ -200,7 +200,7 @@ class RequestSwapQuoteUseCase(
 
         val mismatchArgs = (result as? SwapQuoteData.Error)?.toMismatchArgs()
         if (mismatchArgs != null) {
-            if (canNavigateToSwapQuote()) {
+            if (canNavigateToSwapQuote() && swapRepository.consumeReview(result) != null) {
                 swapRepository.clearQuote()
                 navigationRouter.forward(mismatchArgs)
             }
@@ -250,7 +250,8 @@ class RequestSwapQuoteUseCase(
             }
         }
 
-        if (canNavigateToSwapQuote()) {
+        if (result is SwapQuoteData.Success && !swapRepository.markReviewReady(result)) return@withContext
+        if (canNavigateToSwapQuote() && swapRepository.consumeReview(result) != null) {
             navigationRouter.forward(SwapQuoteArgs)
         }
     }

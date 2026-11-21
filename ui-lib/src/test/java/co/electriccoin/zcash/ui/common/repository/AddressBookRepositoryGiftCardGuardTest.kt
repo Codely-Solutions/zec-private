@@ -11,6 +11,7 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -50,30 +51,32 @@ class AddressBookRepositoryGiftCardGuardTest {
         )
 
     @Test
-    fun saveContactRefusesAGiftCardLink() {
-        GiftCardSecretFixture.all.forEach { (name, link) ->
-            val exception =
-                assertFailsWith<GiftCardContactNotAllowedException>(name) {
-                    repository.saveContact(name = "Card", address = link, chain = null)
-                }
-            assertFalse(exception.toString().contains(link), name)
-        }
+    fun saveContactRefusesAGiftCardLink() =
+        runTest {
+            GiftCardSecretFixture.all.forEach { (name, link) ->
+                val exception =
+                    assertFailsWith<GiftCardContactNotAllowedException>(name) {
+                        repository.saveContact(name = "Card", address = link, chain = null)
+                    }
+                assertFalse(exception.toString().contains(link), name)
+            }
 
-        verify { addressBookDataSource wasNot Called }
-        verify { addressBookKeyStorageProvider wasNot Called }
-    }
+            verify { addressBookDataSource wasNot Called }
+            verify { addressBookKeyStorageProvider wasNot Called }
+        }
 
     @Test
-    fun updateContactRefusesAGiftCardLink() {
-        GiftCardSecretFixture.all.forEach { (name, link) ->
-            val exception =
-                assertFailsWith<GiftCardContactNotAllowedException>(name) {
-                    repository.updateContact(contact = existing, name = "Card", address = link, chain = "btc")
-                }
-            assertFalse(exception.toString().contains(link), name)
-        }
+    fun updateContactRefusesAGiftCardLink() =
+        runTest {
+            GiftCardSecretFixture.all.forEach { (name, link) ->
+                val exception =
+                    assertFailsWith<GiftCardContactNotAllowedException>(name) {
+                        repository.updateContact(contact = existing, name = "Card", address = link, chain = "btc")
+                    }
+                assertFalse(exception.toString().contains(link), name)
+            }
 
-        verify { addressBookDataSource wasNot Called }
-        verify { addressBookKeyStorageProvider wasNot Called }
-    }
+            verify { addressBookDataSource wasNot Called }
+            verify { addressBookKeyStorageProvider wasNot Called }
+        }
 }

@@ -5,6 +5,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.component.destructive
 import co.electriccoin.zcash.ui.common.model.LceState
+import co.electriccoin.zcash.ui.common.model.guardLoading
 import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.model.stateIn
 import co.electriccoin.zcash.ui.common.model.withLce
@@ -32,21 +33,29 @@ class ResetZashiVM(
             isKeepFilesChecked,
             confirmationDialogFlow,
             resetLce.state,
-        ) { isKeepFilesChecked, confirmationDialog, lce ->
+            resetZashi.isPending,
+            resetZashi.isRunning,
+        ) { isKeepFilesChecked, confirmationDialog, lce, pending, running ->
             createState(
                 isKeepFilesChecked = isKeepFilesChecked,
                 confirmationDialog = confirmationDialog,
-                isLoading = lce.loading,
+                isLoading = lce.loading || running,
+                isPending = pending,
             )
-        }.withLce(resetLce, errorStateMapper::mapToState)
-            .stateIn(this, LceState(content = createState(isKeepFilesChecked.value, null, false)))
+        }.withLce(resetLce) { error ->
+            errorStateMapper.mapToState(error, message = stringRes(R.string.wallet_reset_failed))
+        }.stateIn(
+            this,
+            LceState(content = createState(isKeepFilesChecked.value, null, resetZashi.isRunning.value, resetZashi.isPending.value))
+        )
 
     private fun createState(
         isKeepFilesChecked: Boolean,
         confirmationDialog: ZashiConfirmationState?,
         isLoading: Boolean,
+        isPending: Boolean,
     ) = ResetZashiState(
-        onBack = { navigationRouter.back() },
+        onBack = { if (!resetZashi.isRunning.value && !resetZashi.isPending.value) navigationRouter.back() },
         checkboxState =
             CheckboxState(
                 title = stringRes(R.string.deleteWallet_metadataWarn1),
@@ -56,17 +65,23 @@ class ResetZashiVM(
             ),
         buttonState =
             ButtonState(
-                text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm),
+                text = if (isPending) {
+                    stringRes(R.string.wallet_initialization_retry)
+                } else {
+                    stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm)
+                },
                 isLoading = isLoading,
                 onClick = ::onConfirmClicked
             ),
         confirmationDialog = confirmationDialog,
+        isPending = isPending,
     )
 
     private fun onCheckboxToggled() = isKeepFilesChecked.update { !it }
 
     private fun onConfirmClicked() {
-        confirmationDialogFlow.value = createConfirmationState()
+        if (resetZashi.isRunning.value) return
+        if (resetZashi.isPending.value) onConfirmReset() else confirmationDialogFlow.value = createConfirmationState()
     }
 
     private fun createConfirmationState(): ZashiConfirmationState =
@@ -85,8 +100,9 @@ class ResetZashiVM(
 
     private fun onConfirmReset() {
         confirmationDialogFlow.value = null
-        resetLce.execute {
-            resetZashi(keepFiles = isKeepFilesChecked.value)
+        resetLce.guardLoading {
+            val keepFiles = isKeepFilesChecked.value
+            resetLce.execute { resetZashi(keepFiles) }
         }
     }
 }

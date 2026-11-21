@@ -77,12 +77,12 @@ class RestoreHeightVM(
         )
     }
 
-    private fun onEstimateClick() = navigationRouter.forward(RestoreDateArgs(seed = restoreHeight.seed))
+    private fun onEstimateClick() = navigationRouter.forward(RestoreDateArgs(sessionId = restoreHeight.sessionId))
 
     private fun onRestoreClick() {
         navigationRouter.forward(
             RestoreTorArgs(
-                seed = restoreHeight.seed.trim(),
+                sessionId = restoreHeight.sessionId,
                 blockHeight = blockHeightText.value.amount?.toLong() ?: return
             )
         )

@@ -8,8 +8,6 @@ class DeleteABContactUseCase(
     private val addressBookRepository: AddressBookRepository,
     private val navigationRouter: NavigationRouter
 ) {
-    operator fun invoke(contact: EnhancedABContact) {
-        addressBookRepository.deleteContact(contact)
-        navigationRouter.back()
-    }
+    suspend operator fun invoke(contact: EnhancedABContact): ABContactSaveResult =
+        persistABContact(navigationRouter) { addressBookRepository.deleteContact(contact) }
 }

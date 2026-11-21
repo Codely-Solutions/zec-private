@@ -55,7 +55,7 @@ class RestoreEstimationVM(
     }
 
     private fun onRestoreClick() {
-        navigationRouter.forward(RestoreTorArgs(seed = args.seed.trim(), blockHeight = args.blockHeight))
+        navigationRouter.forward(RestoreTorArgs(sessionId = args.sessionId, blockHeight = args.blockHeight))
     }
 
     private fun onBack() = navigationRouter.back()

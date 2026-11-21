@@ -1,7 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
-import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector
@@ -18,7 +18,7 @@ class UpdateABContactUseCase(
     private val navigationRouter: NavigationRouter
 ) {
     @Suppress("ReturnCount") // Refusal exits precede all persistence and navigation.
-    operator fun invoke(
+    suspend operator fun invoke(
         contact: EnhancedABContact,
         name: String,
         address: String,
@@ -28,8 +28,8 @@ class UpdateABContactUseCase(
         val recipient = chain?.let { validateSwapRecipient(address, it, allowPaymentAmount = false) }
         if (recipient != null && !recipient.isValid) return ABContactSaveResult.InvalidAddress
         val receivingAddress = recipient?.input?.address ?: address
-        addressBookRepository.updateContact(contact = contact, name = name, address = receivingAddress, chain = chain)
-        navigationRouter.back()
-        return ABContactSaveResult.Saved
+        return persistABContact(navigationRouter) {
+            addressBookRepository.updateContact(contact = contact, name = name, address = receivingAddress, chain = chain)
+        }
     }
 }

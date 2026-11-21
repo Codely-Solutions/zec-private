@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.VKType
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
@@ -22,6 +23,7 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -33,6 +35,7 @@ import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlin.reflect.KClass
@@ -220,7 +223,7 @@ class VKDetailVMTest {
             requireNotNull(vm.state.value).secondaryButton.onClick()
             advanceUntilIdle()
 
-            coVerify(exactly = 0) { shareQR(any(), any(), any(), any(), any()) }
+            coVerify(exactly = 0) { shareQR(any(), any(), any(), any(), any(), any()) }
         }
 
     @Test
@@ -239,7 +242,8 @@ class VKDetailVMTest {
                     shareText = stringRes(KEY),
                     sharePickerText = stringRes(R.string.exportViewingKey_share_picker_title),
                     filenamePrefix = "zodl_viewing_key_qr_",
-                    centerIcon = null
+                    centerIcon = null,
+                    isAllowed = any()
                 )
             }
         }
@@ -261,7 +265,8 @@ class VKDetailVMTest {
                     shareText = stringRes(KEY),
                     sharePickerText = stringRes(R.string.exportViewingKey_share_picker_title),
                     filenamePrefix = "zodl_viewing_key_qr_",
-                    centerIcon = null
+                    centerIcon = null,
+                    isAllowed = any()
                 )
             }
         }
@@ -277,6 +282,52 @@ class VKDetailVMTest {
             advanceUntilIdle()
 
             verify(exactly = 0) { deleteSharedQRImages(any()) }
+        }
+
+    @Test
+    fun relockHidesKeyAndRejectsStaleShareEvenAfterUnlock() =
+        runTest(dispatcher) {
+            val session = AppAccessSession().apply { unlock() }
+            val shareQR = mockk<ShareQRUseCase>(relaxed = true)
+            val vm = startedVm(shareQR = shareQR, appAccessSession = session)
+            reveal(vm)
+            val staleShare = requireNotNull(vm.state.value).secondaryButton.onClick
+
+            session.lock()
+            staleShare()
+            advanceUntilIdle()
+            assertFalse(requireNotNull(vm.state.value).content.isRevealed)
+
+            session.unlock()
+            staleShare()
+            advanceUntilIdle()
+            assertFalse(requireNotNull(vm.state.value).content.isRevealed)
+            coVerify(exactly = 0) { shareQR(any(), any(), any(), any(), any(), any()) }
+            reveal(vm)
+            assertTrue(requireNotNull(vm.state.value).content.isRevealed)
+            staleShare()
+            advanceUntilIdle()
+            coVerify(exactly = 0) { shareQR(any(), any(), any(), any(), any(), any()) }
+        }
+
+    @Test
+    fun biometricResultFromRevokedSessionCannotRevealInTheNextSession() =
+        runTest(dispatcher) {
+            val session = AppAccessSession().apply { unlock() }
+            val result = CompletableDeferred<Unit>()
+            val biometrics = mockk<BiometricRepository> {
+                coEvery { requestBiometrics(any()) } coAnswers { result.await() }
+            }
+            val vm = startedVm(biometricRepository = biometrics, appAccessSession = session)
+            requireNotNull(vm.state.value).primaryButton.onClick()
+            runCurrent()
+
+            session.lock()
+            session.unlock()
+            result.complete(Unit)
+            advanceUntilIdle()
+
+            assertFalse(requireNotNull(vm.state.value).content.isRevealed)
         }
 
     @Test
@@ -342,6 +393,7 @@ class VKDetailVMTest {
         shareQR: ShareQRUseCase = mockk(relaxed = true),
         deleteSharedQRImages: DeleteSharedQRImagesUseCase = mockk(relaxed = true),
         router: FakeNavigationRouter = FakeNavigationRouter(),
+        appAccessSession: AppAccessSession = AppAccessSession().apply { unlock() },
     ): VKDetailVM {
         val getVK =
             mockk<GetVKUseCase> {
@@ -355,6 +407,7 @@ class VKDetailVMTest {
                 deleteSharedQRImages = deleteSharedQRImages,
                 biometricRepository = biometricRepository,
                 navigationRouter = router,
+                appAccessSession = appAccessSession,
             )
         backgroundScope.launch { vm.state.collect { } }
         advanceUntilIdle()

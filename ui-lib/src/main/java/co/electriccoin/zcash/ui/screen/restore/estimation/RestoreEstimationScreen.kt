@@ -21,6 +21,6 @@ fun RestoreEstimationScreen(args: RestoreEstimationArgs) {
 
 @Serializable
 data class RestoreEstimationArgs(
-    val seed: String,
+    val sessionId: String,
     val blockHeight: Long
 )

@@ -8,8 +8,10 @@ import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
 import co.electriccoin.zcash.ui.common.usecase.ValidateSeedUseCase
 import co.electriccoin.zcash.ui.design.component.SeedWordInnerTextFieldState
+import co.electriccoin.zcash.ui.screen.restore.height.RestoreHeight
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -80,6 +82,47 @@ class RestoreSeedPasteTest {
         vm.state.first { it != null }!!.pasteButton!!.onClick()
         vm.state.first { it?.nextButton != null }
         verify(exactly = 0) { clearClipboard() }
+    }
+
+    @Test
+    fun enteringBirthdayCreatesAnOpaqueSessionAndCompletionClearsThePhrase() = runVmTest {
+        every { readClipboard() } returns words.joinToString(" ")
+        val vm = vm()
+        vm.state.first { it != null }!!.pasteButton!!.onClick()
+        val entered = vm.state.first { it?.nextButton != null }!!
+
+        entered.nextButton!!.onClick()
+        advanceUntilIdle()
+        val route = slot<RestoreHeight>()
+        verify(exactly = 1) { navigation.forward(capture(route)) }
+        val sessionId = route.captured.sessionId
+        assertFalse(sessionId.contains(words.first()))
+        assertEquals(phrase, vm.resolveSession(sessionId))
+
+        vm.completeRestore(sessionId)
+        val cleared =
+            vm.state.first { state ->
+                state != null && state.nextButton == null && state.seed.values.all { it.innerState.value.isEmpty() }
+            }!!
+        assertNull(vm.resolveSession(sessionId))
+        assertNull(cleared.nextButton)
+    }
+
+    @Test
+    fun returningToSeedEntryRevokesBirthdaySessionWhileKeepingEditableWords() = runVmTest {
+        every { readClipboard() } returns words.joinToString(" ")
+        val vm = vm()
+        vm.state.first { it != null }!!.pasteButton!!.onClick()
+        val entered = vm.state.first { it?.nextButton != null }!!
+
+        entered.nextButton!!.onClick()
+        advanceUntilIdle()
+        val route = slot<RestoreHeight>()
+        verify(exactly = 1) { navigation.forward(capture(route)) }
+        vm.cancelBirthdayEntry(route.captured.sessionId)
+
+        assertNull(vm.resolveSession(route.captured.sessionId))
+        assertEquals(words, vm.state.first { it?.nextButton != null }!!.seed.values.map { it.innerState.value })
     }
 
     @Test

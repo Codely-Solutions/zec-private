@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.model.SensitiveReveal
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRequest
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
@@ -21,7 +23,6 @@ import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.component.SeedTextState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.restore.info.SeedInfo
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
@@ -29,7 +30,6 @@ import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.take
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class WalletBackupViewModel(
@@ -40,7 +40,8 @@ class WalletBackupViewModel(
     private val onUserSavedWalletBackup: OnUserSavedWalletBackupUseCase,
     private val remindWalletBackupLater: RemindWalletBackupLaterUseCase,
     private val biometricRepository: BiometricRepository,
-    private val copyRecoveryToClipboard: CopyRecoveryToClipboardUseCase
+    private val copyRecoveryToClipboard: CopyRecoveryToClipboardUseCase,
+    private val appAccessSession: AppAccessSession,
 ) : ViewModel() {
     private val lockoutDuration =
         walletBackupMessageUseCase
@@ -54,21 +55,18 @@ class WalletBackupViewModel(
                 initialValue = null
             )
 
-    private val isRevealed = MutableStateFlow(false)
+    private val reveal = SensitiveReveal(appAccessSession)
 
-    private val isRemindMeLaterButtonVisible =
-        isRevealed
-            .map { isRevealed ->
-                isRevealed && args.isOpenedFromSeedBackupInfo
-            }
+    internal val isRevealed: Boolean
+        get() = reveal.isRevealed
 
     val state =
         combine(
-            isRevealed,
-            isRemindMeLaterButtonVisible,
+            reveal.changes,
             getPersistableWallet.observe(),
             lockoutDuration
-        ) { isRevealed, isRemindMeLaterButtonVisible, wallet, lockoutDuration ->
+        ) { grant, wallet, lockoutDuration ->
+            val isRevealed = grant != null
             WalletBackupState(
                 secondaryButton =
                     ButtonState(
@@ -78,8 +76,8 @@ class WalletBackupViewModel(
                             } else {
                                 stringRes(R.string.recoveryPhraseDisplay_button_remindMeLater)
                             },
-                        onClick = ::onRemindMeLaterClick
-                    ).takeIf { isRemindMeLaterButtonVisible },
+                        onClick = { onRemindMeLaterClick(grant) }
+                    ).takeIf { isRevealed && args.isOpenedFromSeedBackupInfo },
                 primaryButton =
                     ButtonState(
                         text =
@@ -98,7 +96,7 @@ class WalletBackupViewModel(
                             },
                         onClick =
                             if (isRevealed && args.isOpenedFromSeedBackupInfo) {
-                                { onWalletBackupSavedClick() }
+                                { onWalletBackupSavedClick(grant) }
                             } else {
                                 { onRevealClick() }
                             },
@@ -119,7 +117,7 @@ class WalletBackupViewModel(
                     ),
                 seed =
                     SeedTextState(
-                        seed = wallet?.seedPhrase?.joinToString().orEmpty(),
+                        seed = wallet?.seedPhrase?.split?.joinToString(" ") { if (isRevealed) it else "*" }.orEmpty(),
                         isRevealed = isRevealed,
                     ),
                 birthday =
@@ -128,6 +126,7 @@ class WalletBackupViewModel(
                         text =
                             stringRes(
                                 wallet
+                                    ?.takeIf { isRevealed }
                                     ?.birthday
                                     ?.value
                                     ?.toString()
@@ -144,7 +143,7 @@ class WalletBackupViewModel(
                 copyPhrase = wallet?.takeIf { isRevealed }?.let { wallet ->
                     ButtonState(text = stringRes(R.string.recovery_copy_phrase), onClick = {
                         copyRecoveryIfRevealed(
-                            isRevealed = this.isRevealed.value,
+                            isRevealed = reveal.permits(grant),
                             value = { wallet.seedPhrase.split.joinToString(" ") },
                             copy = copyRecoveryToClipboard::invoke
                         )
@@ -154,7 +153,7 @@ class WalletBackupViewModel(
                     wallet.birthday?.let { birthday ->
                         ButtonState(text = stringRes(R.string.recovery_copy_birthday), onClick = {
                             copyRecoveryIfRevealed(
-                                isRevealed = this.isRevealed.value,
+                                isRevealed = reveal.permits(grant),
                                 value = { birthday.value.toString() },
                                 copy = copyRecoveryToClipboard::invoke
                             )
@@ -165,16 +164,18 @@ class WalletBackupViewModel(
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT), null)
 
-    private fun onRemindMeLaterClick() = viewModelScope.launch { remindWalletBackupLater(persistConsent = false) }
+    private fun onRemindMeLaterClick(grant: AppAccessSession.Grant?) =
+        viewModelScope.launch { if (reveal.permits(grant)) remindWalletBackupLater(persistConsent = false) }
 
-    private fun onWalletBackupSavedClick() =
+    private fun onWalletBackupSavedClick(grant: AppAccessSession.Grant?) =
         viewModelScope.launch {
-            onUserSavedWalletBackup()
+            if (reveal.permits(grant)) onUserSavedWalletBackup()
         }
 
     private fun onRevealClick() =
         viewModelScope.launch {
-            if (!isRevealed.value) {
+            val grant = appAccessSession.grant.value ?: return@launch
+            if (!isRevealed) {
                 try {
                     biometricRepository.requestBiometrics(
                         BiometricRequest(
@@ -185,14 +186,14 @@ class WalletBackupViewModel(
                                 )
                         )
                     )
-                    isRevealed.update { !it }
+                    reveal.reveal(grant)
                 } catch (_: BiometricsFailureException) {
                     // do nothing
                 } catch (_: BiometricsCancelledException) {
                     // do nothing
                 }
             } else {
-                isRevealed.update { !it }
+                reveal.hide()
             }
         }
 

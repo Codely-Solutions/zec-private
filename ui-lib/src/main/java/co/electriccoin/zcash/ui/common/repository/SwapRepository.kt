@@ -89,6 +89,12 @@ interface SwapRepository {
     fun clear()
 
     fun clearQuote()
+
+    /** Admit only the current request after its local funding preparation succeeds. */
+    fun markReviewReady(result: SwapQuoteData): Boolean
+
+    /** One owner may navigate for a prepared result, including after a cancel sheet closes. */
+    fun consumeReview(expected: SwapQuoteData? = null): SwapQuoteData?
 }
 
 sealed interface SwapQuoteData {
@@ -114,6 +120,7 @@ data class SwapAssetsData(
     val zecAsset: SwapAsset? = null,
     val isLoading: Boolean = false,
     val error: Exception? = null,
+    val recoveryAssets: List<SwapAsset>? = null,
 ) {
     val hasUsableLivePrices: Boolean
         get() =
@@ -146,6 +153,8 @@ class SwapRepositoryImpl(
     private var requestQuoteJob: Job? = null
 
     private val quoteGeneration = RequestGeneration()
+    private var readyReview: SwapQuoteData? = null
+    private var consumedReview: SwapQuoteData? = null
 
     override fun requestRefreshAssets() {
         getOrStartRefreshAssetsSession(keepRefreshing = true)
@@ -224,7 +233,7 @@ class SwapRepositoryImpl(
                 .apply {
                     removeIf {
                         val usdPrice = it.usdPrice
-                        it.isZCashAsset || usdPrice == null || usdPrice == BigDecimal.ZERO
+                        it.isZCashAsset || usdPrice == null || usdPrice <= BigDecimal.ZERO
                     }
                 }.toList()
 
@@ -234,10 +243,8 @@ class SwapRepositoryImpl(
             val filtered = filterSwapAssets(tokens)
             val zecAsset = findZecSwapAsset(tokens)
             try {
-                // Persist only assets that the live path can actually offer. Prices themselves are
-                // stripped by the cache provider, but a cached selection will still exist in the
-                // next live catalog instead of becoming a permanently disabled orphan.
-                swapAssetCacheProvider.store(tokens.filter { it.isZCashAsset || it in filtered })
+                // Historical identities must remain resolvable when a price or offer disappears.
+                swapAssetCacheProvider.store(mergeRecoveryAssets(tokens, assets.value.recoveryAssets.orEmpty()))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -248,7 +255,8 @@ class SwapRepositoryImpl(
                     data = filtered,
                     zecAsset = zecAsset,
                     error = null,
-                    isLoading = false
+                    isLoading = false,
+                    recoveryAssets = mergeRecoveryAssets(tokens, it.recoveryAssets.orEmpty()),
                 )
             }
         } catch (e: CancellationException) {
@@ -275,6 +283,7 @@ class SwapRepositoryImpl(
                 zecAsset = cachedAssets.find(SwapAsset::isZCashAsset),
                 error = null,
                 isLoading = true,
+                recoveryAssets = cachedAssets,
             )
         }
     }
@@ -495,6 +504,7 @@ class SwapRepositoryImpl(
                 depositAddress = recovery.reference,
                 supportedTokens = getSupportedTokensForStatus()
             )
+        require(result.depositAddress.address == recovery.reference) { "Swap status reference mismatch" }
         requireMatchingAsset(
             name = "origin",
             type = SwapQuoteMismatchType.ORIGIN_ASSET,
@@ -520,11 +530,13 @@ class SwapRepositoryImpl(
      */
     private suspend fun getSupportedTokensForStatus(): List<SwapAsset> {
         val loaded = assets.value
+        loaded.recoveryAssets?.takeIf { tokens -> tokens.any { it.isZCashAsset } }?.let { return it }
         if (loaded.data != null && loaded.zecAsset != null) {
             return loaded.data + loaded.zecAsset
         }
         requestRefreshAssetsOnce()
         val refreshed = assets.firstOrNull { !it.isLoading }
+        refreshed?.recoveryAssets?.takeIf { tokens -> tokens.any { it.isZCashAsset } }?.let { return it }
         if (refreshed?.data != null && refreshed.zecAsset != null) {
             return refreshed.data + refreshed.zecAsset
         }
@@ -550,6 +562,8 @@ class SwapRepositoryImpl(
                 val generation = quoteGeneration.advance()
                 requestQuoteJob?.cancel()
                 quote.value = SwapQuoteData.Loading
+                readyReview = null
+                consumedReview = null
                 scope.launch(start = CoroutineStart.LAZY) { block(generation) }.also { requestQuoteJob = it }
             }
         job.start()
@@ -557,7 +571,10 @@ class SwapRepositoryImpl(
 
     private fun publishQuote(generation: RequestId, result: SwapQuoteData) {
         synchronized(this) {
-            if (quoteGeneration.isCurrent(generation)) quote.value = result
+            if (quoteGeneration.isCurrent(generation)) {
+                quote.value = result
+                readyReview = result.takeIf { it is SwapQuoteData.Error }
+            }
         }
     }
 
@@ -567,9 +584,27 @@ class SwapRepositoryImpl(
             requestQuoteJob?.cancel()
             requestQuoteJob = null
             quote.value = null
+            readyReview = null
+            consumedReview = null
         }
     }
+
+    override fun markReviewReady(result: SwapQuoteData): Boolean = synchronized(this) {
+        if (quote.value !== result || result === consumedReview || result == SwapQuoteData.Loading) {
+            return@synchronized false
+        }
+        readyReview = result
+        true
+    }
+
+    override fun consumeReview(expected: SwapQuoteData?): SwapQuoteData? = synchronized(this) {
+        readyReview?.takeIf { it === quote.value && (expected == null || it === expected) }
+            ?.also { readyReview = null; consumedReview = it }
+    }
 }
+
+private fun mergeRecoveryAssets(current: List<SwapAsset>, previous: List<SwapAsset>): List<SwapAsset> =
+    current + previous.filter { old -> current.none { it.assetId == old.assetId } }
 
 val DEFAULT_SLIPPAGE = BigDecimal("2")
 

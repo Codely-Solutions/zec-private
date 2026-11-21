@@ -24,8 +24,7 @@ class PasteGiftCardLinkVM(
     /** The field's text as entered. */
     private val text = MutableStateFlow("")
 
-    /** Whether anything was taken from the clipboard on this screen. */
-    private var hasPasted = false
+    private var pastedClipboardText: String? = null
 
     private var hasContinued = false
 
@@ -54,18 +53,13 @@ class PasteGiftCardLinkVM(
     private fun onValueChange(text: String) = this.text.update { text }
 
     private fun onPasteClick() {
-        val pasted = readClipboardText()?.trim() ?: return
-        hasPasted = true
-        text.update { pasted }
+        val pasted = readClipboardText() ?: return
+        pastedClipboardText = pasted
+        text.update { pasted.trim() }
     }
 
     private fun onClearClick() = text.update { "" }
 
-    /**
-     * Opens the redeem screen in place of this one, and clears the clipboard when anything was pasted from it on this
-     * screen, so that the secret does not stay there even when the pasted text was edited afterwards. The field's text
-     * is cleared too, so that the link does not linger in this view model's memory.
-     */
     private fun onContinueClick() {
         if (hasContinued) return
         val link = linkIn(text.value) ?: return
@@ -75,19 +69,14 @@ class PasteGiftCardLinkVM(
         text.update { "" }
     }
 
-    /**
-     * Leaves without redeeming. The clipboard is cleared when anything was pasted from it on this screen, as on
-     * Continue, so that backing out does not leave the secret there either.
-     */
     private fun onBack() {
         if (!hasContinued) clearPasted()
         navigationRouter.back()
     }
 
-    /** Clears the clipboard once, if anything was pasted from it on this screen. */
     private fun clearPasted() {
-        if (!hasPasted) return
-        hasPasted = false
-        clearClipboard()
+        val pasted = pastedClipboardText ?: return
+        pastedClipboardText = null
+        if (readClipboardText() == pasted) clearClipboard()
     }
 }

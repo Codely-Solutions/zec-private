@@ -320,9 +320,39 @@ class PasteGiftCardLinkVMTest {
             verify(exactly = 1) { env.clearClipboard() }
         }
 
+    @Test
+    fun backPreservesAReplacementClipboardItem() =
+        runTest(dispatcher) {
+            val env = Env(this, clipboard = LINK)
+            every { env.clearClipboard() } answers { env.clipboard = null }
+            env.state.fieldButton.onClick()
+            runCurrent()
+
+            env.clipboard = "unrelated copied text"
+            env.state.onBack()
+
+            assertEquals("unrelated copied text", env.clipboard)
+            verify(exactly = 0) { env.clearClipboard() }
+        }
+
+    @Test
+    fun continuePreservesAReplacementClipboardItem() =
+        runTest(dispatcher) {
+            val env = Env(this, clipboard = LINK)
+            every { env.clearClipboard() } answers { env.clipboard = null }
+            env.state.fieldButton.onClick()
+            runCurrent()
+
+            env.clipboard = "unrelated copied text"
+            env.state.continueButton.onClick()
+
+            assertEquals("unrelated copied text", env.clipboard)
+            verify(exactly = 0) { env.clearClipboard() }
+        }
+
     private class Env(
         scope: TestScope,
-        clipboard: String? = null,
+        var clipboard: String? = null,
     ) {
         val store = GiftCardLinkStoreImpl()
         val router = RecordingNavigationRouter()
@@ -330,7 +360,7 @@ class PasteGiftCardLinkVMTest {
         val vm =
             PasteGiftCardLinkVM(
                 navigateToRedeemGiftCard = navigateToRedeemGiftCard(store, router),
-                readClipboardText = mockk<ReadClipboardTextUseCase> { every { this@mockk.invoke() } returns clipboard },
+                readClipboardText = mockk<ReadClipboardTextUseCase> { every { this@mockk.invoke() } answers { clipboard } },
                 clearClipboard = clearClipboard,
                 navigationRouter = router
             )

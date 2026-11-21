@@ -181,8 +181,5 @@ internal fun pruneQuarantine(
  * [recreatedMarkerFile] guard, not just the entries [pruneQuarantine] would age out. Used by
  * "Reset Zodl" so wiping the wallet also removes any ciphertext left behind by an earlier recovery.
  */
-internal suspend fun purgeEncryptedPreferencesQuarantine(quarantineDir: File) {
-    withContext(Dispatchers.IO) {
-        quarantineDir.deleteRecursively()
-    }
-}
+internal suspend fun purgeEncryptedPreferencesQuarantine(quarantineDir: File): Boolean =
+    withContext(Dispatchers.IO) { quarantineDir.deleteRecursively() }

@@ -42,6 +42,7 @@ import co.electriccoin.zcash.ui.design.component.ConfigurationOverride
 import co.electriccoin.zcash.ui.design.component.Override
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.screen.ScreenTimeoutVM
+import co.electriccoin.zcash.ui.screen.authentication.AppAccessBoundary
 import co.electriccoin.zcash.ui.screen.authentication.AuthenticationUseCase
 import co.electriccoin.zcash.ui.screen.authentication.RETRY_TRIGGER_DELAY
 import co.electriccoin.zcash.ui.screen.authentication.WrapAuthentication
@@ -83,7 +84,10 @@ class MainActivity : FragmentActivity() {
     private val handleExternalLink: HandleExternalLinkUseCase by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+        // Older navigation state can contain the plaintext restore phrase and obsolete destination IDs.
+        val restorableState =
+            savedInstanceState?.takeIf { it.getInt(NAVIGATION_STATE_VERSION_KEY) == NAVIGATION_STATE_VERSION }
+        super.onCreate(restorableState)
         Twig.debug { "Activity state: Create" }
 
         setAllowedScreenOrientation()
@@ -96,6 +100,11 @@ class MainActivity : FragmentActivity() {
 
         handleViewIntent(intent, isRecreated = savedInstanceState != null)
         handleMigrationIntent(intent)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -128,7 +137,7 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         Twig.debug { "Activity state: Start" }
         authenticationViewModel.runAuthenticationRequiredCheck()
-        checkMigrationRecoveryOnStart()
+        if (authenticationViewModel.appAccessSession.grant.value != null) checkMigrationRecoveryOnStart()
         super.onStart()
     }
 
@@ -187,6 +196,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun setupUiContent() {
+        val appAccessSession = authenticationViewModel.appAccessSession
         // Turn off the decor fitting system windows, which allows us to handle insets,
         // including IME animations, and go edge-to-edge.
         // This also sets up the initial system bar style based on the platform theme
@@ -212,8 +222,12 @@ class MainActivity : FragmentActivity() {
                             .semantics { testTagsAsResourceId = true }
                     ) {
                         BindCompLocalProvider {
-                            MainContent()
-                            AuthenticationForAppAccess()
+                            AppAccessBoundary(
+                                session = appAccessSession,
+                                lockedContent = { AuthenticationForAppAccess() }
+                            ) { grant ->
+                                MainContent { appAccessSession.permits(grant) }
+                            }
                             ScreenTimeoutHandle()
                         }
                     }
@@ -237,7 +251,7 @@ class MainActivity : FragmentActivity() {
                 delay = AnimationConstants.INITIAL_DELAY.milliseconds,
                 showAuthLogo = authFailed,
                 onRetry = {
-                    authenticationViewModel.resetAuthenticationResult()
+                    authenticationViewModel.resetAppAccessResult()
                     authenticationViewModel.authenticate(
                         activity = this,
                         initialAuthSystemWindowDelay = RETRY_TRIGGER_DELAY.milliseconds,
@@ -269,11 +283,7 @@ class MainActivity : FragmentActivity() {
                 // Note that the Welcome animation is part of its logic
                 WrapAuthentication(
                     onSuccess = {
-                        lifecycleScope.launch {
-                            // Wait until the welcome animation finishes, then mark it as presented to the user
-                            delay((AnimationConstants.durationOnly()).milliseconds)
-                            authenticationViewModel.appAccessAuthentication.value = AuthenticationUIState.Successful
-                        }
+                        authenticationViewModel.appAccessAuthentication.value = AuthenticationUIState.Successful
                     },
                     onCancel = {
                         authenticationViewModel.setAuthFailed()
@@ -293,9 +303,9 @@ class MainActivity : FragmentActivity() {
     }
 
     @Composable
-    private fun MainContent() {
+    private fun MainContent(hasAppAccess: () -> Boolean) {
         val secretState by walletViewModel.secretState.collectAsStateWithLifecycle()
-        RootNavGraph(secretState, walletViewModel, storageCheckViewModel)
+        RootNavGraph(secretState, walletViewModel, storageCheckViewModel, hasAppAccess)
     }
 
     @Composable
@@ -333,6 +343,9 @@ class MainActivity : FragmentActivity() {
     }
 
     companion object {
+        private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
+        private const val NAVIGATION_STATE_VERSION = 1
+
         @VisibleForTesting
         internal val SPLASH_SCREEN_DELAY = 0.seconds
     }

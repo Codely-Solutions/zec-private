@@ -24,5 +24,5 @@ fun RestoreDateScreen(args: RestoreDateArgs) {
 
 @Serializable
 data class RestoreDateArgs(
-    val seed: String
+    val sessionId: String
 )

@@ -4,6 +4,7 @@ import android.app.KeyguardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.biometric.BiometricManager
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.design.util.stringRes
 import io.mockk.every
 import io.mockk.mockk
@@ -72,11 +73,15 @@ class BiometricRepositoryTest {
         val toast = mockk<Toast>(relaxed = true)
         every { Toast.makeText(context, any<Int>(), Toast.LENGTH_LONG) } returns toast
         val manager = mockk<BiometricManager>()
-        val repository = BiometricRepositoryImpl(context, manager)
+        val session = AppAccessSession()
+        val repository = BiometricRepositoryImpl(context, manager, session)
         val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
             BiometricManager.Authenticators.DEVICE_CREDENTIAL
         assertEquals(authenticators, repository.allowedAuthenticators)
         val request = BiometricRequest(message = stringRes("Synthetic authentication"))
+        assertFailsWith<BiometricsCancelledException> { repository.requestBiometrics(request) }
+        verify(exactly = 0) { manager.canAuthenticate(any()) }
+        session.unlock()
         listOf(
             BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE,
             BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE,

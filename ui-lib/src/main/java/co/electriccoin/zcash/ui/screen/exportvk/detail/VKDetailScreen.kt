@@ -14,7 +14,7 @@ fun VKDetailScreen(args: VKDetailArgs) {
     val vm = koinViewModel<VKDetailVM> { parametersOf(args) }
     val state by vm.state.collectAsStateWithLifecycle()
     BackHandler(enabled = state != null) { state?.onBack() }
-    state?.let { VKDetailView(state = it) }
+    state?.takeIf { !it.content.isRevealed || vm.isRevealed }?.let { VKDetailView(state = it) }
 }
 
 @Serializable

@@ -20,6 +20,7 @@ import co.electriccoin.zcash.ui.common.usecase.ValidateSwapABContactAddressUseCa
 import co.electriccoin.zcash.ui.common.usecase.ValidateZashiABContactAddressUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -114,7 +115,7 @@ class ContactGiftCardLinkRefusalTest {
             runCurrent()
 
             assertRefused(state())
-            verify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
+            coVerify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
         }
 
     @Test
@@ -143,7 +144,7 @@ class ContactGiftCardLinkRefusalTest {
             runCurrent()
 
             assertRefused(state())
-            verify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
+            coVerify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
         }
 
     /** Keeps [flow] collected for the rest of the test, and returns a reader of its current, non-null state. */

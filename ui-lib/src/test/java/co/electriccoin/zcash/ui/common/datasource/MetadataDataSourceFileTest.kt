@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.common.model.metadata.AnnotationMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.BookmarkMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapsMetadataV3
+import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.MetadataProviderImpl
 import co.electriccoin.zcash.ui.common.provider.MetadataStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
@@ -53,6 +54,7 @@ class MetadataDataSourceFileTest {
     private val legacyName = key.fileIdentifiers()[1]
     private val storageProvider =
         MetadataStorageProviderImpl(
+            directorySync = DirectorySync {},
             context =
                 mockk<Context> {
                     every { filesDir } returns this@MetadataDataSourceFileTest.filesDir

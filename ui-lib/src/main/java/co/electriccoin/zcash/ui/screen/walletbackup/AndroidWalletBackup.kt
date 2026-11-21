@@ -13,7 +13,7 @@ internal fun AndroidWalletBackup(args: WalletBackup) {
     val viewModel = koinViewModel<WalletBackupViewModel> { parametersOf(args) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     BackHandler { state?.onBack?.invoke() }
-    state?.let { WalletBackupView(state = it) }
+    state?.takeIf { !it.seed.isRevealed || viewModel.isRevealed }?.let { WalletBackupView(state = it) }
 }
 
 @Serializable

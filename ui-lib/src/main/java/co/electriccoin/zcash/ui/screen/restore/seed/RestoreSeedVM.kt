@@ -43,6 +43,7 @@ class RestoreSeedVM(
     private val clearClipboard: ClearClipboardUseCase
 ) : ViewModel() {
     private val pasteError = MutableStateFlow(false)
+    private val restoreSession = RestoreSession()
 
     private val suggestions =
         flow {
@@ -54,20 +55,7 @@ class RestoreSeedVM(
             initialValue = null
         )
 
-    @Suppress("MagicNumber")
-    private val seedWords =
-        MutableStateFlow(
-            (0..23).map { index ->
-                SeedWordTextFieldState(
-                    innerState =
-                        SeedWordInnerTextFieldState(
-                            ""
-                        ),
-                    onValueChange = { onValueChange(index, it) },
-                    isError = false
-                )
-            }
-        )
+    private val seedWords = MutableStateFlow(emptySeedWords())
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val seedValidations =
@@ -158,8 +146,36 @@ class RestoreSeedVM(
     )
 
     private fun onBack() {
+        clearSeed()
         navigationRouter.back()
     }
+
+    internal fun resolveSession(id: String): SeedPhrase? = restoreSession.resolve(id)
+
+    internal fun completeRestore(id: String) {
+        if (restoreSession.resolve(id) != null) clearSeed()
+    }
+
+    internal fun cancelBirthdayEntry(id: String) = restoreSession.clear(id)
+
+    override fun onCleared() {
+        clearSeed()
+        super.onCleared()
+    }
+
+    private fun clearSeed() {
+        restoreSession.clear()
+        seedWords.value = emptySeedWords()
+    }
+
+    private fun emptySeedWords() =
+        List(SEED_WORD_COUNT) { index ->
+            SeedWordTextFieldState(
+                innerState = SeedWordInnerTextFieldState(""),
+                onValueChange = { onValueChange(index, it) },
+                isError = false
+            )
+        }
 
     private fun onInfoButtonClick() {
         navigationRouter.forward(SeedInfo)
@@ -169,7 +185,7 @@ class RestoreSeedVM(
         viewModelScope.launch {
             if (pasteError.value) return@launch
             val seed = validSeed.first() ?: return@launch
-            navigationRouter.forward(RestoreHeight(seed.joinToString()))
+            navigationRouter.forward(RestoreHeight(restoreSession.start(seed)))
         }
     }
 

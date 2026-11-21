@@ -3,8 +3,11 @@ package co.electriccoin.zcash.ui
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import co.electriccoin.zcash.ui.common.compose.LocalActivity
 import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
@@ -21,6 +24,8 @@ import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.exitTransition
 import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.popEnterTransition
 import co.electriccoin.zcash.ui.design.animation.ScreenAnimation.popExitTransition
 import co.electriccoin.zcash.ui.design.util.LocalNavController
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiScreen
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.warning.viewmodel.StorageCheckViewModel
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -39,7 +44,15 @@ fun RootNavGraph(
     secretState: SecretState,
     walletViewModel: WalletViewModel,
     storageCheckViewModel: StorageCheckViewModel = koinViewModel(),
+    hasAppAccess: () -> Boolean,
 ) {
+    val resetProgress = koinInject<ResetProgressStore>()
+    val isResetPending by resetProgress.isPending.collectAsStateWithLifecycle()
+    if (isResetPending) {
+        ResetZashiScreen()
+        return
+    }
+
     val keyboardManager = LocalKeyboardManager.current
     val navigationRouter = koinInject<NavigationRouter>()
     val applicationStateProvider = koinInject<ApplicationStateProvider>()
@@ -50,6 +63,7 @@ fun RootNavGraph(
     val navigateToRedeemGiftCard = koinInject<NavigateToRedeemGiftCardUseCase>()
     val navController = LocalNavController.current
     val activity = LocalActivity.current
+    val currentAccess = rememberUpdatedState(hasAppAccess)
     val navigator: Navigator =
         remember(
             activity,
@@ -71,6 +85,7 @@ fun RootNavGraph(
 
     LaunchedEffect(navigationRouter) {
         navigationRouter.observePipeline().collect {
+            if (!currentAccess.value()) return@collect
             when (it) {
                 is CustomNavigationCommand -> navigator.executeCommand(it)
                 is NavigationCommand -> navigator.executeCommand(it)
@@ -101,6 +116,7 @@ fun RootNavGraph(
     }
 
     LaunchedEffect(secretState, navController) {
+        if (!currentAccess.value()) return@LaunchedEffect
         if (secretState == SecretState.READY &&
             navController.currentDestination?.parent?.route != MainAppGraph::class.qualifiedName
         ) {
@@ -110,11 +126,6 @@ fun RootNavGraph(
                     inclusive = true
                 }
             }
-            // Same pattern as MainActivity.handleMigrationIntent — Home always lands on the
-            // back stack first, then we redirect on top of it if a migration transfer needs
-            // attention. isSyncBlocked() (fed into the synchronizer directly) already stopped
-            // sync regardless of whether this redirect lands — this is routing only.
-            migrationAppHooks.checkRecovery()
         } else if (
             secretState == SecretState.NONE &&
             navController.currentDestination?.parent?.route != OnboardingGraph::class.qualifiedName
@@ -126,6 +137,7 @@ fun RootNavGraph(
                 }
             }
         }
+        if (secretState == SecretState.READY) migrationAppHooks.checkRecovery()
     }
 
     LaunchedEffect(secretState, navController) {
@@ -134,7 +146,7 @@ fun RootNavGraph(
             it.destination.parent?.route == MainAppGraph::class.qualifiedName
         }
         giftCardLinkStore.isInAppScanRequested.filter { it }.collect {
-            navigateToRedeemGiftCard.openRequestedInAppScan()
+            if (currentAccess.value()) navigateToRedeemGiftCard.openRequestedInAppScan()
         }
     }
 }

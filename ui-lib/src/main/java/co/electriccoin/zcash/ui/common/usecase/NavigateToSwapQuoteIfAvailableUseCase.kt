@@ -11,7 +11,7 @@ class NavigateToSwapQuoteIfAvailableUseCase(
     private val navigationRouter: NavigationRouter
 ) {
     suspend operator fun invoke(hideBottomSheet: suspend () -> Unit) {
-        val value = swapRepository.quote.value
+        val value = swapRepository.consumeReview() ?: return
         val mismatchArgs = (value as? SwapQuoteData.Error)?.toMismatchArgs()
 
         val isQuoteAvailable = value is SwapQuoteData.Success || value is SwapQuoteData.Error

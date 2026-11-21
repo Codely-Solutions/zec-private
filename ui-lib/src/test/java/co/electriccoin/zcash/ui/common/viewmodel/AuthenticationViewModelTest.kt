@@ -6,6 +6,7 @@ import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import co.electriccoin.zcash.spackle.AndroidApiVersion
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.GetMonotonicTimeProvider
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 import co.electriccoin.zcash.ui.fixture.VersionInfoFixture
@@ -30,6 +31,8 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 
@@ -167,6 +170,9 @@ class AuthenticationViewModelTest {
             val (viewModel, _, setMonotonicTimeMillis) = newViewModel(secretState = SecretState.READY)
             viewModel.appAccessAuthentication.value = AuthenticationUIState.Successful
             viewModel.setWelcomeAnimationDisplayed()
+            advanceUntilIdle()
+            val session = viewModel.appAccessSession
+            val initialGrant = assertNotNull(session.grant.value)
 
             setMonotonicTimeMillis(0L)
             viewModel.onEnteredBackground()
@@ -174,8 +180,36 @@ class AuthenticationViewModelTest {
             setMonotonicTimeMillis(16.minutes.inWholeMilliseconds)
             viewModel.runAuthenticationRequiredCheck()
 
+            assertNull(session.grant.value)
+            assertFalse(session.permits(initialGrant))
             assertEquals(AuthenticationUIState.Initial, viewModel.appAccessAuthentication.value)
             assertTrue(viewModel.showWelcomeAnimation.value)
+
+            advanceUntilIdle()
+            assertEquals(AuthenticationUIState.Required, viewModel.appAccessAuthenticationResultState.value)
+            assertNull(session.grant.value)
+
+            viewModel.appAccessAuthentication.value = AuthenticationUIState.Successful
+            advanceUntilIdle()
+            assertNotNull(session.grant.value)
+            assertFalse(session.permits(initialGrant))
+        }
+
+    @Test
+    fun cancellationLeavesAppAccessRevokedUntilSuccessfulRetry() =
+        runTest {
+            val (viewModel, _) = newViewModel(secretState = SecretState.READY)
+            advanceUntilIdle()
+            assertEquals(AuthenticationUIState.Required, viewModel.appAccessAuthenticationResultState.value)
+
+            viewModel.appAccessResult.value = AuthenticationResult.Canceled
+            viewModel.setAuthFailed()
+            advanceUntilIdle()
+            assertNull(viewModel.appAccessSession.grant.value)
+
+            viewModel.appAccessAuthentication.value = AuthenticationUIState.Successful
+            advanceUntilIdle()
+            assertNotNull(viewModel.appAccessSession.grant.value)
         }
 
     @Test
@@ -216,7 +250,8 @@ class AuthenticationViewModelTest {
                 getMonotonicTime = getMonotonicTime,
                 getVersionInfo = getVersionInfo,
                 standardPreferenceProvider = standardPreferenceProvider,
-                walletViewModel = walletViewModel
+                walletViewModel = walletViewModel,
+                appAccessSession = AppAccessSession()
             )
 
         return Triple(viewModel, secretStateFlow) { monotonicTimeMillis = it }

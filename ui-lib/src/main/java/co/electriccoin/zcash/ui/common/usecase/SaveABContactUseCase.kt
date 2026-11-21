@@ -1,9 +1,10 @@
 package co.electriccoin.zcash.ui.common.usecase
 
-import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.GiftCardSecretDetector
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 
 /**
  * Saves a new contact and goes back.
@@ -17,7 +18,7 @@ class SaveABContactUseCase(
     private val navigationRouter: NavigationRouter,
 ) {
     @Suppress("ReturnCount") // Refusal exits precede all persistence and navigation.
-    operator fun invoke(
+    suspend operator fun invoke(
         name: String,
         address: String,
         chain: String?,
@@ -26,15 +27,17 @@ class SaveABContactUseCase(
         val recipient = chain?.let { validateSwapRecipient(address, it, allowPaymentAmount = false) }
         if (recipient != null && !recipient.isValid) return ABContactSaveResult.InvalidAddress
         val receivingAddress = recipient?.input?.address ?: address
-        addressBookRepository.saveContact(name = name, address = receivingAddress, chain = chain)
-        navigationRouter.back()
-        return ABContactSaveResult.Saved
+        return persistABContact(navigationRouter) {
+            addressBookRepository.saveContact(name = name, address = receivingAddress, chain = chain)
+        }
     }
 }
 
 /** What [SaveABContactUseCase] or [UpdateABContactUseCase] did with a contact. */
 sealed interface ABContactSaveResult {
     data object InvalidAddress : ABContactSaveResult
+
+    data object StorageFailure : ABContactSaveResult
 
     /** The contact was saved, and the screen was left. */
     data object Saved : ABContactSaveResult
@@ -44,4 +47,10 @@ sealed interface ABContactSaveResult {
      * saved, and the screen stays.
      */
     data object GiftCardLinkRefused : ABContactSaveResult
+}
+
+internal inline fun persistABContact(navigationRouter: NavigationRouter, persist: () -> Unit): ABContactSaveResult {
+    if (runCatchingRecoverable(persist).isFailure) return ABContactSaveResult.StorageFailure
+    navigationRouter.back()
+    return ABContactSaveResult.Saved
 }

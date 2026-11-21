@@ -5,6 +5,9 @@ import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookEncr
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookKey
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookSerializer
 import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 interface AddressBookProvider {
     fun writeAddressBookToFile(
@@ -24,19 +27,35 @@ interface AddressBookProvider {
 class AddressBookProviderImpl(
     private val addressBookEncryptor: AddressBookEncryptor,
     private val addressBookSerializer: AddressBookSerializer,
+    private val directorySync: DirectorySync,
 ) : AddressBookProvider {
     override fun writeAddressBookToFile(
         file: File,
         addressBook: AddressBook,
         addressBookKey: AddressBookKey
     ) {
-        file.outputStream().buffered().use { stream ->
-            addressBookEncryptor.encrypt(
-                key = addressBookKey,
-                outputStream = stream,
-                data = addressBook
+        val directory = checkNotNull(file.absoluteFile.parentFile)
+        val tempFile = File(directory, file.name + ADDRESS_BOOK_TEMP_FILE_SUFFIX)
+        try {
+            FileOutputStream(tempFile).use { fileStream ->
+                val stream = fileStream.buffered()
+                addressBookEncryptor.encrypt(
+                    key = addressBookKey,
+                    outputStream = stream,
+                    data = addressBook
+                )
+                stream.flush()
+                fileStream.fd.sync()
+            }
+            Files.move(
+                tempFile.toPath(),
+                file.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING
             )
-            stream.flush()
+            directorySync.sync(directory)
+        } finally {
+            tempFile.delete()
         }
     }
 
@@ -56,3 +75,5 @@ class AddressBookProviderImpl(
             addressBookSerializer.deserializeAddressBook(stream)
         }
 }
+
+internal const val ADDRESS_BOOK_TEMP_FILE_SUFFIX = ".tmp"

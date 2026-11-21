@@ -159,6 +159,7 @@ import co.electriccoin.zcash.ui.common.usecase.Zip321BuildUriUseCase
 import co.electriccoin.zcash.ui.common.usecase.Zip321ParseUriValidationUseCase
 import co.electriccoin.zcash.ui.screen.advancedsettings.debug.SimulateSeedNotRelevantUseCase
 import co.electriccoin.zcash.ui.screen.advancedsettings.debug.db.ExecuteDebugDBQueryUseCase
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiUseCase
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import org.koin.core.module.dsl.factoryOf
@@ -311,7 +312,8 @@ val useCaseModule =
         factoryOf(::IsEphemeralAddressLockedUseCase)
         singleOf(::SubmitIncreaseEphemeralGapLimitUseCase)
         factoryOf(::CreateIncreaseEphemeralGapLimitProposalUseCase)
-        factoryOf(::ResetZashiUseCase)
+        singleOf(::ResetProgressStore)
+        singleOf(::ResetZashiUseCase)
         factoryOf(::GetPreselectedSwapAssetUseCase)
         singleOf(::RecoverFromSeedMismatchUseCase)
         factoryOf(::ObserveSeedMismatchUseCase)

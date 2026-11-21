@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.common.usecase
 import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
+import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 import co.electriccoin.zcash.ui.common.repository.SwapAssetsData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
@@ -20,7 +21,7 @@ import kotlin.test.assertEquals
  * must both drop non-curated assets.
  */
 class GetCuratedSwapAssetsUseCaseTest {
-    private val eth = swapAsset(token = "ETH", chain = "eth")
+    private val eth = SwapCatalogTestFixture.assets.single { it.assetId == "nep141:eth.omft.near" }
     private val doge = swapAsset(token = "DOGE", chain = "doge")
 
     private val swapRepository =
@@ -37,6 +38,16 @@ class GetCuratedSwapAssetsUseCaseTest {
     @Test
     fun invokeKeepsOnlyCuratedAssets() {
         assertEquals(listOf(eth), useCase().data)
+    }
+
+    @Test
+    fun sameDisplayContractAndUnknownIdCannotBecomeNewQuoteSelections() {
+        val twin = eth.copy(assetId = "synthetic:eth-twin")
+        val wrongContract = eth.copy(contractAddress = "synthetic:wrong-contract")
+        for (order in listOf(listOf(twin, eth, wrongContract), listOf(wrongContract, eth, twin))) {
+            every { swapRepository.assets } returns MutableStateFlow(SwapAssetsData(data = order))
+            assertEquals(listOf(eth), useCase().data)
+        }
     }
 
     @Test

@@ -21,6 +21,7 @@ import co.electriccoin.zcash.ui.common.model.FastestServersState
 import co.electriccoin.zcash.ui.common.model.OnboardingState
 import co.electriccoin.zcash.ui.common.model.WalletRestoringState
 import co.electriccoin.zcash.ui.common.provider.IsIronwoodAnnouncementShownStorageProvider
+import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
@@ -29,8 +30,10 @@ import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
@@ -70,13 +73,16 @@ interface WalletRepository {
 
     fun createNewWallet()
 
+    fun retryWalletInitialization()
+
     suspend fun markIronwoodAnnouncementShown()
 
     fun restoreWallet(
         network: ZcashNetwork,
         seedPhrase: SeedPhrase,
-        birthday: BlockHeight
-    )
+        birthday: BlockHeight,
+        enableTor: Boolean = false
+    ): Deferred<Unit>
 
     suspend fun updateWalletEndpoint(endpoint: LightWalletEndpoint)
 
@@ -99,6 +105,7 @@ class WalletRepositoryImpl(
     private val walletBackupFlagStorageProvider: WalletBackupFlagStorageProvider,
     private val isIronwoodAnnouncementShownStorageProvider: IsIronwoodAnnouncementShownStorageProvider,
     private val sdkEncryptedPreferenceRecoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
+    private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
 ) : WalletRepository {
     /**
      * Scope the repository's `stateIn`-shared flows run on. Captured by those flows at
@@ -119,7 +126,9 @@ class WalletRepositoryImpl(
     override val walletInitialization = initialization.asStateFlow()
 
     // Keep the accepted operation across failures, including failures after the wallet was stored.
-    private var acceptedInitialization: (suspend (PersistableWallet?) -> Unit)? = null
+    private val initializationLock = Any()
+    private var acceptedInitialization: WalletInitializationOperation? = null
+    private var activeInitialization: Deferred<Unit>? = null
 
     /**
      * Scope the repository's fire-and-forget jobs run on. A test seam: unit tests replace it
@@ -344,7 +353,7 @@ class WalletRepositoryImpl(
 
     override fun createNewWallet() {
         var candidate: PersistableWallet? = null
-        initializeWallet { stored ->
+        initializeWallet(WalletInitializationRequest.Create) { stored ->
             if (candidate == null && stored != null) {
                 finishExistingWalletInitialization(stored)
                 return@initializeWallet
@@ -361,6 +370,13 @@ class WalletRepositoryImpl(
             persistWalletInternal(newWallet)
             walletRestoringStateProvider.store(WalletRestoringState.INITIATING)
             persistOnboardingStateInternal(OnboardingState.READY)
+        }
+    }
+
+    override fun retryWalletInitialization() {
+        synchronized(initializationLock) {
+            val accepted = acceptedInitialization ?: return
+            if (activeInitialization == null) startWalletInitialization(accepted)
         }
     }
 
@@ -386,10 +402,14 @@ class WalletRepositoryImpl(
     override fun restoreWallet(
         network: ZcashNetwork,
         seedPhrase: SeedPhrase,
-        birthday: BlockHeight
-    ) {
+        birthday: BlockHeight,
+        enableTor: Boolean
+    ): Deferred<Unit> {
+        val request = WalletInitializationRequest.Restore(network, seedPhrase, birthday, enableTor)
         var candidate: PersistableWallet? = null
-        initializeWallet { stored ->
+        return initializeWallet(request) { stored ->
+            if (stored != null && !request.matches(stored)) throw WalletInitializationConflictException()
+            if (enableTor) isTorEnabledStorageProvider.store(true)
             if (candidate == null && stored != null) {
                 finishExistingWalletInitialization(stored)
                 return@initializeWallet
@@ -420,38 +440,86 @@ class WalletRepositoryImpl(
         persistOnboardingStateInternal(OnboardingState.READY)
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    private fun initializeWallet(operation: suspend (PersistableWallet?) -> Unit) {
-        val previous = initialization.value
-        if (previous == WalletInitializationState.RUNNING ||
-            !initialization.compareAndSet(previous, WalletInitializationState.RUNNING)
-        ) return
+    private fun initializeWallet(
+        request: WalletInitializationRequest,
+        operation: suspend (PersistableWallet?) -> Unit
+    ): Deferred<Unit> =
+        synchronized(initializationLock) {
+            val accepted = acceptedInitialization
+            if (accepted != null && accepted.request != request) {
+                CompletableDeferred<Unit>().apply { completeExceptionally(WalletInitializationConflictException()) }
+            } else {
+                activeInitialization ?: startWalletInitialization(
+                    accepted ?: WalletInitializationOperation(request, operation)
+                )
+            }
+        }
 
-        val accepted = acceptedInitialization ?: operation.also { acceptedInitialization = it }
-        var failed = false
+    @Suppress("TooGenericExceptionCaught")
+    private fun startWalletInitialization(accepted: WalletInitializationOperation): Deferred<Unit> {
+        val result = CompletableDeferred<Unit>()
+        acceptedInitialization = accepted
+        activeInitialization = result
+        initialization.value = WalletInitializationState.RUNNING
+        var failure: Exception? = null
         scope.launch {
             try {
                 walletMutation.withLock {
                     val stored = persistableWalletProvider.getPersistableWallet()
                     if (onboardingState.first() != OnboardingState.READY || stored == null) {
-                        accepted(stored)
+                        accepted.operation(stored)
+                    } else {
+                        val request = accepted.request
+                        if (request is WalletInitializationRequest.Restore && !request.matches(stored)) {
+                            throw WalletInitializationConflictException()
+                        }
                     }
-                    acceptedInitialization = null
                 }
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: WalletInitializationConflictException) {
+                failure = e
             } catch (_: Exception) {
-                // SDK/storage exceptions can contain sensitive material; expose only a generic failure.
+                // SDK and storage errors can contain sensitive material.
                 Twig.error { "Wallet initialization failed; the accepted operation can be retried" }
-                failed = true
+                failure = IllegalStateException("Wallet initialization failed")
             }
-        }.invokeOnCompletion {
-            // Also releases admission when the scope was cancelled before the coroutine started.
-            initialization.value =
-                if (failed || it != null) WalletInitializationState.FAILED else WalletInitializationState.IDLE
+        }.invokeOnCompletion { cause ->
+            val error = failure ?: cause?.let { IllegalStateException("Wallet initialization was interrupted") }
+            synchronized(initializationLock) {
+                val canRetry = error != null && error !is WalletInitializationConflictException
+                if (!canRetry) acceptedInitialization = null
+                activeInitialization = null
+                initialization.value = if (canRetry) WalletInitializationState.FAILED else WalletInitializationState.IDLE
+            }
+            if (error == null) result.complete(Unit) else result.completeExceptionally(error)
+        }
+        return result
+    }
+
+    private class WalletInitializationOperation(
+        val request: WalletInitializationRequest,
+        val operation: suspend (PersistableWallet?) -> Unit
+    )
+
+    private sealed interface WalletInitializationRequest {
+        data object Create : WalletInitializationRequest
+
+        data class Restore(
+            val network: ZcashNetwork,
+            val seedPhrase: SeedPhrase,
+            val birthday: BlockHeight,
+            val enableTor: Boolean
+        ) : WalletInitializationRequest {
+            fun matches(wallet: PersistableWallet): Boolean =
+                network == wallet.network && seedPhrase == wallet.seedPhrase && birthday == wallet.birthday
+
+            override fun toString() = "Restore"
         }
     }
 }
+
+class WalletInitializationConflictException : IllegalStateException("A different wallet setup already owns initialization")
 
 enum class WalletInitializationState {
     IDLE,

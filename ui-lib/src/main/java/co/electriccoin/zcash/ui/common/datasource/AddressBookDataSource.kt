@@ -1,20 +1,26 @@
 package co.electriccoin.zcash.ui.common.datasource
 
 import co.electriccoin.zcash.spackle.Twig
-import co.electriccoin.zcash.spackle.io.deleteSuspend
 import co.electriccoin.zcash.ui.common.model.AddressBook
 import co.electriccoin.zcash.ui.common.model.AddressBookContact
+import co.electriccoin.zcash.ui.common.provider.ADDRESS_BOOK_TEMP_FILE_SUFFIX
 import co.electriccoin.zcash.ui.common.provider.AddressBookProvider
 import co.electriccoin.zcash.ui.common.provider.AddressBookStorageProvider
+import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.nio.file.Files
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -43,22 +49,19 @@ interface AddressBookDataSource {
 
 class AddressBookDataSourceImpl(
     private val addressBookStorageProvider: AddressBookStorageProvider,
-    private val addressBookProvider: AddressBookProvider
+    private val addressBookProvider: AddressBookProvider,
+    private val directorySync: DirectorySync
 ) : AddressBookDataSource {
     private val mutex = Mutex()
 
-    private val abUpdatePipeline = MutableSharedFlow<Pair<AddressBookKey, AddressBook?>>()
+    private val revision = MutableStateFlow(0L)
 
-    override fun observe(key: AddressBookKey) =
-        flow {
-            emit(null)
-            mutex.withLock { emit(getAddressBookInternal(key)) }
-            abUpdatePipeline.collect { (newKey, newAddressBook) ->
-                if (key.key.equalsSecretBytes(newKey.key)) {
-                    emit(newAddressBook)
-                }
-            }
-        }.distinctUntilChanged()
+    override fun observe(key: AddressBookKey): Flow<AddressBook?> =
+        revision
+            .map<Long, AddressBook?> { mutex.withLock { getAddressBookInternal(key) } }
+            .onStart { emit(null) }
+            .distinctUntilChanged()
+            .flowOn(Dispatchers.IO)
 
     override suspend fun saveContact(
         name: String,
@@ -66,13 +69,8 @@ class AddressBookDataSourceImpl(
         chain: String?,
         key: AddressBookKey
     ) = updateAB(key) { contacts ->
-        contacts +
-            AddressBookContact(
-                name = name.trim(),
-                address = address.trim(),
-                chain = chain?.trim()?.takeIf { it.isNotEmpty() },
-                lastUpdated = getTimestampNow(),
-            )
+        val replacement = newContact(name, address, chain)
+        if (contacts.any { it.hasSameDetails(replacement) }) contacts else contacts + replacement
     }
 
     override suspend fun updateContact(
@@ -82,17 +80,15 @@ class AddressBookDataSourceImpl(
         chain: String?,
         key: AddressBookKey
     ) = updateAB(key) { contacts ->
-        contacts.apply {
-            set(
-                indexOf(contact),
-                AddressBookContact(
-                    name = name.trim(),
-                    address = address.trim(),
-                    chain = chain?.trim()?.takeIf { it.isNotEmpty() },
-                    lastUpdated = getTimestampNow(),
-                )
-            )
+        val replacement = newContact(name, address, chain)
+        val index = contacts.indexOf(contact)
+        if (index >= 0) {
+            contacts[index] = replacement
+        } else {
+            // A retry after directory sync failed can find the replacement already on disk.
+            check(contacts.any { it.hasSameDetails(replacement) }) { "Contact changed before it could be updated" }
         }
+        contacts
     }
 
     override suspend fun deleteContact(addressBookContact: AddressBookContact, key: AddressBookKey) =
@@ -101,58 +97,34 @@ class AddressBookDataSourceImpl(
     override suspend fun delete(key: AddressBookKey) {
         withContext(Dispatchers.IO) {
             mutex.withLock {
-                addressBookStorageProvider.getStorageFile(key)?.delete()
-                abUpdatePipeline.emit(key to null)
+                val target = addressBookStorageProvider.getStorageTarget(key)
+                Files.deleteIfExists(target.toPath())
+                Files.deleteIfExists(File(target.parentFile, target.name + ADDRESS_BOOK_TEMP_FILE_SUFFIX).toPath())
+                directorySync.sync(checkNotNull(target.parentFile))
+                addressBookStorageProvider.getLegacyUnencryptedStorageFile()?.let {
+                    Files.deleteIfExists(it.toPath())
+                    directorySync.sync(checkNotNull(it.parentFile))
+                }
+                revision.update { it + 1 }
             }
         }
     }
 
-    @Suppress("ReturnCount")
-    private suspend fun getAddressBookInternal(addressBookKey: AddressBookKey): AddressBook {
-        suspend fun readLocalFileToAddressBook(addressBookKey: AddressBookKey): AddressBook? {
-            val encryptedFile = runCatching { addressBookStorageProvider.getStorageFile(addressBookKey) }.getOrNull()
-            val unencryptedFile =
-                runCatching { addressBookStorageProvider.getLegacyUnencryptedStorageFile() }.getOrNull()
+    private fun getAddressBookInternal(addressBookKey: AddressBookKey): AddressBook {
+        val encrypted = addressBookStorageProvider.getStorageFile(addressBookKey)
+        if (encrypted != null) return addressBookProvider.readAddressBookFromFile(encrypted, addressBookKey)
 
-            return when {
-                encryptedFile != null -> {
-                    runCatching {
-                        addressBookProvider
-                            .readAddressBookFromFile(encryptedFile, addressBookKey)
-                            .also { unencryptedFile?.deleteSuspend() }
-                    }.onFailure { e -> Twig.warn(e) { "Failed to decrypt address book" } }.getOrNull()
-                }
-
-                unencryptedFile != null -> {
-                    addressBookProvider
-                        .readLegacyUnencryptedAddressBookFromFile(unencryptedFile)
-                        .also { unencryptedAddressBook ->
-                            writeToLocalStorage(unencryptedAddressBook, addressBookKey)
-                            unencryptedFile.deleteSuspend()
-                        }
-                }
-
-                else -> {
-                    null
-                }
-            }
-        }
-
-        return withContext(Dispatchers.IO) {
-            var addressBook = readLocalFileToAddressBook(addressBookKey)
-            if (addressBook == null) {
-                addressBook = AddressBook(lastUpdated = getTimestampNow(), contacts = emptyList())
-                writeToLocalStorage(addressBook, addressBookKey)
-            }
-            addressBook
-        }
+        val legacy = addressBookStorageProvider.getLegacyUnencryptedStorageFile()
+            ?: return AddressBook(lastUpdated = getTimestampNow(), contacts = emptyList())
+        val book = addressBookProvider.readLegacyUnencryptedAddressBookFromFile(legacy)
+        writeToLocalStorage(book, addressBookKey)
+        if (!legacy.delete()) Twig.warn { "Unable to remove migrated address book" }
+        return book
     }
 
     private fun writeToLocalStorage(addressBook: AddressBook, key: AddressBookKey) {
-        runCatching {
-            val file = addressBookStorageProvider.getOrCreateStorageFile(key)
-            addressBookProvider.writeAddressBookToFile(file, addressBook, key)
-        }.onFailure { e -> Twig.warn(e) { "Failed to write address book" } }
+        val target = addressBookStorageProvider.getStorageTarget(key)
+        addressBookProvider.writeAddressBookToFile(target, addressBook, key)
     }
 
     private suspend fun updateAB(
@@ -167,9 +139,20 @@ class AddressBookDataSourceImpl(
                     contacts = transform(addressBook.contacts.toMutableList()).toList(),
                 )
             writeToLocalStorage(newAddressBook, key)
-            abUpdatePipeline.emit(key to newAddressBook)
+            revision.update { it + 1 }
         }
     }
+
+    private fun newContact(name: String, address: String, chain: String?) =
+        AddressBookContact(
+            name = name.trim(),
+            address = address.trim(),
+            chain = chain?.trim()?.takeIf { it.isNotEmpty() },
+            lastUpdated = getTimestampNow(),
+        )
+
+    private fun AddressBookContact.hasSameDetails(other: AddressBookContact) =
+        name == other.name && address == other.address && chain == other.chain
 
     private fun getTimestampNow(): Instant =
         Instant.fromEpochMilliseconds(Clock.System.now().toEpochMilliseconds())

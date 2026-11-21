@@ -133,7 +133,8 @@ class AddZashiABContactVM(
         }
 
     val state =
-        combine(contactAddressState, contactNameState, saveButtonState) { address, name, saveButton ->
+        combine(contactAddressState, contactNameState, saveButtonState, refusedGiftCardLink.storageError) {
+            address, name, saveButton, storageError ->
             ABContactState(
                 info = null,
                 title = stringRes(R.string.addressBook_addNewContact),
@@ -142,6 +143,7 @@ class AddZashiABContactVM(
                 chain = null,
                 negativeButton = null,
                 positiveButton = saveButton,
+                operationError = storageError,
                 onBack = ::onBack
             )
         }.stateIn(
@@ -150,7 +152,9 @@ class AddZashiABContactVM(
             initialValue = null
         )
 
-    private fun onBack() = navigationRouter.back()
+    private fun onBack() {
+        if (!isSavingContact.value) navigationRouter.back()
+    }
 
     private fun onSaveButtonClick() =
         viewModelScope.launch {

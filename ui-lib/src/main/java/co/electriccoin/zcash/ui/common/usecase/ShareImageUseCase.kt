@@ -21,7 +21,8 @@ class ShareImageUseCase(
         shareText: String? = null,
         sharePickerText: String,
         filePrefix: String = "",
-        fileSuffix: String = ""
+        fileSuffix: String = "",
+        isAllowed: () -> Boolean = { true }
     ) = shareData(
         context = context,
         shareImageBitmap = shareImageBitmap,
@@ -30,6 +31,7 @@ class ShareImageUseCase(
         fileSuffix = fileSuffix,
         shareText = shareText,
         sharePickerText = sharePickerText,
+        isAllowed = isAllowed,
     )
 
     private suspend fun shareData(
@@ -40,6 +42,7 @@ class ShareImageUseCase(
         versionInfo: VersionInfo,
         filePrefix: String,
         fileSuffix: String,
+        isAllowed: () -> Boolean,
     ): Boolean =
         runCatching {
             val bitmapFile =
@@ -66,8 +69,15 @@ class ShareImageUseCase(
                     versionInfo = versionInfo,
                 )
 
-            context.startActivity(shareIntent)
-            true
+            withContext(Dispatchers.Main.immediate) {
+                if (isAllowed()) {
+                    context.startActivity(shareIntent)
+                    true
+                } else {
+                    bitmapFile.delete()
+                    false
+                }
+            }
         }.getOrElse { false }
 
     private suspend fun File.storeBitmap(bitmap: Bitmap) =

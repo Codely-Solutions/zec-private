@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.model.SensitiveReveal
 import co.electriccoin.zcash.ui.common.model.VKType
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRequest
@@ -34,16 +36,20 @@ internal class VKDetailVM(
     private val deleteSharedQRImages: DeleteSharedQRImagesUseCase,
     private val biometricRepository: BiometricRepository,
     private val navigationRouter: NavigationRouter,
+    private val appAccessSession: AppAccessSession,
 ) : ViewModel() {
     private val key = MutableStateFlow<String?>(null)
 
-    private val isRevealed = MutableStateFlow(false)
+    private val reveal = SensitiveReveal(appAccessSession)
+
+    internal val isRevealed: Boolean
+        get() = reveal.isRevealed
 
     private val tab = MutableStateFlow(Tab.QR)
 
     val state =
-        combine(key, isRevealed, tab) { key, isRevealed, tab ->
-            key?.let { createState(it, isRevealed, tab) }
+        combine(key, reveal.changes, tab) { key, grant, tab ->
+            key?.let { createState(it, grant, tab) }
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
@@ -63,7 +69,7 @@ internal class VKDetailVM(
 
     private fun createState(
         key: String,
-        isRevealed: Boolean,
+        grant: AppAccessSession.Grant?,
         tab: Tab
     ): VKDetailState =
         VKDetailState(
@@ -77,10 +83,10 @@ internal class VKDetailVM(
                         onClick = { onTabClick(item) }
                     )
                 },
-            content = createContent(key, isRevealed, tab),
+            content = createContent(key, grant != null, tab),
             disclaimer = stringRes(disclaimerRes(tab)),
-            secondaryButton = createShareButton(isRevealed),
-            primaryButton = createRevealButton(isRevealed),
+            secondaryButton = createShareButton(grant),
+            primaryButton = createRevealButton(grant != null),
             onBack = ::onBack
         )
 
@@ -109,12 +115,12 @@ internal class VKDetailVM(
             }
         }
 
-    private fun createShareButton(isRevealed: Boolean) =
+    private fun createShareButton(grant: AppAccessSession.Grant?) =
         ButtonState(
             text = stringRes(R.string.exportViewingKey_share),
             icon = R.drawable.ic_share,
-            isEnabled = isRevealed,
-            onClick = ::onShareClick
+            isEnabled = grant != null,
+            onClick = { onShareClick(grant) }
         )
 
     private fun createRevealButton(isRevealed: Boolean) =
@@ -151,7 +157,8 @@ internal class VKDetailVM(
 
     private fun onRevealClick() =
         viewModelScope.launch {
-            if (!isRevealed.value) {
+            val grant = appAccessSession.grant.value ?: return@launch
+            if (!isRevealed) {
                 try {
                     biometricRepository.requestBiometrics(
                         BiometricRequest(
@@ -162,27 +169,28 @@ internal class VKDetailVM(
                                 )
                         )
                     )
-                    isRevealed.update { true }
+                    reveal.reveal(grant)
                 } catch (_: BiometricsFailureException) {
-                    isRevealed.update { false }
+                    // Leave the key hidden.
                 } catch (_: BiometricsCancelledException) {
-                    isRevealed.update { false }
+                    // Leave the key hidden.
                 }
             } else {
-                isRevealed.update { false }
+                reveal.hide()
             }
         }
 
-    private fun onShareClick() =
+    private fun onShareClick(grant: AppAccessSession.Grant?) =
         viewModelScope.launch {
             val key = key.value ?: return@launch
-            if (!isRevealed.value) return@launch
+            if (!reveal.permits(grant)) return@launch
             shareQR(
                 qrData = key,
                 shareText = stringRes(key),
                 sharePickerText = stringRes(R.string.exportViewingKey_share_picker_title),
                 filenamePrefix = VK_QR_FILENAME_PREFIX,
                 centerIcon = null,
+                isAllowed = { reveal.permits(grant) },
             )
         }
 

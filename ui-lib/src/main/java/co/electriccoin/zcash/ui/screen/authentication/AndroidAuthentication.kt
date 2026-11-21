@@ -14,8 +14,10 @@ import co.electriccoin.zcash.ui.MainActivity
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.viewmodel.AuthenticationResult
 import co.electriccoin.zcash.ui.common.viewmodel.AuthenticationViewModel
+import co.electriccoin.zcash.ui.screen.authentication.view.AnimationConstants
 import co.electriccoin.zcash.ui.screen.authentication.view.AppAccessAuthentication
 import co.electriccoin.zcash.ui.screen.authentication.view.AuthenticationErrorDialog
+import kotlinx.coroutines.delay
 import kotlin.time.Duration.Companion.milliseconds
 
 private const val APP_ACCESS_TRIGGER_DELAY = 0
@@ -170,7 +172,7 @@ private fun WrapAppAccessAuth(
 
     AppAccessAuthentication(
         onRetry = {
-            authenticationViewModel.resetAuthenticationResult()
+            authenticationViewModel.resetAppAccessResult()
             authenticationViewModel.authenticate(
                 activity = activity,
                 initialAuthSystemWindowDelay = RETRY_TRIGGER_DELAY.milliseconds,
@@ -182,8 +184,8 @@ private fun WrapAppAccessAuth(
     )
 
     val authenticationResult =
-        authenticationViewModel.authenticationResult
-            .collectAsStateWithLifecycle(initialValue = AuthenticationResult.None)
+        authenticationViewModel.appAccessResult
+            .collectAsStateWithLifecycle()
             .value
 
     when (authenticationResult) {
@@ -193,31 +195,34 @@ private fun WrapAppAccessAuth(
         }
 
         AuthenticationResult.Success -> {
-            Twig.debug { "Authentication result: successful" }
-            authenticationViewModel.resetAuthenticationResult()
-            authenticationViewModel.setWelcomeAnimationDisplayed()
-            goToAppContent()
+            LaunchedEffect(authenticationResult) {
+                authenticationViewModel.setWelcomeAnimationDisplayed()
+                delay(AnimationConstants.durationOnly())
+                if (authenticationViewModel.appAccessResult.value == AuthenticationResult.Success) {
+                    authenticationViewModel.resetAppAccessResult()
+                    goToAppContent()
+                }
+            }
         }
 
         AuthenticationResult.Canceled -> {
-            Twig.info { "Authentication result: canceled: shutting down" }
-            authenticationViewModel.resetAuthenticationResult()
-            Toast
-                .makeText(activity, stringResource(id = R.string.authentication_toast_canceled), Toast.LENGTH_SHORT)
-                .show()
-            onCancel()
+            LaunchedEffect(authenticationResult) {
+                authenticationViewModel.resetAppAccessResult()
+                Toast.makeText(activity, R.string.authentication_toast_canceled, Toast.LENGTH_SHORT).show()
+                onCancel()
+            }
         }
 
         AuthenticationResult.Failed -> {
             Twig.warn { "Authentication result: failed" }
-            onFail()
+            LaunchedEffect(authenticationResult) { onFail() }
         }
 
         is AuthenticationResult.Error -> {
             Twig.error {
                 "Authentication result: error: ${authenticationResult.errorCode}: ${authenticationResult.errorMessage}"
             }
-            onFail()
+            LaunchedEffect(authenticationResult) { onFail() }
         }
     }
 

@@ -25,7 +25,6 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.shareIn
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Duration.Companion.seconds
@@ -39,7 +38,7 @@ interface AddressBookRepository {
      * @throws GiftCardContactNotAllowedException when [address] is, or may contain, a gift card link or key; nothing
      * is saved then
      */
-    fun saveContact(
+    suspend fun saveContact(
         name: String,
         address: String,
         chain: String?,
@@ -51,18 +50,18 @@ interface AddressBookRepository {
      * @throws GiftCardContactNotAllowedException when [address] is, or may contain, a gift card link or key; nothing
      * is saved then
      */
-    fun updateContact(
+    suspend fun updateContact(
         contact: EnhancedABContact,
         name: String,
         address: String,
         chain: String?,
     )
 
-    fun deleteContact(contact: EnhancedABContact)
+    suspend fun deleteContact(contact: EnhancedABContact)
 
     fun observeContactByAddress(address: String): Flow<EnhancedABContact?>
 
-    fun delete()
+    suspend fun delete()
 }
 
 /**
@@ -128,7 +127,7 @@ class AddressBookRepositoryImpl(
                 }
             }.distinctUntilChanged()
 
-    override fun saveContact(
+    override suspend fun saveContact(
         name: String,
         address: String,
         chain: String?,
@@ -145,7 +144,7 @@ class AddressBookRepositoryImpl(
         }
     }
 
-    override fun updateContact(
+    override suspend fun updateContact(
         contact: EnhancedABContact,
         name: String,
         address: String,
@@ -163,7 +162,7 @@ class AddressBookRepositoryImpl(
         }
     }
 
-    override fun deleteContact(contact: EnhancedABContact) =
+    override suspend fun deleteContact(contact: EnhancedABContact) =
         updateAB {
             addressBookDataSource.deleteContact(
                 addressBookContact = contact.contact,
@@ -178,33 +177,18 @@ class AddressBookRepositoryImpl(
                 it.find { contact -> contact.address == address }
             }.distinctUntilChanged()
 
-    @Suppress("TooGenericExceptionCaught")
-    override fun delete() {
-        scope.launch {
-            mutex.withLock {
-                try {
-                    val account = accountDataSource.getZashiAccount()
-                    val key = getAddressBookKey(account)
-                    addressBookDataSource.delete(key)
-                } catch (e: Exception) {
-                    Twig.error(e) { "Unable to delete Address Book" }
-                }
-            }
+    override suspend fun delete() {
+        mutex.withLock {
+            val key = addressBookKeyStorageProvider.getAddressBookKey()
+                ?: getAddressBookKey(accountDataSource.getZashiAccount())
+            addressBookDataSource.delete(key)
         }
     }
 
-    @Suppress("TooGenericExceptionCaught")
-    private fun updateAB(block: suspend (AddressBookKey) -> Unit) {
-        scope.launch {
-            mutex.withLock {
-                try {
-                    val selectedAccount = accountDataSource.getZashiAccount()
-                    val key = getAddressBookKey(selectedAccount)
-                    block(key)
-                } catch (e: Exception) {
-                    Twig.error(e) { "Unable to update Address Book" }
-                }
-            }
+    private suspend fun updateAB(block: suspend (AddressBookKey) -> Unit) {
+        mutex.withLock {
+            val selectedAccount = accountDataSource.getZashiAccount()
+            block(getAddressBookKey(selectedAccount))
         }
     }
 

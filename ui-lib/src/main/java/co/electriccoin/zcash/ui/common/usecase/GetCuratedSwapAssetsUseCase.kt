@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.ui.common.model.isSame
+import co.electriccoin.zcash.ui.common.model.SwapPriceMarkets
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 import co.electriccoin.zcash.ui.common.repository.SwapAssetsData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
@@ -26,7 +27,7 @@ class GetCuratedSwapAssetsUseCase(
             data =
                 data.data
                     ?.filter { token ->
-                        inclusionList.any {
+                        SwapPriceMarkets.reference(token) != null && inclusionList.any {
                             it.isSame(token.tokenTicker, token.blockchain.chainTicker)
                         }
                     }

@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.update
  */
 class RefusedGiftCardLinkAddress {
     private val refused = MutableStateFlow<String?>(null)
+    val storageError = MutableStateFlow<StringResource?>(null)
 
     /**
      * Combines [address] with its [addressError] into [transform], the error replaced by the gift link error while
@@ -36,5 +37,7 @@ class RefusedGiftCardLinkAddress {
         result: ABContactSaveResult
     ) {
         if (result == ABContactSaveResult.GiftCardLinkRefused) refused.update { address }
+        storageError.value =
+            if (result == ABContactSaveResult.StorageFailure) stringRes(R.string.contact_error_saveFailed) else null
     }
 }

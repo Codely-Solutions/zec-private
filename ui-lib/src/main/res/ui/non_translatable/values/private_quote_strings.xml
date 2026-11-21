@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="private_swap_deposit_reference" translatable="false">Deposit reference</string>
     <string name="private_included_input_allowance" translatable="false">Included allowance (%1$s)</string>
     <string name="private_value_difference_known" translatable="false">Value received versus total spend at quoted dollar prices, including the network fee.</string>
     <string name="private_value_difference_external" translatable="false">Value received versus the amount sent at quoted dollar prices.</string>

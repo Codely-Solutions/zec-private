@@ -78,9 +78,10 @@ class SubmitProposalUseCaseTest {
     fun keystoneSwapProposalAddsHistoryAndNavigatesToSignKeystone() =
         runTest {
             val fx = useCase()
-            fx.givenKeystone(swapProposal(tokenTicker = "eth", chainTicker = "eth"))
+            val proposal = swapProposal(tokenTicker = "eth", chainTicker = "eth")
+            fx.givenKeystone(proposal)
 
-            fx.useCase()
+            fx.useCase(proposal)
 
             verify(exactly = 1) { fx.metadataRepository.addSwapAssetToHistory("eth", "eth") }
             verify(exactly = 1) { fx.navigationRouter.replace(SignKeystoneTransactionArgs) }
@@ -132,7 +133,7 @@ class SubmitProposalUseCaseTest {
             val submitResult = mockk<SubmitResult>(relaxed = true)
             fx.givenZashi(proposal, submitResult)
 
-            fx.useCase()
+            fx.useCase(proposal)
 
             verify(exactly = 1) { fx.metadataRepository.addSwapAssetToHistory("eth", "eth") }
             verify(exactly = 1) { fx.swapRepository.clear() }
@@ -168,9 +169,10 @@ class SubmitProposalUseCaseTest {
     @Test
     fun approvedSwapCannotStartASecondSubmission() = runTest {
         val fx = useCase()
-        fx.givenZashi(swapProposal("eth", "eth"))
-        fx.useCase()
-        fx.useCase()
+        val proposal = swapProposal("eth", "eth")
+        fx.givenZashi(proposal)
+        fx.useCase(proposal)
+        fx.useCase(proposal)
         coVerify(exactly = 1) { fx.processSwapTransaction.persistBeforeFunding(any()) }
         coVerify(exactly = 1) { fx.zashiProposalRepository.submit() }
     }
@@ -178,9 +180,10 @@ class SubmitProposalUseCaseTest {
     @Test
     fun existingSwapBlocksPaymentUntilStatusIsReviewed() = runTest {
         val fx = useCase()
-        fx.givenZashi(swapProposal("eth", "eth"))
+        val proposal = swapProposal("eth", "eth")
+        fx.givenZashi(proposal)
         coEvery { fx.metadataRepository.getSwapMetadata(any()) } returns mockk<TransactionSwapMetadata>()
-        fx.useCase()
+        fx.useCase(proposal)
         coVerify(exactly = 0) { fx.processSwapTransaction.persistBeforeFunding(any()) }
         coVerify(exactly = 0) { fx.zashiProposalRepository.submit() }
     }
@@ -190,11 +193,11 @@ class SubmitProposalUseCaseTest {
         runTest {
             val fx = useCase()
             coEvery { fx.accountDataSource.getSelectedAccount() } returns spendable<ZodlAccount>()
-            coEvery { fx.zashiProposalRepository.getTransactionProposal() } returns
-                swapProposal(tokenTicker = "eth", chainTicker = "eth")
+            val proposal = swapProposal(tokenTicker = "eth", chainTicker = "eth")
+            coEvery { fx.zashiProposalRepository.getTransactionProposal() } returns proposal
             coEvery { fx.zashiProposalRepository.submit() } throws RuntimeException("boom")
 
-            fx.useCase()
+            fx.useCase(proposal)
 
             // The submit failure is swallowed: no swap processing, but the prefill is still cleared
             // (finally) and navigation to progress happens regardless of the async outcome.
@@ -202,6 +205,30 @@ class SubmitProposalUseCaseTest {
             verify(exactly = 1) { fx.prefillSend.clear() }
             verify(exactly = 1) { fx.navigationRouter.replace(TransactionProgressArgs) }
         }
+
+    @Test
+    fun replacementDuringAuthenticationCannotFundAnUnreviewedSwap() = runTest {
+        val fx = useCase()
+        val reviewed = swapProposal("eth", "eth")
+        val replacement = swapProposal("btc", "btc")
+        fx.givenZashi(reviewed)
+        coEvery { fx.biometricRepository.requestBiometrics(any()) } coAnswers {
+            fx.givenZashi(replacement)
+        }
+        fx.useCase(reviewed)
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit() }
+        coVerify(exactly = 0) { fx.processSwapTransaction.persistBeforeFunding(any()) }
+        verify(exactly = 0) { fx.navigationRouter.replace(*anyVararg()) }
+    }
+
+    @Test
+    fun swapSubmissionRequiresTheReviewedProposal() = runTest {
+        val fx = useCase()
+        fx.givenZashi(swapProposal("eth", "eth"))
+        fx.useCase()
+        coVerify(exactly = 0) { fx.zashiProposalRepository.submit() }
+        coVerify(exactly = 0) { fx.processSwapTransaction.persistBeforeFunding(any()) }
+    }
 
     private suspend fun swapProposal(
         tokenTicker: String,

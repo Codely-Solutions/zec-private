@@ -74,105 +74,111 @@ class GiftCardContactGuardTest {
         }
 
     @Test
-    fun saveRefusesAGiftCardLinkWithoutSavingOrNavigating() {
-        val save = SaveABContactUseCase(addressBookRepository, navigationRouter)
+    fun saveRefusesAGiftCardLinkWithoutSavingOrNavigating() =
+        runTest {
+            val save = SaveABContactUseCase(addressBookRepository, navigationRouter)
 
-        GiftCardSecretFixture.all.forEach { (name, link) ->
+            GiftCardSecretFixture.all.forEach { (name, link) ->
+                assertEquals(
+                    ABContactSaveResult.GiftCardLinkRefused,
+                    save(name = "Card", address = link, chain = null),
+                    name
+                )
+                assertEquals(ABContactSaveResult.GiftCardLinkRefused, save("Card", link, "btc"), name)
+            }
+            coVerify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
+            verify { navigationRouter wasNot Called }
+        }
+
+    @Test
+    fun updateRefusesAGiftCardLinkWithoutSavingOrNavigating() =
+        runTest {
+            val update = UpdateABContactUseCase(addressBookRepository, navigationRouter)
+
+            GiftCardSecretFixture.all.forEach { (name, link) ->
+                assertEquals(
+                    ABContactSaveResult.GiftCardLinkRefused,
+                    update(contact = existing, name = "Card", address = link, chain = "btc"),
+                    name
+                )
+            }
+            coVerify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
+            verify { navigationRouter wasNot Called }
+        }
+
+    @Test
+    fun ordinaryAddressesAreSavedAndUpdatedAsBefore() =
+        runTest {
             assertEquals(
-                ABContactSaveResult.GiftCardLinkRefused,
-                save(name = "Card", address = link, chain = null),
-                name
+                ABContactSaveResult.Saved,
+                SaveABContactUseCase(addressBookRepository, navigationRouter)(name = "A", address = "u1new", chain = null)
             )
-            assertEquals(ABContactSaveResult.GiftCardLinkRefused, save("Card", link, "btc"), name)
-        }
-        verify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
-        verify { navigationRouter wasNot Called }
-    }
-
-    @Test
-    fun updateRefusesAGiftCardLinkWithoutSavingOrNavigating() {
-        val update = UpdateABContactUseCase(addressBookRepository, navigationRouter)
-
-        GiftCardSecretFixture.all.forEach { (name, link) ->
             assertEquals(
-                ABContactSaveResult.GiftCardLinkRefused,
-                update(contact = existing, name = "Card", address = link, chain = "btc"),
-                name
+                ABContactSaveResult.Saved,
+                UpdateABContactUseCase(addressBookRepository, navigationRouter)(
+                    contact = existing,
+                    name = "B",
+                    address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
+                    chain = "btc"
+                )
             )
+
+            coVerify(exactly = 1) { addressBookRepository.saveContact("A", "u1new", null) }
+            coVerify(exactly = 1) {
+                addressBookRepository.updateContact(existing, "B", "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", "btc")
+            }
+            verify(exactly = 2) { navigationRouter.back() }
         }
-        verify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
-        verify { navigationRouter wasNot Called }
-    }
 
     @Test
-    fun ordinaryAddressesAreSavedAndUpdatedAsBefore() {
-        assertEquals(
-            ABContactSaveResult.Saved,
-            SaveABContactUseCase(addressBookRepository, navigationRouter)(name = "A", address = "u1new", chain = null)
-        )
-        assertEquals(
-            ABContactSaveResult.Saved,
-            UpdateABContactUseCase(addressBookRepository, navigationRouter)(
-                contact = existing,
-                name = "B",
-                address = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
-                chain = "btc"
+    fun invalidNetworkAddressesCannotBeSavedOrUpdated() =
+        runTest {
+            val save = SaveABContactUseCase(addressBookRepository, navigationRouter)
+            val update = UpdateABContactUseCase(addressBookRepository, navigationRouter)
+            listOf(
+                "invalid-address" to "btc",
+                "0x1111111111111111111111111111111111111111" to "btc",
+                "bitcoin:1BoatSLRHtKNngkdXEeobR76b53LETtpyT" to "eth",
+            ).forEach { (address, chain) ->
+                assertEquals(ABContactSaveResult.InvalidAddress, save("Synthetic", address, chain))
+                assertEquals(ABContactSaveResult.InvalidAddress, update(existing, "Synthetic", address, chain))
+            }
+            coVerify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
+            coVerify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
+            verify { navigationRouter wasNot Called }
+        }
+
+    @Test
+    fun savesAndUpdatesParsedPaymentUriAddresses() =
+        runTest {
+            val btc = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
+            val evm = "0x1111111111111111111111111111111111111111"
+            assertEquals(ABContactSaveResult.Saved, SaveABContactUseCase(addressBookRepository, navigationRouter)(
+                "Synthetic BTC", " bitcoin:$btc ", "btc"
+            ))
+            assertEquals(ABContactSaveResult.Saved, UpdateABContactUseCase(addressBookRepository, navigationRouter)(
+                existing, "Synthetic EVM", "ethereum:$evm@1", "eth"
+            ))
+            coVerify(exactly = 1) { addressBookRepository.saveContact("Synthetic BTC", btc, "btc") }
+            coVerify(exactly = 1) { addressBookRepository.updateContact(existing, "Synthetic EVM", evm, "eth") }
+            verify(exactly = 2) { navigationRouter.back() }
+        }
+
+    @Test
+    fun amountBearingPaymentUrisCannotBeSavedOrUpdated() =
+        runTest {
+            val save = SaveABContactUseCase(addressBookRepository, navigationRouter)
+            val update = UpdateABContactUseCase(addressBookRepository, navigationRouter)
+            val requests = listOf(
+                "bitcoin:1BoatSLRHtKNngkdXEeobR76b53LETtpyT?amount=1" to "btc",
+                "ethereum:0x1111111111111111111111111111111111111111@1?value=1e18" to "eth"
             )
-        )
-
-        verify(exactly = 1) { addressBookRepository.saveContact("A", "u1new", null) }
-        verify(exactly = 1) {
-            addressBookRepository.updateContact(existing, "B", "1BoatSLRHtKNngkdXEeobR76b53LETtpyT", "btc")
+            requests.forEach { (request, chain) ->
+                assertEquals(ABContactSaveResult.InvalidAddress, save("Synthetic", request, chain))
+                assertEquals(ABContactSaveResult.InvalidAddress, update(existing, "Synthetic", request, chain))
+            }
+            coVerify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
+            coVerify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
+            verify { navigationRouter wasNot Called }
         }
-        verify(exactly = 2) { navigationRouter.back() }
-    }
-
-    @Test
-    fun invalidNetworkAddressesCannotBeSavedOrUpdated() {
-        val save = SaveABContactUseCase(addressBookRepository, navigationRouter)
-        val update = UpdateABContactUseCase(addressBookRepository, navigationRouter)
-        listOf(
-            "invalid-address" to "btc",
-            "0x1111111111111111111111111111111111111111" to "btc",
-            "bitcoin:1BoatSLRHtKNngkdXEeobR76b53LETtpyT" to "eth",
-        ).forEach { (address, chain) ->
-            assertEquals(ABContactSaveResult.InvalidAddress, save("Synthetic", address, chain))
-            assertEquals(ABContactSaveResult.InvalidAddress, update(existing, "Synthetic", address, chain))
-        }
-        verify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
-        verify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
-        verify { navigationRouter wasNot Called }
-    }
-
-    @Test
-    fun savesAndUpdatesParsedPaymentUriAddresses() {
-        val btc = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
-        val evm = "0x1111111111111111111111111111111111111111"
-        assertEquals(ABContactSaveResult.Saved, SaveABContactUseCase(addressBookRepository, navigationRouter)(
-            "Synthetic BTC", " bitcoin:$btc ", "btc"
-        ))
-        assertEquals(ABContactSaveResult.Saved, UpdateABContactUseCase(addressBookRepository, navigationRouter)(
-            existing, "Synthetic EVM", "ethereum:$evm@1", "eth"
-        ))
-        verify(exactly = 1) { addressBookRepository.saveContact("Synthetic BTC", btc, "btc") }
-        verify(exactly = 1) { addressBookRepository.updateContact(existing, "Synthetic EVM", evm, "eth") }
-        verify(exactly = 2) { navigationRouter.back() }
-    }
-
-    @Test
-    fun amountBearingPaymentUrisCannotBeSavedOrUpdated() {
-        val save = SaveABContactUseCase(addressBookRepository, navigationRouter)
-        val update = UpdateABContactUseCase(addressBookRepository, navigationRouter)
-        val requests = listOf(
-            "bitcoin:1BoatSLRHtKNngkdXEeobR76b53LETtpyT?amount=1" to "btc",
-            "ethereum:0x1111111111111111111111111111111111111111@1?value=1e18" to "eth"
-        )
-        requests.forEach { (request, chain) ->
-            assertEquals(ABContactSaveResult.InvalidAddress, save("Synthetic", request, chain))
-            assertEquals(ABContactSaveResult.InvalidAddress, update(existing, "Synthetic", request, chain))
-        }
-        verify(exactly = 0) { addressBookRepository.saveContact(any(), any(), any()) }
-        verify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
-        verify { navigationRouter wasNot Called }
-    }
 }
