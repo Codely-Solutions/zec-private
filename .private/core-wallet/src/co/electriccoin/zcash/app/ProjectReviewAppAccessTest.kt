@@ -330,7 +330,10 @@ class ProjectReviewAppAccessTest {
                 .filterIsInstance<MainActivity>().single()
         }
         fun assertMasked() = onMain {
-            val entry = checkNotNull(activity.navControllerForTesting.currentBackStackEntry)
+            // Keep the app's implementation-only Navigation dependency off the instrumentation classpath.
+            val controller = MainActivity::class.java.getMethod("getNavControllerForTesting").invoke(activity)
+            val entry = checkNotNull(controller.javaClass.getMethod("getCurrentBackStackEntry").invoke(controller))
+                as androidx.lifecycle.ViewModelStoreOwner
             val model = androidx.lifecycle.ViewModelProvider(entry)[WalletBackupViewModel::class.java]
             val state = checkNotNull(model.state.value)
             check(!state.seed.isRevealed && state.copyPhrase == null)
