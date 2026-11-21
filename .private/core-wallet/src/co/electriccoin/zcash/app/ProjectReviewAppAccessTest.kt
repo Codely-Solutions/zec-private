@@ -390,7 +390,7 @@ class ProjectReviewAppAccessTest {
     ): Rect {
         var result: Rect? = null
         waitFor(label) {
-            result = findBounds(requireClick, match)
+            result = findBounds(requireClick = requireClick, match = match)
             result != null
         }
         return checkNotNull(result)
