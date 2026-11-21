@@ -8,7 +8,6 @@ import android.graphics.Rect
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
-import android.graphics.Bitmap
 import android.view.KeyEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
@@ -44,7 +43,6 @@ import org.junit.Before
 import org.junit.After
 import org.koin.core.context.GlobalContext
 import java.util.concurrent.TimeUnit
-import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
 /** Runs against a blank, PIN-secured emulator with the opt-in core-wallet instrumentation. */
@@ -60,6 +58,7 @@ class ProjectReviewAppAccessTest {
     private val copyLabel get() = context.getString(R.string.recovery_copy_phrase)
     private val biometricCreations = AtomicInteger()
     private var diagnosticMode = false
+    private var diagnosticFallbackUsed = false
     private val lifecycleCallback = ActivityLifecycleCallback { activity, stage ->
         if (activity is BiometricActivity && stage == Stage.CREATED) biometricCreations.incrementAndGet()
     }
@@ -92,7 +91,7 @@ class ProjectReviewAppAccessTest {
         assertWalletAbsent(walletWords)
         report("initial_credential_prompt")
 
-        cancelCredentialEntry(captureInitialLayer = true)
+        cancelCredentialEntry()
         try {
             waitForLabel(lockedTitle)
         } finally {
@@ -140,7 +139,7 @@ class ProjectReviewAppAccessTest {
         waitForCredentialEntry()
         assertWalletAbsent(walletWords)
         report("return_credential_prompt")
-        cancelCredentialEntry(captureInitialLayer = false)
+        cancelCredentialEntry()
         reportState("return_cancel_sent", walletWords, activity)
         try {
             waitForLabel(lockedTitle)
@@ -162,6 +161,9 @@ class ProjectReviewAppAccessTest {
         check(!hasLabel(copyLabel)) { "Recovery copy remained available after relock" }
         check(!hasWalletWord(walletWords)) { "Recovery words remained exposed after relock" }
         revealBackup(pin, walletWords)
+        check(!diagnosticFallbackUsed) {
+            "Coordinate input did not activate recovery; accessibility diagnostic is not timed acceptance"
+        }
         report(if (forceTimeout) "diagnostic_passed" else "passed", elapsed)
     }
 
@@ -233,6 +235,7 @@ class ProjectReviewAppAccessTest {
 
     private suspend fun revealBackup(pin: String, walletWords: Set<String>) {
         scrollToReveal()
+        settleRecoveryTouch()
         val reveal = waitForBounds("recovery reveal action", requireClick = true) { matchesLabel(it, revealLabel) }
         val before = biometricCreations.get()
         tap(reveal)
@@ -248,6 +251,7 @@ class ProjectReviewAppAccessTest {
             .put("credential_focused", hasFocusedCredentialEntry())
             .toString())
         if (diagnosticMode && biometricCreations.get() == before && !hasFocusedCredentialEntry()) {
+            diagnosticFallbackUsed = true
             check(!hasWalletWord(walletWords) && !hasLabel(copyLabel))
             val accepted = findBounds(requireClick = true, performClick = true) { matchesLabel(it, revealLabel) } != null
             android.util.Log.i("ProjectReviewAppAccess", JSONObject()
@@ -282,7 +286,16 @@ class ProjectReviewAppAccessTest {
         val lower = scroll.top + scroll.height() * 3 / 4
         val from = if (towardTop) upper else lower
         val to = if (towardTop) lower else upper
-        shell("input swipe $x $from $x $to 250")
+        shell("input swipe $x $from $x $to 500")
+        automation.waitForIdle(400, 5_000)
+    }
+
+    private fun settleRecoveryTouch() {
+        val scroll = findBounds { it.packageName == context.packageName && it.isScrollable } ?: return
+        // A coordinate tap can stop the native scroll/fling without invoking its target. Stop it in padding first.
+        val padding = (8 * context.resources.displayMetrics.density).toInt()
+        shell("input tap ${scroll.left + padding} ${scroll.centerY()}")
+        automation.waitForIdle(500, 5_000)
     }
 
     private suspend fun waitForCredentialEntry() {
@@ -329,7 +342,7 @@ class ProjectReviewAppAccessTest {
 
     private fun pressBack() = shell("input keyevent ${KeyEvent.KEYCODE_BACK}")
 
-    private suspend fun cancelCredentialEntry(captureInitialLayer: Boolean) {
+    private suspend fun cancelCredentialEntry() {
         val credentialWindow = checkNotNull(focusedCredentialWindowId())
         val imeBefore = automation.windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD }
         pressBack()
@@ -344,16 +357,6 @@ class ProjectReviewAppAccessTest {
                 .put("ime_before", imeBefore)
                 .put("ime_after", automation.windows.any { it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD })
                 .toString())
-            if (captureInitialLayer) {
-                // No recovery route or reveal has run at this point in the isolated scenario.
-                automation.takeScreenshot()?.let { bitmap ->
-                    try {
-                        File(context.cacheDir, "initial-credential-back-layer.png").outputStream().use { output ->
-                            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
-                        }
-                    } finally { bitmap.recycle() }
-                }
-            }
             pressBack()
         }
     }
