@@ -4,6 +4,9 @@ allprojects { p ->
         if (p.path == ':ui-lib') {
             p.android.sourceSets.debug.kotlin.directories.add(new File(p.rootProject.projectDir, '.private/style-comparison/src').path)
             p.android.sourceSets.debug.manifest.srcFile(new File(p.rootProject.projectDir, '.private/style-comparison/AndroidManifest.xml'))
+            p.android.sourceSets.maybeCreate('testDebug').kotlin.directories.add(
+                new File(p.rootProject.projectDir, '.private/style-comparison/test').path
+            )
         }
     }
 }

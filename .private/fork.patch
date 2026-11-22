@@ -2618,7 +2618,7 @@ index 5a7def039..b8ec6cf2a 100644
 +
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
 new file mode 100644
-index 000000000..edad9c2b8
+index 000000000..cafc6932d
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
 @@ -0,0 +1,101 @@
@@ -2637,10 +2637,10 @@ index 000000000..edad9c2b8
 +import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
-+import io.mockk.mockkStatic
++import io.mockk.mockkObject
 +import io.mockk.mockkConstructor
 +import io.mockk.unmockkConstructor
-+import io.mockk.unmockkStatic
++import io.mockk.unmockkObject
 +import io.mockk.verify
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.flow.MutableStateFlow
@@ -2670,7 +2670,7 @@ index 000000000..edad9c2b8
 +            }
 +        }
 +        val hooks = MigrationAppHooksImpl(mockk(), mockk(), mockk(), accounts, mockk(), context)
-+        mockkStatic(WorkManager::class)
++        mockkObject(WorkManager.Companion)
 +        try {
 +            every { WorkManager.getInstance(context) } returns workManager
 +            val reset = launch { hooks.cancelMigrationWork(null) }
@@ -2685,7 +2685,7 @@ index 000000000..edad9c2b8
 +            assertTrue(reset.isCompleted)
 +        } finally {
 +            cancellation.cancel(false)
-+            unmockkStatic(WorkManager::class)
++            unmockkObject(WorkManager.Companion)
 +        }
 +    }
 +
@@ -2705,7 +2705,7 @@ index 000000000..edad9c2b8
 +        }
 +        val notifier = mockk<MigrationNotifier>(relaxed = true)
 +        val hooks = MigrationAppHooksImpl(mockk(), mockk(), mockk(), accounts, notifier, context)
-+        mockkStatic(WorkManager::class)
++        mockkObject(WorkManager.Companion)
 +        mockkConstructor(MigrationScheduler::class)
 +        try {
 +            every { WorkManager.getInstance(context) } returns workManager
@@ -2719,7 +2719,7 @@ index 000000000..edad9c2b8
 +            coVerify(exactly = 0) { accounts.getAllAccounts() }
 +        } finally {
 +            unmockkConstructor(MigrationScheduler::class)
-+            unmockkStatic(WorkManager::class)
++            unmockkObject(WorkManager.Companion)
 +        }
 +    }
 +}

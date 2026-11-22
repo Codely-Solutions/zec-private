@@ -13,10 +13,10 @@ import com.google.common.util.concurrent.SettableFuture
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.mockkStatic
+import io.mockk.mockkObject
 import io.mockk.mockkConstructor
 import io.mockk.unmockkConstructor
-import io.mockk.unmockkStatic
+import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,7 +46,7 @@ class MigrationAppHooksResetTest {
             }
         }
         val hooks = MigrationAppHooksImpl(mockk(), mockk(), mockk(), accounts, mockk(), context)
-        mockkStatic(WorkManager::class)
+        mockkObject(WorkManager.Companion)
         try {
             every { WorkManager.getInstance(context) } returns workManager
             val reset = launch { hooks.cancelMigrationWork(null) }
@@ -61,7 +61,7 @@ class MigrationAppHooksResetTest {
             assertTrue(reset.isCompleted)
         } finally {
             cancellation.cancel(false)
-            unmockkStatic(WorkManager::class)
+            unmockkObject(WorkManager.Companion)
         }
     }
 
@@ -81,7 +81,7 @@ class MigrationAppHooksResetTest {
         }
         val notifier = mockk<MigrationNotifier>(relaxed = true)
         val hooks = MigrationAppHooksImpl(mockk(), mockk(), mockk(), accounts, notifier, context)
-        mockkStatic(WorkManager::class)
+        mockkObject(WorkManager.Companion)
         mockkConstructor(MigrationScheduler::class)
         try {
             every { WorkManager.getInstance(context) } returns workManager
@@ -95,7 +95,7 @@ class MigrationAppHooksResetTest {
             coVerify(exactly = 0) { accounts.getAllAccounts() }
         } finally {
             unmockkConstructor(MigrationScheduler::class)
-            unmockkStatic(WorkManager::class)
+            unmockkObject(WorkManager.Companion)
         }
     }
 }
