@@ -30,7 +30,6 @@ import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.ui.MainActivity
 import co.electriccoin.zcash.ui.MainAppGraph
-import androidx.navigation.NavController
 import co.electriccoin.zcash.ui.BiometricActivity
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
@@ -181,12 +180,10 @@ class ProjectReviewAppAccessTest {
                 // Require actual credential authorization and wallet-graph entry rather than a covered Home row.
                 waitFor("authenticated wallet graph") {
                     onMain {
-                        val controller = MainActivity::class.java.getMethod("getNavControllerForTesting")
-                            .invoke(activity) as NavController
                         val model = androidx.lifecycle.ViewModelProvider(activity)[AuthenticationViewModel::class.java]
                         val auth = AuthenticationViewModel::class.java.getDeclaredField("appAccessAuthenticationResultState")
                             .apply { isAccessible = true }.get(model) as StateFlow<*>
-                        controller.currentDestination?.parent?.route == MainAppGraph::class.qualifiedName &&
+                        navigationRoutes(activity).second == MainAppGraph::class.qualifiedName &&
                             auth.value?.javaClass?.simpleName == "Successful"
                     } && !hasLabel(lockedTitle) && !hasLabel(continueLabel)
                 }
@@ -689,19 +686,18 @@ class ProjectReviewAppAccessTest {
             .put("locked_title", hasLabel(lockedTitle))
             .put("backup_title", hasLabel(backupTitle))
             .put("wallet_action", hasWalletAction())
-            .put("phrase_visible", hasWalletWord(words))
+            .put("phrase_visibility_checked", words.isNotEmpty())
+            .put("phrase_visible", if (words.isNotEmpty()) hasWalletWord(words) else JSONObject.NULL)
             .put("copy_visible", hasLabel(copyLabel))
         onMain {
             receipt.put("activity_resumed", activity.lifecycle.currentState == Lifecycle.State.RESUMED)
                 .put("activity_destroyed", activity.isDestroyed)
                 .put("activity_focused", activity.hasWindowFocus())
             if (!activity.isDestroyed) {
-                val controller = MainActivity::class.java.getMethod("getNavControllerForTesting")
-                    .invoke(activity) as NavController
-                val destination = controller.currentDestination
-                receipt.put("main_graph", destination?.parent?.route == MainAppGraph::class.qualifiedName)
-                    .put("home_route", destination?.route?.startsWith("co.electriccoin.zcash.ui.screen.home.HomeArgs") == true)
-                    .put("restore_instructions_route", destination?.route?.startsWith(
+                val (route, parentRoute) = navigationRoutes(activity)
+                receipt.put("main_graph", parentRoute == MainAppGraph::class.qualifiedName)
+                    .put("home_route", route?.startsWith("co.electriccoin.zcash.ui.screen.home.HomeArgs") == true)
+                    .put("restore_instructions_route", route?.startsWith(
                         "co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs") == true)
                     .put("ready", dependency<WalletRepository>().secretState.value == SecretState.READY)
                 val model = androidx.lifecycle.ViewModelProvider(activity)[AuthenticationViewModel::class.java]
@@ -723,6 +719,15 @@ class ProjectReviewAppAccessTest {
             } == true
         })
         android.util.Log.i("ProjectReviewAppAccess", receipt.toString())
+    }
+
+    // Navigation is an implementation dependency of ui-lib, so this app harness reads its public getters.
+    private fun navigationRoutes(activity: MainActivity): Pair<String?, String?> {
+        val controller = MainActivity::class.java.getMethod("getNavControllerForTesting").invoke(activity)
+        val destination = controller.javaClass.getMethod("getCurrentDestination").invoke(controller)
+        val parent = destination?.javaClass?.getMethod("getParent")?.invoke(destination)
+        fun route(value: Any?): String? = value?.javaClass?.getMethod("getRoute")?.invoke(value) as? String
+        return route(destination) to route(parent)
     }
 
     private inline fun <reified T : Any> dependency(): T = GlobalContext.get().get()
