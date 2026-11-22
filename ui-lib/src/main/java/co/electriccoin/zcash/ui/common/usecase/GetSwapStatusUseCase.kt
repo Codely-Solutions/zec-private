@@ -73,7 +73,15 @@ class GetSwapStatusUseCase(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        data.update { it.copy(isLoading = false, error = e) }
+                        val latest = (e as? SwapRefreshNotSavedException)?.savedMetadata
+                        data.update {
+                            it.copy(
+                                isLoading = false,
+                                error = e,
+                                savedMetadata = latest ?: it.savedMetadata,
+                                status = if (latest != null) null else it.status,
+                            )
+                        }
                     }
                     delay(30.seconds)
                 }
@@ -89,7 +97,9 @@ class GetSwapStatusUseCase(
         try {
             return refresh.mutex.withLock {
                 val result = swapRepository.checkSwapStatus(expected)
-                check(metadataRepository.updateSwap(expected, result)) { "Swap status refresh was not saved" }
+                if (!metadataRepository.updateSwap(expected, result)) {
+                    throw SwapRefreshNotSavedException(metadataRepository.reloadSwapMetadata(expected))
+                }
                 result
             }
         } finally {
@@ -103,6 +113,9 @@ class GetSwapStatusUseCase(
         val mutex = Mutex()
         var users = 0
     }
+
+    private class SwapRefreshNotSavedException(val savedMetadata: TransactionSwapMetadata?) :
+        IllegalStateException("Swap status refresh was not saved")
 }
 
 data class SwapQuoteStatusData(

@@ -1,12 +1,15 @@
 package co.electriccoin.zcash.ui.screen.transactiondetail.infoitems
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -44,23 +47,21 @@ fun TransactionDetailSwapStatusRow(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
 ) {
-    TransactionDetailRowSurface(
-        onClick = null,
-        modifier = modifier,
-        contentPadding = contentPadding
+    FlowRow(
+        modifier = modifier.fillMaxWidth().padding(contentPadding),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
+            modifier = Modifier.padding(end = 16.dp),
             text = state.title.getValue(),
             style = ZashiTypography.textSm,
             color = ZashiColors.Text.textTertiary
         )
         if (state.status != null) {
-            Spacer(Modifier.width(16.dp))
             StatusChip(state)
         } else {
-            Spacer(Modifier.width(16.dp))
             Box(
                 modifier = Modifier.shimmer(rememberZashiShimmer())
             ) {

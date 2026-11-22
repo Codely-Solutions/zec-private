@@ -52,6 +52,9 @@ import kotlin.time.Duration.Companion.milliseconds
 interface MetadataDataSource {
     fun observe(key: MetadataKey): Flow<MetadataV3?>
 
+    /** Reads the current file under the datasource lock; the repository owns wallet write admission. */
+    suspend fun read(key: MetadataKey): MetadataV3?
+
     suspend fun flipTxAsBookmarked(txId: String, key: MetadataKey): Boolean
 
     suspend fun createOrUpdateTxNote(
@@ -143,6 +146,8 @@ class MetadataDataSourceImpl(
     private val mergedFiles = ConcurrentHashMap.newKeySet<FileSignature>()
 
     private val isFlushFailureLogged = AtomicBoolean(false)
+
+    override suspend fun read(key: MetadataKey): MetadataV3? = mutex.withLock { getMetadataInternal(key) }
 
     /**
      * Null, then the file content, then every later update for [key]. The updates are subscribed to

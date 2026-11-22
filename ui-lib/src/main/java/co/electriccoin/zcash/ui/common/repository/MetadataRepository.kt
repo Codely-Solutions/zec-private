@@ -114,6 +114,9 @@ interface MetadataRepository {
 
     suspend fun getSwapMetadata(depositAddress: String): TransactionSwapMetadata?
 
+    /** Reloads only the original wallet generation, account and saved route that owned a refresh. */
+    suspend fun reloadSwapMetadata(expected: TransactionSwapMetadata): TransactionSwapMetadata?
+
     fun observeLastUsedAssetHistory(): Flow<Set<SimpleSwapAsset>?>
 
     /** [accountUuid]'s icon colour from [metadata], null while unread or when it has none. */
@@ -296,6 +299,27 @@ class MetadataRepositoryImpl(
             .firstOrNull { it.depositAddress == depositAddress }
             ?.toBusinessObject(simpleSwapAssetProvider)
             ?.copy(ownerAccount = owner, walletWriteToken = token)
+    }
+
+    override suspend fun reloadSwapMetadata(expected: TransactionSwapMetadata): TransactionSwapMetadata? {
+        val owner = expected.ownerAccount ?: return null
+        val token = expected.walletWriteToken ?: return null
+        val key = getMetadataKey(owner, token)
+        return mutex.withLock {
+            walletWriteAccess.write(token) {
+                metadataDataSource.read(key)?.accountMetadata?.swaps?.swapIds
+                    ?.firstOrNull { it.depositAddress == expected.depositAddress }
+                    ?.toBusinessObject(simpleSwapAssetProvider)
+                    ?.takeIf {
+                        it.provider == expected.provider && it.lastUpdated == expected.lastUpdated &&
+                            it.reviewedIdentity == expected.reviewedIdentity && it.mode == expected.mode &&
+                            it.origin.tokenTicker == expected.origin.tokenTicker &&
+                            it.origin.chainTicker == expected.origin.chainTicker &&
+                            it.destination.tokenTicker == expected.destination.tokenTicker &&
+                            it.destination.chainTicker == expected.destination.chainTicker
+                    }?.copy(ownerAccount = owner, walletWriteToken = token)
+            }
+        }
     }
 
     override fun observeLastUsedAssetHistory(): Flow<Set<SimpleSwapAsset>?> =

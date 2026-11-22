@@ -1,8 +1,10 @@
 package co.electriccoin.zcash.ui.common.datasource
 
 import android.content.Context
+import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
+import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
@@ -19,6 +21,8 @@ import co.electriccoin.zcash.ui.common.model.metadata.BookmarkMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapsMetadataV3
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuote
+import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
+import co.electriccoin.zcash.ui.common.model.near.SwapStatusResponseDto
 import co.electriccoin.zcash.ui.common.model.near.QuoteResponseDto
 import co.electriccoin.zcash.ui.common.model.near.SwapType
 import co.electriccoin.zcash.ui.common.model.near.reviewedIdentity
@@ -29,22 +33,39 @@ import co.electriccoin.zcash.ui.common.provider.MetadataStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.MetadataRepositoryImpl
+import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataEncryptorImpl
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataKey
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataSerializer
 import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
+import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.common.usecase.SaveORSwapUseCase
+import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
+import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailVM
+import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailArgs
+import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
+import co.electriccoin.zcash.ui.R
 import com.google.crypto.tink.InsecureSecretKeyAccess
 import com.google.crypto.tink.util.SecretBytes
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.test.setMain
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -99,13 +120,16 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
-    fun anOpenStatusObserverCanRetainProcessingAfterAnotherObserverSavedSuccess() = runTest {
+    fun anOpenDetailReloadsSettlementAfterAnotherObserverSavedSuccess() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        mockkObject(FiatCurrency.USD)
+        every { FiatCurrency.USD.symbol } returns "$"
         val quote = fundingQuote(SwapType.FLEX_INPUT)
         val metadata = repository(metadataProvider)
         SaveORSwapUseCase(mockk(), metadata, mockk()).persistBeforeFunding(quote)
         fun status(value: co.electriccoin.zcash.ui.common.model.near.SwapStatus, time: String) =
-            co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus(
-                response = co.electriccoin.zcash.ui.common.model.near.SwapStatusResponseDto(
+            NearSwapQuoteStatus(
+                response = SwapStatusResponseDto(
                     quoteResponse = quote.response,
                     status = value,
                     updatedAt = time,
@@ -123,19 +147,24 @@ class MetadataDataSourceFileTest {
             co.electriccoin.zcash.ui.common.model.near.SwapStatus.SUCCESS, "2026-11-22T12:02:00Z"
         )
         var requests = 0
-        val swaps = mockk<co.electriccoin.zcash.ui.common.repository.SwapRepository> {
+        val swaps = mockk<SwapRepository> {
             coEvery { checkSwapStatus(any()) } answers {
                 when (++requests) {
                     1 -> processing
                     2 -> success
-                    else -> processing
+                    3 -> processing
+                    else -> throw IOException("Synthetic unavailable provider")
                 }
             }
         }
-        val useCase = co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase(metadata, swaps)
-        val first = mutableListOf<co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData>()
-        val second = mutableListOf<co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData>()
-        val firstJob = backgroundScope.launch { useCase.observe("deposit").collect { first += it } }
+        val useCase = GetSwapStatusUseCase(metadata, swaps)
+        val second = mutableListOf<SwapQuoteStatusData>()
+        val vm = SwapDetailVM(
+            GetReloadableSwapQuoteUseCase(useCase),
+            SwapDetailArgs("deposit"), mockk(), mockk(),
+            CommonTransactionDetailMapper(), SwapSupportMapper(),
+        )
+        val firstJob = backgroundScope.launch { vm.state.collect {} }
         fun pump(condition: () -> Boolean) {
             val until = System.nanoTime() + 10_000_000_000L
             while (!condition() && System.nanoTime() < until) {
@@ -144,18 +173,62 @@ class MetadataDataSourceFileTest {
             }
             assertTrue(condition(), "The bounded production-flow probe did not reach its target state")
         }
-        pump { first.lastOrNull()?.status?.status == SwapStatus.PROCESSING }
-        val secondJob = backgroundScope.launch { useCase.observe("deposit").collect { second += it } }
-        pump { second.lastOrNull()?.status?.status == SwapStatus.SUCCESS }
-        assertEquals(SwapStatus.SUCCESS, storedSwaps().swapIds.single().status)
-        secondJob.cancel()
-        testScheduler.advanceTimeBy(30_000)
-        pump { first.lastOrNull()?.error != null }
-        assertEquals(SwapStatus.SUCCESS, storedSwaps().swapIds.single().status)
-        assertEquals(SwapStatus.PROCESSING, first.last().status?.status)
-        assertEquals(SwapStatus.PENDING, first.last().savedMetadata?.status)
-        assertTrue(first.last().error is IllegalStateException)
-        firstJob.cancel()
+        try {
+            pump { vm.state.value?.status?.status == SwapStatus.PROCESSING }
+            val secondJob = backgroundScope.launch { useCase.observe("deposit").collect { second += it } }
+            pump { second.lastOrNull()?.status?.status == SwapStatus.SUCCESS }
+            assertEquals(SwapStatus.SUCCESS, storedSwaps().swapIds.single().status)
+            secondJob.cancel()
+            testScheduler.advanceTimeBy(30_000)
+            pump { vm.state.value?.showLiveDetails == false }
+            val completed = checkNotNull(vm.state.value)
+            assertEquals(SwapStatus.SUCCESS, completed.status.status)
+            assertEquals(stringRes(R.string.private_swap_saved_status), completed.status.title)
+            assertTrue(completed.infoFooter != null)
+            assertNull(completed.donationBasisZec)
+            testScheduler.advanceTimeBy(30_000)
+            pump { requests == 4 }
+            assertEquals(completed.transactionHeader, vm.state.value?.transactionHeader)
+            assertEquals(SwapStatus.SUCCESS, vm.state.value?.status?.status)
+            assertEquals(SwapStatus.SUCCESS, storedSwaps().swapIds.single().status)
+            firstJob.cancel()
+            vm.viewModelScope.cancel()
+            testScheduler.advanceTimeBy(90_000)
+            runCurrent()
+            assertEquals(4, requests)
+        } finally {
+            firstJob.cancel()
+            vm.viewModelScope.cancel()
+            unmockkObject(FiatCurrency.USD)
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun aRejectedRefreshReloadsOnlyItsOriginalEntryAndWalletGeneration() = runTest {
+        val ownership = WalletWriteAccess()
+        val metadata = repository(metadataProvider, ownership)
+        val quote = fundingQuote(SwapType.FLEX_INPUT)
+        SaveORSwapUseCase(mockk(), metadata, mockk()).persistBeforeFunding(quote)
+        val expected = checkNotNull(metadata.getSwapMetadata("deposit"))
+        assertEquals(expected, metadata.reloadSwapMetadata(expected))
+        for (other in listOf(
+            expected.copy(depositAddress = "other-deposit"),
+            expected.copy(provider = "other-provider"),
+            expected.copy(lastUpdated = expected.lastUpdated.plusSeconds(1)),
+            expected.copy(reviewedIdentity = "other-review"),
+            expected.copy(mode = SwapMode.EXACT_OUTPUT),
+            expected.copy(destination = swapAsset("eth", "eth")),
+            expected.copy(walletWriteToken = expected.walletWriteToken!! + 1),
+            expected.copy(ownerAccount = null),
+        )) {
+            assertNull(metadata.reloadSwapMetadata(other))
+        }
+        ownership.beginReset()
+        assertNull(metadata.reloadSwapMetadata(expected))
+        ownership.finishReset()
+        ownership.replaceWallet {}
+        assertNull(metadata.reloadSwapMetadata(expected))
     }
 
     @Test
@@ -495,7 +568,10 @@ class MetadataDataSourceFileTest {
             walletWriteAccess = ownership
         )
 
-    private fun TestScope.repository(provider: MetadataProviderImpl): MetadataRepositoryImpl {
+    private fun TestScope.repository(
+        provider: MetadataProviderImpl,
+        ownership: WalletWriteAccess = WalletWriteAccess(),
+    ): MetadataRepositoryImpl {
         val uuid = AccountUuid.new(ByteArray(16))
         val wallet = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(uuid) }
         val accounts = mockk<AccountDataSource> {
@@ -503,7 +579,6 @@ class MetadataDataSourceFileTest {
             every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(listOf(wallet))
             coEvery { getSelectedAccount() } returns wallet
         }
-        val ownership = WalletWriteAccess()
         return MetadataRepositoryImpl(
             accountDataSource = accounts,
             metadataDataSource = dataSource(provider, ownership),
