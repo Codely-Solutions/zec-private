@@ -33970,6 +33970,206 @@ index 000000000..d89066e86
 +        .subtract(BigDecimal.ONE)
 +        .multiply(BigDecimal("100"))
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteInfo.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteInfo.kt
+new file mode 100644
+index 000000000..1efc91678
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteInfo.kt
+@@ -0,0 +1,194 @@
++package co.electriccoin.zcash.ui.screen.swap.quote
++
++import androidx.compose.foundation.layout.BoxWithConstraints
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.Row
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.layout.width
++import androidx.compose.foundation.text.selection.SelectionContainer
++import androidx.compose.material3.ExperimentalMaterial3Api
++import androidx.compose.material3.PlainTooltip
++import androidx.compose.material3.Text
++import androidx.compose.material3.rememberTooltipState
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.graphics.Color
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.platform.LocalDensity
++import androidx.compose.ui.text.TextStyle
++import androidx.compose.ui.text.font.FontWeight
++import androidx.compose.ui.text.rememberTextMeasurer
++import androidx.compose.ui.unit.Constraints
++import androidx.compose.ui.unit.dp
++import co.electriccoin.zcash.ui.common.compose.ZashiTooltipBox
++import co.electriccoin.zcash.ui.design.component.IconButtonState
++import co.electriccoin.zcash.ui.design.component.Spacer
++import co.electriccoin.zcash.ui.design.component.ZashiAutoSizeText
++import co.electriccoin.zcash.ui.design.component.ZashiIconButton
++import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
++import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
++import co.electriccoin.zcash.ui.design.util.getValue
++import kotlin.math.ceil
++import kotlinx.coroutines.launch
++
++@OptIn(ExperimentalMaterial3Api::class)
++@Composable
++private fun QuoteFieldHelp(help: SwapQuoteFieldHelp, tint: Color) {
++    val tooltip = rememberTooltipState(isPersistent = true)
++    val scope = rememberCoroutineScope()
++    ZashiTooltipBox(
++        state = tooltip,
++        tooltip = { PlainTooltip { Text(help.text.getValue(), style = ZashiTypography.textSm) } },
++        anchor = {
++            ZashiIconButton(
++                state = IconButtonState(
++                    icon = co.electriccoin.zcash.ui.design.R.drawable.ic_info,
++                    contentDescription = help.label,
++                    onClick = { scope.launch { tooltip.show() } },
++                ),
++                iconSize = 20.dp,
++                iconTint = tint,
++            )
++        },
++    )
++}
++
++@Composable
++private fun QuoteInfoLabel(
++    item: SwapQuoteInfoItem,
++    style: TextStyle,
++    color: Color,
++    modifier: Modifier,
++) {
++    val label = item.description.getValue()
++    val help = item.help
++    if (help == null) {
++        Text(text = label, modifier = modifier, style = style, color = color)
++    } else {
++        val measurer = rememberTextMeasurer()
++        val density = LocalDensity.current
++        BoxWithConstraints(modifier) {
++            val available = (constraints.maxWidth - with(density) { quoteHelpWidth.roundToPx() }).coerceAtLeast(1)
++            val measured = measurer.measure(label, style, constraints = Constraints(maxWidth = available))
++            val labelWidth = ceil((0 until measured.lineCount).maxOf {
++                measured.getLineRight(it) - measured.getLineLeft(it)
++            }).toInt().coerceIn(1, available)
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                Text(
++                    text = label,
++                    modifier = Modifier.width(with(density) { labelWidth.toDp() }),
++                    style = style,
++                    color = color,
++                )
++                QuoteFieldHelp(help, color)
++            }
++        }
++    }
++}
++
++@Composable
++fun SwapQuoteInfo(
++    item: SwapQuoteInfoItem,
++    descriptionStyle: TextStyle = ZashiTypography.textSm,
++    descriptionFontWeight: FontWeight = FontWeight.Normal,
++    descriptionColor: Color = ZashiColors.Text.textTertiary
++) {
++    val labelStyle = descriptionStyle.copy(fontWeight = descriptionFontWeight)
++    if (item.layout == SwapQuoteInfoLayout.STACKED) {
++        StackedSwapQuoteInfo(item, labelStyle, descriptionColor)
++    } else if (item.help != null) {
++        BoxWithConstraints(Modifier.fillMaxWidth()) {
++            val measurer = rememberTextMeasurer()
++            val labelWidth = measurer.measure(item.description.getValue(), labelStyle, softWrap = false).size.width
++            val titleStyle = ZashiTypography.textSm.copy(fontWeight = FontWeight.Medium)
++            val titleWidth = measurer.measure(item.title.getValue(), titleStyle, softWrap = false).size.width
++            val subtitleWidth = item.subtitle?.let {
++                measurer.measure(it.getValue(), ZashiTypography.textXs, softWrap = false).size.width
++            } ?: 0
++            val helpWidth = with(LocalDensity.current) { quoteHelpWidth.roundToPx() }
++            if (labelWidth + helpWidth + maxOf(titleWidth, subtitleWidth) > constraints.maxWidth) {
++                StackedSwapQuoteInfo(item, labelStyle, descriptionColor)
++            } else {
++                InlineSwapQuoteInfo(item, labelStyle, descriptionColor)
++            }
++        }
++    } else {
++        InlineSwapQuoteInfo(item, labelStyle, descriptionColor)
++    }
++}
++
++@Composable
++private fun InlineSwapQuoteInfo(item: SwapQuoteInfoItem, descriptionStyle: TextStyle, descriptionColor: Color) {
++    Row(verticalAlignment = Alignment.CenterVertically) {
++        QuoteInfoLabel(
++            item = item,
++            style = descriptionStyle,
++            color = descriptionColor,
++            modifier = Modifier.weight(1f),
++        )
++        Column(
++            horizontalAlignment = Alignment.End
++        ) {
++            SelectionContainer {
++                ZashiAutoSizeText(
++                    text = item.title.getValue(),
++                    style = ZashiTypography.textSm,
++                    fontWeight = FontWeight.Medium,
++                    color = ZashiColors.Text.textPrimary,
++                    maxLines = 1
++                )
++            }
++            if (item.subtitle != null) {
++                SelectionContainer {
++                    ZashiAutoSizeText(
++                        text = item.subtitle.getValue(),
++                        style = ZashiTypography.textXs,
++                        color = ZashiColors.Text.textTertiary,
++                        maxLines = 1
++                    )
++                }
++            }
++        }
++    }
++}
++
++@Suppress("MagicNumber")
++@Composable
++private fun StackedSwapQuoteInfo(
++    item: SwapQuoteInfoItem,
++    descriptionStyle: TextStyle,
++    descriptionColor: Color
++) {
++    Column(modifier = Modifier.fillMaxWidth()) {
++        QuoteInfoLabel(
++            item = item,
++            modifier = Modifier.fillMaxWidth(),
++            style = descriptionStyle,
++            color = descriptionColor
++        )
++        Spacer(4.dp)
++        SelectionContainer {
++            Column(modifier = Modifier.fillMaxWidth()) {
++                Text(
++                    modifier = Modifier.fillMaxWidth(),
++                    text = item.title.getValue(),
++                    style = ZashiTypography.textSm,
++                    fontWeight = FontWeight.Medium,
++                    color = ZashiColors.Text.textPrimary
++                )
++                item.subtitle?.let { subtitle ->
++                    Spacer(4.dp)
++                    Text(
++                        modifier = Modifier.fillMaxWidth(),
++                        text = subtitle.getValue(),
++                        style = ZashiTypography.textSm,
++                        color = ZashiColors.Text.textTertiary
++                    )
++                }
++            }
++        }
++    }
++}
++
++private val quoteHelpWidth = 48.dp
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt
 index 2ceac399f..a6d8d3d56 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteState.kt
@@ -34381,58 +34581,62 @@ index 717411935..4149cbc77 100644
 +        ),
 +    )
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
-index 1fa0df8d6..94254140f 100644
+index 1fa0df8d6..97598e84e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
-@@ -4,0 +5 @@ import androidx.compose.foundation.layout.Box
-+import androidx.compose.foundation.layout.BoxWithConstraints
-@@ -8,0 +10,2 @@ import androidx.compose.foundation.layout.fillMaxWidth
+@@ -7 +6,0 @@ import androidx.compose.foundation.layout.PaddingValues
+-import androidx.compose.foundation.layout.Row
+@@ -8,0 +8,2 @@ import androidx.compose.foundation.layout.fillMaxWidth
 +import androidx.compose.foundation.layout.heightIn
 +import androidx.compose.foundation.layout.size
-@@ -9,0 +13 @@ import androidx.compose.foundation.layout.padding
-+import androidx.compose.foundation.layout.width
-@@ -13,0 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
-+import androidx.compose.material3.PlainTooltip
-+import androidx.compose.material3.rememberTooltipState
-+import androidx.compose.runtime.rememberCoroutineScope
-+import co.electriccoin.zcash.ui.design.component.IconButtonState
-+import co.electriccoin.zcash.ui.design.component.ZashiIconButton
-+import co.electriccoin.zcash.ui.common.compose.ZashiTooltipBox
-+import kotlinx.coroutines.launch
-@@ -14,0 +26,6 @@ import androidx.compose.material3.Text
+@@ -11 +11,0 @@ import androidx.compose.foundation.rememberScrollState
+-import androidx.compose.foundation.text.selection.SelectionContainer
+@@ -14,0 +15,6 @@ import androidx.compose.material3.Text
 +import androidx.compose.material3.TextButton
 +import androidx.compose.material3.Icon
 +import androidx.compose.material3.MaterialTheme
 +import androidx.compose.material.icons.Icons
 +import androidx.compose.material.icons.filled.ExpandLess
 +import androidx.compose.material.icons.filled.ExpandMore
-@@ -20,0 +38 @@ import androidx.compose.runtime.setValue
+@@ -20,0 +27 @@ import androidx.compose.runtime.setValue
 +import androidx.compose.runtime.saveable.rememberSaveable
-@@ -23,0 +42 @@ import androidx.compose.ui.graphics.Color
-+import androidx.compose.ui.platform.LocalDensity
-@@ -24,0 +44,3 @@ import androidx.compose.ui.res.painterResource
+@@ -23 +29,0 @@ import androidx.compose.ui.Modifier
+-import androidx.compose.ui.graphics.Color
+@@ -25 +31,3 @@ import androidx.compose.ui.res.painterResource
+-import androidx.compose.ui.text.TextStyle
 +import androidx.compose.ui.res.stringResource
 +import androidx.compose.ui.semantics.semantics
 +import androidx.compose.ui.semantics.stateDescription
-@@ -26,0 +49 @@ import androidx.compose.ui.text.font.FontWeight
-+import androidx.compose.ui.text.rememberTextMeasurer
-@@ -28,0 +52 @@ import androidx.compose.ui.unit.dp
-+import androidx.compose.ui.unit.Constraints
-@@ -57,0 +82 @@ import co.electriccoin.zcash.ui.design.util.withStyle
-+import kotlin.math.ceil
-@@ -184,0 +210,4 @@ private fun Success(
+@@ -35 +42,0 @@ import co.electriccoin.zcash.ui.design.component.SwapTokenAmountState
+-import co.electriccoin.zcash.ui.design.component.ZashiAutoSizeText
+@@ -184,0 +192,4 @@ private fun Success(
 +            state.priceCheck?.takeIf { it.showInline }?.let {
 +                Spacer(8.dp)
 +                PriceCheckNotice(it)
 +            }
-@@ -200,0 +230,5 @@ private fun Success(
+@@ -200,0 +212,5 @@ private fun Success(
 +            val priceDetails = state.priceCheck?.takeIf { it.detailItem != null || !it.showInline }
 +            if (priceDetails != null || state.minimumDeposit != null) {
 +                Spacer(8.dp)
 +                QuoteDetails(priceDetails, state.minimumDeposit)
 +            }
-@@ -236,0 +271,102 @@ private fun Success(
-+@Composable
+@@ -238,16 +254,10 @@ private fun Success(
+-fun SwapQuoteInfo(
+-    item: SwapQuoteInfoItem,
+-    descriptionStyle: TextStyle = ZashiTypography.textSm,
+-    descriptionFontWeight: FontWeight = FontWeight.Normal,
+-    descriptionColor: Color = ZashiColors.Text.textTertiary
+-) {
+-    Row {
+-        Text(
+-            modifier = Modifier.weight(1f),
+-            text = item.description.getValue(),
+-            style = descriptionStyle,
+-            fontWeight = descriptionFontWeight,
+-            color = descriptionColor
+-        )
+-        Column(
+-            horizontalAlignment = Alignment.End
 +private fun QuoteDetails(state: PriceCheckNoticeState?, minimumDeposit: SwapQuoteInfoItem?) {
 +    var expanded by rememberSaveable { mutableStateOf(false) }
 +    val description = stringResource(
@@ -34443,7 +34647,15 @@ index 1fa0df8d6..94254140f 100644
 +            onClick = { expanded = !expanded },
 +            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).semantics { stateDescription = description },
 +            contentPadding = PaddingValues(0.dp),
-+        ) {
+@@ -255,8 +265,23 @@ fun SwapQuoteInfo(
+-            SelectionContainer {
+-                ZashiAutoSizeText(
+-                    text = item.title.getValue(),
+-                    style = ZashiTypography.textSm,
+-                    fontWeight = FontWeight.Medium,
+-                    color = ZashiColors.Text.textPrimary,
+-                    maxLines = 1
+-                )
 +            Text(
 +                stringResource(R.string.private_quote_details),
 +                modifier = Modifier.weight(1f), textAlign = TextAlign.Start,
@@ -34467,157 +34679,26 @@ index 1fa0df8d6..94254140f 100644
 +            state.detailItem?.let { item ->
 +                Spacer(8.dp)
 +                SwapQuoteInfo(item)
-+            }
+@@ -264,9 +289,6 @@ fun SwapQuoteInfo(
+-            if (item.subtitle != null) {
+-                SelectionContainer {
+-                    ZashiAutoSizeText(
+-                        text = item.subtitle.getValue(),
+-                        style = ZashiTypography.textXs,
+-                        color = ZashiColors.Text.textTertiary,
+-                        maxLines = 1
+-                    )
+-                }
 +            state.explanation?.takeUnless { state.showInline }?.let { explanation ->
 +                Spacer(8.dp)
 +                Text(
 +                    explanation.getValue(), style = MaterialTheme.typography.bodySmall,
 +                    color = MaterialTheme.colorScheme.onSurfaceVariant,
 +                )
-+            }
-+        }
-+    }
-+}
-+
-+@OptIn(ExperimentalMaterial3Api::class)
-+@Composable
-+private fun QuoteFieldHelp(help: SwapQuoteFieldHelp, tint: Color) {
-+    val tooltip = rememberTooltipState(isPersistent = true)
-+    val scope = rememberCoroutineScope()
-+    ZashiTooltipBox(
-+        state = tooltip,
-+        tooltip = { PlainTooltip { Text(help.text.getValue(), style = ZashiTypography.textSm) } },
-+        anchor = {
-+            ZashiIconButton(
-+                state = IconButtonState(
-+                    icon = co.electriccoin.zcash.ui.design.R.drawable.ic_info,
-+                    contentDescription = help.label,
-+                    onClick = { scope.launch { tooltip.show() } },
-+                ),
-+                iconSize = 20.dp,
-+                iconTint = tint,
-+            )
-+        },
-+    )
-+}
-+
-+@Composable
-+private fun QuoteInfoLabel(
-+    item: SwapQuoteInfoItem,
-+    style: TextStyle,
-+    color: Color,
-+    modifier: Modifier,
-+) {
-+    val label = item.description.getValue()
-+    val help = item.help
-+    if (help == null) {
-+        Text(text = label, modifier = modifier, style = style, color = color)
-+    } else {
-+        val measurer = rememberTextMeasurer()
-+        val density = LocalDensity.current
-+        BoxWithConstraints(modifier) {
-+            val available = (constraints.maxWidth - with(density) { quoteHelpWidth.roundToPx() }).coerceAtLeast(1)
-+            val measured = measurer.measure(label, style, constraints = Constraints(maxWidth = available))
-+            val labelWidth = ceil((0 until measured.lineCount).maxOf {
-+                measured.getLineRight(it) - measured.getLineLeft(it)
-+            }).toInt().coerceIn(1, available)
-+            Row(verticalAlignment = Alignment.CenterVertically) {
-+                Text(
-+                    text = label,
-+                    modifier = Modifier.width(with(density) { labelWidth.toDp() }),
-+                    style = style,
-+                    color = color,
-+                )
-+                QuoteFieldHelp(help, color)
-+            }
-+        }
-+    }
-+}
-+
-@@ -244,4 +380,29 @@ fun SwapQuoteInfo(
--    Row {
--        Text(
--            modifier = Modifier.weight(1f),
--            text = item.description.getValue(),
-+    val labelStyle = descriptionStyle.copy(fontWeight = descriptionFontWeight)
-+    if (item.layout == SwapQuoteInfoLayout.STACKED) {
-+        StackedSwapQuoteInfo(item, labelStyle, descriptionColor)
-+    } else if (item.help != null) {
-+        BoxWithConstraints(Modifier.fillMaxWidth()) {
-+            val measurer = rememberTextMeasurer()
-+            val labelWidth = measurer.measure(item.description.getValue(), labelStyle, softWrap = false).size.width
-+            val titleStyle = ZashiTypography.textSm.copy(fontWeight = FontWeight.Medium)
-+            val titleWidth = measurer.measure(item.title.getValue(), titleStyle, softWrap = false).size.width
-+            val subtitleWidth = item.subtitle?.let {
-+                measurer.measure(it.getValue(), ZashiTypography.textXs, softWrap = false).size.width
-+            } ?: 0
-+            val helpWidth = with(LocalDensity.current) { quoteHelpWidth.roundToPx() }
-+            if (labelWidth + helpWidth + maxOf(titleWidth, subtitleWidth) > constraints.maxWidth) {
-+                StackedSwapQuoteInfo(item, labelStyle, descriptionColor)
-+            } else {
-+                InlineSwapQuoteInfo(item, labelStyle, descriptionColor)
-+            }
-+        }
-+    } else {
-+        InlineSwapQuoteInfo(item, labelStyle, descriptionColor)
-+    }
-+}
-+
-+@Composable
-+private fun InlineSwapQuoteInfo(item: SwapQuoteInfoItem, descriptionStyle: TextStyle, descriptionColor: Color) {
-+    Row(verticalAlignment = Alignment.CenterVertically) {
-+        QuoteInfoLabel(
-+            item = item,
-@@ -249,2 +410,2 @@ fun SwapQuoteInfo(
--            fontWeight = descriptionFontWeight,
--            color = descriptionColor
-+            color = descriptionColor,
-+            modifier = Modifier.weight(1f),
-@@ -277,0 +439,40 @@ fun SwapQuoteInfo(
-+@Suppress("MagicNumber")
-+@Composable
-+private fun StackedSwapQuoteInfo(
-+    item: SwapQuoteInfoItem,
-+    descriptionStyle: TextStyle,
-+    descriptionColor: Color
-+) {
-+    Column(modifier = Modifier.fillMaxWidth()) {
-+        QuoteInfoLabel(
-+            item = item,
-+            modifier = Modifier.fillMaxWidth(),
-+            style = descriptionStyle,
-+            color = descriptionColor
-+        )
-+        Spacer(4.dp)
-+        SelectionContainer {
-+            Column(modifier = Modifier.fillMaxWidth()) {
-+                Text(
-+                    modifier = Modifier.fillMaxWidth(),
-+                    text = item.title.getValue(),
-+                    style = ZashiTypography.textSm,
-+                    fontWeight = FontWeight.Medium,
-+                    color = ZashiColors.Text.textPrimary
-+                )
-+                item.subtitle?.let { subtitle ->
-+                    Spacer(4.dp)
-+                    Text(
-+                        modifier = Modifier.fillMaxWidth(),
-+                        text = subtitle.getValue(),
-+                        style = ZashiTypography.textSm,
-+                        color = ZashiColors.Text.textTertiary
-+                    )
-+                }
-+            }
-+        }
-+    }
-+}
-+
-+private val quoteHelpWidth = 48.dp
-+
-@@ -307 +508 @@ private fun SuccessPreview() =
+@@ -307 +329 @@ private fun SuccessPreview() =
 -                                title = stringRes("Zodl").withStyle(),
 +                                title = stringRes("ZEC Private").withStyle(),
-@@ -316 +517 @@ private fun SuccessPreview() =
+@@ -316 +338 @@ private fun SuccessPreview() =
 -                                description = stringRes("ZEC transaction fee"),
 +                                description = stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
