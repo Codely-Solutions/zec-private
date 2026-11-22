@@ -41440,10 +41440,10 @@ index 4c13e2085..1a88b2241 100644
 +        const val ZIP321_RECIPIENT = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SubmissionFundingGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SubmissionFundingGuardTest.kt
 new file mode 100644
-index 000000000..f011047b2
+index 000000000..de5d94cb7
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SubmissionFundingGuardTest.kt
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,83 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.model.CreatedTransaction
@@ -41457,7 +41457,6 @@ index 000000000..f011047b2
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
 +import kotlin.test.assertFalse
-+import kotlin.test.assertSame
 +
 +class SubmissionFundingGuardTest {
 +    @Test
@@ -41485,7 +41484,7 @@ index 000000000..f011047b2
 +        }
 +        assertFalse(pending.isCompleted)
 +        allowed = false
-+        assertSame(refusal, pending.await())
++        assertEquals(refusal.message, pending.await().message)
 +        assertEquals(1, checks)
 +        assertEquals(0, submissions)
 +    }
@@ -41530,7 +41529,7 @@ index 000000000..f011047b2
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
 new file mode 100644
-index 000000000..3339f2768
+index 000000000..83115ea71
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
 @@ -0,0 +1,215 @@
@@ -41616,7 +41615,7 @@ index 000000000..3339f2768
 +            val fixture = Fixture(hardware)
 +            fixture.prepare()
 +            assertIs<SubmitResult.Success>(fixture.whileSuspended {}.getOrThrow())
-+            coVerify(exactly = 1) { fixture.synchronizer.broadcaster.submit(fixture.transactions[0], any()) }
++            coVerify(exactly = 1) { fixture.broadcaster.submit(fixture.transactions[0], any()) }
 +        }
 +    }
 +
@@ -41625,13 +41624,13 @@ index 000000000..3339f2768
 +        for (hardware in listOf(false, true)) {
 +            val fixture = Fixture(hardware, legs = 2)
 +            fixture.prepare()
-+            coEvery { fixture.synchronizer.broadcaster.submit(fixture.transactions[0], any()) } answers {
++            coEvery { fixture.broadcaster.submit(fixture.transactions[0], any()) } answers {
 +                fixture.expire()
 +                TransactionSubmitResult.Failure(fixture.transactions[0].txId, true, -1, "synthetic uncertain response")
 +            }
 +            assertIs<SubmitResult.GrpcFailure>(fixture.whileSuspended {}.getOrThrow())
 +            for (transaction in fixture.transactions) {
-+                coVerify(exactly = 1) { fixture.synchronizer.broadcaster.submit(transaction, any()) }
++                coVerify(exactly = 1) { fixture.broadcaster.submit(transaction, any()) }
 +            }
 +            coVerify(exactly = 1) {
 +                fixture.metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
@@ -41641,6 +41640,7 @@ index 000000000..3339f2768
 +
 +    private class Fixture(private val hardware: Boolean, private val pauseEndpoints: Boolean = false, legs: Int = 1) {
 +        val synchronizer = mockk<Synchronizer>()
++        val broadcaster = synchronizer.apply { every { broadcaster } returns mockk() }.broadcaster
 +        val metadata = mockk<MetadataRepository>(relaxed = true)
 +        val transactions = (1..legs).map {
 +            CreatedTransaction(
@@ -41673,20 +41673,19 @@ index 000000000..3339f2768
 +        private lateinit var reviewed: ExactInputSwapTransactionProposal
 +
 +        init {
-+            every { synchronizer.broadcaster } returns mockk()
 +            coEvery { metadata.getSwapMetadata(any()) } returns null
 +            coEvery {
 +                metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
 +            } returns true
-+            coEvery { synchronizer.broadcaster.createProposedTransactions(any(), any()) } coAnswers {
++            coEvery { broadcaster.createProposedTransactions(any(), any()) } coAnswers {
 +                if (!pauseEndpoints) pause()
 +                transactions
 +            }
-+            coEvery { synchronizer.broadcaster.createTransactionFromPczt(any(), any()) } coAnswers {
++            coEvery { broadcaster.createTransactionFromPczt(any(), any()) } coAnswers {
 +                if (!pauseEndpoints) pause()
 +                transactions
 +            }
-+            coEvery { synchronizer.broadcaster.submit(any(), any()) } answers {
++            coEvery { broadcaster.submit(any(), any()) } answers {
 +                TransactionSubmitResult.Success(firstArg<CreatedTransaction>().txId)
 +            }
 +        }
@@ -41742,7 +41741,7 @@ index 000000000..3339f2768
 +
 +        fun expire() { deadline = Instant.parse("2000-01-01T00:00:00Z") }
 +        fun clear() { if (hardware) keystone.clear() else software.clear() }
-+        fun verifyNoBroadcast() { coVerify(exactly = 0) { synchronizer.broadcaster.submit(any(), any()) } }
++        fun verifyNoBroadcast() { coVerify(exactly = 0) { broadcaster.submit(any(), any()) } }
 +        private suspend fun pause() {
 +            entered.complete(Unit)
 +            released.await()

@@ -80,7 +80,7 @@ class SwapBroadcastDeadlineTest {
             val fixture = Fixture(hardware)
             fixture.prepare()
             assertIs<SubmitResult.Success>(fixture.whileSuspended {}.getOrThrow())
-            coVerify(exactly = 1) { fixture.synchronizer.broadcaster.submit(fixture.transactions[0], any()) }
+            coVerify(exactly = 1) { fixture.broadcaster.submit(fixture.transactions[0], any()) }
         }
     }
 
@@ -89,13 +89,13 @@ class SwapBroadcastDeadlineTest {
         for (hardware in listOf(false, true)) {
             val fixture = Fixture(hardware, legs = 2)
             fixture.prepare()
-            coEvery { fixture.synchronizer.broadcaster.submit(fixture.transactions[0], any()) } answers {
+            coEvery { fixture.broadcaster.submit(fixture.transactions[0], any()) } answers {
                 fixture.expire()
                 TransactionSubmitResult.Failure(fixture.transactions[0].txId, true, -1, "synthetic uncertain response")
             }
             assertIs<SubmitResult.GrpcFailure>(fixture.whileSuspended {}.getOrThrow())
             for (transaction in fixture.transactions) {
-                coVerify(exactly = 1) { fixture.synchronizer.broadcaster.submit(transaction, any()) }
+                coVerify(exactly = 1) { fixture.broadcaster.submit(transaction, any()) }
             }
             coVerify(exactly = 1) {
                 fixture.metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
@@ -105,6 +105,7 @@ class SwapBroadcastDeadlineTest {
 
     private class Fixture(private val hardware: Boolean, private val pauseEndpoints: Boolean = false, legs: Int = 1) {
         val synchronizer = mockk<Synchronizer>()
+        val broadcaster = synchronizer.apply { every { broadcaster } returns mockk() }.broadcaster
         val metadata = mockk<MetadataRepository>(relaxed = true)
         val transactions = (1..legs).map {
             CreatedTransaction(
@@ -137,20 +138,19 @@ class SwapBroadcastDeadlineTest {
         private lateinit var reviewed: ExactInputSwapTransactionProposal
 
         init {
-            every { synchronizer.broadcaster } returns mockk()
             coEvery { metadata.getSwapMetadata(any()) } returns null
             coEvery {
                 metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
             } returns true
-            coEvery { synchronizer.broadcaster.createProposedTransactions(any(), any()) } coAnswers {
+            coEvery { broadcaster.createProposedTransactions(any(), any()) } coAnswers {
                 if (!pauseEndpoints) pause()
                 transactions
             }
-            coEvery { synchronizer.broadcaster.createTransactionFromPczt(any(), any()) } coAnswers {
+            coEvery { broadcaster.createTransactionFromPczt(any(), any()) } coAnswers {
                 if (!pauseEndpoints) pause()
                 transactions
             }
-            coEvery { synchronizer.broadcaster.submit(any(), any()) } answers {
+            coEvery { broadcaster.submit(any(), any()) } answers {
                 TransactionSubmitResult.Success(firstArg<CreatedTransaction>().txId)
             }
         }
@@ -206,7 +206,7 @@ class SwapBroadcastDeadlineTest {
 
         fun expire() { deadline = Instant.parse("2000-01-01T00:00:00Z") }
         fun clear() { if (hardware) keystone.clear() else software.clear() }
-        fun verifyNoBroadcast() { coVerify(exactly = 0) { synchronizer.broadcaster.submit(any(), any()) } }
+        fun verifyNoBroadcast() { coVerify(exactly = 0) { broadcaster.submit(any(), any()) } }
         private suspend fun pause() {
             entered.complete(Unit)
             released.await()

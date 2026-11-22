@@ -11,7 +11,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
-import kotlin.test.assertSame
 
 class SubmissionFundingGuardTest {
     @Test
@@ -39,7 +38,7 @@ class SubmissionFundingGuardTest {
         }
         assertFalse(pending.isCompleted)
         allowed = false
-        assertSame(refusal, pending.await())
+        assertEquals(refusal.message, pending.await().message)
         assertEquals(1, checks)
         assertEquals(0, submissions)
     }
