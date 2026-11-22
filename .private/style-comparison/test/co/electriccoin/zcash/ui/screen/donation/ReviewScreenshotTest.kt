@@ -16,6 +16,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -128,6 +129,7 @@ class ReviewScreenshotTest {
                     }
                     "swap-support-ready" -> {
                         compose.onNodeWithText(text(R.string.reportSwap_report)).assertIsEnabled().assertHasClickAction()
+                        if (!target.isDisplayed()) target.performScrollTo()
                         compose.onNodeWithText(text(R.string.reportSwap_shareQuoteDescription)).assertIsDisplayed()
                         target.assertIsEnabled().assertHasClickAction()
                     }

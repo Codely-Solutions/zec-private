@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.app
 
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.app.Application
 import android.app.KeyguardManager
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -22,6 +23,8 @@ import androidx.test.runner.lifecycle.ActivityLifecycleCallback
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
 import androidx.lifecycle.Lifecycle
+import cash.z.ecc.android.sdk.WalletInitMode
+import cash.z.ecc.android.sdk.model.PersistableWallet
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
@@ -29,9 +32,13 @@ import co.electriccoin.zcash.ui.MainActivity
 import co.electriccoin.zcash.ui.BiometricActivity
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.OnboardingState
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
+import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.ui.common.repository.WalletInitializationState
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRequest
@@ -124,6 +131,54 @@ class ProjectReviewAppAccessTest {
     /** Diagnostic only: exercise the real lifecycle with a backdated monotonic checkpoint. */
     @Test
     fun cancellationAndForcedTimeoutDiagnostic() = verifyBackgroundRelock(forceTimeout = true)
+
+    @Test
+    fun interruptedSetupRequiresCredentialBeforeContinue() = runBlocking {
+        val pin = prepareSecuredGuest()
+        val walletProvider = dependency<PersistableWalletProvider>()
+        val preferences = dependency<StandardPreferenceProvider>()()
+        val repository = dependency<WalletRepository>()
+        check(walletProvider.getPersistableWallet() == null)
+        check(StandardPreferenceKeys.ONBOARDING_STATE.getValue(preferences) == OnboardingState.NONE.toNumber())
+        dependency<IsTorEnabledStorageProvider>().store(false)
+        repository.markIronwoodAnnouncementShown()
+        // Reconstruct the persisted shape of an interrupted setup before the first activity starts.
+        walletProvider.store(
+            PersistableWallet.new(
+                application = context.applicationContext as Application,
+                zcashNetwork = ZcashNetwork.Testnet,
+                endpoint = dependency<LightWalletEndpointProvider>().getDefaultEndpoint(),
+                walletInitMode = WalletInitMode.RestoreWallet
+            )
+        )
+        withTimeout(UI_TIMEOUT_MILLIS) {
+            repository.walletInitialization.first { it == WalletInitializationState.INCOMPLETE }
+            repository.secretState.first { it == SecretState.INCOMPLETE }
+        }
+        val continueLabel = context.getString(R.string.wallet_initialization_continue)
+        val activity = instrumentation.startActivitySync(launchIntent()) as MainActivity
+        try {
+            waitForCredentialEntry()
+            check(!hasLabel(continueLabel) && !hasWalletAction())
+            cancelCredentialEntry()
+            waitForLabel(lockedTitle)
+            check(!hasLabel(continueLabel) && !hasWalletAction())
+            check(StandardPreferenceKeys.ONBOARDING_STATE.getValue(preferences) == OnboardingState.NONE.toNumber())
+            report("interrupted_setup_cancelled")
+
+            retryUnlock(pin)
+            val continueWallet = waitForBounds("continue interrupted setup", requireClick = true) {
+                matchesLabel(it, continueLabel)
+            }
+            check(!hasWalletAction())
+            tap(continueWallet)
+            withTimeout(WALLET_TIMEOUT_MILLIS) { repository.secretState.first { it == SecretState.READY } }
+            waitFor("authenticated wallet action") { hasWalletAction() }
+            report("interrupted_setup_continued")
+        } finally {
+            onMain { activity.finish() }
+        }
+    }
 
     private fun verifyBackgroundRelock(forceTimeout: Boolean) = runBlocking {
         diagnosticMode = forceTimeout

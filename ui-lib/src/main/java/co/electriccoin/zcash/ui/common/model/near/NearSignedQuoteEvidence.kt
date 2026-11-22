@@ -4,7 +4,6 @@ import com.google.crypto.tink.signature.Ed25519PublicKey
 import com.google.crypto.tink.signature.subtle.Ed25519Verifier
 import com.google.crypto.tink.util.Bytes
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -51,16 +50,15 @@ internal fun verifiedNearQuoteEvidence(
         originalJson.encodeToByteArray().size > MAX_QUOTE_EVIDENCE_BYTES
     ) return null
     return try {
-        val response = Json.parseToJsonElement(originalJson) as? JsonObject ?: return null
-        val request = response["quoteRequest"] as? JsonObject ?: return null
-        val quote = response["quote"] as? JsonObject ?: return null
-        if (request["dry"] != JsonPrimitive(false)) return null
-        val signature = (response["signature"] as? JsonPrimitive)?.takeIf { it.isString } ?: return null
+        val response = requireNotNull(Json.parseToJsonElement(originalJson) as? JsonObject)
+        val request = requireNotNull(response["quoteRequest"] as? JsonObject)
+        val quote = requireNotNull(response["quote"] as? JsonObject)
+        require(request["dry"] == JsonPrimitive(false))
+        val signature = requireNotNull(response["signature"] as? JsonPrimitive)
+        require(signature.isString)
         val key = Ed25519PublicKey.create(Bytes.copyFrom(decodeBase58(managerPublicKey)))
         Ed25519Verifier.create(key).verify(decodeBase58(signature.content), quoteMessage(response, request, quote))
         NearSignedQuoteEvidence(originalJson)
-    } catch (_: SerializationException) {
-        null
     } catch (_: IllegalArgumentException) {
         null
     } catch (_: ArithmeticException) {
@@ -85,15 +83,17 @@ private fun JsonObject.selectFields(
     optional: Set<String>,
 ) {
     for ((name, value) in this) {
-        if (name in fields || name in optional && value != JsonNull && value != JsonPrimitive(false)) {
+        if (name in fields || name in optional) {
             val primitive = requireNotNull(value as? JsonPrimitive)
             val normalized = primitive.canonicalize()
-            if (name in fields || normalized != JsonPrimitive(0) && normalized != JsonPrimitive("")) {
+            if (name in fields || normalized !in optionalSignedFieldEmptyValues) {
                 signedFields[name] = normalized
             }
         }
     }
 }
+
+private val optionalSignedFieldEmptyValues = setOf(JsonNull, JsonPrimitive(false), JsonPrimitive(0), JsonPrimitive(""))
 
 // The signed numeric fields in supported routes are small integers. Decline evidence for other
 // numeric forms rather than hashing a spelling different from JavaScript's JSON.stringify.
