@@ -1619,7 +1619,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSelectedEndpointUseCase.kt": "2a51ca562420e1866014a7e47a3b5a1576b8db416ffc8590d9797071684f06a2",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSelectedWalletAccountUseCase.kt": "199d9b836a52427fccfc8adeaeb7f1bba63c58a6379cb9e1a9cef11c2efda83f",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSupportUseCase.kt": "2dc0ecc0d9cb1ff4134a9ca1d16c7a070f3b18ac50eb5938f36e3331d2705b01",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt": "2c885569565e2c416e215db0879628aa01ac0c8d4edec63a7ea4da411d4bd622",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt": "2f0492a7cc260ac39e2fe5d3b0a0b801867ea09efbf657918828e3cbd3b36dd9",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetTotalSpendableBalanceUseCase.kt": "829cc7004a1786c68de3eacb97aea06fece0d8924a84ec0f286352bb75e3110d",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetTransactionDetailByIdUseCase.kt": "8197b2be838d39ed74bd2081866a1ea4550281cb000373019aaed3067941dc4f",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetTransactionFiltersUseCase.kt": "0f83151d28c38f1957bb9c2516c91ce299e078ed220df4990fca7d22f2790f90",

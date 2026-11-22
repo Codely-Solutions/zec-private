@@ -79,7 +79,9 @@ class GetSwapStatusUseCase(
                                 isLoading = false,
                                 error = e,
                                 savedMetadata = latest ?: it.savedMetadata,
-                                status = it.status?.takeIf { live -> latest == null || live.matchesSavedStatus(latest) },
+                                status = it.status?.takeIf { live ->
+                                    latest == null || live.matchesSavedStatus(latest)
+                                },
                             )
                         }
                     }
