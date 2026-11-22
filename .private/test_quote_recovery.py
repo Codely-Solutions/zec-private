@@ -23,6 +23,10 @@ SOURCE, OLD, MAIN = 'a' * 40, 'b' * 40, 'c' * 40
 
 
 class QuoteRecoveryTests(unittest.TestCase):
+    def setUp(self):
+        # These fixtures exercise run/job decisions. Archive and receipt validation uses separate fixtures.
+        self.enterContext(patch.object(hosted_release, 'verify_recovered_receipts'))
+
     def test_market_result_requires_visible_reference_or_warning(self):
         self.assertIsNone(market_reference_state({'quote details', 'market reference'}))
         self.assertIsNone(market_reference_state({'checking market price…', 'confirm'}))
@@ -204,6 +208,7 @@ class QuoteRecoveryTests(unittest.TestCase):
                 patch.object(hosted_release, 'artifact', side_effect=lambda _, i, *args: {'id': i}) as artifact:
             result = resolve(Path('.'), SOURCE, MAIN, '7', metadata)
             self.assertEqual(result, dict(original_controller=MAIN, same_controller_retry='true',
+                                          core_controller=MAIN, core_run=7,
                                           production_id='1', core_id='2', quote_id='3', core_receipt_id='4'))
             self.assertEqual({(call.args[3], call.args[4]) for call in artifact.call_args_list}, {('7', MAIN)})
             self.assertEqual(failure.call_args.args[1]['name'], 'build / hosted_quotes / quote-cycles')
@@ -264,6 +269,13 @@ class QuoteRecoveryTests(unittest.TestCase):
                 patch('release_inputs.version_code', return_value=42), patch('hosted_claim.verify'), \
                 patch('quote_recovery.subprocess.check_output', return_value=preclaim):
             self.assertEqual(unused_reservation(Path('.'), SOURCE, MAIN, '8', prior, '8', metadata), reservation)
+        jobs[2]['conclusion'] = 'success'
+        metadata.api.side_effect = [run]
+        with patch('quote_recovery.git', return_value=prior.encode()), \
+                patch('quote_recovery.verify_delta'), patch('quote_recovery.subprocess.check_output') as log:
+            with self.assertRaisesRegex(ValueError, 'Prior run lacks.*hosted_core / wallet'):
+                unused_reservation(Path('.'), SOURCE, MAIN, '7', OLD, '8', metadata)
+            log.assert_not_called()
 
     def test_skipped_wallet_reuses_original_builds_and_passing_quotes(self):
         run = dict(id=7, path=WORKFLOW, event='workflow_dispatch', head_branch='main', head_sha=OLD,
@@ -309,14 +321,14 @@ class QuoteRecoveryTests(unittest.TestCase):
         artifacts = [dict(id=i, name=name, expired=False) for i, name in enumerate(names, 1)]
         claim = dict(ref='refs/heads/testnet-claims/release-42', object={'sha': 'd' * 40})
 
-        def run_case(run, outcomes, available, reservations, *, signing=False):
+        def run_case(run, outcomes, available, reservations, *, signing=False, quote_run=''):
             metadata = Mock()
             metadata.api.side_effect = [run, reservations]
             metadata.pages.side_effect = [
                 [dict(name=name, conclusion=result, run_id=7, head_sha=OLD) for name, result in outcomes.items()],
                 available,
             ]
-            return resolve(Path('.'), SOURCE, MAIN, '7', metadata, signing=signing)
+            return resolve(Path('.'), SOURCE, MAIN, '7', metadata, quote_run, signing=signing)
 
         with patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_delta') as delta, \
                 patch('funded_reuse.select', return_value={'core': {}, 'origin': {}, 'fixture': {}}) as select, \
@@ -342,6 +354,12 @@ class QuoteRecoveryTests(unittest.TestCase):
             recovered = run_case(original, failed_quote, artifacts[:3] + artifacts[4:], [claim])
             quote_receipt_keys = {'quote_receipt_id', 'quote_controller', 'quote_run'}
             self.assertEqual(recovered, {key: value for key, value in expected.items() if key not in quote_receipt_keys})
+            selected_quote = dict(quote_receipt_id='81', quote_run=8, quote_controller='e' * 40)
+            with patch('quote_recovery.resolve_quotes', return_value=selected_quote) as reuse_quotes:
+                failed_upgrade = dict(failed_quote, **{'build / hosted_core / reserve': 'skipped'})
+                result = run_case(original, failed_upgrade, artifacts[:3] + artifacts[4:], [], quote_run='8')
+                self.assertEqual(result, dict(expected, **selected_quote))
+                self.assertTrue(reuse_quotes.call_args.kwargs['funded'])
 
             for run, outcomes, available, reservations, error in (
                 (dict(original, status='in_progress'), states, artifacts, [claim], 'trusted custom run'),
@@ -397,6 +415,169 @@ class QuoteRecoveryTests(unittest.TestCase):
                 else:
                     self.assertEqual(resolve_quotes(Path('.'), SOURCE, MAIN, OLD, '8', metadata),
                                      {'quote_receipt_id': '22', 'quote_controller': quote_head, 'quote_run': 8})
+
+    def test_completed_wallet_or_upgrade_recovery_keeps_independent_apk_and_quote_producers(self):
+        repair = 'd' * 40
+        original_jobs = {
+            'admit_hosted': 'success', 'unsigned': 'success', 'emulator': 'success',
+            'testnet_apk / testnet': 'success', 'hosted_core / prepare-direct': 'success',
+            'hosted_core / reserve': 'success', 'hosted_core / wallet': 'failure',
+            'hosted_quotes / quote-cycles': 'success', 'publish': 'skipped',
+        }
+        original_names = (*tuple(ARTIFACTS.values())[:3], 'hosted-quote-receipt', 'core-direct-candidate')
+        original = self.recovery_run(7, OLD, original_jobs, original_names)
+        for funded, keep_prepared in ((False, False), (True, False), (True, True)):
+            recovery_jobs = {
+                'admit_hosted': 'success', 'unsigned': 'skipped', 'emulator': 'skipped',
+                'hosted_core / prepare-direct': 'skipped' if keep_prepared else 'success',
+                'hosted_core / reserve': 'skipped' if funded else 'success',
+                'hosted_core / wallet': 'success', 'publish': 'failure',
+            }
+            receipt = 'hosted-upgrade-receipt' if funded else 'hosted-core-receipt'
+            names = (receipt,) if keep_prepared else (receipt, 'core-direct-candidate')
+            later = self.recovery_run(8, repair, recovery_jobs, names)
+            with self.subTest(funded=funded, keep_prepared=keep_prepared), \
+                    patch('quote_recovery.require_dispatch') as dispatch, patch('quote_recovery.verify_delta'), \
+                    patch('quote_recovery.verify_receipt_delta'), patch('quote_recovery.unused_reservation') as reserve, \
+                    patch('funded_reuse.select') as select:
+                meta = self.recovery_metadata(original, later)
+                result = resolve(Path('.'), SOURCE, MAIN, '7', meta, core_run='8')
+                self.assertEqual(result['production_id'], '71')
+                self.assertEqual(result['core_id'], '72')
+                self.assertEqual(result['quote_run'], 7)
+                self.assertEqual(result['quote_receipt_id'], '74')
+                self.assertEqual(result['core_run'], 8)
+                self.assertEqual(result['core_controller'], repair)
+                self.assertEqual(result['core_receipt_id'], '81')
+                self.assertEqual(result['prepared_id'], '75' if keep_prepared else '82')
+                self.assertEqual(result['prepared_run'], 7 if keep_prepared else 8)
+                self.assertEqual(result.get('reuse_funded'), 'true' if funded else None)
+                self.assertNotIn('run_missing_core', result)
+                self.assertNotIn('same_controller_retry', result)
+                reserve.assert_not_called()
+                select.assert_not_called()
+                self.assertEqual(dispatch.call_args.kwargs['core_run'], '8')
+                for change, error in (
+                    ('wrong attempt', 'trusted recovery attempt'), ('wrong wallet job', 'hosted_core / wallet'),
+                    ('expired wallet receipt', 'exact trusted run and role'),
+                    ('wrong prepared artifact', 'exact trusted run and role'),
+                    ('publication attestation', 'no publication attestation'),
+                ):
+                    changed_run, changed_jobs, changed_artifacts = self.recovery_run(8, repair, recovery_jobs, names)
+                    if change == 'wrong attempt':
+                        changed_run['run_attempt'] = 2
+                    elif change == 'wrong wallet job':
+                        next(job for job in changed_jobs if job['name'].endswith('/ wallet'))['run_id'] = 7
+                    elif change == 'expired wallet receipt':
+                        changed_artifacts[0]['expired'] = True
+                    elif change == 'wrong prepared artifact':
+                        if keep_prepared:
+                            continue
+                        changed_artifacts[1]['workflow_run']['head_sha'] = OLD
+                    else:
+                        changed_artifacts.append({'name': 'release-attestation-1'})
+                    with self.subTest(change=change), self.assertRaisesRegex(ValueError, error):
+                        resolve(Path('.'), SOURCE, MAIN, '7',
+                                self.recovery_metadata(original, (changed_run, changed_jobs, changed_artifacts)),
+                                core_run='8')
+                with self.assertRaisesRegex(ValueError, 'failed pre-claim run'):
+                    resolve(Path('.'), SOURCE, MAIN, '7', meta, core_run='8', preclaim_run='7')
+                with self.assertRaisesRegex(ValueError, 'build / unsigned'):
+                    resolve(Path('.'), SOURCE, MAIN, '8', self.recovery_metadata(later))
+
+    def test_reserved_same_controller_quote_receipt_survives_signer_failure(self):
+        original_jobs = {
+            'admit_hosted': 'success', 'unsigned': 'success', 'emulator': 'success',
+            'testnet_apk / testnet': 'success', 'hosted_core / wallet': 'success',
+            'hosted_quotes / quote-cycles': 'failure', 'publish': 'skipped',
+        }
+        original = self.recovery_run(7, OLD, original_jobs, tuple(ARTIFACTS.values()))
+        retry = self.recovery_run(8, OLD, {
+            'admit_hosted': 'success', 'reserve_quote_retry': 'success',
+            'hosted_quotes / quote-cycles': 'success', 'publish': 'failure',
+        }, ('hosted-quote-receipt',))
+        for signer, attempt, selector in ((OLD, '1', '8'), (MAIN, '1', '8'), (OLD, '2', '')):
+            with self.subTest(signer=signer, attempt=attempt), \
+                    patch_environment({'GITHUB_RUN_ATTEMPT': attempt, 'GITHUB_RUN_ID': '8' if not selector else '9'}), \
+                    patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_build_candidate'), \
+                    patch('quote_recovery.verify_delta'), patch('quote_recovery.verify_receipt_delta') as delta, \
+                    patch('quote_recovery.require_transient_quote_failure') as transient, \
+                    patch('quote_recovery.verify_quote_reservation') as reservation:
+                meta = self.recovery_metadata(original, retry)
+                outputs = resolve(Path('.'), SOURCE, signer, '7', meta, selector, signing=attempt != '1')
+                self.assertEqual(outputs['quote_run'], 8)
+                self.assertEqual(outputs['quote_receipt_id'], '81')
+                self.assertNotIn('same_controller_retry', outputs)
+                self.assertNotIn('run_missing_core', outputs)
+                transient.assert_called_once()
+                reservation.assert_called_once_with(SOURCE, OLD, '7', '8', meta)
+                delta.assert_called_once_with(Path('.'), OLD, signer, 'Quote')
+                if not selector:
+                    self.assertIn('/actions/runs/8/attempts/1', [call.args[0] for call in meta.api.call_args_list])
+                reservation.side_effect = ValueError('Protected reservation belongs to different inputs')
+                with self.assertRaisesRegex(ValueError, 'different inputs'):
+                    resolve(Path('.'), SOURCE, signer, '7', meta, selector, signing=attempt != '1')
+                reservation.side_effect = None
+                transient.side_effect = ValueError('Original quote job did not prove a transient failure')
+                with self.assertRaisesRegex(ValueError, 'transient failure'):
+                    resolve(Path('.'), SOURCE, signer, '7', meta, selector, signing=attempt != '1')
+
+    def test_cancelled_original_reuses_passing_acceptance_without_funded_eligibility(self):
+        states = {
+            'admit_hosted': 'success', 'unsigned': 'success', 'emulator': 'success',
+            'testnet_apk / testnet': 'success', 'hosted_core / wallet': 'success',
+            'hosted_core / reserve': 'success', 'hosted_core / prepare-direct': 'success',
+            'hosted_quotes / quote-cycles': 'success', 'publish': 'cancelled',
+        }
+        names = (*ARTIFACTS.values(), 'hosted-quote-receipt')
+        for outcome, artifact_names, error in (
+            (states, names, None),
+            ({key: value for key, value in states.items() if key != 'publish'}, names, None),
+            (dict(states, publish=None), names, 'build / publish'),
+            (dict(states, **{'hosted_quotes / quote-cycles': 'cancelled'}), names, 'passing wallet and quote'),
+            (states, names[:-1], 'original artifact: hosted-quote-receipt'),
+            (states, (*names, 'release-attestation-1'), 'retained publication attestation'),
+        ):
+            original = self.recovery_run(7, OLD, outcome, artifact_names, conclusion='cancelled')
+            with self.subTest(error=error), patch('quote_recovery.require_dispatch'), \
+                    patch('quote_recovery.verify_delta'), patch('funded_reuse.select', return_value=None) as select:
+                meta = self.recovery_metadata(original)
+                if error:
+                    with self.assertRaisesRegex(ValueError, error):
+                        resolve(Path('.'), SOURCE, MAIN, '7', meta)
+                else:
+                    outputs = resolve(Path('.'), SOURCE, MAIN, '7', meta)
+                    self.assertEqual(outputs['core_receipt_id'], '74')
+                    self.assertEqual(outputs['quote_receipt_id'], '75')
+                    self.assertNotIn('run_missing_core', outputs)
+                    self.assertNotIn('reuse_funded', outputs)
+                select.assert_not_called()
+
+    @staticmethod
+    def recovery_run(run_id, controller, states, names, *, conclusion='failure'):
+        run = dict(id=run_id, path=WORKFLOW, event='workflow_dispatch', head_branch='main',
+                   head_repository={'full_name': REPOSITORY}, actor={'id': OPERATOR_ID},
+                   head_sha=controller, status='completed', conclusion=conclusion, run_attempt=1)
+        jobs = [dict(name='build / ' + name, conclusion=result, run_id=run_id, head_sha=controller)
+                for name, result in states.items()]
+        artifacts = [dict(id=run_id * 10 + index, name=name, expired=False, size_in_bytes=100,
+                          digest='sha256:' + '0' * 64, workflow_run=dict(id=run_id, head_sha=controller))
+                     for index, name in enumerate(names, 1)]
+        return run, jobs, artifacts
+
+    @staticmethod
+    def recovery_metadata(*runs):
+        meta = Mock()
+        endpoints = {}
+        pages = {}
+        for run, jobs, artifacts in runs:
+            path = f'/actions/runs/{run["id"]}'
+            endpoints.update({path: run, path + '/attempts/1': run})
+            endpoints.update({f'/actions/artifacts/{row["id"]}': row for row in artifacts if 'id' in row})
+            pages.update({path + '/attempts/1/jobs': jobs, path + '/artifacts': artifacts})
+        meta.api.side_effect = endpoints.__getitem__
+        meta.pages.side_effect = lambda path, key: pages[path]
+        return meta
 
     def test_signer_reaches_recovery_admission_before_reading_any_key(self):
         with tempfile.TemporaryDirectory() as temp:

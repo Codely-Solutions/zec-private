@@ -1,8 +1,11 @@
+import hashlib
+import io
 import json
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import Mock, patch
+import zipfile
 from test_support import patch_environment
 
 import hosted_claim
@@ -186,13 +189,119 @@ class HostedReleaseTests(unittest.TestCase):
                 for change in ({'build_source_sha': 'c' * 40}, {'workflow_run_id': RUN},
                                {'quote_controller_sha': CONTROLLER}, {'artifact_run_id': RUN},
                                {'production_artifact': original}):
-                    with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'trusted run'):
+                    with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'trusted run|execution inputs'):
                         read(dict(quote, **change))
                 with self.assertRaisesRegex(ValueError, 'prepared test APK'):
                     read(quote, direct_core_id=2)
                 select.return_value = None
                 with self.assertRaisesRegex(ValueError, 'qualify for reuse'):
                     read(quote)
+
+    def test_admission_and_signing_bind_the_linked_wallet_receipt_and_its_predecessor(self):
+        build_run, core_run, quote_run = '7', '8', '9'
+        original, wallet_controller, quote_controller = 'c' * 40, 'd' * 40, 'e' * 40
+        primary, linked = '1' * 40, '2' * 40
+        metadata = Mock(gh='gh', repo='repos/fixture')
+        records = {}
+        archives = {}
+
+        def artifact(artifact_id, name, run, controller, data=None):
+            archive = io.BytesIO()
+            with zipfile.ZipFile(archive, 'w') as bundle:
+                bundle.writestr(hosted_release.RECEIPT_FILES.get(name, 'other'), data or b'test')
+            content = archive.getvalue()
+            identity = dict(id=artifact_id, digest='sha256:' + hashlib.sha256(content).hexdigest(),
+                            size_in_bytes=len(content))
+            records[f'/actions/artifacts/{artifact_id}'] = dict(identity, name=name, expired=False,
+                                                               workflow_run=dict(id=int(run), head_sha=controller))
+            archives[f'repos/fixture/actions/artifacts/{artifact_id}/zip'] = content
+            return identity
+
+        production = artifact(70, 'validated-unsigned-apk', build_run, original)
+        original_core = artifact(71, 'core-testnet-candidate', build_run, original)
+        quote_producer = artifact(72, 'isolated-ui-repro-apk', build_run, original)
+        preparation = artifact(80, 'core-direct-candidate', core_run, wallet_controller)
+        fixture = dict(source_sha='4' * 40, candidate_apk_sha256='a' * 64)
+        core = dict(build_source_sha=SOURCE, production_artifact=production, candidate_version_code=VERSION,
+                    workflow_run_id=int(core_run), artifact_run_id=int(core_run), producer=preparation,
+                    rehearsal=False, tor_enabled=False, hosted_reservation=linked,
+                    funding_setup={'claim_requests': 1}, candidate_apk_sha256='c' * 64, instrumentation_apk_sha256='d' * 64,
+                    direct_preparation=dict(source=SOURCE, harness_controller=wallet_controller, original_core=original_core,
+                                            baseline_source=fixture['source_sha'], baseline_apk_sha256='a' * 64,
+                                            candidate_apk_sha256='c' * 64, candidate_instrumentation_sha256='d' * 64))
+        quote = dict(build_source_sha=SOURCE, production_artifact=production, candidate_version_code=VERSION,
+                     workflow_run_id=int(quote_run), artifact_run_id=int(build_run), producer=quote_producer,
+                     quote_controller_sha=quote_controller)
+        artifact(81, 'hosted-core-receipt', core_run, wallet_controller, json.dumps(core))
+        artifact(91, 'hosted-quote-receipt', quote_run, quote_controller, json.dumps(quote))
+        prior_binding = hosted_claim.binding(SOURCE, original, VERSION, int(build_run), False)
+        next_binding = hosted_claim.binding(SOURCE, wallet_controller, VERSION, int(core_run), False, primary)
+        primary_ref, linked_ref = hosted_claim.ref_for(prior_binding), hosted_claim.ref_for(next_binding)
+        records['/git/matching-refs/' + primary_ref.removeprefix('refs/')] = [
+            dict(ref=primary_ref, object={'sha': primary}), dict(ref=linked_ref, object={'sha': linked})]
+        for ref, commit, value in ((primary_ref, primary, prior_binding), (linked_ref, linked, next_binding)):
+            records['/git/ref/' + ref.removeprefix('refs/')] = {'object': {'sha': commit}}
+            records['/git/commits/' + commit] = {'message': json.dumps(value)}
+            records['/rules/branches/' + ref.removeprefix('refs/heads/').replace('/', '%2F')] = [
+                {'type': 'update'}, {'type': 'deletion'}]
+        metadata.api.side_effect = records.__getitem__
+        outputs = dict(run=int(build_run), original_controller=original, production_id='70', core_id='71', quote_id='72',
+                       core_receipt_id='81', core_run=int(core_run), core_controller=wallet_controller, prepared_id='80',
+                       quote_receipt_id='91', quote_run=int(quote_run), quote_controller=quote_controller)
+
+        def admit(root):
+            return hosted_release.verify_recovered_receipts(root, SOURCE, CONTROLLER, build_run, outputs, metadata,
+                                                            original_prepared='success', original_reserve='success')
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / '.private').mkdir()
+            (root / '.private/hosted-fixture.json').write_text(json.dumps(fixture))
+            (root / 'hosted-core.json').write_bytes(json.dumps(core).encode())
+            (root / 'hosted-quotes.json').write_bytes(json.dumps(quote).encode())
+            with patch_environment({'GITHUB_RUN_ID': str(RUN)}), patch.object(hosted_release, 'ROOT', root), \
+                    patch.object(hosted_release, 'version_code', return_value=VERSION), \
+                    patch.object(hosted_release, 'input_fingerprint', return_value='candidate-inputs'), \
+                    patch.object(hosted_release, 'validate_core_sources') as validate_core, \
+                    patch.object(hosted_release, 'validate_quotes'), \
+                    patch('hosted_claim.claim_revision', side_effect=lambda commit, **kwargs: commit), \
+                    patch('subprocess.check_output', side_effect=lambda cmd, **kw: archives[cmd[-1]]):
+                admit(root)
+                self.assertEqual(outputs['previous_reservation'], primary)
+                proof = dict(workflow_run_id=build_run, versionCode=VERSION)
+
+                def sign_inputs():
+                    return hosted_release.read_receipts(root, proof=proof, source=SOURCE, controller=CONTROLLER,
+                                                        production_id=70, core_id=71, quote_id=72, metadata=metadata,
+                                                        direct_core_id='80', recovery=outputs)
+
+                accepted_core, accepted_quote = sign_inputs()
+                self.assertEqual(accepted_core['producer_controller_sha'], wallet_controller)
+                self.assertEqual(accepted_quote['producer_controller_sha'], original)
+                self.assertEqual(validate_core.call_count, 2)
+                (root / 'hosted-core.json').write_text(json.dumps(dict(core, workflow_run_id=int(build_run))))
+                with self.assertRaisesRegex(ValueError, 'exact selected artifact'):
+                    sign_inputs()
+                for change, error in (
+                    ({'build_source_sha': '9' * 40}, 'trusted run'),
+                    ({'workflow_run_id': int(build_run)}, 'trusted run'),
+                    ({'artifact_run_id': int(build_run)}, 'different artifact run'),
+                    ({'hosted_reservation': primary}, 'different linked reservation'),
+                    ({'funding_setup': {'claim_requests': 2}}, 'one funded testnet claim'),
+                    ({'funding_setup': {'claim_requests': True}}, 'one funded testnet claim'),
+                ):
+                    artifact(81, 'hosted-core-receipt', core_run, wallet_controller, json.dumps(dict(core, **change)))
+                    with self.subTest(change=change), self.assertRaisesRegex(ValueError, error):
+                        admit(root)
+                artifact(81, 'hosted-core-receipt', core_run, wallet_controller, json.dumps(core))
+                artifact(91, 'hosted-quote-receipt', quote_run, quote_controller,
+                         json.dumps(dict(quote, producer=original_core)))
+                with self.assertRaisesRegex(ValueError, 'different execution inputs or APKs'):
+                    admit(root)
+                artifact(91, 'hosted-quote-receipt', quote_run, quote_controller, json.dumps(quote))
+                records['/git/commits/' + linked]['message'] = json.dumps(dict(next_binding, previous=linked))
+                with self.assertRaisesRegex(ValueError, 'Protected reservation belongs to different inputs'):
+                    admit(root)
 
     def test_fixture_selects_release_upgrade_pair_when_funded_core_is_older(self):
         with tempfile.TemporaryDirectory() as temp:

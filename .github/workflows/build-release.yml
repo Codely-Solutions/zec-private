@@ -56,6 +56,9 @@ on:
       quote_run:
         type: string
         default: ''
+      core_run:
+        type: string
+        default: ''
       preclaim_run:
         type: string
         default: ''
@@ -85,6 +88,7 @@ jobs:
       core_id: ${{ steps.admission.outputs.core_id }}
       quote_id: ${{ steps.admission.outputs.quote_id }}
       core_receipt_id: ${{ steps.admission.outputs.core_receipt_id }}
+      core_receipt_run: ${{ steps.admission.outputs.core_run }}
       quote_receipt_id: ${{ steps.admission.outputs.quote_receipt_id }}
       quote_receipt_run: ${{ steps.admission.outputs.quote_run }}
       run_missing_core: ${{ steps.admission.outputs.run_missing_core }}
@@ -106,6 +110,7 @@ jobs:
           SOURCE_SHA: ${{ inputs.source_sha }}
           RECOVER_RUN: ${{ inputs.recover_run }}
           QUOTE_RUN: ${{ inputs.quote_run }}
+          CORE_RUN: ${{ inputs.core_run }}
           PRECLAIM_RUN: ${{ inputs.preclaim_run }}
           PREFLIGHT_ONLY: ${{ inputs.preflight_only }}
         run: |
@@ -124,15 +129,17 @@ jobs:
               from acceptance_policy import ROOT
               from quote_recovery import resolve
               result = resolve(ROOT, source, controller, os.environ['RECOVER_RUN'], metadata, os.environ['QUOTE_RUN'],
-                               preclaim_run=os.environ['PRECLAIM_RUN'])
+                               preclaim_run=os.environ['PRECLAIM_RUN'], core_run=os.environ['CORE_RUN'])
           else:
+              if any(os.environ[name] for name in ('CORE_RUN', 'QUOTE_RUN', 'PRECLAIM_RUN')):
+                  raise ValueError('Receipt selectors require an original recovery run')
               admit(source, controller, metadata, preflight_only=os.environ['PREFLIGHT_ONLY'] == 'true')
               evidence = select(source, controller, metadata)
               result = {'reuse_funded': 'true'} if evidence else {}
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.writelines(f'{key}={value}\n' for key, value in result.items())
           print('Hosted wallet and quote acceptance use direct app networking.')
-          if result.get('reuse_funded') == 'true':
+          if result.get('reuse_funded') == 'true' and not result.get('core_receipt_id'):
               print('Funded evidence matches. Run the installed upgrade without a faucet claim.')
           PY
   quote_bridge:
@@ -396,7 +403,7 @@ jobs:
       preflight_only: ${{ inputs.preflight_only }}
   hosted_core:
     needs: [admit_hosted, preflight, signing_smoke, unsigned, testnet_apk, recovery_quotes]
-    if: ${{ !cancelled() && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && ((!inputs.recover_run && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success') || (inputs.recover_run && ((needs.admit_hosted.outputs.reuse_funded == 'true' && needs.admit_hosted.outputs.core_receipt_id == '') || (needs.admit_hosted.outputs.run_missing_core == 'true' && (!inputs.preclaim_run || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != ''))))) }}
+    if: ${{ !cancelled() && inputs.hosted && !inputs.preflight_only && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && ((!inputs.recover_run && needs.unsigned.result == 'success' && needs.testnet_apk.result == 'success') || (inputs.recover_run && needs.admit_hosted.outputs.core_receipt_id == '' && (needs.admit_hosted.outputs.reuse_funded == 'true' || (needs.admit_hosted.outputs.run_missing_core == 'true' && (!inputs.preclaim_run || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != ''))))) }}
     permissions:
       actions: read
       contents: write
@@ -415,7 +422,7 @@ jobs:
       prepared_id: ${{ needs.admit_hosted.outputs.prepared_id }}
   reserve_quote_retry:
     needs: [admit_hosted, preflight, signing_smoke, quote_bridge]
-    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && inputs.recover_run && !inputs.preflight_only && needs.admit_hosted.outputs.same_controller_retry == 'true' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && needs.quote_bridge.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && inputs.recover_run && !inputs.preflight_only && needs.admit_hosted.outputs.same_controller_retry == 'true' && needs.admit_hosted.outputs.quote_receipt_id == '' && needs.admit_hosted.result == 'success' && needs.preflight.result == 'success' && needs.quote_bridge.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 4
     permissions:
@@ -538,7 +545,7 @@ jobs:
         with:
           artifact-ids: ${{ needs.admit_hosted.outputs.core_receipt_id || needs.hosted_core.outputs.upgrade_receipt_id || needs.hosted_core.outputs.receipt_id }}
           path: hosted-receipts/
-          run-id: ${{ needs.admit_hosted.outputs.core_receipt_id != '' && inputs.recover_run || github.run_id }}
+          run-id: ${{ needs.admit_hosted.outputs.core_receipt_run || github.run_id }}
           github-token: ${{ github.token }}
           digest-mismatch: error
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
@@ -564,6 +571,7 @@ jobs:
           ARTIFACT_RUN_ID: ${{ inputs.recover_run || inputs.candidate_run || github.run_id }}
           RECOVER_RUN: ${{ inputs.recover_run }}
           RECOVER_QUOTE_RUN: ${{ inputs.quote_run }}
+          RECOVER_CORE_RUN: ${{ inputs.core_run }}
           PRECLAIM_RUN: ${{ inputs.preclaim_run }}
           CONTROLLER_SHA: ${{ github.sha }}
           HOSTED_ACCEPTANCE: ${{ inputs.hosted || false }}

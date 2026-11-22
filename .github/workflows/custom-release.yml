@@ -16,7 +16,11 @@ on:
         type: string
         default: ''
       quote_run:
-        description: Passing quote recovery run if its signer failed before publication
+        description: Passing quote recovery run before an interrupted publication
+        type: string
+        default: ''
+      core_run:
+        description: Passing wallet or installed-upgrade recovery run before an interrupted publication
         type: string
         default: ''
       preclaim_run:
@@ -70,6 +74,7 @@ jobs:
       source_sha: ${{ inputs.source_sha }}
       recover_run: ${{ inputs.recover_run }}
       quote_run: ${{ inputs.quote_run }}
+      core_run: ${{ inputs.core_run }}
       preclaim_run: ${{ inputs.preclaim_run }}
     secrets:
       NTFY_URL: ${{ secrets.NTFY_URL }}

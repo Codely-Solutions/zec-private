@@ -175,7 +175,8 @@ def main():
 
         recovery = resolve(ROOT, expected, controller, recover_run, Metadata(),
                            os.environ.get('RECOVER_QUOTE_RUN', ''), signing=True,
-                           preclaim_run=os.environ.get('PRECLAIM_RUN', ''))
+                           preclaim_run=os.environ.get('PRECLAIM_RUN', ''),
+                           core_run=os.environ.get('RECOVER_CORE_RUN', ''))
         recovery['run'] = int(recover_run)
         if (recovery.get('reuse_funded') == 'true') != reuse_funded:
             raise RuntimeError('Recovery evidence policy differs from verified original run')

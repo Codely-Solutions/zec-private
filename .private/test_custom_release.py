@@ -53,6 +53,28 @@ class CustomReleaseTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'controller-owned files'):
                 custom_release.verify_custom_child(SOURCE, MAIN, Path('.'))
 
+    def test_dispatch_binds_independent_wallet_and_quote_selectors(self):
+        run = dict(id=7, path=custom_release.WORKFLOW, event='workflow_dispatch', head_branch='main',
+                   head_sha=MAIN, head_repository={'full_name': custom_release.REPOSITORY},
+                   actor={'id': custom_release.OPERATOR_ID})
+        inputs = dict(source_sha=SOURCE, operation='recover', recover_run='4', core_run='5', quote_run='6')
+        with tempfile.TemporaryDirectory() as directory:
+            event = Path(directory) / 'event.json'
+            env = dict(GITHUB_REPOSITORY=custom_release.REPOSITORY, GITHUB_REF='refs/heads/main',
+                       GITHUB_EVENT_NAME='workflow_dispatch', GITHUB_RUN_ID='7', GITHUB_EVENT_PATH=str(event))
+            event.write_text(json.dumps({'inputs': inputs}))
+            with patch_environment(env):
+                metadata = Mock()
+                metadata.api.side_effect = [run, {'object': {'sha': MAIN}}]
+                custom_release.require_dispatch(SOURCE, MAIN, metadata, publish=True,
+                                                recover_run='4', core_run='5', quote_run='6')
+                for selector in ({'core_run': ''}, {'core_run': '6'}, {'quote_run': '5'}):
+                    fields = dict(recover_run='4', core_run='5', quote_run='6')
+                    fields.update(selector)
+                    metadata.api.side_effect = [run]
+                    with self.subTest(selector=selector), self.assertRaisesRegex(ValueError, 'does not authorize'):
+                        custom_release.require_dispatch(SOURCE, MAIN, metadata, publish=True, **fields)
+
 
 if __name__ == '__main__':
     unittest.main()

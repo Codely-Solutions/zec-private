@@ -121,6 +121,22 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('stage_bridge(target,', probe)
         self.assertNotIn('assembleDebug', probe)
 
+    def test_recovery_routes_receipts_from_independent_runs_without_new_acceptance(self):
+        root = Path(__file__).resolve().parents[1]
+        workflow = (root / '.github/workflows/build-release.yml').read_text()
+        custom = (root / '.github/workflows/custom-release.yml').read_text()
+        self.assertIn('core_run: ${{ inputs.core_run }}', custom)
+        self.assertIn('core_receipt_run: ${{ steps.admission.outputs.core_run }}', workflow)
+        self.assertIn('RECOVER_CORE_RUN: ${{ inputs.core_run }}', workflow)
+        self.assertIn('run-id: ${{ needs.admit_hosted.outputs.core_receipt_run ||', workflow)
+        self.assertIn('run-id: ${{ needs.admit_hosted.outputs.quote_receipt_run || github.run_id }}', workflow)
+        for job, receipt in (('hosted_core', 'core'), ('hosted_quotes', 'quote'), ('recovery_quotes', 'quote'),
+                             ('reserve_quote_retry', 'quote')):
+            with self.subTest(job=job):
+                section = workflow.split(f'  {job}:\n', 1)[1]
+                condition = next(line for line in section.splitlines() if line.strip().startswith('if:'))
+                self.assertIn(f"needs.admit_hosted.outputs.{receipt}_receipt_id == ''", condition)
+
     def test_signing_policy_rejects_tags_and_wider_branch_access(self):
         metadata = Mock()
         metadata.api.return_value = {'id': 5, 'protection_rules': [], 'deployment_branch_policy': {
