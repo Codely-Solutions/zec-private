@@ -2924,7 +2924,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/advancedsettings/debug/DebugVMTest.kt": "ec99c4194af4fbaf04805887fb213089616749c0301c9751a0971dced7d7eb04",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/balances/spendable/SpendableBalanceVMTest.kt": "e4d60cd488403e9a44c2fbf7168e564a6445e2264204424a454c3bc5926195ae",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/choosehwwallet/ChooseHWWalletVMTest.kt": "cdb9c4441110a7c40eee07f4f0b29a8cd0d8e79f4280b3eee35351d8cc416a8f",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt": "0721cae557df93a1dfe8eea2817d6a3a39569a1634ec2676b6d88b279ff5b561",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt": "b319906084dd4a99af8b6560fca4a0a621449bfff3fef5081043a90073484ee0",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerVMTest.kt": "47bfbbb62409a8544ba19f43376fb8f3172ff419dcfde18a3b7993a426c76a3c",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/colorpicker/ColorPickerViewTest.kt": "03160c5e68bfc13ad530f48f2fda82400efeec35a464b203500970ee88c9dc6b",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/connecthw/HWEnrollmentVMTest.kt": "e42bbae881c40def4f8c462b0f72447b7ee05c42baa7f551bf299a6720b8bb12",
