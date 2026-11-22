@@ -27,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -49,6 +50,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -92,6 +94,27 @@ class SwapSupportVMTest {
         assertReportHandoff(null, "USDC - Arbitrum", "zec - Zcash")
     }
 
+    @Test
+    fun reportIssueWaitsForSavedOrLiveSwapDetails() = runTest {
+        val getStatus = mockk<GetSwapStatusUseCase> {
+            every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData())
+        }
+        val vm = SwapSupportVM(
+            SwapSupportArgs(saved.depositAddress),
+            GetReloadableSwapQuoteUseCase(getStatus),
+            mockk(),
+            mockk(),
+        )
+        val subscription = backgroundScope.launch { vm.state.collect {} }
+        try {
+            runCurrent()
+            assertFalse(assertNotNull(vm.state.value).reportIssueButton.isEnabled)
+        } finally {
+            subscription.cancel()
+            vm.viewModelScope.cancel()
+        }
+    }
+
     private fun TestScope.assertReportHandoff(status: SwapQuoteStatus?, origin: String, destination: String) {
         val application = RuntimeEnvironment.getApplication()
         val supportInfo = mockk<SupportInfo> {
@@ -99,7 +122,7 @@ class SwapSupportVMTest {
         }
         val getSupport = mockk<GetSupportUseCase> { coEvery { this@mockk() } returns supportInfo }
         val share = SendEmailUseCase(application, getSupport, BlockchainProviderImpl(application))
-        val statusFlow = MutableStateFlow(SwapQuoteStatusData(isLoading = true, savedMetadata = saved))
+        val statusFlow = MutableStateFlow(SwapQuoteStatusData())
         val getStatus = mockk<GetSwapStatusUseCase> {
             every { observe(saved.depositAddress) } returns statusFlow
         }
@@ -121,6 +144,7 @@ class SwapSupportVMTest {
             runCurrent()
             val report = assertNotNull(vm.state.value).reportIssueButton
             assertEquals(stringRes(R.string.reportSwap_report), report.text)
+            assertTrue(report.isEnabled)
             assertNull(shadowOf(application).nextStartedActivity)
             report.onClick()
             runCurrent()

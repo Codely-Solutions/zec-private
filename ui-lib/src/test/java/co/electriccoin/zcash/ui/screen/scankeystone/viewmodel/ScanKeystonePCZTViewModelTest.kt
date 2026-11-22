@@ -15,6 +15,7 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
+import io.mockk.Called
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -96,7 +97,7 @@ class ScanKeystonePCZTViewModelTest {
         assertEquals(stringRes(R.string.error_keystone_firmware_title), sheet.title)
         sheet.positive.onClick()
 
-        assertEquals(listOf(SignKeystoneTransactionArgs), routes)
+        assertEquals(listOf<Any>(SignKeystoneTransactionArgs), routes)
     }
 
     private suspend fun assertInvalidScan(error: Exception) {

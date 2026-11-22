@@ -608,6 +608,22 @@ class WalletRepositoryImplTest {
         }
 
     @Test
+    fun retryCommitsAnEndpointThatWasPublishedOnlyInMemory() = runTest {
+        val (repository, harness) = newRepository(OnboardingState.READY, fixtureWallet())
+        val walletProvider = harness.walletProvider as FakePersistableWalletProvider
+        val endpoint = LightWalletEndpoint("retry.example.invalid", 443, true)
+        walletProvider.failWrites = true
+        assertFailsWith<IOException> { repository.updateWalletEndpoint(endpoint) }
+        assertEquals(endpoint, walletProvider.requirePersistableWallet().endpoint)
+        assertTrue(harness.events.isEmpty())
+
+        walletProvider.failWrites = false
+        repository.updateWalletEndpoint(endpoint)
+
+        assertEquals(listOf("wallet"), harness.events)
+    }
+
+    @Test
     fun aDelayedEndpointChangeCannotRestoreAClearedWallet() = runTest {
         val (repository, harness) = newRepository(OnboardingState.READY, fixtureWallet())
         val walletProvider = harness.walletProvider as FakePersistableWalletProvider

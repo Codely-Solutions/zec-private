@@ -135,16 +135,29 @@ class ChooseServerVMTest {
 
     @Test
     fun aFailedEndpointWriteReturnsToEditableStateAndCanBeRetried() = runTest {
+        assertEndpointWriteRecovery(publishBeforeFailure = false)
+    }
+
+    @Test
+    fun aFailedEndpointWriteCanBeRetriedWhenTheValueWasPublishedInMemory() = runTest {
+        assertEndpointWriteRecovery(publishBeforeFailure = true)
+    }
+
+    private suspend fun TestScope.assertEndpointWriteRecovery(publishBeforeFailure: Boolean) {
         withScreen(initiallyAutomatic = false) { screen ->
             coEvery { screen.synchronizer.validateServerEndpoint(any(), corrected) } returns ServerValidation.Valid
-            coEvery { screen.repository.updateWalletEndpoint(corrected) } throws IOException("Cannot save endpoint")
+            coEvery { screen.repository.updateWalletEndpoint(corrected) } coAnswers {
+                if (publishBeforeFailure) screen.storedEndpoint.value = corrected
+                throw IOException("Cannot save endpoint")
+            }
             screen.enter(corrected)
             runCurrent()
             screen.state.saveButton.onClick()
             runCurrent()
 
             val dialog = assertIs<ServerDialogState.Validation>(screen.state.dialogState)
-            assertEquals(bundled, screen.storedEndpoint.value)
+            assertEquals(bundled, screen.durableEndpoint)
+            assertEquals(if (publishBeforeFailure) corrected else bundled, screen.storedEndpoint.value)
             assertFalse(screen.state.saveButton.isLoading)
             assertTrue(screen.state.saveButton.isEnabled)
             assertTrue(screen.state.custom.newServerTextFieldState.isEnabled)
@@ -153,12 +166,13 @@ class ChooseServerVMTest {
             runCurrent()
             assertNull(screen.state.dialogState)
             coEvery { screen.repository.updateWalletEndpoint(corrected) } coAnswers {
-                screen.storedEndpoint.value = corrected
+                screen.saveEndpoint(corrected)
             }
             screen.state.saveButton.onClick()
             runCurrent()
 
             assertEquals(corrected, screen.storedEndpoint.value)
+            assertEquals(corrected, screen.durableEndpoint)
             assertFalse(screen.state.saveButton.isEnabled)
             coVerify(exactly = 2) { screen.repository.updateWalletEndpoint(corrected) }
         }
@@ -178,6 +192,8 @@ class ChooseServerVMTest {
 
     private inner class Screen(initiallyAutomatic: Boolean) {
         val storedEndpoint = MutableStateFlow(bundled)
+        var durableEndpoint = bundled
+            private set
         val automatic = MutableStateFlow(initiallyAutomatic)
         val synchronizer = mockk<Synchronizer>()
         val automaticPreference = mockk<IsServerSelectionAutomaticProvider> {
@@ -185,7 +201,7 @@ class ChooseServerVMTest {
         }
         val repository = mockk<WalletRepository> {
             every { fastestEndpoints } returns MutableStateFlow(FastestServersState(listOf(bundled), false))
-            coEvery { updateWalletEndpoint(any()) } coAnswers { storedEndpoint.value = firstArg() }
+            coEvery { updateWalletEndpoint(any()) } coAnswers { saveEndpoint(firstArg()) }
         }
         private val selectedEndpoint = mockk<GetSelectedEndpointUseCase> {
             every { observe() } returns storedEndpoint
@@ -202,7 +218,7 @@ class ChooseServerVMTest {
         private val persist = PersistServerSelectionUseCase(
             application,
             repository,
-            mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer },
+            mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns this@Screen.synchronizer },
             automaticPreference,
             automaticEndpoint,
         )
@@ -218,6 +234,11 @@ class ChooseServerVMTest {
             automaticEndpoint,
         )
         val state: ChooseServerState get() = assertNotNull(vm.state.value)
+
+        fun saveEndpoint(endpoint: LightWalletEndpoint) {
+            durableEndpoint = endpoint
+            storedEndpoint.value = endpoint
+        }
 
         fun enter(endpoint: LightWalletEndpoint) {
             val text = "${endpoint.host}:${endpoint.port}"
