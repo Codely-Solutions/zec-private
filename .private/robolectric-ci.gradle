@@ -1,7 +1,30 @@
+import org.gradle.api.file.FileCollection
+import org.gradle.api.tasks.Classpath
+import org.gradle.process.CommandLineArgumentProvider
+
+// Use the exact locked runtime agent. Startup instrumentation avoids external self-attachment
+// failures inside bounded Windows jobs and remains supported when dynamic attachment is disabled.
+class MockKStartupAgent implements CommandLineArgumentProvider {
+    @Classpath
+    FileCollection agentClasspath
+
+    @Override
+    Iterable<String> asArguments() {
+        def agents = agentClasspath.files
+        if (agents.empty) return []
+        if (agents.size() != 1) throw new GradleException('Expected one locked Byte Buddy test agent')
+        return ["-javaagent:${agents.first().absolutePath}".toString()]
+    }
+}
+
 // Maven Central canonical endpoint; avoid repo1 rate limiting in the test JVM.
 allprojects {
-    tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
+    tasks.withType(org.gradle.api.tasks.testing.Test).configureEach { testTask ->
         jvmArgs '-XX:+ExitOnOutOfMemoryError', '-XX:-HeapDumpOnOutOfMemoryError'
         systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
+        def agents = project.files(project.provider {
+            testTask.classpath.filter { it.name ==~ /byte-buddy-agent-[0-9][0-9A-Za-z.\-]*\.jar/ }
+        })
+        jvmArgumentProviders.add(new MockKStartupAgent(agentClasspath: agents))
     }
 }
