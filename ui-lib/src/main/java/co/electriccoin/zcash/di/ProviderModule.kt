@@ -32,8 +32,6 @@ import co.electriccoin.zcash.ui.common.provider.IsKeepScreenOnDuringRestoreProvi
 import co.electriccoin.zcash.ui.common.provider.IsKeepScreenOnDuringRestoreProviderImpl
 import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProviderImpl
-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProviderImpl
 import co.electriccoin.zcash.ui.common.provider.IsSwapRefundWarningDismissedStorageProvider
 import co.electriccoin.zcash.ui.common.provider.IsSwapRefundWarningDismissedStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
@@ -82,10 +80,12 @@ import co.electriccoin.zcash.ui.common.provider.WalletBackupRemindMeTimestampSto
 import co.electriccoin.zcash.ui.common.provider.WalletBackupRemindMeTimestampStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProviderImpl
+import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import org.koin.core.module.dsl.factoryOf
 import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.bind
+import org.koin.dsl.binds
 import org.koin.dsl.module
 
 val providerModule =
@@ -95,10 +95,10 @@ val providerModule =
         singleOf(::GetVersionInfoProvider)
         singleOf(::GetZcashCurrencyProvider)
         singleOf(::SelectedAccountUUIDProviderImpl) bind SelectedAccountUUIDProvider::class
-        singleOf(::PersistableWalletProviderImpl) bind PersistableWalletProvider::class
+        singleOf(::PersistableWalletProviderImpl) binds
+            arrayOf(PersistableWalletProvider::class, WalletServerSelectionProvider::class)
         single { WalletWriteAccess(get()) }
         singleOf(::PreferredFiatProviderImpl) bind PreferredFiatProvider::class
-        singleOf(::IsServerSelectionAutomaticProviderImpl) bind IsServerSelectionAutomaticProvider::class
         single {
             SynchronizerProviderImpl(
                 walletCoordinator = get(),

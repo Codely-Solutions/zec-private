@@ -370,8 +370,7 @@ class ViewOnlySpendGuardTest {
                 ProposalDataSourceImpl(
                     synchronizerProvider = synchronizerProvider,
                     lightWalletEndpointProvider = mockk(),
-                    isServerSelectionAutomaticProvider = mockk(),
-                    persistableWalletProvider = mockk(),
+                    walletServerSelectionProvider = mockk(),
                 )
 
             assertViewOnly(assertFailsWith { dataSource.createProposal(viewOnly, mockk(relaxed = true)) })
@@ -389,8 +388,7 @@ class ViewOnlySpendGuardTest {
                 ProposalDataSourceImpl(
                     synchronizerProvider = synchronizerProvider,
                     lightWalletEndpointProvider = mockk(),
-                    isServerSelectionAutomaticProvider = mockk(),
-                    persistableWalletProvider = mockk(),
+                    walletServerSelectionProvider = mockk(),
                 )
 
             assertViewOnly(

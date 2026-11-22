@@ -11,6 +11,12 @@ interface PreferenceProvider {
         value: String?
     )
 
+    /**
+     * Writes a string and retains the previous visible value on failure. The default delegates to
+     * [putString], so providers whose cache can publish before acknowledgement must override this.
+     */
+    suspend fun putStringWithRollback(key: PreferenceKey, value: String?) = putString(key, value)
+
     suspend fun putStringSet(
         key: PreferenceKey,
         value: Set<String>?

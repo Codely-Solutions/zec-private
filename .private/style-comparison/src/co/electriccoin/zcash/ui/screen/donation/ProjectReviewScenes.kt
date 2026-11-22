@@ -19,6 +19,38 @@ import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiView
 @Composable
 internal fun ProjectReviewScene(screen: String): Boolean {
     when (screen) {
+        "gift-reviewed-account", "gift-unknown-account" -> co.electriccoin.zcash.ui.screen.redeemgift.RedeemGiftView(
+            co.electriccoin.zcash.ui.screen.redeemgift.RedeemGiftState.ready(
+                redeemable = cash.z.ecc.android.sdk.model.Zatoshi(10_000_000),
+                ticker = stringRes("ZEC"),
+                message = "Synthetic gift",
+                walletName = stringRes("Reviewed wallet").takeIf { screen == "gift-reviewed-account" },
+                onRedeem = {},
+                onBack = {},
+            )
+        )
+        "setup-incomplete" -> co.electriccoin.zcash.ui.screen.onboarding.view.Onboarding(
+            onImportWallet = {},
+            onCreateWallet = {},
+            onContinueWallet = {},
+            onRetrySetup = {},
+            initialization = co.electriccoin.zcash.ui.common.repository.WalletInitializationState.INCOMPLETE,
+        )
+        "restore-tor-enabled", "restore-tor-disabled" -> co.electriccoin.zcash.ui.screen.restore.tor.RestoreTorView(
+            co.electriccoin.zcash.ui.screen.restore.tor.RestoreTorState(
+                checkbox = CheckboxState(
+                    title = stringRes(R.string.torSettingsSheet_title),
+                    subtitle = stringRes(R.string.torSettingsSheet_desc),
+                    isChecked = screen == "restore-tor-enabled",
+                    onClick = {},
+                ),
+                primary = ButtonState(stringRes(R.string.root_existingWallet_restore), onClick = {}),
+                secondary = ButtonState(
+                    stringRes(co.electriccoin.zcash.ui.design.R.string.general_cancel), onClick = {},
+                ),
+                onBack = {},
+            )
+        )
         "app-locked" -> AppAccessBoundary(
             session = androidx.compose.runtime.remember { AppAccessSession() },
             lockedContent = {

@@ -3,15 +3,19 @@ package co.electriccoin.zcash.ui.screen.redeemgift
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
+import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.model.Account
+import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.GiftCardException
 import co.electriccoin.zcash.ui.common.model.GiftCardRedemption
 import co.electriccoin.zcash.ui.common.model.GiftCardStatus
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 import co.electriccoin.zcash.ui.common.repository.GiftCardRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.GetGiftCardDestinationAddressUseCase
@@ -35,7 +39,7 @@ import io.mockk.unmockkAll
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
@@ -115,12 +119,24 @@ class RedeemGiftVMTest {
         }
 
     @Test
-    fun theDisclaimerNamesNoWalletUntilTheSelectedAccountIsKnown() =
+    fun redemptionWaitsUntilTheSelectedAccountCanBeDisplayed() =
         runTest(dispatcher) {
-            val vm = Env(this, account = null).startedVm()
+            val env = Env(this, account = null)
+            val vm = env.startedVm()
 
             val state = assertIs<RedeemGiftState.Ready>(vm.state.value)
             assertEquals(stringRes(R.string.redeemGift_ready_disclaimer_noWallet), state.disclaimer)
+            assertFalse(state.redeemButton.isEnabled)
+            state.redeemButton.onClick()
+            runCurrent()
+            assertTrue(env.dataSource.redeemedTo.isEmpty())
+
+            val account = zashiAccount()
+            env.selectedAccount.value = account
+            runCurrent()
+            val ready = assertIs<RedeemGiftState.Ready>(vm.state.value)
+            assertEquals(stringRes(R.string.redeemGift_ready_disclaimer, account.name), ready.disclaimer)
+            assertTrue(ready.redeemButton.isEnabled)
         }
 
     /** Reopening a ready card never shows the no-wallet disclaimer first when the wallet is already known. */
@@ -199,6 +215,87 @@ class RedeemGiftVMTest {
                 progress.subtitle
             )
         }
+
+    @Test
+    fun redemptionUsesTheAccountNamedByTheTappedReadyStateAcrossSelectionChanges() = runTest(dispatcher) {
+        val reviewed = zashiAccount()
+        val replacement = mockk<WalletAccount> {
+            every { name } returns stringRes("Another account")
+            every { sdkAccount } returns mockk()
+        }
+        val selected = MutableStateFlow<WalletAccount?>(reviewed)
+        val accountDataSource = mockk<AccountDataSource> {
+            every { selectedAccount } returns selected
+        }
+        val addressResolutionStarted = CompletableDeferred<Unit>()
+        val resolveAddress = CompletableDeferred<Unit>()
+        val synchronizer = mockk<Synchronizer> {
+            coEvery { getCustomUnifiedAddress(any(), UnifiedAddressRequest.Orchard) } coAnswers {
+                val address = if (firstArg<Account>() === reviewed.sdkAccount) ORCHARD_ADDRESS else "u1otherorchard"
+                addressResolutionStarted.complete(Unit)
+                resolveAddress.await()
+                address
+            }
+        }
+        val provider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer }
+        val env = Env(this)
+        val vm = env.newVm(
+            getSelectedWalletAccount = GetSelectedWalletAccountUseCase(accountDataSource),
+            getDestinationAddress = GetGiftCardDestinationAddressUseCase(provider),
+        )
+        backgroundScope.launch { vm.state.collect { } }
+        runCurrent()
+
+        val ready = assertIs<RedeemGiftState.Ready>(vm.state.value)
+        assertEquals(stringRes(R.string.redeemGift_ready_disclaimer, reviewed.name), ready.disclaimer)
+        try {
+            ready.redeemButton.onClick()
+            selected.value = replacement
+            runCurrent()
+            assertTrue(addressResolutionStarted.isCompleted)
+            assertTrue(env.dataSource.redeemedTo.isEmpty())
+
+            resolveAddress.complete(Unit)
+            runCurrent()
+
+            assertEquals(listOf(ORCHARD_ADDRESS), env.dataSource.redeemedTo)
+        } finally {
+            clear(vm)
+        }
+    }
+
+    @Test
+    fun resetCancelsSuspendedGiftAddressResolutionBeforeRedemptionEntersTheDataSource() = runTest(dispatcher) {
+        val addressResolutionStarted = CompletableDeferred<Unit>()
+        val addressResolutionCancelled = CompletableDeferred<Unit>()
+        val provider = mockk<SynchronizerProvider> {
+            coEvery { getSynchronizer() } coAnswers {
+                addressResolutionStarted.complete(Unit)
+                try {
+                    awaitCancellation()
+                } finally {
+                    addressResolutionCancelled.complete(Unit)
+                }
+            }
+        }
+        val env = Env(this)
+        val vm = env.newVm(getDestinationAddress = GetGiftCardDestinationAddressUseCase(provider))
+        backgroundScope.launch { vm.state.collect { } }
+        runCurrent()
+        try {
+            assertIs<RedeemGiftState.Ready>(vm.state.value).redeemButton.onClick()
+            runCurrent()
+            assertTrue(addressResolutionStarted.isCompleted)
+
+            env.quiesceForWalletReset()
+
+            assertTrue(addressResolutionCancelled.isCompleted)
+            assertTrue(env.dataSource.redeemedTo.isEmpty())
+            assertEquals(1, env.dataSource.closed.size)
+        } finally {
+            clear(vm)
+        }
+    }
 
     @Test
     fun anUnknownAmountReceivedShowsTheCopyWithoutAnAmount() =
@@ -740,11 +837,12 @@ class RedeemGiftVMTest {
      */
     private inner class Env(
         private val scope: TestScope,
-        private val account: WalletAccount? = zashiAccount(),
+        account: WalletAccount? = zashiAccount(),
     ) {
         val dataSource = FakeGiftCardDataSource()
         val store = GiftCardLinkStoreImpl()
         val router = RecordingNavigationRouter()
+        val selectedAccount = MutableStateFlow(account)
         val linkId = store.stash(LINK)
         private val repository =
             GiftCardRepositoryImpl(dataSource, store).also {
@@ -759,28 +857,27 @@ class RedeemGiftVMTest {
             return vm
         }
 
+        suspend fun quiesceForWalletReset() = repository.quiesceForWalletReset()
+
         /**
          * A view model whose state nobody collects yet. The selected account comes from a [MutableStateFlow], as the
          * app's account flow is backed by an eagerly shared state flow.
          */
-        fun newVm(linkId: String = this.linkId): RedeemGiftVM {
-            val accounts: Flow<WalletAccount?> = MutableStateFlow(account)
-            val getSelectedWalletAccount =
-                mockk<GetSelectedWalletAccountUseCase> {
-                    every { observe() } returns accounts
-                }
-            val getDestinationAddress =
-                mockk<GetGiftCardDestinationAddressUseCase> {
-                    coEvery { this@mockk.invoke() } returns ORCHARD_ADDRESS
-                }
-            return RedeemGiftVM(
-                args = RedeemGiftArgs(linkId),
-                giftCardRepository = repository,
-                getDestinationAddress = getDestinationAddress,
-                navigationRouter = router,
-                getSelectedWalletAccount = getSelectedWalletAccount,
-            )
-        }
+        fun newVm(
+            linkId: String = this.linkId,
+            getSelectedWalletAccount: GetSelectedWalletAccountUseCase = mockk {
+                every { observe() } returns selectedAccount
+            },
+            getDestinationAddress: GetGiftCardDestinationAddressUseCase = mockk {
+                coEvery { this@mockk.invoke(any()) } returns ORCHARD_ADDRESS
+            },
+        ): RedeemGiftVM = RedeemGiftVM(
+            args = RedeemGiftArgs(linkId),
+            giftCardRepository = repository,
+            getDestinationAddress = getDestinationAddress,
+            navigationRouter = router,
+            getSelectedWalletAccount = getSelectedWalletAccount,
+        )
     }
 
     private fun zashiAccount() =

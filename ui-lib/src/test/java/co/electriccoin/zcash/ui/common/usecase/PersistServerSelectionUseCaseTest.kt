@@ -4,13 +4,15 @@ import android.app.Application
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.type.ServerValidation
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
-import co.electriccoin.zcash.ui.common.repository.WalletRepository
+import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
+import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import java.io.IOException
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -28,15 +30,16 @@ class PersistServerSelectionUseCaseTest {
 
     private val synchronizer = mockk<Synchronizer>()
     private val synchronizerProvider = mockk<SynchronizerProvider>()
-    private val walletRepository = mockk<WalletRepository>(relaxed = true)
-    private val isAutomaticProvider = mockk<IsServerSelectionAutomaticProvider>(relaxed = true)
+    private val storage = mockk<WalletServerSelectionProvider> {
+        every { writeVersion } returns 12L
+        coEvery { storeServerSelection(any(), 12L, null) } returns true
+    }
     private val getAutomaticEndpoint = mockk<GetAutomaticEndpointUseCase>()
     private val useCase =
         PersistServerSelectionUseCase(
             application = mockk<Application>(),
-            walletRepository = walletRepository,
+            walletServerSelectionProvider = storage,
             synchronizerProvider = synchronizerProvider,
-            isServerSelectionAutomaticProvider = isAutomaticProvider,
             getAutomaticEndpoint = getAutomaticEndpoint
         )
 
@@ -52,8 +55,7 @@ class PersistServerSelectionUseCaseTest {
 
             useCase.persistManual(endpoint)
 
-            coVerify(exactly = 1) { isAutomaticProvider.store(false) }
-            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(endpoint) }
+            coVerify(exactly = 1) { storage.storeServerSelection(WalletServerSelection(endpoint, false), 12L, null) }
         }
 
     @Test
@@ -65,8 +67,7 @@ class PersistServerSelectionUseCaseTest {
             val exception = assertFailsWith<PersistEndpointException> { useCase.persistManual(endpoint) }
 
             assertEquals("bad host", exception.message)
-            coVerify(exactly = 0) { isAutomaticProvider.store(any()) }
-            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
+            coVerify(exactly = 0) { storage.storeServerSelection(any(), any(), any()) }
         }
 
     @Test
@@ -76,8 +77,7 @@ class PersistServerSelectionUseCaseTest {
 
             assertFailsWith<PersistEndpointException> { useCase.persistManual(endpoint) }
 
-            coVerify(exactly = 0) { isAutomaticProvider.store(any()) }
-            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
+            coVerify(exactly = 0) { storage.storeServerSelection(any(), any(), any()) }
         }
 
     @Test
@@ -87,7 +87,13 @@ class PersistServerSelectionUseCaseTest {
 
             useCase.persistAutomatic()
 
-            coVerify(exactly = 1) { isAutomaticProvider.store(true) }
-            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(fastest) }
+            coVerify(exactly = 1) { storage.storeServerSelection(WalletServerSelection(fastest, true), 12L, null) }
         }
+    @Test
+    fun refusedWalletWriteIsASaveFailure() = runTest {
+        coEvery { getAutomaticEndpoint() } returns fastest
+        coEvery { storage.storeServerSelection(any(), 12L, null) } returns false
+
+        assertFailsWith<IOException> { useCase.persistAutomatic() }
+    }
 }

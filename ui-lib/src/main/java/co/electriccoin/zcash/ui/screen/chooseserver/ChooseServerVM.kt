@@ -12,11 +12,11 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.component.EndpointTextFieldInnerState
 import co.electriccoin.zcash.ui.common.component.EndpointTextFieldState
 import co.electriccoin.zcash.ui.common.datasource.resolveIsEndpointCustom
+import co.electriccoin.zcash.ui.common.datasource.resolveIsServerSelectionAutomatic
 import co.electriccoin.zcash.ui.common.model.FastestServersState
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
+import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 import co.electriccoin.zcash.ui.common.usecase.GetAutomaticEndpointUseCase
-import co.electriccoin.zcash.ui.common.usecase.GetSelectedEndpointUseCase
-import co.electriccoin.zcash.ui.common.usecase.IsServerAutomaticUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveFastestServersUseCase
 import co.electriccoin.zcash.ui.common.usecase.PersistEndpointException
 import co.electriccoin.zcash.ui.common.usecase.PersistServerSelectionUseCase
@@ -42,8 +42,7 @@ import java.io.IOException
 class ChooseServerVM(
     application: Application,
     observeFastestServers: ObserveFastestServersUseCase,
-    getSelectedEndpoint: GetSelectedEndpointUseCase,
-    isServerAutomatic: IsServerAutomaticUseCase,
+    walletServerSelectionProvider: WalletServerSelectionProvider,
     private val lightWalletEndpointProvider: LightWalletEndpointProvider,
     private val refreshFastestServersUseCase: RefreshFastestServersUseCase,
     private val persistServerSelection: PersistServerSelectionUseCase,
@@ -196,16 +195,19 @@ class ChooseServerVM(
     }
 
     init {
-        combine(
-            isServerAutomatic.observe(),
-            getSelectedEndpoint.observe().filterNotNull()
-        ) { isAutomatic, endpoint -> isAutomatic to endpoint }
-            .onEach { (isAutomatic, endpoint) ->
+        walletServerSelectionProvider.serverSelection
+            .filterNotNull()
+            .onEach { selection ->
                 innerState.update { inner ->
+                    val endpoint = selection.endpoint
                     val persisted =
                         InnerState.Persisted(
                             endpoint = endpoint,
-                            isAutomatic = isAutomatic,
+                            isAutomatic = resolveIsServerSelectionAutomatic(
+                                selection.isAutomatic,
+                                endpoint,
+                                inner.availableServers
+                            ),
                             isCustomEndpoint = resolveIsEndpointCustom(endpoint, inner.availableServers),
                         )
                     inner.copy(

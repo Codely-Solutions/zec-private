@@ -139,6 +139,14 @@ def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.s
     env = dict(os.environ, JAVA_HOME=str(manifest.get('jdk', JDK)), ANDROID_HOME=str(manifest.get('sdk', SDK)),
                ANDROID_SDK_ROOT=str(manifest.get('sdk', SDK)), GRADLE_USER_HOME=str(manifest.get('gradle_home', Path.home()/'.gradle')),
                ANDROID_USER_HOME=str(root/'android-home'), CODEX_GUARD_OUTPUT=str(root))
+    # Windows JDK selectors prefer transient AF_UNIX files, which are reparse
+    # points. Keep the guard's rejection intact and use the JDK's TCP fallback
+    # by selecting an owned, deliberately absent socket directory.
+    socket_directory = root/'unavailable-unix-sockets'
+    if socket_directory.exists():
+        raise ValueError('Unix socket fallback directory must remain absent')
+    env['JDK_JAVA_OPTIONS'] = (env.get('JDK_JAVA_OPTIONS', '') +
+                               ' "-Djdk.net.unixdomain.tmpdir=' + str(socket_directory) + '"').strip()
     operations = iter(manifest.get('operations', []))
     index = 0
     previous = None
@@ -179,7 +187,8 @@ def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.s
             tool = Path(env['JAVA_HOME'])/'bin/java.exe'
             receipt['java_sha256'] = hashlib.sha256(tool.read_bytes()).hexdigest() if tool.exists() else None
             receipt['binding'] = digest(dict(source=commit, config=config, environment={key:env[key] for key in
-                                             ('JAVA_HOME', 'ANDROID_HOME', 'ANDROID_SDK_ROOT', 'GRADLE_USER_HOME')}, java_sha256=receipt['java_sha256'],
+                                             ('JAVA_HOME', 'ANDROID_HOME', 'ANDROID_SDK_ROOT', 'GRADLE_USER_HOME',
+                                              'JDK_JAVA_OPTIONS')}, java_sha256=receipt['java_sha256'],
                                              helper=hashlib.sha256(Path(__file__).read_bytes()).hexdigest()))
             receipt['configuration_changed'] = previous is not None and previous != digest(config)
             previous = digest(config)

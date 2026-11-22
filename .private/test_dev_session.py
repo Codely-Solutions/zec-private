@@ -9,6 +9,20 @@ import dev_session as session
 
 
 class SessionTest(unittest.TestCase):
+    def test_java_socket_fallback_preserves_existing_child_options_and_keeps_directory_absent(self):
+        from test_support import patch_environment
+        options = []
+        def runner(command, cwd, seconds, root, name, **kwargs):
+            value = kwargs['environment']['JDK_JAVA_OPTIONS']
+            self.assertTrue(value.startswith('-Dexisting.option=kept '))
+            self.assertIn('"-Djdk.net.unixdomain.tmpdir='+str(root/'unavailable-unix-sockets')+'"', value)
+            self.assertFalse((root/'unavailable-unix-sockets').exists())
+            options.append(value)
+            return dict(exitCode=0)
+        with patch_environment({'JDK_JAVA_OPTIONS': '-Dexisting.option=kept'}):
+            self.run_session([self.operation(self.first)], runner)
+        self.assertEqual(len(options), 1)
+
     def test_filters_bind_to_each_unit_task_before_other_task_options(self):
         tasks = [':ui-lib:testReleaseUnitTest', ':app:assembleDebug', ':wallet-foundation-lib:test', ':detektAll']
         command = session.gradle(self.root, dict(tasks=tasks, tests=['Fixture*']), session.JDK)

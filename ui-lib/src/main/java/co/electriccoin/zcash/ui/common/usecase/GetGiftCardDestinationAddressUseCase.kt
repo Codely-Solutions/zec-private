@@ -1,20 +1,17 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
-import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 
 /**
- * The address a redeemed gift card is swept to: the selected account's Orchard-only unified address.
+ * Resolves the Orchard-only unified address of the account reviewed for gift redemption.
  */
 class GetGiftCardDestinationAddressUseCase(
-    private val accountDataSource: AccountDataSource,
     private val synchronizerProvider: SynchronizerProvider,
 ) {
-    suspend operator fun invoke(): String {
-        val account = accountDataSource.getSelectedAccount()
-        return synchronizerProvider
+    suspend operator fun invoke(account: WalletAccount): String =
+        synchronizerProvider
             .getSynchronizer()
             .getCustomUnifiedAddress(account.sdkAccount, UnifiedAddressRequest.Orchard)
-    }
 }

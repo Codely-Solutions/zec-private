@@ -11,6 +11,7 @@ import cash.z.ecc.android.sdk.model.UnifiedSpendingKey
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
+import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
 import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
@@ -122,11 +123,10 @@ class SwapBroadcastDeadlineTest {
         private val dataSource = ProposalDataSourceImpl(
             mockk { coEvery { getSynchronizer() } returns this@Fixture.synchronizer },
             mockk { every { getEndpoints() } returns listOf(endpoint) },
-            mockk { coEvery { get() } returns true },
             mockk {
-                coEvery { requirePersistableWallet() } coAnswers {
+                coEvery { getServerSelection() } coAnswers {
                     if (pauseEndpoints) pause()
-                    mockk wallet@{ every { this@wallet.endpoint } returns this@Fixture.endpoint }
+                    WalletServerSelection(this@Fixture.endpoint, isAutomatic = true)
                 }
             }
         )

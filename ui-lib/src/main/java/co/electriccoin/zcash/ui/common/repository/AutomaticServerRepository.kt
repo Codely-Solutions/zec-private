@@ -8,10 +8,11 @@ import co.electriccoin.zcash.ui.common.datasource.resolveIsEndpointCustom
 import co.electriccoin.zcash.ui.common.datasource.resolveIsServerSelectionAutomatic
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
+import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 import co.electriccoin.zcash.ui.common.provider.rawWalletBalances
 import co.electriccoin.zcash.ui.common.provider.retainWhileWalletExists
 import kotlinx.coroutines.CoroutineScope
@@ -24,12 +25,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
-import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.cancellation.CancellationException
@@ -51,7 +49,6 @@ interface AutomaticServerRepository {
 }
 
 class AutomaticServerRepositoryImpl(
-    private val walletRepository: WalletRepository,
     private val zashiProposalRepository: ZashiProposalRepository,
     private val keystoneProposalRepository: KeystoneProposalRepository,
     private val ledgerProposalPipeline: LedgerProposalPipeline,
@@ -59,7 +56,7 @@ class AutomaticServerRepositoryImpl(
     private val synchronizerProvider: SynchronizerProvider,
     private val persistableWalletProvider: PersistableWalletProvider,
     private val lightWalletEndpointProvider: LightWalletEndpointProvider,
-    private val isServerSelectionAutomaticProvider: IsServerSelectionAutomaticProvider,
+    private val walletServerSelectionProvider: WalletServerSelectionProvider,
     private val evaluationInterval: EvaluationInterval,
 ) : AutomaticServerRepository {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -79,46 +76,28 @@ class AutomaticServerRepositoryImpl(
             .rawWalletBalances()
             .retainWhileWalletExists(persistableWalletProvider)
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     override val isServerAutomatic: Flow<Boolean> =
-        isServerSelectionAutomaticProvider
-            .observe()
+        walletServerSelectionProvider.serverSelection
+            .filterNotNull()
+            .map { it.isAutomatic() }
             .distinctUntilChanged()
-            .flatMapLatest { isAutomatic ->
-                if (isAutomatic != null) {
-                    flowOf(isAutomatic)
-                } else {
-                    persistableWalletProvider.persistableWallet
-                        .mapNotNull { it?.endpoint }
-                        .map { endpoint ->
-                            resolveIsServerSelectionAutomatic(
-                                isAutomaticPreference = null,
-                                currentEndpoint = endpoint,
-                                knownEndpoints = lightWalletEndpointProvider.getEndpoints()
-                            )
-                        }
-                }
-            }.distinctUntilChanged()
 
-    override suspend fun isServerAutomatic(): Boolean {
-        val preference = isServerSelectionAutomaticProvider.get()
-        // Only the wallet read is guarded; resolving a custom endpoint is needed solely when the
-        // preference was never written. getEndpoints() is an in-memory list, so it stays unguarded.
-        val currentEndpoint =
-            if (preference == null) persistableWalletProvider.getPersistableWallet()?.endpoint else null
-        return resolveIsServerSelectionAutomatic(
-            isAutomaticPreference = preference,
-            currentEndpoint = currentEndpoint,
+    override suspend fun isServerAutomatic(): Boolean =
+        walletServerSelectionProvider.getServerSelection().isAutomatic()
+
+    private fun WalletServerSelection?.isAutomatic() =
+        resolveIsServerSelectionAutomatic(
+            isAutomaticPreference = this?.isAutomatic,
+            currentEndpoint = this?.endpoint,
             knownEndpoints = lightWalletEndpointProvider.getEndpoints()
         )
-    }
 
     // Manual mode alone doesn't mean the endpoint is custom, since manual mode also covers pinning
     // one of our own bundled servers — see resolveIsEndpointCustom.
     override suspend fun isServerCustom(): Boolean {
-        if (isServerAutomatic()) return false
-        val endpoint = persistableWalletProvider.getPersistableWallet()?.endpoint
-        return endpoint != null && resolveIsEndpointCustom(endpoint, lightWalletEndpointProvider.getEndpoints())
+        val selection = walletServerSelectionProvider.getServerSelection() ?: return false
+        return !selection.isAutomatic() &&
+            resolveIsEndpointCustom(selection.endpoint, lightWalletEndpointProvider.getEndpoints())
     }
 
     override fun init() {
@@ -144,8 +123,9 @@ class AutomaticServerRepositoryImpl(
             .mapLatest { guarded("evaluate a server switch") { resolveSwitchCandidate() } }
             .filterNotNull()
             .onEach { candidate ->
-                guarded("switch to ${candidate.host}:${candidate.port}") { applyServerSwitch(candidate) }
-            }
+                val endpoint = candidate.endpoint
+                guarded("switch to ${endpoint.host}:${endpoint.port}") { applyServerSwitch(candidate) }
+            }.map { it.endpoint }
 
     private suspend fun <T> guarded(
         what: String,
@@ -164,13 +144,14 @@ class AutomaticServerRepositoryImpl(
      * reason no snapshot exists, so the failover that matters most cannot be gated forever on the sync it
      * is meant to repair.
      */
-    internal suspend fun resolveSwitchCandidate(): LightWalletEndpoint? {
+    internal suspend fun resolveSwitchCandidate(): ServerSwitchCandidate? {
         val candidate = evaluateServerSwitch() ?: return null
+        val endpoint = candidate.endpoint
         val balances = withTimeoutOrNull(BALANCE_SNAPSHOT_TIMEOUT) { walletBalances.filterNotNull().first() }
         if (balances == null) {
             Twig.warn {
                 "Automatic server: no local balance snapshot within $BALANCE_SNAPSHOT_TIMEOUT, applying the " +
-                    "switch to ${candidate.host}:${candidate.port} anyway"
+                    "switch to ${endpoint.host}:${endpoint.port} anyway"
             }
         } else {
             Twig.info { "Automatic server: local balance snapshot present, applying the switch" }
@@ -179,19 +160,20 @@ class AutomaticServerRepositoryImpl(
     }
 
     @Suppress("ReturnCount")
-    internal suspend fun evaluateServerSwitch(): LightWalletEndpoint? {
-        if (!isServerAutomatic() || isAppInTransactionState) return null
-        val current = persistableWalletProvider.getPersistableWallet()?.endpoint ?: return null
+    internal suspend fun evaluateServerSwitch(): ServerSwitchCandidate? {
+        val version = walletServerSelectionProvider.writeVersion
+        val current = walletServerSelectionProvider.getServerSelection() ?: return null
+        if (!current.isAutomatic() || isAppInTransactionState) return null
         val candidates = lightWalletEndpointProvider.getEndpoints()
         if (candidates.isEmpty()) return null
         val synchronizer = synchronizerProvider.getSynchronizerOrNull() ?: return null
         return try {
             synchronizer.evaluateServerSwitch(
-                current = current,
+                current = current.endpoint,
                 candidates = candidates,
                 fetchThreshold = 5.seconds,
                 blocksToFetch = 1
-            )
+            )?.let { ServerSwitchCandidate(it, current, version) }
         } finally {
             evaluationInterval.markAttempted()
         }
@@ -206,15 +188,26 @@ class AutomaticServerRepositoryImpl(
      * Synchronizer down and rebuilds it. Which instance receives the confirmation does not matter - the
      * hysteresis state it updates is process-wide and outlives any single Synchronizer.
      */
-    private suspend fun applyServerSwitch(candidate: LightWalletEndpoint) {
-        if (!isServerAutomatic() || isAppInTransactionState) return
-        if (candidate !in lightWalletEndpointProvider.getEndpoints()) return
+    private suspend fun applyServerSwitch(candidate: ServerSwitchCandidate) {
+        if (isAppInTransactionState) return
+        val endpoint = candidate.endpoint
+        if (endpoint !in lightWalletEndpointProvider.getEndpoints()) return
         val synchronizer: Synchronizer? = synchronizerProvider.getSynchronizerOrNull()
-        Twig.info { "Automatic server: switching to ${candidate.host}:${candidate.port}" }
-        walletRepository.updateWalletEndpoint(candidate)
-        synchronizer?.confirmServerSwitch(candidate)
+        Twig.info { "Automatic server: switching to ${endpoint.host}:${endpoint.port}" }
+        val applied = walletServerSelectionProvider.storeServerSelection(
+            WalletServerSelection(endpoint, isAutomatic = true),
+            version = candidate.version,
+            expected = candidate.current
+        )
+        if (applied) synchronizer?.confirmServerSwitch(endpoint)
     }
 }
+
+internal data class ServerSwitchCandidate(
+    val endpoint: LightWalletEndpoint,
+    val current: WalletServerSelection,
+    val version: Long,
+)
 
 /**
  * Rate limit for the automatic-selection lane. `observeOnForeground()` fires on every foreground edge and a

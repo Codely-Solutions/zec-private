@@ -12,7 +12,6 @@ import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import cash.z.ecc.sdk.type.fromResources
-import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.crash.android.GlobalCrashReporter
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.spackle.Twig
@@ -85,8 +84,6 @@ interface WalletRepository {
         enableTor: Boolean = false
     ): Deferred<Unit>
 
-    suspend fun updateWalletEndpoint(endpoint: LightWalletEndpoint)
-
     fun init()
 
     fun refreshFastestServers()
@@ -140,6 +137,9 @@ class WalletRepositoryImpl(
 
     private val refreshFastestServersRequest = MutableSharedFlow<Unit>()
 
+    // A preference commit can publish READY to observers before disk acknowledges it.
+    private val onboardingReadyWritePending = MutableStateFlow(false)
+
     private val onboardingState =
         flow {
             emitAll(
@@ -148,6 +148,10 @@ class WalletRepositoryImpl(
                 }
             )
         }
+            .combine(onboardingReadyWritePending) { state, _ ->
+                // Preference notifications and pending-write updates can arrive in either order.
+                if (onboardingReadyWritePending.value) OnboardingState.NONE else state
+            }
 
     override val walletInitialization =
         combine(
@@ -355,13 +359,6 @@ class WalletRepositoryImpl(
             }
     }
 
-    override suspend fun updateWalletEndpoint(endpoint: LightWalletEndpoint) {
-        val version = persistableWalletProvider.writeVersion
-        val selectedWallet = persistableWalletProvider.getPersistableWallet() ?: return
-        // A failed preference commit may have published this endpoint in memory before it reached disk.
-        persistableWalletProvider.storeIfCurrent(selectedWallet, selectedWallet.copy(endpoint = endpoint), version)
-    }
-
     private suspend fun persistWalletInternal(persistableWallet: PersistableWallet) {
         persistableWalletProvider.store(persistableWallet)
     }
@@ -407,10 +404,12 @@ class WalletRepositoryImpl(
     }
 
     private suspend fun persistOnboardingStateInternal(onboardingState: OnboardingState) {
+        if (onboardingState == OnboardingState.READY) onboardingReadyWritePending.value = true
         StandardPreferenceKeys.ONBOARDING_STATE.putValue(
             preferenceProvider = standardPreferenceProvider(),
             newValue = onboardingState.toNumber()
         )
+        onboardingReadyWritePending.value = false
     }
 
     override fun refreshFastestServers() {
@@ -433,7 +432,8 @@ class WalletRepositoryImpl(
             if (stored != null && (candidate == null || !request.matches(stored))) {
                 throw WalletInitializationConflictException()
             }
-            if (enableTor) isTorEnabledStorageProvider.store(true)
+            // Commit the accepted setting before the wallet can start a synchronizer.
+            isTorEnabledStorageProvider.store(request.enableTor)
             val restoredWallet =
                 stored ?: candidate ?: PersistableWallet(
                     network = network,

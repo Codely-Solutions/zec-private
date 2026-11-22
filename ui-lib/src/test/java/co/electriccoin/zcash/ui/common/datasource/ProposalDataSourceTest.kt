@@ -173,8 +173,7 @@ class ProposalDataSourceTest {
         ProposalDataSourceImpl(
             synchronizerProvider = mockk { coEvery { getSynchronizer() } returns synchronizer },
             lightWalletEndpointProvider = mockk(),
-            isServerSelectionAutomaticProvider = mockk(),
-            persistableWalletProvider = mockk()
+            walletServerSelectionProvider = mockk()
         )
 
     private suspend fun send(): ZecSend =

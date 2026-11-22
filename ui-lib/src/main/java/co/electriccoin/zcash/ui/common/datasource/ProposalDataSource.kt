@@ -27,9 +27,8 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.requireSpendable
 import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
 import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
-import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import java.math.BigDecimal
 import kotlinx.coroutines.Dispatchers
@@ -115,8 +114,7 @@ class UnsupportedZip321PaymentCountException : Exception("ZIP321 requests must c
 class ProposalDataSourceImpl(
     private val synchronizerProvider: SynchronizerProvider,
     private val lightWalletEndpointProvider: LightWalletEndpointProvider,
-    private val isServerSelectionAutomaticProvider: IsServerSelectionAutomaticProvider,
-    private val persistableWalletProvider: PersistableWalletProvider,
+    private val walletServerSelectionProvider: WalletServerSelectionProvider,
 ) : ProposalDataSource {
     override suspend fun createProposal(account: WalletAccount, send: ZecSend): RegularTransactionProposal =
         withContext(Dispatchers.IO) {
@@ -369,14 +367,14 @@ class ProposalDataSourceImpl(
      */
     private suspend fun getSubmissionEndpoints(): List<LightWalletEndpoint> {
         val knownEndpoints = lightWalletEndpointProvider.getEndpoints()
-        val currentEndpoint = persistableWalletProvider.requirePersistableWallet().endpoint
+        val selection = checkNotNull(walletServerSelectionProvider.getServerSelection())
         val isAutomatic =
             resolveIsServerSelectionAutomatic(
-                isAutomaticPreference = isServerSelectionAutomaticProvider.get(),
-                currentEndpoint = currentEndpoint,
+                isAutomaticPreference = selection.isAutomatic,
+                currentEndpoint = selection.endpoint,
                 knownEndpoints = knownEndpoints
             )
-        return if (isAutomatic) knownEndpoints else listOf(currentEndpoint)
+        return if (isAutomatic) knownEndpoints else listOf(selection.endpoint)
     }
 
     @Suppress("TooGenericExceptionCaught")

@@ -105,7 +105,7 @@ sealed interface RedeemGiftState {
 
         /**
          * A card that can be redeemed now. [message] is the sender's note and [walletName] the wallet the funds go to;
-         * `null` picks the copy without a wallet name. [ticker] is the network's currency ticker.
+         * A `null` [walletName] disables redemption until a destination is shown. [ticker] is the network's ticker.
          */
         @Suppress("LongParameterList")
         fun ready(
@@ -130,6 +130,7 @@ sealed interface RedeemGiftState {
                 ButtonState(
                     text = stringRes(R.string.redeemGift_redeem),
                     style = ButtonStyle.PRIMARY,
+                    isEnabled = walletName != null,
                     hapticFeedbackType = HapticFeedbackType.Confirm,
                     onClick = onRedeem
                 ),

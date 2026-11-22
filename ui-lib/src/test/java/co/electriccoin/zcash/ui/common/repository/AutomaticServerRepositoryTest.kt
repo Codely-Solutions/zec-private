@@ -7,10 +7,11 @@ import cash.z.ecc.android.sdk.model.PersistableWallet
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
+import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -48,7 +49,11 @@ class AutomaticServerRepositoryTest {
     private val default = endpoint("zec.rocks")
     private val known = listOf(default, endpoint("na.zec.rocks"))
 
-    private val isAutomaticProvider = mockk<IsServerSelectionAutomaticProvider>(relaxed = true)
+    private val serverSelectionProvider = mockk<WalletServerSelectionProvider> {
+        every { serverSelection } returns MutableStateFlow(null)
+        every { writeVersion } returns 7L
+        coEvery { storeServerSelection(any(), any(), any()) } returns true
+    }
     private val persistedWallet = MutableStateFlow<PersistableWallet?>(null)
     private val persistableWalletProvider =
         mockk<PersistableWalletProvider>(relaxed = true) { every { persistableWallet } returns persistedWallet }
@@ -83,13 +88,10 @@ class AutomaticServerRepositoryTest {
             every { submitState } returns MutableStateFlow<SubmitProposalState?>(null)
         }
 
-    private val walletRepository = mockk<WalletRepository>(relaxed = true)
-
     private val timeSource = TestTimeSource()
 
     private val repository =
         AutomaticServerRepositoryImpl(
-            walletRepository = walletRepository,
             zashiProposalRepository = zashiProposalRepository,
             keystoneProposalRepository = keystoneProposalRepository,
             ledgerProposalPipeline = ledgerProposalPipeline,
@@ -97,30 +99,28 @@ class AutomaticServerRepositoryTest {
             synchronizerProvider = synchronizerProvider,
             persistableWalletProvider = persistableWalletProvider,
             lightWalletEndpointProvider = lightWalletEndpointProvider,
-            isServerSelectionAutomaticProvider = isAutomaticProvider,
+            walletServerSelectionProvider = serverSelectionProvider,
             evaluationInterval = EvaluationInterval(MINIMUM_EVALUATION_INTERVAL, timeSource)
         )
 
     @Test
     fun explicitAutomaticPreferenceIsAutomatic() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns true
+            selectServer(true)
             assertEquals(true, repository.isServerAutomatic())
         }
 
     @Test
     fun explicitManualPreferenceIsManual() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns false
+            selectServer(false)
             assertEquals(false, repository.isServerAutomatic())
         }
 
     @Test
     fun nullPreferenceWithCustomEndpointIsManual() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns null
-            coEvery { persistableWalletProvider.getPersistableWallet() } returns
-                wallet(endpoint("custom.example.com"))
+            selectServer(null, endpoint("custom.example.com"))
 
             assertEquals(false, repository.isServerAutomatic())
         }
@@ -128,8 +128,7 @@ class AutomaticServerRepositoryTest {
     @Test
     fun nullPreferenceWithBundledEndpointIsAutomatic() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns null
-            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.last())
+            selectServer(null, known.last())
 
             assertEquals(true, repository.isServerAutomatic())
         }
@@ -137,8 +136,7 @@ class AutomaticServerRepositoryTest {
     @Test
     fun nullPreferenceWithoutWalletIsAutomatic() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns null
-            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
+            coEvery { serverSelectionProvider.getServerSelection() } returns null
 
             assertEquals(true, repository.isServerAutomatic())
         }
@@ -146,15 +144,14 @@ class AutomaticServerRepositoryTest {
     @Test
     fun automaticIsNeverCustom() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns true
+            selectServer(true)
             assertEquals(false, repository.isServerCustom())
         }
 
     @Test
     fun manualWithBundledEndpointIsNotCustom() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns false
-            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.last())
+            selectServer(false, known.last())
 
             assertEquals(false, repository.isServerCustom())
         }
@@ -162,9 +159,7 @@ class AutomaticServerRepositoryTest {
     @Test
     fun manualWithNonBundledEndpointIsCustom() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns false
-            coEvery { persistableWalletProvider.getPersistableWallet() } returns
-                wallet(endpoint("custom.example.com"))
+            selectServer(false, endpoint("custom.example.com"))
 
             assertEquals(true, repository.isServerCustom())
         }
@@ -172,8 +167,7 @@ class AutomaticServerRepositoryTest {
     @Test
     fun manualWithoutWalletIsNotCustom() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns false
-            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
+            coEvery { serverSelectionProvider.getServerSelection() } returns null
 
             assertEquals(false, repository.isServerCustom())
         }
@@ -181,68 +175,65 @@ class AutomaticServerRepositoryTest {
     @Test
     fun manualSelectionSkipsTheSdkBenchmark() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns false
+            selectServer(false)
 
-            assertNull(repository.evaluateServerSwitch())
+            assertNull(repository.evaluateServerSwitch()?.endpoint)
             coVerify(exactly = 0) { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) }
         }
 
     @Test
     fun inTransactionStateSkipsTheSdkBenchmark() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns true
+            selectServer(true)
             every { zashiProposalRepository.submitState } returns MutableStateFlow(SubmitProposalState.Submitting)
 
-            assertNull(repository.evaluateServerSwitch())
+            assertNull(repository.evaluateServerSwitch()?.endpoint)
             coVerify(exactly = 0) { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) }
         }
 
     @Test
     fun aPendingLedgerProposalSkipsTheSdkBenchmark() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns true
+            selectServer(true)
             every { ledgerProposalPipeline.transactionProposal } returns
                 MutableStateFlow<TransactionProposal?>(mockk<TransactionProposal>())
 
-            assertNull(repository.evaluateServerSwitch())
+            assertNull(repository.evaluateServerSwitch()?.endpoint)
             coVerify(exactly = 0) { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) }
         }
 
     @Test
     fun aPendingLedgerSubmitStateSkipsTheSdkBenchmark() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns true
+            selectServer(true)
             every { ledgerProposalPipeline.submitState } returns MutableStateFlow(SubmitProposalState.Submitting)
 
-            assertNull(repository.evaluateServerSwitch())
+            assertNull(repository.evaluateServerSwitch()?.endpoint)
             coVerify(exactly = 0) { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) }
         }
 
     @Test
     fun sdkDecisionToStayIsPassedThrough() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns true
-            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.first())
+            selectServer(true, known.first())
             coEvery { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) } returns null
 
-            assertNull(repository.evaluateServerSwitch())
+            assertNull(repository.evaluateServerSwitch()?.endpoint)
         }
 
     @Test
     fun sdkDecisionToSwitchIsPassedThrough() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns true
-            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.first())
+            selectServer(true, known.first())
             coEvery { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) } returns known.last()
 
-            assertEquals(known.last(), repository.evaluateServerSwitch())
+            assertEquals(known.last(), repository.evaluateServerSwitch()?.endpoint)
         }
 
     @Test
     fun sdkIsCalledWithTheCurrentEndpointAndEveryKnownCandidate() =
         runTest {
-            coEvery { isAutomaticProvider.get() } returns true
-            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.first())
+            selectServer(true, known.first())
             coEvery { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) } returns null
 
             repository.evaluateServerSwitch()
@@ -266,7 +257,7 @@ class AutomaticServerRepositoryTest {
         runTest {
             stubSwitchDecision(balances = null)
 
-            assertNull(withTimeoutOrNull(1.seconds) { repository.resolveSwitchCandidate() })
+            assertNull(withTimeoutOrNull(1.seconds) { repository.resolveSwitchCandidate()?.endpoint })
         }
 
     @Test
@@ -274,7 +265,7 @@ class AutomaticServerRepositoryTest {
         runTest {
             stubSwitchDecision(balances = emptyMap())
 
-            assertEquals(known.last(), repository.resolveSwitchCandidate())
+            assertEquals(known.last(), repository.resolveSwitchCandidate()?.endpoint)
         }
 
     @Test
@@ -282,7 +273,7 @@ class AutomaticServerRepositoryTest {
         runTest {
             stubSwitchDecision(balances = null)
 
-            assertEquals(known.last(), repository.resolveSwitchCandidate())
+            assertEquals(known.last(), repository.resolveSwitchCandidate()?.endpoint)
         }
 
     @Test
@@ -297,8 +288,32 @@ class AutomaticServerRepositoryTest {
             foregroundEdges.emit(Unit)
             runCurrent()
 
-            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
+            coVerify(exactly = 1) {
+                serverSelectionProvider.storeServerSelection(
+                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
+                )
+            }
             coVerify(exactly = 1) { synchronizer.confirmServerSwitch(known.last()) }
+        }
+
+    @Test
+    fun aRefusedConditionalWriteIsNotConfirmedToTheSdk() =
+        runTest {
+            stubSwitchDecision(balances = emptyMap())
+            coEvery { serverSelectionProvider.storeServerSelection(any(), any(), any()) } returns false
+            val foregroundEdges = MutableSharedFlow<Unit>()
+            repository.observeSwitchCandidates(foregroundEdges).launchIn(backgroundScope)
+            runCurrent()
+
+            foregroundEdges.emit(Unit)
+            runCurrent()
+
+            coVerify(exactly = 1) {
+                serverSelectionProvider.storeServerSelection(
+                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
+                )
+            }
+            coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
         }
 
     @Test
@@ -315,7 +330,7 @@ class AutomaticServerRepositoryTest {
             foregroundEdges.emit(Unit)
             runCurrent()
 
-            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
+            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
             coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
         }
 
@@ -335,7 +350,7 @@ class AutomaticServerRepositoryTest {
             runCurrent()
             lane.cancelAndJoin()
 
-            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
+            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
             coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
         }
 
@@ -372,21 +387,25 @@ class AutomaticServerRepositoryTest {
             foregroundEdges.emit(Unit)
             runCurrent()
 
-            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
+            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
 
             coEvery { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) } returns known.last()
             timeSource += MINIMUM_EVALUATION_INTERVAL
             foregroundEdges.emit(Unit)
             runCurrent()
 
-            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
+            coVerify(exactly = 1) {
+                serverSelectionProvider.storeServerSelection(
+                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
+                )
+            }
         }
 
     @Test
     fun theLaneSurvivesAFailureToApplyTheSwitch() =
         runTest {
             stubSwitchDecision(balances = emptyMap())
-            coEvery { walletRepository.updateWalletEndpoint(any()) } throws IllegalStateException("prefs failed")
+            coEvery { serverSelectionProvider.storeServerSelection(any(), any(), any()) } throws IllegalStateException("prefs failed")
 
             val foregroundEdges = MutableSharedFlow<Unit>()
             repository.observeSwitchCandidates(foregroundEdges).launchIn(backgroundScope)
@@ -395,7 +414,11 @@ class AutomaticServerRepositoryTest {
             foregroundEdges.emit(Unit)
             runCurrent()
 
-            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
+            coVerify(exactly = 1) {
+                serverSelectionProvider.storeServerSelection(
+                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
+                )
+            }
         }
 
     @Test
@@ -418,11 +441,14 @@ class AutomaticServerRepositoryTest {
 
     private fun stubSwitchDecision(balances: Map<AccountUuid, AccountBalance>?) {
         val wallet = wallet(known.first())
-        coEvery { isAutomaticProvider.get() } returns true
-        coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet
+        selectServer(true)
         persistedWallet.value = wallet
         localBalances.value = balances
         coEvery { synchronizer.evaluateServerSwitch(any(), any(), any(), any()) } returns known.last()
+    }
+
+    private fun selectServer(isAutomatic: Boolean?, endpoint: LightWalletEndpoint = known.first()) {
+        coEvery { serverSelectionProvider.getServerSelection() } returns WalletServerSelection(endpoint, isAutomatic)
     }
 
     private fun wallet(walletEndpoint: LightWalletEndpoint) =

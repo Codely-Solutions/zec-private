@@ -15239,6 +15239,17 @@ index 1c946b382..d56790dbc 100644
 @@ -73 +86 @@ org.jetbrains.kotlinx:kotlinx-coroutines-test:1.6.2=commonTestImplementationCopy
 -org.jetbrains.kotlinx:kover-jvm-agent:0.9.7=koverJvmAgent,koverJvmReporter
 +org.jetbrains.kotlinx:kover-jvm-agent:0.9.11=koverJvmAgent,koverJvmReporter
+diff --git a/preference-api-lib/src/commonMain/kotlin/co/electriccoin/zcash/preference/api/PreferenceProvider.kt b/preference-api-lib/src/commonMain/kotlin/co/electriccoin/zcash/preference/api/PreferenceProvider.kt
+index 70f171d11..986c6a22b 100644
+--- a/preference-api-lib/src/commonMain/kotlin/co/electriccoin/zcash/preference/api/PreferenceProvider.kt
++++ b/preference-api-lib/src/commonMain/kotlin/co/electriccoin/zcash/preference/api/PreferenceProvider.kt
+@@ -13,0 +14,6 @@ interface PreferenceProvider {
++    /**
++     * Writes a string and retains the previous visible value on failure. The default delegates to
++     * [putString], so providers whose cache can publish before acknowledgement must override this.
++     */
++    suspend fun putStringWithRollback(key: PreferenceKey, value: String?) = putString(key, value)
++
 diff --git a/preference-impl-android-lib/build.gradle.kts b/preference-impl-android-lib/build.gradle.kts
 index 245c01c78..24b627df4 100644
 --- a/preference-impl-android-lib/build.gradle.kts
@@ -15246,7 +15257,7 @@ index 245c01c78..24b627df4 100644
 @@ -3 +2,0 @@ plugins {
 -    kotlin("android")
 diff --git a/preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/AndroidPreferenceProvider.kt b/preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/AndroidPreferenceProvider.kt
-index 482d6da57..bfaa054ba 100644
+index 482d6da57..edf456718 100644
 --- a/preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/AndroidPreferenceProvider.kt
 +++ b/preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/AndroidPreferenceProvider.kt
 @@ -18 +18 @@ import kotlinx.coroutines.flow.Flow
@@ -15262,13 +15273,36 @@ index 482d6da57..bfaa054ba 100644
 @@ -70 +72 @@ class AndroidPreferenceProvider(
 -            editor.commit()
 +            editor.commitOrThrow()
-@@ -86 +88 @@ class AndroidPreferenceProvider(
+@@ -75,0 +78,19 @@ class AndroidPreferenceProvider(
++    @SuppressLint("ApplySharedPref")
++    override suspend fun putStringWithRollback(key: PreferenceKey, value: String?) = withContext(dispatcher) {
++        mutex.withLock {
++            val previous = sharedPreferences.getString(key.key, null)
++            try {
++                sharedPreferences.edit().putString(key.key, value).commitOrThrow()
++            } catch (failure: IOException) {
++                // Android publishes to memory before committing. Restore the previous value before
++                // readers or another editor can use the unacknowledged update.
++                try {
++                    sharedPreferences.edit().putString(key.key, previous).commitOrThrow()
++                } catch (rollbackFailure: IOException) {
++                    failure.addSuppressed(rollbackFailure)
++                }
++                throw failure
++            }
++        }
++    }
++
+@@ -86 +107 @@ class AndroidPreferenceProvider(
 -            editor.commit()
 +            editor.commitOrThrow()
-@@ -105 +107 @@ class AndroidPreferenceProvider(
+@@ -105 +126 @@ class AndroidPreferenceProvider(
 -            editor.commit()
 +            editor.commitOrThrow()
-@@ -132,7 +134,9 @@ class AndroidPreferenceProvider(
+@@ -121 +142 @@ class AndroidPreferenceProvider(
+-            sharedPreferences.getString(key.key, null)
++            mutex.withLock { sharedPreferences.getString(key.key, null) }
+@@ -132,7 +153,9 @@ class AndroidPreferenceProvider(
 -            val editor = sharedPreferences.edit()
 -
 -            editor.clear()
@@ -15285,14 +15319,14 @@ index 482d6da57..bfaa054ba 100644
 +                    clearRevision.update { it + 1 }
 +                }
 +            }
-@@ -151 +155 @@ class AndroidPreferenceProvider(
+@@ -151 +174 @@ class AndroidPreferenceProvider(
 -                clearPipeline.collect {
 +                clearRevision.collect {
-@@ -156,3 +159,0 @@ class AndroidPreferenceProvider(
+@@ -156,3 +178,0 @@ class AndroidPreferenceProvider(
 -            // Kickstart the emissions
 -            trySend(Unit)
 -
-@@ -168,5 +169,3 @@ class AndroidPreferenceProvider(
+@@ -168,5 +188,3 @@ class AndroidPreferenceProvider(
 -            val editor = sharedPreferences.edit()
 -
 -            editor.remove(key.key)
@@ -15301,7 +15335,7 @@ index 482d6da57..bfaa054ba 100644
 +            mutex.withLock {
 +                sharedPreferences.edit().remove(key.key).commitOrThrow()
 +            }
-@@ -176 +175,6 @@ class AndroidPreferenceProvider(
+@@ -176 +194,6 @@ class AndroidPreferenceProvider(
 -    companion object Factory : AndroidPreferenceFactory by AndroidPreferenceFactoryImpl()
 +    companion object Factory : AndroidPreferenceFactory by AndroidPreferenceFactoryImpl() {
 +        // A failed disk commit can already have changed Android's in-memory value.
@@ -21693,9 +21727,89 @@ index 1d0d5d9fc..10ba80306 100644
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerSelectionTest.kt b/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerSelectionTest.kt
-index d6a43b29c..853fb7119 100644
+index d6a43b29c..b33a8d603 100644
 --- a/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerSelectionTest.kt
 +++ b/ui-lib/src/androidTest/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerSelectionTest.kt
+@@ -23,2 +22,0 @@ import co.electriccoin.zcash.ui.common.model.WalletRestoringState
+-import co.electriccoin.zcash.ui.common.provider.ApplicationStateProviderImpl
+-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
+@@ -28 +26,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+-import co.electriccoin.zcash.ui.common.repository.AutomaticServerRepository
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
+@@ -32 +30,0 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedEndpointUseCase
+-import co.electriccoin.zcash.ui.common.usecase.IsServerAutomaticUseCase
+@@ -66 +63,0 @@ class ChooseServerSelectionTest {
+-            val isServerSelectionAutomaticProvider = FakeIsServerSelectionAutomaticProvider(initial = null)
+@@ -73 +69,0 @@ class ChooseServerSelectionTest {
+-                    isServerSelectionAutomaticProvider,
+@@ -100 +96 @@ class ChooseServerSelectionTest {
+-                isServerSelectionAutomaticProvider.observe().first { it == false }
++                persistableWalletProvider.serverSelection.first { it.isAutomatic == false }
+@@ -102,2 +98,2 @@ class ChooseServerSelectionTest {
+-            assertEquals(false, isServerSelectionAutomaticProvider.get())
+-            assertEquals(currentEndpoint, walletRepository.updatedEndpoint)
++            assertEquals(false, persistableWalletProvider.getServerSelection().isAutomatic)
++            assertEquals(currentEndpoint, persistableWalletProvider.getServerSelection().endpoint)
+@@ -114 +109,0 @@ class ChooseServerSelectionTest {
+-            val isServerSelectionAutomaticProvider = FakeIsServerSelectionAutomaticProvider(initial = null)
+@@ -116 +111,2 @@ class ChooseServerSelectionTest {
+-            val walletRepository = FakeWalletRepository(currentEndpoint, continueEndpointUpdate)
++            persistableWalletProvider.continueEndpointUpdate = continueEndpointUpdate
++            val walletRepository = FakeWalletRepository(currentEndpoint)
+@@ -122 +117,0 @@ class ChooseServerSelectionTest {
+-                    isServerSelectionAutomaticProvider,
+@@ -144 +139 @@ class ChooseServerSelectionTest {
+-                    walletRepository.endpointUpdateStarted.await()
++                    persistableWalletProvider.endpointUpdateStarted.await()
+@@ -199 +194 @@ class ChooseServerSelectionTest {
+-            assertEquals(currentEndpoint, walletRepository.updatedEndpoint)
++            assertEquals(currentEndpoint, persistableWalletProvider.getServerSelection().endpoint)
+@@ -210,2 +205 @@ private fun createViewModel(
+-    persistableWalletProvider: PersistableWalletProvider,
+-    isServerSelectionAutomaticProvider: IsServerSelectionAutomaticProvider,
++    persistableWalletProvider: FakePersistableWalletProvider,
+@@ -221,10 +214,0 @@ private fun createViewModel(
+-    val automaticServerRepository =
+-        object : AutomaticServerRepository {
+-            override val isServerAutomatic = emptyFlow<Boolean>()
+-
+-            override suspend fun isServerAutomatic() = false
+-
+-            override suspend fun isServerCustom() = false
+-
+-            override fun init() = Unit
+-        }
+@@ -234,2 +218 @@ private fun createViewModel(
+-        getSelectedEndpoint = getSelectedEndpoint,
+-        isServerAutomatic = IsServerAutomaticUseCase(automaticServerRepository),
++        walletServerSelectionProvider = persistableWalletProvider,
+@@ -241 +224 @@ private fun createViewModel(
+-                walletRepository = walletRepository,
++                walletServerSelectionProvider = persistableWalletProvider,
+@@ -243 +225,0 @@ private fun createViewModel(
+-                isServerSelectionAutomaticProvider = isServerSelectionAutomaticProvider,
+@@ -257 +239,19 @@ private class FakePersistableWalletProvider(
+-) : PersistableWalletProvider {
++) : PersistableWalletProvider, WalletServerSelectionProvider {
++    override val writeVersion = 0L
++    override val serverSelection = MutableStateFlow(WalletServerSelection(endpoint, null))
++    val endpointUpdateStarted = CompletableDeferred<Unit>()
++    var continueEndpointUpdate: CompletableDeferred<Unit>? = null
++
++    override suspend fun getServerSelection() = serverSelection.value
++
++    override suspend fun storeServerSelection(
++        selection: WalletServerSelection,
++        version: Long,
++        expected: WalletServerSelection?,
++    ): Boolean {
++        endpointUpdateStarted.complete(Unit)
++        continueEndpointUpdate?.await()
++        serverSelection.value = selection
++        return true
++    }
++
 @@ -274,0 +275,6 @@ private class FakePersistableWalletProvider(
 +    override suspend fun storeIfCurrent(
 +        expected: PersistableWallet,
@@ -21703,17 +21817,50 @@ index d6a43b29c..853fb7119 100644
 +        version: Long,
 +    ): Boolean = error("This server selection fixture does not run seed-mismatch recovery")
 +
-@@ -301,0 +308,2 @@ private class FakeWalletRepository(
+@@ -280,18 +285,0 @@ private class FakePersistableWalletProvider(
+-private class FakeIsServerSelectionAutomaticProvider(
+-    initial: Boolean?
+-) : IsServerSelectionAutomaticProvider {
+-    private val state = MutableStateFlow(initial)
+-
+-    override suspend fun get(): Boolean? = state.value
+-
+-    override suspend fun store(amount: Boolean) {
+-        state.value = amount
+-    }
+-
+-    override fun observe(): Flow<Boolean?> = state
+-
+-    override suspend fun clear() {
+-        state.value = null
+-    }
+-}
+-
+@@ -300 +287,0 @@ private class FakeWalletRepository(
+-    private val continueEndpointUpdate: CompletableDeferred<Unit>? = null,
+@@ -301,0 +289,2 @@ private class FakeWalletRepository(
 +    override val walletInitialization =
 +        MutableStateFlow(co.electriccoin.zcash.ui.common.repository.WalletInitializationState.IDLE)
-@@ -318,0 +327,4 @@ private class FakeWalletRepository(
+@@ -307,5 +295,0 @@ private class FakeWalletRepository(
+-    val endpointUpdateStarted = CompletableDeferred<Unit>()
+-
+-    var updatedEndpoint: LightWalletEndpoint? = null
+-        private set
+-
+@@ -318,0 +303,4 @@ private class FakeWalletRepository(
 +    override fun continueWalletSetup() = Unit
 +
 +    override fun retryWalletInitialization() = Unit
 +
-@@ -322,2 +334,3 @@ private class FakeWalletRepository(
+@@ -322,8 +310,3 @@ private class FakeWalletRepository(
 -        birthday: BlockHeight
 -    ) = Unit
+-
+-    override suspend fun updateWalletEndpoint(endpoint: LightWalletEndpoint) {
+-        updatedEndpoint = endpoint
+-        endpointUpdateStarted.complete(Unit)
+-        continueEndpointUpdate?.await()
+-    }
 +        birthday: BlockHeight,
 +        enableTor: Boolean
 +    ) = CompletableDeferred(Unit)
@@ -22301,18 +22448,29 @@ index 1a21cd376..0f9011394 100644
 +                simpleSwapAssetProvider = get(),
 +                walletWriteAccess = get(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
-index 9c294ca9d..ab9876144 100644
+index 9c294ca9d..3e8f83e16 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/ProviderModule.kt
 @@ -22,0 +23,2 @@ import co.electriccoin.zcash.ui.common.provider.HttpClientProvider
 +import co.electriccoin.zcash.ui.common.provider.IndependentPriceProvider
 +import co.electriccoin.zcash.ui.common.provider.KrakenPriceProvider
-@@ -42,0 +45 @@ import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProviderImpl
+@@ -33,2 +34,0 @@ import co.electriccoin.zcash.ui.common.provider.IsOledEnabledStorageProviderImpl
+-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
+-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProviderImpl
+@@ -42,0 +43 @@ import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.QuoteRequestDiagnostics
-@@ -81,0 +85 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProviderImpl
+@@ -81,0 +83,2 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProviderImpl
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
-@@ -94,0 +99 @@ val providerModule =
+@@ -84,0 +88 @@ import org.koin.dsl.bind
++import org.koin.dsl.binds
+@@ -94 +98,3 @@ val providerModule =
+-        singleOf(::PersistableWalletProviderImpl) bind PersistableWalletProvider::class
++        singleOf(::PersistableWalletProviderImpl) binds
++            arrayOf(PersistableWalletProvider::class, WalletServerSelectionProvider::class)
 +        single { WalletWriteAccess(get()) }
+@@ -96 +101,0 @@ val providerModule =
+-        singleOf(::IsServerSelectionAutomaticProviderImpl) bind IsServerSelectionAutomaticProvider::class
 @@ -129,0 +135 @@ val providerModule =
 +        single { QuoteRequestDiagnostics() }
 @@ -136,0 +143,3 @@ val providerModule =
@@ -22336,7 +22494,7 @@ index 1c2a8787c..9a180202c 100644
 -        singleOf(::TransactionRepositoryImpl) bind TransactionRepository::class
 +        single<TransactionRepository> { TransactionRepositoryImpl(get(), get(), get(), get()) }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
-index c9262f680..37ceaffc1 100644
+index c9262f680..901a8ef27 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/di/UseCaseModule.kt
 @@ -10,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
@@ -22345,29 +22503,33 @@ index c9262f680..37ceaffc1 100644
 -import co.electriccoin.zcash.ui.common.usecase.CreateFlexaTransactionUseCase
 @@ -42 +41,0 @@ import co.electriccoin.zcash.ui.common.usecase.GetFilteredActivitiesUseCase
 -import co.electriccoin.zcash.ui.common.usecase.GetFlexaStatusUseCase
-@@ -75 +73,0 @@ import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
+@@ -72 +70,0 @@ import co.electriccoin.zcash.ui.common.usecase.IsScreenTimeoutDisabledDuringRest
+-import co.electriccoin.zcash.ui.common.usecase.IsServerAutomaticUseCase
+@@ -75 +72,0 @@ import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
 -import co.electriccoin.zcash.ui.common.usecase.NavigateToAddressBookUseCase
-@@ -137 +134,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
+@@ -137 +133,0 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 -import co.electriccoin.zcash.ui.common.usecase.SendSupportEmailUseCase
-@@ -164,0 +162 @@ import co.electriccoin.zcash.ui.screen.advancedsettings.debug.db.ExecuteDebugDBQ
+@@ -164,0 +161 @@ import co.electriccoin.zcash.ui.screen.advancedsettings.debug.db.ExecuteDebugDBQ
 +import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
-@@ -188,0 +187 @@ val useCaseModule =
+@@ -188,0 +186 @@ val useCaseModule =
 +        singleOf(::CopyRecoveryToClipboardUseCase)
-@@ -201 +199,0 @@ val useCaseModule =
+@@ -201 +198,0 @@ val useCaseModule =
 -        factoryOf(::SendSupportEmailUseCase)
-@@ -246 +243,0 @@ val useCaseModule =
+@@ -246 +242,0 @@ val useCaseModule =
 -        factoryOf(::NavigateToAddressBookUseCase)
-@@ -256 +252,0 @@ val useCaseModule =
+@@ -256 +251,0 @@ val useCaseModule =
 -        factoryOf(::CreateFlexaTransactionUseCase)
-@@ -261 +256,0 @@ val useCaseModule =
+@@ -261 +255,0 @@ val useCaseModule =
 -        factoryOf(::GetFlexaStatusUseCase)
-@@ -320 +315,2 @@ val useCaseModule =
+@@ -320 +314,2 @@ val useCaseModule =
 -        factoryOf(::ResetZashiUseCase)
 +        singleOf(::ResetProgressStore)
 +        singleOf(::ResetZashiUseCase)
-@@ -325 +321 @@ val useCaseModule =
+@@ -325 +320 @@ val useCaseModule =
 -        factoryOf(::GetSwapStatusUseCase)
 +        single { GetSwapStatusUseCase(get(), get(), get()) }
+@@ -330 +324,0 @@ val useCaseModule =
+-        factoryOf(::IsServerAutomaticUseCase)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt b/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt
 index 50bcc0da8..904bf2920 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/di/ViewModelModule.kt
@@ -23435,19 +23597,23 @@ index a5bcffdcd..e38c16d76 100644
 -const val AFFILIATE_FEE_BPS = 67
 -const val AFFILIATE_ADDRESS = "d78abd5477432c9d9c5e32c4a1a0056cd7b8be6580d3c49e1f97185b786592db"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
-index bf147a8b5..97694a069 100644
+index bf147a8b5..cab15beec 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.datasource
 +import co.electriccoin.zcash.ui.common.model.zcash.DonationPolicy
-@@ -26,0 +28,2 @@ import co.electriccoin.zcash.ui.common.model.requireSpendable
+@@ -27 +28,2 @@ import co.electriccoin.zcash.ui.common.model.requireSpendable
+-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
 +import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
-@@ -30,0 +34 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -29 +31 @@ import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
+-import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
+@@ -30,0 +33 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import java.math.BigDecimal
-@@ -35 +38,0 @@ import org.zecdev.zip321.parser.ParserContext
+@@ -35 +37,0 @@ import org.zecdev.zip321.parser.ParserContext
 -import java.math.BigDecimal
-@@ -76 +79,6 @@ interface ProposalDataSource {
+@@ -76 +78,6 @@ interface ProposalDataSource {
 -    suspend fun submitTransaction(pcztWithProofs: Pczt, pcztWithSignatures: Pczt): SubmitResult
 +    /** Runs [beforeFirstSubmission] after preparation and endpoint lookup, once before any broadcast. */
 +    suspend fun submitTransaction(
@@ -23455,7 +23621,7 @@ index bf147a8b5..97694a069 100644
 +        pcztWithSignatures: Pczt,
 +        beforeFirstSubmission: () -> Unit = {},
 +    ): SubmitResult
-@@ -78 +86,6 @@ interface ProposalDataSource {
+@@ -78 +85,6 @@ interface ProposalDataSource {
 -    suspend fun submitTransaction(proposal: Proposal, usk: UnifiedSpendingKey): SubmitResult
 +    /** Runs [beforeFirstSubmission] after preparation and endpoint lookup, once before any broadcast. */
 +    suspend fun submitTransaction(
@@ -23463,17 +23629,21 @@ index bf147a8b5..97694a069 100644
 +        usk: UnifiedSpendingKey,
 +        beforeFirstSubmission: () -> Unit = {},
 +    ): SubmitResult
-@@ -93,0 +107,2 @@ class TexUnsupportedOnKSException : Exception("TEX addresses are unsupported on
+@@ -93,0 +106,2 @@ class TexUnsupportedOnKSException : Exception("TEX addresses are unsupported on
 +class UnsupportedZip321PaymentCountException : Exception("ZIP321 requests must contain exactly one payment")
 +
-@@ -114 +129,5 @@ class ProposalDataSourceImpl(
+@@ -103,2 +117 @@ class ProposalDataSourceImpl(
+-    private val isServerSelectionAutomaticProvider: IsServerSelectionAutomaticProvider,
+-    private val persistableWalletProvider: PersistableWalletProvider,
++    private val walletServerSelectionProvider: WalletServerSelectionProvider,
+@@ -114 +127,5 @@ class ProposalDataSourceImpl(
 -                    proposal = synchronizer.proposeSend(account = account.sdkAccount, send = send),
 +                    proposal = synchronizer.proposeSend(account = account.sdkAccount, send = send).also { proposal ->
 +                        if (send.destination.address == DonationPolicy.recipient()) {
 +                            DonationPolicy.requireShielded(proposal, send)
 +                        }
 +                    },
-@@ -137 +156,7 @@ class ProposalDataSourceImpl(
+@@ -137 +154,7 @@ class ProposalDataSourceImpl(
 -                        is ZIP321.ParserResult.Request -> request.paymentRequest.payments[0]
 +                        is ZIP321.ParserResult.Request -> {
 +                            // Review shows one payment; the SDK fulfills the entire URI.
@@ -23482,7 +23652,7 @@ index bf147a8b5..97694a069 100644
 +                            }
 +                            request.paymentRequest.payments.single()
 +                        }
-@@ -162 +187,7 @@ class ProposalDataSourceImpl(
+@@ -162 +185,7 @@ class ProposalDataSourceImpl(
 -                )
 +                ).also { reviewed ->
 +                    if (reviewed.destination.address == DonationPolicy.recipient()) {
@@ -23491,7 +23661,7 @@ index bf147a8b5..97694a069 100644
 +                        )
 +                    }
 +                }
-@@ -238,2 +269,6 @@ class ProposalDataSourceImpl(
+@@ -238,2 +267,6 @@ class ProposalDataSourceImpl(
 -    override suspend fun submitTransaction(pcztWithProofs: Pczt, pcztWithSignatures: Pczt): SubmitResult =
 -        submitTransactionInternal(MULTI_SUBMIT_PCZT_TAG) {
 +    override suspend fun submitTransaction(
@@ -23500,7 +23670,7 @@ index bf147a8b5..97694a069 100644
 +        beforeFirstSubmission: () -> Unit,
 +    ): SubmitResult =
 +        submitTransactionInternal(MULTI_SUBMIT_PCZT_TAG, beforeFirstSubmission) {
-@@ -246,2 +281,6 @@ class ProposalDataSourceImpl(
+@@ -246,2 +279,6 @@ class ProposalDataSourceImpl(
 -    override suspend fun submitTransaction(proposal: Proposal, usk: UnifiedSpendingKey): SubmitResult =
 -        submitTransactionInternal(MULTI_SUBMIT_TAG) {
 +    override suspend fun submitTransaction(
@@ -23509,22 +23679,33 @@ index bf147a8b5..97694a069 100644
 +        beforeFirstSubmission: () -> Unit,
 +    ): SubmitResult =
 +        submitTransactionInternal(MULTI_SUBMIT_TAG, beforeFirstSubmission) {
-@@ -263,0 +303 @@ class ProposalDataSourceImpl(
+@@ -263,0 +301 @@ class ProposalDataSourceImpl(
 +        beforeFirstSubmission: () -> Unit,
-@@ -288 +328,2 @@ class ProposalDataSourceImpl(
+@@ -288 +326,2 @@ class ProposalDataSourceImpl(
 -                    logTag = logTag
 +                    logTag = logTag,
 +                    beforeFirstSubmission = beforeFirstSubmission
-@@ -308 +349,2 @@ class ProposalDataSourceImpl(
+@@ -308 +347,2 @@ class ProposalDataSourceImpl(
 -        logTag: String
 +        logTag: String,
 +        beforeFirstSubmission: () -> Unit,
-@@ -310,0 +353 @@ class ProposalDataSourceImpl(
+@@ -310,0 +351 @@ class ProposalDataSourceImpl(
 +            beforeFirstSubmission = beforeFirstSubmission,
-@@ -347,0 +391,2 @@ class ProposalDataSourceImpl(
+@@ -329 +370 @@ class ProposalDataSourceImpl(
+-        val currentEndpoint = persistableWalletProvider.requirePersistableWallet().endpoint
++        val selection = checkNotNull(walletServerSelectionProvider.getServerSelection())
+@@ -332,2 +373,2 @@ class ProposalDataSourceImpl(
+-                isAutomaticPreference = isServerSelectionAutomaticProvider.get(),
+-                currentEndpoint = currentEndpoint,
++                isAutomaticPreference = selection.isAutomatic,
++                currentEndpoint = selection.endpoint,
+@@ -336 +377 @@ class ProposalDataSourceImpl(
+-        return if (isAutomatic) knownEndpoints else listOf(currentEndpoint)
++        return if (isAutomatic) knownEndpoints else listOf(selection.endpoint)
+@@ -347,0 +389,2 @@ class ProposalDataSourceImpl(
 +        } catch (e: UnsupportedZip321PaymentCountException) {
 +            throw e
-@@ -481 +526,2 @@ data class RegularTransactionProposal(
+@@ -481 +524,2 @@ data class RegularTransactionProposal(
 -    override val proposal: Proposal
 +    override val proposal: Proposal,
 +    val isDonation: Boolean = false,
@@ -25540,6 +25721,23 @@ index feef536f5..017b876eb 100644
 +            // Bodies and URL parameters carry wallet data in debug builds too. Quote lifecycle
 +            // diagnostics record bounded stage metadata without exposing payloads or URLs.
 +            level = LogLevel.NONE
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsServerSelectionAutomaticProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsServerSelectionAutomaticProvider.kt
+deleted file mode 100644
+index 308662bcf..000000000
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/IsServerSelectionAutomaticProvider.kt
++++ /dev/null
+@@ -1,11 +0,0 @@
+-package co.electriccoin.zcash.ui.common.provider
+-
+-import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
+-import co.electriccoin.zcash.preference.model.entry.PreferenceKey
+-
+-interface IsServerSelectionAutomaticProvider : NullableBooleanStorageProvider
+-
+-class IsServerSelectionAutomaticProviderImpl(
+-    override val preferenceHolder: EncryptedPreferenceProvider
+-) : BaseNullableBooleanStorageProvider(PreferenceKey("is_server_selection_automatic")),
+-    IsServerSelectionAutomaticProvider
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenMarketData.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/KrakenMarketData.kt
 new file mode 100644
 index 000000000..301cc8286
@@ -26075,24 +26273,63 @@ index 000000000..85f546267
 +        BigInteger(1, bytes.copyOfRange(start, end).reversedArray())
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt
-index c85256529..4fa2440cb 100644
+index c85256529..c540ada7e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PersistableWalletProvider.kt
-@@ -13,0 +14 @@ interface PersistableWalletProvider {
+@@ -3,0 +4 @@ import cash.z.ecc.android.sdk.model.PersistableWallet
++import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
+@@ -5,0 +7 @@ import co.electriccoin.zcash.preference.api.PreferenceProvider
++import co.electriccoin.zcash.preference.model.entry.NullableBooleanPreferenceDefault
+@@ -7,0 +10,2 @@ import co.electriccoin.zcash.preference.model.entry.PreferenceKey
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.ensureActive
+@@ -8,0 +13 @@ import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.distinctUntilChanged
+@@ -13,0 +19 @@ interface PersistableWalletProvider {
 +    val writeVersion: Long get() = 0L
-@@ -16,0 +18,3 @@ interface PersistableWalletProvider {
+@@ -16,0 +23,3 @@ interface PersistableWalletProvider {
 +    /** Writes only while the persisted snapshot and wallet generation match. */
 +    suspend fun storeIfCurrent(expected: PersistableWallet, replacement: PersistableWallet, version: Long): Boolean
 +
-@@ -23 +27,2 @@ class PersistableWalletProviderImpl(
+@@ -21,0 +31,15 @@ interface PersistableWalletProvider {
++data class WalletServerSelection(val endpoint: LightWalletEndpoint, val isAutomatic: Boolean?)
++
++interface WalletServerSelectionProvider {
++    val serverSelection: Flow<WalletServerSelection?>
++    val writeVersion: Long
++
++    suspend fun getServerSelection(): WalletServerSelection?
++
++    suspend fun storeServerSelection(
++        selection: WalletServerSelection,
++        version: Long,
++        expected: WalletServerSelection? = null,
++    ): Boolean
++}
++
+@@ -23,2 +47,3 @@ class PersistableWalletProviderImpl(
 -    preferenceHolder: EncryptedPreferenceProvider
-+    preferenceHolder: EncryptedPreferenceProvider,
+-) : PersistableWalletProvider {
++    private val preferenceHolder: EncryptedPreferenceProvider,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
-@@ -25,0 +31 @@ class PersistableWalletProviderImpl(
++) : PersistableWalletProvider, WalletServerSelectionProvider {
+@@ -25,0 +51 @@ class PersistableWalletProviderImpl(
 +    override val writeVersion get() = walletWriteAccess.token()
-@@ -37 +43,17 @@ class PersistableWalletProviderImpl(
+@@ -30 +56,2 @@ class PersistableWalletProviderImpl(
+-            .map { wallet ->
++            .map { record ->
++                val wallet = record?.wallet
+@@ -34 +61,6 @@ class PersistableWalletProviderImpl(
+-            }
++            }.distinctUntilChanged()
++
++    override val serverSelection =
++        persistableWalletStorageProvider.observe().map { it?.serverSelection() }.distinctUntilChanged()
++
++    override suspend fun getServerSelection() = persistableWalletStorageProvider.get()?.serverSelection()
+@@ -37 +69,17 @@ class PersistableWalletProviderImpl(
 -        persistableWalletStorageProvider.store(persistableWallet)
-+        walletWriteAccess.replaceWallet { persistableWalletStorageProvider.store(persistableWallet) }
++        walletWriteAccess.replaceWallet { persistableWalletStorageProvider.store(WalletRecord(persistableWallet)) }
 +    }
 +
 +    override suspend fun storeIfCurrent(
@@ -26102,18 +26339,86 @@ index c85256529..4fa2440cb 100644
 +    ): Boolean {
 +        return walletWriteAccess.write(version) {
 +            val current = persistableWalletStorageProvider.get()
-+            if (current == null || !current.matchesPersistedSnapshot(expected)) {
++            if (current == null || !current.wallet.matchesPersistedSnapshot(expected)) {
 +                false
 +            } else {
-+                persistableWalletStorageProvider.store(replacement)
++                persistableWalletStorageProvider.store(current.copy(wallet = replacement))
 +                true
 +            }
 +        } ?: false
-@@ -44,0 +67,4 @@ class PersistableWalletProviderImpl(
+@@ -40 +88,22 @@ class PersistableWalletProviderImpl(
+-    override suspend fun getPersistableWallet() = persistableWalletStorageProvider.get()
++    override suspend fun storeServerSelection(
++        selection: WalletServerSelection,
++        version: Long,
++        expected: WalletServerSelection?,
++    ): Boolean =
++        walletWriteAccess.write(version) {
++            val current = persistableWalletStorageProvider.get()
++            if (current == null || (expected != null && current.serverSelection() != expected)) {
++                false
++            } else {
++                currentCoroutineContext().ensureActive()
++                persistableWalletStorageProvider.store(
++                    WalletRecord(
++                        wallet = current.wallet.copy(endpoint = selection.endpoint),
++                        isAutomatic = checkNotNull(selection.isAutomatic)
++                    )
++                )
++                true
++            }
++        } ?: false
++
++    override suspend fun getPersistableWallet() = persistableWalletStorageProvider.get()?.wallet
+@@ -42 +111,7 @@ class PersistableWalletProviderImpl(
+-    override suspend fun requirePersistableWallet() = checkNotNull(persistableWalletStorageProvider.get())
++    override suspend fun requirePersistableWallet() = checkNotNull(getPersistableWallet())
++
++    private suspend fun WalletRecord.serverSelection() =
++        WalletServerSelection(
++            endpoint = wallet.endpoint,
++            isAutomatic = isAutomatic ?: LEGACY_SERVER_SELECTION_AUTOMATIC.getValue(preferenceHolder())
++        )
+@@ -45 +120,11 @@ class PersistableWalletProviderImpl(
+-private interface PersistableWalletStorageProvider : NullableStorageProvider<PersistableWallet>
 +private fun PersistableWallet.matchesPersistedSnapshot(expected: PersistableWallet): Boolean =
 +    network == expected.network && seedPhrase == expected.seedPhrase &&
 +        birthday == expected.birthday && endpoint == expected.endpoint
 +
++private val LEGACY_SERVER_SELECTION_AUTOMATIC = NullableBooleanPreferenceDefault(
++    PreferenceKey("is_server_selection_automatic")
++)
++
++private const val SERVER_SELECTION_AUTOMATIC = "server_selection_automatic"
++
++private data class WalletRecord(val wallet: PersistableWallet, val isAutomatic: Boolean? = null)
+@@ -49,2 +134 @@ private class PersistableWalletStorageProviderImpl(
+-) : BaseNullableStorageProvider<PersistableWallet>(),
+-    PersistableWalletStorageProvider {
++) : BaseNullableStorageProvider<WalletRecord>() {
+@@ -56 +140 @@ private class PersistableWalletPreferenceDefault(
+-) : PreferenceDefault<PersistableWallet?> {
++) : PreferenceDefault<WalletRecord?> {
+@@ -58 +142,4 @@ private class PersistableWalletPreferenceDefault(
+-        preferenceProvider.getString(key)?.let { PersistableWallet.from(JSONObject(it)) }
++        preferenceProvider.getString(key)?.let {
++            val json = JSONObject(it)
++            WalletRecord(PersistableWallet.from(json), json.opt(SERVER_SELECTION_AUTOMATIC) as? Boolean)
++        }
+@@ -62,2 +149,11 @@ private class PersistableWalletPreferenceDefault(
+-        newValue: PersistableWallet?
+-    ) = preferenceProvider.putString(key, newValue?.toJson()?.toString())
++        newValue: WalletRecord?
++    ) {
++        val value = newValue?.let { record ->
++            record.wallet.toJson().apply { put(SERVER_SELECTION_AUTOMATIC, record.isAutomatic) }.toString()
++        }
++        if (newValue?.isAutomatic != null) {
++            preferenceProvider.putStringWithRollback(key, value)
++        } else {
++            preferenceProvider.putString(key, value)
++        }
++    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PublicMarketRpc.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/PublicMarketRpc.kt
 new file mode 100644
 index 000000000..b375367dc
@@ -26472,6 +26777,130 @@ index c8f5b4cbd..cfed1dcda 100644
 +            checkNotNull(walletWriteAccess.write(token) {
 +                addressBookKeyStorageProvider.storeAddressBookKey(newKey)
 +            }) { "Wallet changed before its contact key could be saved" }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt
+index 322328a32..c79a1795e 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepository.kt
+@@ -11 +10,0 @@ import co.electriccoin.zcash.ui.common.provider.ApplicationStateProvider
+-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
+@@ -14,0 +14,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
+@@ -27,2 +27,0 @@ import kotlinx.coroutines.flow.first
+-import kotlinx.coroutines.flow.flatMapLatest
+-import kotlinx.coroutines.flow.flowOf
+@@ -32 +30,0 @@ import kotlinx.coroutines.flow.mapLatest
+-import kotlinx.coroutines.flow.mapNotNull
+@@ -54 +51,0 @@ class AutomaticServerRepositoryImpl(
+-    private val walletRepository: WalletRepository,
+@@ -62 +59 @@ class AutomaticServerRepositoryImpl(
+-    private val isServerSelectionAutomaticProvider: IsServerSelectionAutomaticProvider,
++    private val walletServerSelectionProvider: WalletServerSelectionProvider,
+@@ -82 +78,0 @@ class AutomaticServerRepositoryImpl(
+-    @OptIn(ExperimentalCoroutinesApi::class)
+@@ -84,2 +80,3 @@ class AutomaticServerRepositoryImpl(
+-        isServerSelectionAutomaticProvider
+-            .observe()
++        walletServerSelectionProvider.serverSelection
++            .filterNotNull()
++            .map { it.isAutomatic() }
+@@ -87,25 +84,8 @@ class AutomaticServerRepositoryImpl(
+-            .flatMapLatest { isAutomatic ->
+-                if (isAutomatic != null) {
+-                    flowOf(isAutomatic)
+-                } else {
+-                    persistableWalletProvider.persistableWallet
+-                        .mapNotNull { it?.endpoint }
+-                        .map { endpoint ->
+-                            resolveIsServerSelectionAutomatic(
+-                                isAutomaticPreference = null,
+-                                currentEndpoint = endpoint,
+-                                knownEndpoints = lightWalletEndpointProvider.getEndpoints()
+-                            )
+-                        }
+-                }
+-            }.distinctUntilChanged()
+-
+-    override suspend fun isServerAutomatic(): Boolean {
+-        val preference = isServerSelectionAutomaticProvider.get()
+-        // Only the wallet read is guarded; resolving a custom endpoint is needed solely when the
+-        // preference was never written. getEndpoints() is an in-memory list, so it stays unguarded.
+-        val currentEndpoint =
+-            if (preference == null) persistableWalletProvider.getPersistableWallet()?.endpoint else null
+-        return resolveIsServerSelectionAutomatic(
+-            isAutomaticPreference = preference,
+-            currentEndpoint = currentEndpoint,
++
++    override suspend fun isServerAutomatic(): Boolean =
++        walletServerSelectionProvider.getServerSelection().isAutomatic()
++
++    private fun WalletServerSelection?.isAutomatic() =
++        resolveIsServerSelectionAutomatic(
++            isAutomaticPreference = this?.isAutomatic,
++            currentEndpoint = this?.endpoint,
+@@ -114 +93,0 @@ class AutomaticServerRepositoryImpl(
+-    }
+@@ -119,3 +98,3 @@ class AutomaticServerRepositoryImpl(
+-        if (isServerAutomatic()) return false
+-        val endpoint = persistableWalletProvider.getPersistableWallet()?.endpoint
+-        return endpoint != null && resolveIsEndpointCustom(endpoint, lightWalletEndpointProvider.getEndpoints())
++        val selection = walletServerSelectionProvider.getServerSelection() ?: return false
++        return !selection.isAutomatic() &&
++            resolveIsEndpointCustom(selection.endpoint, lightWalletEndpointProvider.getEndpoints())
+@@ -147,2 +126,3 @@ class AutomaticServerRepositoryImpl(
+-                guarded("switch to ${candidate.host}:${candidate.port}") { applyServerSwitch(candidate) }
+-            }
++                val endpoint = candidate.endpoint
++                guarded("switch to ${endpoint.host}:${endpoint.port}") { applyServerSwitch(candidate) }
++            }.map { it.endpoint }
+@@ -167 +147 @@ class AutomaticServerRepositoryImpl(
+-    internal suspend fun resolveSwitchCandidate(): LightWalletEndpoint? {
++    internal suspend fun resolveSwitchCandidate(): ServerSwitchCandidate? {
+@@ -168,0 +149 @@ class AutomaticServerRepositoryImpl(
++        val endpoint = candidate.endpoint
+@@ -173 +154 @@ class AutomaticServerRepositoryImpl(
+-                    "switch to ${candidate.host}:${candidate.port} anyway"
++                    "switch to ${endpoint.host}:${endpoint.port} anyway"
+@@ -182,3 +163,4 @@ class AutomaticServerRepositoryImpl(
+-    internal suspend fun evaluateServerSwitch(): LightWalletEndpoint? {
+-        if (!isServerAutomatic() || isAppInTransactionState) return null
+-        val current = persistableWalletProvider.getPersistableWallet()?.endpoint ?: return null
++    internal suspend fun evaluateServerSwitch(): ServerSwitchCandidate? {
++        val version = walletServerSelectionProvider.writeVersion
++        val current = walletServerSelectionProvider.getServerSelection() ?: return null
++        if (!current.isAutomatic() || isAppInTransactionState) return null
+@@ -190 +172 @@ class AutomaticServerRepositoryImpl(
+-                current = current,
++                current = current.endpoint,
+@@ -194 +176 @@ class AutomaticServerRepositoryImpl(
+-            )
++            )?.let { ServerSwitchCandidate(it, current, version) }
+@@ -209,3 +191,4 @@ class AutomaticServerRepositoryImpl(
+-    private suspend fun applyServerSwitch(candidate: LightWalletEndpoint) {
+-        if (!isServerAutomatic() || isAppInTransactionState) return
+-        if (candidate !in lightWalletEndpointProvider.getEndpoints()) return
++    private suspend fun applyServerSwitch(candidate: ServerSwitchCandidate) {
++        if (isAppInTransactionState) return
++        val endpoint = candidate.endpoint
++        if (endpoint !in lightWalletEndpointProvider.getEndpoints()) return
+@@ -213,3 +196,7 @@ class AutomaticServerRepositoryImpl(
+-        Twig.info { "Automatic server: switching to ${candidate.host}:${candidate.port}" }
+-        walletRepository.updateWalletEndpoint(candidate)
+-        synchronizer?.confirmServerSwitch(candidate)
++        Twig.info { "Automatic server: switching to ${endpoint.host}:${endpoint.port}" }
++        val applied = walletServerSelectionProvider.storeServerSelection(
++            WalletServerSelection(endpoint, isAutomatic = true),
++            version = candidate.version,
++            expected = candidate.current
++        )
++        if (applied) synchronizer?.confirmServerSwitch(endpoint)
+@@ -218,0 +206,6 @@ class AutomaticServerRepositoryImpl(
++internal data class ServerSwitchCandidate(
++    val endpoint: LightWalletEndpoint,
++    val current: WalletServerSelection,
++    val version: Long,
++)
++
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/BiometricRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/BiometricRepository.kt
 index f2e4afbff..f9c9b5771 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/BiometricRepository.kt
@@ -27948,38 +28377,42 @@ index 26bf877f4..db3df438d 100644
 +                                                    }
 +                                                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
-index fa652b038..dd4a34ccc 100644
+index fa652b038..f3282e711 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
-@@ -23,0 +24 @@ import co.electriccoin.zcash.ui.common.provider.IsIronwoodAnnouncementShownStora
+@@ -15 +14,0 @@ import cash.z.ecc.sdk.type.fromResources
+-import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
+@@ -23,0 +23 @@ import co.electriccoin.zcash.ui.common.provider.IsIronwoodAnnouncementShownStora
 +import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
-@@ -31,0 +33,2 @@ import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
+@@ -31,0 +32,2 @@ import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.CompletableDeferred
-@@ -32,0 +36 @@ import kotlinx.coroutines.CoroutineScope
+@@ -32,0 +35 @@ import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.Deferred
-@@ -37,0 +42 @@ import kotlinx.coroutines.flow.MutableSharedFlow
+@@ -37,0 +41 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 +import kotlinx.coroutines.flow.MutableStateFlow
-@@ -57,0 +63,2 @@ interface WalletRepository {
+@@ -57,0 +62,2 @@ interface WalletRepository {
 +    val walletInitialization: StateFlow<WalletInitializationState>
 +
-@@ -67,0 +75,4 @@ interface WalletRepository {
+@@ -67,0 +74,4 @@ interface WalletRepository {
 +    fun continueWalletSetup()
 +
 +    fun retryWalletInitialization()
 +
-@@ -73,2 +84,3 @@ interface WalletRepository {
+@@ -73,4 +83,3 @@ interface WalletRepository {
 -        birthday: BlockHeight
 -    )
+-
+-    suspend fun updateWalletEndpoint(endpoint: LightWalletEndpoint)
 +        birthday: BlockHeight,
 +        enableTor: Boolean = false
 +    ): Deferred<Unit>
-@@ -82,0 +95,2 @@ interface WalletRepository {
+@@ -82,0 +92,2 @@ interface WalletRepository {
 +// Initialization admission and interrupted-setup recovery share the same wallet mutation boundary.
 +@Suppress("TooManyFunctions")
-@@ -94,0 +109 @@ class WalletRepositoryImpl(
+@@ -94,0 +106 @@ class WalletRepositoryImpl(
 +    private val isTorEnabledStorageProvider: IsTorEnabledStorageProvider,
-@@ -110,0 +126,7 @@ class WalletRepositoryImpl(
+@@ -110,0 +123,7 @@ class WalletRepositoryImpl(
 +    private val initialization = MutableStateFlow(WalletInitializationState.IDLE)
 +
 +    // Keep the accepted operation across failures, including failures after the wallet was stored.
@@ -27987,7 +28420,16 @@ index fa652b038..dd4a34ccc 100644
 +    private var acceptedInitialization: WalletInitializationOperation? = null
 +    private var activeInitialization: Deferred<Unit>? = null
 +
-@@ -129,0 +152,13 @@ class WalletRepositoryImpl(
+@@ -120,0 +140,3 @@ class WalletRepositoryImpl(
++    // A preference commit can publish READY to observers before disk acknowledges it.
++    private val onboardingReadyWritePending = MutableStateFlow(false)
++
+@@ -128,0 +151,17 @@ class WalletRepositoryImpl(
++            .combine(onboardingReadyWritePending) { state, _ ->
++                // Preference notifications and pending-write updates can arrive in either order.
++                if (onboardingReadyWritePending.value) OnboardingState.NONE else state
++            }
++
 +    override val walletInitialization =
 +        combine(
 +            initialization,
@@ -28000,28 +28442,27 @@ index fa652b038..dd4a34ccc 100644
 +                else -> WalletInitializationState.IDLE
 +            }
 +        }.stateIn(sharingScope, SharingStarted.Eagerly, WalletInitializationState.CHECKING)
-+
-@@ -257,0 +293 @@ class WalletRepositoryImpl(
+@@ -257,0 +297 @@ class WalletRepositoryImpl(
 +                    val version = persistableWalletProvider.writeVersion
-@@ -260 +296 @@ class WalletRepositoryImpl(
+@@ -260 +300 @@ class WalletRepositoryImpl(
 -                    migrateDecommissionedEndpointIfNeeded(wallet)
 +                    migrateDecommissionedEndpointIfNeeded(wallet, version)
-@@ -269 +305 @@ class WalletRepositoryImpl(
+@@ -269 +309 @@ class WalletRepositoryImpl(
 -    private suspend fun migrateDecommissionedEndpointIfNeeded(wallet: PersistableWallet?) {
 +    private suspend fun migrateDecommissionedEndpointIfNeeded(wallet: PersistableWallet?, version: Long) {
-@@ -272 +308,2 @@ class WalletRepositoryImpl(
+@@ -272 +312,2 @@ class WalletRepositoryImpl(
 -            persistWalletInternal(wallet.copy(endpoint = lightWalletEndpointProvider.getDefaultEndpoint()))
 +            val replacement = wallet.copy(endpoint = lightWalletEndpointProvider.getDefaultEndpoint())
 +            persistableWalletProvider.storeIfCurrent(wallet, replacement, version)
-@@ -321,0 +359 @@ class WalletRepositoryImpl(
-+        val version = persistableWalletProvider.writeVersion
-@@ -323,3 +361,2 @@ class WalletRepositoryImpl(
+@@ -321,7 +361,0 @@ class WalletRepositoryImpl(
+-    override suspend fun updateWalletEndpoint(endpoint: LightWalletEndpoint) {
+-        val selectedWallet = persistableWalletProvider.getPersistableWallet() ?: return
 -        val selectedEndpoint = selectedWallet.endpoint
 -        if (selectedEndpoint == endpoint) return
 -        persistWalletInternal(selectedWallet.copy(endpoint = endpoint))
-+        // A failed preference commit may have published this endpoint in memory before it reached disk.
-+        persistableWalletProvider.storeIfCurrent(selectedWallet, selectedWallet.copy(endpoint = endpoint), version)
-@@ -333,13 +370,5 @@ class WalletRepositoryImpl(
+-    }
+-
+@@ -333,13 +367,5 @@ class WalletRepositoryImpl(
 -        scope.launch {
 -            walletMutation.withLock {
 -                val zcashNetwork = ZcashNetwork.fromResources(application)
@@ -28040,7 +28481,7 @@ index fa652b038..dd4a34ccc 100644
 +            val accepted = candidate
 +            if (stored != null && (accepted == null || !stored.hasSameIdentityAs(accepted))) {
 +                throw WalletInitializationConflictException()
-@@ -346,0 +376,26 @@ class WalletRepositoryImpl(
+@@ -346,0 +373,26 @@ class WalletRepositoryImpl(
 +            val zcashNetwork = ZcashNetwork.fromResources(application)
 +            val newWallet =
 +                stored ?: accepted ?: PersistableWallet.new(
@@ -28067,7 +28508,11 @@ index fa652b038..dd4a34ccc 100644
 +        synchronized(initializationLock) {
 +            val accepted = acceptedInitialization ?: return
 +            if (activeInitialization == null) startWalletInitialization(accepted)
-@@ -372,2 +427,61 @@ class WalletRepositoryImpl(
+@@ -354,0 +407 @@ class WalletRepositoryImpl(
++        if (onboardingState == OnboardingState.READY) onboardingReadyWritePending.value = true
+@@ -358,0 +412 @@ class WalletRepositoryImpl(
++        onboardingReadyWritePending.value = false
+@@ -372,2 +426,62 @@ class WalletRepositoryImpl(
 -        birthday: BlockHeight
 -    ) {
 +        birthday: BlockHeight,
@@ -28079,7 +28524,8 @@ index fa652b038..dd4a34ccc 100644
 +            if (stored != null && (candidate == null || !request.matches(stored))) {
 +                throw WalletInitializationConflictException()
 +            }
-+            if (enableTor) isTorEnabledStorageProvider.store(true)
++            // Commit the accepted setting before the wallet can start a synchronizer.
++            isTorEnabledStorageProvider.store(request.enableTor)
 +            val restoredWallet =
 +                stored ?: candidate ?: PersistableWallet(
 +                    network = network,
@@ -28131,7 +28577,7 @@ index fa652b038..dd4a34ccc 100644
 +        activeInitialization = result
 +        initialization.value = WalletInitializationState.RUNNING
 +        var failure: Exception? = null
-@@ -375,14 +489,21 @@ class WalletRepositoryImpl(
+@@ -375,14 +489,30 @@ class WalletRepositoryImpl(
 -            walletMutation.withLock {
 -                val restoredWallet =
 -                    PersistableWallet(
@@ -28167,7 +28613,7 @@ index fa652b038..dd4a34ccc 100644
 +                // SDK and storage errors can contain sensitive material.
 +                Twig.error { "Wallet initialization failed; the accepted operation can be retried" }
 +                failure = IllegalStateException("Wallet initialization failed")
-@@ -389,0 +511,10 @@ class WalletRepositoryImpl(
++            }
 +        }.invokeOnCompletion { cause ->
 +            val error = failure ?: cause?.let { IllegalStateException("Wallet initialization was interrupted") }
 +            synchronized(initializationLock) {
@@ -28176,11 +28622,11 @@ index fa652b038..dd4a34ccc 100644
 +                activeInitialization = null
 +                initialization.value =
 +                    if (canRetry) WalletInitializationState.FAILED else WalletInitializationState.IDLE
-+            }
+@@ -389,0 +520,25 @@ class WalletRepositoryImpl(
 +            if (error == null) result.complete(Unit) else result.completeExceptionally(error)
-@@ -390,0 +522 @@ class WalletRepositoryImpl(
++        }
 +        return result
-@@ -391,0 +524,37 @@ class WalletRepositoryImpl(
++    }
 +
 +    private class WalletInitializationOperation(
 +        val request: WalletInitializationRequest,
@@ -28202,10 +28648,7 @@ index fa652b038..dd4a34ccc 100644
 +                network == wallet.network && seedPhrase == wallet.seedPhrase && birthday == wallet.birthday
 +
 +            override fun toString() = "Restore"
-+        }
-+    }
-+}
-+
+@@ -393,0 +549,14 @@ class WalletRepositoryImpl(
 +private fun PersistableWallet.hasSameIdentityAs(other: PersistableWallet): Boolean =
 +    network == other.network && seedPhrase == other.seedPhrase && birthday == other.birthday
 +
@@ -28218,6 +28661,8 @@ index fa652b038..dd4a34ccc 100644
 +    INCOMPLETE,
 +    RUNNING,
 +    FAILED
++}
++
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
 index 0a5bfe73c..bebde683a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
@@ -28753,6 +29198,26 @@ index 84d9fd0c0..000000000
 -    ENABLED,
 -    DISABLED
 -}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCase.kt
+index cb0d758f8..f71f30ced 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCase.kt
+@@ -4 +4 @@ import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
+-import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.model.WalletAccount
+@@ -8 +8 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+- * The address a redeemed gift card is swept to: the selected account's Orchard-only unified address.
++ * Resolves the Orchard-only unified address of the account reviewed for gift redemption.
+@@ -11 +10,0 @@ class GetGiftCardDestinationAddressUseCase(
+-    private val accountDataSource: AccountDataSource,
+@@ -14,3 +13,2 @@ class GetGiftCardDestinationAddressUseCase(
+-    suspend operator fun invoke(): String {
+-        val account = accountDataSource.getSelectedAccount()
+-        return synchronizerProvider
++    suspend operator fun invoke(account: WalletAccount): String =
++        synchronizerProvider
+@@ -19 +16,0 @@ class GetGiftCardDestinationAddressUseCase(
+-    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetReloadableSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetReloadableSwapQuoteUseCase.kt
 index 9174c2293..1c2415bd7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetReloadableSwapQuoteUseCase.kt
@@ -28872,6 +29337,21 @@ index d668814fa..ef7d2073e 100644
 @@ -33 +29 @@ class HandleExternalLinkUseCase(
 -            navigationRouter.forward(ThirdPartyScan)
 +            launchNavigation.requestThirdPartyScan()
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/IsServerAutomaticUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/IsServerAutomaticUseCase.kt
+deleted file mode 100644
+index ff481ba3f..000000000
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/IsServerAutomaticUseCase.kt
++++ /dev/null
+@@ -1,9 +0,0 @@
+-package co.electriccoin.zcash.ui.common.usecase
+-
+-import co.electriccoin.zcash.ui.common.repository.AutomaticServerRepository
+-
+-class IsServerAutomaticUseCase(
+-    private val automaticServerRepository: AutomaticServerRepository
+-) {
+-    fun observe() = automaticServerRepository.isServerAutomatic
+-}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToAddressBookUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/NavigateToAddressBookUseCase.kt
 deleted file mode 100644
 index dfe3474a2..000000000
@@ -29083,6 +29563,40 @@ index 6600cf554..d4dd2efe2 100644
 -        submitKSProposal()
 +        val proposal = keystoneProposalRepository.parsePCZT(ur)
 +        submitKSProposal(proposal)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PersistServerSelectionUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PersistServerSelectionUseCase.kt
+index 9c8b54fdb..7fbdbd732 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PersistServerSelectionUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/PersistServerSelectionUseCase.kt
+@@ -6 +5,0 @@ import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
+-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
+@@ -8 +7,3 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+-import co.electriccoin.zcash.ui.common.repository.WalletRepository
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
++import java.io.IOException
+@@ -12 +13 @@ class PersistServerSelectionUseCase(
+-    private val walletRepository: WalletRepository,
++    private val walletServerSelectionProvider: WalletServerSelectionProvider,
+@@ -14 +14,0 @@ class PersistServerSelectionUseCase(
+-    private val isServerSelectionAutomaticProvider: IsServerSelectionAutomaticProvider,
+@@ -17,0 +18 @@ class PersistServerSelectionUseCase(
++        val version = walletServerSelectionProvider.writeVersion
+@@ -19 +20 @@ class PersistServerSelectionUseCase(
+-        persistFlagAndEndpoint(isAutomatic = true, endpoint = endpoint)
++        persistSelection(WalletServerSelection(endpoint, isAutomatic = true), version)
+@@ -23,0 +25 @@ class PersistServerSelectionUseCase(
++        val version = walletServerSelectionProvider.writeVersion
+@@ -25 +27 @@ class PersistServerSelectionUseCase(
+-            ServerValidation.Valid -> persistFlagAndEndpoint(isAutomatic = false, endpoint = endpoint)
++            ServerValidation.Valid -> persistSelection(WalletServerSelection(endpoint, isAutomatic = false), version)
+@@ -31,3 +33,4 @@ class PersistServerSelectionUseCase(
+-    private suspend fun persistFlagAndEndpoint(isAutomatic: Boolean, endpoint: LightWalletEndpoint) {
+-        isServerSelectionAutomaticProvider.store(isAutomatic)
+-        walletRepository.updateWalletEndpoint(endpoint)
++    private suspend fun persistSelection(selection: WalletServerSelection, version: Long) {
++        if (!walletServerSelectionProvider.storeServerSelection(selection, version)) {
++            throw IOException("The wallet changed before saving the server selection")
++        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt
 index db95c0420..69c42cb37 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt
@@ -30109,6 +30623,18 @@ index 9f381262b..6d970b7ba 100644
 -private val PromoMessage = Color(0xFFC0BFB1)
 -
 -private const val PROMO_FADE_START = 0.49f
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/advancedsettings/debug/SimulateSeedNotRelevantUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/advancedsettings/debug/SimulateSeedNotRelevantUseCase.kt
+index cd0b17449..a45139bf1 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/advancedsettings/debug/SimulateSeedNotRelevantUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/advancedsettings/debug/SimulateSeedNotRelevantUseCase.kt
+@@ -14,0 +15 @@ class SimulateSeedNotRelevantUseCase(
++        val version = persistableWalletProvider.writeVersion
+@@ -26,2 +27,3 @@ class SimulateSeedNotRelevantUseCase(
+-        persistableWalletProvider.store(wallet.copy(seedPhrase = fakeSeedPhrase))
+-        Process.killProcess(Process.myPid())
++        if (persistableWalletProvider.storeIfCurrent(wallet, wallet.copy(seedPhrase = fakeSeedPhrase), version)) {
++            Process.killProcess(Process.myPid())
++        }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/authentication/AppAccessBoundary.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/authentication/AppAccessBoundary.kt
 new file mode 100644
 index 000000000..a920ca403
@@ -30442,28 +30968,57 @@ index 68f4d521d..cd2d7112a 100644
 +        override val reason: StringResource? = null
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVM.kt
-index 4b4eb7ebf..c8cfda3fc 100644
+index 4b4eb7ebf..17385290e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVM.kt
 @@ -3,0 +4 @@ import android.app.Application
 +import androidx.annotation.StringRes
+@@ -13,0 +15 @@ import co.electriccoin.zcash.ui.common.datasource.resolveIsEndpointCustom
++import co.electriccoin.zcash.ui.common.datasource.resolveIsServerSelectionAutomatic
+@@ -15,0 +18 @@ import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
+@@ -17,2 +19,0 @@ import co.electriccoin.zcash.ui.common.usecase.GetAutomaticEndpointUseCase
+-import co.electriccoin.zcash.ui.common.usecase.GetSelectedEndpointUseCase
+-import co.electriccoin.zcash.ui.common.usecase.IsServerAutomaticUseCase
 @@ -37,0 +39 @@ import kotlinx.coroutines.launch
 +import java.io.IOException
-@@ -237 +239 @@ class ChooseServerVM(
+@@ -43,2 +45 @@ class ChooseServerVM(
+-    getSelectedEndpoint: GetSelectedEndpointUseCase,
+-    isServerAutomatic: IsServerAutomaticUseCase,
++    walletServerSelectionProvider: WalletServerSelectionProvider,
+@@ -197,5 +198,3 @@ class ChooseServerVM(
+-        combine(
+-            isServerAutomatic.observe(),
+-            getSelectedEndpoint.observe().filterNotNull()
+-        ) { isAutomatic, endpoint -> isAutomatic to endpoint }
+-            .onEach { (isAutomatic, endpoint) ->
++        walletServerSelectionProvider.serverSelection
++            .filterNotNull()
++            .onEach { selection ->
+@@ -202,0 +202 @@ class ChooseServerVM(
++                    val endpoint = selection.endpoint
+@@ -206 +206,5 @@ class ChooseServerVM(
+-                            isAutomatic = isAutomatic,
++                            isAutomatic = resolveIsServerSelectionAutomatic(
++                                selection.isAutomatic,
++                                endpoint,
++                                inner.availableServers
++                            ),
+@@ -237 +241 @@ class ChooseServerVM(
 -                false
 +                local.isSaveRetryPending
-@@ -243 +245 @@ class ChooseServerVM(
+@@ -243 +247 @@ class ChooseServerVM(
 -                effectiveEndpoint != null && effectiveEndpoint != persisted.endpoint
 +                effectiveEndpoint != null && (local.isSaveRetryPending || effectiveEndpoint != persisted.endpoint)
-@@ -395,0 +398 @@ class ChooseServerVM(
+@@ -395,0 +400 @@ class ChooseServerVM(
 +            var isSaveRetryPending = local.isSaveRetryPending
-@@ -406,0 +410 @@ class ChooseServerVM(
+@@ -406,0 +412 @@ class ChooseServerVM(
 +                isSaveRetryPending = false
-@@ -408,0 +413,3 @@ class ChooseServerVM(
+@@ -408,0 +415,3 @@ class ChooseServerVM(
 +            } catch (_: IOException) {
 +                isSaveRetryPending = true
 +                showSaveFailureDialog()
-@@ -410 +417,8 @@ class ChooseServerVM(
+@@ -410 +419,8 @@ class ChooseServerVM(
 -                innerState.update { it.copy(local = it.requireLocal().copy(isSaveInProgress = false)) }
 +                innerState.update {
 +                    it.copy(
@@ -30473,7 +31028,7 @@ index 4b4eb7ebf..c8cfda3fc 100644
 +                        )
 +                    )
 +                }
-@@ -421,8 +435,3 @@ class ChooseServerVM(
+@@ -421,8 +437,3 @@ class ChooseServerVM(
 -                        AlertDialogState(
 -                            title = stringRes(R.string.choose_server_validation_dialog_error_title),
 -                            text = stringRes(R.string.choose_server_validation_dialog_error_text),
@@ -30485,7 +31040,7 @@ index 4b4eb7ebf..c8cfda3fc 100644
 +                        createErrorDialog(
 +                            title = R.string.choose_server_validation_dialog_error_title,
 +                            text = R.string.choose_server_validation_dialog_error_text,
-@@ -434,0 +444,24 @@ class ChooseServerVM(
+@@ -434,0 +446,24 @@ class ChooseServerVM(
 +
 +    private fun showSaveFailureDialog() {
 +        innerState.update {
@@ -30510,7 +31065,7 @@ index 4b4eb7ebf..c8cfda3fc 100644
 +                    onClick = ::onConfirmDialogButtonClicked
 +                ),
 +        )
-@@ -452,0 +486 @@ private data class InnerState(
+@@ -452,0 +488 @@ private data class InnerState(
 +        val isSaveRetryPending: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerView.kt
 index cc829b5e8..ef8018b93 100644
@@ -33029,12 +33584,28 @@ index 31b503b72..975cc45ea 100644
 -                                title = stringRes("Zodl"),
 +                                title = stringRes("ZEC Private"),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftState.kt
-index 3a2e4768c..ef94b82dc 100644
+index 3a2e4768c..e4c852f92 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftState.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftState.kt
-@@ -329 +329 @@ sealed interface RedeemGiftState {
+@@ -108 +108 @@ sealed interface RedeemGiftState {
+-         * `null` picks the copy without a wallet name. [ticker] is the network's currency ticker.
++         * A `null` [walletName] disables redemption until a destination is shown. [ticker] is the network's ticker.
+@@ -132,0 +133 @@ sealed interface RedeemGiftState {
++                    isEnabled = walletName != null,
+@@ -329 +330 @@ sealed interface RedeemGiftState {
 -                walletName = stringRes("Zodl"),
 +                walletName = stringRes("ZEC Private"),
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVM.kt
+index 9a4ecd6d8..b86020637 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVM.kt
+@@ -69 +69,2 @@ class RedeemGiftVM(
+-    private fun onRedeemClick() = giftCardRepository.redeem(args.linkId) { getDestinationAddress() }
++    private fun onRedeemClick(account: WalletAccount) =
++        giftCardRepository.redeem(args.linkId) { getDestinationAddress(account) }
+@@ -98 +99 @@ class RedeemGiftVM(
+-                    onRedeem = ::onRedeemClick,
++                    onRedeem = { account?.let(::onRedeemClick) },
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVM.kt
 index e3623fc9a..ed35df44e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVM.kt
@@ -43594,7 +44165,7 @@ index 000000000..6dbf3b69f
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt
-index 4c13e2085..1a88b2241 100644
+index 4c13e2085..ee4039fc7 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSourceTest.kt
 @@ -10,0 +11 @@ import cash.z.ecc.android.sdk.model.ZecSend
@@ -43639,7 +44210,11 @@ index 4c13e2085..1a88b2241 100644
 +            coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(sdkAccount, uri) }
 +        }
 +
-@@ -150,0 +189 @@ class ProposalDataSourceTest {
+@@ -138,2 +176 @@ class ProposalDataSourceTest {
+-            isServerSelectionAutomaticProvider = mockk(),
+-            persistableWalletProvider = mockk()
++            walletServerSelectionProvider = mockk()
+@@ -150,0 +188 @@ class ProposalDataSourceTest {
 +        const val ZIP321_RECIPIENT = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU"
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SubmissionFundingGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SubmissionFundingGuardTest.kt
 new file mode 100644
@@ -43732,7 +44307,7 @@ index 000000000..de5d94cb7
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
 new file mode 100644
-index 000000000..83115ea71
+index 000000000..914f2aa7d
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
 @@ -0,0 +1,215 @@
@@ -43749,6 +44324,7 @@ index 000000000..83115ea71
 +import cash.z.ecc.android.sdk.model.WalletAddress
 +import cash.z.ecc.android.sdk.model.Zatoshi
 +import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
 +import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
 +import co.electriccoin.zcash.ui.common.model.SubmitResult
 +import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
@@ -43860,11 +44436,10 @@ index 000000000..83115ea71
 +        private val dataSource = ProposalDataSourceImpl(
 +            mockk { coEvery { getSynchronizer() } returns this@Fixture.synchronizer },
 +            mockk { every { getEndpoints() } returns listOf(endpoint) },
-+            mockk { coEvery { get() } returns true },
 +            mockk {
-+                coEvery { requirePersistableWallet() } coAnswers {
++                coEvery { getServerSelection() } coAnswers {
 +                    if (pauseEndpoints) pause()
-+                    mockk wallet@{ every { this@wallet.endpoint } returns this@Fixture.endpoint }
++                    WalletServerSelection(this@Fixture.endpoint, isAutomatic = true)
 +                }
 +            }
 +        )
@@ -46835,6 +47410,179 @@ index dd9e18236..5d8637365 100644
 +            verify { addressBookDataSource wasNot Called }
 +            verify { addressBookKeyStorageProvider wasNot Called }
 +        }
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
+index bd304eb7c..f2a0551e4 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
+@@ -10 +9,0 @@ import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
+-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
+@@ -13,0 +13,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
+@@ -51 +52,5 @@ class AutomaticServerRepositoryTest {
+-    private val isAutomaticProvider = mockk<IsServerSelectionAutomaticProvider>(relaxed = true)
++    private val serverSelectionProvider = mockk<WalletServerSelectionProvider> {
++        every { serverSelection } returns MutableStateFlow(null)
++        every { writeVersion } returns 7L
++        coEvery { storeServerSelection(any(), any(), any()) } returns true
++    }
+@@ -86,2 +90,0 @@ class AutomaticServerRepositoryTest {
+-    private val walletRepository = mockk<WalletRepository>(relaxed = true)
+-
+@@ -92 +94,0 @@ class AutomaticServerRepositoryTest {
+-            walletRepository = walletRepository,
+@@ -100 +102 @@ class AutomaticServerRepositoryTest {
+-            isServerSelectionAutomaticProvider = isAutomaticProvider,
++            walletServerSelectionProvider = serverSelectionProvider,
+@@ -107 +109 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns true
++            selectServer(true)
+@@ -114 +116 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns false
++            selectServer(false)
+@@ -121,3 +123 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns null
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returns
+-                wallet(endpoint("custom.example.com"))
++            selectServer(null, endpoint("custom.example.com"))
+@@ -131,2 +131 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns null
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.last())
++            selectServer(null, known.last())
+@@ -140,2 +139 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns null
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
++            coEvery { serverSelectionProvider.getServerSelection() } returns null
+@@ -149 +147 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns true
++            selectServer(true)
+@@ -156,2 +154 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns false
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.last())
++            selectServer(false, known.last())
+@@ -165,3 +162 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns false
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returns
+-                wallet(endpoint("custom.example.com"))
++            selectServer(false, endpoint("custom.example.com"))
+@@ -175,2 +170 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns false
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returns null
++            coEvery { serverSelectionProvider.getServerSelection() } returns null
+@@ -184 +178 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns false
++            selectServer(false)
+@@ -186 +180 @@ class AutomaticServerRepositoryTest {
+-            assertNull(repository.evaluateServerSwitch())
++            assertNull(repository.evaluateServerSwitch()?.endpoint)
+@@ -193 +187 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns true
++            selectServer(true)
+@@ -196 +190 @@ class AutomaticServerRepositoryTest {
+-            assertNull(repository.evaluateServerSwitch())
++            assertNull(repository.evaluateServerSwitch()?.endpoint)
+@@ -203 +197 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns true
++            selectServer(true)
+@@ -207 +201 @@ class AutomaticServerRepositoryTest {
+-            assertNull(repository.evaluateServerSwitch())
++            assertNull(repository.evaluateServerSwitch()?.endpoint)
+@@ -214 +208 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns true
++            selectServer(true)
+@@ -217 +211 @@ class AutomaticServerRepositoryTest {
+-            assertNull(repository.evaluateServerSwitch())
++            assertNull(repository.evaluateServerSwitch()?.endpoint)
+@@ -224,2 +218 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns true
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.first())
++            selectServer(true, known.first())
+@@ -228 +221 @@ class AutomaticServerRepositoryTest {
+-            assertNull(repository.evaluateServerSwitch())
++            assertNull(repository.evaluateServerSwitch()?.endpoint)
+@@ -234,2 +227 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns true
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.first())
++            selectServer(true, known.first())
+@@ -238 +230 @@ class AutomaticServerRepositoryTest {
+-            assertEquals(known.last(), repository.evaluateServerSwitch())
++            assertEquals(known.last(), repository.evaluateServerSwitch()?.endpoint)
+@@ -244,2 +236 @@ class AutomaticServerRepositoryTest {
+-            coEvery { isAutomaticProvider.get() } returns true
+-            coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(known.first())
++            selectServer(true, known.first())
+@@ -269 +260 @@ class AutomaticServerRepositoryTest {
+-            assertNull(withTimeoutOrNull(1.seconds) { repository.resolveSwitchCandidate() })
++            assertNull(withTimeoutOrNull(1.seconds) { repository.resolveSwitchCandidate()?.endpoint })
+@@ -277 +268 @@ class AutomaticServerRepositoryTest {
+-            assertEquals(known.last(), repository.resolveSwitchCandidate())
++            assertEquals(known.last(), repository.resolveSwitchCandidate()?.endpoint)
+@@ -285 +276 @@ class AutomaticServerRepositoryTest {
+-            assertEquals(known.last(), repository.resolveSwitchCandidate())
++            assertEquals(known.last(), repository.resolveSwitchCandidate()?.endpoint)
+@@ -300 +291,5 @@ class AutomaticServerRepositoryTest {
+-            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
++            coVerify(exactly = 1) {
++                serverSelectionProvider.storeServerSelection(
++                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
++                )
++            }
+@@ -303,0 +299,20 @@ class AutomaticServerRepositoryTest {
++    @Test
++    fun aRefusedConditionalWriteIsNotConfirmedToTheSdk() =
++        runTest {
++            stubSwitchDecision(balances = emptyMap())
++            coEvery { serverSelectionProvider.storeServerSelection(any(), any(), any()) } returns false
++            val foregroundEdges = MutableSharedFlow<Unit>()
++            repository.observeSwitchCandidates(foregroundEdges).launchIn(backgroundScope)
++            runCurrent()
++
++            foregroundEdges.emit(Unit)
++            runCurrent()
++
++            coVerify(exactly = 1) {
++                serverSelectionProvider.storeServerSelection(
++                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
++                )
++            }
++            coVerify(exactly = 0) { synchronizer.confirmServerSwitch(any()) }
++        }
++
+@@ -318 +333 @@ class AutomaticServerRepositoryTest {
+-            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
++            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
+@@ -338 +353 @@ class AutomaticServerRepositoryTest {
+-            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
++            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
+@@ -375 +390 @@ class AutomaticServerRepositoryTest {
+-            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
++            coVerify(exactly = 0) { serverSelectionProvider.storeServerSelection(any(), any(), any()) }
+@@ -382 +397,5 @@ class AutomaticServerRepositoryTest {
+-            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
++            coVerify(exactly = 1) {
++                serverSelectionProvider.storeServerSelection(
++                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
++                )
++            }
+@@ -389 +408 @@ class AutomaticServerRepositoryTest {
+-            coEvery { walletRepository.updateWalletEndpoint(any()) } throws IllegalStateException("prefs failed")
++            coEvery { serverSelectionProvider.storeServerSelection(any(), any(), any()) } throws IllegalStateException("prefs failed")
+@@ -398 +417,5 @@ class AutomaticServerRepositoryTest {
+-            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
++            coVerify(exactly = 1) {
++                serverSelectionProvider.storeServerSelection(
++                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
++                )
++            }
+@@ -421,2 +444 @@ class AutomaticServerRepositoryTest {
+-        coEvery { isAutomaticProvider.get() } returns true
+-        coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet
++        selectServer(true)
+@@ -427,0 +450,4 @@ class AutomaticServerRepositoryTest {
++    private fun selectServer(isAutomatic: Boolean?, endpoint: LightWalletEndpoint = known.first()) {
++        coEvery { serverSelectionProvider.getServerSelection() } returns WalletServerSelection(endpoint, isAutomatic)
++    }
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/BiometricRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/BiometricRepositoryTest.kt
 new file mode 100644
 index 000000000..d40d2bfd9
@@ -47700,7 +48448,7 @@ index 000000000..a403feaf3
 +
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
-index 0bc7a1124..79c08037c 100644
+index 0bc7a1124..6e6276aba 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 @@ -3,0 +4,2 @@ import android.app.Application
@@ -47713,31 +48461,35 @@ index 0bc7a1124..79c08037c 100644
 +import cash.z.ecc.android.sdk.fixture.WalletFixture
 +import cash.z.ecc.android.sdk.model.SeedPhrase
 +import cash.z.ecc.android.sdk.model.ZcashNetwork
-@@ -21,0 +29,2 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
+@@ -8,0 +16 @@ import co.electriccoin.zcash.crash.android.GlobalCrashReporter
++import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
+@@ -15,0 +24,2 @@ import co.electriccoin.zcash.ui.common.provider.IsIronwoodAnnouncementShownStora
++import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
++import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProviderImpl
+@@ -21,0 +32,3 @@ import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
 +import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
++import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 +import co.electriccoin.zcash.ui.common.usecase.RestoreWalletUseCase
-@@ -22,0 +32 @@ import co.electriccoin.zcash.ui.common.viewmodel.SecretState
+@@ -22,0 +36 @@ import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 +import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
-@@ -31,0 +42,2 @@ import kotlinx.coroutines.CoroutineScope
+@@ -31,0 +46,2 @@ import kotlinx.coroutines.CoroutineScope
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.Dispatchers
-@@ -37,0 +50 @@ import kotlinx.coroutines.flow.first
+@@ -37,0 +54 @@ import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.flow.flow
-@@ -39,0 +53 @@ import kotlinx.coroutines.flow.map
-+import kotlinx.coroutines.launch
-@@ -42,0 +57 @@ import kotlinx.coroutines.test.advanceUntilIdle
+@@ -42,0 +60 @@ import kotlinx.coroutines.test.advanceUntilIdle
 +import kotlinx.coroutines.test.resetMain
-@@ -43,0 +59,3 @@ import kotlinx.coroutines.test.runTest
+@@ -43,0 +62,3 @@ import kotlinx.coroutines.test.runTest
 +import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.setMain
 +import java.io.IOException
-@@ -47,0 +66,3 @@ import kotlin.test.assertEquals
+@@ -47,0 +69,3 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
 +import kotlin.test.assertNull
 +import kotlin.test.assertTrue
-@@ -70,0 +92 @@ class WalletRepositoryImplTest {
+@@ -70,0 +95 @@ class WalletRepositoryImplTest {
 +        Dispatchers.resetMain()
-@@ -131,0 +154,364 @@ class WalletRepositoryImplTest {
+@@ -131,0 +157,450 @@ class WalletRepositoryImplTest {
 +    @Test
 +    fun repeatedCreateTriggersKeepTheFirstAcceptedWallet() =
 +        runTest {
@@ -47972,6 +48724,91 @@ index 0bc7a1124..79c08037c 100644
 +        }
 +
 +    @Test
++    fun readyPublishedBeforeFailedCommitDoesNotRouteOrSuppressRestoreRetry() =
++        runTest {
++            val (repository, harness) = newRepository(OnboardingState.NONE, null)
++            repository.useTestScope(testScheduler)
++            val key = StandardPreferenceKeys.ONBOARDING_STATE.key
++            val ready = OnboardingState.READY.toNumber().toString()
++            val none = OnboardingState.NONE.toNumber().toString()
++            val readyPublished = CompletableDeferred<Unit>()
++            val failCommit = CompletableDeferred<Unit>()
++            harness.fakePrefs.beforeStringCommit = { writtenKey, value ->
++                if (writtenKey == key && value == ready) {
++                    readyPublished.complete(Unit)
++                    failCommit.await()
++                    throw IOException("Cannot persist onboarding")
++                }
++            }
++
++            val restore = repository.restoreFixture()
++            readyPublished.await()
++            assertEquals(ready, harness.fakePrefs.getString(key))
++            assertEquals(none, harness.fakePrefs.committedString(key))
++            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
++            failCommit.complete(Unit)
++            assertFailsWith<IllegalStateException> { restore.await() }
++            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
++            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
++
++            val stored = harness.walletProvider.requirePersistableWallet()
++            val committedState = OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
++            val (interrupted, interruptedHarness) = newRepository(committedState, stored)
++            assertEquals(SecretState.NONE, interrupted.secretState.first { it != SecretState.LOADING })
++            interrupted.walletInitialization.first { it == WalletInitializationState.INCOMPLETE }
++            assertEquals(stored, interruptedHarness.walletProvider.requirePersistableWallet())
++
++            harness.fakePrefs.beforeStringCommit = { _, _ -> }
++            repository.restoreFixture().await()
++            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
++            assertEquals(
++                listOf("onboarding=$ready", "onboarding=$ready"),
++                harness.events.filter { it.startsWith("onboarding=") }
++            )
++            assertEquals(ready, harness.fakePrefs.committedString(key))
++            repository.secretState.first { it == SecretState.READY }
++
++            val recoveredState = OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
++            val (recovered, _) = newRepository(recoveredState, stored)
++            assertEquals(SecretState.READY, recovered.secretState.first { it != SecretState.LOADING })
++        }
++
++    @Test
++    fun cancellationAfterReadyPublicationKeepsOnboardingPendingUntilRetry() =
++        runTest {
++            val (repository, harness) = newRepository(OnboardingState.NONE, null)
++            repository.useTestScope(testScheduler)
++            val key = StandardPreferenceKeys.ONBOARDING_STATE.key
++            val ready = OnboardingState.READY.toNumber().toString()
++            val none = OnboardingState.NONE.toNumber().toString()
++            val readyPublished = CompletableDeferred<Unit>()
++            harness.fakePrefs.beforeStringCommit = { writtenKey, value ->
++                if (writtenKey == key && value == ready) {
++                    readyPublished.complete(Unit)
++                    CompletableDeferred<Unit>().await()
++                }
++            }
++
++            val restore = repository.restoreFixture()
++            readyPublished.await()
++            val stored = harness.walletProvider.requirePersistableWallet()
++            repository.scope.cancel()
++            assertFailsWith<IllegalStateException> { restore.await() }
++            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
++            assertEquals(ready, harness.fakePrefs.getString(key))
++            assertEquals(none, harness.fakePrefs.committedString(key))
++            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
++
++            harness.fakePrefs.beforeStringCommit = { _, _ -> }
++            repository.useTestScope(testScheduler)
++            repository.retryWalletInitialization()
++            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
++            assertEquals(stored, harness.walletProvider.requirePersistableWallet())
++            assertEquals(ready, harness.fakePrefs.committedString(key))
++            repository.secretState.first { it == SecretState.READY }
++        }
++
++    @Test
 +    fun failedRestoreMetadataRetriesTheAcceptedRestore() =
 +        runTest {
 +            val (repository, harness) = newRepository(OnboardingState.NONE, null)
@@ -48095,78 +48932,111 @@ index 0bc7a1124..79c08037c 100644
 +            assertEquals(original, harness.walletProvider.requirePersistableWallet().birthday)
 +        }
 +
-+    private fun WalletRepositoryImpl.restoreFixture() =
++    private fun WalletRepositoryImpl.restoreFixture(enableTor: Boolean = false) =
 +        restoreWallet(
 +            ZcashNetwork.Testnet,
 +            SeedPhrase.new(WalletFixture.Alice.seedPhrase),
-+            WalletFixture.Alice.getBirthday(ZcashNetwork.Testnet)
++            WalletFixture.Alice.getBirthday(ZcashNetwork.Testnet),
++            enableTor = enableTor
 +        )
 +
-@@ -202,0 +589 @@ class WalletRepositoryImplTest {
+@@ -202,0 +678 @@ class WalletRepositoryImplTest {
 +                    every { writeVersion } returns 0L
-@@ -222,0 +610,39 @@ class WalletRepositoryImplTest {
+@@ -222,0 +699,69 @@ class WalletRepositoryImplTest {
 +    @Test
-+    fun retryCommitsAnEndpointThatWasPublishedOnlyInMemory() = runTest {
-+        val (repository, harness) = newRepository(OnboardingState.READY, fixtureWallet())
-+        val walletProvider = harness.walletProvider as FakePersistableWalletProvider
-+        val endpoint = LightWalletEndpoint("retry.example.invalid", 443, true)
-+        walletProvider.failWrites = true
-+        assertFailsWith<IOException> { repository.updateWalletEndpoint(endpoint) }
-+        assertEquals(endpoint, walletProvider.requirePersistableWallet().endpoint)
-+        assertTrue(harness.events.isEmpty())
++    fun uncheckedRestoreDisablesTorAfterInterruptedSetup() =
++        runTest {
++            val torPreferences = RecordingPreferenceProvider(mutableListOf())
++            val encrypted = mockk<EncryptedPreferenceProvider>()
++            coEvery { encrypted() } returns torPreferences
++            val firstTor = IsTorEnabledStorageProviderImpl(encrypted)
++            val (first, firstHarness) = newRepository(OnboardingState.NONE, null, torPreference = firstTor)
++            first.useTestScope(testScheduler)
++            val firstWalletStore = firstHarness.walletProvider as FakePersistableWalletProvider
++            firstWalletStore.failWritesBeforePublishing = true
 +
-+        walletProvider.failWrites = false
-+        repository.updateWalletEndpoint(endpoint)
++            assertNull(firstTor.get())
++            assertFailsWith<IllegalStateException> { first.restoreFixture(enableTor = true).await() }
++            assertEquals(true, firstTor.get())
++            assertNull(firstWalletStore.getPersistableWallet())
++            val key = StandardPreferenceKeys.ONBOARDING_STATE.key
++            assertEquals(OnboardingState.NONE.toNumber().toString(), firstHarness.fakePrefs.committedString(key))
 +
-+        assertEquals(listOf("wallet"), harness.events)
-+    }
++            val restartedPreferences = torPreferences.reopen()
++            coEvery { encrypted() } returns restartedPreferences
++            val restartedTor = IsTorEnabledStorageProviderImpl(encrypted)
++            val (restarted, restartedHarness) = newRepository(OnboardingState.NONE, null, torPreference = restartedTor)
++            restarted.useTestScope(testScheduler)
++            assertTrue(IsTorEnabledUseCase(restartedTor).observe().first())
++            restartedPreferences.beforeStringCommit = { _, _ -> throw IOException("Cannot persist Tor setting") }
++            assertFailsWith<IllegalStateException> { restarted.restoreFixture(enableTor = false).await() }
++            restarted.walletInitialization.first { it == WalletInitializationState.FAILED }
++            assertEquals(false, restartedTor.get())
++            assertNull(restartedHarness.walletProvider.getPersistableWallet())
++            assertEquals(SecretState.NONE, restarted.secretState.first { it != SecretState.LOADING })
 +
-+    @Test
-+    fun aDelayedEndpointChangeCannotRestoreAClearedWallet() = runTest {
-+        val (repository, harness) = newRepository(OnboardingState.READY, fixtureWallet())
-+        val walletProvider = harness.walletProvider as FakePersistableWalletProvider
-+        val currentEndpoint = LightWalletEndpoint("current.example.invalid", 443, true)
-+        repository.updateWalletEndpoint(currentEndpoint)
-+        assertEquals(currentEndpoint, walletProvider.requirePersistableWallet().endpoint)
-+        val walletRead = CompletableDeferred<Unit>()
-+        val releaseRead = CompletableDeferred<Unit>()
-+        walletProvider.beforeReadReturns = {
-+            walletRead.complete(Unit)
-+            releaseRead.await()
++            restartedPreferences.beforeStringCommit = { _, _ -> }
++            restarted.restoreFixture(enableTor = false).await()
++
++            val restored = restartedHarness.walletProvider.requirePersistableWallet()
++            assertTrue(restored.seedPhrase == fixtureWallet().seedPhrase)
++            restarted.secretState.first { it == SecretState.READY }
++            coEvery { encrypted() } returns restartedPreferences.reopen()
++            val reopenedTor = IsTorEnabledStorageProviderImpl(encrypted)
++            assertEquals(false, reopenedTor.get())
++            assertEquals(false, IsTorEnabledUseCase(reopenedTor).observe().first())
 +        }
-+        val stale = launch { repository.updateWalletEndpoint(LightWalletEndpoint("stale.example.invalid", 443, true)) }
-+        walletRead.await()
-+        walletProvider.clearForReset()
-+        releaseRead.complete(Unit)
-+        stale.join()
 +
-+        assertNull(walletProvider.getPersistableWallet())
-+        assertEquals(listOf("wallet"), harness.events)
-+    }
++    @Test
++    fun failedTorCommitBlocksRestoreUntilTheAcceptedChoiceIsRetried() =
++        runTest {
++            val torPreferences = RecordingPreferenceProvider(mutableListOf())
++            val encrypted = mockk<EncryptedPreferenceProvider>()
++            coEvery { encrypted() } returns torPreferences
++            val tor = IsTorEnabledStorageProviderImpl(encrypted)
++            val (repository, harness) = newRepository(OnboardingState.NONE, null, torPreference = tor)
++            repository.useTestScope(testScheduler)
++            torPreferences.beforeStringCommit = { _, _ -> throw IOException("Cannot persist Tor setting") }
 +
-@@ -286,0 +713 @@ class WalletRepositoryImplTest {
++            assertFailsWith<IllegalStateException> { repository.restoreFixture(enableTor = true).await() }
++            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
++            assertTrue(harness.events.isEmpty())
++            assertNull(harness.walletProvider.getPersistableWallet())
++            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
++            assertFailsWith<WalletInitializationConflictException> { repository.restoreFixture(enableTor = false).await() }
++
++            torPreferences.beforeStringCommit = { _, _ -> }
++            repository.restoreFixture(enableTor = true).await()
++            repository.secretState.first { it == SecretState.READY }
++            coEvery { encrypted() } returns torPreferences.reopen()
++            assertTrue(IsTorEnabledUseCase(IsTorEnabledStorageProviderImpl(encrypted)).observe().first())
++        }
++
+@@ -256,0 +802 @@ class WalletRepositoryImplTest {
++        torPreference: IsTorEnabledStorageProvider = mockk(relaxed = true),
+@@ -286,0 +833 @@ class WalletRepositoryImplTest {
 +        fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())
-@@ -303 +730,2 @@ class WalletRepositoryImplTest {
+@@ -303 +850,2 @@ class WalletRepositoryImplTest {
 -        val sdkEncryptedPreferenceRecoveryProvider = FakeSdkEncryptedPreferenceRecoveryProvider(events)
 +        val sdkEncryptedPreferenceRecoveryProvider = mockk<SdkEncryptedPreferenceRecoveryProvider>()
 +        coEvery { sdkEncryptedPreferenceRecoveryProvider.ensureReadable() } coAnswers { events += "sdkRepair" }
-@@ -317,0 +746 @@ class WalletRepositoryImplTest {
-+                isTorEnabledStorageProvider = mockk(relaxed = true),
-@@ -320,2 +748,0 @@ class WalletRepositoryImplTest {
+@@ -317,0 +866 @@ class WalletRepositoryImplTest {
++                isTorEnabledStorageProvider = torPreference,
+@@ -320,2 +868,0 @@ class WalletRepositoryImplTest {
 -        fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())
 -
-@@ -325 +752,4 @@ class WalletRepositoryImplTest {
+@@ -325 +872,4 @@ class WalletRepositoryImplTest {
 -        return repository to TestHarness(events, fakePrefs)
 +        return repository to TestHarness(
 +            events, fakePrefs, persistableWalletProvider, walletRestoringStateProvider,
 +            sdkEncryptedPreferenceRecoveryProvider, walletBackupFlagStorageProvider
 +        )
-@@ -330,0 +761,4 @@ class WalletRepositoryImplTest {
+@@ -330,0 +881,4 @@ class WalletRepositoryImplTest {
 +        val walletProvider: PersistableWalletProvider,
 +        val restoringProvider: WalletRestoringStateProvider,
 +        val recoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
 +        val backupProvider: WalletBackupFlagStorageProvider,
-@@ -334,12 +767,0 @@ class WalletRepositoryImplTest {
+@@ -334,12 +887,0 @@ class WalletRepositoryImplTest {
 -/**
 - * Records `"sdkRepair"` into the shared events list, so tests can assert where the SDK secret
 - * store repair lands relative to the onboarding-flag write and the SDK data erase.
@@ -48179,11 +49049,16 @@ index 0bc7a1124..79c08037c 100644
 -    }
 -}
 -
-@@ -356,0 +779,3 @@ private class FakePersistableWalletProvider(
+@@ -356,0 +899,3 @@ private class FakePersistableWalletProvider(
 +    private val writeAccess = WalletWriteAccess()
 +    var failWrites = false
-+    var beforeReadReturns: suspend () -> Unit = {}
-@@ -358,0 +784,18 @@ private class FakePersistableWalletProvider(
++    var failWritesBeforePublishing = false
+@@ -359,5 +904,18 @@ private class FakePersistableWalletProvider(
+-
+-    override suspend fun store(persistableWallet: PersistableWallet) {
+-        walletFlow.value = persistableWallet
+-        events += "wallet"
+-    }
 +    override val writeVersion get() = writeAccess.token()
 +
 +    override suspend fun store(persistableWallet: PersistableWallet) =
@@ -48202,36 +49077,42 @@ index 0bc7a1124..79c08037c 100644
 +            true
 +        }
 +    } ?: false
-@@ -360,6 +803,2 @@ private class FakePersistableWalletProvider(
--    override suspend fun store(persistableWallet: PersistableWallet) {
--        walletFlow.value = persistableWallet
--        events += "wallet"
--    }
--
--    override suspend fun getPersistableWallet(): PersistableWallet? = walletFlow.value
-+    override suspend fun getPersistableWallet(): PersistableWallet? =
-+        walletFlow.value.also { beforeReadReturns() }
-@@ -367,0 +807,13 @@ private class FakePersistableWalletProvider(
-+
-+    suspend fun clearForReset() {
-+        writeAccess.beginReset()
-+        walletFlow.value = null
-+        writeAccess.finishReset()
-+    }
+@@ -367,0 +926,8 @@ private class FakePersistableWalletProvider(
 +
 +    private fun write(wallet: PersistableWallet) {
++        if (failWritesBeforePublishing) throw IOException("Cannot persist wallet")
 +        walletFlow.value = wallet
 +        // Android may update its memory cache even when commit reports a disk failure.
 +        if (failWrites) throw IOException("Synthetic persistence failure")
 +        events += "wallet"
 +    }
-@@ -385,0 +838,6 @@ private class WalletStoredAfterFirstReadProvider(
+@@ -385,0 +952,6 @@ private class WalletStoredAfterFirstReadProvider(
 +    override suspend fun storeIfCurrent(
 +        expected: PersistableWallet,
 +        replacement: PersistableWallet,
 +        version: Long,
 +    ): Boolean = error("This wallet setup fixture does not run seed-mismatch recovery")
 +
+@@ -402,0 +975,2 @@ private class RecordingPreferenceProvider(
++    private val committedValues = mutableMapOf<String, String?>()
++    var beforeStringCommit: suspend (PreferenceKey, String?) -> Unit = { _, _ -> }
+@@ -416,0 +991 @@ private class RecordingPreferenceProvider(
++        committedValues[key.key] = value
+@@ -418,0 +994,7 @@ private class RecordingPreferenceProvider(
++    fun committedString(key: PreferenceKey): String? = committedValues[key.key]
++
++    fun reopen(): RecordingPreferenceProvider =
++        RecordingPreferenceProvider(mutableListOf()).also { reopened ->
++            committedValues.forEach { (key, value) -> reopened.seed(PreferenceKey(key), value) }
++        }
++
+@@ -429,0 +1012,2 @@ private class RecordingPreferenceProvider(
++        beforeStringCommit(key, value)
++        committedValues[key.key] = value
+@@ -451,0 +1036 @@ private class RecordingPreferenceProvider(
++        committedValues.remove(key.key)
+@@ -455,0 +1041 @@ private class RecordingPreferenceProvider(
++        committedValues.clear()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 new file mode 100644
 index 000000000..ad0a2253b
@@ -48774,6 +49655,25 @@ index 000000000..a21e89296
 +        ).observe().filterNotNull().first()
 +    }
 +}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt
+index 1e55b67e9..733aca71f 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt
+@@ -6 +5,0 @@ import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
+-import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+@@ -18,2 +17 @@ import kotlin.test.assertEquals
+- * [GetGiftCardDestinationAddressUseCase] sweeps a gift card to the selected account's Orchard-only address, never to
+- * a transparent or Sapling receiver.
++ * [GetGiftCardDestinationAddressUseCase] requests an Orchard-only address for the reviewed account.
+@@ -26,2 +23,0 @@ class GetGiftCardDestinationAddressUseCaseTest {
+-    private val accountDataSource = mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns walletAccount }
+-
+@@ -34 +30 @@ class GetGiftCardDestinationAddressUseCaseTest {
+-    fun theDestinationIsTheSelectedAccountsOrchardOnlyAddress() =
++    fun theDestinationIsTheReviewedAccountsOrchardOnlyAddress() =
+@@ -39 +35 @@ class GetGiftCardDestinationAddressUseCaseTest {
+-            val address = GetGiftCardDestinationAddressUseCase(accountDataSource, synchronizerProvider)()
++            val address = GetGiftCardDestinationAddressUseCase(synchronizerProvider)(walletAccount)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
 index 40bfe60a6..ae2963adf 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
@@ -49295,6 +50195,56 @@ index 638b04663..3d56ce6a0 100644
 +        override suspend fun getPersistableWallet() = persistableWallet.value
 +
 +        override suspend fun requirePersistableWallet() = checkNotNull(persistableWallet.value)
++    }
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PersistServerSelectionUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PersistServerSelectionUseCaseTest.kt
+index 5db80f520..0b203e637 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PersistServerSelectionUseCaseTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/PersistServerSelectionUseCaseTest.kt
+@@ -7 +6,0 @@ import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
+-import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
+@@ -9 +8,2 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+-import co.electriccoin.zcash.ui.common.repository.WalletRepository
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelectionProvider
+@@ -11,0 +12 @@ import io.mockk.coVerify
++import io.mockk.every
+@@ -13,0 +15 @@ import kotlinx.coroutines.test.runTest
++import java.io.IOException
+@@ -31,2 +33,4 @@ class PersistServerSelectionUseCaseTest {
+-    private val walletRepository = mockk<WalletRepository>(relaxed = true)
+-    private val isAutomaticProvider = mockk<IsServerSelectionAutomaticProvider>(relaxed = true)
++    private val storage = mockk<WalletServerSelectionProvider> {
++        every { writeVersion } returns 12L
++        coEvery { storeServerSelection(any(), 12L, null) } returns true
++    }
+@@ -37 +41 @@ class PersistServerSelectionUseCaseTest {
+-            walletRepository = walletRepository,
++            walletServerSelectionProvider = storage,
+@@ -39 +42,0 @@ class PersistServerSelectionUseCaseTest {
+-            isServerSelectionAutomaticProvider = isAutomaticProvider,
+@@ -55,2 +58 @@ class PersistServerSelectionUseCaseTest {
+-            coVerify(exactly = 1) { isAutomaticProvider.store(false) }
+-            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(endpoint) }
++            coVerify(exactly = 1) { storage.storeServerSelection(WalletServerSelection(endpoint, false), 12L, null) }
+@@ -68,2 +70 @@ class PersistServerSelectionUseCaseTest {
+-            coVerify(exactly = 0) { isAutomaticProvider.store(any()) }
+-            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
++            coVerify(exactly = 0) { storage.storeServerSelection(any(), any(), any()) }
+@@ -79,2 +80 @@ class PersistServerSelectionUseCaseTest {
+-            coVerify(exactly = 0) { isAutomaticProvider.store(any()) }
+-            coVerify(exactly = 0) { walletRepository.updateWalletEndpoint(any()) }
++            coVerify(exactly = 0) { storage.storeServerSelection(any(), any(), any()) }
+@@ -90,2 +90 @@ class PersistServerSelectionUseCaseTest {
+-            coVerify(exactly = 1) { isAutomaticProvider.store(true) }
+-            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(fastest) }
++            coVerify(exactly = 1) { storage.storeServerSelection(WalletServerSelection(fastest, true), 12L, null) }
+@@ -92,0 +92,7 @@ class PersistServerSelectionUseCaseTest {
++    @Test
++    fun refusedWalletWriteIsASaveFailure() = runTest {
++        coEvery { getAutomaticEndpoint() } returns fastest
++        coEvery { storage.storeServerSelection(any(), 12L, null) } returns false
++
++        assertFailsWith<IOException> { useCase.persistAutomatic() }
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt
 index 16244cdf4..ac65bbcf1 100644
@@ -50869,7 +51819,7 @@ index 9e55e6f64..8d0846800 100644
 +        coVerify(exactly = 0) { addressBookRepository.updateContact(any(), any(), any(), any()) }
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
-index 1d445dd11..38889b9bc 100644
+index 1d445dd11..1c3a07e3d 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt
 @@ -11,0 +12 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
@@ -50902,6 +51852,14 @@ index 1d445dd11..38889b9bc 100644
 @@ -263 +268 @@ class ViewOnlySpendGuardTest {
 -            coVerify(exactly = 0) { zashiProposalRepository.getTransactionProposal() }
 +            verify(exactly = 0) { zashiProposalRepository.transactionProposal }
+@@ -368,2 +373 @@ class ViewOnlySpendGuardTest {
+-                    isServerSelectionAutomaticProvider = mockk(),
+-                    persistableWalletProvider = mockk(),
++                    walletServerSelectionProvider = mockk(),
+@@ -387,2 +391 @@ class ViewOnlySpendGuardTest {
+-                    isServerSelectionAutomaticProvider = mockk(),
+-                    persistableWalletProvider = mockk(),
++                    walletServerSelectionProvider = mockk(),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321PaymentCountTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321PaymentCountTest.kt
 new file mode 100644
 index 000000000..75b1a6427
@@ -51230,27 +52188,36 @@ index 32d01648d..a9e4d875e 100644
 +            every { loadedBalances } returns balances
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt
 new file mode 100644
-index 000000000..aa2a5dbb1
+index 000000000..2c938865f
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt
-@@ -0,0 +1,253 @@
+@@ -0,0 +1,419 @@
 +package co.electriccoin.zcash.ui.screen.chooseserver
 +
++import android.content.SharedPreferences
 +import androidx.lifecycle.viewModelScope
 +import cash.z.ecc.android.sdk.Synchronizer
++import cash.z.ecc.android.sdk.WalletInitMode
++import cash.z.ecc.android.sdk.model.PersistableWallet
++import cash.z.ecc.android.sdk.model.SeedPhrase
++import cash.z.ecc.android.sdk.model.ZcashNetwork
 +import cash.z.ecc.android.sdk.type.ServerValidation
 +import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
++import co.electriccoin.zcash.preference.AndroidPreferenceProvider
++import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
++import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.component.EndpointTextFieldInnerState
 +import co.electriccoin.zcash.ui.common.component.ZashiEndpointTextFieldParser
 +import co.electriccoin.zcash.ui.common.model.FastestServersState
-+import co.electriccoin.zcash.ui.common.provider.IsServerSelectionAutomaticProvider
 +import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
++import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.provider.WalletServerSelection
++import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 +import co.electriccoin.zcash.ui.common.repository.WalletRepository
 +import co.electriccoin.zcash.ui.common.usecase.GetAutomaticEndpointUseCase
 +import co.electriccoin.zcash.ui.common.usecase.GetSelectedEndpointUseCase
-+import co.electriccoin.zcash.ui.common.usecase.IsServerAutomaticUseCase
 +import co.electriccoin.zcash.ui.common.usecase.ObserveFastestServersUseCase
 +import co.electriccoin.zcash.ui.common.usecase.PersistServerSelectionUseCase
 +import co.electriccoin.zcash.ui.common.usecase.RefreshFastestServersUseCase
@@ -51259,6 +52226,7 @@ index 000000000..aa2a5dbb1
 +import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
++import io.mockk.verify
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -51278,7 +52246,6 @@ index 000000000..aa2a5dbb1
 +import org.robolectric.RobolectricTestRunner
 +import org.robolectric.RuntimeEnvironment
 +import org.robolectric.annotation.Config
-+import java.io.IOException
 +import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertIs
@@ -51306,7 +52273,7 @@ index 000000000..aa2a5dbb1
 +
 +    @Test
 +    fun rejectedCustomEndpointCanBeDismissedCorrectedAndSaved() = runTest {
-+        withScreen(initiallyAutomatic = true) { screen ->
++        withScreen(PreferenceDisk(bundled, true)) { screen ->
 +            val retry = CompletableDeferred<ServerValidation>()
 +            coEvery { screen.synchronizer.validateServerEndpoint(any(), rejected) } returns
 +                ServerValidation.InValid(IllegalArgumentException("Server rejected the connection"))
@@ -51327,10 +52294,8 @@ index 000000000..aa2a5dbb1
 +            val dialog = assertIs<ServerDialogState.Validation>(screen.state.dialogState)
 +            assertEquals(stringRes(R.string.choose_server_validation_dialog_error_title), dialog.state.title)
 +            assertEquals(stringRes("Server rejected the connection"), dialog.reason)
-+            assertEquals(bundled, screen.storedEndpoint.value)
-+            assertTrue(screen.automatic.value)
-+            coVerify(exactly = 0) { screen.automaticPreference.store(any()) }
-+            coVerify(exactly = 0) { screen.repository.updateWalletEndpoint(any()) }
++            assertEquals(WalletServerSelection(bundled, true), screen.walletProvider.getServerSelection())
++            assertEquals(0, screen.disk.attempts)
 +            assertFalse(screen.state.saveButton.isLoading)
 +
 +            assertNotNull(dialog.state.confirmButtonState).onClick()
@@ -51357,66 +52322,167 @@ index 000000000..aa2a5dbb1
 +
 +            retry.complete(ServerValidation.Valid)
 +            runCurrent()
-+            assertEquals(corrected, screen.storedEndpoint.value)
-+            assertFalse(screen.automatic.value)
++            assertEquals(WalletServerSelection(corrected, false), screen.walletProvider.getServerSelection())
 +            assertNull(screen.state.dialogState)
 +            assertFalse(screen.state.saveButton.isLoading)
 +            assertFalse(screen.state.saveButton.isEnabled)
 +            assertTrue(screen.state.custom.newServerTextFieldState.isEnabled)
 +            assertEquals(stringRes(R.string.serverSetup_active), screen.state.custom.badge)
 +            coVerify(exactly = 1) { screen.synchronizer.validateServerEndpoint(any(), corrected) }
-+            coVerify(exactly = 1) { screen.repository.updateWalletEndpoint(corrected) }
++            assertEquals(1, screen.disk.attempts)
 +        }
 +    }
 +
 +    @Test
-+    fun aFailedEndpointWriteReturnsToEditableStateAndCanBeRetried() = runTest {
-+        assertEndpointWriteRecovery(publishBeforeFailure = false)
++    fun failedAutomaticToManualSaveKeepsPreviousSelectionThroughBackAndRetry() = runTest {
++        assertFailedSaveRecovery(initiallyAutomatic = true)
 +    }
 +
 +    @Test
-+    fun aFailedEndpointWriteCanBeRetriedWhenTheValueWasPublishedInMemory() = runTest {
-+        assertEndpointWriteRecovery(publishBeforeFailure = true)
++    fun failedManualToAutomaticSaveKeepsPreviousSelectionThroughBackAndRetry() = runTest {
++        assertFailedSaveRecovery(initiallyAutomatic = false)
 +    }
 +
-+    private suspend fun TestScope.assertEndpointWriteRecovery(publishBeforeFailure: Boolean) {
-+        withScreen(initiallyAutomatic = false) { screen ->
-+            coEvery { screen.synchronizer.validateServerEndpoint(any(), corrected) } returns ServerValidation.Valid
-+            coEvery { screen.repository.updateWalletEndpoint(corrected) } coAnswers {
-+                if (publishBeforeFailure) screen.storedEndpoint.value = corrected
-+                throw IOException("Cannot save endpoint")
-+            }
++    @Test
++    fun failedManualEndpointChangeCanBeRetried() = runTest {
++        val disk = PreferenceDisk(bundled, false)
++        withScreen(disk) { screen ->
++            disk.failNextCommit = true
 +            screen.enter(corrected)
 +            runCurrent()
 +            screen.state.saveButton.onClick()
 +            runCurrent()
 +
-+            val dialog = assertIs<ServerDialogState.SaveFailure>(screen.state.dialogState)
-+            assertEquals(stringRes(R.string.choose_server_save_error_title), dialog.state.title)
-+            assertEquals(bundled, screen.durableEndpoint)
-+            assertEquals(if (publishBeforeFailure) corrected else bundled, screen.storedEndpoint.value)
-+            assertFalse(screen.state.saveButton.isLoading)
++            assertIs<ServerDialogState.SaveFailure>(screen.state.dialogState)
++            assertEquals(WalletServerSelection(bundled, false), screen.walletProvider.getServerSelection())
 +            assertTrue(screen.state.saveButton.isEnabled)
-+            assertTrue(screen.state.custom.newServerTextFieldState.isEnabled)
-+
-+            assertNotNull(dialog.state.confirmButtonState).onClick()
-+            runCurrent()
-+            assertNull(screen.state.dialogState)
-+            coEvery { screen.repository.updateWalletEndpoint(corrected) } coAnswers {
-+                screen.saveEndpoint(corrected)
-+            }
++            screen.dismissError()
 +            screen.state.saveButton.onClick()
 +            runCurrent()
 +
-+            assertEquals(corrected, screen.storedEndpoint.value)
-+            assertEquals(corrected, screen.durableEndpoint)
++            assertEquals(WalletServerSelection(corrected, false), screen.walletProvider.getServerSelection())
++            assertEquals(3, disk.attempts)
 +            assertFalse(screen.state.saveButton.isEnabled)
-+            coVerify(exactly = 2) { screen.repository.updateWalletEndpoint(corrected) }
 +        }
 +    }
 +
-+    private suspend fun TestScope.withScreen(initiallyAutomatic: Boolean, test: suspend (Screen) -> Unit) {
-+        val screen = Screen(initiallyAutomatic)
++    @Test
++    fun cancellingBeforeWriteAdmissionKeepsAutomaticSelection() = runTest {
++        assertCancellationRecovery(initiallyAutomatic = true)
++    }
++
++    @Test
++    fun cancellingBeforeWriteAdmissionKeepsManualSelection() = runTest {
++        assertCancellationRecovery(initiallyAutomatic = false)
++    }
++
++    @Test
++    fun resetDuringValidationRefusesTheOldWalletSelection() = runTest {
++        val disk = PreferenceDisk(bundled, true)
++        withScreen(disk) { screen ->
++            val validation = CompletableDeferred<ServerValidation>()
++            coEvery { screen.synchronizer.validateServerEndpoint(any(), corrected) } coAnswers { validation.await() }
++            selectOtherMode(screen, initiallyAutomatic = true)
++            screen.state.saveButton.onClick()
++            runCurrent()
++            screen.writeAccess.beginReset()
++            screen.writeAccess.finishReset()
++            screen.walletProvider.store(wallet(bundled))
++
++            validation.complete(ServerValidation.Valid)
++            runCurrent()
++
++            assertIs<ServerDialogState.SaveFailure>(screen.state.dialogState)
++            assertEquals(WalletServerSelection(bundled, true), screen.walletProvider.getServerSelection())
++            assertEquals(1, disk.attempts)
++        }
++    }
++
++    private suspend fun TestScope.assertFailedSaveRecovery(initiallyAutomatic: Boolean) {
++        val previous = initialSelection(initiallyAutomatic)
++        val next = initialSelection(!initiallyAutomatic)
++        val disk = PreferenceDisk(previous.endpoint, initiallyAutomatic)
++        withScreen(disk) { screen ->
++            screen.assertSelected(previous)
++            selectOtherMode(screen, initiallyAutomatic)
++            disk.failNextCommit = true
++            screen.state.saveButton.onClick()
++            runCurrent()
++
++            val dialog = assertIs<ServerDialogState.SaveFailure>(screen.state.dialogState)
++            assertEquals(stringRes(R.string.choose_server_save_error_title), dialog.state.title)
++            assertEquals(previous, screen.walletProvider.getServerSelection())
++            assertTrue(screen.state.saveButton.isEnabled)
++            assertFalse(screen.state.saveButton.isLoading)
++            screen.dismissError()
++            runCurrent()
++            screen.state.onBack()
++            verify(exactly = 1) { screen.navigation.back() }
++        }
++
++        withScreen(disk) { reopened ->
++            reopened.assertSelected(previous)
++            selectOtherMode(reopened, initiallyAutomatic)
++            reopened.state.saveButton.onClick()
++            runCurrent()
++
++            reopened.assertSelected(next)
++            assertEquals(3, disk.attempts)
++        }
++        withScreen(disk) { it.assertSelected(next) }
++    }
++
++    private suspend fun TestScope.assertCancellationRecovery(initiallyAutomatic: Boolean) {
++        val previous = initialSelection(initiallyAutomatic)
++        val next = initialSelection(!initiallyAutomatic)
++        val disk = PreferenceDisk(previous.endpoint, initiallyAutomatic)
++        withScreen(disk) { screen ->
++            val release = CompletableDeferred<Unit>()
++            val pendingWrite = launch {
++                screen.writeAccess.write(screen.writeAccess.token()) { release.await() }
++            }
++            runCurrent()
++            selectOtherMode(screen, initiallyAutomatic)
++            screen.state.saveButton.onClick()
++            runCurrent()
++            assertTrue(screen.state.saveButton.isLoading)
++            screen.vm.viewModelScope.cancel()
++            release.complete(Unit)
++            pendingWrite.join()
++            runCurrent()
++
++            assertEquals(0, disk.attempts)
++            assertEquals(previous, screen.walletProvider.getServerSelection())
++        }
++        withScreen(disk) { reopened ->
++            reopened.assertSelected(previous)
++            selectOtherMode(reopened, initiallyAutomatic)
++            reopened.state.saveButton.onClick()
++            runCurrent()
++            reopened.assertSelected(next)
++        }
++        withScreen(disk) { it.assertSelected(next) }
++    }
++
++    private fun TestScope.selectOtherMode(screen: Screen, initiallyAutomatic: Boolean) {
++        if (initiallyAutomatic) {
++            screen.state.connectionMode.manual.onClick()
++            runCurrent()
++            screen.state.custom.radioButtonState.onClick()
++            runCurrent()
++            screen.enter(corrected)
++        } else {
++            screen.state.connectionMode.automatic.onClick()
++        }
++        runCurrent()
++        assertTrue(screen.state.saveButton.isEnabled)
++    }
++
++    private fun initialSelection(isAutomatic: Boolean) =
++        WalletServerSelection(if (isAutomatic) bundled else corrected, isAutomatic)
++
++    private suspend fun TestScope.withScreen(disk: PreferenceDisk, test: suspend (Screen) -> Unit) {
++        val screen = Screen(disk)
 +        val subscription = backgroundScope.launch { screen.vm.state.collect {} }
 +        try {
 +            runCurrent()
@@ -51427,54 +52493,53 @@ index 000000000..aa2a5dbb1
 +        }
 +    }
 +
-+    private inner class Screen(initiallyAutomatic: Boolean) {
-+        val storedEndpoint = MutableStateFlow(bundled)
-+        var durableEndpoint = bundled
-+            private set
-+        val automatic = MutableStateFlow(initiallyAutomatic)
-+        val synchronizer = mockk<Synchronizer>()
-+        val automaticPreference = mockk<IsServerSelectionAutomaticProvider> {
-+            coEvery { store(any()) } coAnswers { automatic.value = firstArg() }
++    private inner class Screen(val disk: PreferenceDisk) {
++        val writeAccess = WalletWriteAccess()
++        val navigation = mockk<NavigationRouter>(relaxed = true)
++        val synchronizer = mockk<Synchronizer> {
++            coEvery { validateServerEndpoint(any(), corrected) } returns ServerValidation.Valid
 +        }
-+        val repository = mockk<WalletRepository> {
++        val walletProvider = PersistableWalletProviderImpl(disk.open(), writeAccess)
++        private val repository = mockk<WalletRepository> {
 +            every { fastestEndpoints } returns MutableStateFlow(FastestServersState(listOf(bundled), false))
-+            coEvery { updateWalletEndpoint(any()) } coAnswers { saveEndpoint(firstArg()) }
-+        }
-+        private val selectedEndpoint = mockk<GetSelectedEndpointUseCase> {
-+            every { observe() } returns storedEndpoint
-+        }
-+        private val automaticMode = mockk<IsServerAutomaticUseCase> {
-+            every { observe() } returns automatic
 +        }
 +        private val endpoints = mockk<LightWalletEndpointProvider> {
 +            every { getEndpoints() } returns listOf(bundled)
 +            every { getDefaultEndpoint() } returns bundled
 +        }
 +        private val application = RuntimeEnvironment.getApplication()
-+        private val automaticEndpoint = GetAutomaticEndpointUseCase(repository, endpoints, selectedEndpoint)
++        private val automaticEndpoint =
++            GetAutomaticEndpointUseCase(repository, endpoints, GetSelectedEndpointUseCase(walletProvider))
 +        private val persist = PersistServerSelectionUseCase(
 +            application,
-+            repository,
++            walletProvider,
 +            mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns this@Screen.synchronizer },
-+            automaticPreference,
 +            automaticEndpoint,
 +        )
 +        val vm = ChooseServerVM(
 +            application,
 +            ObserveFastestServersUseCase(repository),
-+            selectedEndpoint,
-+            automaticMode,
++            walletProvider,
 +            endpoints,
 +            RefreshFastestServersUseCase(repository),
 +            persist,
-+            mockk(),
++            navigation,
 +            automaticEndpoint,
 +        )
 +        val state: ChooseServerState get() = assertNotNull(vm.state.value)
 +
-+        fun saveEndpoint(endpoint: LightWalletEndpoint) {
-+            durableEndpoint = endpoint
-+            storedEndpoint.value = endpoint
++        suspend fun assertSelected(selection: WalletServerSelection) {
++            assertEquals(selection, walletProvider.getServerSelection())
++            assertEquals(selection.isAutomatic == false, state.connectionMode.isManualSelected)
++            val badge = if (selection.endpoint == bundled) state.fastest.servers.single().badge else state.custom.badge
++            assertEquals(stringRes(R.string.serverSetup_active), badge)
++            assertFalse(state.saveButton.isEnabled)
++            assertNull(state.dialogState)
++        }
++
++        fun dismissError() {
++            val dialog = assertIs<ServerDialogState.SaveFailure>(state.dialogState)
++            assertNotNull(dialog.state.confirmButtonState).onClick()
 +        }
 +
 +        fun enter(endpoint: LightWalletEndpoint) {
@@ -51483,6 +52548,65 @@ index 000000000..aa2a5dbb1
 +            state.custom.newServerTextFieldState.onValueChange(EndpointTextFieldInnerState.fromEndpoint(parsed))
 +        }
 +    }
++
++    private inner class PreferenceDisk(endpoint: LightWalletEndpoint, isAutomatic: Boolean) {
++        private val durable = mutableMapOf(
++            "persistable_wallet" to wallet(endpoint).toJson().toString(),
++            "is_server_selection_automatic" to isAutomatic.toString(),
++        )
++        var attempts = 0
++            private set
++        var failNextCommit = false
++
++        fun open(): EncryptedPreferenceProvider {
++            val cache = durable.toMutableMap()
++            val listeners = mutableSetOf<SharedPreferences.OnSharedPreferenceChangeListener>()
++            val preferences = mockk<SharedPreferences>()
++            every { preferences.getString(any(), null) } answers { cache[firstArg()] }
++            every { preferences.registerOnSharedPreferenceChangeListener(any()) } answers {
++                listeners.add(firstArg())
++                Unit
++            }
++            every { preferences.unregisterOnSharedPreferenceChangeListener(any()) } answers {
++                listeners.remove(firstArg())
++                Unit
++            }
++            every { preferences.edit() } answers {
++                val updates = mutableMapOf<String, String?>()
++                val editor = mockk<SharedPreferences.Editor>()
++                every { editor.putString(any(), any()) } answers {
++                    updates[firstArg()] = secondArg()
++                    editor
++                }
++                every { editor.commit() } answers {
++                    attempts++
++                    updates.forEach { (key, value) ->
++                        if (value == null) cache.remove(key) else cache[key] = value
++                        listeners.forEach { it.onSharedPreferenceChanged(preferences, key) }
++                    }
++                    val succeeded = !failNextCommit
++                    failNextCommit = false
++                    if (succeeded) {
++                        durable.clear()
++                        durable.putAll(cache)
++                    }
++                    succeeded
++                }
++                editor
++            }
++            val provider = AndroidPreferenceProvider(preferences, Dispatchers.Main)
++            return mockk { coEvery { invoke() } returns provider }
++        }
++    }
++
++    private fun wallet(endpoint: LightWalletEndpoint) =
++        PersistableWallet(
++            network = ZcashNetwork.Mainnet,
++            endpoint = endpoint,
++            birthday = null,
++            seedPhrase = SeedPhrase(List(SeedPhrase.SEED_PHRASE_SIZE) { "abandon" }),
++            walletInitMode = WalletInitMode.ExistingWallet
++        )
 +
 +    private val ChooseServerState.custom: ServerState.Custom
 +        get() = other.servers.filterIsInstance<ServerState.Custom>().single()
@@ -53663,6 +54787,164 @@ index 461fb8fbb..64d0c613c 100644
 -        assertTrue(router.forwardedRoutes.isEmpty())
 +        assertFalse(HandleExternalLinkUseCase(launchNavigation)("gift.zodl.com.evil.example", isRedelivery = false))
 +        assertEquals(LaunchNavigationRequests.Kind.THIRD_PARTY_SCAN, launchNavigation.changes.value.single().kind)
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
+index 1dec990ab..3b9c03f3e 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
+@@ -5,0 +6 @@ import androidx.lifecycle.ViewModelStore
++import cash.z.ecc.android.sdk.Synchronizer
+@@ -6,0 +8 @@ import cash.z.ecc.android.sdk.model.Account
++import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
+@@ -9,0 +12 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+@@ -14,0 +18 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
++import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -38 +42 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+-import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.awaitCancellation
+@@ -118 +122 @@ class RedeemGiftVMTest {
+-    fun theDisclaimerNamesNoWalletUntilTheSelectedAccountIsKnown() =
++    fun redemptionWaitsUntilTheSelectedAccountCanBeDisplayed() =
+@@ -120 +124,2 @@ class RedeemGiftVMTest {
+-            val vm = Env(this, account = null).startedVm()
++            val env = Env(this, account = null)
++            val vm = env.startedVm()
+@@ -123,0 +129,11 @@ class RedeemGiftVMTest {
++            assertFalse(state.redeemButton.isEnabled)
++            state.redeemButton.onClick()
++            runCurrent()
++            assertTrue(env.dataSource.redeemedTo.isEmpty())
++
++            val account = zashiAccount()
++            env.selectedAccount.value = account
++            runCurrent()
++            val ready = assertIs<RedeemGiftState.Ready>(vm.state.value)
++            assertEquals(stringRes(R.string.redeemGift_ready_disclaimer, account.name), ready.disclaimer)
++            assertTrue(ready.redeemButton.isEnabled)
+@@ -202,0 +219,81 @@ class RedeemGiftVMTest {
++    @Test
++    fun redemptionUsesTheAccountNamedByTheTappedReadyStateAcrossSelectionChanges() = runTest(dispatcher) {
++        val reviewed = zashiAccount()
++        val replacement = mockk<WalletAccount> {
++            every { name } returns stringRes("Another account")
++            every { sdkAccount } returns mockk()
++        }
++        val selected = MutableStateFlow<WalletAccount?>(reviewed)
++        val accountDataSource = mockk<AccountDataSource> {
++            every { selectedAccount } returns selected
++        }
++        val addressResolutionStarted = CompletableDeferred<Unit>()
++        val resolveAddress = CompletableDeferred<Unit>()
++        val synchronizer = mockk<Synchronizer> {
++            coEvery { getCustomUnifiedAddress(any(), UnifiedAddressRequest.Orchard) } coAnswers {
++                val address = if (firstArg<Account>() === reviewed.sdkAccount) ORCHARD_ADDRESS else "u1otherorchard"
++                addressResolutionStarted.complete(Unit)
++                resolveAddress.await()
++                address
++            }
++        }
++        val provider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer }
++        val env = Env(this)
++        val vm = env.newVm(
++            getSelectedWalletAccount = GetSelectedWalletAccountUseCase(accountDataSource),
++            getDestinationAddress = GetGiftCardDestinationAddressUseCase(provider),
++        )
++        backgroundScope.launch { vm.state.collect { } }
++        runCurrent()
++
++        val ready = assertIs<RedeemGiftState.Ready>(vm.state.value)
++        assertEquals(stringRes(R.string.redeemGift_ready_disclaimer, reviewed.name), ready.disclaimer)
++        try {
++            ready.redeemButton.onClick()
++            selected.value = replacement
++            runCurrent()
++            assertTrue(addressResolutionStarted.isCompleted)
++            assertTrue(env.dataSource.redeemedTo.isEmpty())
++
++            resolveAddress.complete(Unit)
++            runCurrent()
++
++            assertEquals(listOf(ORCHARD_ADDRESS), env.dataSource.redeemedTo)
++        } finally {
++            clear(vm)
++        }
++    }
++
++    @Test
++    fun resetCancelsSuspendedGiftAddressResolutionBeforeRedemptionEntersTheDataSource() = runTest(dispatcher) {
++        val addressResolutionStarted = CompletableDeferred<Unit>()
++        val addressResolutionCancelled = CompletableDeferred<Unit>()
++        val provider = mockk<SynchronizerProvider> {
++            coEvery { getSynchronizer() } coAnswers {
++                addressResolutionStarted.complete(Unit)
++                try {
++                    awaitCancellation()
++                } finally {
++                    addressResolutionCancelled.complete(Unit)
++                }
++            }
++        }
++        val env = Env(this)
++        val vm = env.newVm(getDestinationAddress = GetGiftCardDestinationAddressUseCase(provider))
++        backgroundScope.launch { vm.state.collect { } }
++        runCurrent()
++        try {
++            assertIs<RedeemGiftState.Ready>(vm.state.value).redeemButton.onClick()
++            runCurrent()
++            assertTrue(addressResolutionStarted.isCompleted)
++
++            env.quiesceForWalletReset()
++
++            assertTrue(addressResolutionCancelled.isCompleted)
++            assertTrue(env.dataSource.redeemedTo.isEmpty())
++            assertEquals(1, env.dataSource.closed.size)
++        } finally {
++            clear(vm)
++        }
++    }
++
+@@ -743 +840 @@ class RedeemGiftVMTest {
+-        private val account: WalletAccount? = zashiAccount(),
++        account: WalletAccount? = zashiAccount(),
+@@ -747,0 +845 @@ class RedeemGiftVMTest {
++        val selectedAccount = MutableStateFlow(account)
+@@ -761,0 +860,2 @@ class RedeemGiftVMTest {
++        suspend fun quiesceForWalletReset() = repository.quiesceForWalletReset()
++
+@@ -766,18 +866,15 @@ class RedeemGiftVMTest {
+-        fun newVm(linkId: String = this.linkId): RedeemGiftVM {
+-            val accounts: Flow<WalletAccount?> = MutableStateFlow(account)
+-            val getSelectedWalletAccount =
+-                mockk<GetSelectedWalletAccountUseCase> {
+-                    every { observe() } returns accounts
+-                }
+-            val getDestinationAddress =
+-                mockk<GetGiftCardDestinationAddressUseCase> {
+-                    coEvery { this@mockk.invoke() } returns ORCHARD_ADDRESS
+-                }
+-            return RedeemGiftVM(
+-                args = RedeemGiftArgs(linkId),
+-                giftCardRepository = repository,
+-                getDestinationAddress = getDestinationAddress,
+-                navigationRouter = router,
+-                getSelectedWalletAccount = getSelectedWalletAccount,
+-            )
+-        }
++        fun newVm(
++            linkId: String = this.linkId,
++            getSelectedWalletAccount: GetSelectedWalletAccountUseCase = mockk {
++                every { observe() } returns selectedAccount
++            },
++            getDestinationAddress: GetGiftCardDestinationAddressUseCase = mockk {
++                coEvery { this@mockk.invoke(any()) } returns ORCHARD_ADDRESS
++            },
++        ): RedeemGiftVM = RedeemGiftVM(
++            args = RedeemGiftArgs(linkId),
++            giftCardRepository = repository,
++            getDestinationAddress = getDestinationAddress,
++            navigationRouter = router,
++            getSelectedWalletAccount = getSelectedWalletAccount,
++        )
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVMTest.kt
 index fcda335bd..a57b60e46 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/paste/PasteGiftCardLinkVMTest.kt
@@ -53922,21 +55204,23 @@ index 000000000..d748ccc91
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/restore/tor/RestoreTorVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/restore/tor/RestoreTorVMTest.kt
 new file mode 100644
-index 000000000..06d86d125
+index 000000000..49a69f69c
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/restore/tor/RestoreTorVMTest.kt
-@@ -0,0 +1,179 @@
+@@ -0,0 +1,303 @@
 +package co.electriccoin.zcash.ui.screen.restore.tor
 +
 +import androidx.lifecycle.ViewModel
 +import androidx.lifecycle.viewModelScope
 +import cash.z.ecc.android.bip39.Mnemonics
++import cash.z.ecc.android.sdk.SdkSynchronizer
 +import cash.z.ecc.android.sdk.model.BlockHeight
 +import cash.z.ecc.android.sdk.model.ZcashNetwork
 +import cash.z.ecc.sdk.type.fromResources
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.model.LceError
++import co.electriccoin.zcash.ui.common.model.VersionInfo
 +import co.electriccoin.zcash.ui.common.repository.WalletInitializationConflictException
 +import co.electriccoin.zcash.ui.common.repository.WalletRepository
 +import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
@@ -53944,17 +55228,28 @@ index 000000000..06d86d125
 +import co.electriccoin.zcash.ui.common.usecase.ValidateSeedUseCase
 +import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
 +import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.design.util.stringResByNumber
++import co.electriccoin.zcash.ui.screen.restore.date.RestoreDateArgs
++import co.electriccoin.zcash.ui.screen.restore.date.RestoreDateVM
++import co.electriccoin.zcash.ui.screen.restore.estimation.RestoreEstimationArgs
++import co.electriccoin.zcash.ui.screen.restore.estimation.RestoreEstimationVM
 +import co.electriccoin.zcash.ui.screen.restore.height.RestoreHeight
 +import co.electriccoin.zcash.ui.screen.restore.height.RestoreHeightVM
 +import co.electriccoin.zcash.ui.screen.restore.seed.RestoreSeedArgs
 +import co.electriccoin.zcash.ui.screen.restore.seed.RestoreSeedVM
++import io.mockk.coEvery
++import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
++import io.mockk.mockkObject
++import io.mockk.unmockkObject
 +import io.mockk.verify
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.Job
++import kotlinx.coroutines.awaitCancellation
++import kotlinx.coroutines.cancelAndJoin
 +import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.joinAll
 +import kotlinx.coroutines.test.StandardTestDispatcher
@@ -53967,6 +55262,8 @@ index 000000000..06d86d125
 +import org.robolectric.RobolectricTestRunner
 +import org.robolectric.RuntimeEnvironment
 +import org.robolectric.annotation.Config
++import java.time.YearMonth
++import java.time.ZoneId
 +import kotlin.test.AfterTest
 +import kotlin.test.BeforeTest
 +import kotlin.test.Test
@@ -53975,7 +55272,9 @@ index 000000000..06d86d125
 +import kotlin.test.assertIs
 +import kotlin.test.assertNotNull
 +import kotlin.test.assertNull
++import kotlin.test.assertSame
 +import kotlin.test.assertTrue
++import kotlin.time.toKotlinInstant
 +
 +@OptIn(ExperimentalCoroutinesApi::class)
 +@RunWith(RobolectricTestRunner::class)
@@ -54061,6 +55360,110 @@ index 000000000..06d86d125
 +        verify(exactly = 2) { repository.restoreWallet(network, phrase, BlockHeight.new(birthday), true) }
 +    }
 +
++    @Test
++    fun restoreFromMonthRetriesEstimationAndUsesTheDisplayedHeightAndTorChoice() = runVmTest {
++        val forwarded = recordForwardedRoutes()
++        val seed = enteredSeed()
++        assertNotNull(seed.state.first { it != null }?.pasteButton).onClick()
++        assertNotNull(seed.state.first { it?.nextButton != null }?.nextButton).onClick()
++        runCurrent()
++        val seedRoute = assertIs<RestoreHeight>(forwarded.single())
++        val phrase = assertNotNull(seed.restoreSession.resolve(seedRoute.sessionId))
++        val height = RestoreHeightVM(seedRoute, navigation).also { viewModels += it }
++        assertNotNull(height.state.value.secondaryButton).onClick()
++        val dateRoute = assertIs<RestoreDateArgs>(forwarded.last())
++        assertEquals(seedRoute.sessionId, dateRoute.sessionId)
++
++        val month = YearMonth.of(2024, 8)
++        val expectedDate = month.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toKotlinInstant()
++        val estimatedHeight = BlockHeight.new(birthday)
++        val retry = CompletableDeferred<BlockHeight>()
++        mockkObject(SdkSynchronizer.Companion)
++        try {
++            coEvery {
++                SdkSynchronizer.estimateBirthdayHeight(context, expectedDate, VersionInfo.NETWORK)
++            } throws IllegalStateException("Synthetic estimation failure") coAndThen { retry.await() }
++            val date = RestoreDateVM(dateRoute, navigation, context, ErrorMapperUseCase(mockk(), mockk()))
++                .also { viewModels += it }
++            assertNotNull(date.state.value.content).onYearMonthChange(month)
++            val picked = assertNotNull(date.state.first { it.content?.selection == month }.content)
++            picked.primaryButton.onClick()
++
++            val failed = date.state.first { it.error != null }
++            assertEquals(month, failed.content?.selection)
++            assertEquals(listOf(seedRoute, dateRoute), forwarded)
++            assertSame(phrase, seed.restoreSession.resolve(seedRoute.sessionId))
++            assertIs<LceError.BottomSheet>(failed.error).state.primaryAction.onClick()
++            date.state.first { it.error == null && it.content?.primaryButton?.isLoading == true }
++            assertEquals(listOf(seedRoute, dateRoute), forwarded)
++            retry.complete(estimatedHeight)
++            runCurrent()
++
++            val estimateRoute = assertIs<RestoreEstimationArgs>(forwarded.last())
++            assertEquals(seedRoute.sessionId, estimateRoute.sessionId)
++            val estimate = RestoreEstimationVM(estimateRoute, navigation, mockk()).also { viewModels += it }
++            assertEquals(stringResByNumber(birthday, 0), estimate.state.value.blockHeightText)
++            estimate.state.value.primaryButton.onClick()
++            val torRoute = assertIs<RestoreTorArgs>(forwarded.last())
++            assertEquals(RestoreTorArgs(seedRoute.sessionId, birthday), torRoute)
++
++            val network = ZcashNetwork.fromResources(context)
++            val completedRestore = CompletableDeferred(Unit)
++            every { repository.restoreWallet(network, phrase, estimatedHeight, true) } returns completedRestore
++            val tor = tor(seed, torRoute)
++            val unchecked = assertNotNull(tor.state.value.content)
++            assertFalse(unchecked.checkbox.isChecked)
++            unchecked.checkbox.onClick()
++            val checked = assertNotNull(tor.state.first { it.content?.checkbox?.isChecked == true }.content)
++            checked.primary.onClick()
++            runCurrent()
++
++            verify(exactly = 1) { repository.restoreWallet(network, phrase, estimatedHeight, true) }
++            assertNull(seed.restoreSession.resolve(seedRoute.sessionId))
++            coVerify(exactly = 2) {
++                SdkSynchronizer.estimateBirthdayHeight(context, expectedDate, VersionInfo.NETWORK)
++            }
++        } finally {
++            retry.cancel()
++            unmockkObject(SdkSynchronizer.Companion)
++        }
++    }
++
++    @Test
++    fun leavingMonthPickerCancelsTheInFlightEstimate() = runVmTest {
++        val started = CompletableDeferred<Unit>()
++        val cancelled = CompletableDeferred<Unit>()
++        mockkObject(SdkSynchronizer.Companion)
++        try {
++            coEvery { SdkSynchronizer.estimateBirthdayHeight(context, any(), VersionInfo.NETWORK) } coAnswers {
++                started.complete(Unit)
++                try {
++                    awaitCancellation()
++                } finally {
++                    cancelled.complete(Unit)
++                }
++            }
++            val date = RestoreDateVM(
++                RestoreDateArgs("opaque-test-session"),
++                navigation,
++                context,
++                ErrorMapperUseCase(mockk(), mockk()),
++            ).also { viewModels += it }
++            val state = assertNotNull(date.state.value.content)
++            state.primaryButton.onClick()
++            started.await()
++
++            state.onBack()
++            date.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
++
++            assertTrue(cancelled.isCompleted)
++            verify(exactly = 1) { navigation.back() }
++            verify(exactly = 0) { navigation.forward(*anyVararg()) }
++        } finally {
++            unmockkObject(SdkSynchronizer.Companion)
++        }
++    }
++
 +    private fun enteredSeed() = RestoreSeedVM(
 +        navigationRouter = navigation,
 +        validateSeed = ValidateSeedUseCase(),
@@ -54069,10 +55472,7 @@ index 000000000..06d86d125
 +    ).also { viewModels += it }
 +
 +    private suspend fun TestScope.enterBirthday(seed: RestoreSeedVM): RestoreTorArgs {
-+        val forwarded = mutableListOf<Any>()
-+        every { navigation.forward(*anyVararg()) } answers {
-+            (args[0] as Array<*>).filterNotNull().forEach { forwarded.add(it) }
-+        }
++        val forwarded = recordForwardedRoutes()
 +        assertNotNull(seed.state.first { it != null }?.pasteButton).onClick()
 +        assertNotNull(seed.state.first { it?.nextButton != null }?.nextButton).onClick()
 +        runCurrent()
@@ -54085,6 +55485,12 @@ index 000000000..06d86d125
 +        assertEquals(seedRoute.sessionId, torRoute.sessionId)
 +        assertEquals(birthday, torRoute.blockHeight)
 +        return torRoute
++    }
++
++    private fun recordForwardedRoutes() = mutableListOf<Any>().also { forwarded ->
++        every { navigation.forward(*anyVararg()) } answers {
++            (args[0] as Array<*>).filterNotNull().forEach { forwarded.add(it) }
++        }
 +    }
 +
 +    private fun tor(seed: RestoreSeedVM, args: RestoreTorArgs) = RestoreTorVM(
@@ -54246,19 +55652,33 @@ index 8ad312da8..5fddbfcca 100644
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt
 new file mode 100644
-index 000000000..2444d0c67
+index 000000000..107f7dc47
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/scankeystone/viewmodel/ScanKeystonePCZTViewModelTest.kt
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,203 @@
 +package co.electriccoin.zcash.ui.screen.scankeystone.viewmodel
 +
++import cash.z.ecc.android.sdk.model.Memo
++import cash.z.ecc.android.sdk.model.Pczt
++import cash.z.ecc.android.sdk.model.Proposal
++import cash.z.ecc.android.sdk.model.WalletAddress
++import cash.z.ecc.android.sdk.model.Zatoshi
++import cash.z.ecc.android.sdk.model.ZecSend
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
++import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
++import co.electriccoin.zcash.ui.common.model.SubmitResult
++import co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider
 +import co.electriccoin.zcash.ui.common.repository.KeystoneFirmwareBelowMinimumException
++import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
 +import co.electriccoin.zcash.ui.common.repository.ParsePCZTException
 +import co.electriccoin.zcash.ui.common.usecase.InvalidKeystonePCZTQRException
 +import co.electriccoin.zcash.ui.common.usecase.ParseKeystonePCZTUseCase
 +import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneQrResult
++import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
++import co.electriccoin.zcash.ui.common.usecase.SubmitKSProposalUseCase
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 +import co.electriccoin.zcash.ui.screen.error.ErrorBottomSheet
@@ -54267,13 +55687,21 @@ index 000000000..2444d0c67
 +import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
 +import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
 +import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
++import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressArgs
++import com.keystone.module.DecodeResult
++import com.sparrowwallet.hummingbird.UR
++import com.sparrowwallet.hummingbird.URDecoder
++import com.sparrowwallet.hummingbird.UREncoder
 +import io.mockk.Called
 +import io.mockk.coEvery
++import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
 +import io.mockk.verify
++import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.joinAll
 +import kotlinx.coroutines.test.StandardTestDispatcher
 +import kotlinx.coroutines.test.resetMain
 +import kotlinx.coroutines.test.runTest
@@ -54281,10 +55709,13 @@ index 000000000..2444d0c67
 +import kotlin.test.AfterTest
 +import kotlin.test.BeforeTest
 +import kotlin.test.Test
++import kotlin.test.assertContentEquals
 +import kotlin.test.assertEquals
 +import kotlin.test.assertIs
++import kotlin.test.assertNotNull
 +import kotlin.test.assertNull
 +import kotlin.test.assertSame
++import kotlin.test.assertTrue
 +
 +@OptIn(ExperimentalCoroutinesApi::class)
 +class ScanKeystonePCZTViewModelTest {
@@ -54314,6 +55745,71 @@ index 000000000..2444d0c67
 +        vm.onScanned("last-fragment").join()
 +        assertEquals(100, vm.state.value.progress)
 +        assertEquals(ScanValidationState.NONE, vm.validationState.value)
++    }
++
++    @Test
++    fun completedScanSubmitsTheApprovedProposalOnceAndOpensProgress() = runTest {
++        val signer = mockk<KeystoneSDKProvider>()
++        val accountDataSource = mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns mockk() }
++        val proposalDataSource = mockk<ProposalDataSource>()
++        val sdkProposal = mockk<Proposal>()
++        val repository = KeystoneProposalRepositoryImpl(accountDataSource, proposalDataSource, signer, mockk())
++        val prefillSend = mockk<PrefillSendUseCase>(relaxed = true)
++        val submit = SubmitKSProposalUseCase(repository, router, mockk(relaxed = true), mockk(), prefillSend)
++        submit.scope = this
++        val vm = ScanKeystonePCZTViewModel(ParseKeystonePCZTUseCase(submit, repository, signer), navigateToError)
++
++        val unsigned = Pczt(byteArrayOf(1))
++        val proven = Pczt(byteArrayOf(2))
++        val signed = "keystone:fw_version".encodeToByteArray() + byteArrayOf(3, 13, 0, 1)
++        val signedUr = UR.fromBytes("zcash-pczt", signed)
++        val encoder = UREncoder(signedUr, 10, 10, 0L)
++        val fragments = List(encoder.seqLen) { encoder.nextPart() }
++        val decoder = URDecoder()
++        val submitted = CompletableDeferred<Pair<ByteArray, ByteArray>>()
++        val destination = WalletAddress.Unified.new("synthetic-recipient")
++        val amount = Zatoshi(1234)
++        val memo = Memo("")
++        val approved = RegularTransactionProposal(destination, amount, memo, sdkProposal)
++        val send = ZecSend(destination = destination, amount = amount, memo = memo, proposal = null)
++        coEvery { proposalDataSource.createProposal(any(), send) } returns approved
++        coEvery { proposalDataSource.createPcztFromProposal(any(), sdkProposal) } returns unsigned
++        coEvery { proposalDataSource.addProofsToPczt(any()) } returns proven
++        coEvery { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) } coAnswers {
++            thirdArg<() -> Unit>().invoke()
++            submitted.complete(firstArg<Pczt>().toByteArray() to secondArg<Pczt>().toByteArray())
++            SubmitResult.Success(listOf("synthetic-transaction"))
++        }
++        // The Android Keystone adapter loads JNI. Keep its JVM UR decoding at the test boundary.
++        every { signer.decodeQR(any()) } answers {
++            check(decoder.receivePart(firstArg()))
++            val decoded = decoder.result?.ur
++            val progress = if (decoded == null) (decoder.estimatedPercentComplete * 100).toInt() else 100
++            DecodeResult(progress, decoded)
++        }
++        every { signer.parsePczt(signedUr) } answers { firstArg<UR>().toBytes() }
++        every { router.replace(TransactionProgressArgs) } returns Unit
++
++        repository.createProposal(send)
++        repository.createPCZTFromProposal()
++        repository.approveForSigning(approved)
++
++        vm.onScanned(fragments.first()).join()
++        assertTrue(assertNotNull(vm.state.value.progress) in 1..99)
++        verify(exactly = 0) { router.replace(TransactionProgressArgs) }
++        fragments.drop(1).dropLast(1).forEach { vm.onScanned(it).join() }
++
++        List(3) { vm.onScanned(fragments.last()) }.joinAll()
++
++        assertEquals(100, vm.state.value.progress)
++        assertEquals(ScanValidationState.NONE, vm.validationState.value)
++        verify(exactly = 1) { signer.decodeQR(fragments.last()) }
++        verify(exactly = 1) { signer.parsePczt(signedUr) }
++        verify(exactly = 1) { router.replace(TransactionProgressArgs) }
++        val (proofBytes, signatureBytes) = submitted.await()
++        assertContentEquals(proven.toByteArray(), proofBytes)
++        assertContentEquals(signed, signatureBytes)
++        coVerify(exactly = 1) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) }
 +    }
 +
 +    @Test
@@ -54361,6 +55857,159 @@ index 000000000..2444d0c67
 +        assertEquals(ScanValidationState.INVALID, vm.validationState.value)
 +        assertNull(vm.state.value.progress)
 +        verify { router wasNot Called }
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendRecipientSelectionTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendRecipientSelectionTest.kt
+new file mode 100644
+index 000000000..00531848d
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendRecipientSelectionTest.kt
+@@ -0,0 +1,147 @@
++package co.electriccoin.zcash.ui.screen.send
++
++import androidx.lifecycle.viewModelScope
++import cash.z.ecc.android.sdk.Synchronizer
++import cash.z.ecc.android.sdk.type.AddressType
++import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.model.AddressBookContact
++import co.electriccoin.zcash.ui.common.model.WalletAccount
++import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
++import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
++import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
++import co.electriccoin.zcash.ui.common.usecase.GetABContactsUseCase
++import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
++import co.electriccoin.zcash.ui.common.usecase.NavigateToSelectRecipientUseCase
++import co.electriccoin.zcash.ui.common.usecase.ObserveABContactPickedUseCase
++import co.electriccoin.zcash.ui.common.usecase.ObserveAccountIconUseCase
++import co.electriccoin.zcash.ui.common.usecase.ObserveContactByAddressUseCase
++import co.electriccoin.zcash.ui.design.util.imageRes
++import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.design.util.stringResByAddress
++import co.electriccoin.zcash.ui.screen.addressbook.ADDRESS_MAX_LENGTH
++import co.electriccoin.zcash.ui.screen.addressbook.AddressBookItem
++import co.electriccoin.zcash.ui.screen.addressbook.SelectABRecipientArgs
++import co.electriccoin.zcash.ui.screen.addressbook.SelectABRecipientVM
++import co.electriccoin.zcash.ui.screen.send.model.RecipientAddressState
++import io.mockk.coEvery
++import io.mockk.coVerify
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.verify
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.cancel
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.flow.flowOf
++import kotlinx.coroutines.test.StandardTestDispatcher
++import kotlinx.coroutines.test.resetMain
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import kotlinx.coroutines.test.setMain
++import kotlin.test.AfterTest
++import kotlin.test.BeforeTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.time.Instant
++
++@OptIn(ExperimentalCoroutinesApi::class)
++class SendRecipientSelectionTest {
++    @BeforeTest
++    fun setUp() = Dispatchers.setMain(StandardTestDispatcher())
++
++    @AfterTest
++    fun tearDown() = Dispatchers.resetMain()
++
++    @Test
++    fun contactAndUpdatedWalletAccountRowsPublishTheirValidatedAddressesToSend() = runTest {
++        val contact = EnhancedABContact(
++            AddressBookContact("Saved recipient", "synthetic-contact", Instant.fromEpochSeconds(0), chain = null),
++            blockchain = null,
++        )
++        val ownAddress = "synthetic-selected-account"
++        val oldAddress = "synthetic-old-wallet-recipient"
++        val newAddress = "synthetic-new-wallet-recipient-".repeat(8)
++        val accounts = MutableStateFlow<List<WalletAccount>?>(
++            listOf(account("Sending wallet", ownAddress, selected = true), account("Old wallet", oldAddress))
++        )
++        val accountDataSource = mockk<AccountDataSource> { every { allAccounts } returns accounts }
++        val addressBook = mockk<AddressBookRepository> {
++            every { contacts } returns flowOf(listOf(contact))
++            every { observeContactByAddress(any()) } answers { flowOf(contact.takeIf { it.address == firstArg() }) }
++        }
++        val synchronizer = mockk<Synchronizer> {
++            coEvery { validateAddress(contact.address) } returns AddressType.Transparent
++            coEvery { validateAddress(newAddress) } returns AddressType.Unified
++        }
++        val synchronizerProvider = mockk<SynchronizerProvider> {
++            coEvery { getSynchronizer() } returns synchronizer
++        }
++        val router = mockk<NavigationRouter>(relaxed = true)
++        val getWalletAccounts = GetWalletAccountsUseCase(accountDataSource)
++        val selection = ObserveABContactPickedUseCase(synchronizerProvider)
++        val send = SendViewModel(
++            exchangeRateRepository = mockk(relaxed = true),
++            observeContactByAddress = ObserveContactByAddressUseCase(addressBook),
++            observeContactPicked = selection,
++            createProposal = mockk(),
++            observeWalletAccounts = getWalletAccounts,
++            navigateToSelectRecipient = NavigateToSelectRecipientUseCase(router),
++            navigationRouter = router,
++        )
++        val picker = SelectABRecipientVM(
++            getAddressBookContacts = GetABContactsUseCase(addressBook),
++            getWalletAccountsUseCase = getWalletAccounts,
++            observeContactPicked = selection,
++            navigationRouter = router,
++            observeAccountIcon = mockk<ObserveAccountIconUseCase> {
++                every { observeAll() } returns flowOf(emptyMap())
++                every { iconOf(any(), any<WalletAccount>()) } returns imageRes("W")
++            },
++        )
++
++        try {
++            send.sendAddressBookState.value.onButtonClick()
++            runCurrent()
++            verify(exactly = 1) { router.forward(SelectABRecipientArgs) }
++
++            val initial = picker.state.first { !it.isLoading }.items.filterIsInstance<AddressBookItem.Contact>()
++            assertEquals(listOf(stringRes("Old wallet"), stringRes(contact.name)), initial.map { it.state.name })
++            initial.last().state.onClick()
++
++            val contactRecipient = send.recipientAddressState.first { it.address == contact.address }
++            assertEquals(RecipientAddressState.new(contact.address, AddressType.Transparent), contactRecipient)
++            verify(exactly = 1) { router.back() }
++
++            send.sendAddressBookState.value.onButtonClick()
++            accounts.value = listOf(
++                account("Old wallet", oldAddress, selected = true),
++                account("New wallet", newAddress),
++            )
++            val updated = picker.state.first { state ->
++                state.items.filterIsInstance<AddressBookItem.Contact>().any { it.state.name == stringRes("New wallet") }
++            }.items.filterIsInstance<AddressBookItem.Contact>()
++            assertEquals(listOf(stringRes("New wallet"), stringRes(contact.name)), updated.map { it.state.name })
++            assertEquals(stringResByAddress(newAddress.take(ADDRESS_MAX_LENGTH) + "..."), updated.first().state.address)
++            updated.first().state.onClick()
++
++            val walletRecipient = send.recipientAddressState.first { it.address == newAddress }
++            assertEquals(RecipientAddressState.new(newAddress, AddressType.Unified), walletRecipient)
++            verify(exactly = 2) { router.forward(SelectABRecipientArgs) }
++            verify(exactly = 2) { router.back() }
++            coVerify(exactly = 1) { synchronizer.validateAddress(contact.address) }
++            coVerify(exactly = 1) { synchronizer.validateAddress(newAddress) }
++            coVerify(exactly = 0) { synchronizer.validateAddress(oldAddress) }
++        } finally {
++            picker.viewModelScope.cancel()
++            send.viewModelScope.cancel()
++        }
++    }
++
++    private fun account(label: String, address: String, selected: Boolean = false): WalletAccount = mockk {
++        every { name } returns stringRes(label)
++        every { unifiedAddress } returns address
++        every { isSelected } returns selected
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/support/model/TimeInfoTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/support/model/TimeInfoTest.kt

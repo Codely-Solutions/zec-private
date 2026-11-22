@@ -66,7 +66,8 @@ class RedeemGiftVM(
             initialValue = null
         )
 
-    private fun onRedeemClick() = giftCardRepository.redeem(args.linkId) { getDestinationAddress() }
+    private fun onRedeemClick(account: WalletAccount) =
+        giftCardRepository.redeem(args.linkId) { getDestinationAddress(account) }
 
     private fun onRetryClick() = giftCardRepository.checkAgain(args.linkId)
 
@@ -95,7 +96,7 @@ class RedeemGiftVM(
                     ticker = stringRes(CURRENCY_TICKER),
                     message = session.summary?.message?.takeIf { it.isNotBlank() },
                     walletName = account?.name,
-                    onRedeem = ::onRedeemClick,
+                    onRedeem = { account?.let(::onRedeemClick) },
                     onBack = ::onBack
                 )
             }

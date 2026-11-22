@@ -12,6 +12,7 @@ class SimulateSeedNotRelevantUseCase(
     private val persistableWalletProvider: PersistableWalletProvider,
 ) {
     suspend operator fun invoke() {
+        val version = persistableWalletProvider.writeVersion
         val wallet = persistableWalletProvider.getPersistableWallet() ?: return
         val fakeSeedPhrase =
             withContext(Dispatchers.IO) {
@@ -23,7 +24,8 @@ class SimulateSeedNotRelevantUseCase(
                         .map { it.concatToString() }
                 )
             }
-        persistableWalletProvider.store(wallet.copy(seedPhrase = fakeSeedPhrase))
-        Process.killProcess(Process.myPid())
+        if (persistableWalletProvider.storeIfCurrent(wallet, wallet.copy(seedPhrase = fakeSeedPhrase), version)) {
+            Process.killProcess(Process.myPid())
+        }
     }
 }

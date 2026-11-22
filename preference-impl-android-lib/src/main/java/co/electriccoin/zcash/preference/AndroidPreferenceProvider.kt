@@ -76,6 +76,25 @@ class AndroidPreferenceProvider(
     }
 
     @SuppressLint("ApplySharedPref")
+    override suspend fun putStringWithRollback(key: PreferenceKey, value: String?) = withContext(dispatcher) {
+        mutex.withLock {
+            val previous = sharedPreferences.getString(key.key, null)
+            try {
+                sharedPreferences.edit().putString(key.key, value).commitOrThrow()
+            } catch (failure: IOException) {
+                // Android publishes to memory before committing. Restore the previous value before
+                // readers or another editor can use the unacknowledged update.
+                try {
+                    sharedPreferences.edit().putString(key.key, previous).commitOrThrow()
+                } catch (rollbackFailure: IOException) {
+                    failure.addSuppressed(rollbackFailure)
+                }
+                throw failure
+            }
+        }
+    }
+
+    @SuppressLint("ApplySharedPref")
     override suspend fun putStringSet(
         key: PreferenceKey,
         value: Set<String>?
@@ -120,7 +139,7 @@ class AndroidPreferenceProvider(
 
     override suspend fun getString(key: PreferenceKey) =
         withContext(dispatcher) {
-            sharedPreferences.getString(key.key, null)
+            mutex.withLock { sharedPreferences.getString(key.key, null) }
         }
 
     override suspend fun getStringSet(key: PreferenceKey): Set<String>? =

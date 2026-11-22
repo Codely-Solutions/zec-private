@@ -13,6 +13,7 @@ import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
 import co.electriccoin.zcash.configuration.model.map.Configuration
 import co.electriccoin.zcash.crash.android.GlobalCrashReporter
+import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
@@ -20,6 +21,8 @@ import co.electriccoin.zcash.ui.common.datasource.RestoreTimestampDataSource
 import co.electriccoin.zcash.ui.common.model.OnboardingState
 import co.electriccoin.zcash.ui.common.model.WalletRestoringState
 import co.electriccoin.zcash.ui.common.provider.IsIronwoodAnnouncementShownStorageProvider
+import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProvider
+import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryProvider
@@ -27,6 +30,7 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import co.electriccoin.zcash.ui.common.usecase.RestoreWalletUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
@@ -50,7 +54,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -385,6 +388,91 @@ class WalletRepositoryImplTest {
         }
 
     @Test
+    fun readyPublishedBeforeFailedCommitDoesNotRouteOrSuppressRestoreRetry() =
+        runTest {
+            val (repository, harness) = newRepository(OnboardingState.NONE, null)
+            repository.useTestScope(testScheduler)
+            val key = StandardPreferenceKeys.ONBOARDING_STATE.key
+            val ready = OnboardingState.READY.toNumber().toString()
+            val none = OnboardingState.NONE.toNumber().toString()
+            val readyPublished = CompletableDeferred<Unit>()
+            val failCommit = CompletableDeferred<Unit>()
+            harness.fakePrefs.beforeStringCommit = { writtenKey, value ->
+                if (writtenKey == key && value == ready) {
+                    readyPublished.complete(Unit)
+                    failCommit.await()
+                    throw IOException("Cannot persist onboarding")
+                }
+            }
+
+            val restore = repository.restoreFixture()
+            readyPublished.await()
+            assertEquals(ready, harness.fakePrefs.getString(key))
+            assertEquals(none, harness.fakePrefs.committedString(key))
+            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
+            failCommit.complete(Unit)
+            assertFailsWith<IllegalStateException> { restore.await() }
+            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
+            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
+
+            val stored = harness.walletProvider.requirePersistableWallet()
+            val committedState = OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
+            val (interrupted, interruptedHarness) = newRepository(committedState, stored)
+            assertEquals(SecretState.NONE, interrupted.secretState.first { it != SecretState.LOADING })
+            interrupted.walletInitialization.first { it == WalletInitializationState.INCOMPLETE }
+            assertEquals(stored, interruptedHarness.walletProvider.requirePersistableWallet())
+
+            harness.fakePrefs.beforeStringCommit = { _, _ -> }
+            repository.restoreFixture().await()
+            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
+            assertEquals(
+                listOf("onboarding=$ready", "onboarding=$ready"),
+                harness.events.filter { it.startsWith("onboarding=") }
+            )
+            assertEquals(ready, harness.fakePrefs.committedString(key))
+            repository.secretState.first { it == SecretState.READY }
+
+            val recoveredState = OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
+            val (recovered, _) = newRepository(recoveredState, stored)
+            assertEquals(SecretState.READY, recovered.secretState.first { it != SecretState.LOADING })
+        }
+
+    @Test
+    fun cancellationAfterReadyPublicationKeepsOnboardingPendingUntilRetry() =
+        runTest {
+            val (repository, harness) = newRepository(OnboardingState.NONE, null)
+            repository.useTestScope(testScheduler)
+            val key = StandardPreferenceKeys.ONBOARDING_STATE.key
+            val ready = OnboardingState.READY.toNumber().toString()
+            val none = OnboardingState.NONE.toNumber().toString()
+            val readyPublished = CompletableDeferred<Unit>()
+            harness.fakePrefs.beforeStringCommit = { writtenKey, value ->
+                if (writtenKey == key && value == ready) {
+                    readyPublished.complete(Unit)
+                    CompletableDeferred<Unit>().await()
+                }
+            }
+
+            val restore = repository.restoreFixture()
+            readyPublished.await()
+            val stored = harness.walletProvider.requirePersistableWallet()
+            repository.scope.cancel()
+            assertFailsWith<IllegalStateException> { restore.await() }
+            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
+            assertEquals(ready, harness.fakePrefs.getString(key))
+            assertEquals(none, harness.fakePrefs.committedString(key))
+            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
+
+            harness.fakePrefs.beforeStringCommit = { _, _ -> }
+            repository.useTestScope(testScheduler)
+            repository.retryWalletInitialization()
+            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
+            assertEquals(stored, harness.walletProvider.requirePersistableWallet())
+            assertEquals(ready, harness.fakePrefs.committedString(key))
+            repository.secretState.first { it == SecretState.READY }
+        }
+
+    @Test
     fun failedRestoreMetadataRetriesTheAcceptedRestore() =
         runTest {
             val (repository, harness) = newRepository(OnboardingState.NONE, null)
@@ -508,11 +596,12 @@ class WalletRepositoryImplTest {
             assertEquals(original, harness.walletProvider.requirePersistableWallet().birthday)
         }
 
-    private fun WalletRepositoryImpl.restoreFixture() =
+    private fun WalletRepositoryImpl.restoreFixture(enableTor: Boolean = false) =
         restoreWallet(
             ZcashNetwork.Testnet,
             SeedPhrase.new(WalletFixture.Alice.seedPhrase),
-            WalletFixture.Alice.getBirthday(ZcashNetwork.Testnet)
+            WalletFixture.Alice.getBirthday(ZcashNetwork.Testnet),
+            enableTor = enableTor
         )
 
     @Test
@@ -608,43 +697,73 @@ class WalletRepositoryImplTest {
         }
 
     @Test
-    fun retryCommitsAnEndpointThatWasPublishedOnlyInMemory() = runTest {
-        val (repository, harness) = newRepository(OnboardingState.READY, fixtureWallet())
-        val walletProvider = harness.walletProvider as FakePersistableWalletProvider
-        val endpoint = LightWalletEndpoint("retry.example.invalid", 443, true)
-        walletProvider.failWrites = true
-        assertFailsWith<IOException> { repository.updateWalletEndpoint(endpoint) }
-        assertEquals(endpoint, walletProvider.requirePersistableWallet().endpoint)
-        assertTrue(harness.events.isEmpty())
+    fun uncheckedRestoreDisablesTorAfterInterruptedSetup() =
+        runTest {
+            val torPreferences = RecordingPreferenceProvider(mutableListOf())
+            val encrypted = mockk<EncryptedPreferenceProvider>()
+            coEvery { encrypted() } returns torPreferences
+            val firstTor = IsTorEnabledStorageProviderImpl(encrypted)
+            val (first, firstHarness) = newRepository(OnboardingState.NONE, null, torPreference = firstTor)
+            first.useTestScope(testScheduler)
+            val firstWalletStore = firstHarness.walletProvider as FakePersistableWalletProvider
+            firstWalletStore.failWritesBeforePublishing = true
 
-        walletProvider.failWrites = false
-        repository.updateWalletEndpoint(endpoint)
+            assertNull(firstTor.get())
+            assertFailsWith<IllegalStateException> { first.restoreFixture(enableTor = true).await() }
+            assertEquals(true, firstTor.get())
+            assertNull(firstWalletStore.getPersistableWallet())
+            val key = StandardPreferenceKeys.ONBOARDING_STATE.key
+            assertEquals(OnboardingState.NONE.toNumber().toString(), firstHarness.fakePrefs.committedString(key))
 
-        assertEquals(listOf("wallet"), harness.events)
-    }
+            val restartedPreferences = torPreferences.reopen()
+            coEvery { encrypted() } returns restartedPreferences
+            val restartedTor = IsTorEnabledStorageProviderImpl(encrypted)
+            val (restarted, restartedHarness) = newRepository(OnboardingState.NONE, null, torPreference = restartedTor)
+            restarted.useTestScope(testScheduler)
+            assertTrue(IsTorEnabledUseCase(restartedTor).observe().first())
+            restartedPreferences.beforeStringCommit = { _, _ -> throw IOException("Cannot persist Tor setting") }
+            assertFailsWith<IllegalStateException> { restarted.restoreFixture(enableTor = false).await() }
+            restarted.walletInitialization.first { it == WalletInitializationState.FAILED }
+            assertEquals(false, restartedTor.get())
+            assertNull(restartedHarness.walletProvider.getPersistableWallet())
+            assertEquals(SecretState.NONE, restarted.secretState.first { it != SecretState.LOADING })
+
+            restartedPreferences.beforeStringCommit = { _, _ -> }
+            restarted.restoreFixture(enableTor = false).await()
+
+            val restored = restartedHarness.walletProvider.requirePersistableWallet()
+            assertTrue(restored.seedPhrase == fixtureWallet().seedPhrase)
+            restarted.secretState.first { it == SecretState.READY }
+            coEvery { encrypted() } returns restartedPreferences.reopen()
+            val reopenedTor = IsTorEnabledStorageProviderImpl(encrypted)
+            assertEquals(false, reopenedTor.get())
+            assertEquals(false, IsTorEnabledUseCase(reopenedTor).observe().first())
+        }
 
     @Test
-    fun aDelayedEndpointChangeCannotRestoreAClearedWallet() = runTest {
-        val (repository, harness) = newRepository(OnboardingState.READY, fixtureWallet())
-        val walletProvider = harness.walletProvider as FakePersistableWalletProvider
-        val currentEndpoint = LightWalletEndpoint("current.example.invalid", 443, true)
-        repository.updateWalletEndpoint(currentEndpoint)
-        assertEquals(currentEndpoint, walletProvider.requirePersistableWallet().endpoint)
-        val walletRead = CompletableDeferred<Unit>()
-        val releaseRead = CompletableDeferred<Unit>()
-        walletProvider.beforeReadReturns = {
-            walletRead.complete(Unit)
-            releaseRead.await()
-        }
-        val stale = launch { repository.updateWalletEndpoint(LightWalletEndpoint("stale.example.invalid", 443, true)) }
-        walletRead.await()
-        walletProvider.clearForReset()
-        releaseRead.complete(Unit)
-        stale.join()
+    fun failedTorCommitBlocksRestoreUntilTheAcceptedChoiceIsRetried() =
+        runTest {
+            val torPreferences = RecordingPreferenceProvider(mutableListOf())
+            val encrypted = mockk<EncryptedPreferenceProvider>()
+            coEvery { encrypted() } returns torPreferences
+            val tor = IsTorEnabledStorageProviderImpl(encrypted)
+            val (repository, harness) = newRepository(OnboardingState.NONE, null, torPreference = tor)
+            repository.useTestScope(testScheduler)
+            torPreferences.beforeStringCommit = { _, _ -> throw IOException("Cannot persist Tor setting") }
 
-        assertNull(walletProvider.getPersistableWallet())
-        assertEquals(listOf("wallet"), harness.events)
-    }
+            assertFailsWith<IllegalStateException> { repository.restoreFixture(enableTor = true).await() }
+            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
+            assertTrue(harness.events.isEmpty())
+            assertNull(harness.walletProvider.getPersistableWallet())
+            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
+            assertFailsWith<WalletInitializationConflictException> { repository.restoreFixture(enableTor = false).await() }
+
+            torPreferences.beforeStringCommit = { _, _ -> }
+            repository.restoreFixture(enableTor = true).await()
+            repository.secretState.first { it == SecretState.READY }
+            coEvery { encrypted() } returns torPreferences.reopen()
+            assertTrue(IsTorEnabledUseCase(IsTorEnabledStorageProviderImpl(encrypted)).observe().first())
+        }
 
     /**
      * "The erase failed and we carried on anyway" is the half-reset state MOB-1836 was reported
@@ -680,6 +799,7 @@ class WalletRepositoryImplTest {
         onboardingState: OnboardingState,
         initialWallet: PersistableWallet?,
         persistableWalletProviderOverride: PersistableWalletProvider? = null,
+        torPreference: IsTorEnabledStorageProvider = mockk(relaxed = true),
     ): Pair<WalletRepositoryImpl, TestHarness> {
         val events = mutableListOf<String>()
 
@@ -743,7 +863,7 @@ class WalletRepositoryImplTest {
                 walletBackupFlagStorageProvider = walletBackupFlagStorageProvider,
                 isIronwoodAnnouncementShownStorageProvider = isIronwoodAnnouncementShownStorageProvider,
                 sdkEncryptedPreferenceRecoveryProvider = sdkEncryptedPreferenceRecoveryProvider,
-                isTorEnabledStorageProvider = mockk(relaxed = true),
+                isTorEnabledStorageProvider = torPreference,
             )
 
         scopes += repository.scope
@@ -778,7 +898,7 @@ private class FakePersistableWalletProvider(
     private val walletFlow = MutableStateFlow(initial)
     private val writeAccess = WalletWriteAccess()
     var failWrites = false
-    var beforeReadReturns: suspend () -> Unit = {}
+    var failWritesBeforePublishing = false
 
     override val persistableWallet: Flow<PersistableWallet?> = walletFlow
     override val writeVersion get() = writeAccess.token()
@@ -800,18 +920,12 @@ private class FakePersistableWalletProvider(
         }
     } ?: false
 
-    override suspend fun getPersistableWallet(): PersistableWallet? =
-        walletFlow.value.also { beforeReadReturns() }
+    override suspend fun getPersistableWallet(): PersistableWallet? = walletFlow.value
 
     override suspend fun requirePersistableWallet(): PersistableWallet = checkNotNull(walletFlow.value)
 
-    suspend fun clearForReset() {
-        writeAccess.beginReset()
-        walletFlow.value = null
-        writeAccess.finishReset()
-    }
-
     private fun write(wallet: PersistableWallet) {
+        if (failWritesBeforePublishing) throw IOException("Cannot persist wallet")
         walletFlow.value = wallet
         // Android may update its memory cache even when commit reports a disk failure.
         if (failWrites) throw IOException("Synthetic persistence failure")
@@ -858,6 +972,8 @@ private class RecordingPreferenceProvider(
     private val events: MutableList<String>
 ) : PreferenceProvider {
     private val values = mutableMapOf<String, String?>()
+    private val committedValues = mutableMapOf<String, String?>()
+    var beforeStringCommit: suspend (PreferenceKey, String?) -> Unit = { _, _ -> }
     private val changes =
         MutableSharedFlow<Unit>(replay = 1).apply {
             tryEmit(Unit)
@@ -872,7 +988,15 @@ private class RecordingPreferenceProvider(
         value: String?
     ) {
         values[key.key] = value
+        committedValues[key.key] = value
     }
+
+    fun committedString(key: PreferenceKey): String? = committedValues[key.key]
+
+    fun reopen(): RecordingPreferenceProvider =
+        RecordingPreferenceProvider(mutableListOf()).also { reopened ->
+            committedValues.forEach { (key, value) -> reopened.seed(PreferenceKey(key), value) }
+        }
 
     override suspend fun hasKey(key: PreferenceKey) = values.containsKey(key.key)
 
@@ -885,6 +1009,8 @@ private class RecordingPreferenceProvider(
             events += "onboarding=$value"
         }
         changes.emit(Unit)
+        beforeStringCommit(key, value)
+        committedValues[key.key] = value
     }
 
     override suspend fun putStringSet(
@@ -907,10 +1033,12 @@ private class RecordingPreferenceProvider(
 
     override suspend fun remove(key: PreferenceKey) {
         values.remove(key.key)
+        committedValues.remove(key.key)
     }
 
     override suspend fun clearPreferences(): Boolean {
         values.clear()
+        committedValues.clear()
         return true
     }
 }

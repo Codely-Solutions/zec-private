@@ -12,6 +12,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -68,6 +70,33 @@ class ReviewScreenshotTest {
         captureScenes(listOf("dark"), fontScale = 2f)
     }
 
+    @Test
+    fun captureSetupCorrectionStates() {
+        val scene = mutableStateOf(Scene("setup-incomplete", "light"))
+        show(scene)
+        for ((theme, scale) in listOf("light" to 1f, "dark" to 1f, "oled" to 1f, "dark" to 2f)) {
+            compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
+            for (screen in listOf(
+                "setup-incomplete", "server-save-error", "restore-tor-disabled", "restore-tor-enabled",
+                "gift-reviewed-account", "gift-unknown-account",
+            )) {
+                val current = Scene(screen, theme, scale)
+                compose.runOnIdle { scene.value = current }
+                val expected = when (screen) {
+                    "setup-incomplete" -> text(R.string.wallet_initialization_continue)
+                    "server-save-error" -> text(R.string.choose_server_save_error_text)
+                    "gift-reviewed-account", "gift-unknown-account" -> text(R.string.redeemGift_redeem)
+                    else -> text(R.string.root_existingWallet_restore)
+                }
+                if (screen != "server-save-error") compose.onNodeWithText(expected).performScrollTo()
+                compose.onNodeWithText(expected).assertIsDisplayed()
+                if (screen == "gift-reviewed-account") compose.onNodeWithText(expected).assertIsEnabled()
+                if (screen == "gift-unknown-account") compose.onNodeWithText(expected).assertIsNotEnabled()
+                capture(current, "screen", expected)
+            }
+        }
+    }
+
     private fun captureScenes(themes: List<String>, fontScale: Float) {
         // Dialog and tooltip windows create their own Compose owners from Android resources.
         compose.runOnUiThread {
@@ -114,7 +143,7 @@ class ReviewScreenshotTest {
                 ) {
                     Box(Modifier.fillMaxSize().background(ZashiColors.Surfaces.bgPrimary)) {
                         when (scene.screen) {
-                            "price-warning" -> AdditionalReviewScene(
+                            "price-warning", "server-save-error" -> AdditionalReviewScene(
                                 scene.screen, {}, ZashiMainTopAppBarStateFixture.new(),
                             )
                             "incoming-saved-pending" -> IncomingSwapReviewScene(scene.screen)

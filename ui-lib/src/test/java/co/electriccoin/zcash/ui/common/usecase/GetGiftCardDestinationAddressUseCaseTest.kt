@@ -3,7 +3,6 @@ package co.electriccoin.zcash.ui.common.usecase
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.UnifiedAddressRequest
-import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import io.mockk.coEvery
@@ -15,15 +14,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 /**
- * [GetGiftCardDestinationAddressUseCase] sweeps a gift card to the selected account's Orchard-only address, never to
- * a transparent or Sapling receiver.
+ * [GetGiftCardDestinationAddressUseCase] requests an Orchard-only address for the reviewed account.
  */
 class GetGiftCardDestinationAddressUseCaseTest {
     private val account = mockk<Account>()
 
     private val walletAccount = mockk<WalletAccount> { every { sdkAccount } returns account }
-
-    private val accountDataSource = mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns walletAccount }
 
     private val mainSynchronizer = mockk<Synchronizer>()
 
@@ -31,12 +27,12 @@ class GetGiftCardDestinationAddressUseCaseTest {
         mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns mainSynchronizer }
 
     @Test
-    fun theDestinationIsTheSelectedAccountsOrchardOnlyAddress() =
+    fun theDestinationIsTheReviewedAccountsOrchardOnlyAddress() =
         runTest {
             coEvery { mainSynchronizer.getCustomUnifiedAddress(account, UnifiedAddressRequest.Orchard) } returns
                 ORCHARD_ADDRESS
 
-            val address = GetGiftCardDestinationAddressUseCase(accountDataSource, synchronizerProvider)()
+            val address = GetGiftCardDestinationAddressUseCase(synchronizerProvider)(walletAccount)
 
             assertEquals(ORCHARD_ADDRESS, address)
             coVerify(exactly = 1) { mainSynchronizer.getCustomUnifiedAddress(any(), any()) }
