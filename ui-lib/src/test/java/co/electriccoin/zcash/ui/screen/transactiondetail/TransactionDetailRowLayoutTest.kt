@@ -27,6 +27,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
@@ -57,15 +58,17 @@ class TransactionDetailRowLayoutTest {
             val layouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
             val layout = layouts.single()
-            assertFalse(
-                layout.hasVisualOverflow,
-                "$text must remain complete at 200% text: ${layout.size}, ${layout.layoutInput.constraints}, " +
-                    "width=${layout.didOverflowWidth}, height=${layout.didOverflowHeight}",
-            )
+            assertFalse(layout.didOverflowHeight, "$text must fit vertically")
+            assertEquals(text.length, layout.getLineEnd(layout.lineCount - 1), "$text must remain complete")
+            for (line in 0 until layout.lineCount) {
+                assertFalse(layout.isLineEllipsized(line), "$text must not be ellipsized")
+                // Native paragraph widths can differ from the integer layout width by a rounding pixel.
+                assertTrue(layout.getLineRight(line) <= layout.size.width + 1f, "$text must fit horizontally")
+            }
         }
         val label = compose.onNodeWithText("Saved status").fetchSemanticsNode().boundsInRoot
         val status = compose.onNodeWithText("Pending deposit").fetchSemanticsNode().boundsInRoot
-        assertTrue(label.bottom <= status.top || label.right <= status.left, "Label and badge must not overlap")
+        assertTrue(label.bottom <= status.top, "Large-text content must stack without overlap")
     }
 
     @Test

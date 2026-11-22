@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.model.ZecSimpleSwapAsset
 import co.electriccoin.zcash.ui.common.model.metadata.AccountMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.AnnotationMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.BookmarkMetadataV3
@@ -728,7 +729,12 @@ class MetadataDataSourceFileTest {
 
     private fun swapAsset(token: String, chain: String) =
         swapAssets.getOrPut("$token:$chain") {
-            SwapAssetTestFixture.simpleAsset(token, chain)
+            if (token.equals("zec", true) && chain.equals("zec", true)) {
+                val asset = SwapAssetTestFixture.zecSimpleAsset()
+                ZecSimpleSwapAsset(token, asset.tokenName, asset.tokenIcon, asset.blockchain)
+            } else {
+                SwapAssetTestFixture.simpleAsset(token, chain)
+            }
         }
 
     private fun metadata(

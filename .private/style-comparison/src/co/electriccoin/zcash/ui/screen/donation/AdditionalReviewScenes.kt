@@ -52,7 +52,7 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                 other = co.electriccoin.zcash.ui.screen.chooseserver.ServerListState.Other(
                     title = stringRes("Other servers"), servers = emptyList(),
                 ),
-                saveButton = ButtonState(stringRes("Save"), onClick = {}),
+                saveButton = ButtonState(stringRes(R.string.serverSetup_save), onClick = {}),
                 dialogState = if (screen == "server-save-error") {
                     co.electriccoin.zcash.ui.screen.chooseserver.ServerDialogState.SaveFailure(
                         AlertDialogState(

@@ -1,14 +1,16 @@
 package co.electriccoin.zcash.ui.screen.transactiondetail.infoitems
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import co.electriccoin.zcash.ui.R
@@ -45,38 +47,21 @@ fun TransactionDetailSwapStatusRow(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues = PaddingValues(horizontal = 20.dp, vertical = 14.dp),
 ) {
-    SubcomposeLayout(
+    FlowRow(
         modifier = modifier.fillMaxWidth().padding(contentPadding),
-    ) { constraints ->
-        val childConstraints = constraints.copy(minWidth = 0, minHeight = 0)
-        val label = subcompose("label") {
-            Text(
-                text = state.title.getValue(),
-                style = ZashiTypography.textSm,
-                color = ZashiColors.Text.textTertiary,
-            )
-        }.single().measure(childConstraints)
-        val status = subcompose("status") { StatusValue(state) }.single().measure(childConstraints)
-        val gap = 16.dp.roundToPx()
-        val width = if (constraints.hasBoundedWidth) constraints.maxWidth else label.width + gap + status.width
-        val stacked = label.width + gap + status.width > width
-        val verticalGap = 8.dp.roundToPx()
-        val height = if (stacked) label.height + verticalGap + status.height else maxOf(label.height, status.height)
-        layout(width, height.coerceIn(constraints.minHeight, constraints.maxHeight)) {
-            label.placeRelative(0, if (stacked) 0 else (height - label.height) / 2)
-            status.placeRelative(
-                width - status.width,
-                if (stacked) label.height + verticalGap else (height - status.height) / 2,
-            )
-        }
-    }
-}
-
-@Composable
-private fun StatusValue(state: TransactionDetailSwapStatusRowState) {
-    if (state.status != null) {
-        StatusChip(state)
-    } else {
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        itemVerticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            modifier = Modifier.padding(end = 16.dp),
+            text = state.title.getValue(),
+            style = ZashiTypography.textSm,
+            color = ZashiColors.Text.textTertiary
+        )
+        if (state.status != null) {
+            StatusChip(state)
+        } else {
             Box(
                 modifier = Modifier.shimmer(rememberZashiShimmer())
             ) {
@@ -93,6 +78,7 @@ private fun StatusValue(state: TransactionDetailSwapStatusRowState) {
                     shape = CircleShape
                 )
             }
+        }
     }
 }
 
