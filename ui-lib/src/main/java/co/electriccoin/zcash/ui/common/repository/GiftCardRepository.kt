@@ -11,11 +11,14 @@ import co.electriccoin.zcash.ui.common.model.GiftCardSession
 import co.electriccoin.zcash.ui.common.model.GiftCardStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -28,6 +31,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlin.time.Duration
@@ -79,7 +83,7 @@ interface GiftCardRepository {
 
     /**
      * Redeems a [GiftCardPhase.Ready] card to the address [toAddress] returns. Ignored in any other phase, so a
-     * second tap cannot redeem twice. Once started, the redemption is never cancelled.
+     * second tap cannot redeem twice. Once the SDK is called, the redemption is never cancelled by the repository.
      */
     fun redeem(
         linkId: String,
@@ -93,10 +97,13 @@ interface GiftCardRepository {
     fun dismiss(linkId: String)
 
     /**
-     * Ends every session as [dismiss] does, including one being redeemed: its redemption still runs to its end, and
-     * its card wallet is erased after it. For when the wallet the cards are redeemed into is deleted.
+     * Blocks new sessions, cancels work before submission, and awaits any redemption already handed to the SDK
+     * and all queued card-wallet closures. Cancelling the wait leaves shutdown running.
      */
-    fun closeAllSessions()
+    suspend fun quiesceForWalletReset()
+
+    /** Releases the reset gate. New sessions can start once shutdown has finished. */
+    fun resumeSessions()
 
     /**
      * Erases the card wallets that a session did not get to erase, e.g. because the process died. Card wallets of
@@ -170,13 +177,19 @@ class GiftCardRepositoryImpl(
      */
     internal var quietRecheckMinDuration: Duration = QUIET_RECHECK_MIN_DURATION
 
-    /** Guards [links], [sweepJob] and the mutable fields of every [Session]. */
+    /** Guards the session maps, jobs, reset gate and mutable fields of every [Session]. */
     private val lock = Any()
 
     /** The session each link id observes; several ids point at the same session once a link joins another. */
     private val links = mutableMapOf<String, MutableStateFlow<Session>>()
 
     private var sweepJob: Job? = null
+    private val sessionJobs = mutableSetOf<Job>()
+    private var shutdownJob: Deferred<Unit>? = null
+    private var isResetting = false
+
+    private val sessionsBlocked
+        get() = isResetting || shutdownJob?.isCompleted == false
 
     override fun isGiftCardLink(value: String): Boolean = GiftCardLinkPrefixes.matches(value)
 
@@ -199,11 +212,11 @@ class GiftCardRepositoryImpl(
                 canRecheckQuietly && session.handle != null -> {
                     session.pollJob?.cancel()
                     session.update { it.copy(phase = phase.withRechecking(true)) }
-                    session.workJob = scope.launch { check(session, isQuiet = true) }
+                    session.workJob = launchSessionJobLocked { check(session, isQuiet = true) }
                 }
 
                 canStartOver || canRecheckQuietly -> {
-                    session.workJob = scope.launch { start(session) }
+                    session.workJob = launchSessionJobLocked { start(session) }
                 }
             }
         }
@@ -218,7 +231,8 @@ class GiftCardRepositoryImpl(
                 idleSessionLocked(linkId)?.takeIf { it.state.value.phase is GiftCardPhase.Ready } ?: return
             session.pollJob?.cancel()
             session.update { it.copy(phase = GiftCardPhase.Redeeming) }
-            session.redeemJob = scope.launch { redeem(session, toAddress) }
+            session.redemptionStarted = false
+            session.redeemJob = launchSessionJobLocked { redeem(session, toAddress) }
         }
     }
 
@@ -230,18 +244,53 @@ class GiftCardRepositoryImpl(
         }
     }
 
-    override fun closeAllSessions() {
+    override suspend fun quiesceForWalletReset() {
+        val shutdown =
+            synchronized(lock) {
+                isResetting = true
+                shutdownJob?.takeUnless { it.isCompleted } ?: beginShutdownLocked().also { shutdownJob = it }
+            }
+        shutdown.await()
+        giftCardDataSource.awaitPendingCloses()
+    }
+
+    override fun resumeSessions() {
         synchronized(lock) {
-            links.values
-                .map { it.value }
-                .distinct()
-                .forEach { closeLocked(it) }
+            isResetting = false
+        }
+    }
+
+    private fun beginShutdownLocked(): Deferred<Unit> {
+        val sessions = links.values.map { it.value }.distinct()
+        links.clear()
+        sessions.forEach { session ->
+            session.idleJob?.cancel()
+            if (session.redemptionStarted && session.redeemJob?.isCompleted == false) {
+                stopSessionWorkLocked(session)
+            } else {
+                session.redeemJob?.cancel()
+                closeCardLocked(session)
+                session.update { if (it.phase.isFinal()) it else it.copy(phase = LINK_UNAVAILABLE) }
+            }
+        }
+        val jobs = sessionJobs + listOfNotNull(sweepJob)
+        return scope.async {
+            jobs.joinAll()
+            synchronized(lock) {
+                sessions.forEach { session ->
+                    closeCardLocked(session)
+                    session.update {
+                        if (it.phase == GiftCardPhase.Redeeming) it.copy(phase = LINK_UNAVAILABLE) else it
+                    }
+                }
+            }
         }
     }
 
     override suspend fun sweepOrphanedCardWallets() {
         val job =
             synchronized(lock) {
+                if (sessionsBlocked) return
                 sweepJob ?: scope.launch { sweep() }.also { sweepJob = it }
             }
         job.join()
@@ -255,13 +304,25 @@ class GiftCardRepositoryImpl(
 
     private fun link(linkId: String): MutableStateFlow<Session> =
         synchronized(lock) {
+            if (sessionsBlocked) {
+                giftCardLinkStore.take(linkId)
+                return MutableStateFlow(Session(emptySet()).apply { update { it.copy(phase = LINK_UNAVAILABLE) } })
+            }
             links.getOrPut(linkId) {
                 val session = Session(linkIds = setOf(linkId))
                 session.link = giftCardLinkStore.take(linkId)
-                session.workJob = scope.launch { start(session) }
-                session.idleJob = scope.launch { closeWhenIdle(session) }
+                session.workJob = launchSessionJobLocked { start(session) }
+                session.idleJob = launchSessionJobLocked { closeWhenIdle(session) }
                 MutableStateFlow(session)
             }
+        }
+
+    /** Tracks work even after its session is closed or a new job replaces it. Call with [lock] held. */
+    private fun launchSessionJobLocked(block: suspend () -> Unit): Job =
+        scope.launch(start = CoroutineStart.LAZY) { block() }.also { job ->
+            sessionJobs += job
+            job.invokeOnCompletion { synchronized(lock) { sessionJobs.remove(job) } }
+            job.start()
         }
 
     /**
@@ -358,7 +419,7 @@ class GiftCardRepositoryImpl(
         session: Session,
         isQuiet: Boolean
     ) {
-        val handle = session.handle ?: return
+        val handle = synchronized(lock) { session.handle.takeUnless { session.isClosed } } ?: return
         synchronized(lock) { sweepJob }?.join()
         val phase =
             coroutineScope {
@@ -377,7 +438,7 @@ class GiftCardRepositoryImpl(
             session.update { it.copy(phase = phase) }
             if (phase is GiftCardPhase.Pending) {
                 session.pollJob?.cancel()
-                session.pollJob = scope.launch { pollWhilePending(session) }
+                session.pollJob = launchSessionJobLocked { pollWhilePending(session) }
             }
         }
     }
@@ -460,7 +521,14 @@ class GiftCardRepositoryImpl(
         val phase =
             try {
                 withTimeout(TO_ADDRESS_TIMEOUT) { toAddress() }.let { address ->
-                    GiftCardPhase.Redeemed(giftCardDataSource.redeem(handle, address))
+                    GiftCardPhase.Redeemed(
+                        giftCardDataSource.redeem(handle, address) {
+                            synchronized(lock) {
+                                if (session.isClosed) throw GiftCardException.UnknownHandle()
+                                session.redemptionStarted = true
+                            }
+                        }
+                    )
                 }
             } catch (_: TimeoutCancellationException) {
                 Twig.error { "The destination address of a gift card redemption did not arrive in time" }
@@ -573,12 +641,17 @@ class GiftCardRepositoryImpl(
      * Cancels [session]'s check and polling, and closes its card in the data source. Call with [lock] held.
      */
     private fun closeCardLocked(session: Session) {
+        stopSessionWorkLocked(session)
+        session.handle?.let { giftCardDataSource.close(it) }
+        session.handle = null
+    }
+
+    /** Stops further check and redemption work without closing the card used by an existing SDK redemption. */
+    private fun stopSessionWorkLocked(session: Session) {
         session.isClosed = true
         session.link = null
         session.workJob?.cancel()
         session.pollJob?.cancel()
-        session.handle?.let { giftCardDataSource.close(it) }
-        session.handle = null
     }
 
     /** Removes the link ids that still point at [session]. Call with [lock] held. */
@@ -651,6 +724,7 @@ class GiftCardRepositoryImpl(
         var workJob: Job? = null
         var pollJob: Job? = null
         var redeemJob: Job? = null
+        var redemptionStarted = false
         var idleJob: Job? = null
 
         fun isBusyLocked(): Boolean = workJob?.isActive == true || redeemJob?.isActive == true

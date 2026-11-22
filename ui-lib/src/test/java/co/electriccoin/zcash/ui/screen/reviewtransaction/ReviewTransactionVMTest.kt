@@ -6,20 +6,35 @@ import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
+import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
+import co.electriccoin.zcash.ui.common.repository.BiometricRepository
+import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
+import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.AccountIconFixtures
 import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import co.electriccoin.zcash.ui.common.usecase.ObserveContactByAddressUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
+import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.design.R
 import co.electriccoin.zcash.ui.design.util.ImageResource
 import co.electriccoin.zcash.ui.design.util.imageRes
+import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressArgs
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -82,31 +97,112 @@ class ReviewTransactionVMTest {
             assertEquals(imageRes(zodl.icon), sender(vm).icon)
         }
 
+    @Test
+    fun sendConfirmsTheDisplayedProposalAcrossAuthentication() = runTest {
+        confirmAfterReplacingProposal(proposal(), proposal(amount = 4321L))
+    }
+
+    @Test
+    fun zip321ConfirmsTheDisplayedProposalAcrossAuthentication() = runTest {
+        confirmAfterReplacingProposal(zip321Proposal(), zip321Proposal(amount = 4321L))
+    }
+
+    private fun TestScope.confirmAfterReplacingProposal(
+        reviewed: SendTransactionProposal,
+        replacement: SendTransactionProposal,
+    ) {
+        val current = MutableStateFlow<TransactionProposal?>(reviewed)
+        val zashiRepository = mockk<ZashiProposalRepository>(relaxed = true) {
+            every { transactionProposal } returns current
+        }
+        val keystoneRepository = mockk<KeystoneProposalRepository>()
+        val ledgerPipeline = mockk<LedgerProposalPipeline>()
+        val accountDataSource = mockk<AccountDataSource> {
+            every { selectedAccount } returns MutableStateFlow(zodl)
+            coEvery { getSelectedAccount() } returns zodl
+        }
+        val authenticationStarted = CompletableDeferred<Unit>()
+        val authentication = CompletableDeferred<Unit>()
+        val biometricRepository = mockk<BiometricRepository> {
+            coEvery { requestBiometrics(any()) } coAnswers {
+                authenticationStarted.complete(Unit)
+                authentication.await()
+            }
+        }
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
+        val submit = SubmitProposalUseCase(
+            navigationRouter = router,
+            accountDataSource = accountDataSource,
+            zashiProposalRepository = zashiRepository,
+            keystoneProposalRepository = keystoneRepository,
+            ledgerProposalPipeline = ledgerPipeline,
+            ledgerNavigator = mockk(),
+            biometricRepository = biometricRepository,
+            swapRepository = mockk(relaxed = true),
+            processSwapTransaction = mockk(),
+            prefillSend = mockk(relaxed = true),
+            navigateToError = navigateToError,
+        ).also { it.scope = backgroundScope }
+        val vm = vm(
+            metadata = emptyMap(),
+            observeProposal = ObserveProposalUseCase(keystoneRepository, ledgerPipeline, zashiRepository, accountDataSource),
+            submitProposal = submit,
+        )
+        collect(vm)
+        val confirm = assertNotNull(vm.state.value).primaryButton.onClick
+        confirm()
+        runCurrent()
+        check(authenticationStarted.isCompleted)
+        current.value = replacement
+        runCurrent()
+        authentication.complete(Unit)
+        runCurrent()
+
+        coVerify(exactly = 0) { zashiRepository.submit(any()) }
+        verify(exactly = 1) { navigateToError(any()) }
+        verify(exactly = 0) { router.replace(TransactionProgressArgs) }
+
+        assertNotNull(vm.state.value).primaryButton.onClick()
+        runCurrent()
+        coVerify(exactly = 1) { zashiRepository.submit(replacement) }
+        verify(exactly = 1) { router.replace(TransactionProgressArgs) }
+    }
+
     private fun sender(vm: ReviewTransactionVM) =
         assertNotNull(assertNotNull(vm.state.value).items.filterIsInstance<SenderState>().singleOrNull())
 
-    private suspend fun vm(metadata: Map<AccountUuid, MetadataV3>): ReviewTransactionVM {
-        val proposal = proposal()
-        return ReviewTransactionVM(
+    private fun vm(
+        metadata: Map<AccountUuid, MetadataV3>,
+        observeProposal: ObserveProposalUseCase,
+        submitProposal: SubmitProposalUseCase = mockk(relaxed = true),
+    ) =
+        ReviewTransactionVM(
             getWalletAccounts = EditAccountFixtures.getWalletAccounts(accounts),
             observeContactByAddress =
                 mockk<ObserveContactByAddressUseCase> { every { this@mockk(any()) } returns flowOf(null) },
             observeSelectedWalletAccount =
                 mockk<ObserveSelectedWalletAccountUseCase> { every { require() } returns flowOf(zodl) },
-            observeProposal =
-                mockk<ObserveProposalUseCase> { every { filterSend() } returns MutableStateFlow(proposal) },
+            observeProposal = observeProposal,
             observeAccountIcon = AccountIconFixtures.useCase(MutableStateFlow(metadata)),
             cancelProposalFlow = mockk(relaxed = true),
             getExchangeRate = mockk(relaxed = true),
             navigationRouter = mockk(relaxed = true),
-            submitProposal = mockk(relaxed = true),
+            submitProposal = submitProposal,
+        )
+
+    private suspend fun vm(metadata: Map<AccountUuid, MetadataV3>): ReviewTransactionVM {
+        val proposal = proposal()
+        return vm(
+            metadata,
+            mockk<ObserveProposalUseCase> { every { filterSend() } returns MutableStateFlow(proposal) },
         )
     }
 
-    private suspend fun proposal(): SendTransactionProposal =
+    private suspend fun proposal(amount: Long = 1234L): SendTransactionProposal =
         RegularTransactionProposal(
             destination = WalletAddress.Unified.new(RECIPIENT),
-            amount = Zatoshi(1234L),
+            amount = Zatoshi(amount),
             memo = Memo(""),
             proposal =
                 mockk<Proposal> {
@@ -114,6 +210,11 @@ class ReviewTransactionVMTest {
                     every { usesOrchardInputs() } returns false
                 },
         )
+
+    private suspend fun zip321Proposal(amount: Long = 1234L): SendTransactionProposal {
+        val regular = proposal(amount)
+        return Zip321TransactionProposal(regular.destination, regular.amount, regular.memo, regular.proposal)
+    }
 
     private fun TestScope.collect(vm: ReviewTransactionVM) {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }

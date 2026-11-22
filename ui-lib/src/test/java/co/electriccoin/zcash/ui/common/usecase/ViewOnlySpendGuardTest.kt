@@ -262,7 +262,7 @@ class ViewOnlySpendGuardTest {
                     navigateToError = navigateToError,
                 )
 
-            useCase()
+            useCase(null)
 
             verifyViewOnlyErrorShown()
             verify(exactly = 0) { zashiProposalRepository.transactionProposal }

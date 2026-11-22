@@ -55,7 +55,7 @@ class ResetZashiUseCase(
             // The pending screen can replace the initiating screen. Finish each confirmed attempt
             // even if that transition cancels the first view model.
             withContext(NonCancellable) {
-                if (stage == null) prepareReset(keepFiles)
+                prepareReset(keepFiles, stage)
                 if (stage != ResetStage.CLEAR_PREFERENCES) {
                     closeSynchronizer()
                     clearSDK()
@@ -70,23 +70,24 @@ class ResetZashiUseCase(
         } catch (_: BiometricsCancelledException) {
             // Wait for another confirmation.
         } finally {
+            if (!progressStore.isPending.value) giftCardRepository.resumeSessions()
             running.value = false
             resetMutex.unlock()
         }
     }
 
-    private suspend fun prepareReset(keepFiles: Boolean) {
+    private suspend fun prepareReset(keepFiles: Boolean, stage: ResetStage?) {
         val prepared = withTimeoutOrNull(PREPARE_RESET_TIMEOUT) {
-            migrationAppHooks.cancelMigrationWork()
-            giftCardRepository.closeAllSessions()
-            if (!keepFiles) {
+            if (stage == null) migrationAppHooks.cancelMigrationWork()
+            giftCardRepository.quiesceForWalletReset()
+            if (stage == null && !keepFiles) {
                 addressBookRepository.delete()
                 metadataRepository.delete()
             }
             true
         }
         check(prepared == true) { "Timed out preparing wallet reset" }
-        progressStore.store(ResetStage.ERASE_SDK)
+        if (stage == null) progressStore.store(ResetStage.ERASE_SDK)
     }
 
     private suspend fun requestBiometrics() {

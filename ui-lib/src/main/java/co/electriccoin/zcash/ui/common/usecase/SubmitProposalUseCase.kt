@@ -54,9 +54,10 @@ class SubmitProposalUseCase(
     /**
      * Submit Zashi proposal and navigate to Transaction Progress screen, navigate to Keystone PCZT flow, or open
      * the Ledger sign sheet over the confirmation screen. An account that cannot spend gets the
-     * unsupported-operation error instead, before any proposal is read.
+     * unsupported-operation error instead, before any proposal is read. The proposal must still be the one
+     * displayed for review when authentication completes.
      */
-    suspend operator fun invoke(reviewedProposal: TransactionProposal? = null) {
+    suspend operator fun invoke(reviewedProposal: TransactionProposal?) {
         if (!submissionMutex.tryLock()) return
         try {
             biometricRepository.requestBiometrics(
@@ -81,11 +82,8 @@ class SubmitProposalUseCase(
             val proposal = checkNotNull(currentProposal(account)) {
                 "The reviewed transaction is unavailable. Review it again before sending."
             }
-            check(reviewedProposal == null || proposal === reviewedProposal) {
+            check(proposal === reviewedProposal) {
                 "The reviewed transaction changed. Review it again before sending."
-            }
-            check(proposal !is SwapTransactionProposal || reviewedProposal === proposal) {
-                "Review the prepared swap transaction before sending."
             }
             check(proposal !is SwapTransactionProposal || kotlin.time.Clock.System.now() < proposal.quote.deadline) {
                 "The swap quote expired. Request a fresh quote before sending."

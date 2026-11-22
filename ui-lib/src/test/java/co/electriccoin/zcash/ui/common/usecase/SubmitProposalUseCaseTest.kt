@@ -58,7 +58,7 @@ class SubmitProposalUseCaseTest {
             val fx = useCase()
             coEvery { fx.biometricRepository.requestBiometrics(any()) } throws BiometricsFailureException()
 
-            fx.useCase()
+            fx.useCase(null)
 
             coVerify(exactly = 0) { fx.accountDataSource.getSelectedAccount() }
             coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any()) }
@@ -71,7 +71,7 @@ class SubmitProposalUseCaseTest {
             val fx = useCase()
             coEvery { fx.biometricRepository.requestBiometrics(any()) } throws BiometricsCancelledException()
 
-            fx.useCase()
+            fx.useCase(null)
 
             coVerify(exactly = 0) { fx.accountDataSource.getSelectedAccount() }
             verify(exactly = 0) { fx.navigationRouter.replace(*anyVararg()) }
@@ -104,9 +104,10 @@ class SubmitProposalUseCaseTest {
     fun keystoneNonSwapProposalNavigatesWithoutTouchingHistory() =
         runTest {
             val fx = useCase()
-            fx.givenKeystone(mockk<TransactionProposal>())
+            val proposal = mockk<TransactionProposal>()
+            fx.givenKeystone(proposal)
 
-            fx.useCase()
+            fx.useCase(proposal)
 
             verify(exactly = 1) { fx.navigationRouter.replace(SignKeystoneTransactionArgs) }
             coVerify(exactly = 0) { fx.keystoneProposalRepository.submit() }
@@ -116,9 +117,10 @@ class SubmitProposalUseCaseTest {
     fun ledgerProposalOpensTheSignSheetWithoutSubmittingOrClearingSwapState() =
         runTest {
             val fx = useCase()
-            fx.givenLedger(mockk<TransactionProposal>())
+            val proposal = mockk<TransactionProposal>()
+            fx.givenLedger(proposal)
 
-            fx.useCase()
+            fx.useCase(proposal)
 
             verify(exactly = 1) { fx.ledgerNavigator.forwardToSign() }
             verify(exactly = 0) { fx.swapRepository.clear() }
@@ -153,9 +155,10 @@ class SubmitProposalUseCaseTest {
     fun zashiNonSwapProposalSubmitsWithoutProcessingSwap() =
         runTest {
             val fx = useCase()
-            fx.givenZashi(mockk<TransactionProposal>())
+            val proposal = mockk<TransactionProposal>()
+            fx.givenZashi(proposal)
 
-            fx.useCase()
+            fx.useCase(proposal)
 
             verify(exactly = 1) { fx.swapRepository.clear() }
             coVerify(exactly = 1) { fx.zashiProposalRepository.submit(any()) }
@@ -242,7 +245,7 @@ class SubmitProposalUseCaseTest {
     fun swapSubmissionRequiresTheReviewedProposal() = runTest {
         val fx = useCase()
         fx.givenZashi(swapProposal("eth", "eth"))
-        fx.useCase()
+        fx.useCase(null)
         coVerify(exactly = 0) { fx.zashiProposalRepository.submit(any()) }
     }
 

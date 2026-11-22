@@ -212,7 +212,7 @@ class ReviewTransactionVM(
                         is ZodlAccount -> stringRes(R.string.tabs_send)
                     },
                 style = orchardPrivacyWarningButtonStyle(transactionProposal.proposal.usesOrchardInputs()),
-                onClick = ::onConfirmClick
+                onClick = { onConfirmClick(transactionProposal) }
             ),
         onBack = ::onBack,
     )
@@ -286,7 +286,7 @@ class ReviewTransactionVM(
                         is ViewOnlyAccount -> stringRes(R.string.tabs_send)
                         is ZodlAccount -> stringRes(R.string.tabs_send)
                     },
-                onClick = ::onConfirmClick
+                onClick = { onConfirmClick(transactionProposal) }
             ),
         onBack = ::onBack,
     )
@@ -308,9 +308,9 @@ class ReviewTransactionVM(
         onBack()
     }
 
-    private fun onConfirmClick() {
+    private fun onConfirmClick(proposal: SendTransactionProposal) {
         if (onConfirmClickJob?.isActive == true) return
-        onConfirmClickJob = viewModelScope.launch { submitProposal() }
+        onConfirmClickJob = viewModelScope.launch { submitProposal(proposal) }
     }
 
     private fun onAddContactClick(address: String) = navigationRouter.forward(AddZashiABContactArgs(address))

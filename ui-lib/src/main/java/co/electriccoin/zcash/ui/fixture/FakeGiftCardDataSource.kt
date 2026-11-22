@@ -63,8 +63,10 @@ class FakeGiftCardDataSource(
 
     override suspend fun redeem(
         handle: GiftCardHandle,
-        toAddress: String
+        toAddress: String,
+        beforeSubmission: () -> Unit,
     ): GiftCardRedemption {
+        beforeSubmission()
         redeemedTo += toAddress
         redeemGate?.await()
         redeemError?.let { throw it }
@@ -74,6 +76,8 @@ class FakeGiftCardDataSource(
     override fun close(handle: GiftCardHandle) {
         closed += handle
     }
+
+    override suspend fun awaitPendingCloses() = Unit
 
     override suspend fun findStoredCardWallets(): List<StoredCardWallet> = storedWallets
 

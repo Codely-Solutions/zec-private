@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.fixture.GiftCardSummaryFixture.pendingStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -22,6 +23,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.suspendCoroutine
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Duration
@@ -271,7 +273,7 @@ class GiftCardRepositoryIdlePolicyTest {
         }
 
     @Test
-    fun closingAllSessionsClosesEveryCardIncludingOneBeingRedeemed() =
+    fun resetQuiescenceClosesEveryCardAndAllowsNewSessionsAfterRelease() =
         runTest {
             dataSource.redeemGate = CompletableDeferred()
             val repository = repository()
@@ -284,14 +286,22 @@ class GiftCardRepositoryIdlePolicyTest {
             val other = observe(repository.observeSession(otherId))
             runCurrent()
 
-            repository.closeAllSessions()
-            dataSource.redeemGate?.complete(Unit)
+            val shutdown = launch { repository.quiesceForWalletReset() }
             runCurrent()
+            assertFalse(shutdown.isCompleted)
+            assertEquals(listOf(GiftCardHandle("fixture-2")), dataSource.closed)
+            dataSource.redeemGate?.complete(Unit)
+            shutdown.join()
 
             assertEquals(setOf(HANDLE, GiftCardHandle("fixture-2")), dataSource.closed.toSet())
             assertEquals(listOf(ADDRESS), dataSource.redeemedTo, "the redemption itself runs to its end")
+            repository.resumeSessions()
+            val afterReset = observe(repository.observeSession(store.stash(LINK)))
+            runCurrent()
+            assertIs<GiftCardPhase.Ready>(afterReset.latest().phase)
             redeeming.job.cancel()
             other.job.cancel()
+            afterReset.job.cancel()
         }
 
     @Test

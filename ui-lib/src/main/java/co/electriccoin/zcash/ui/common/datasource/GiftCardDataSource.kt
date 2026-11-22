@@ -27,9 +27,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import java.util.UUID
+import kotlin.time.Duration.Companion.milliseconds
 import cash.z.ecc.android.sdk.exception.GiftCardException as SdkGiftCardException
 import cash.z.ecc.android.sdk.model.GiftCardOrigin as SdkGiftCardOrigin
 
@@ -64,7 +67,7 @@ interface GiftCardDataSource {
     /**
      * Sends everything the card holds to [toAddress], with a memo that identifies the transaction as a gift card
      * redemption (and carries the card's message, if any) in the user's history. [toAddress] must therefore be a
-     * shielded address.
+     * shielded address. [beforeSubmission] is called after preparation, just before entering the SDK's redeem call.
      *
      * @throws GiftCardException.NotChecked when no [check] of this card has completed
      * @throws GiftCardException.NothingToRedeem when the card holds nothing spendable above the fee
@@ -74,7 +77,8 @@ interface GiftCardDataSource {
      */
     suspend fun redeem(
         handle: GiftCardHandle,
-        toAddress: String
+        toAddress: String,
+        beforeSubmission: () -> Unit = {},
     ): GiftCardRedemption
 
     /**
@@ -83,6 +87,12 @@ interface GiftCardDataSource {
      * so that it also runs when the caller's scope is being cancelled.
      */
     fun close(handle: GiftCardHandle)
+
+    /**
+     * Waits for queued card wallet closures and confirms that their files were removed. The caller bounds the wait.
+     * A failed SDK close leaves reset blocked until the process, and its SDK state, are restarted.
+     */
+    suspend fun awaitPendingCloses()
 
     /**
      * The card wallets whose data is stored on the device, on every network, whether or not a card is held for them.
@@ -141,7 +151,7 @@ class GiftCardDataSourceImpl(
 ) : GiftCardDataSource {
     internal var scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    /** Guards [cards] and [closeJobs]. */
+    /** Guards held cards and card-wallet closure records. */
     private val lock = Any()
 
     private val cards = mutableMapOf<GiftCardHandle, HeldCard>()
@@ -149,6 +159,10 @@ class GiftCardDataSourceImpl(
     /** The latest close of each alias' card wallet, so that a new redeemer for the alias can wait for it. */
     private val closeJobs = mutableMapOf<String, Job>()
 
+    private val closedWallets = mutableSetOf<StoredCardWallet>()
+    private var closeFailed = false
+
+    @Suppress("TooGenericExceptionCaught")
     override suspend fun parse(link: String): ParsedGiftCard {
         val wallet = persistableWalletProvider.getPersistableWallet() ?: throw GiftCardException.NotAvailable()
         val card =
@@ -157,8 +171,14 @@ class GiftCardDataSourceImpl(
             } catch (e: SdkGiftCardException.InvalidLink) {
                 throw e.toAppException()
             }
-        if (card.network != wallet.network) throw GiftCardException.WrongNetwork()
-        val redeemer = newRedeemer(card, wallet.network, wallet.endpoint)
+        val redeemer =
+            try {
+                if (card.network != wallet.network) throw GiftCardException.WrongNetwork()
+                newRedeemer(card, wallet.network, wallet.endpoint)
+            } catch (e: Exception) {
+                card.wipe()
+                throw e
+            }
 
         val handle = GiftCardHandle(UUID.randomUUID().toString())
         val held = HeldCard(card = card, network = wallet.network, endpoint = wallet.endpoint, redeemer = redeemer)
@@ -216,15 +236,19 @@ class GiftCardDataSourceImpl(
     @Suppress("TooGenericExceptionCaught")
     override suspend fun redeem(
         handle: GiftCardHandle,
-        toAddress: String
+        toAddress: String,
+        beforeSubmission: () -> Unit,
     ): GiftCardRedemption {
         val held = held(handle)
         held.priorClose?.join()
         val recipient = RecipientAddress.new(toAddress, held.network)
         val memo = redeemMemo(label = application.getString(R.string.redeemGift_memo), message = held.card.description)
+        val destination = synchronizerProvider.synchronizer.value
+        currentCoroutineContext().ensureActive()
+        beforeSubmission()
         val redemption =
             try {
-                held.redeemer.redeem(recipient, memo, synchronizerProvider.synchronizer.value)
+                held.redeemer.redeem(recipient, memo, destination)
             } catch (e: SdkGiftCardException.Closed) {
                 throw GiftCardException.UnknownHandle(e)
             } catch (e: SdkGiftCardException.NetworkMismatch) {
@@ -256,8 +280,24 @@ class GiftCardDataSourceImpl(
 
     override fun close(handle: GiftCardHandle) {
         synchronized(lock) {
-            cards.remove(handle)?.let { closeLocked(it.redeemer, wipe = it.card) }
+            cards.remove(handle)?.let { closeLocked(it.redeemer, network = it.network, wipe = it.card) }
         }
+    }
+
+    override suspend fun awaitPendingCloses() {
+        synchronized(lock) { closeJobs.values.toList() }.joinAll()
+        val targets = synchronized(lock) {
+            check(!closeFailed) { "Could not close a gift card wallet. Restart the app before trying reset again." }
+            closedWallets.groupBy { it.network }
+        }
+        // SDK close may return while its teardown erases the helper wallet in the background.
+        for ((network, wallets) in targets) {
+            val aliases = wallets.map { it.alias }.toSet()
+            while (GiftCardRedeemers.storedAliases(application, network).any(aliases::contains)) {
+                delay(CARD_WALLET_ERASE_CHECK_INTERVAL)
+            }
+        }
+        synchronized(lock) { closedWallets.clear() }
     }
 
     override suspend fun findStoredCardWallets(): List<StoredCardWallet> =
@@ -317,7 +357,7 @@ class GiftCardDataSourceImpl(
             }
         synchronized(lock) {
             if (cards[handle] !== held) return
-            closeLocked(held.redeemer, wipe = null)
+            closeLocked(held.redeemer, network = held.network, wipe = null)
             held.priorClose = closeJobs[fresh.alias]
             held.redeemer = fresh
         }
@@ -330,9 +370,11 @@ class GiftCardDataSourceImpl(
     @Suppress("TooGenericExceptionCaught")
     private fun closeLocked(
         redeemer: GiftCardRedeemer,
+        network: ZcashNetwork,
         wipe: GiftCard?
     ) {
         val alias = redeemer.alias
+        closedWallets += StoredCardWallet(network, alias)
         val previous = closeJobs[alias]
         val job =
             scope.launch {
@@ -340,6 +382,7 @@ class GiftCardDataSourceImpl(
                 try {
                     redeemer.close()
                 } catch (e: Exception) {
+                    synchronized(lock) { closeFailed = true }
                     Twig.error { "Closing a gift card wallet failed: ${e::class.simpleName}" }
                 } finally {
                     wipe?.wipe()
@@ -397,6 +440,7 @@ private fun String.truncatedToUtf8Bytes(maxBytes: Int): String {
 
 private const val CONTINUATION_BYTE_MASK = 0xC0
 private const val CONTINUATION_BYTE = 0x80
+private val CARD_WALLET_ERASE_CHECK_INTERVAL = 100.milliseconds
 
 private fun SdkGiftCardException.InvalidLink.toAppException(): GiftCardException =
     when (reason) {
