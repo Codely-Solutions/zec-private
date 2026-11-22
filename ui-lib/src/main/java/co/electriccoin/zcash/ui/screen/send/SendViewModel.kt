@@ -135,8 +135,8 @@ class SendViewModel(
     }
 
     internal fun initializeRecipient(route: Send) {
-        if (savedStateHandle.contains(RECIPIENT_STATE_KEY)) return
-        val address = route.recipientAddress ?: return
+        val address = route.recipientAddress
+        if (address == null || savedStateHandle.contains(RECIPIENT_STATE_KEY)) return
         val type = when (route.recipientAddressType) {
             cash.z.ecc.sdk.model.AddressType.UNIFIED -> AddressType.Unified
             cash.z.ecc.sdk.model.AddressType.TRANSPARENT -> AddressType.Transparent

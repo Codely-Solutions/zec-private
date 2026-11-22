@@ -225,6 +225,7 @@ jobs:
           python3 -B .private/test_fixture_download.py
           python3 -B .private/test_core_instrumentation_pairing.py
           python3 -B .private/test_dev_session.py
+          python3 -B .private/test_notify.py
           python3 -B .private/test_prepared_apks.py
           python3 -B .private/test_ui_capture.py
           PYTHONPATH=.private python3 -B -m unittest test_emulator_session test_emulator_batch

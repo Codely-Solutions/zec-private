@@ -166,7 +166,9 @@ internal class ExactOutputVMMapper {
 
     private fun createAmountErrorState(state: ExactOutputInternalState): StringResource? =
         when {
-            state.hasUnrepresentableTokenAmount -> stringRes(co.electriccoin.zcash.ui.design.R.string.send_error_invalidAmount)
+            state.hasUnrepresentableTokenAmount -> {
+                stringRes(co.electriccoin.zcash.ui.design.R.string.send_error_invalidAmount)
+            }
             state.isInsufficientFunds -> stringRes(R.string.send_error_insufficientFunds)
             else -> null
         }

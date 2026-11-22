@@ -8,6 +8,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
 import java.math.BigInteger
 import java.security.GeneralSecurityException
 import java.security.MessageDigest
@@ -99,7 +100,7 @@ private val optionalSignedFieldEmptyValues = setOf(JsonNull, JsonPrimitive(false
 // The signed numeric fields in supported routes are small integers. Decline evidence for other
 // numeric forms rather than hashing a spelling different from JavaScript's JSON.stringify.
 private fun JsonPrimitive.canonicalize(): JsonPrimitive {
-    if (isString || this == JsonNull || content == "true" || content == "false") return this
+    if (isString || this == JsonNull || booleanOrNull != null) return this
     require(content.length <= MAX_SIGNED_NUMBER_LENGTH)
     val integer = content.toBigDecimal().longValueExact()
     require(integer in -MAX_JS_SAFE_INTEGER..MAX_JS_SAFE_INTEGER)

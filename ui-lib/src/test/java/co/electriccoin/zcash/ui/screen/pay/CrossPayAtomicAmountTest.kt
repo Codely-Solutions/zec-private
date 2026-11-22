@@ -73,7 +73,8 @@ class CrossPayAtomicAmountTest(private val decimals: Int) {
             val near = mockk<NearApiProvider> {
                 coEvery { requestQuote(any()) } coAnswers {
                     val json = Json.encodeToString(QuoteRequest.serializer(), firstArg<QuoteRequest>())
-                    wireRequest.complete(Json.parseToJsonElement(json).jsonObject.getValue("amount").jsonPrimitive.content)
+                    val amount = Json.parseToJsonElement(json).jsonObject.getValue("amount").jsonPrimitive.content
+                    wireRequest.complete(amount)
                     throw IllegalArgumentException("Synthetic quote provider refused request")
                 }
             }

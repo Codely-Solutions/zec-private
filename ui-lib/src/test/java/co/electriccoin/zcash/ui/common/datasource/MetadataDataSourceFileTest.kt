@@ -94,6 +94,7 @@ import kotlin.test.assertTrue
  * more than one entry.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass") // Quote retention uses the same encrypted file, restart, and tracking fixture.
 class MetadataDataSourceFileTest {
     private val filesDir = createTempDirectory("metadata-data-source-file-test").toFile()
     private val metadataDir = File(filesDir, "metadata")

@@ -123,7 +123,10 @@ class WalletRepositoryImplTest {
         assertEquals(SecretState.INCOMPLETE, resolveSecretState(true, OnboardingState.NONE, true))
         assertEquals(SecretState.INCOMPLETE, resolveSecretState(true, OnboardingState.NEEDS_WARN, true))
         assertEquals(SecretState.INCOMPLETE, resolveSecretState(true, OnboardingState.NEEDS_BACKUP, true))
-        assertEquals(SecretState.NONE, resolveSecretState(true, OnboardingState.NONE, true, storedByCurrentSetup = true))
+        assertEquals(
+            SecretState.NONE,
+            resolveSecretState(true, OnboardingState.NONE, true, storedByCurrentSetup = true)
+        )
         assertEquals(SecretState.LOADING, resolveSecretState(false, OnboardingState.READY, true))
     }
 
@@ -790,7 +793,8 @@ class WalletRepositoryImplTest {
             advanceUntilIdle()
             assertEquals(
                 listOf(
-                    "onboarding=4", "eraseSlipstream", "erase", "onboarding=0", "wallet", "restoring=INITIATING", "onboarding=3"
+                    "onboarding=4", "eraseSlipstream", "erase", "onboarding=0",
+                    "wallet", "restoring=INITIATING", "onboarding=3"
                 ),
                 harness.events
             )
@@ -843,7 +847,10 @@ class WalletRepositoryImplTest {
             repository.init()
             advanceUntilIdle()
 
-            assertEquals(listOf("onboarding=4", "sdkRepair", "eraseSlipstream", "erase", "onboarding=0"), harness.events)
+            assertEquals(
+                listOf("onboarding=4", "sdkRepair", "eraseSlipstream", "erase", "onboarding=0"),
+                harness.events
+            )
         }
 
     @Test

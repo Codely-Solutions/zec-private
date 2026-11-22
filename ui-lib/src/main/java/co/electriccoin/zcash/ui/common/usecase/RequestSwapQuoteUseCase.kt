@@ -93,15 +93,16 @@ class RequestSwapQuoteUseCase(
         canNavigateToSwapQuote: () -> Boolean,
         contactNetwork: String? = null
     ) {
-        if (amount.toExactNearQuoteAmountOrNull(selectedAsset.decimals) == null) {
-            if (canNavigateToSwapQuote()) {
-                navigateToErrorUseCase(
-                    ErrorArgs.General(IllegalArgumentException("Quote amount must be a positive whole number of base units"))
-                )
-            }
-            return
-        }
-        val recipient = validatedRecipient(address, selectedAsset, contactNetwork, canNavigateToSwapQuote) ?: return
+        val recipient =
+            if (amount.toExactNearQuoteAmountOrNull(selectedAsset.decimals) != null) {
+                validatedRecipient(address, selectedAsset, contactNetwork, canNavigateToSwapQuote)
+            } else {
+                if (canNavigateToSwapQuote()) {
+                    val error = IllegalArgumentException("Quote amount must be a positive whole number of base units")
+                    navigateToErrorUseCase(ErrorArgs.General(error))
+                }
+                null
+            } ?: return
         val newAddress = requestFreshAddress() ?: return
         requestQuote(
             requestQuote = {

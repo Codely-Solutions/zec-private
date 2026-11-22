@@ -1,3 +1,5 @@
+@file:Suppress("TooManyFunctions") // Keep swap retention beside the storage merge that reapplies its bound.
+
 package co.electriccoin.zcash.ui.common.datasource
 
 import androidx.compose.ui.graphics.Color
@@ -261,6 +263,7 @@ class MetadataDataSourceImpl(
                     // Re-acknowledge the same quote durably without replacing the saved settlement.
                     return@updateMetadata metadata.takeIf { tracked.reviewedIdentity == reviewedIdentity }
                 }
+                val evidence = signedQuoteEvidence.takeIf { reviewedIdentity != null }
                 metadata.copy(
                     swaps =
                         metadata.swaps.copy(
@@ -287,7 +290,7 @@ class MetadataDataSourceImpl(
                                             status = status,
                                             amountOutFormatted = amountOutFormatted,
                                             reviewedIdentity = reviewedIdentity,
-                                            signedQuoteEvidence = signedQuoteEvidence.takeIf { reviewedIdentity != null },
+                                            signedQuoteEvidence = evidence,
                                         )
                                     }.withBoundedQuoteEvidence()
                         ),
@@ -948,8 +951,12 @@ private fun List<SwapMetadataV3>.withBoundedQuoteEvidence(): List<SwapMetadataV3
     val retained = withEvidence.asReversed().sortedByDescending { it.lastUpdated }
         .take(MAX_RETAINED_SIGNED_QUOTES)
         .mapTo(mutableSetOf()) { it.depositAddress }
-    return map {
-        if (it.signedQuoteEvidence != null && it.depositAddress !in retained) it.copy(signedQuoteEvidence = null) else it
+    return map { swap ->
+        if (swap.signedQuoteEvidence != null && swap.depositAddress !in retained) {
+            swap.copy(signedQuoteEvidence = null)
+        } else {
+            swap
+        }
     }
 }
 
