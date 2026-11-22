@@ -117,7 +117,8 @@ class RestoreTorVMTest {
         val errorSheet = assertIs<LceError.BottomSheet>(failed.error).state
         assertEquals(stringRes(R.string.wallet_initialization_conflict), errorSheet.message)
         assertTrue(seed.restoreSession.resolve(args.sessionId) === phrase)
-        assertTrue(seed.state.first { it?.nextButton != null }?.seed?.values?.all { it.innerState.value.isNotBlank() } == true)
+        val retained = assertNotNull(seed.state.first { it?.nextButton != null })
+        assertTrue(retained.seed.values.all { it.innerState.value.isNotBlank() })
 
         errorSheet.primaryAction.onClick()
         vm.state.first { it.error == null && it.content?.primary?.isLoading == true }

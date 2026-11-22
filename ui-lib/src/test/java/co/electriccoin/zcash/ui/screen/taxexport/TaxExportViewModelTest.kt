@@ -135,7 +135,10 @@ class TaxExportViewModelTest {
 
             val chooser = assertNotNull(launchedOnBack.await())
             assertEquals(Intent.ACTION_CHOOSER, chooser.action)
-            assertEquals(application.getString(R.string.taxExport_taxFile), chooser.getCharSequenceExtra(Intent.EXTRA_TITLE))
+            assertEquals(
+                application.getString(R.string.taxExport_taxFile),
+                chooser.getCharSequenceExtra(Intent.EXTRA_TITLE),
+            )
             val shared = assertNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
             assertEquals(Intent.ACTION_SEND, shared.action)
             assertEquals(FileShareUtil.ZASHI_INTERNAL_DATA_MIME_TYPE, shared.type)
@@ -144,7 +147,10 @@ class TaxExportViewModelTest {
             val uri = Uri.parse("content://$authority/tax_exports/$name")
             assertEquals(uri, shared.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java))
             assertEquals(uri, shared.clipData?.getItemAt(0)?.uri)
-            assertContains(File(application.cacheDir, "tax_exports/$name").readLines(), "06/15/$year 12:00:00,1.25,ZEC,,,,,")
+            assertContains(
+                File(application.cacheDir, "tax_exports/$name").readLines(),
+                "06/15/$year 12:00:00,1.25,ZEC,,,,,",
+            )
             verify(exactly = 1) { navigation.back() }
         } finally {
             subscription.cancel()
