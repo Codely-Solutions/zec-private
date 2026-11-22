@@ -99,6 +99,66 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun anOpenStatusObserverCanRetainProcessingAfterAnotherObserverSavedSuccess() = runTest {
+        val quote = fundingQuote(SwapType.FLEX_INPUT)
+        val metadata = repository(metadataProvider)
+        SaveORSwapUseCase(mockk(), metadata, mockk()).persistBeforeFunding(quote)
+        fun status(value: co.electriccoin.zcash.ui.common.model.near.SwapStatus, time: String) =
+            co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus(
+                response = co.electriccoin.zcash.ui.common.model.near.SwapStatusResponseDto(
+                    quoteResponse = quote.response,
+                    status = value,
+                    updatedAt = time,
+                ),
+                origin = quote.originAsset,
+                destination = quote.destinationAsset,
+                depositAddress = quote.depositAddress,
+                destinationAddress = quote.destinationAddress,
+                refundAddress = quote.refundAddress,
+            )
+        val processing = status(
+            co.electriccoin.zcash.ui.common.model.near.SwapStatus.PROCESSING, "2026-11-22T12:01:00Z"
+        )
+        val success = status(
+            co.electriccoin.zcash.ui.common.model.near.SwapStatus.SUCCESS, "2026-11-22T12:02:00Z"
+        )
+        var requests = 0
+        val swaps = mockk<co.electriccoin.zcash.ui.common.repository.SwapRepository> {
+            coEvery { checkSwapStatus(any()) } answers {
+                when (++requests) {
+                    1 -> processing
+                    2 -> success
+                    else -> processing
+                }
+            }
+        }
+        val useCase = co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase(metadata, swaps)
+        val first = mutableListOf<co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData>()
+        val second = mutableListOf<co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData>()
+        val firstJob = backgroundScope.launch { useCase.observe("deposit").collect { first += it } }
+        fun pump(condition: () -> Boolean) {
+            val until = System.nanoTime() + 10_000_000_000L
+            while (!condition() && System.nanoTime() < until) {
+                runCurrent()
+                Thread.sleep(2)
+            }
+            assertTrue(condition(), "The bounded production-flow probe did not reach its target state")
+        }
+        pump { first.lastOrNull()?.status?.status == SwapStatus.PROCESSING }
+        val secondJob = backgroundScope.launch { useCase.observe("deposit").collect { second += it } }
+        pump { second.lastOrNull()?.status?.status == SwapStatus.SUCCESS }
+        assertEquals(SwapStatus.SUCCESS, storedSwaps().swapIds.single().status)
+        secondJob.cancel()
+        testScheduler.advanceTimeBy(30_000)
+        pump { first.lastOrNull()?.error != null }
+        assertEquals(SwapStatus.SUCCESS, storedSwaps().swapIds.single().status)
+        assertEquals(SwapStatus.PROCESSING, first.last().status?.status)
+        assertEquals(SwapStatus.PENDING, first.last().savedMetadata?.status)
+        assertTrue(first.last().error is IllegalStateException)
+        firstJob.cancel()
+    }
+
+    @Test
     fun trackingRequiresDirectoryDurabilityForCreationReplacementAndRestart() = runTest {
         var failSync = true
         var directorySyncs = 0

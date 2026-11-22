@@ -17,6 +17,9 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRow
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRowState
+import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRow
+import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
+import co.electriccoin.zcash.ui.common.model.SwapStatus
 import org.junit.Rule
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -32,6 +35,33 @@ import kotlin.test.assertTrue
 class TransactionDetailRowLayoutTest {
     @get:Rule
     val compose = createComposeRule()
+
+    @Test
+    fun savedStatusAndLabelRemainCompleteAtTwoHundredPercentText() {
+        compose.setContent {
+            val density = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(density.density, 2f)) {
+                ZcashTheme {
+                    TransactionDetailSwapStatusRow(
+                        state = TransactionDetailSwapStatusRowState(
+                            title = stringRes("Saved status"),
+                            status = SwapStatus.PENDING,
+                            mode = TransactionDetailSwapStatusRowState.Mode.SWAP_INTO_ZEC,
+                        ),
+                        modifier = Modifier.width(320.dp),
+                    )
+                }
+            }
+        }
+        for (text in listOf("Saved status", "Pending deposit")) {
+            val layouts = mutableListOf<TextLayoutResult>()
+            compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
+            assertFalse(layouts.single().hasVisualOverflow, "$text must remain complete at 200% text")
+        }
+        val label = compose.onNodeWithText("Saved status").fetchSemanticsNode().boundsInRoot
+        val status = compose.onNodeWithText("Pending deposit").fetchSemanticsNode().boundsInRoot
+        assertTrue(label.bottom <= status.top || label.right <= status.left, "Label and badge must not overlap")
+    }
 
     @Test
     fun savedUpdateRemainsCompleteAtLargeTextAndNarrowWidth() {
