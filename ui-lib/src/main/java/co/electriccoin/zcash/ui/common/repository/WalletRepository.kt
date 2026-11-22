@@ -290,9 +290,10 @@ class WalletRepositoryImpl(
         scope.launch {
             try {
                 walletMutation.withLock {
+                    val version = persistableWalletProvider.writeVersion
                     val wallet = persistableWalletProvider.getPersistableWallet()
                     val onboarding = onboardingState.first()
-                    migrateDecommissionedEndpointIfNeeded(wallet)
+                    migrateDecommissionedEndpointIfNeeded(wallet, version)
                     resetOnboardingIfWalletMissing(wallet = wallet, onboardingState = onboarding)
                 }
             } catch (e: Exception) {
@@ -301,10 +302,11 @@ class WalletRepositoryImpl(
         }
     }
 
-    private suspend fun migrateDecommissionedEndpointIfNeeded(wallet: PersistableWallet?) {
+    private suspend fun migrateDecommissionedEndpointIfNeeded(wallet: PersistableWallet?, version: Long) {
         if (wallet == null) return
         if (wallet.endpoint.host in lightWalletEndpointProvider.getDecommissionedHosts()) {
-            persistWalletInternal(wallet.copy(endpoint = lightWalletEndpointProvider.getDefaultEndpoint()))
+            val replacement = wallet.copy(endpoint = lightWalletEndpointProvider.getDefaultEndpoint())
+            persistableWalletProvider.storeIfCurrent(wallet, replacement, version)
         }
     }
 
@@ -354,10 +356,11 @@ class WalletRepositoryImpl(
     }
 
     override suspend fun updateWalletEndpoint(endpoint: LightWalletEndpoint) {
+        val version = persistableWalletProvider.writeVersion
         val selectedWallet = persistableWalletProvider.getPersistableWallet() ?: return
         val selectedEndpoint = selectedWallet.endpoint
         if (selectedEndpoint == endpoint) return
-        persistWalletInternal(selectedWallet.copy(endpoint = endpoint))
+        persistableWalletProvider.storeIfCurrent(selectedWallet, selectedWallet.copy(endpoint = endpoint), version)
     }
 
     private suspend fun persistWalletInternal(persistableWallet: PersistableWallet) {
@@ -366,7 +369,7 @@ class WalletRepositoryImpl(
 
     override fun createNewWallet() {
         var candidate: PersistableWallet? = null
-        initializeWallet(WalletInitializationRequest.Create) { stored ->
+        initializeWallet(WalletInitializationRequest.Create) { stored, _ ->
             val accepted = candidate
             if (stored != null && (accepted == null || !stored.hasSameIdentityAs(accepted))) {
                 throw WalletInitializationConflictException()
@@ -387,9 +390,9 @@ class WalletRepositoryImpl(
     }
 
     override fun continueWalletSetup() {
-        initializeWallet(WalletInitializationRequest.Continue) { stored ->
+        initializeWallet(WalletInitializationRequest.Continue) { stored, version ->
             if (stored == null) throw WalletInitializationConflictException()
-            finishExistingWalletInitialization(stored)
+            finishExistingWalletInitialization(stored, version)
         }
     }
 
@@ -427,7 +430,7 @@ class WalletRepositoryImpl(
     ): Deferred<Unit> {
         val request = WalletInitializationRequest.Restore(network, seedPhrase, birthday, enableTor)
         var candidate: PersistableWallet? = null
-        return initializeWallet(request) { stored ->
+        return initializeWallet(request) { stored, _ ->
             if (stored != null && (candidate == null || !request.matches(stored))) {
                 throw WalletInitializationConflictException()
             }
@@ -449,10 +452,13 @@ class WalletRepositoryImpl(
         }
     }
 
-    private suspend fun finishExistingWalletInitialization(wallet: PersistableWallet) {
+    private suspend fun finishExistingWalletInitialization(wallet: PersistableWallet, version: Long) {
         // A process can stop between the encrypted wallet write and onboarding metadata. Its seed already owns
         // this setup. Resume conservatively as a restore and preserve the existing backup flag.
-        persistWalletInternal(wallet.copy(walletInitMode = WalletInitMode.RestoreWallet))
+        val replacement = wallet.copy(walletInitMode = WalletInitMode.RestoreWallet)
+        if (!persistableWalletProvider.storeIfCurrent(wallet, replacement, version)) {
+            throw WalletInitializationConflictException()
+        }
         walletRestoringStateProvider.store(WalletRestoringState.RESTORING)
         restoreTimestampDataSource.getOrCreate()
         persistOnboardingStateInternal(OnboardingState.READY)
@@ -460,7 +466,7 @@ class WalletRepositoryImpl(
 
     private fun initializeWallet(
         request: WalletInitializationRequest,
-        operation: suspend (PersistableWallet?) -> Unit
+        operation: suspend (PersistableWallet?, Long) -> Unit
     ): Deferred<Unit> =
         synchronized(initializationLock) {
             val accepted = acceptedInitialization
@@ -483,9 +489,10 @@ class WalletRepositoryImpl(
         scope.launch {
             try {
                 walletMutation.withLock {
+                    val version = persistableWalletProvider.writeVersion
                     val stored = persistableWalletProvider.getPersistableWallet()
                     if (onboardingState.first() != OnboardingState.READY || stored == null) {
-                        accepted.operation(stored)
+                        accepted.operation(stored, version)
                     } else {
                         val request = accepted.request
                         if (request is WalletInitializationRequest.Restore && !request.matches(stored)) {
@@ -518,7 +525,7 @@ class WalletRepositoryImpl(
 
     private class WalletInitializationOperation(
         val request: WalletInitializationRequest,
-        val operation: suspend (PersistableWallet?) -> Unit
+        val operation: suspend (PersistableWallet?, Long) -> Unit
     )
 
     private sealed interface WalletInitializationRequest {

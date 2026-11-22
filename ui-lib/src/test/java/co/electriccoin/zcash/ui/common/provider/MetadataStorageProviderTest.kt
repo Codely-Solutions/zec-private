@@ -44,6 +44,25 @@ class MetadataStorageProviderTest {
     }
 
     @Test
+    fun interruptedDirectoryCreationRequiresParentSyncOnRetry() {
+        var attempts = 0
+        val recovering = MetadataStorageProviderImpl(
+            context = mockk { every { filesDir } returns this@MetadataStorageProviderTest.filesDir },
+            directorySync = DirectorySync {
+                attempts += 1
+                if (attempts == 1) throw IOException("Synthetic parent sync failure")
+            }
+        )
+        val key = metadataKey(0)
+        assertFailsWith<IOException> { recovering.getOrCreateStorageFile(key) }
+        assertTrue(metadataDir.isDirectory)
+        assertFalse(File(metadataDir, key.fileIdentifier()).exists())
+
+        assertTrue(recovering.getOrCreateStorageFile(key).exists())
+        assertEquals(2, attempts)
+    }
+
+    @Test
     fun getStorageFilesReturnsNothingWhenNothingExists() {
         val key = metadataKey(0, 1)
 

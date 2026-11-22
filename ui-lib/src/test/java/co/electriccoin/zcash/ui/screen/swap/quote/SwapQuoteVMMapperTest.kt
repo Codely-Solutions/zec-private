@@ -50,6 +50,7 @@ import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.math.BigDecimal
 import co.electriccoin.zcash.ui.design.util.withStyle
@@ -110,7 +111,7 @@ class SwapQuoteVMMapperTest {
         )
         val fee = Zatoshi(1000)
         val proposal = ExactInputSwapTransactionProposal(
-            destination = WalletAddress.Unified.new("synthetic-deposit"),
+            destination = runBlocking { WalletAddress.Unified.new("synthetic-deposit") },
             amount = Zatoshi(150_000_000),
             memo = Memo(""),
             proposal = mockk<Proposal> { every { totalFeeRequired() } returns fee },

@@ -26,6 +26,7 @@ import co.electriccoin.zcash.ui.common.provider.SdkEncryptedPreferenceRecoveryPr
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.usecase.RestoreWalletUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
@@ -49,6 +50,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -62,6 +64,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -583,6 +586,7 @@ class WalletRepositoryImplTest {
             val failingWalletProvider =
                 mockk<PersistableWalletProvider> {
                     every { persistableWallet } returns MutableSharedFlow()
+                    every { writeVersion } returns 0L
                 }
             coEvery { failingWalletProvider.getPersistableWallet() } throws
                 IllegalStateException("encrypted preferences unreadable")
@@ -602,6 +606,29 @@ class WalletRepositoryImplTest {
             assertEquals("3", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
             coVerify(exactly = 0) { Synchronizer.erase(any(), any(), any()) }
         }
+
+    @Test
+    fun aDelayedEndpointChangeCannotRestoreAClearedWallet() = runTest {
+        val (repository, harness) = newRepository(OnboardingState.READY, fixtureWallet())
+        val walletProvider = harness.walletProvider as FakePersistableWalletProvider
+        val currentEndpoint = LightWalletEndpoint("current.example.invalid", 443, true)
+        repository.updateWalletEndpoint(currentEndpoint)
+        assertEquals(currentEndpoint, walletProvider.requirePersistableWallet().endpoint)
+        val walletRead = CompletableDeferred<Unit>()
+        val releaseRead = CompletableDeferred<Unit>()
+        walletProvider.beforeReadReturns = {
+            walletRead.complete(Unit)
+            releaseRead.await()
+        }
+        val stale = launch { repository.updateWalletEndpoint(LightWalletEndpoint("stale.example.invalid", 443, true)) }
+        walletRead.await()
+        walletProvider.clearForReset()
+        releaseRead.complete(Unit)
+        stale.join()
+
+        assertNull(walletProvider.getPersistableWallet())
+        assertEquals(listOf("wallet"), harness.events)
+    }
 
     /**
      * "The erase failed and we carried on anyway" is the half-reset state MOB-1836 was reported
@@ -733,26 +760,47 @@ private class FakePersistableWalletProvider(
     private val events: MutableList<String>
 ) : PersistableWalletProvider {
     private val walletFlow = MutableStateFlow(initial)
+    private val writeAccess = WalletWriteAccess()
     var failWrites = false
+    var beforeReadReturns: suspend () -> Unit = {}
 
     override val persistableWallet: Flow<PersistableWallet?> = walletFlow
+    override val writeVersion get() = writeAccess.token()
 
-    override suspend fun store(persistableWallet: PersistableWallet) {
-        walletFlow.value = persistableWallet
-        // Android may update its memory cache even when commit reports a disk failure.
-        if (failWrites) throw IOException("Synthetic persistence failure")
-        events += "wallet"
-    }
+    override suspend fun store(persistableWallet: PersistableWallet) =
+        writeAccess.replaceWallet { write(persistableWallet) }
 
     override suspend fun storeIfCurrent(
         expected: PersistableWallet,
         replacement: PersistableWallet,
         version: Long,
-    ): Boolean = error("This wallet setup fixture does not run seed-mismatch recovery")
+    ): Boolean = writeAccess.write(version) {
+        val wallet = walletFlow.value
+        if (wallet == null || wallet.network != expected.network || wallet.seedPhrase != expected.seedPhrase) {
+            false
+        } else {
+            write(replacement)
+            true
+        }
+    } ?: false
 
-    override suspend fun getPersistableWallet(): PersistableWallet? = walletFlow.value
+    override suspend fun getPersistableWallet(): PersistableWallet? =
+        walletFlow.value.also { beforeReadReturns() }
 
     override suspend fun requirePersistableWallet(): PersistableWallet = checkNotNull(walletFlow.value)
+
+    suspend fun clearForReset() {
+        writeAccess.beginReset()
+        walletFlow.value = null
+        writeAccess.finishReset()
+    }
+
+    private fun write(wallet: PersistableWallet) {
+        walletFlow.value = wallet
+        // Android may update its memory cache even when commit reports a disk failure.
+        if (failWrites) throw IOException("Synthetic persistence failure")
+        events += "wallet"
+    }
 }
 
 /**

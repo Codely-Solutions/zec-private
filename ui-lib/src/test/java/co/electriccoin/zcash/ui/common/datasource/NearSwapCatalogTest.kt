@@ -135,6 +135,18 @@ class NearSwapCatalogTest {
     }
 
     @Test
+    fun simpleOriginQuoteIgnoresMemoForASeparateAddress() = runBlocking {
+        val route = Route(bitcoin, zec, SwapType.FLEX_INPUT)
+        val response = quoteJson(route).replace(
+            "\"depositAddress\":",
+            "\"chainDepositAddresses\": [{\"blockchain\": \"stellar\", \"address\": \"other\", \"memo\": \"123\"}], " +
+                "\"depositAddress\":"
+        )
+        coEvery { nearApiProvider.requestQuote(any()) } returns Json.decodeFromString<QuoteResponseDto>(response)
+        assertEquals(route.deposit, requestQuote(route, SwapMode.FLEX_INPUT).depositAddress.address)
+    }
+
+    @Test
     fun successfulStatusesPreserveAmountsAndAssetIdentityInEitherCatalogOrder() =
         runBlocking {
             val statusCatalog = catalog + omni
@@ -251,6 +263,7 @@ class NearSwapCatalogTest {
         assertEquals(0, route.fixedAmount.atomic.compareTo(request.captured.amount), route.label)
         assertEquals(route.refund, request.captured.refundTo, route.label)
         assertEquals(route.recipient, request.captured.recipient, route.label)
+        assertEquals("SIMPLE", request.captured.depositMode, route.label)
         assertEquals(SLIPPAGE_BPS, request.captured.slippageTolerance, route.label)
         assertEquals(mode, quote.mode, route.label)
         assertEquals(route.origin, quote.originAsset, route.label)

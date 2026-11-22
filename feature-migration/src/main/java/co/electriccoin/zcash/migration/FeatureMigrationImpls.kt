@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
+import androidx.work.WorkManager
 import cash.z.ecc.android.sdk.InternalTestingApi
 import co.electriccoin.zcash.ui.LaunchNavigationRequests
 import co.electriccoin.zcash.ui.NavigationCommand
@@ -67,6 +68,7 @@ import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureS
 import co.electriccoin.zcash.work.MigrationScheduler
 import co.electriccoin.zcash.work.MigrationWorker
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
 
 class MigrationGateImpl(
@@ -227,20 +229,17 @@ class MigrationAppHooksImpl(
         }
 
     override suspend fun cancelMigrationWork(accountKeyId: String?) {
-        val keys =
-            accountKeyId?.let { listOf(it) }
-                ?: runCatching {
-                    accountDataSource.getAllAccounts().map { it.sdkAccount.accountUuid.toStorageKeyId() }
-                }.getOrDefault(emptyList())
+        val keys = if (accountKeyId == null) {
+            // Reset must cancel the worker chain even when the synchronizer has no account snapshot.
+            val accounts = accountDataSource.allAccounts.value.orEmpty()
+            WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name).result.await()
+            accounts.map { it.sdkAccount.accountUuid.toStorageKeyId() }
+        } else {
+            listOf(accountKeyId)
+        }
         keys.forEach { key ->
             MigrationScheduler(context).cancel(key)
             migrationNotifier.cancel(key)
-        }
-        // Belt-and-braces (wallet reset): WorkManager auto-tags every request with its worker
-        // class name, so a tag sweep also catches jobs whose account key we can no longer resolve.
-        if (accountKeyId == null) {
-            val wm = androidx.work.WorkManager.getInstance(context)
-            wm.cancelAllWorkByTag(MigrationWorker::class.java.name)
         }
         migrationLog("AppHooks: cancelled migration work (accounts=${keys.size}, sweep=${accountKeyId == null})")
     }
