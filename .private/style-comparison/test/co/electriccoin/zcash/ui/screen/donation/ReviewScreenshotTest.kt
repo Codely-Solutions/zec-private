@@ -72,10 +72,23 @@ class ReviewScreenshotTest {
 
     @Test
     fun captureSetupCorrectionStates() {
-        val scene = mutableStateOf(Scene("setup-incomplete", "light"))
+        captureSetupStates(listOf("light", "dark", "oled"), 1f)
+    }
+
+    @Test
+    fun captureLargeSetupCorrectionStates() {
+        captureSetupStates(listOf("dark"), 2f)
+    }
+
+    private fun captureSetupStates(themes: List<String>, scale: Float) {
+        // Font changes recreate the Activity; set the configuration before content creation.
+        compose.runOnUiThread {
+            RuntimeEnvironment.setFontScale(scale)
+            assertEquals(scale, compose.activity.resources.configuration.fontScale)
+        }
+        val scene = mutableStateOf(Scene("setup-incomplete", themes.first(), scale))
         show(scene)
-        for ((theme, scale) in listOf("light" to 1f, "dark" to 1f, "oled" to 1f, "dark" to 2f)) {
-            compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
+        for (theme in themes) {
             for (screen in listOf(
                 "setup-incomplete", "setup-failed", "server-save-error", "restore-tor-disabled", "restore-tor-enabled",
                 "gift-reviewed-account", "gift-unknown-account",
