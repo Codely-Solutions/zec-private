@@ -352,7 +352,7 @@ private fun QuoteInfoLabel(
         val measurer = rememberTextMeasurer()
         val density = LocalDensity.current
         BoxWithConstraints(modifier) {
-            val available = (constraints.maxWidth - with(density) { 48.dp.roundToPx() }).coerceAtLeast(1)
+            val available = (constraints.maxWidth - with(density) { quoteHelpWidth.roundToPx() }).coerceAtLeast(1)
             val measured = measurer.measure(label, style, constraints = Constraints(maxWidth = available))
             val labelWidth = ceil((0 until measured.lineCount).maxOf {
                 measured.getLineRight(it) - measured.getLineLeft(it)
@@ -377,14 +377,36 @@ fun SwapQuoteInfo(
     descriptionFontWeight: FontWeight = FontWeight.Normal,
     descriptionColor: Color = ZashiColors.Text.textTertiary
 ) {
+    val labelStyle = descriptionStyle.copy(fontWeight = descriptionFontWeight)
     if (item.layout == SwapQuoteInfoLayout.STACKED) {
-        StackedSwapQuoteInfo(item, descriptionStyle, descriptionFontWeight, descriptionColor)
-        return
+        StackedSwapQuoteInfo(item, labelStyle, descriptionColor)
+    } else if (item.help != null) {
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val measurer = rememberTextMeasurer()
+            val labelWidth = measurer.measure(item.description.getValue(), labelStyle, softWrap = false).size.width
+            val titleStyle = ZashiTypography.textSm.copy(fontWeight = FontWeight.Medium)
+            val titleWidth = measurer.measure(item.title.getValue(), titleStyle, softWrap = false).size.width
+            val subtitleWidth = item.subtitle?.let {
+                measurer.measure(it.getValue(), ZashiTypography.textXs, softWrap = false).size.width
+            } ?: 0
+            val helpWidth = with(LocalDensity.current) { quoteHelpWidth.roundToPx() }
+            if (labelWidth + helpWidth + maxOf(titleWidth, subtitleWidth) > constraints.maxWidth) {
+                StackedSwapQuoteInfo(item, labelStyle, descriptionColor)
+            } else {
+                InlineSwapQuoteInfo(item, labelStyle, descriptionColor)
+            }
+        }
+    } else {
+        InlineSwapQuoteInfo(item, labelStyle, descriptionColor)
     }
+}
+
+@Composable
+private fun InlineSwapQuoteInfo(item: SwapQuoteInfoItem, descriptionStyle: TextStyle, descriptionColor: Color) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         QuoteInfoLabel(
             item = item,
-            style = descriptionStyle.copy(fontWeight = descriptionFontWeight),
+            style = descriptionStyle,
             color = descriptionColor,
             modifier = Modifier.weight(1f),
         )
@@ -419,15 +441,13 @@ fun SwapQuoteInfo(
 private fun StackedSwapQuoteInfo(
     item: SwapQuoteInfoItem,
     descriptionStyle: TextStyle,
-    descriptionFontWeight: FontWeight,
     descriptionColor: Color
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
+        QuoteInfoLabel(
+            item = item,
             modifier = Modifier.fillMaxWidth(),
-            text = item.description.getValue(),
             style = descriptionStyle,
-            fontWeight = descriptionFontWeight,
             color = descriptionColor
         )
         Spacer(4.dp)
@@ -453,6 +473,8 @@ private fun StackedSwapQuoteInfo(
         }
     }
 }
+
+private val quoteHelpWidth = 48.dp
 
 @PreviewScreens
 @Composable

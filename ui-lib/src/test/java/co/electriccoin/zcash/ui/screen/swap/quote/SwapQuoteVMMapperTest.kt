@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -106,7 +107,16 @@ class SwapQuoteVMMapperTest {
     }
 
     @Test
-    fun poorOutgoingQuoteKeepsWarningAndContinuationWithExpandableMarketSource() {
+    fun poorOutgoingQuoteKeepsWarningAndContinuationWithExpandableMarketSource() =
+        assertPoorOutgoingQuote(fontScale = 1f)
+
+    @Test
+    @Config(sdk = [28], qualifiers = "w360dp-h640dp-xxhdpi")
+    fun poorOutgoingQuoteStacksTheMarketComparisonAtDoubleTextSize() =
+        assertPoorOutgoingQuote(fontScale = 2f)
+
+    private fun assertPoorOutgoingQuote(fontScale: Float) {
+        composeTestRule.runOnUiThread { RuntimeEnvironment.setFontScale(fontScale) }
         val check = IndependentPriceCheck.Compared(BigDecimal("-15.25"), Long.MAX_VALUE, listOf("Kraken", "Orca"))
         val context: Application = RuntimeEnvironment.getApplication()
         val tokens = TokenIconProviderImpl(context)
@@ -137,13 +147,31 @@ class SwapQuoteVMMapperTest {
         kotlin.test.assertNull(state.minimumDeposit)
         composeTestRule.setContent { ZcashTheme { SwapQuoteView(state) } }
 
-        composeTestRule.onNodeWithText("15.3% below market reference").assertIsDisplayed()
+        composeTestRule.onNodeWithText("15.3% below market reference").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("Swap anyway").performScrollTo().performClick()
         composeTestRule.runOnIdle { assertTrue(continued) }
         composeTestRule.onNodeWithText("Market comparison").assertDoesNotExist()
         composeTestRule.onNodeWithText("Quote details").performScrollTo().performClick()
-        composeTestRule.onNodeWithText("15.25% less value").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithContentDescription("About the market comparison").performClick()
+        val label = composeTestRule.onNodeWithText("Market comparison").performScrollTo().assertIsDisplayed()
+        val value = composeTestRule.onNodeWithText("15.25% less value").performScrollTo().assertIsDisplayed()
+        val help = composeTestRule.onNodeWithContentDescription("About the market comparison")
+        val layouts = mutableListOf<TextLayoutResult>()
+        label.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action -> action(layouts) }
+        val layout = layouts.single()
+        assertEquals(fontScale, layout.layoutInput.density.fontScale)
+        assertFalse(layout.hasVisualOverflow)
+        assertTrue(layout.lineCount <= 2, "The two-word market label wraps within a word")
+        val labelBounds = label.getUnclippedBoundsInRoot()
+        val valueBounds = value.getUnclippedBoundsInRoot()
+        val helpBounds = help.getUnclippedBoundsInRoot()
+        assertTrue(helpBounds.top < labelBounds.bottom && helpBounds.bottom > labelBounds.top)
+        if (fontScale == 2f) {
+            assertTrue(valueBounds.top >= labelBounds.bottom, "The value needs its own line at 200% text")
+        } else {
+            assertEquals(1, layout.lineCount)
+            assertTrue(valueBounds.top < labelBounds.bottom, "The value should remain beside the label")
+        }
+        help.performScrollTo().performClick()
         composeTestRule.onNodeWithText("Value received versus total spend, using prices from Kraken, Orca.")
             .assertIsDisplayed()
     }

@@ -34381,7 +34381,7 @@ index 717411935..4149cbc77 100644
 +        ),
 +    )
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
-index 1fa0df8d6..21ae26077 100644
+index 1fa0df8d6..94254140f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteView.kt
 @@ -4,0 +5 @@ import androidx.compose.foundation.layout.Box
@@ -34516,7 +34516,7 @@ index 1fa0df8d6..21ae26077 100644
 +        val measurer = rememberTextMeasurer()
 +        val density = LocalDensity.current
 +        BoxWithConstraints(modifier) {
-+            val available = (constraints.maxWidth - with(density) { 48.dp.roundToPx() }).coerceAtLeast(1)
++            val available = (constraints.maxWidth - with(density) { quoteHelpWidth.roundToPx() }).coerceAtLeast(1)
 +            val measured = measurer.measure(label, style, constraints = Constraints(maxWidth = available))
 +            val labelWidth = ceil((0 until measured.lineCount).maxOf {
 +                measured.getLineRight(it) - measured.getLineLeft(it)
@@ -34534,38 +34534,58 @@ index 1fa0df8d6..21ae26077 100644
 +    }
 +}
 +
-@@ -244,2 +380,9 @@ fun SwapQuoteInfo(
+@@ -244,4 +380,29 @@ fun SwapQuoteInfo(
 -    Row {
 -        Text(
+-            modifier = Modifier.weight(1f),
+-            text = item.description.getValue(),
++    val labelStyle = descriptionStyle.copy(fontWeight = descriptionFontWeight)
 +    if (item.layout == SwapQuoteInfoLayout.STACKED) {
-+        StackedSwapQuoteInfo(item, descriptionStyle, descriptionFontWeight, descriptionColor)
-+        return
++        StackedSwapQuoteInfo(item, labelStyle, descriptionColor)
++    } else if (item.help != null) {
++        BoxWithConstraints(Modifier.fillMaxWidth()) {
++            val measurer = rememberTextMeasurer()
++            val labelWidth = measurer.measure(item.description.getValue(), labelStyle, softWrap = false).size.width
++            val titleStyle = ZashiTypography.textSm.copy(fontWeight = FontWeight.Medium)
++            val titleWidth = measurer.measure(item.title.getValue(), titleStyle, softWrap = false).size.width
++            val subtitleWidth = item.subtitle?.let {
++                measurer.measure(it.getValue(), ZashiTypography.textXs, softWrap = false).size.width
++            } ?: 0
++            val helpWidth = with(LocalDensity.current) { quoteHelpWidth.roundToPx() }
++            if (labelWidth + helpWidth + maxOf(titleWidth, subtitleWidth) > constraints.maxWidth) {
++                StackedSwapQuoteInfo(item, labelStyle, descriptionColor)
++            } else {
++                InlineSwapQuoteInfo(item, labelStyle, descriptionColor)
++            }
++        }
++    } else {
++        InlineSwapQuoteInfo(item, labelStyle, descriptionColor)
 +    }
++}
++
++@Composable
++private fun InlineSwapQuoteInfo(item: SwapQuoteInfoItem, descriptionStyle: TextStyle, descriptionColor: Color) {
 +    Row(verticalAlignment = Alignment.CenterVertically) {
 +        QuoteInfoLabel(
 +            item = item,
-+            style = descriptionStyle.copy(fontWeight = descriptionFontWeight),
-+            color = descriptionColor,
-@@ -247,4 +389,0 @@ fun SwapQuoteInfo(
--            text = item.description.getValue(),
--            style = descriptionStyle,
+@@ -249,2 +410,2 @@ fun SwapQuoteInfo(
 -            fontWeight = descriptionFontWeight,
 -            color = descriptionColor
-@@ -277,0 +417,40 @@ fun SwapQuoteInfo(
++            color = descriptionColor,
++            modifier = Modifier.weight(1f),
+@@ -277,0 +439,40 @@ fun SwapQuoteInfo(
 +@Suppress("MagicNumber")
 +@Composable
 +private fun StackedSwapQuoteInfo(
 +    item: SwapQuoteInfoItem,
 +    descriptionStyle: TextStyle,
-+    descriptionFontWeight: FontWeight,
 +    descriptionColor: Color
 +) {
 +    Column(modifier = Modifier.fillMaxWidth()) {
-+        Text(
++        QuoteInfoLabel(
++            item = item,
 +            modifier = Modifier.fillMaxWidth(),
-+            text = item.description.getValue(),
 +            style = descriptionStyle,
-+            fontWeight = descriptionFontWeight,
 +            color = descriptionColor
 +        )
 +        Spacer(4.dp)
@@ -34592,10 +34612,12 @@ index 1fa0df8d6..21ae26077 100644
 +    }
 +}
 +
-@@ -307 +486 @@ private fun SuccessPreview() =
++private val quoteHelpWidth = 48.dp
++
+@@ -307 +508 @@ private fun SuccessPreview() =
 -                                title = stringRes("Zodl").withStyle(),
 +                                title = stringRes("ZEC Private").withStyle(),
-@@ -316 +495 @@ private fun SuccessPreview() =
+@@ -316 +517 @@ private fun SuccessPreview() =
 -                                description = stringRes("ZEC transaction fee"),
 +                                description = stringRes(R.string.private_wallet_transaction_fee),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
@@ -53726,10 +53748,10 @@ index 881e28b09..74f1857a7 100644
 @@ -79,0 +80 @@ class SwapQuoteVMGiftCardLinkTest {
 +            independentPrices = mockk(relaxed = true),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-index 38427672d..a826d5a17 100644
+index 38427672d..34dee4493 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMMapperTest.kt
-@@ -2,0 +3,25 @@ package co.electriccoin.zcash.ui.screen.swap.quote
+@@ -2,0 +3,26 @@ package co.electriccoin.zcash.ui.screen.swap.quote
 +import android.app.Application
 +import android.graphics.Bitmap
 +import android.graphics.Canvas
@@ -53745,6 +53767,7 @@ index 38427672d..a826d5a17 100644
 +import androidx.compose.ui.platform.testTag
 +import androidx.compose.ui.semantics.SemanticsActions
 +import androidx.compose.ui.test.assertIsDisplayed
++import androidx.compose.ui.test.getUnclippedBoundsInRoot
 +import androidx.compose.ui.test.onNodeWithContentDescription
 +import androidx.compose.ui.test.onNodeWithTag
 +import androidx.compose.ui.test.performClick
@@ -53755,21 +53778,21 @@ index 38427672d..a826d5a17 100644
 +import androidx.compose.ui.unit.dp
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 +import androidx.compose.ui.test.onNodeWithText
-@@ -4,0 +30,4 @@ import cash.z.ecc.android.sdk.model.AccountUuid
+@@ -4,0 +31,4 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 +import cash.z.ecc.android.sdk.model.Memo
 +import cash.z.ecc.android.sdk.model.Proposal
 +import cash.z.ecc.android.sdk.model.WalletAddress
 +import cash.z.ecc.android.sdk.model.Zatoshi
-@@ -6,0 +36,2 @@ import co.electriccoin.zcash.ui.R
+@@ -6,0 +37,2 @@ import co.electriccoin.zcash.ui.R
 +import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 +import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
-@@ -10,0 +42 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
+@@ -10,0 +43 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 +import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
-@@ -13,0 +46,3 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
+@@ -13,0 +47,3 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
 +import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
 +import co.electriccoin.zcash.ui.common.provider.BlockchainProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.TokenIconProviderImpl
-@@ -15,0 +51,12 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
+@@ -15,0 +52,12 @@ import co.electriccoin.zcash.ui.design.util.StyledStringResource
 +import co.electriccoin.zcash.ui.design.util.getString
 +import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 +import co.electriccoin.zcash.ui.design.theme.AppearanceMode
@@ -53782,18 +53805,18 @@ index 38427672d..a826d5a17 100644
 +import co.electriccoin.zcash.ui.design.util.withStyle
 +import java.util.Locale
 +import org.junit.Rule
-@@ -17,0 +65 @@ import org.robolectric.RobolectricTestRunner
+@@ -17,0 +66 @@ import org.robolectric.RobolectricTestRunner
 +import org.robolectric.RuntimeEnvironment
-@@ -18,0 +67 @@ import org.robolectric.annotation.Config
+@@ -18,0 +68 @@ import org.robolectric.annotation.Config
 +import org.robolectric.annotation.GraphicsMode
-@@ -20,0 +70,2 @@ import kotlin.test.assertEquals
+@@ -20,0 +71,2 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFalse
 +import kotlin.test.assertTrue
-@@ -31 +82,2 @@ import kotlin.test.assertEquals
+@@ -31 +83,2 @@ import kotlin.test.assertEquals
 -@Config(sdk = [34])
 +@Config(sdk = [34], qualifiers = "w411dp-h891dp")
 +@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@@ -32,0 +85,151 @@ class SwapQuoteVMMapperTest {
+@@ -32,0 +86,178 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun ordinaryMarketComparisonUsesOneRowWithDirectionalValueAndSourceHelp() {
 +        val cases = mapOf(
@@ -53818,7 +53841,16 @@ index 38427672d..a826d5a17 100644
 +    }
 +
 +    @Test
-+    fun poorOutgoingQuoteKeepsWarningAndContinuationWithExpandableMarketSource() {
++    fun poorOutgoingQuoteKeepsWarningAndContinuationWithExpandableMarketSource() =
++        assertPoorOutgoingQuote(fontScale = 1f)
++
++    @Test
++    @Config(sdk = [28], qualifiers = "w360dp-h640dp-xxhdpi")
++    fun poorOutgoingQuoteStacksTheMarketComparisonAtDoubleTextSize() =
++        assertPoorOutgoingQuote(fontScale = 2f)
++
++    private fun assertPoorOutgoingQuote(fontScale: Float) {
++        composeTestRule.runOnUiThread { RuntimeEnvironment.setFontScale(fontScale) }
 +        val check = IndependentPriceCheck.Compared(BigDecimal("-15.25"), Long.MAX_VALUE, listOf("Kraken", "Orca"))
 +        val context: Application = RuntimeEnvironment.getApplication()
 +        val tokens = TokenIconProviderImpl(context)
@@ -53849,13 +53881,31 @@ index 38427672d..a826d5a17 100644
 +        kotlin.test.assertNull(state.minimumDeposit)
 +        composeTestRule.setContent { ZcashTheme { SwapQuoteView(state) } }
 +
-+        composeTestRule.onNodeWithText("15.3% below market reference").assertIsDisplayed()
++        composeTestRule.onNodeWithText("15.3% below market reference").performScrollTo().assertIsDisplayed()
 +        composeTestRule.onNodeWithText("Swap anyway").performScrollTo().performClick()
 +        composeTestRule.runOnIdle { assertTrue(continued) }
 +        composeTestRule.onNodeWithText("Market comparison").assertDoesNotExist()
 +        composeTestRule.onNodeWithText("Quote details").performScrollTo().performClick()
-+        composeTestRule.onNodeWithText("15.25% less value").performScrollTo().assertIsDisplayed()
-+        composeTestRule.onNodeWithContentDescription("About the market comparison").performClick()
++        val label = composeTestRule.onNodeWithText("Market comparison").performScrollTo().assertIsDisplayed()
++        val value = composeTestRule.onNodeWithText("15.25% less value").performScrollTo().assertIsDisplayed()
++        val help = composeTestRule.onNodeWithContentDescription("About the market comparison")
++        val layouts = mutableListOf<TextLayoutResult>()
++        label.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { action -> action(layouts) }
++        val layout = layouts.single()
++        assertEquals(fontScale, layout.layoutInput.density.fontScale)
++        assertFalse(layout.hasVisualOverflow)
++        assertTrue(layout.lineCount <= 2, "The two-word market label wraps within a word")
++        val labelBounds = label.getUnclippedBoundsInRoot()
++        val valueBounds = value.getUnclippedBoundsInRoot()
++        val helpBounds = help.getUnclippedBoundsInRoot()
++        assertTrue(helpBounds.top < labelBounds.bottom && helpBounds.bottom > labelBounds.top)
++        if (fontScale == 2f) {
++            assertTrue(valueBounds.top >= labelBounds.bottom, "The value needs its own line at 200% text")
++        } else {
++            assertEquals(1, layout.lineCount)
++            assertTrue(valueBounds.top < labelBounds.bottom, "The value should remain beside the label")
++        }
++        help.performScrollTo().performClick()
 +        composeTestRule.onNodeWithText("Value received versus total spend, using prices from Kraken, Orca.")
 +            .assertIsDisplayed()
 +    }
@@ -53945,7 +53995,7 @@ index 38427672d..a826d5a17 100644
 +    @get:Rule
 +    val composeTestRule = createComposeRule()
 +
-@@ -68,0 +272,124 @@ class SwapQuoteVMMapperTest {
+@@ -68,0 +300,124 @@ class SwapQuoteVMMapperTest {
 +    @Test
 +    fun incomingQuoteDoesNotInventAWalletTransactionFee() {
 +        val items = createItems(zashi(), SwapAssetTestFixture.zecAsset())
