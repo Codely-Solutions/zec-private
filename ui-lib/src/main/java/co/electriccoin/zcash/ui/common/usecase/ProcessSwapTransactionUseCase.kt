@@ -4,6 +4,7 @@ import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.near.reviewedIdentity
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import kotlinx.coroutines.sync.Mutex
@@ -71,7 +72,8 @@ class ProcessSwapTransactionUseCase(
             origin = transactionProposal.quote.originAsset,
             destination = transactionProposal.quote.destinationAsset,
             mode = transactionProposal.quote.mode,
-            status = SwapStatus.PENDING
+            status = SwapStatus.PENDING,
+            reviewedIdentity = transactionProposal.quote.reviewedIdentity()
         )) { "Unable to save swap tracking before funding" }
     }
 

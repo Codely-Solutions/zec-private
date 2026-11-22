@@ -23,6 +23,7 @@ import co.electriccoin.zcash.ui.common.model.near.RecipientType
 import co.electriccoin.zcash.ui.common.model.near.RefundType
 import co.electriccoin.zcash.ui.common.model.near.SubmitDepositTransactionRequest
 import co.electriccoin.zcash.ui.common.model.near.SwapType
+import co.electriccoin.zcash.ui.common.model.near.requireSimpleChainRouting
 import co.electriccoin.zcash.ui.common.provider.BlockchainProvider
 import co.electriccoin.zcash.ui.common.provider.NearApiProvider
 import co.electriccoin.zcash.ui.common.provider.ResponseWithNearErrorException
@@ -170,6 +171,7 @@ class NearSwapDataSource(
             require(depositType != AddressType.Tex) {
                 "TEX swap deposits require an intermediate transparent wallet address and are not supported."
             }
+            response.requireSimpleChainRouting()
             NearSwapQuote(
                 response = response,
                 originAsset = originAsset,

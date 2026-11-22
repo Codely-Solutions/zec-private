@@ -13,6 +13,7 @@ import java.nio.file.Files
 import java.nio.file.StandardCopyOption
 
 enum class ResetStage {
+    DELETE_LOCAL_FILES,
     ERASE_SDK,
     CLEAR_PREFERENCES,
 }

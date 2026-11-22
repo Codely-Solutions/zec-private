@@ -18,6 +18,7 @@ import co.electriccoin.zcash.ui.common.model.metadata.SwapsMetadataV3
 import co.electriccoin.zcash.ui.common.provider.MetadataProvider
 import co.electriccoin.zcash.ui.common.provider.MetadataStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.serialization.UnknownEncryptionVersionException
 import co.electriccoin.zcash.ui.common.serialization.metadata.DecryptionException
@@ -73,7 +74,8 @@ interface MetadataDataSource {
         mode: SwapMode,
         amountOutFormatted: BigDecimal,
         status: SwapStatus,
-        key: MetadataKey
+        key: MetadataKey,
+        reviewedIdentity: String? = null,
     ): Boolean
 
     suspend fun updateSwap(
@@ -83,7 +85,9 @@ interface MetadataDataSource {
         mode: SwapMode,
         origin: SimpleSwapAsset,
         destination: SimpleSwapAsset,
-        key: MetadataKey
+        key: MetadataKey,
+        statusUpdatedAt: kotlin.time.Instant? = null,
+        expectedCreatedAt: Instant? = null,
     ): Boolean
 
     // suspend fun deleteSwap(depositAddress: String, key: MetadataKey)
@@ -113,6 +117,7 @@ class MetadataDataSourceImpl(
     private val metadataProvider: MetadataProvider,
     private val simpleSwapAssetProvider: SimpleSwapAssetProvider,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) : MetadataDataSource {
     private val mutex = Mutex()
 
@@ -145,14 +150,17 @@ class MetadataDataSourceImpl(
      */
     override fun observe(key: MetadataKey): Flow<MetadataV3?> =
         channelFlow {
+            val token = walletWriteAccess.token()
             val updates = Channel<MetadataV3?>(Channel.UNLIMITED)
             send(null)
             val initial =
-                mutex.withLock {
-                    launch(start = CoroutineStart.UNDISPATCHED) {
-                        metadataUpdatePipeline.collect { (k, m) -> if (k == null || k.isSameAs(key)) updates.send(m) }
+                walletWriteAccess.write(token) {
+                    mutex.withLock {
+                        launch(start = CoroutineStart.UNDISPATCHED) {
+                            metadataUpdatePipeline.collect { (k, m) -> if (k == null || k.isSameAs(key)) updates.send(m) }
+                        }
+                        getMetadataInternal(key)
                     }
-                    getMetadataInternal(key)
                 }
             send(initial)
             for (update in updates) send(update)
@@ -216,11 +224,17 @@ class MetadataDataSourceImpl(
         mode: SwapMode,
         amountOutFormatted: BigDecimal,
         status: SwapStatus,
-        key: MetadataKey
+        key: MetadataKey,
+        reviewedIdentity: String?,
     ) = mutex.withLock {
         updateMetadata(
             key = key,
             transform = { metadata ->
+                val tracked = metadata.swaps.swapIds.firstOrNull { it.depositAddress == depositAddress }
+                if (tracked != null && (tracked.reviewedIdentity != null || reviewedIdentity != null)) {
+                    // Re-acknowledge the same quote durably without replacing the saved settlement.
+                    return@updateMetadata metadata.takeIf { tracked.reviewedIdentity == reviewedIdentity }
+                }
                 metadata.copy(
                     swaps =
                         metadata.swaps.copy(
@@ -246,6 +260,7 @@ class MetadataDataSourceImpl(
                                             exactInput = mode == EXACT_INPUT,
                                             status = status,
                                             amountOutFormatted = amountOutFormatted,
+                                            reviewedIdentity = reviewedIdentity,
                                         )
                                     }
                         ),
@@ -262,11 +277,20 @@ class MetadataDataSourceImpl(
         origin: SimpleSwapAsset,
         destination: SimpleSwapAsset,
         key: MetadataKey,
+        statusUpdatedAt: kotlin.time.Instant?,
+        expectedCreatedAt: Instant?,
     ): Boolean =
         mutex.withLock {
             updateMetadata(
                 key = key,
                 transform = { metadata ->
+                    val current = metadata.swaps.swapIds.firstOrNull { it.depositAddress == depositAddress }
+                        ?: return@updateMetadata null
+                    val sameEntry = expectedCreatedAt == null ||
+                        current.lastUpdated.toEpochMilli() == expectedCreatedAt.toEpochMilli()
+                    if (!sameEntry || !current.acceptsStatus(status, statusUpdatedAt, amountOutFormatted)) {
+                        return@updateMetadata null
+                    }
                     metadata.copy(
                         swaps =
                             metadata.swaps.copy(
@@ -276,7 +300,12 @@ class MetadataDataSourceImpl(
                                             it.copy(
                                                 status = status,
                                                 amountOutFormatted = amountOutFormatted,
-                                                exactInput = mode == EXACT_INPUT,
+                                                statusUpdatedAt = statusUpdatedAt,
+                                                exactInput = if (it.reviewedIdentity == null) {
+                                                    mode == EXACT_INPUT
+                                                } else {
+                                                    it.exactInput
+                                                },
                                                 fromAsset =
                                                     MetadataSimpleSwapAssetV3(
                                                         token = origin.tokenTicker,
@@ -573,7 +602,8 @@ class MetadataDataSourceImpl(
         }
 
     /**
-     * Returns whether the write landed. A failed write leaves the previous file content intact.
+     * Returns whether replacement and directory sync completed. A failed sync keeps any replacement
+     * already renamed into place so tracking remains available for recovery.
      */
     private suspend fun writeToLocalStorage(metadata: MetadataV3, key: MetadataKey): Boolean =
         withContext(ioDispatcher) {
@@ -653,7 +683,7 @@ class MetadataDataSourceImpl(
 
     private suspend fun updateMetadata(
         key: MetadataKey,
-        transform: (AccountMetadataV3) -> AccountMetadataV3
+        transform: (AccountMetadataV3) -> AccountMetadataV3?
     ): Boolean =
         withContext(ioDispatcher) {
             val read = readMetadata(key)
@@ -663,12 +693,12 @@ class MetadataDataSourceImpl(
             }
             val metadata = read.metadata
 
-            val accountMetadata = metadata.accountMetadata
+            val accountMetadata = transform(metadata.accountMetadata) ?: return@withContext false
 
             val updatedMetadata =
                 metadata.copy(
                     lastUpdated = Instant.now(),
-                    accountMetadata = transform(accountMetadata)
+                    accountMetadata = accountMetadata
                 )
 
             val isWritten = writeToLocalStorage(updatedMetadata, key)
@@ -840,28 +870,54 @@ private fun AccountMetadataV3.merge(other: AccountMetadataV3, otherIsNewer: Bool
  */
 private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean): SwapsMetadataV3 =
     SwapsMetadataV3(
-        swapIds = swapIds.mergeById(other.swapIds, idOf = { it.depositAddress }, lastUpdatedOf = { it.lastUpdated }),
+        swapIds = swapIds.mergeById(other.swapIds, idOf = { it.depositAddress }, lastUpdatedOf = { it.lastUpdated }) {
+                saved, candidate ->
+            saved.reviewedIdentity == candidate.reviewedIdentity &&
+                candidate.status != null && candidate.statusUpdatedAt != null &&
+                (saved.statusUpdatedAt == null || candidate.statusUpdatedAt > saved.statusUpdatedAt) &&
+                saved.acceptsStatus(candidate.status, candidate.statusUpdatedAt, candidate.amountOutFormatted)
+        },
         lastUsedAssetHistory =
             (if (otherIsNewer) other.lastUsedAssetHistory else lastUsedAssetHistory)
                 .take(MAX_SWAP_ASSETS_IN_HISTORY)
                 .toSet()
     )
 
+private fun SwapMetadataV3.acceptsStatus(
+    status: SwapStatus,
+    updatedAt: kotlin.time.Instant?,
+    amount: BigDecimal?,
+): Boolean {
+    // Settlement and a completed refund keep their outcome. FAILED and EXPIRED can precede later recovery.
+    if ((this.status == SwapStatus.SUCCESS || this.status == SwapStatus.REFUNDED) && this.status != status) {
+        return false
+    }
+    val previous = statusUpdatedAt ?: return true
+    if (updatedAt == previous) {
+        return this.status == status && amount != null && amountOutFormatted?.compareTo(amount) == 0
+    }
+    return updatedAt != null && updatedAt > previous
+}
+
 /**
  * Unions two entry lists by [idOf], keeping whichever entry's [lastUpdatedOf] is newer whenever
- * the same id appears twice, within one list or across both. A tie keeps the earlier entry, so
- * this list wins over [other].
+ * the same id appears twice, within one list or across both. A tie keeps the earlier entry
+ * unless [preferCandidateOnTie] selects the candidate.
  */
 private fun <T> List<T>.mergeById(
     other: List<T>,
     idOf: (T) -> String,
-    lastUpdatedOf: (T) -> Instant
+    lastUpdatedOf: (T) -> Instant,
+    preferCandidateOnTie: (T, T) -> Boolean = { _, _ -> false },
 ): List<T> {
     val merged = LinkedHashMap<String, T>()
     (this + other).forEach { candidate ->
         val id = idOf(candidate)
         val current = merged[id]
-        if (current == null || lastUpdatedOf(candidate) > lastUpdatedOf(current)) {
+        if (current == null ||
+            lastUpdatedOf(candidate) > lastUpdatedOf(current) ||
+            lastUpdatedOf(candidate) == lastUpdatedOf(current) && preferCandidateOnTie(current, candidate)
+        ) {
             merged[id] = candidate
         }
     }

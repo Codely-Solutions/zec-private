@@ -1,10 +1,15 @@
 package co.electriccoin.zcash.ui.common.datasource
 
 import androidx.compose.ui.graphics.Color
+import cash.z.ecc.android.sdk.model.Account
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
+import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.metadata.AccountAppearanceMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.AccountMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.AnnotationMetadataV3
@@ -14,15 +19,21 @@ import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapsMetadataV3
 import co.electriccoin.zcash.ui.common.provider.MetadataProvider
+import co.electriccoin.zcash.ui.common.provider.MetadataKeyStorageProvider
 import co.electriccoin.zcash.ui.common.provider.MetadataStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
+import co.electriccoin.zcash.ui.common.repository.MetadataRepositoryImpl
+import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.serialization.UnknownEncryptionVersionException
 import co.electriccoin.zcash.ui.common.serialization.metadata.DecryptionException
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataKey
+import co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase
 import com.google.crypto.tink.InsecureSecretKeyAccess
 import com.google.crypto.tink.util.SecretBytes
 import io.mockk.CapturingSlot
 import io.mockk.Runs
+import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.just
 import io.mockk.mockk
@@ -31,6 +42,9 @@ import io.mockk.verify
 import io.mockk.verifyOrder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -43,10 +57,12 @@ import java.io.IOException
 import java.math.BigDecimal
 import java.nio.file.NoSuchFileException
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
@@ -551,6 +567,76 @@ class MetadataDataSourceTest {
             assertEquals(SwapStatus.SUCCESS, updated.status)
             assertEquals(Instant.ofEpochSecond(5), updated.lastUpdated)
         }
+
+    @Test
+    fun overlappingActivityAndDetailRefreshesKeepSettlementThroughObserverRestart() = runTest {
+        val saved = AtomicReference(
+            metadata(lastUpdated = 1, swapIds = listOf(swap("s1", "near", 5).copy(status = SwapStatus.PENDING)))
+        )
+        every { metadataStorageProvider.getStorageFiles(key) } returns listOf(canonicalFile)
+        every { metadataProvider.readMetadataFromFile(canonicalFile, key) } answers { saved.get() }
+        every { metadataProvider.writeMetadataToFile(canonicalFile, any(), key) } answers {
+            saved.set(secondArg())
+        }
+        val uuid = AccountUuid.new(ByteArray(16))
+        val wallet = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(uuid) }
+        val accounts = mockk<AccountDataSource> {
+            every { selectedAccount } returns MutableStateFlow<WalletAccount?>(wallet)
+            every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(listOf(wallet))
+            coEvery { getSelectedAccount() } returns wallet
+        }
+        val simpleAsset = swapAsset()
+        fun repository() = MetadataRepositoryImpl(
+            accountDataSource = accounts,
+            metadataDataSource = dataSource(),
+            metadataKeyStorageProvider = mockk<MetadataKeyStorageProvider> { coEvery { get(uuid) } returns key },
+            persistableWalletProvider = mockk(),
+            simpleSwapAssetProvider = mockk<SimpleSwapAssetProvider> { every { get(any(), any()) } returns simpleAsset }
+        )
+        fun response(currentStatus: SwapStatus, output: BigDecimal) = mockk<SwapQuoteStatus> {
+            every { status } returns currentStatus
+            every { amountOutFormatted } returns output
+            every { mode } returns SwapMode.EXACT_INPUT
+        }
+        val entered = CompletableDeferred<Unit>()
+        val releaseOldResponse = CompletableDeferred<Unit>()
+        val detailLoading = CompletableDeferred<Unit>()
+        var checks = 0
+        val provider = mockk<SwapRepository> {
+            coEvery { checkSwapStatus(any()) } coAnswers {
+                when (++checks) {
+                    1 -> {
+                        entered.complete(Unit)
+                        releaseOldResponse.await()
+                        response(SwapStatus.PROCESSING, BigDecimal.ONE)
+                    }
+                    2 -> response(SwapStatus.SUCCESS, BigDecimal.TEN)
+                    else -> response(SwapStatus.PROCESSING, BigDecimal.ONE)
+                }
+            }
+        }
+        val checkStatus = GetSwapStatusUseCase(repository(), provider)
+        val activity = async { checkStatus("s1") }
+        entered.await()
+        val details = async {
+            checkStatus.observe("s1").first {
+                if (it.savedMetadata != null) detailLoading.complete(Unit)
+                !it.isLoading
+            }
+        }
+        detailLoading.await()
+        coVerify(exactly = 1) { provider.checkSwapStatus(any()) }
+
+        releaseOldResponse.complete(Unit)
+        assertEquals(SwapStatus.PROCESSING, activity.await().status?.status)
+        assertEquals(SwapStatus.SUCCESS, details.await().status?.status)
+
+        val restarted = GetSwapStatusUseCase(repository(), provider)("s1")
+        assertIs<IllegalStateException>(restarted.error)
+        assertEquals(SwapStatus.SUCCESS, restarted.savedMetadata?.status)
+        assertEquals(BigDecimal.TEN, restarted.savedMetadata?.amountOutFormatted)
+        assertEquals(SwapStatus.SUCCESS, saved.get().accountMetadata.swaps.swapIds.single().status)
+    }
 
     @Test
     fun aFailedUpdateWriteEmitsNothing() =

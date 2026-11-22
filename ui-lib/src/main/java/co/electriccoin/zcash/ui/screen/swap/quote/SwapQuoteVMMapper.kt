@@ -243,14 +243,18 @@ internal fun mapPriceCheck(check: IndependentPriceCheck): PriceCheckNoticeState 
             ),
             explanation = stringRes(R.string.private_price_check_details),
             isWarning = true,
+            detailItem = check.toMarketComparison(),
         )
     } else {
-        check.toMarketComparison()
+        PriceCheckNoticeState(
+            label = stringRes(R.string.private_price_reference),
+            showInline = false,
+            detailItem = check.toMarketComparison(),
+        )
     }
 }
 
-private fun IndependentPriceCheck.Compared.toMarketComparison(): PriceCheckNoticeState {
-    val label = stringRes(R.string.private_price_reference)
+private fun IndependentPriceCheck.Compared.toMarketComparison(): SwapQuoteInfoItem {
     val rounded = differencePercent.setScale(2, RoundingMode.HALF_UP)
     val percentage = rounded.abs().toPlainString()
     val result = when (rounded.signum()) {
@@ -258,16 +262,12 @@ private fun IndependentPriceCheck.Compared.toMarketComparison(): PriceCheckNotic
         1 -> stringRes(R.string.private_price_more_value, percentage)
         else -> stringRes(R.string.private_price_in_line)
     }
-    return PriceCheckNoticeState(
-        label = label,
-        showInline = false,
-        detailItem = SwapQuoteInfoItem(
-            description = label,
-            title = result.withStyle(),
-            help = SwapQuoteFieldHelp(
-                label = stringRes(R.string.private_price_reference_help_label),
-                text = stringRes(R.string.private_price_reference_help, sources.joinToString()),
-            ),
+    return SwapQuoteInfoItem(
+        description = stringRes(R.string.private_price_reference),
+        title = result.withStyle(),
+        help = SwapQuoteFieldHelp(
+            label = stringRes(R.string.private_price_reference_help_label),
+            text = stringRes(R.string.private_price_reference_help, sources.joinToString()),
         ),
     )
 }

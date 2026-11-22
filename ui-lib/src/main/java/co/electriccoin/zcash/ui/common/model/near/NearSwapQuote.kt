@@ -11,6 +11,7 @@ import co.electriccoin.zcash.ui.common.model.isSame
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
+import java.security.MessageDigest
 import kotlin.time.Instant
 
 /**
@@ -71,6 +72,9 @@ data class NearSwapQuote(
                         "but server returned ${response.quoteRequest.slippageTolerance}"
             )
         }
+        if (expectedSlippageToleranceBps != null) {
+            response.quote.requireFundingAmounts(expectedSlippageToleranceBps)
+        }
         requireWithinSlippage(
             swapType = response.quoteRequest.swapType,
             amountIn = response.quote.amountIn,
@@ -123,6 +127,19 @@ data class NearSwapQuote(
     override val timestamp: Instant = response.timestamp
 
     override val deadline: Instant = response.quote.deadline
+}
+
+internal fun SwapQuote.reviewedIdentity(): String? =
+    (this as? NearSwapQuote)?.response?.reviewedIdentity()
+
+/** Keep the route verifiable without storing another copy of the recipient and refund addresses. */
+internal fun QuoteResponseDto.reviewedIdentity(): String {
+    val fields = listOf(
+        "near-swap-v1", quote.depositAddress, quoteRequest.originAsset, quoteRequest.destinationAsset,
+        requireNotNull(quoteRequest.swapType).apiValue, quoteRequest.recipient, quoteRequest.refundTo
+    )
+    val framed = fields.joinToString("") { "${it.length}:$it" }
+    return MessageDigest.getInstance("SHA-256").digest(framed.encodeToByteArray()).toHexString()
 }
 
 internal fun requireConsistent(
@@ -250,6 +267,22 @@ internal fun requireWithinSlippage(
 private const val MAX_SLIPPAGE_BPS = 10000
 
 private fun BigDecimal.isPositiveAtomic() = signum() > 0 && stripTrailingZeros().scale() <= 0
+
+private fun QuoteDetails.requireFundingAmounts(slippageBps: Int) {
+    if (slippageBps !in 0..MAX_SLIPPAGE_BPS) {
+        throw SwapQuoteMismatchException.Rejected(
+            SwapQuoteMismatchType.SLIPPAGE_TOLERANCE, "Invalid swap slippage tolerance"
+        )
+    }
+    requireAtomicBounds(amountIn, minAmountIn, SwapQuoteMismatchType.INPUT_AMOUNT)
+    requireAtomicBounds(amountOut, minAmountOut, SwapQuoteMismatchType.OUTPUT_AMOUNT)
+}
+
+private fun requireAtomicBounds(amount: BigDecimal, minimum: BigDecimal, type: SwapQuoteMismatchType) {
+    if (!amount.isPositiveAtomic() || !minimum.isPositiveAtomic() || minimum > amount) {
+        throw SwapQuoteMismatchException.Rejected(type, "Invalid swap amount or minimum in atomic units")
+    }
+}
 
 private fun requireExactOutputAmounts(amountIn: BigDecimal, minAmountIn: BigDecimal, slippageBps: Int) {
     if (slippageBps !in 0..MAX_SLIPPAGE_BPS) {

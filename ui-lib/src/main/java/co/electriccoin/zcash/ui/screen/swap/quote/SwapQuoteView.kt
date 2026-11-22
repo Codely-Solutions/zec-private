@@ -227,7 +227,7 @@ private fun Success(
                 descriptionFontWeight = FontWeight.Medium,
                 descriptionColor = ZashiColors.Text.textPrimary
             )
-            val priceDetails = state.priceCheck?.takeUnless { it.showInline }
+            val priceDetails = state.priceCheck?.takeIf { it.detailItem != null || !it.showInline }
             if (priceDetails != null || state.minimumDeposit != null) {
                 Spacer(8.dp)
                 QuoteDetails(priceDetails, state.minimumDeposit)
@@ -304,7 +304,7 @@ private fun QuoteDetails(state: PriceCheckNoticeState?, minimumDeposit: SwapQuot
                 Spacer(8.dp)
                 SwapQuoteInfo(item)
             }
-            state.explanation?.let { explanation ->
+            state.explanation?.takeUnless { state.showInline }?.let { explanation ->
                 Spacer(8.dp)
                 Text(
                     explanation.getValue(), style = MaterialTheme.typography.bodySmall,

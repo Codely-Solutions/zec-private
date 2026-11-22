@@ -18,8 +18,11 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapPriceMarkets
 import co.electriccoin.zcash.ui.common.model.isZCashAsset
+import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.near.requireMatchingAsset
 import co.electriccoin.zcash.ui.common.model.near.requireQuoteMatchesUserAmount
+import co.electriccoin.zcash.ui.common.model.near.requireSimpleChainRouting
+import co.electriccoin.zcash.ui.common.model.near.reviewedIdentity
 import co.electriccoin.zcash.ui.common.model.swapQuoteMismatchSignal
 import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
 import co.electriccoin.zcash.wallet.foundation.RequestGeneration
@@ -503,6 +506,11 @@ class SwapRepositoryImpl(
         val recovery = swapMetadata.requireNearRecovery()
         val result = checkStatusUsingCatalog(recovery.reference)
         require(result.depositAddress.address == recovery.reference) { "Swap status reference mismatch" }
+        swapMetadata.reviewedIdentity?.let { expectedIdentity ->
+            val response = requireNotNull((result as? NearSwapQuoteStatus)?.response?.quoteResponse)
+            response.requireSimpleChainRouting()
+            require(response.reviewedIdentity() == expectedIdentity) { "Swap status reviewed identity mismatch" }
+        }
         requireMatchingAsset(
             name = "origin",
             type = SwapQuoteMismatchType.ORIGIN_ASSET,

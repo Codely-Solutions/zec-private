@@ -744,6 +744,12 @@ private class FakePersistableWalletProvider(
         events += "wallet"
     }
 
+    override suspend fun storeIfCurrent(
+        expected: PersistableWallet,
+        replacement: PersistableWallet,
+        version: Long,
+    ): Boolean = error("This wallet setup fixture does not run seed-mismatch recovery")
+
     override suspend fun getPersistableWallet(): PersistableWallet? = walletFlow.value
 
     override suspend fun requirePersistableWallet(): PersistableWallet = checkNotNull(walletFlow.value)
@@ -764,6 +770,12 @@ private class WalletStoredAfterFirstReadProvider(
     override suspend fun store(persistableWallet: PersistableWallet) {
         walletFlow.value = persistableWallet
     }
+
+    override suspend fun storeIfCurrent(
+        expected: PersistableWallet,
+        replacement: PersistableWallet,
+        version: Long,
+    ): Boolean = error("This wallet setup fixture does not run seed-mismatch recovery")
 
     override suspend fun getPersistableWallet(): PersistableWallet? =
         walletFlow.value.also { walletFlow.value = storedLater }

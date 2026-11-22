@@ -88,6 +88,48 @@ class NearSwapCatalogTest {
         }
 
     @Test
+    fun quoteRejectsInvalidMinimumsAndFractionalAtomicAmounts() = runBlocking {
+        val route = Route(bitcoin, zec, SwapType.FLEX_INPUT)
+        val quote = quoteJson(route)
+        val cases = listOf(
+            quote.replace(
+                "\"minAmountOut\": \"${route.destinationAmount.atomic}\"",
+                "\"minAmountOut\": \"${route.destinationAmount.executedAtomic}\""
+            ),
+            quote.replace(
+                "\"amountOut\": \"${route.destinationAmount.atomic}\"",
+                "\"amountOut\": \"${route.destinationAmount.atomic}.5\""
+            ).replace(
+                "\"amountOutFormatted\": \"${route.destinationAmount.formatted}\"",
+                "\"amountOutFormatted\": \"${route.destinationAmount.formatted}5\""
+            ),
+            quote.replace("\"minAmountIn\": \"${route.originAmount.atomic}\"", "\"minAmountIn\": \"0\""),
+            quote.replace("\"minAmountIn\": \"${route.originAmount.atomic}\"", "\"minAmountIn\": \"0.5\""),
+        )
+        for (invalid in cases) {
+            coEvery { nearApiProvider.requestQuote(any()) } returns Json.decodeFromString<QuoteResponseDto>(invalid)
+            assertFailsWith<SwapQuoteMismatchException.Rejected> { requestQuote(route, SwapMode.FLEX_INPUT) }
+        }
+    }
+
+    @Test
+    fun quoteRejectsUnsupportedFundingInstructionsInDecodedResponses() = runBlocking {
+        val route = Route(bitcoin, zec, SwapType.FLEX_INPUT)
+        val plain = quoteJson(route)
+        val cases = listOf(
+            plain.replace("\"depositAddress\":", "\"depositMemo\": \"123\", \"depositAddress\":"),
+            plain.replace("\"depositMode\": \"SIMPLE\"", "\"depositMode\": \"MEMO\""),
+            plain.replace("\"depositType\": \"ORIGIN_CHAIN\"", "\"depositType\": \"INTENTS\""),
+            plain.replace("\"refundType\": \"ORIGIN_CHAIN\"", "\"refundType\": \"INTENTS\""),
+            plain.replace("\"recipientType\": \"DESTINATION_CHAIN\"", "\"recipientType\": \"CONFIDENTIAL_INTENTS\""),
+        )
+        for (invalid in cases) {
+            coEvery { nearApiProvider.requestQuote(any()) } returns Json.decodeFromString<QuoteResponseDto>(invalid)
+            assertFailsWith<IllegalArgumentException> { requestQuote(route, SwapMode.FLEX_INPUT) }
+        }
+    }
+
+    @Test
     fun successfulStatusesPreserveAmountsAndAssetIdentityInEitherCatalogOrder() =
         runBlocking {
             val statusCatalog = catalog + omni
@@ -256,10 +298,14 @@ class NearSwapCatalogTest {
                 "swapType": "${route.type.apiValue}",
                 "slippageTolerance": $SLIPPAGE_BPS,
                 "originAsset": "${route.origin.assetId}",
+                "depositType": "ORIGIN_CHAIN",
+                "depositMode": "SIMPLE",
                 "destinationAsset": "${route.destination.assetId}",
                 "amount": "${route.fixedAmount.atomic}",
                 "refundTo": "${route.refund}",
+                "refundType": "ORIGIN_CHAIN",
                 "recipient": "${route.recipient}",
+                "recipientType": "DESTINATION_CHAIN",
                 "deadline": "2026-11-21T00:00:00Z",
                 "appFees": []
             },

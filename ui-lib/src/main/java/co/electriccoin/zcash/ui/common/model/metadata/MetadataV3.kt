@@ -130,6 +130,10 @@ data class SwapMetadataV3(
     @Serializable(BigDecimalSerializer::class)
     @SerialName("amountOutFormatted")
     val amountOutFormatted: BigDecimal?,
+    @SerialName("reviewedIdentity")
+    val reviewedIdentity: String? = null,
+    @SerialName("statusUpdatedAt")
+    val statusUpdatedAt: kotlin.time.Instant? = null,
 ) {
     @Transient
     val totalFeesUsd: BigDecimal = checkNotNull(totalFeesUsdInternal ?: totalUSDFeesInternal)

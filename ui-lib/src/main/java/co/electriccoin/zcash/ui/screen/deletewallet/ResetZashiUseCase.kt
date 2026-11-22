@@ -7,6 +7,7 @@ import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.migration.MigrationAppHooks
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRequest
@@ -38,6 +39,7 @@ class ResetZashiUseCase(
     private val migrationAppHooks: MigrationAppHooks,
     private val giftCardRepository: GiftCardRepository,
     private val progressStore: ResetProgressStore,
+    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) {
     private val resetMutex = Mutex()
     private val running = MutableStateFlow(false)
@@ -55,6 +57,10 @@ class ResetZashiUseCase(
             // The pending screen can replace the initiating screen. Finish each confirmed attempt
             // even if that transition cancels the first view model.
             withContext(NonCancellable) {
+                if (stage == null) {
+                    progressStore.store(if (keepFiles) ResetStage.ERASE_SDK else ResetStage.DELETE_LOCAL_FILES)
+                }
+                walletWriteAccess.beginReset()
                 prepareReset(keepFiles, stage)
                 if (stage != ResetStage.CLEAR_PREFERENCES) {
                     closeSynchronizer()
@@ -64,6 +70,7 @@ class ResetZashiUseCase(
                 clearSharedPrefs()
                 homeMessageCacheRepository.reset()
                 progressStore.store(null)
+                walletWriteAccess.finishReset()
             }
         } catch (_: BiometricsFailureException) {
             // Wait for another confirmation.
@@ -80,14 +87,14 @@ class ResetZashiUseCase(
         val prepared = withTimeoutOrNull(PREPARE_RESET_TIMEOUT) {
             if (stage == null) migrationAppHooks.cancelMigrationWork()
             giftCardRepository.quiesceForWalletReset()
-            if (stage == null && !keepFiles) {
+            if (stage == ResetStage.DELETE_LOCAL_FILES || (stage == null && !keepFiles)) {
                 addressBookRepository.delete()
                 metadataRepository.delete()
+                progressStore.store(ResetStage.ERASE_SDK)
             }
             true
         }
         check(prepared == true) { "Timed out preparing wallet reset" }
-        if (stage == null) progressStore.store(ResetStage.ERASE_SDK)
     }
 
     private suspend fun requestBiometrics() {

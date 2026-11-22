@@ -11,8 +11,11 @@ import org.json.JSONObject
 
 interface PersistableWalletProvider {
     val persistableWallet: Flow<PersistableWallet?>
+    val writeVersion: Long get() = 0L
 
     suspend fun store(persistableWallet: PersistableWallet)
+
+    suspend fun storeIfCurrent(expected: PersistableWallet, replacement: PersistableWallet, version: Long): Boolean
 
     suspend fun getPersistableWallet(): PersistableWallet?
 
@@ -20,9 +23,11 @@ interface PersistableWalletProvider {
 }
 
 class PersistableWalletProviderImpl(
-    preferenceHolder: EncryptedPreferenceProvider
+    preferenceHolder: EncryptedPreferenceProvider,
+    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) : PersistableWalletProvider {
     private val persistableWalletStorageProvider = PersistableWalletStorageProviderImpl(preferenceHolder)
+    override val writeVersion get() = walletWriteAccess.token()
 
     override val persistableWallet: Flow<PersistableWallet?> =
         persistableWalletStorageProvider
@@ -34,7 +39,23 @@ class PersistableWalletProviderImpl(
             }
 
     override suspend fun store(persistableWallet: PersistableWallet) {
-        persistableWalletStorageProvider.store(persistableWallet)
+        walletWriteAccess.replaceWallet { persistableWalletStorageProvider.store(persistableWallet) }
+    }
+
+    override suspend fun storeIfCurrent(
+        expected: PersistableWallet,
+        replacement: PersistableWallet,
+        version: Long
+    ): Boolean {
+        return walletWriteAccess.write(version) {
+            val current = persistableWalletStorageProvider.get()
+            if (current == null || current.network != expected.network || current.seedPhrase != expected.seedPhrase) {
+                false
+            } else {
+                persistableWalletStorageProvider.store(replacement)
+                true
+            }
+        } ?: false
     }
 
     override suspend fun getPersistableWallet() = persistableWalletStorageProvider.get()

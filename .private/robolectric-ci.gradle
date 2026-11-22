@@ -3,7 +3,7 @@ import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.tasks.Classpath
 import org.gradle.process.CommandLineArgumentProvider
 
-// Use the exact locked runtime agent. Startup instrumentation avoids external self-attachment
+// Use the checksum-verified agent selected by the resolved runtime. Startup instrumentation avoids external self-attachment
 // failures inside bounded Windows jobs and remains supported when dynamic attachment is disabled.
 class MockKStartupAgent implements CommandLineArgumentProvider {
     @Classpath
@@ -14,7 +14,7 @@ class MockKStartupAgent implements CommandLineArgumentProvider {
         def agents = agentClasspath.files
         if (agents.isEmpty()) return []
         if (agents.size() != 1) {
-            throw new GradleException("Expected one locked Byte Buddy test agent; found ${agents.size()}")
+            throw new GradleException("Expected one resolved Byte Buddy test agent; found ${agents.size()}")
         }
         return ["-javaagent:${agents.first().absolutePath}".toString()]
     }

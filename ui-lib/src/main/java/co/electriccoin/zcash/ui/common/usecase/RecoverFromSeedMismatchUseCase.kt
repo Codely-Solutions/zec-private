@@ -2,7 +2,6 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.WalletCoordinator
 import cash.z.ecc.android.sdk.WalletInitMode
-import cash.z.ecc.android.sdk.model.PersistableWallet
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import kotlinx.coroutines.TimeoutCancellationException
@@ -26,6 +25,7 @@ class RecoverFromSeedMismatchUseCase(
 
     @Suppress("ThrowsCount")
     suspend operator fun invoke() {
+        val version = persistableWalletProvider.writeVersion
         val wallet = persistableWalletProvider.getPersistableWallet() ?: return
 
         if (failedAttempts >= MAX_RECOVERY_ATTEMPTS) {
@@ -59,8 +59,7 @@ class RecoverFromSeedMismatchUseCase(
 
         failedAttempts = 0
 
-        val currentWallet = persistableWalletProvider.getPersistableWallet()
-        if (currentWallet == null || !currentWallet.identifiesSameWalletAs(wallet)) {
+        if (!persistableWalletProvider.storeIfCurrent(wallet, recoveryWallet, version)) {
             Twig.error {
                 "Seed-mismatch recovery: skipping store() — the persisted wallet changed during the erase " +
                     "(cleared by a concurrent Reset Zashi, or replaced by a concurrent wallet restore)"
@@ -68,7 +67,6 @@ class RecoverFromSeedMismatchUseCase(
             return
         }
 
-        persistableWalletProvider.store(recoveryWallet)
     }
 
     companion object {
@@ -76,13 +74,6 @@ class RecoverFromSeedMismatchUseCase(
         private val ERASE_TIMEOUT = 30.seconds
     }
 }
-
-/**
- * Wallet identity is network plus seed phrase. `walletInitMode` is excluded because it is not serialized
- * and reflects process state rather than identity.
- */
-private fun PersistableWallet.identifiesSameWalletAs(other: PersistableWallet) =
-    network == other.network && seedPhrase == other.seedPhrase
 
 /**
  * Thrown when the SDK erase fails, times out, or [RecoverFromSeedMismatchUseCase.MAX_RECOVERY_ATTEMPTS]

@@ -1,6 +1,5 @@
 """Verify the latest public wallet APK from the original unsigned artifact."""
 import base64
-from datetime import datetime
 import hashlib
 import io
 import json
@@ -17,7 +16,7 @@ import zipfile
 from apk_architecture import check_apk
 from published_history import release_tag_matches
 from publish import CERT, REPO, read_attestation
-from release_metadata import APK_PAYLOAD_LIMIT, ARCHIVE_LIMITS, MIB, PUBLIC_APK_LIMIT
+from release_metadata import APK_PAYLOAD_LIMIT, ARCHIVE_LIMITS, MIB, PUBLIC_APK_LIMIT, artifact_producer_job
 
 
 APK = 'zec-private-latest.apk'
@@ -99,54 +98,13 @@ def payload(data):
 
 
 def unsigned_producer_job(run, jobs, asset, expected_id=None):
-    def timestamp(value):
-        require(isinstance(value, str), 'Missing GitHub artifact or job timestamp')
-        parsed = datetime.fromisoformat(value)
-        require(parsed.tzinfo is not None, 'GitHub artifact or job timestamp must include timezone')
-        return parsed
+    def attempt(number):
+        value = gh(f'actions/runs/{run["id"]}/attempts/{number}')
+        require(value['id'] == run['id'] and value['run_attempt'] == number
+                and value['head_sha'] == run['head_sha'], 'Unsigned producer attempt identity mismatch')
+        return value
 
-    created = timestamp(asset.get('created_at'))
-    matches = []
-    for job in jobs:
-        started = timestamp(job['started_at']) if job.get('started_at') else None
-        completed = timestamp(job['completed_at']) if job.get('completed_at') else None
-        if started is not None and started <= created and (completed is None or created <= completed):
-            matches.append((job, started, completed))
-    ids = [job.get('id') for job, _, _ in matches]
-    require(all(type(job_id) is int and job_id > 0 for job_id in ids) and len(ids) == len(set(ids)),
-            'Expected one record per matching unsigned producer job')
-
-    current = run['run_attempt']
-    attempts = {current: run}
-    producers, copies = [], []
-    for job, started, completed in matches:
-        number = job.get('run_attempt')
-        require(type(number) is int and 1 <= number <= current, 'Invalid unsigned producer attempt')
-        if number not in attempts:
-            attempt = gh(f'actions/runs/{run["id"]}/attempts/{number}')
-            require(attempt['id'] == run['id'] and attempt['run_attempt'] == number
-                    and attempt['head_sha'] == run['head_sha'], 'Unsigned producer attempt identity mismatch')
-            attempts[number] = attempt
-        attempt_started = timestamp(attempts[number].get('run_started_at'))
-        if started >= attempt_started:
-            producers.append(job)
-        else:
-            require(completed is not None and completed < attempt_started,
-                    'Unsigned producer overlaps the start of its reported attempt')
-            copies.append(job)
-
-    require(len(producers) == 1 and producers[0]['status'] == 'completed'
-            and producers[0]['conclusion'] == 'success' and producers[0].get('completed_at'),
-            'Expected one successful unsigned producer job when the selected artifact was uploaded')
-    job = producers[0]
-    if copies:
-        # GitHub reruns can copy a successful job into a later attempt under
-        # a new job ID. Its original execution finished before that attempt.
-        fields = ('status', 'conclusion', 'started_at', 'completed_at', 'runner_id', 'steps')
-        require(type(job.get('runner_id')) is int and job['runner_id'] > 0 and job.get('steps')
-                and all(copy['run_attempt'] > job['run_attempt']
-                        and all(copy.get(field) == job.get(field) for field in fields) for copy in copies),
-                'Copied unsigned producer does not match the original execution')
+    job = artifact_producer_job(run, jobs, asset, attempt, role='unsigned')
     require(expected_id is None or (type(expected_id) is int and job['id'] == expected_id),
             'Unsigned artifact differs from the exact attested producer job')
     return job['id']

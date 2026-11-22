@@ -272,6 +272,12 @@ private class FakePersistableWalletProvider(
         mutablePersistableWallet.value = persistableWallet
     }
 
+    override suspend fun storeIfCurrent(
+        expected: PersistableWallet,
+        replacement: PersistableWallet,
+        version: Long,
+    ): Boolean = error("This server selection fixture does not run seed-mismatch recovery")
+
     override suspend fun getPersistableWallet() = mutablePersistableWallet.value
 
     override suspend fun requirePersistableWallet() = checkNotNull(mutablePersistableWallet.value)

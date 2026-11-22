@@ -40,15 +40,29 @@ internal fun ProjectReviewScene(screen: String): Boolean {
                 operationError = stringRes(R.string.contact_error_saveFailed).takeIf { screen == "contact-save-error" },
             )
         )
-        "reset-pending" -> ResetZashiView(
-            ResetZashiState(
-                onBack = {},
-                checkboxState = CheckboxState(title = stringRes("Keep local files"), isChecked = false, onClick = {}),
-                buttonState = ButtonState(stringRes(R.string.wallet_initialization_retry), onClick = {}),
-                confirmationDialog = null,
-                isPending = true,
+        "reset-pending", "reset-retention", "reset-retention-off" -> {
+            val pending = screen == "reset-pending"
+            ResetZashiView(
+                ResetZashiState(
+                    onBack = {},
+                    checkboxState = CheckboxState(
+                        title = stringRes(R.string.deleteWallet_metadataWarn1),
+                        subtitle = stringRes(R.string.deleteWallet_metadataWarn2),
+                        isChecked = screen == "reset-retention",
+                        onClick = {},
+                    ),
+                    buttonState = ButtonState(
+                        stringRes(
+                            if (pending) R.string.wallet_initialization_retry
+                            else co.electriccoin.zcash.ui.design.R.string.general_confirm
+                        ),
+                        onClick = {},
+                    ),
+                    confirmationDialog = null,
+                    isPending = pending,
+                )
             )
-        )
+        }
         else -> return false
     }
     return true

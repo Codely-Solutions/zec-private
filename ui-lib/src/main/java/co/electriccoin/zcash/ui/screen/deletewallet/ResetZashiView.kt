@@ -192,7 +192,7 @@ private fun ResetZashiViewPreview() =
                     checkboxState =
                         CheckboxState(
                             title = stringRes(R.string.deleteWallet_metadataWarn1),
-                            subtitle = stringRes("This data cannot be recovered during Restore."),
+                            subtitle = stringRes(R.string.deleteWallet_metadataWarn2),
                             isChecked = true,
                             onClick = {}
                         ),

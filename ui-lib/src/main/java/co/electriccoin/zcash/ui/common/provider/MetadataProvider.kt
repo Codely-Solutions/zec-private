@@ -1,6 +1,5 @@
 package co.electriccoin.zcash.ui.common.provider
 
-import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
@@ -13,8 +12,8 @@ import java.nio.file.StandardCopyOption
 
 interface MetadataProvider {
     /**
-     * Replaces [file]'s content atomically: a failure or a crash leaves the previous content
-     * intact. Throws when the write did not land.
+     * Atomically replaces [file] and syncs its directory before acknowledging durability.
+     * A failure after rename can leave the replacement readable; callers must treat it as unacknowledged.
      */
     fun writeMetadataToFile(
         file: File,
@@ -42,16 +41,13 @@ fun interface DirectorySync {
 }
 
 /**
- * Flushes a directory through [Os]. A filesystem that cannot fsync a directory reports EINVAL,
- * which counts as flushed since there is nothing more to do.
+ * Flushes a directory through [Os]. Unsupported or failed syncs remain unacknowledged.
  */
 class OsDirectorySync : DirectorySync {
     override fun sync(directory: File) {
         val descriptor = Os.open(directory.path, OsConstants.O_RDONLY, 0)
         try {
             Os.fsync(descriptor)
-        } catch (e: ErrnoException) {
-            if (e.errno != OsConstants.EINVAL) throw e
         } finally {
             Os.close(descriptor)
         }
@@ -85,6 +81,7 @@ class MetadataProviderImpl(
                 StandardCopyOption.ATOMIC_MOVE,
                 StandardCopyOption.REPLACE_EXISTING
             )
+            syncDirectoryOf(file)
         }.onFailure {
             tempFile.delete()
         }.getOrThrow()

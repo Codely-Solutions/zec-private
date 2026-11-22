@@ -24,9 +24,9 @@ import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityState
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
@@ -66,8 +66,10 @@ class SwapActivityStatusTest {
         val metadataRepository = mockk<MetadataRepository>(relaxed = true) {
             coEvery { getSwapMetadata(deposit) } returns storedSwap
             every { observeTransactionMetadata(failed) } returns metadata
-            every { updateSwap(deposit, any(), any(), any(), any(), any()) } answers {
-                metadata.value = metadata.value.copy(swapMetadata = storedSwap.copy(recordedStatus = thirdArg()))
+            coEvery { updateSwap(storedSwap, any()) } answers {
+                val status = secondArg<SwapQuoteStatus>()
+                metadata.value = metadata.value.copy(swapMetadata = storedSwap.copy(recordedStatus = status.status))
+                true
             }
         }
         val transactions = mockk<TransactionRepository> {
@@ -88,10 +90,8 @@ class SwapActivityStatusTest {
 
         assertEquals(SwapStatus.SUCCESS, details.swap?.status?.status)
         assertEquals(SwapStatus.SUCCESS, storedSwap.outgoingStatus(failed, details.swap?.status?.status))
-        verify(exactly = 1) {
-            metadataRepository.updateSwap(
-                deposit, BigDecimal("0.0001"), SwapStatus.SUCCESS, SwapMode.EXACT_INPUT, origin, destination
-            )
+        coVerify(exactly = 1) {
+            metadataRepository.updateSwap(storedSwap, remote)
         }
         val settled = activity(details.transaction, metadata.value.swapMetadata)
         assertEquals(stringRes(R.string.swapStatus_swapped), settled.title)

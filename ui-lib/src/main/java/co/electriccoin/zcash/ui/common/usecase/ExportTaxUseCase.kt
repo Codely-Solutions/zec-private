@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
+import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
@@ -15,14 +16,12 @@ import co.electriccoin.zcash.ui.common.repository.SendTransaction
 import co.electriccoin.zcash.ui.common.repository.ShieldTransaction
 import co.electriccoin.zcash.ui.common.repository.TransactionRepository
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
-import co.electriccoin.zcash.ui.design.util.TickerLocation.HIDDEN
-import co.electriccoin.zcash.ui.design.util.getString
-import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 import co.electriccoin.zcash.ui.util.FileShareUtil
 import co.electriccoin.zcash.ui.util.FileShareUtil.ZASHI_INTERNAL_DATA_MIME_TYPE
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.BufferedWriter
 import java.io.File
 import java.time.Year
 import java.time.ZoneId
@@ -97,7 +96,7 @@ class ExportTaxUseCase(
         data: List<CsvEntry>
     ) {
         outputFile.outputStream().bufferedWriter().use { writer ->
-            writer.write(
+            writer.writeCsvRow(
                 listOf(
                     context.getString(R.string.tax_export_date),
                     context.getString(R.string.tax_export_received_quantity),
@@ -107,12 +106,11 @@ class ExportTaxUseCase(
                     context.getString(R.string.tax_export_fee_amount),
                     context.getString(R.string.tax_export_fee_currency),
                     context.getString(R.string.tax_export_tag)
-                ).joinToString(separator = CSV_SEPARATOR)
+                )
             )
-            writer.newLine()
 
             data.forEach {
-                writer.write(
+                writer.writeCsvRow(
                     listOf(
                         it.date,
                         it.receivedQuantity,
@@ -122,12 +120,9 @@ class ExportTaxUseCase(
                         it.feeAmount,
                         it.feeCurrency,
                         it.tag,
-                    ).joinToString(separator = CSV_SEPARATOR)
+                    )
                 )
-                writer.newLine()
             }
-
-            writer.flush()
         }
     }
 
@@ -155,20 +150,15 @@ class ExportTaxUseCase(
                     is SendTransaction.Pending -> {
                         val fee = transaction.fee
 
-                        val sentQuantity =
-                            if (fee != null) {
-                                stringRes(transaction.amount - fee, HIDDEN)
-                            } else {
-                                stringRes(transaction.amount, HIDDEN)
-                            }
+                        val sentQuantity = transaction.amount - (fee ?: Zatoshi(0))
 
                         CsvEntry(
                             date = dateString,
                             receivedQuantity = "",
                             receivedCurrency = "",
-                            sentQuantity = sentQuantity.getString(context),
+                            sentQuantity = sentQuantity.toCsvQuantity(),
                             sentCurrency = CURRENCY_TICKER,
-                            feeAmount = stringRes(fee ?: Zatoshi(0), HIDDEN).getString(context),
+                            feeAmount = (fee ?: Zatoshi(0)).toCsvQuantity(),
                             feeCurrency = CURRENCY_TICKER,
                             tag = ""
                         )
@@ -182,7 +172,7 @@ class ExportTaxUseCase(
                     is ReceiveTransaction.Pending -> {
                         CsvEntry(
                             date = dateString,
-                            receivedQuantity = stringRes(transaction.amount, HIDDEN).getString(context),
+                            receivedQuantity = transaction.amount.toCsvQuantity(),
                             receivedCurrency = CURRENCY_TICKER,
                             sentQuantity = "",
                             sentCurrency = "",
@@ -216,4 +206,18 @@ private data class CsvEntry(
     val tag: String,
 )
 
-private const val CSV_SEPARATOR = ","
+private fun Zatoshi.toCsvQuantity(): String =
+    convertZatoshiToZec(scale = ZEC_DECIMAL_PLACES).stripTrailingZeros().toPlainString()
+
+internal fun BufferedWriter.writeCsvRow(fields: List<String>) {
+    write(fields.joinToString(",") { field ->
+        if (field.any { it == ',' || it == '"' || it == '\r' || it == '\n' }) {
+            "\"" + field.replace("\"", "\"\"") + "\""
+        } else {
+            field
+        }
+    })
+    write("\r\n")
+}
+
+private const val ZEC_DECIMAL_PLACES = 8

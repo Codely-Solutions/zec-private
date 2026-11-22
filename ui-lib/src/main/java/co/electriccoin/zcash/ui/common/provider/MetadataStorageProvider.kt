@@ -54,6 +54,7 @@ class MetadataStorageProviderImpl(
     private val directorySync: DirectorySync,
     private val currentTimeMillis: () -> Long = System::currentTimeMillis
 ) : MetadataStorageProvider {
+    private var parentSynced = false
     /**
      * A key derived in a different preference order can leave data under more than one of [key]'s
      * names; merging them back into the canonical file is the caller's job, not this one's.
@@ -125,7 +126,11 @@ class MetadataStorageProviderImpl(
         val filesDir = context.filesDir
         val metadataDir = File(filesDir, "metadata")
         if (!metadataDir.exists()) {
-            metadataDir.mkdir()
+            Files.createDirectory(metadataDir.toPath())
+        }
+        if (!parentSynced) {
+            directorySync.sync(filesDir)
+            parentSynced = true
         }
         return metadataDir
     }

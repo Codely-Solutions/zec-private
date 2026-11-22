@@ -77,6 +77,43 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun trackingRequiresDirectoryDurabilityForCreationReplacementAndRestart() = runTest {
+        var failSync = true
+        var directorySyncs = 0
+        val provider = MetadataProviderImpl(
+            metadataEncryptor = MetadataEncryptorImpl(MetadataSerializer()),
+            directorySync = DirectorySync {
+                directorySyncs += 1
+                if (failSync) throw java.io.IOException("Synthetic directory durability failure")
+            }
+        )
+        fun source() = MetadataDataSourceImpl(
+            metadataStorageProvider = storageProvider,
+            metadataProvider = provider,
+            simpleSwapAssetProvider = simpleSwapAssetProvider,
+            ioDispatcher = StandardTestDispatcher(testScheduler)
+        )
+
+        assertFalse(markSwap(source(), provider = "creation", mode = SwapMode.EXACT_INPUT))
+        assertEquals(1, directorySyncs)
+        // Rename can land without a durable acknowledgement. Keep the record for recovery.
+        assertEquals("creation", storedSwaps().swapIds.single().provider)
+        failSync = false
+        assertTrue(markSwap(source(), provider = "creation", mode = SwapMode.EXACT_INPUT))
+        assertEquals(2, directorySyncs)
+        failSync = true
+        assertFalse(markSwap(source(), provider = "replacement", mode = SwapMode.EXACT_INPUT))
+        assertEquals(3, directorySyncs)
+        assertEquals("replacement", storedSwaps().swapIds.single().provider)
+        failSync = false
+        assertTrue(markSwap(source(), provider = "replacement", mode = SwapMode.EXACT_INPUT))
+        assertEquals(4, directorySyncs)
+        assertEquals("replacement", source().observe(key).first { it != null }
+            ?.accountMetadata?.swaps?.swapIds?.single()?.provider)
+        assertFalse(File(metadataDir, "$canonicalName.tmp").exists())
+    }
+
+    @Test
     fun aLegacyFileUnderALaterKeyIsMergedIntoTheCanonicalFileAndDeleted() =
         runTest {
             write(canonicalName, metadata(lastUpdated = 1, annotations = listOf(note("tx1", "canonical", 1))))
@@ -224,6 +261,46 @@ class MetadataDataSourceFileTest {
         }
 
     @Test
+    fun restartedStorageKeepsReviewedIdentityAndRejectsStaleStatus() = runTest {
+        val reviewedIdentity = "synthetic-reviewed-identity"
+        val initial = dataSource()
+        assertTrue(markSwap(initial, provider = "near", mode = SwapMode.EXACT_INPUT, reviewedIdentity = reviewedIdentity))
+        val createdAt = storedSwaps().swapIds.single().lastUpdated
+
+        suspend fun refresh(
+            source: MetadataDataSourceImpl,
+            status: SwapStatus,
+            updatedAt: String,
+            amount: BigDecimal,
+        ) = source.updateSwap(
+            depositAddress = "deposit",
+            amountOutFormatted = amount,
+            status = status,
+            mode = SwapMode.EXACT_OUTPUT,
+            origin = swapAsset("zec", "zec"),
+            destination = swapAsset("usdc", "near"),
+            key = key,
+            statusUpdatedAt = kotlin.time.Instant.parse(updatedAt),
+            expectedCreatedAt = createdAt,
+        )
+
+        assertTrue(refresh(initial, SwapStatus.FAILED, "2026-11-22T00:00:00.0001Z", BigDecimal.ONE))
+        assertTrue(refresh(initial, SwapStatus.PROCESSING, "2026-11-22T00:00:00.0002Z", BigDecimal.ONE))
+        val restarted = dataSource()
+        assertFalse(refresh(restarted, SwapStatus.FAILED, "2026-11-22T00:00:00.0001Z", BigDecimal.ONE))
+        assertTrue(refresh(restarted, SwapStatus.SUCCESS, "2026-11-22T00:00:00.0003Z", BigDecimal.TEN))
+        assertFalse(refresh(restarted, SwapStatus.SUCCESS, "2026-11-22T00:00:00.0002Z", BigDecimal.ONE))
+        assertFalse(refresh(restarted, SwapStatus.PROCESSING, "2026-11-22T00:00:01Z", BigDecimal.ONE))
+        val saved = storedSwaps().swapIds.single()
+        assertEquals(SwapStatus.SUCCESS, saved.status)
+        assertEquals(BigDecimal.TEN, saved.amountOutFormatted)
+        assertEquals(createdAt, saved.lastUpdated)
+        assertEquals(kotlin.time.Instant.parse("2026-11-22T00:00:00.0003Z"), saved.statusUpdatedAt)
+        assertEquals(reviewedIdentity, saved.reviewedIdentity)
+        assertEquals(true, saved.exactInput)
+    }
+
+    @Test
     fun theSwapAssetHistoryPutsTheLatestFirstAndKeepsTen() =
         runTest {
             val dataSource = dataSource()
@@ -283,7 +360,12 @@ class MetadataDataSourceFileTest {
         return emitted
     }
 
-    private suspend fun markSwap(dataSource: MetadataDataSourceImpl, provider: String, mode: SwapMode) =
+    private suspend fun markSwap(
+        dataSource: MetadataDataSourceImpl,
+        provider: String,
+        mode: SwapMode,
+        reviewedIdentity: String? = null,
+    ) =
         dataSource.markTxAsSwap(
             depositAddress = "deposit",
             provider = provider,
@@ -294,7 +376,8 @@ class MetadataDataSourceFileTest {
             mode = mode,
             amountOutFormatted = BigDecimal.ONE,
             status = SwapStatus.PENDING,
-            key = key
+            key = key,
+            reviewedIdentity = reviewedIdentity,
         )
 
     private fun storedSwaps() = read(canonicalName).accountMetadata.swaps

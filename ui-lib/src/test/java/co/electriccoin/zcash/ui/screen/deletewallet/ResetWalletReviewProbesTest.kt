@@ -5,10 +5,23 @@ import cash.z.ecc.android.sdk.WalletCoordinator
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.AddressBookDataSourceImpl
+import co.electriccoin.zcash.ui.common.provider.AddressBookKeyStorageProvider
+import co.electriccoin.zcash.ui.common.provider.AddressBookProviderImpl
+import co.electriccoin.zcash.ui.common.provider.AddressBookStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
+import co.electriccoin.zcash.ui.common.repository.AddressBookRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+import co.electriccoin.zcash.ui.common.serialization.ADDRESS_BOOK_ENCRYPTION_KEY_SIZE
+import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookEncryptorImpl
+import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookKey
+import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookSerializer
+import com.google.crypto.tink.InsecureSecretKeyAccess
+import com.google.crypto.tink.util.SecretBytes
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -26,6 +39,7 @@ import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -82,11 +96,17 @@ class ResetWalletReviewProbesTest {
 
         assertFailsWith<IOException> { fixture.reset(keepFiles = false) }
         verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
-        assertNull(fixture.progressStore().getStage())
+        assertEquals(ResetStage.DELETE_LOCAL_FILES, fixture.progressStore().getStage())
+        coVerify(exactly = 0) { fixture.encryptedPrefs.clearPreferences() }
 
         coEvery { fixture.metadataRepository.delete() } returns Unit
-        fixture.reset(keepFiles = false)
+        val resumed = fixture.newReset()
+        assertTrue(resumed.isPending.value)
+        resumed(keepFiles = true)
         verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 2) { fixture.addressBookRepository.delete() }
+        coVerify(exactly = 2) { fixture.metadataRepository.delete() }
+        assertNull(fixture.progressStore().getStage())
     }
 
     @Test
@@ -112,6 +132,63 @@ class ResetWalletReviewProbesTest {
         assertNull(fixture.progressStore().getStage())
     }
 
+    @Test
+    fun retentionThenOptOutRemovesBothWalletContactBooksAndOwnedArtifacts() = runTest {
+        val fixture = Fixture()
+        val firstWalletKey = addressBookKey(1)
+        val currentWalletKey = addressBookKey(2)
+        val storage = fixture.addressBookStorage()
+        val source = addressBookSource(storage)
+        val first = storage.getStorageTarget(firstWalletKey)
+        val current = storage.getStorageTarget(currentWalletKey)
+        source.saveContact("Retained Contact", "synthetic-first-recipient", null, firstWalletKey)
+
+        fixture.newReset(fixture.contactRepository(source))(keepFiles = true)
+        assertTrue(first.isFile)
+        source.saveContact("Current Contact", "synthetic-current-recipient", null, currentWalletKey)
+        val temporary = current.resolveSibling(current.name + ".tmp").apply { writeText("interrupted write") }
+        val legacy = storage.getLegacyUnencryptedStorageTarget().apply { writeText("legacy export") }
+        val unrelated = first.resolveSibling("unrelated.txt").apply { writeText("keep") }
+
+        fixture.newReset(fixture.contactRepository(source))(keepFiles = false)
+
+        listOf(first, current, temporary, legacy).forEach { assertFalse(it.exists(), it.name) }
+        assertEquals("keep", unrelated.readText())
+        verify(exactly = 2) { fixture.walletCoordinator.deleteSdkDataFlow() }
+    }
+
+    @Test
+    fun optOutWithNoCachedKeyOrAccountStillErasesSdkAndPreferences() = runTest {
+        val fixture = Fixture()
+        val unavailableAccount = mockk<AccountDataSource> {
+            every { zashiAccount } returns flowOf(null)
+            coEvery { getZashiAccount() } coAnswers { awaitCancellation() }
+        }
+        val keys = mockk<AddressBookKeyStorageProvider>()
+        val repository = fixture.contactRepository(
+            addressBookSource(fixture.addressBookStorage()), unavailableAccount, keys
+        )
+
+        fixture.newReset(repository)(keepFiles = false)
+
+        coVerify(exactly = 0) { unavailableAccount.getZashiAccount() }
+        coVerify(exactly = 0) { keys.getAddressBookKey() }
+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 1) { fixture.encryptedPrefs.clearPreferences() }
+        assertNull(fixture.progressStore().getStage())
+    }
+
+    private fun addressBookKey(marker: Byte) = AddressBookKey(
+        SecretBytes.copyFrom(ByteArray(ADDRESS_BOOK_ENCRYPTION_KEY_SIZE) { marker }, InsecureSecretKeyAccess.get())
+    )
+
+    private fun addressBookSource(storage: AddressBookStorageProviderImpl): AddressBookDataSourceImpl {
+        val sync = DirectorySync {}
+        val serializer = AddressBookSerializer()
+        val provider = AddressBookProviderImpl(AddressBookEncryptorImpl(serializer), serializer, sync)
+        return AddressBookDataSourceImpl(storage, provider, sync)
+    }
+
     private inner class Fixture {
         val walletCoordinator = mockk<WalletCoordinator> {
             every { deleteSdkDataFlow() } returns flowOf(true)
@@ -134,26 +211,41 @@ class ResetWalletReviewProbesTest {
         }
         val addressBookRepository = mockk<AddressBookRepository>(relaxed = true)
         val metadataRepository = mockk<MetadataRepository>(relaxed = true)
+        private val files = directory.newFolder("files")
         private val context = mockk<Context> {
             every { noBackupFilesDir } returns directory.root
+            every { filesDir } returns files
         }
+
+        private val writeAccess = WalletWriteAccess(progressStore())
 
         fun progressStore() = ResetProgressStore(context, DirectorySync {})
 
+        fun addressBookStorage() = AddressBookStorageProviderImpl(context, DirectorySync {})
+
+        fun contactRepository(
+            source: AddressBookDataSourceImpl,
+            accounts: AccountDataSource = mockk {
+                every { zashiAccount } returns flowOf(null)
+            },
+            keys: AddressBookKeyStorageProvider = mockk(),
+        ) = AddressBookRepositoryImpl(source, keys, accounts, mockk(), mockk(), writeAccess)
+
         val reset = newReset()
 
-        fun newReset() = ResetZashiUseCase(
+        fun newReset(repository: AddressBookRepository = addressBookRepository) = ResetZashiUseCase(
             walletCoordinator = walletCoordinator,
             synchronizerProvider = synchronizerProvider,
             standardPreferenceProvider = standardProvider,
             encryptedPreferenceProvider = encryptedProvider,
             homeMessageCacheRepository = mockk(relaxed = true),
             biometricRepository = mockk(relaxed = true),
-            addressBookRepository = addressBookRepository,
+            addressBookRepository = repository,
             metadataRepository = metadataRepository,
             migrationAppHooks = mockk(relaxed = true),
             giftCardRepository = mockk(relaxed = true),
             progressStore = progressStore(),
+            walletWriteAccess = writeAccess,
         )
     }
 }

@@ -14,7 +14,11 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
@@ -23,8 +27,13 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
+import cash.z.ecc.android.sdk.model.Memo
+import cash.z.ecc.android.sdk.model.Proposal
+import cash.z.ecc.android.sdk.model.WalletAddress
+import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
@@ -39,6 +48,8 @@ import co.electriccoin.zcash.ui.design.util.getString
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
+import io.mockk.every
+import io.mockk.mockk
 import java.io.File
 import java.math.BigDecimal
 import co.electriccoin.zcash.ui.design.util.withStyle
@@ -90,13 +101,43 @@ class SwapQuoteVMMapperTest {
     }
 
     @Test
-    fun poorAndUnavailableComparisonsUseTheirExistingNotices() {
-        val check = IndependentPriceCheck.Compared(BigDecimal("-15"), Long.MAX_VALUE)
-        val poor = mapPriceCheck(check)
-        assertTrue(poor.showInline)
-        assertTrue(poor.isWarning)
-        kotlin.test.assertNull(poor.detailItem)
-        assertEquals(R.string.private_price_poor, poor.label.resourceId())
+    fun poorOutgoingQuoteKeepsWarningAndContinuationWithExpandableMarketSource() {
+        val check = IndependentPriceCheck.Compared(BigDecimal("-15.25"), Long.MAX_VALUE, listOf("Kraken", "Orca"))
+        val quote = FakeSwapQuote(
+            destinationAsset = destinationAsset,
+            originAsset = SwapAssetTestFixture.zecAsset(),
+            mode = SwapMode.EXACT_INPUT,
+        )
+        val fee = Zatoshi(1000)
+        val proposal = ExactInputSwapTransactionProposal(
+            destination = WalletAddress.Unified.new("synthetic-deposit"),
+            amount = Zatoshi(150_000_000),
+            memo = Memo(""),
+            proposal = mockk<Proposal> { every { totalFeeRequired() } returns fee },
+            quote = quote,
+        )
+        var continued = false
+        val state = mapper.createState(
+            SwapQuoteInternalState(proposal, quote, zashi()), {}, { continued = true }, {}, check,
+        )
+        assertTrue(requireNotNull(state.priceCheck).isWarning)
+        assertTrue(state.primaryButton.isEnabled)
+        kotlin.test.assertNull(state.minimumDeposit)
+        composeTestRule.setContent { ZcashTheme { SwapQuoteView(state) } }
+
+        composeTestRule.onNodeWithText("15.3% below market reference").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Swap anyway").performScrollTo().performClick()
+        composeTestRule.runOnIdle { assertTrue(continued) }
+        composeTestRule.onNodeWithText("Market comparison").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Quote details").performScrollTo().performClick()
+        composeTestRule.onNodeWithText("15.25% less value").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("About the market comparison").performClick()
+        composeTestRule.onNodeWithText("Value received versus total spend, using prices from Kraken, Orca.")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun unavailableComparisonKeepsItsStandaloneNotice() {
         val unavailable = mapPriceCheck(IndependentPriceCheck.Unavailable)
         assertFalse(unavailable.isWarning)
         kotlin.test.assertNull(unavailable.detailItem)

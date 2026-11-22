@@ -15,6 +15,11 @@ from release_metadata import ARCHIVE_LIMITS, Metadata, require
 
 
 def artifact(metadata, artifact_id, name, run, controller):
+    value = artifact_record(metadata, artifact_id, name, run, controller)
+    return {key: value[key] for key in ('id', 'digest', 'size_in_bytes')}
+
+
+def artifact_record(metadata, artifact_id, name, run, controller):
     require(re.fullmatch(r'[1-9][0-9]*', str(artifact_id)), 'Exact artifact ID required')
     value = metadata.api('/actions/artifacts/' + str(artifact_id))
     producer = value['workflow_run']
@@ -23,7 +28,7 @@ def artifact(metadata, artifact_id, name, run, controller):
             and 0 < value['size_in_bytes'] <= ARCHIVE_LIMITS[name][0]
             and re.fullmatch(r'sha256:[a-f0-9]{64}', value.get('digest', '')),
             'Artifact does not belong to the exact trusted run and role')
-    return {key: value[key] for key in ('id', 'digest', 'size_in_bytes')}
+    return value
 
 
 def stage(directory, artifact_id, name, *, metadata=None, run=None, controller=None):
@@ -244,7 +249,8 @@ def verify_recovered_receipts(root, source, controller, run, outputs, metadata, 
             else:
                 require(original_reserve == 'success' and (use_tor or original_prepared == 'success'),
                         'Original wallet requires a passing reservation and applicable preparation job')
-            direct_core_id = '' if use_tor else outputs.get('prepared_id', core['producer']['id'])
+            require(use_tor or outputs.get('prepared_id'), 'Direct wallet requires its verified preparation archive')
+            direct_core_id = '' if use_tor else outputs['prepared_id']
             validate_wallet(core, source=source, version=version, production=production, original_core=original_core,
                             build_run=run, build_controller=original, core_run=core_run,
                             core_controller=core_controller, fixture=fixture, metadata=metadata,

@@ -188,7 +188,7 @@ class AddressBookDurabilityTest {
             every { filesDir } returns directory.newFolder("files")
             every { noBackupFilesDir } returns directory.newFolder("no-backup")
         }
-        private val storage = AddressBookStorageProviderImpl(context)
+        private val storage = AddressBookStorageProviderImpl(context, DirectorySync {})
         private val serializer = AddressBookSerializer()
         val encryptor = AddressBookEncryptorImpl(serializer)
         private val sync = DirectorySync {}

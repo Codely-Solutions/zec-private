@@ -22,7 +22,9 @@ import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.component.ZashiMessageState
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.stringResByDateTime
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
+import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
 import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
 import io.mockk.every
@@ -44,6 +46,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import java.math.BigDecimal
 import java.time.Instant
+import java.time.ZoneId
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -116,6 +119,7 @@ class SwapDetailVMTest {
         assertEquals(previous.transactionHeader, harness.state().transactionHeader)
         assertEquals(previous.recipient.message, harness.state().recipient.message)
         assertEquals(SwapStatus.SUCCESS, harness.state().status.status)
+        assertEquals(stringRes(R.string.transactionHistory_timestamp), harness.state().timestamp.title)
         assertEquals(stringResByNumber(OUTPUT), harness.state().transactionHeader.amount)
         assertNull(harness.state().errorFooter)
         assertNotNull(harness.state().infoFooter)
@@ -260,6 +264,12 @@ class SwapDetailVMTest {
     private fun assertSaved(state: SwapDetailState, saved: TransactionSwapMetadata, assetId: String? = null) {
         assertEquals(saved.status, state.status.status, assetId)
         assertEquals(stringRes(R.string.private_swap_saved_status), state.status.title, assetId)
+        assertEquals(stringRes(R.string.private_swap_created_at), state.timestamp.title, assetId)
+        assertEquals(
+            stringResByDateTime(saved.lastUpdated.atZone(ZoneId.systemDefault()), useFullFormat = true).withStyle(),
+            state.timestamp.message,
+            assetId,
+        )
         assertEquals(stringResByNumber(saved.amountOutFormatted), state.transactionHeader.amount, assetId)
         assertEquals(saved.origin.tokenIcon, state.transactionHeader.icons.first(), assetId)
         assertNull(state.errorFooter, assetId)

@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.screen.theme.settings.*
 import co.electriccoin.zcash.ui.screen.theme.darklook.*
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.appbar.ZashiMainTopAppBarState
+import co.electriccoin.zcash.ui.common.model.IndependentPriceCheck
 import co.electriccoin.zcash.ui.design.component.*
 import co.electriccoin.zcash.ui.design.component.listitem.ListItemState
 import co.electriccoin.zcash.ui.design.util.*
@@ -18,6 +19,7 @@ import co.electriccoin.zcash.ui.screen.advancedsettings.*
 import co.electriccoin.zcash.ui.screen.walletbackup.*
 import co.electriccoin.zcash.ui.screen.transactiondetail.*
 import co.electriccoin.zcash.ui.screen.swap.quote.*
+import java.math.BigDecimal
 
 /** Synthetic display-only state. Every payment, clipboard and destructive action is inert. */
 @Composable
@@ -175,9 +177,8 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                     isEnabled = screen != "price-checking", onClick = {},
                 ),
                 priceCheck = when (screen) {
-                    "price-warning" -> PriceCheckNoticeState(
-                        stringRes(R.string.private_price_poor, "24.8"),
-                        stringRes(R.string.private_price_check_details), true,
+                    "price-warning" -> mapPriceCheck(
+                        IndependentPriceCheck.Compared(BigDecimal("-24.8"), Long.MAX_VALUE, listOf("Kraken")),
                     )
                     "price-unavailable" -> PriceCheckNoticeState(
                         stringRes(R.string.private_price_unavailable),

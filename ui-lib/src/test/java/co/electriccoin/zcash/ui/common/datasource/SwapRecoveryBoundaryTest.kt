@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
 import co.electriccoin.zcash.ui.common.model.near.NearTokenDto
 import co.electriccoin.zcash.ui.common.model.near.SwapStatusResponseDto
+import co.electriccoin.zcash.ui.common.model.near.reviewedIdentity
 import co.electriccoin.zcash.ui.common.provider.NearApiProvider
 import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -19,7 +20,6 @@ import co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -36,6 +36,7 @@ class SwapRecoveryBoundaryTest {
     private val api = mockk<NearApiProvider>()
     private val sync = mockk<Synchronizer> {
         coEvery { validateAddress("synthetic-zec-recipient") } returns AddressType.Shielded
+        coEvery { validateAddress("another-synthetic-zec-recipient") } returns AddressType.Shielded
     }
     private val syncProvider = mockk<SynchronizerProvider> {
         coEvery { getSynchronizer() } returns sync
@@ -46,7 +47,9 @@ class SwapRecoveryBoundaryTest {
     private val cache = mockk<SwapAssetCacheProvider>(relaxed = true) {
         coEvery { get() } returns emptyList()
     }
-    private val metadata = mockk<MetadataRepository>(relaxed = true)
+    private val metadata = mockk<MetadataRepository>(relaxed = true) {
+        coEvery { updateSwap(any(), any()) } returns true
+    }
     private val stored = TransactionSwapMetadata(
         depositAddress = "tracked-deposit",
         provider = "near",
@@ -68,7 +71,7 @@ class SwapRecoveryBoundaryTest {
         assertIs<IllegalArgumentException>(result.error)
         assertNull(result.status)
         assertEquals(stored, result.savedMetadata)
-        verify(exactly = 0) { metadata.updateSwap(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { metadata.updateSwap(any(), any()) }
     }
 
     @Test
@@ -82,7 +85,7 @@ class SwapRecoveryBoundaryTest {
         assertEquals(SwapStatus.SUCCESS, unpriced.status?.status)
         assertEquals(stored, unpriced.savedMetadata)
         coVerify(exactly = 2) { api.checkSwapStatus("tracked-deposit") }
-        verify(exactly = 2) { metadata.updateSwap(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 2) { metadata.updateSwap(any(), any()) }
     }
 
     @Test
@@ -96,7 +99,7 @@ class SwapRecoveryBoundaryTest {
         assertNull(shadowed.error)
         assertEquals(SwapStatus.SUCCESS, shadowed.status?.status)
         assertEquals(stored, shadowed.savedMetadata)
-        verify(exactly = 2) { metadata.updateSwap(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 2) { metadata.updateSwap(any(), any()) }
     }
 
     @Test
@@ -106,7 +109,7 @@ class SwapRecoveryBoundaryTest {
         assertIs<AssetNotFoundException>(rejected.error)
         assertNull(rejected.status)
         assertEquals(stored, rejected.savedMetadata)
-        verify(exactly = 0) { metadata.updateSwap(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { metadata.updateSwap(any(), any()) }
     }
 
     @Test
@@ -119,7 +122,7 @@ class SwapRecoveryBoundaryTest {
         val recovered = readStatus(scope = this)
         assertNull(recovered.error)
         assertEquals(SwapStatus.SUCCESS, recovered.status?.status)
-        verify(exactly = 1) { metadata.updateSwap(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { metadata.updateSwap(any(), any()) }
     }
 
     @Test
@@ -160,13 +163,44 @@ class SwapRecoveryBoundaryTest {
         val offline = status("tracked-deposit")
         assertIs<AssetNotFoundException>(offline.error)
         assertEquals(stored, offline.savedMetadata)
-        verify(exactly = 0) { metadata.updateSwap(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 0) { metadata.updateSwap(any(), any()) }
 
         coEvery { api.getSupportedTokens() } returns listOf(zec.dto(), eth.dto())
         val recovered = status("tracked-deposit")
         assertNull(recovered.error)
         assertEquals(SwapStatus.SUCCESS, recovered.status?.status)
-        verify(exactly = 1) { metadata.updateSwap(any(), any(), any(), any(), any(), any()) }
+        coVerify(exactly = 1) { metadata.updateSwap(any(), any()) }
+    }
+
+    @Test
+    fun reviewedIdentityRejectsDecodedSubstitutionsWhileHistoricalRecordsRemainReadable() = runBlocking {
+        val twin = eth.dto().copy(assetId = "synthetic:same-display-twin")
+        coEvery { api.getSupportedTokens() } returns listOf(eth.dto(), twin, zec.dto())
+        val original = response("tracked-deposit")
+        val bound = stored.copy(reviewedIdentity = original.quoteResponse.reviewedIdentity())
+        val repository = SwapRepositoryImpl(dataSource, cache).also { it.scope = this }
+        val useCase = GetSwapStatusUseCase(metadata, repository)
+        val cases = listOf(
+            response("tracked-deposit", originId = twin.assetId),
+            response("tracked-deposit", recipient = "another-synthetic-zec-recipient"),
+            response("tracked-deposit", refund = "another-synthetic-external-refund"),
+            response("tracked-deposit", swapType = "EXACT_INPUT"),
+        )
+        for (different in cases) {
+            coEvery { metadata.getSwapMetadata("tracked-deposit") } returns stored
+            coEvery { api.checkSwapStatus("tracked-deposit") } returns different
+            assertEquals(SwapStatus.SUCCESS, useCase("tracked-deposit").status?.status)
+
+            coEvery { metadata.getSwapMetadata("tracked-deposit") } returns bound
+            val rejected = useCase("tracked-deposit")
+            assertIs<IllegalArgumentException>(rejected.error)
+            assertEquals(bound, rejected.savedMetadata)
+            assertNull(rejected.status)
+        }
+        coVerify(exactly = 0) { metadata.updateSwap(bound, any()) }
+        coEvery { api.checkSwapStatus("tracked-deposit") } returns original
+        assertEquals(SwapStatus.SUCCESS, useCase("tracked-deposit").status?.status)
+        coVerify(exactly = 1) { metadata.updateSwap(bound, any()) }
     }
 
     private suspend fun readStatus(echoedAddress: String = "tracked-deposit", scope: CoroutineScope) =
@@ -178,7 +212,13 @@ class SwapRecoveryBoundaryTest {
 
     private fun NearSwapAsset.dto() = NearTokenDto(assetId, decimals, chainTicker, tokenTicker, BigDecimal.ONE)
 
-    private fun response(address: String): SwapStatusResponseDto = Json.decodeFromString(
+    private fun response(
+        address: String,
+        originId: String = eth.assetId,
+        recipient: String = "synthetic-zec-recipient",
+        refund: String = "synthetic-external-refund",
+        swapType: String = "FLEX_INPUT",
+    ): SwapStatusResponseDto = Json.decodeFromString(
         """
         {
             "status": "SUCCESS",
@@ -187,13 +227,17 @@ class SwapRecoveryBoundaryTest {
                 "timestamp": "2026-11-19T23:00:00Z",
                 "quoteRequest": {
                     "dry": false,
-                    "swapType": "FLEX_INPUT",
+                    "swapType": "$swapType",
                     "slippageTolerance": 100,
-                    "originAsset": "${eth.assetId}",
+                    "originAsset": "$originId",
+                    "depositType": "ORIGIN_CHAIN",
+                    "depositMode": "SIMPLE",
                     "destinationAsset": "${zec.assetId}",
                     "amount": "1000000000000000000",
-                    "refundTo": "synthetic-external-refund",
-                    "recipient": "synthetic-zec-recipient",
+                    "refundTo": "$refund",
+                    "refundType": "ORIGIN_CHAIN",
+                    "recipient": "$recipient",
+                    "recipientType": "DESTINATION_CHAIN",
                     "deadline": "2026-11-20T00:00:00Z",
                     "appFees": []
                 },

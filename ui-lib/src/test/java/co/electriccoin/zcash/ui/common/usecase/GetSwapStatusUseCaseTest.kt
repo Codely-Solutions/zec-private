@@ -14,7 +14,6 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.collect
@@ -48,6 +47,7 @@ class GetSwapStatusUseCaseTest {
             val metadataRepository =
                 mockk<MetadataRepository>(relaxed = true) {
                     coEvery { getSwapMetadata("deposit") } returns mockk<TransactionSwapMetadata>()
+                    coEvery { updateSwap(any(), any()) } returns true
                 }
             val status = swapStatusResult()
             val swapRepository =
@@ -60,15 +60,8 @@ class GetSwapStatusUseCaseTest {
             assertFalse(result.isLoading)
             assertNull(result.error)
             assertEquals(status, result.status)
-            verify(exactly = 1) {
-                metadataRepository.updateSwap(
-                    depositAddress = "deposit",
-                    amountOutFormatted = BigDecimal("1.23"),
-                    status = SwapStatus.SUCCESS,
-                    mode = SwapMode.EXACT_INPUT,
-                    origin = btc,
-                    destination = zec
-                )
+            coVerify(exactly = 1) {
+                metadataRepository.updateSwap(any(), status)
             }
         }
 
@@ -88,7 +81,7 @@ class GetSwapStatusUseCaseTest {
             assertEquals(status, result.savedMetadata?.status)
             assertSame(failure, result.error)
             assertNull(result.status)
-            verify(exactly = 0) { metadata.updateSwap(any(), any(), any(), any(), any(), any()) }
+            coVerify(exactly = 0) { metadata.updateSwap(any(), any()) }
         }
     }
 
@@ -130,7 +123,7 @@ class GetSwapStatusUseCaseTest {
             assertFalse(result.isLoading)
             assertEquals(failure, result.error)
             assertNull(result.status)
-            verify(exactly = 0) { metadataRepository.updateSwap(any(), any(), any(), any(), any(), any()) }
+            coVerify(exactly = 0) { metadataRepository.updateSwap(any(), any()) }
         }
 
     @Test
@@ -148,7 +141,7 @@ class GetSwapStatusUseCaseTest {
             assertIs<IllegalStateException>(result.error)
             assertNull(result.status)
             coVerify(exactly = 0) { swapRepository.checkSwapStatus(any()) }
-            verify(exactly = 0) { metadataRepository.updateSwap(any(), any(), any(), any(), any(), any()) }
+            coVerify(exactly = 0) { metadataRepository.updateSwap(any(), any()) }
         }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -159,6 +152,7 @@ class GetSwapStatusUseCaseTest {
             val metadataRepository =
                 mockk<MetadataRepository>(relaxed = true) {
                     coEvery { getSwapMetadata("deposit") } returns saved
+                    coEvery { updateSwap(saved, any()) } returns true
                 }
             val pending = swapStatusResult(swapStatus = SwapStatus.PENDING)
             val processing = swapStatusResult(swapStatus = SwapStatus.PROCESSING)
@@ -187,11 +181,7 @@ class GetSwapStatusUseCaseTest {
             assertNull(resumed.last().error)
             coVerify(exactly = 2) { metadataRepository.getSwapMetadata("deposit") }
             coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved) }
-            verify(exactly = 1) {
-                metadataRepository.updateSwap(
-                    "deposit", BigDecimal("1.23"), SwapStatus.REFUNDED, SwapMode.EXACT_INPUT, btc, zec
-                )
-            }
+            coVerify(exactly = 1) { metadataRepository.updateSwap(saved, refunded) }
             advanceTimeBy(120_000)
             runCurrent()
             coVerify(exactly = 3) { swapRepository.checkSwapStatus(saved) }
@@ -203,6 +193,7 @@ class GetSwapStatusUseCaseTest {
         val saved = mockk<TransactionSwapMetadata>()
         val metadata = mockk<MetadataRepository>(relaxed = true) {
             coEvery { getSwapMetadata("deposit") } returns saved
+            coEvery { updateSwap(saved, any()) } returns true
         }
         val pending = swapStatusResult(swapStatus = SwapStatus.PENDING)
         val success = swapStatusResult(swapStatus = SwapStatus.SUCCESS)

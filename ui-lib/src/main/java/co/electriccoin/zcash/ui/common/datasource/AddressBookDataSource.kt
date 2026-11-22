@@ -6,6 +6,7 @@ import co.electriccoin.zcash.ui.common.provider.ADDRESS_BOOK_TEMP_FILE_SUFFIX
 import co.electriccoin.zcash.ui.common.provider.AddressBookProvider
 import co.electriccoin.zcash.ui.common.provider.AddressBookStorageProvider
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookKey
 import kotlinx.coroutines.Dispatchers
@@ -46,24 +47,37 @@ interface AddressBookDataSource {
     suspend fun deleteContact(addressBookContact: AddressBookContact, key: AddressBookKey)
 
     suspend fun delete(key: AddressBookKey)
+
+    suspend fun deleteAll()
 }
 
 class AddressBookDataSourceImpl(
     private val addressBookStorageProvider: AddressBookStorageProvider,
     private val addressBookProvider: AddressBookProvider,
-    private val directorySync: DirectorySync
+    private val directorySync: DirectorySync,
+    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) : AddressBookDataSource {
     private val mutex = Mutex()
 
     private val revision = MutableStateFlow(0L)
     private var legacyDirectorySynced = false
 
-    override fun observe(key: AddressBookKey): Flow<AddressBook?> =
-        revision
-            .map<Long, AddressBook?> { mutex.withLock { getAddressBookInternal(key) } }
+    override fun observe(key: AddressBookKey): Flow<AddressBook?> {
+        val token = walletWriteAccess.token()
+        return revision
+            .map<Long, AddressBook?> { walletWriteAccess.write(token) { mutex.withLock { getAddressBookInternal(key) } } }
             .onStart { emit(null) }
             .distinctUntilChanged()
             .flowOn(Dispatchers.IO)
+    }
+
+    override suspend fun deleteAll() = withContext(Dispatchers.IO) {
+        mutex.withLock {
+            addressBookStorageProvider.deleteStorageFiles()
+            legacyDirectorySynced = true
+            revision.update { it + 1 }
+        }
+    }
 
     override suspend fun saveContact(
         name: String,

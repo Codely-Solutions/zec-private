@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.time.Duration.Companion.seconds
 
 class GetSwapStatusUseCase(
@@ -24,6 +26,8 @@ class GetSwapStatusUseCase(
     context: Context? = null,
 ) {
     private val donationPreferences = context?.let(::DonationPreferences)
+    private val refreshes = mutableMapOf<String, RefreshLock>()
+
     suspend operator fun invoke(depositAddress: String) = observe(depositAddress).first { !it.isLoading }
 
     @Suppress("TooGenericExceptionCaught", "LoopWithTooManyJumpStatements")
@@ -52,15 +56,7 @@ class GetSwapStatusUseCase(
 
                 while (true) {
                     try {
-                        val result = swapRepository.checkSwapStatus(expectedMetadata)
-                        metadataRepository.updateSwap(
-                            depositAddress = depositAddress,
-                            amountOutFormatted = result.amountOutFormatted,
-                            status = result.status,
-                            mode = result.mode,
-                            origin = result.originAsset,
-                            destination = result.destinationAsset
-                        )
+                        val result = refresh(depositAddress, expectedMetadata)
                         if (result.status == SwapStatus.SUCCESS) {
                             donationPreferences?.recordSuccessfulTransaction()
                         }
@@ -85,6 +81,28 @@ class GetSwapStatusUseCase(
 
             awaitClose()
         }
+
+    private suspend fun refresh(depositAddress: String, expected: TransactionSwapMetadata): SwapQuoteStatus {
+        val refresh = synchronized(refreshes) {
+            refreshes.getOrPut(depositAddress, ::RefreshLock).also { it.users++ }
+        }
+        try {
+            return refresh.mutex.withLock {
+                val result = swapRepository.checkSwapStatus(expected)
+                check(metadataRepository.updateSwap(expected, result)) { "Swap status refresh was not saved" }
+                result
+            }
+        } finally {
+            synchronized(refreshes) {
+                if (--refresh.users == 0) refreshes.remove(depositAddress)
+            }
+        }
+    }
+
+    private class RefreshLock {
+        val mutex = Mutex()
+        var users = 0
+    }
 }
 
 data class SwapQuoteStatusData(

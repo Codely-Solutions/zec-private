@@ -34,7 +34,8 @@ val metadataModule =
             MetadataDataSourceImpl(
                 metadataStorageProvider = get(),
                 metadataProvider = get(),
-                simpleSwapAssetProvider = get()
+                simpleSwapAssetProvider = get(),
+                walletWriteAccess = get(),
             )
         } bind MetadataDataSource::class
         singleOf(::MetadataRepositoryImpl) bind MetadataRepository::class

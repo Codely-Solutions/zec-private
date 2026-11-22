@@ -45,7 +45,7 @@ internal fun IncomingSwapReviewScene(screen: String): Boolean {
             totalFees = empty,
             maxSlippage = empty,
             timestamp = TransactionDetailInfoRowState(
-                stringRes(R.string.private_swap_saved_update), stringRes("20 November 2026, 12:00").withStyle()
+                stringRes(R.string.private_swap_created_at), stringRes("20 November 2026, 12:00").withStyle()
             ),
             message = null,
             errorFooter = null,

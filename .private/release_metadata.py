@@ -1,4 +1,5 @@
 """Bounded read-only verification of release producer and fixture identities."""
+from datetime import datetime
 import json,os,re,subprocess,time
 GH=r"C:\Program Files\GitHub CLI\gh.exe" if os.name == 'nt' else 'gh'
 MIB = 1024**2
@@ -21,6 +22,57 @@ APK_PAYLOAD_LIMIT = 256 * MIB
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+def artifact_producer_job(run, jobs, asset, attempt, *, role, strict_timestamps=False):
+    def timestamp(value):
+        require(isinstance(value, str), 'Missing GitHub artifact or job timestamp')
+        parsed = datetime.fromisoformat(value)
+        require(parsed.tzinfo is not None, 'GitHub artifact or job timestamp must include timezone')
+        return parsed
+
+    created = timestamp(asset.get('created_at'))
+    matches = []
+    for job in jobs:
+        started = timestamp(job['started_at']) if job.get('started_at') else None
+        completed = timestamp(job['completed_at']) if job.get('completed_at') else None
+        if strict_timestamps and job.get('conclusion') == 'success':
+            require(started is not None and completed is not None, 'Missing GitHub artifact or job timestamp')
+        if started is not None and started <= created and (completed is None or created <= completed):
+            matches.append((job, started, completed))
+    ids = [job.get('id') for job, _, _ in matches]
+    require(all(type(job_id) is int and job_id > 0 for job_id in ids) and len(ids) == len(set(ids)),
+            f'Expected one record per matching {role} producer job')
+
+    current = run['run_attempt']
+    attempts = {current: run}
+    producers, copies = [], []
+    for job, started, completed in matches:
+        number = job.get('run_attempt')
+        require(type(number) is int and 1 <= number <= current, f'Invalid {role} producer attempt')
+        if number not in attempts:
+            attempts[number] = attempt(number)
+        attempt_started = timestamp(attempts[number].get('run_started_at'))
+        if started >= attempt_started:
+            producers.append(job)
+        else:
+            require(completed is not None and completed < attempt_started,
+                    f'{role.capitalize()} producer overlaps the start of its reported attempt')
+            copies.append(job)
+
+    require(len(producers) == 1 and producers[0]['status'] == 'completed'
+            and producers[0]['conclusion'] == 'success' and producers[0].get('completed_at'),
+            f'Expected one successful {role} producer job when the selected artifact was uploaded')
+    job = producers[0]
+    if copies:
+        # GitHub reruns can copy a successful job into a later attempt under
+        # a new job ID. Its original execution finished before that attempt.
+        fields = ('status', 'conclusion', 'started_at', 'completed_at', 'runner_id', 'steps')
+        require(type(job.get('runner_id')) is int and job['runner_id'] > 0 and job.get('steps')
+                and all(copy['run_attempt'] > job['run_attempt']
+                        and all(copy.get(field) == job.get(field) for field in fields) for copy in copies),
+                f'Copied {role} producer does not match the original execution')
+    return job
 
 
 def wallet_release_versions(pages):

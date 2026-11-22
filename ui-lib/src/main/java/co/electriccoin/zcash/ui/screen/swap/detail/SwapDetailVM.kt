@@ -87,7 +87,7 @@ class SwapDetailVM(
                         TransactionDetailInfoRowState(
                             title = stringRes(
                                 if (swapData.status == null && hasDetails) {
-                                    R.string.private_swap_saved_update
+                                    R.string.private_swap_created_at
                                 } else {
                                     R.string.transactionHistory_timestamp
                                 }

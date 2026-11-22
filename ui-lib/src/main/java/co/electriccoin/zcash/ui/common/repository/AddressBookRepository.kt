@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.provider.AddressBookKeyStorageProvider
 import co.electriccoin.zcash.ui.common.provider.BlockchainProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -92,7 +93,8 @@ class AddressBookRepositoryImpl(
     private val addressBookKeyStorageProvider: AddressBookKeyStorageProvider,
     private val accountDataSource: AccountDataSource,
     private val persistableWalletProvider: PersistableWalletProvider,
-    private val blockchainProvider: BlockchainProvider
+    private val blockchainProvider: BlockchainProvider,
+    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) : AddressBookRepository {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
 
@@ -104,7 +106,10 @@ class AddressBookRepositoryImpl(
         accountDataSource
             .zashiAccount
             .distinctUntilChangedBy { it?.sdkAccount?.accountUuid }
-            .map { getAddressBookKey(it ?: return@map null) }
+            .map { account ->
+                val token = walletWriteAccess.token()
+                walletWriteAccess.write(token) { getAddressBookKey(account ?: return@write null) }
+            }
             .distinctUntilChanged()
             .flatMapLatest { if (it == null) flowOf(null) else addressBookDataSource.observe(it) }
             .retryWhen { _, attempt ->
@@ -179,16 +184,17 @@ class AddressBookRepositoryImpl(
 
     override suspend fun delete() {
         mutex.withLock {
-            val key = addressBookKeyStorageProvider.getAddressBookKey()
-                ?: getAddressBookKey(accountDataSource.getZashiAccount())
-            addressBookDataSource.delete(key)
+            addressBookDataSource.deleteAll()
         }
     }
 
     private suspend fun updateAB(block: suspend (AddressBookKey) -> Unit) {
+        val token = walletWriteAccess.token()
         mutex.withLock {
-            val selectedAccount = accountDataSource.getZashiAccount()
-            block(getAddressBookKey(selectedAccount))
+            checkNotNull(walletWriteAccess.write(token) {
+                val selectedAccount = accountDataSource.getZashiAccount()
+                block(getAddressBookKey(selectedAccount))
+            }) { "Wallet changed before the contact could be saved" }
         }
     }
 

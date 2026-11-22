@@ -52,7 +52,16 @@ data class QuoteRequest(
     val appFees: List<AppFee>,
     @SerialName("referral")
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val referral: String? = null
+    val referral: String? = null,
+    @SerialName("depositMode")
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val depositMode: String = "SIMPLE",
+    @SerialName("virtualChainRecipient")
+    val virtualChainRecipient: String? = null,
+    @SerialName("virtualChainRefundRecipient")
+    val virtualChainRefundRecipient: String? = null,
+    @SerialName("customRecipientMsg")
+    val customRecipientMsg: String? = null,
 )
 
 @JsonIgnoreUnknownKeys
