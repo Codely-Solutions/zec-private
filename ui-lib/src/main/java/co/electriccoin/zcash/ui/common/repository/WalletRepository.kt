@@ -40,7 +40,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
@@ -72,6 +71,8 @@ interface WalletRepository {
     val walletRestoringState: StateFlow<WalletRestoringState>
 
     fun createNewWallet()
+
+    fun continueWalletSetup()
 
     fun retryWalletInitialization()
 
@@ -123,7 +124,6 @@ class WalletRepositoryImpl(
     private val walletMutation = Mutex()
 
     private val initialization = MutableStateFlow(WalletInitializationState.IDLE)
-    override val walletInitialization = initialization.asStateFlow()
 
     // Keep the accepted operation across failures, including failures after the wallet was stored.
     private val initializationLock = Any()
@@ -148,6 +148,15 @@ class WalletRepositoryImpl(
                 }
             )
         }
+
+    override val walletInitialization =
+        combine(initialization, onboardingState, persistableWalletProvider.persistableWallet) { operation, state, wallet ->
+            when {
+                operation != WalletInitializationState.IDLE -> operation
+                wallet != null && state != OnboardingState.READY -> WalletInitializationState.INCOMPLETE
+                else -> WalletInitializationState.IDLE
+            }
+        }.stateIn(sharingScope, SharingStarted.Eagerly, WalletInitializationState.CHECKING)
 
     /**
      * The encrypted wallet store is only awaited when [onboardingState] already claims a wallet
@@ -354,13 +363,13 @@ class WalletRepositoryImpl(
     override fun createNewWallet() {
         var candidate: PersistableWallet? = null
         initializeWallet(WalletInitializationRequest.Create) { stored ->
-            if (candidate == null && stored != null) {
-                finishExistingWalletInitialization(stored)
-                return@initializeWallet
+            val accepted = candidate
+            if (stored != null && (accepted == null || !stored.hasSameIdentityAs(accepted))) {
+                throw WalletInitializationConflictException()
             }
             val zcashNetwork = ZcashNetwork.fromResources(application)
             val newWallet =
-                candidate ?: PersistableWallet.new(
+                stored ?: accepted ?: PersistableWallet.new(
                     application = application,
                     zcashNetwork = zcashNetwork,
                     endpoint = lightWalletEndpointProvider.getDefaultEndpoint(),
@@ -370,6 +379,13 @@ class WalletRepositoryImpl(
             persistWalletInternal(newWallet)
             walletRestoringStateProvider.store(WalletRestoringState.INITIATING)
             persistOnboardingStateInternal(OnboardingState.READY)
+        }
+    }
+
+    override fun continueWalletSetup() {
+        initializeWallet(WalletInitializationRequest.Continue) { stored ->
+            if (stored == null) throw WalletInitializationConflictException()
+            finishExistingWalletInitialization(stored)
         }
     }
 
@@ -408,14 +424,12 @@ class WalletRepositoryImpl(
         val request = WalletInitializationRequest.Restore(network, seedPhrase, birthday, enableTor)
         var candidate: PersistableWallet? = null
         return initializeWallet(request) { stored ->
-            if (stored != null && !request.matches(stored)) throw WalletInitializationConflictException()
-            if (enableTor) isTorEnabledStorageProvider.store(true)
-            if (candidate == null && stored != null) {
-                finishExistingWalletInitialization(stored)
-                return@initializeWallet
+            if (stored != null && (candidate == null || !request.matches(stored))) {
+                throw WalletInitializationConflictException()
             }
+            if (enableTor) isTorEnabledStorageProvider.store(true)
             val restoredWallet =
-                candidate ?: PersistableWallet(
+                stored ?: candidate ?: PersistableWallet(
                     network = network,
                     birthday = birthday,
                     endpoint = lightWalletEndpointProvider.getDefaultEndpoint(),
@@ -506,6 +520,8 @@ class WalletRepositoryImpl(
     private sealed interface WalletInitializationRequest {
         data object Create : WalletInitializationRequest
 
+        data object Continue : WalletInitializationRequest
+
         data class Restore(
             val network: ZcashNetwork,
             val seedPhrase: SeedPhrase,
@@ -520,11 +536,16 @@ class WalletRepositoryImpl(
     }
 }
 
+private fun PersistableWallet.hasSameIdentityAs(other: PersistableWallet): Boolean =
+    network == other.network && seedPhrase == other.seedPhrase && birthday == other.birthday
+
 class WalletInitializationConflictException :
     IllegalStateException("A different wallet setup already owns initialization")
 
 enum class WalletInitializationState {
+    CHECKING,
     IDLE,
+    INCOMPLETE,
     RUNNING,
     FAILED
 }

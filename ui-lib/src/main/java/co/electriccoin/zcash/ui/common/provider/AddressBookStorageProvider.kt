@@ -9,7 +9,7 @@ import java.nio.file.LinkOption
 interface AddressBookStorageProvider {
     fun getStorageFile(addressBookKey: AddressBookKey): File?
 
-    fun getLegacyUnencryptedStorageFile(): File?
+    fun getLegacyUnencryptedStorageTarget(): File
 
     fun getStorageTarget(addressBookKey: AddressBookKey): File
 }
@@ -21,9 +21,8 @@ class AddressBookStorageProviderImpl(
         File(getOrCreateAddressBookDir(), addressBookKey.fileIdentifier())
             .takeUnless { Files.notExists(it.toPath(), LinkOption.NOFOLLOW_LINKS) }
 
-    override fun getLegacyUnencryptedStorageFile(): File? =
+    override fun getLegacyUnencryptedStorageTarget(): File =
         File(context.noBackupFilesDir, LEGACY_UNENCRYPTED_ADDRESS_BOOK_FILE_NAME)
-            .takeUnless { Files.notExists(it.toPath(), LinkOption.NOFOLLOW_LINKS) }
 
     override fun getStorageTarget(addressBookKey: AddressBookKey): File {
         val directory = getOrCreateAddressBookDir()

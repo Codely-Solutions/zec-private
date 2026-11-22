@@ -41,7 +41,7 @@ class MetadataKey(
                     "file_identifier".toByteArray(),
                     METADATA_FILE_IDENTIFIER_SIZE
                 )
-            "zashi-metadata-" + fileIdentifier.toHexString()
+            METADATA_FILE_IDENTIFIER_PREFIX + fileIdentifier.toHexString()
         }
     }
 
@@ -101,3 +101,5 @@ class MetadataKey(
         }
     }
 }
+
+internal const val METADATA_FILE_IDENTIFIER_PREFIX = "zashi-metadata-"

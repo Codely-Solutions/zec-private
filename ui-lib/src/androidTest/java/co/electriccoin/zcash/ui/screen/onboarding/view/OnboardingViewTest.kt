@@ -8,6 +8,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.filters.MediumTest
 import co.electriccoin.zcash.test.UiTestPrerequisites
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.repository.WalletInitializationState
 import co.electriccoin.zcash.ui.screen.onboarding.OnboardingTestSetup
 import co.electriccoin.zcash.ui.test.getStringResource
 import org.junit.Assert.assertEquals
@@ -63,6 +64,25 @@ class OnboardingViewTest : UiTestPrerequisites() {
         newWalletButton.performClick()
 
         assertEquals(1, testSetup.getOnCreateWalletCallbackCount())
+        assertEquals(0, testSetup.getOnImportWalletCallbackCount())
+    }
+
+    @Test
+    @MediumTest
+    fun unfinishedSetupOffersOnlyContinue() {
+        val testSetup = OnboardingTestSetup(composeTestRule)
+        testSetup.setDefaultContent(WalletInitializationState.INCOMPLETE)
+
+        composeTestRule.onNodeWithText(getStringResource(R.string.plainOnboarding_button_createNewWallet))
+            .assertDoesNotExist()
+        composeTestRule.onNodeWithText(getStringResource(R.string.plainOnboarding_button_restoreWallet))
+            .assertDoesNotExist()
+        composeTestRule.onNodeWithText(getStringResource(R.string.wallet_initialization_continue))
+            .assertIsEnabled()
+            .performClick()
+
+        assertEquals(1, testSetup.getOnContinueWalletCallbackCount())
+        assertEquals(0, testSetup.getOnCreateWalletCallbackCount())
         assertEquals(0, testSetup.getOnImportWalletCallbackCount())
     }
 

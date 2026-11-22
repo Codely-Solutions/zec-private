@@ -6,9 +6,11 @@ import com.google.crypto.tink.InsecureSecretKeyAccess
 import com.google.crypto.tink.util.SecretBytes
 import io.mockk.every
 import io.mockk.mockk
+import org.junit.Assume.assumeNoException
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
 import java.nio.file.NoSuchFileException
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
@@ -182,7 +184,7 @@ class MetadataStorageProviderTest {
     }
 
     @Test
-    fun deleteStorageFilesRemovesEveryFileOfTheKeyAndNothingElse() {
+    fun deleteStorageFilesRemovesOwnedVariantsAndPreservesUnrelatedPaths() {
         val key = metadataKey(0, 1)
         val (canonicalName, legacyName) = key.fileIdentifiers()
         val keyFiles =
@@ -194,16 +196,23 @@ class MetadataStorageProviderTest {
                 metadataFile("$legacyName.tmp", contents = "partial"),
                 metadataFile("$legacyName.undecodable-2", contents = "aside"),
             )
-        val unrelated = metadataFile("unrelated", contents = "other")
+        val unrelated = listOf(
+            metadataFile("unrelated", contents = "other"),
+            metadataFile("$canonicalName.save", contents = "other"),
+            metadataFile("$legacyName.undecodable-note", contents = "other"),
+            metadataFile("zashi-metadata-note.tmp", contents = "other"),
+        )
+        val nested = File(metadataDir, "archive").apply { mkdirs() }
+        val nestedFile = File(nested, canonicalName).apply { writeText("other") }
 
-        provider.deleteStorageFiles(key)
+        repeat(2) { provider.deleteStorageFiles() }
 
         assertEquals(emptyList(), keyFiles.filter { it.exists() })
-        assertTrue(unrelated.exists())
+        (unrelated + nestedFile).forEach { assertEquals("other", it.readText()) }
     }
 
     @Test
-    fun deleteStorageFilesStillRemovesFilesByNameWhenListingFails() {
+    fun deleteStorageFilesFailsWhenListingFails() {
         val key = metadataKey(0, 1)
         val (canonicalName, legacyName) = key.fileIdentifiers()
         val namedFiles =
@@ -215,12 +224,12 @@ class MetadataStorageProviderTest {
         try {
             assumeTrue(metadataDir.setReadable(false) && metadataDir.listFiles() == null)
 
-            assertFailsWith<IOException> { provider.deleteStorageFiles(key) }
+            assertFailsWith<IOException> { provider.deleteStorageFiles() }
         } finally {
             metadataDir.setReadable(true)
         }
 
-        assertEquals(emptyList(), namedFiles.filter { it.exists() })
+        assertTrue(namedFiles.all { it.exists() })
     }
 
     @Test
@@ -239,10 +248,44 @@ class MetadataStorageProviderTest {
         File(undeletable, "child").writeText("keeps the directory non-empty")
         val legacyFile = metadataFile(key.fileIdentifiers()[1], contents = "legacy")
 
-        assertFailsWith<IOException> { provider.deleteStorageFiles(key) }
+        assertFailsWith<IOException> { provider.deleteStorageFiles() }
 
         assertTrue(undeletable.exists())
         assertFalse(legacyFile.exists())
+    }
+
+    @Test
+    fun deleteStorageFilesUnlinksOwnedNameWithoutFollowingItsTarget() {
+        val unrelated = File(filesDir, "unrelated").apply { writeText("other") }
+        metadataDir.mkdir()
+        val link = File(metadataDir, metadataKey(0).fileIdentifier()).toPath()
+        try {
+            runCatchingRecoverable { Files.createSymbolicLink(link, unrelated.toPath()) }
+                .onFailure { assumeNoException(it) }
+
+            provider.deleteStorageFiles()
+
+            assertFalse(Files.isSymbolicLink(link))
+            assertEquals("other", unrelated.readText())
+        } finally {
+            Files.deleteIfExists(link)
+        }
+    }
+
+    @Test
+    fun deleteStorageFilesRefusesASymlinkedMetadataDirectory() {
+        val otherDirectory = File(filesDir, "other").apply { mkdir() }
+        val unrelated = File(otherDirectory, metadataKey(0).fileIdentifier()).apply { writeText("other") }
+        val link = metadataDir.toPath()
+        try {
+            runCatchingRecoverable { Files.createSymbolicLink(link, otherDirectory.toPath()) }
+                .onFailure { assumeNoException(it) }
+
+            assertFailsWith<IOException> { provider.deleteStorageFiles() }
+            assertEquals("other", unrelated.readText())
+        } finally {
+            Files.deleteIfExists(link)
+        }
     }
 
     @Test
@@ -256,7 +299,7 @@ class MetadataStorageProviderTest {
                     }
             )
 
-        assertFailsWith<IllegalStateException> { failingProvider.deleteStorageFiles(metadataKey(0, 1)) }
+        assertFailsWith<IllegalStateException> { failingProvider.deleteStorageFiles() }
     }
 
     private fun metadataFile(identifier: String, contents: String = ""): File {

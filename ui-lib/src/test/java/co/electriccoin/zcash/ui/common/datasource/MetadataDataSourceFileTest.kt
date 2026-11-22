@@ -124,21 +124,25 @@ class MetadataDataSourceFileTest {
         }
 
     @Test
-    fun deleteWipesEveryFileOfTheKeyAndEmitsNull() =
+    fun deleteWipesEveryOwnedFileAndEmitsNullToEveryAccount() =
         runTest {
             write(canonicalName, metadata(lastUpdated = 1))
             val dataSource = dataSource()
             val emitted = collectEmissions(dataSource, key)
+            val removedKey = metadataKey(9)
+            write(removedKey.fileIdentifier(), metadata(lastUpdated = 1), removedKey)
+            val removedEmissions = collectEmissions(dataSource, removedKey)
             write(legacyName, metadata(lastUpdated = 1), metadataKey(1))
             File(metadataDir, "$canonicalName.undecodable-5").writeText("aside")
             File(metadataDir, "$canonicalName.tmp").writeText("partial")
             File(metadataDir, "unrelated").writeText("other")
 
-            dataSource.delete(key)
+            dataSource.delete()
             runCurrent()
 
             assertEquals(listOf("unrelated"), fileNames())
             assertNull(emitted.last())
+            assertNull(removedEmissions.last())
         }
 
     @Test

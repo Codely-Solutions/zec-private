@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.repository
 
 import android.app.Application
 import android.content.res.Resources
+import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.WalletInitMode
 import cash.z.ecc.android.sdk.model.BlockHeight
@@ -27,6 +28,7 @@ import co.electriccoin.zcash.ui.common.provider.WalletBackupFlagStorageProvider
 import co.electriccoin.zcash.ui.common.provider.WalletRestoringStateProvider
 import co.electriccoin.zcash.ui.common.usecase.RestoreWalletUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.SecretState
+import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
 import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -37,19 +39,23 @@ import io.mockk.unmockkAll
 import io.mockk.verify
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.setMain
 import java.io.IOException
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -80,6 +86,7 @@ class WalletRepositoryImplTest {
     fun tearDown() {
         scopes.forEach { it.cancel() }
         scopes.clear()
+        Dispatchers.resetMain()
         unmockkAll()
     }
 
@@ -155,13 +162,29 @@ class WalletRepositoryImplTest {
         }
 
     @Test
-    fun repositoryRecreationWithUnfinishedOnboardingPreservesTheStoredWallet() =
+    fun repositoryRecreationOffersContinueAndPreservesTheStoredWallet() =
         runTest {
-            val storedWallet = fixtureWallet()
+            Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+            val (previous, previousHarness) = newRepository(OnboardingState.NONE, null)
+            previous.useTestScope(testScheduler)
+            coEvery { previousHarness.restoringProvider.store(any()) } throws IOException("Interrupted after wallet write")
+            assertFailsWith<IllegalStateException> { previous.restoreFixture().await() }
+            val storedWallet = previousHarness.walletProvider.requirePersistableWallet()
             val (repository, harness) = newRepository(OnboardingState.NONE, storedWallet)
             repository.useTestScope(testScheduler)
+            val viewModel = WalletViewModel(mockk { every { synchronizer } returns MutableStateFlow(null) }, repository)
+            scopes += viewModel.viewModelScope
+            assertEquals(
+                WalletInitializationState.INCOMPLETE,
+                viewModel.walletInitialization.first { it != WalletInitializationState.CHECKING }
+            )
 
-            repository.createNewWallet()
+            viewModel.createNewWallet()
+            advanceUntilIdle()
+            assertTrue(harness.events.isEmpty())
+            assertEquals("0", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
+
+            repeat(3) { viewModel.continueWalletSetup() }
             advanceUntilIdle()
 
             val recovered = harness.walletProvider.requirePersistableWallet()
@@ -171,6 +194,22 @@ class WalletRepositoryImplTest {
             assertEquals(listOf("wallet", "restoring=RESTORING", "onboarding=3"), harness.events)
             coVerify(exactly = 0) { PersistableWallet.new(any(), any(), any(), any()) }
             coVerify(exactly = 0) { harness.backupProvider.store(any()) }
+        }
+
+    @Test
+    fun walletSetupRemainsCheckingUntilEncryptedWalletIsRead() =
+        runTest {
+            val walletLoaded = CompletableDeferred<PersistableWallet?>()
+            val provider = mockk<PersistableWalletProvider> {
+                every { persistableWallet } returns flow { emit(walletLoaded.await()) }
+            }
+            val (repository, _) = newRepository(OnboardingState.NONE, null, provider)
+            assertEquals(WalletInitializationState.CHECKING, repository.walletInitialization.value)
+            walletLoaded.complete(fixtureWallet())
+            assertEquals(
+                WalletInitializationState.INCOMPLETE,
+                repository.walletInitialization.first { it != WalletInitializationState.CHECKING }
+            )
         }
 
     @Test
@@ -188,7 +227,10 @@ class WalletRepositoryImplTest {
                 ).await()
             }
             assertEquals(emptyList(), harness.events)
-            repository.restoreFixture().await()
+            assertFailsWith<WalletInitializationConflictException> { repository.restoreFixture().await() }
+            assertTrue(harness.events.isEmpty())
+            repository.continueWalletSetup()
+            advanceUntilIdle()
 
             val recovered = harness.walletProvider.requirePersistableWallet()
             assertTrue(recovered.seedPhrase == storedWallet.seedPhrase)
@@ -204,15 +246,15 @@ class WalletRepositoryImplTest {
             val (repository, harness) = newRepository(OnboardingState.NONE, storedWallet)
             repository.useTestScope(testScheduler)
             coEvery { harness.restoringProvider.store(any()) } throws IllegalStateException("test failure")
-            repository.createNewWallet()
+            repository.continueWalletSetup()
             advanceUntilIdle()
-            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
 
             coEvery { harness.restoringProvider.store(any()) } returns Unit
             repository.retryWalletInitialization()
             advanceUntilIdle()
             assertTrue(harness.walletProvider.requirePersistableWallet().seedPhrase == storedWallet.seedPhrase)
-            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
             coVerify(exactly = 0) { PersistableWallet.new(any(), any(), any(), any()) }
             coVerify(exactly = 0) { harness.backupProvider.store(any()) }
         }
@@ -267,7 +309,7 @@ class WalletRepositoryImplTest {
             repository.createNewWallet()
             advanceUntilIdle()
 
-            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
             assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
             assertEquals("0", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
             coVerify(exactly = 0) { harness.restoringProvider.store(any()) }
@@ -282,7 +324,7 @@ class WalletRepositoryImplTest {
             advanceUntilIdle()
 
             assertEquals(accepted, walletProvider.requirePersistableWallet())
-            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
             assertEquals("3", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
             coVerify(exactly = 1) { PersistableWallet.new(any(), any(), any(), any()) }
             assertEquals(listOf("wallet", "restoring=INITIATING", "onboarding=3"), harness.events)
@@ -299,7 +341,7 @@ class WalletRepositoryImplTest {
             repository.restoreFixture()
             advanceUntilIdle()
             val accepted = walletProvider.requirePersistableWallet()
-            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
             assertEquals("0", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
             coVerify(exactly = 0) { harness.backupProvider.store(any()) }
 
@@ -308,7 +350,7 @@ class WalletRepositoryImplTest {
             advanceUntilIdle()
 
             assertEquals(accepted, walletProvider.requirePersistableWallet())
-            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
             assertEquals("3", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
             coVerify(exactly = 0) { PersistableWallet.new(any(), any(), any(), any()) }
             coVerify(exactly = 1) { harness.backupProvider.store(true) }
@@ -323,7 +365,7 @@ class WalletRepositoryImplTest {
 
             repository.createNewWallet()
             advanceUntilIdle()
-            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
             val accepted = harness.walletProvider.getPersistableWallet()
 
             coEvery { harness.restoringProvider.store(any()) } returns Unit
@@ -332,7 +374,7 @@ class WalletRepositoryImplTest {
 
             assertEquals(accepted, harness.walletProvider.getPersistableWallet())
             assertEquals("3", harness.fakePrefs.getString(StandardPreferenceKeys.ONBOARDING_STATE.key))
-            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
             coVerify(exactly = 1) { PersistableWallet.new(any(), any(), any(), any()) }
             coVerify { harness.restoringProvider.store(WalletRestoringState.INITIATING) }
             coVerify(exactly = 0) { harness.restoringProvider.store(WalletRestoringState.RESTORING) }
@@ -353,7 +395,7 @@ class WalletRepositoryImplTest {
             advanceUntilIdle()
 
             assertTrue(harness.walletProvider.requirePersistableWallet().seedPhrase == acceptedSeed)
-            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
             coVerify(exactly = 1) { harness.backupProvider.store(true) }
             coVerify(exactly = 0) { PersistableWallet.new(any(), any(), any(), any()) }
         }
@@ -367,14 +409,14 @@ class WalletRepositoryImplTest {
 
             repository.createNewWallet()
             advanceUntilIdle()
-            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
             assertEquals(emptyList(), harness.events)
 
             repository.useTestScope(testScheduler)
             repository.createNewWallet()
             advanceUntilIdle()
             assertEquals(1, harness.events.count { it == "wallet" })
-            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
         }
 
     @Test
@@ -394,14 +436,14 @@ class WalletRepositoryImplTest {
 
             repository.scope.cancel()
             advanceUntilIdle()
-            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
 
             coEvery { harness.restoringProvider.store(any()) } returns Unit
             repository.useTestScope(testScheduler)
             repository.createNewWallet()
             advanceUntilIdle()
             assertEquals(accepted, harness.walletProvider.getPersistableWallet())
-            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
             coVerify(exactly = 1) { PersistableWallet.new(any(), any(), any(), any()) }
         }
 
@@ -422,7 +464,7 @@ class WalletRepositoryImplTest {
 
             repeat(3) { repository.createNewWallet() }
             runCurrent()
-            assertEquals(WalletInitializationState.RUNNING, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.RUNNING }
             assertEquals(0, harness.events.count { it == "wallet" })
 
             finishRecovery.complete(Unit)
@@ -454,11 +496,11 @@ class WalletRepositoryImplTest {
 
             assertFailsWith<WalletInitializationConflictException> { restore(seed, false, corrected) }
             assertFailsWith<WalletInitializationConflictException> { restore(seed, true, original) }
-            assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.FAILED }
             assertEquals(original, harness.walletProvider.requirePersistableWallet().birthday)
 
             restore(seed, false, original)
-            assertEquals(WalletInitializationState.IDLE, repository.walletInitialization.value)
+            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
             assertEquals(original, harness.walletProvider.requirePersistableWallet().birthday)
         }
 
@@ -624,6 +666,7 @@ class WalletRepositoryImplTest {
             }
 
         val fakePrefs = RecordingPreferenceProvider(events)
+        fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())
         val standardPreferenceProvider = mockk<StandardPreferenceProvider>()
         coEvery { standardPreferenceProvider() } returns fakePrefs
 
@@ -658,8 +701,6 @@ class WalletRepositoryImplTest {
                 sdkEncryptedPreferenceRecoveryProvider = sdkEncryptedPreferenceRecoveryProvider,
                 isTorEnabledStorageProvider = mockk(relaxed = true),
             )
-
-        fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())
 
         scopes += repository.scope
         scopes += repository.sharingScope

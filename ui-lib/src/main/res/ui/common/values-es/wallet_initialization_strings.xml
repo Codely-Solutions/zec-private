@@ -2,5 +2,9 @@
 <resources>
     <string name="wallet_initialization_failed">No se pudo terminar la configuración de la billetera. Inténtalo de nuevo para continuar con la misma configuración.</string>
     <string name="wallet_initialization_retry">Intentar de nuevo</string>
+    <string name="wallet_initialization_checking">Comprobando la configuración de la billetera</string>
+    <string name="wallet_initialization_running">Configurando la billetera</string>
+    <string name="wallet_initialization_incomplete">Ya hay una billetera guardada en este dispositivo. Completa la configuración para usarla. Después podrás restablecerla en Ajustes.</string>
+    <string name="wallet_initialization_continue">Continuar con la configuración de la billetera</string>
     <string name="wallet_initialization_conflict">Ya se inició otra configuración de billetera. Vuelve a la pantalla de bienvenida para completarla o vuelve a intentarlo con su frase y opciones de recuperación originales.</string>
 </resources>

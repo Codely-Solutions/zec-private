@@ -47,7 +47,9 @@ private fun OnboardingComposablePreview() {
     ZcashTheme {
         Onboarding(
             onImportWallet = {},
-            onCreateWallet = {}
+            onCreateWallet = {},
+            onContinueWallet = {},
+            onRetrySetup = {}
         )
     }
 }
@@ -60,6 +62,8 @@ private fun OnboardingComposablePreview() {
 fun Onboarding(
     onImportWallet: () -> Unit,
     onCreateWallet: () -> Unit,
+    onContinueWallet: () -> Unit,
+    onRetrySetup: () -> Unit,
     initialization: WalletInitializationState = WalletInitializationState.IDLE
 ) {
     Scaffold { paddingValues ->
@@ -87,6 +91,8 @@ fun Onboarding(
                 initialization = initialization,
                 onImportWallet = onImportWallet,
                 onCreateWallet = onCreateWallet,
+                onContinueWallet = onContinueWallet,
+                onRetrySetup = onRetrySetup,
                 modifier =
                     Modifier
                         .padding(
@@ -104,6 +110,8 @@ fun Onboarding(
 private fun OnboardingMainContent(
     onImportWallet: () -> Unit,
     onCreateWallet: () -> Unit,
+    onContinueWallet: () -> Unit,
+    onRetrySetup: () -> Unit,
     initialization: WalletInitializationState,
     modifier: Modifier = Modifier,
 ) {
@@ -144,9 +152,14 @@ private fun OnboardingMainContent(
                     .weight(MINIMAL_WEIGHT)
         )
 
-        if (initialization == WalletInitializationState.FAILED) {
+        val message = when (initialization) {
+            WalletInitializationState.FAILED -> R.string.wallet_initialization_failed
+            WalletInitializationState.INCOMPLETE -> R.string.wallet_initialization_incomplete
+            else -> null
+        }
+        if (message != null) {
             Text(
-                text = stringResource(R.string.wallet_initialization_failed),
+                text = stringResource(message),
                 style = ZashiTypography.textSm,
                 color = ZashiColors.Text.textSecondary,
                 textAlign = TextAlign.Center
@@ -154,27 +167,41 @@ private fun OnboardingMainContent(
             Spacer(modifier = Modifier.height(ZashiDimensions.Spacing.spacingMd))
         }
 
-        ZashiButton(
-            modifier = Modifier.fillMaxWidth().testTag(OnboardingTags.RESTORE_EXISTING_WALLET),
-            text = stringResource(R.string.plainOnboarding_button_restoreWallet),
-            onClick = onImportWallet,
-            enabled = initialization == WalletInitializationState.IDLE,
-            colors = ZashiButtonDefaults.tertiaryColors()
-        )
+        if (initialization == WalletInitializationState.IDLE) {
+            ZashiButton(
+                modifier = Modifier.fillMaxWidth().testTag(OnboardingTags.RESTORE_EXISTING_WALLET),
+                text = stringResource(R.string.plainOnboarding_button_restoreWallet),
+                onClick = onImportWallet,
+                colors = ZashiButtonDefaults.tertiaryColors()
+            )
+            Spacer(modifier = Modifier.height(ZashiDimensions.Spacing.spacingMd))
+        }
 
-        Spacer(modifier = Modifier.height(ZashiDimensions.Spacing.spacingMd))
-
         ZashiButton(
-            onClick = onCreateWallet,
-            isLoading = initialization == WalletInitializationState.RUNNING,
+            onClick = when (initialization) {
+                WalletInitializationState.INCOMPLETE -> onContinueWallet
+                WalletInitializationState.FAILED -> onRetrySetup
+                else -> onCreateWallet
+            },
+            enabled = initialization != WalletInitializationState.CHECKING,
+            isLoading = initialization == WalletInitializationState.CHECKING ||
+                initialization == WalletInitializationState.RUNNING,
             text = stringResource(
-                if (initialization == WalletInitializationState.FAILED) {
-                    R.string.wallet_initialization_retry
-                } else {
-                    R.string.plainOnboarding_button_createNewWallet
+                when (initialization) {
+                    WalletInitializationState.CHECKING -> R.string.wallet_initialization_checking
+                    WalletInitializationState.RUNNING -> R.string.wallet_initialization_running
+                    WalletInitializationState.INCOMPLETE -> R.string.wallet_initialization_continue
+                    WalletInitializationState.FAILED -> R.string.wallet_initialization_retry
+                    WalletInitializationState.IDLE -> R.string.plainOnboarding_button_createNewWallet
                 }
             ),
-            modifier = Modifier.fillMaxWidth().testTag(OnboardingTags.CREATE_NEW_WALLET),
+            modifier = Modifier.fillMaxWidth().let {
+                when (initialization) {
+                    WalletInitializationState.IDLE -> it.testTag(OnboardingTags.CREATE_NEW_WALLET)
+                    WalletInitializationState.INCOMPLETE -> it.testTag(OnboardingTags.CONTINUE_WALLET_SETUP)
+                    else -> it
+                }
+            },
             hapticFeedbackType = HapticFeedbackType.Confirm
         )
     }

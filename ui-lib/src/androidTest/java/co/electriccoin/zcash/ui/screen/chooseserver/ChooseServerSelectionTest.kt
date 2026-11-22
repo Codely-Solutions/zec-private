@@ -318,6 +318,8 @@ private class FakeWalletRepository(
 
     override fun createNewWallet() = Unit
 
+    override fun continueWalletSetup() = Unit
+
     override fun retryWalletInitialization() = Unit
 
     override fun restoreWallet(

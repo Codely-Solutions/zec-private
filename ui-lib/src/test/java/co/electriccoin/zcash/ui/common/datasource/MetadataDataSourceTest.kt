@@ -1013,12 +1013,12 @@ class MetadataDataSourceTest {
     @Test
     fun deleteRemovesEveryFileThroughTheStorageProvider() =
         runTest {
-            every { metadataStorageProvider.deleteStorageFiles(key) } just Runs
+            every { metadataStorageProvider.deleteStorageFiles() } just Runs
             every { metadataStorageProvider.getStorageFiles(key) } throws IOException()
 
-            dataSource().delete(key)
+            dataSource().delete()
 
-            verify(exactly = 1) { metadataStorageProvider.deleteStorageFiles(key) }
+            verify(exactly = 1) { metadataStorageProvider.deleteStorageFiles() }
         }
 
     @Test

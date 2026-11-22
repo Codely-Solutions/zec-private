@@ -1,12 +1,12 @@
 package co.electriccoin.zcash.ui.common.datasource
 
-import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.common.model.AddressBook
 import co.electriccoin.zcash.ui.common.model.AddressBookContact
 import co.electriccoin.zcash.ui.common.provider.ADDRESS_BOOK_TEMP_FILE_SUFFIX
 import co.electriccoin.zcash.ui.common.provider.AddressBookProvider
 import co.electriccoin.zcash.ui.common.provider.AddressBookStorageProvider
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.serialization.ADDRESS_BOOK_SERIALIZATION_V2
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookKey
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +22,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.file.Files
+import java.nio.file.LinkOption
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -56,6 +57,7 @@ class AddressBookDataSourceImpl(
     private val mutex = Mutex()
 
     private val revision = MutableStateFlow(0L)
+    private var legacyDirectorySynced = false
 
     override fun observe(key: AddressBookKey): Flow<AddressBook?> =
         revision
@@ -102,10 +104,7 @@ class AddressBookDataSourceImpl(
                 Files.deleteIfExists(target.toPath())
                 Files.deleteIfExists(File(target.parentFile, target.name + ADDRESS_BOOK_TEMP_FILE_SUFFIX).toPath())
                 directorySync.sync(checkNotNull(target.parentFile))
-                addressBookStorageProvider.getLegacyUnencryptedStorageFile()?.let {
-                    Files.deleteIfExists(it.toPath())
-                    directorySync.sync(checkNotNull(it.parentFile))
-                }
+                retireLegacy(addressBookStorageProvider.getLegacyUnencryptedStorageTarget())
                 revision.update { it + 1 }
             }
         }
@@ -113,18 +112,41 @@ class AddressBookDataSourceImpl(
 
     private fun getAddressBookInternal(addressBookKey: AddressBookKey): AddressBook {
         val encrypted = addressBookStorageProvider.getStorageFile(addressBookKey)
-        val legacy = if (encrypted == null) addressBookStorageProvider.getLegacyUnencryptedStorageFile() else null
+        val legacy = addressBookStorageProvider.getLegacyUnencryptedStorageTarget()
+        val hasLegacy = !Files.notExists(legacy.toPath(), LinkOption.NOFOLLOW_LINKS)
         return when {
-            encrypted != null -> addressBookProvider.readAddressBookFromFile(encrypted, addressBookKey)
-            legacy != null -> {
-                val book = addressBookProvider.readLegacyUnencryptedAddressBookFromFile(legacy)
-                    .copy(version = ADDRESS_BOOK_SERIALIZATION_V2)
+            encrypted != null -> addressBookProvider.readAddressBookFromFile(encrypted, addressBookKey).also { book ->
+                // The authenticated replacement must contain the complete legacy book before unlinking it.
+                if (hasLegacy && runCatchingRecoverable { readLegacy(legacy) }.getOrNull() == book) {
+                    directorySync.sync(checkNotNull(encrypted.parentFile))
+                    retireLegacy(legacy)
+                } else if (!hasLegacy && !legacyDirectorySynced) {
+                    // An earlier unlink may have landed without the legacy directory flush.
+                    syncLegacyDirectory(legacy)
+                }
+            }
+            hasLegacy -> {
+                val book = readLegacy(legacy)
                 writeToLocalStorage(book, addressBookKey)
-                if (!legacy.delete()) Twig.warn { "Unable to remove migrated address book" }
+                retireLegacy(legacy)
                 book
             }
             else -> AddressBook(lastUpdated = getTimestampNow(), contacts = emptyList())
         }
+    }
+
+    private fun readLegacy(file: File): AddressBook =
+        addressBookProvider.readLegacyUnencryptedAddressBookFromFile(file).copy(version = ADDRESS_BOOK_SERIALIZATION_V2)
+
+    private fun retireLegacy(file: File) {
+        legacyDirectorySynced = false
+        Files.deleteIfExists(file.toPath())
+        syncLegacyDirectory(file)
+    }
+
+    private fun syncLegacyDirectory(file: File) {
+        directorySync.sync(checkNotNull(file.parentFile))
+        legacyDirectorySynced = true
     }
 
     private fun writeToLocalStorage(addressBook: AddressBook, key: AddressBookKey) {

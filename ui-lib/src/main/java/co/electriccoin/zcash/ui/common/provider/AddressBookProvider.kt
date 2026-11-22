@@ -72,7 +72,9 @@ class AddressBookProviderImpl(
 
     override fun readLegacyUnencryptedAddressBookFromFile(file: File): AddressBook =
         file.inputStream().use { stream ->
-            addressBookSerializer.deserializeAddressBook(stream)
+            addressBookSerializer.deserializeAddressBook(stream).also {
+                require(stream.read() == -1) { "Unexpected trailing data in legacy address book" }
+            }
         }
 }
 

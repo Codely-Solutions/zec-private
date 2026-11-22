@@ -7,7 +7,6 @@ import cash.z.ecc.android.sdk.model.SeedPhrase
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.zcash.ui.common.model.migration.MIGRATION_DUST_THRESHOLD_ZATOSHI
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
-import co.electriccoin.zcash.ui.common.repository.WalletInitializationState
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
 import co.electriccoin.zcash.ui.screen.ironwood.IronwoodActivation
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -72,13 +71,11 @@ class WalletViewModel(
                 initialValue = false
             )
 
-    fun createNewWallet() {
-        if (walletInitialization.value == WalletInitializationState.FAILED) {
-            walletRepository.retryWalletInitialization()
-        } else {
-            walletRepository.createNewWallet()
-        }
-    }
+    fun createNewWallet() = walletRepository.createNewWallet()
+
+    fun continueWalletSetup() = walletRepository.continueWalletSetup()
+
+    fun retryWalletInitialization() = walletRepository.retryWalletInitialization()
 
     fun persistExistingWalletWithSeedPhrase(
         network: ZcashNetwork,

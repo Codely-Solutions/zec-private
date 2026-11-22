@@ -325,8 +325,7 @@ class MetadataRepositoryImpl(
 
     override suspend fun delete() {
         mutex.withLock {
-            val keys = accountDataSource.getAllAccounts().map { getMetadataKey(it) }
-            keys.forEach { metadataDataSource.delete(it) }
+            metadataDataSource.delete()
         }
     }
 

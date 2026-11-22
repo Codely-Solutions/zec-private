@@ -2,5 +2,9 @@
 <resources>
     <string name="wallet_initialization_failed">Wallet setup could not finish. Try again to continue the same setup.</string>
     <string name="wallet_initialization_retry">Try again</string>
+    <string name="wallet_initialization_checking">Checking wallet setup</string>
+    <string name="wallet_initialization_running">Setting up wallet</string>
+    <string name="wallet_initialization_incomplete">A wallet is already stored on this device. Finish setup to use it. You can reset the wallet in Settings after setup.</string>
+    <string name="wallet_initialization_continue">Continue wallet setup</string>
     <string name="wallet_initialization_conflict">A different wallet setup was already started. Return to the welcome screen to finish that setup, or retry with its original recovery phrase and options.</string>
 </resources>

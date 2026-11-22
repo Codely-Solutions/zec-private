@@ -56,6 +56,8 @@ fun NavGraphBuilder.onboardingNavGraph(
             val initialization by walletViewModel.walletInitialization.collectAsStateWithLifecycle()
             Onboarding(
                 initialization = initialization,
+                onContinueWallet = walletViewModel::continueWalletSetup,
+                onRetrySetup = walletViewModel::retryWalletInitialization,
                 onImportWallet = {
                     if (FirebaseTestLabUtil.isFirebaseTestLab(activity.applicationContext)) {
                         persistExistingWalletWithSeedPhrase(

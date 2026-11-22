@@ -1,12 +1,15 @@
 package co.electriccoin.zcash.ui.common.provider
 
 import android.content.Context
+import co.electriccoin.zcash.ui.common.serialization.METADATA_FILE_IDENTIFIER_SIZE
+import co.electriccoin.zcash.ui.common.serialization.metadata.METADATA_FILE_IDENTIFIER_PREFIX
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataKey
 import kotlinx.coroutines.CancellationException
 import java.io.File
 import java.io.IOException
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
+import java.nio.file.LinkOption
 
 interface MetadataStorageProvider {
     /**
@@ -39,10 +42,11 @@ interface MetadataStorageProvider {
     fun setAsideUndecodable(file: File): Boolean
 
     /**
-     * Deletes every file of [key]: each identifier's own file and its temporary write file by name,
-     * and the files set aside under it. Throws when any target could not be found or removed.
+     * Deletes locally stored account metadata, including files for removed accounts and wallets
+     * retained by earlier resets. Only direct children matching the generated storage names are
+     * targets. An unsuccessful deletion or directory sync must fail the reset.
      */
-    fun deleteStorageFiles(key: MetadataKey)
+    fun deleteStorageFiles()
 }
 
 class MetadataStorageProviderImpl(
@@ -97,16 +101,21 @@ class MetadataStorageProviderImpl(
             false
         }
 
-    override fun deleteStorageFiles(key: MetadataKey) {
+    override fun deleteStorageFiles() {
         val dir = getOrCreateMetadataDir()
-        val dirFiles = dir.listFiles()
-        var failed = dirFiles == null
-        key.fileIdentifiers().forEach { identifier ->
-            val setAside = dirFiles.orEmpty().filter { it.name.startsWith(identifier + UNDECODABLE_INFIX) }
-            (listOf(File(dir, identifier), File(dir, identifier + METADATA_TEMP_FILE_SUFFIX)) + setAside)
-                .forEach { file ->
-                    if (runCatchingRecoverable { Files.deleteIfExists(file.toPath()) }.isFailure) failed = true
-                }
+        if (!Files.isDirectory(dir.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+            throw IOException("Metadata directory is unavailable")
+        }
+        val targets = dir.listFiles { file -> ownedFileName.matches(file.name) }
+            ?: throw IOException("Failed to list metadata files")
+        var failed = false
+        targets.forEach { file ->
+            val path = file.toPath()
+            if (Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS) ||
+                runCatchingRecoverable { Files.deleteIfExists(path) }.isFailure
+            ) {
+                failed = true
+            }
         }
         if (failed) throw IOException("Could not remove all wallet metadata")
         directorySync.sync(dir)
@@ -114,11 +123,18 @@ class MetadataStorageProviderImpl(
 
     private fun getOrCreateMetadataDir(): File {
         val filesDir = context.filesDir
-        val addressBookDir = File(filesDir, "metadata")
-        if (!addressBookDir.exists()) {
-            addressBookDir.mkdir()
+        val metadataDir = File(filesDir, "metadata")
+        if (!metadataDir.exists()) {
+            metadataDir.mkdir()
         }
-        return addressBookDir
+        return metadataDir
+    }
+
+    private companion object {
+        val ownedFileName = Regex(
+            "$METADATA_FILE_IDENTIFIER_PREFIX[0-9a-f]{${METADATA_FILE_IDENTIFIER_SIZE * 2}}" +
+                "(?:${Regex.escape(METADATA_TEMP_FILE_SUFFIX)}|${Regex.escape(UNDECODABLE_INFIX)}-?[0-9]+)?"
+        )
     }
 }
 

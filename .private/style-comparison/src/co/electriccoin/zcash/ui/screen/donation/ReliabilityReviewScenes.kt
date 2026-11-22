@@ -34,12 +34,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 @Composable
 internal fun ReliabilityReviewScene(screen: String, originalAccount: ZodlAccount): Boolean {
     when (screen) {
-        "reliability-onboarding", "reliability-onboarding-pending", "reliability-onboarding-failed" -> Onboarding(
+        "reliability-onboarding", "reliability-onboarding-pending", "reliability-onboarding-failed",
+        "reliability-onboarding-incomplete" -> Onboarding(
             onImportWallet = {},
             onCreateWallet = {},
+            onContinueWallet = {},
+            onRetrySetup = {},
             initialization = when (screen) {
                 "reliability-onboarding-pending" -> WalletInitializationState.RUNNING
                 "reliability-onboarding-failed" -> WalletInitializationState.FAILED
+                "reliability-onboarding-incomplete" -> WalletInitializationState.INCOMPLETE
                 else -> WalletInitializationState.IDLE
             }
         )

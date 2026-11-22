@@ -93,6 +93,76 @@ class AddressBookDurabilityTest {
     }
 
     @Test
+    fun migrationRetiresLegacyPlaintextAfterPostRenameSyncFailure() = runTest {
+        val fixture = Fixture()
+        val legacyBytes = fixture.writeLegacy()
+        val failingSync = DirectorySync { throw IOException("Synthetic directory sync failure after rename") }
+
+        assertFailsWith<IOException> {
+            fixture.dataSource(sync = failingSync).observe(fixture.key).filterNotNull().first()
+        }
+        assertEquals(oldBook, fixture.provider.readAddressBookFromFile(fixture.file, fixture.key))
+        assertContentEquals(legacyBytes, fixture.legacy.readBytes())
+
+        assertFailsWith<IOException> {
+            fixture.dataSource(sync = failingSync).saveContact("New", "recipient", null, fixture.key)
+        }
+        assertEquals(oldBook, fixture.provider.readAddressBookFromFile(fixture.file, fixture.key))
+        assertContentEquals(legacyBytes, fixture.legacy.readBytes())
+
+        val orphan = fixture.file.resolveSibling(fixture.file.name + ".tmp").also { it.writeText("partial write") }
+        val retry = fixture.dataSource()
+        assertEquals(oldBook, retry.observe(fixture.key).filterNotNull().first())
+        assertFalse(fixture.legacy.exists())
+        retry.saveContact("New", "recipient", null, fixture.key)
+        assertFalse(orphan.exists())
+        assertEquals(listOf("First", "Second", "New"), retry.observe(fixture.key).filterNotNull().first().contacts.map { it.name })
+    }
+
+    @Test
+    fun failedLegacyDirectoryFlushIsRetriedAfterUnlink() = runTest {
+        val fixture = Fixture()
+        fixture.writeLegacy()
+        val failingSync = DirectorySync { directory ->
+            if (directory == fixture.legacy.parentFile) throw IOException("Synthetic legacy directory flush failure")
+        }
+        assertFailsWith<IOException> { fixture.dataSource(sync = failingSync).observe(fixture.key).filterNotNull().first() }
+        assertEquals(oldBook, fixture.provider.readAddressBookFromFile(fixture.file, fixture.key))
+        assertFalse(fixture.legacy.exists())
+        assertFailsWith<IOException> {
+            fixture.dataSource(sync = failingSync).saveContact("New", "recipient", null, fixture.key)
+        }
+
+        val synced = mutableListOf<File>()
+        fixture.dataSource(sync = DirectorySync { synced += it }).saveContact("New", "recipient", null, fixture.key)
+        assertEquals(listOf(fixture.legacy.parentFile, fixture.file.parentFile), synced)
+    }
+
+    @Test
+    fun unrelatedLegacyBookIsPreservedAlongsideAuthenticatedEncryptedBook() = runTest {
+        val fixture = Fixture()
+        val bytes = fixture.writeLegacy()
+        val differentBook = oldBook.copy(lastUpdated = Instant.fromEpochMilliseconds(124))
+        fixture.provider.writeAddressBookToFile(fixture.file, differentBook, fixture.key)
+
+        val source = fixture.dataSource()
+        assertEquals(differentBook, source.observe(fixture.key).filterNotNull().first())
+        source.saveContact("New", "recipient", null, fixture.key)
+        assertContentEquals(bytes, fixture.legacy.readBytes())
+    }
+
+    @Test
+    fun invalidLegacySuffixCannotAuthorizeUnlink() = runTest {
+        val fixture = Fixture()
+        val bytes = fixture.writeLegacy() + byteArrayOf(1)
+        fixture.legacy.writeBytes(bytes)
+        fixture.provider.writeAddressBookToFile(fixture.file, oldBook, fixture.key)
+
+        assertEquals(oldBook, fixture.dataSource().observe(fixture.key).filterNotNull().first())
+        assertContentEquals(bytes, fixture.legacy.readBytes())
+    }
+
+    @Test
     fun retryAfterDirectorySyncFailureDoesNotDuplicateAContact() = runTest {
         val fixture = Fixture()
         val failingSync = DirectorySync { throw IOException("Synthetic directory flush failure") }

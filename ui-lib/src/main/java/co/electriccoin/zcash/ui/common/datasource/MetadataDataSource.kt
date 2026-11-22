@@ -97,7 +97,7 @@ interface MetadataDataSource {
     /** Stores [color] as the account's icon colour. */
     suspend fun setAccountColor(color: Color, key: MetadataKey): Boolean
 
-    suspend fun delete(key: MetadataKey)
+    suspend fun delete()
 }
 
 /**
@@ -116,7 +116,7 @@ class MetadataDataSourceImpl(
 ) : MetadataDataSource {
     private val mutex = Mutex()
 
-    private val metadataUpdatePipeline = MutableSharedFlow<Pair<MetadataKey, MetadataV3?>>()
+    private val metadataUpdatePipeline = MutableSharedFlow<Pair<MetadataKey?, MetadataV3?>>()
 
     /**
      * Non-canonical and set-aside files that failed to decode, remembered for the process lifetime:
@@ -150,7 +150,7 @@ class MetadataDataSourceImpl(
             val initial =
                 mutex.withLock {
                     launch(start = CoroutineStart.UNDISPATCHED) {
-                        metadataUpdatePipeline.collect { (k, m) -> if (k.isSameAs(key)) updates.send(m) }
+                        metadataUpdatePipeline.collect { (k, m) -> if (k == null || k.isSameAs(key)) updates.send(m) }
                     }
                     getMetadataInternal(key)
                 }
@@ -333,11 +333,13 @@ class MetadataDataSourceImpl(
             }
         }
 
-    override suspend fun delete(key: MetadataKey) =
+    override suspend fun delete() =
         withContext(ioDispatcher) {
             mutex.withLock {
-                metadataStorageProvider.deleteStorageFiles(key)
-                metadataUpdatePipeline.emit(key to null)
+                metadataStorageProvider.deleteStorageFiles()
+                undecodableFiles.clear()
+                mergedFiles.clear()
+                metadataUpdatePipeline.emit(null to null)
             }
         }
 
