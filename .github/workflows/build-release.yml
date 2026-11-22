@@ -709,6 +709,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
+      issues: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -718,6 +719,8 @@ jobs:
         env:
           NTFY_URL: ${{ secrets.NTFY_URL }}
           RELEASE_TAG: ${{ needs.publish.outputs.release_tag || needs.reconcile.outputs.release_tag }}
+          GH_TOKEN: ${{ github.token }}
+          RECOVERY_VERIFIED: 'true'
         run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
   failed:
     if: ${{ always() && !inputs.preflight_only && github.ref == 'refs/heads/main' && (needs.admit_hosted.result == 'failure' || needs.preflight.result == 'failure' || needs.quote_bridge.result == 'failure' || needs.signing_smoke.result == 'failure' || needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.testnet_apk.result == 'failure' || needs.hosted_core.result == 'failure' || needs.reserve_quote_retry.result == 'failure' || needs.hosted_quotes.result == 'failure' || needs.recovery_quotes.result == 'failure' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.resume_draft.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
@@ -739,6 +742,7 @@ jobs:
           INTEGRATION: ${{ needs.record_integration.result }}
           HOSTED_ADMISSION: ${{ needs.admit_hosted.result }}
           QUOTE_RESERVATION: ${{ needs.reserve_quote_retry.result }}
+          BLOCKER_DIAGNOSIS: admission=${{ needs.admit_hosted.result }}; preflight=${{ needs.preflight.result }}; quote-bridge=${{ needs.quote_bridge.result }}; signing-smoke=${{ needs.signing_smoke.result }}; unsigned=${{ needs.unsigned.result }}; emulator=${{ needs.emulator.result }}; testnet=${{ needs.testnet_apk.result }}; core=${{ needs.hosted_core.result }}; reservation=${{ needs.reserve_quote_retry.result }}; quotes=${{ needs.hosted_quotes.result }}; recovery-quotes=${{ needs.recovery_quotes.result }}; promotion=${{ needs.promotion.result }}; publish=${{ needs.publish.result }}; resume=${{ needs.resume_draft.result }}; reconcile=${{ needs.reconcile.result }}; verification=${{ needs.verify_publication.result }}; integration=${{ needs.record_integration.result }}
         run: |
           if [[ "$PUBLIC_VERIFICATION" == failure ]]; then
             python3 .private/notify.py "ZEC Private publication needs reconciliation. Independent public verification failed."

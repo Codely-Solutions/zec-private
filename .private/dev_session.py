@@ -73,7 +73,7 @@ def gradle(root, config, jdk):
     args = [str(jdk/'bin/java.exe'), '-classpath', str(root/'src/gradle/wrapper/gradle-wrapper.jar'),
             'org.gradle.wrapper.GradleWrapperMain', '--project-cache-dir', str(root/'project-cache'),
             '-I', str(root/'outputs.gradle'), '--no-daemon', '--no-watch-fs', '--max-workers=2',
-            '--stacktrace', '-Dorg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g -XX:+ExitOnOutOfMemoryError -XX:-HeapDumpOnOutOfMemoryError',
+            '--stacktrace', '--console=plain', '-Dorg.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g -XX:+ExitOnOutOfMemoryError -XX:-HeapDumpOnOutOfMemoryError',
             '-Pkotlin.compiler.execution.strategy=in-process']
     for script in scripts:
         args += ['-I', script]
@@ -125,6 +125,52 @@ def export_verification_metadata(src, evidence, name, original):
             metadata.write_bytes(original)
 
 
+def test_reports(root, config):
+    for task in dict.fromkeys(config.get('tasks', [])):
+        if is_jvm_test_task(task):
+            parts = task.lstrip(':').split(':')
+            module = Path(*parts[:-1]) if len(parts) > 1 else Path('root')
+            for report in sorted((root/'builds'/module/'test-results'/parts[-1]).glob('TEST-*.xml')):
+                yield task, report
+
+
+def report_identity(path):
+    return (path.stat().st_mtime_ns, path.stat().st_size, hashlib.sha256(path.read_bytes()).hexdigest())
+
+
+def collect_reports(root, evidence, name, receipt, config, before, producers):
+    outcomes = {}
+    for line in receipt.get('task_outcomes', []):
+        match = re.fullmatch(r'> Task (:[\w:-]+)(?: (FROM-CACHE|UP-TO-DATE|FAILED|SKIPPED|NO-SOURCE))?', line.strip())
+        if match:
+            outcomes[match[1]] = match[2] or 'EXECUTED'
+    receipt['reports'] = []
+    for task, report in test_reports(root, config):
+        outcome = outcomes.get(task)
+        if outcome not in ('EXECUTED', 'FAILED', 'FROM-CACHE', 'UP-TO-DATE'):
+            continue
+        identity = report_identity(report)
+        key = str(report.relative_to(root/'builds'))
+        prior = producers.get(key)
+        if outcome == 'UP-TO-DATE':
+            # Gradle confirms current inputs; retain the original report producer.
+            if not prior or prior['sha256'] != identity[2]:
+                continue
+            producer = prior['producer']
+        else:
+            # Failed/interrupted executions may leave XML from an earlier task.
+            if outcome != 'FROM-CACHE' and before.get(key) == identity:
+                continue
+            producer = dict(operation=receipt['operation'], source=receipt['source'],
+                            binding=receipt['binding'], task=task, outcome=outcome)
+            producers[key] = dict(sha256=identity[2], producer=producer)
+        target = evidence/name/'reports'/key
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(report, target)
+        receipt['reports'].append(dict(task=task, outcome=outcome, file=str(target.relative_to(evidence)),
+                                      sha256=identity[2], producer=producer))
+
+
 def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.sleep):
     source = Path(manifest['source']).resolve()
     start = clock()
@@ -150,6 +196,7 @@ def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.s
     operations = iter(manifest.get('operations', []))
     index = 0
     previous = None
+    report_producers = {}
     idle_start = clock()
     while True:
         if clock() >= deadline:
@@ -176,6 +223,11 @@ def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.s
                        checkout=str(src), build_root=str(root/'builds'), project_cache=str(root/'project-cache'),
                        accepted=False)
         began = clock()
+        config = operation.get('config')
+        before_reports = {}
+        timing = src/'artifact/task-timing.jsonl'
+        before_timing = report_identity(timing) if timing.is_file() else None
+        command_started = False
         try:
             commit = pin(source, operation['source'])
             # Fetch admits later local commits while preserving the isolated build state.
@@ -183,7 +235,8 @@ def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.s
             git(src, 'checkout', '--detach', '--quiet', commit)
             if git(src, 'status', '--porcelain', '--untracked-files=no'):
                 raise ValueError('Checkout contains tracked modifications')
-            config = operation['config']
+            if not isinstance(config, dict):
+                raise ValueError('Operation requires a Gradle configuration')
             tool = Path(env['JAVA_HOME'])/'bin/java.exe'
             receipt['java_sha256'] = hashlib.sha256(tool.read_bytes()).hexdigest() if tool.exists() else None
             receipt['binding'] = digest(dict(source=commit, config=config, environment={key:env[key] for key in
@@ -193,6 +246,8 @@ def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.s
             receipt['configuration_changed'] = previous is not None and previous != digest(config)
             previous = digest(config)
             command = gradle(root, config, Path(env['JAVA_HOME']))
+            before_reports = {str(path.relative_to(root/'builds')): report_identity(path)
+                              for _, path in test_reports(root, config)}
             seconds = min(float(operation.get('seconds', 1100)), deadline-clock())
             if seconds <= 0:
                 raise TimeoutError('Session deadline exceeded')
@@ -205,6 +260,7 @@ def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.s
             metadata = src/'gradle/verification-metadata.xml'
             original_metadata = read_verification_metadata(metadata) if writing_verification and metadata.is_file() else None
             try:
+                command_started = True
                 result = runner(command, src, seconds, root, name, environment=env, monitor=check_log,
                                 memory_bytes=6*1024**3, process_limit=32)
                 receipt['process'] = result
@@ -221,34 +277,28 @@ def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.s
             raise
         finally:
             receipt['seconds'] = round(clock()-began, 3)
-            log = root/(name+'.log')
-            if log.exists():
-                data = log.read_bytes()
-                receipt['log_sha256'] = hashlib.sha256(data).hexdigest()
-                (evidence/(name+'.log')).write_bytes(data[-1048576:])
-                receipt['task_outcomes'] = [line for line in data.decode(errors='replace').splitlines() if line.startswith('> Task ')][-1000:]
-            # Keep other modules/variants' retained reports out of this operation's evidence.
-            # Requested reports may be cached/up-to-date; task_outcomes records that distinction.
             receipt['reports'] = []
-            for task in dict.fromkeys(config.get('tasks', [])):
-                if not is_jvm_test_task(task):
-                    continue
-                parts = task.lstrip(':').split(':')
-                module = Path(*parts[:-1]) if len(parts) > 1 else Path('root')
-                results = root/'builds'/module/'test-results'/parts[-1]
-                for report in sorted(results.glob('TEST-*.xml')):
-                    relative = report.relative_to(root/'builds')
-                    target = evidence/name/'reports'/relative
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copyfile(report, target)
-                    receipt['reports'].append(dict(task=task, file=str(target.relative_to(evidence)),
-                        sha256=hashlib.sha256(target.read_bytes()).hexdigest()))
-            for report in [src/'artifact/task-timing.jsonl']:
-                if report.is_file():
-                    target = evidence/(name+'-'+report.name)
-                    shutil.copyfile(report, target)
+            try:
+                log = root/(name+'.log')
+                if log.exists():
+                    data = log.read_bytes()
+                    receipt['log_sha256'] = hashlib.sha256(data).hexdigest()
+                    (evidence/(name+'.log')).write_bytes(data[-1048576:])
+                    receipt['task_outcomes'] = [line for line in data.decode(errors='replace').splitlines() if line.startswith('> Task ')][-1000:]
+                if command_started:
+                    collect_reports(root, evidence, name, receipt, config, before_reports, report_producers)
+                    if timing.is_file() and report_identity(timing) != before_timing:
+                        target = evidence/(name+'-'+timing.name)
+                        shutil.copyfile(timing, target)
+                        receipt['timing'] = dict(file=target.name, sha256=hashlib.sha256(target.read_bytes()).hexdigest(),
+                                                 operation=index, source=receipt['source'], binding=receipt['binding'])
+            except Exception as error:
+                receipt['accepted'] = False
+                receipt['evidence_error'] = type(error).__name__
             write_once(evidence/(name+'.json'), receipt)
             (evidence/(name+'.started.json')).unlink(missing_ok=True)
+            if 'evidence_error' in receipt and 'error' not in receipt:
+                raise RuntimeError('Operation evidence collection failed: '+receipt['evidence_error'])
         idle_start = clock()
 
 

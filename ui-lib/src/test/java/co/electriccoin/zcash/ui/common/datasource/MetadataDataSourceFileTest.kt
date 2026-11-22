@@ -23,11 +23,13 @@ import co.electriccoin.zcash.ui.common.model.metadata.BookmarkMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapsMetadataV3
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuote
+import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.near.SwapStatusResponseDto
 import co.electriccoin.zcash.ui.common.model.near.QuoteResponseDto
 import co.electriccoin.zcash.ui.common.model.near.SwapType
 import co.electriccoin.zcash.ui.common.model.near.reviewedIdentity
+import co.electriccoin.zcash.ui.common.model.near.syntheticSignedQuote
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.MetadataProviderImpl
 import co.electriccoin.zcash.ui.common.provider.MetadataKeyStorageProvider
@@ -58,6 +60,7 @@ import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.setMain
@@ -316,12 +319,15 @@ class MetadataDataSourceFileTest {
     @Test
     fun readableIncomingTrackingCannotBypassFailedDirectorySync() = runTest {
         val sync = TrackingSync()
-        val quote = fundingQuote(SwapType.FLEX_INPUT)
+        val evidence = NearSignedQuoteEvidence(syntheticSignedQuote)
+        val quote = fundingQuote(SwapType.FLEX_INPUT, evidence)
         val initial = SaveORSwapUseCase(mockk(), repository(sync.provider), mockk())
         assertFailsWith<IllegalStateException> { initial.persistBeforeFunding(quote) }
         val readable = storedSwaps().swapIds.single()
         assertEquals(SwapStatus.PENDING, readable.status)
         assertEquals(quote.reviewedIdentity(), readable.reviewedIdentity)
+        assertEquals(evidence, readable.signedQuoteEvidence)
+        assertFalse(File(metadataDir, canonicalName).readText().contains("synthetic-recipient"))
         assertEquals(1, sync.attempts)
 
         val restarted = repository(sync.provider)
@@ -333,6 +339,8 @@ class MetadataDataSourceFileTest {
         retry.persistBeforeFunding(quote)
         assertEquals(3, sync.attempts)
         val expected = checkNotNull(restarted.getSwapMetadata("deposit"))
+        assertEquals(evidence, expected.signedQuoteEvidence)
+        assertNull(dataSource().read(metadataKey(2, 3))?.accountMetadata?.swaps?.swapIds?.singleOrNull())
         val success = mockk<SwapQuoteStatus> {
             every { status } returns SwapStatus.SUCCESS
             every { mode } returns SwapMode.FLEX_INPUT
@@ -341,15 +349,19 @@ class MetadataDataSourceFileTest {
         assertTrue(restarted.updateSwap(expected, success))
         val settled = storedSwaps().swapIds.single()
         assertEquals(SwapStatus.SUCCESS, settled.status)
-        retry.persistBeforeFunding(quote)
+        assertEquals(evidence, settled.signedQuoteEvidence)
+        retry.persistBeforeFunding(fundingQuote(SwapType.FLEX_INPUT, NearSignedQuoteEvidence("{\"other\":true}")))
         assertEquals(5, sync.attempts)
         assertEquals(settled, storedSwaps().swapIds.single())
+        restarted.delete()
+        assertFalse(File(metadataDir, canonicalName).exists())
     }
 
     @Test
     fun outgoingReservationStopsOnDirectorySyncFailureAndRetainsReadableTracking() = runTest {
         val sync = TrackingSync()
-        val quote = fundingQuote(SwapType.EXACT_INPUT)
+        val evidence = NearSignedQuoteEvidence(syntheticSignedQuote)
+        val quote = fundingQuote(SwapType.EXACT_INPUT, evidence)
         val destinationAddress = WalletAddress.Unified.new("deposit")
         val proposal = mockk<SwapTransactionProposal> {
             every { this@mockk.quote } returns quote
@@ -358,17 +370,37 @@ class MetadataDataSourceFileTest {
             every { totalFeesUsd } returns BigDecimal.ZERO
         }
         val initial = ProcessSwapTransactionUseCase(repository(sync.provider), mockk())
+        assertFailsWith<CancellationException> {
+            initial.reserveFunding(proposal) { throw CancellationException("Synthetic cancelled review") }
+        }
+        assertFalse(File(metadataDir, canonicalName).exists())
         assertFailsWith<IllegalStateException> { initial.reserveFunding(proposal) {} }
         assertEquals(1, sync.attempts)
         val pending = storedSwaps().swapIds.single()
         assertEquals(SwapStatus.PENDING, pending.status)
         assertEquals(quote.reviewedIdentity(), pending.reviewedIdentity)
+        assertEquals(evidence, pending.signedQuoteEvidence)
 
         sync.fail = false
         val restarted = ProcessSwapTransactionUseCase(repository(sync.provider), mockk())
         assertFailsWith<IllegalStateException> { restarted.reserveFunding(proposal) {} }
         assertEquals(1, sync.attempts)
         assertEquals(pending, storedSwaps().swapIds.single())
+    }
+
+    @Test
+    fun retentionCapsQuoteBodiesWithoutRemovingSwapHistory() = runTest {
+        val source = dataSource()
+        val evidence = NearSignedQuoteEvidence(syntheticSignedQuote)
+        repeat(65) { index ->
+            assertTrue(markSwap(
+                source, "near", SwapMode.EXACT_INPUT, "review-$index", evidence, "deposit-$index"
+            ))
+        }
+        val saved = storedSwaps().swapIds
+        assertEquals(65, saved.size)
+        assertEquals(64, saved.count { it.signedQuoteEvidence != null })
+        assertEquals(evidence, saved.last().signedQuoteEvidence)
     }
 
     @Test
@@ -634,7 +666,7 @@ class MetadataDataSourceFileTest {
         )
     }
 
-    private fun fundingQuote(mode: SwapType): NearSwapQuote {
+    private fun fundingQuote(mode: SwapType, evidence: NearSignedQuoteEvidence? = null): NearSwapQuote {
         val btc = SwapCatalogTestFixture.externalAssets.single { it.assetId == "nep141:btc.omft.near" }
         val zec = SwapCatalogTestFixture.nativeZec
         val (origin, destination) = if (mode == SwapType.FLEX_INPUT) btc to zec else zec to btc
@@ -659,7 +691,7 @@ class MetadataDataSourceFileTest {
             """.trimIndent()
         )
         return NearSwapQuote(
-            response = response,
+            response = response.copy(signedEvidence = evidence),
             originAsset = origin,
             destinationAsset = destination,
             depositAddress = DynamicSwapAddress("deposit"),
@@ -699,9 +731,11 @@ class MetadataDataSourceFileTest {
         provider: String,
         mode: SwapMode,
         reviewedIdentity: String? = null,
+        signedQuoteEvidence: NearSignedQuoteEvidence? = null,
+        depositAddress: String = "deposit",
     ) =
         dataSource.markTxAsSwap(
-            depositAddress = "deposit",
+            depositAddress = depositAddress,
             provider = provider,
             origin = swapAsset("zec", "zec"),
             destination = swapAsset("usdc", "near"),
@@ -712,6 +746,7 @@ class MetadataDataSourceFileTest {
             status = SwapStatus.PENDING,
             key = key,
             reviewedIdentity = reviewedIdentity,
+            signedQuoteEvidence = signedQuoteEvidence,
         )
 
     private fun storedSwaps() = read(canonicalName).accountMetadata.swaps

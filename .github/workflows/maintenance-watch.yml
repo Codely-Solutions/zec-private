@@ -21,9 +21,8 @@ permissions:
   actions: read
   contents: read
   pull-requests: read
-concurrency:
-  group: maintenance-watch
-  cancel-in-progress: true
+# This read-only classifier follows its caller's lifetime. Independent manual,
+# proposal and discovery runs must not cancel a caller's required prerequisite.
 jobs:
   watch:
     if: github.ref == 'refs/heads/main' && (github.event_name != 'pull_request_target' || github.event.pull_request.user.login == 'dependabot[bot]')

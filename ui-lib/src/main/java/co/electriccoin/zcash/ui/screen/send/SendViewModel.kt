@@ -1,8 +1,10 @@
 package co.electriccoin.zcash.ui.screen.send
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.ZecSend
+import cash.z.ecc.android.sdk.type.AddressType
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -24,11 +26,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
 
@@ -40,8 +42,13 @@ class SendViewModel(
     private val observeWalletAccounts: GetWalletAccountsUseCase,
     private val navigateToSelectRecipient: NavigateToSelectRecipientUseCase,
     private val navigationRouter: NavigationRouter,
+    private val savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
-    val recipientAddressState = MutableStateFlow(RecipientAddressState.new("", null))
+    private val recipientState = MutableStateFlow(
+        savedStateHandle.get<HashMap<String, String>>(RECIPIENT_STATE_KEY)
+            ?.let(RecipientAddressState::fromSavedState) ?: RecipientAddressState.new("")
+    )
+    val recipientAddressState = recipientState.asStateFlow()
 
     private var onCreateZecSendClickJob: Job? = null
 
@@ -127,8 +134,22 @@ class SendViewModel(
         }
     }
 
+    internal fun initializeRecipient(route: Send) {
+        if (savedStateHandle.contains(RECIPIENT_STATE_KEY)) return
+        val address = route.recipientAddress ?: return
+        val type = when (route.recipientAddressType) {
+            cash.z.ecc.sdk.model.AddressType.UNIFIED -> AddressType.Unified
+            cash.z.ecc.sdk.model.AddressType.TRANSPARENT -> AddressType.Transparent
+            cash.z.ecc.sdk.model.AddressType.SAPLING -> AddressType.Shielded
+            cash.z.ecc.sdk.model.AddressType.TEX -> AddressType.Tex
+            null -> return
+        }
+        onRecipientAddressChanged(RecipientAddressState.new(address, type))
+    }
+
     fun onRecipientAddressChanged(state: RecipientAddressState) {
-        recipientAddressState.update { state }
+        savedStateHandle[RECIPIENT_STATE_KEY] = state.toSavedState()
+        recipientState.value = state
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -147,5 +168,9 @@ class SendViewModel(
                     Twig.error(e) { "Error creating proposal" }
                 }
             }
+    }
+
+    private companion object {
+        const val RECIPIENT_STATE_KEY = "sendRecipient"
     }
 }

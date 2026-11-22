@@ -31,7 +31,7 @@ data class QuoteRequest(
     @SerialName("destinationAsset")
     val destinationAsset: String,
     @SerialName("amount")
-    @Serializable(NearProviderDecimalSerializer::class)
+    @Serializable(NearQuoteAmountSerializer::class)
     val amount: BigDecimal,
     @SerialName("refundTo")
     val refundTo: String,
@@ -64,6 +64,9 @@ data class QuoteRequest(
 ) {
     init {
         requireNearProviderDecimals(amount)
+        require(amount.signum() > 0 && amount.stripTrailingZeros().scale() <= 0) {
+            "Quote amount must be a positive whole number of base units"
+        }
     }
 }
 

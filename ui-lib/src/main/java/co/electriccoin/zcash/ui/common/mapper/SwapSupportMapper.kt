@@ -4,6 +4,7 @@ import androidx.compose.ui.text.font.FontWeight
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.component.ZashiMessageState
@@ -135,3 +136,12 @@ class SwapSupportMapper {
         const val PROCESSING_SUPPORT_DELAY = 60
     }
 }
+
+internal fun TransactionSwapMetadata.originalQuoteSupportButton(onSupportClicked: (String) -> Unit): ButtonState? =
+    signedQuoteEvidence?.let {
+        ButtonState(
+            text = stringRes(R.string.errorPage_action_contactSupport),
+            style = ButtonStyle.TERTIARY,
+            onClick = { onSupportClicked(depositAddress) },
+        )
+    }

@@ -2,10 +2,13 @@ package co.electriccoin.zcash.app
 
 import android.content.pm.ApplicationInfo
 import android.content.ContextWrapper
+import android.content.Context
+import android.database.sqlite.SQLiteDatabase
 import android.os.Build
 import androidx.test.platform.app.InstrumentationRegistry
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
+import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.ui.common.model.AddressBook
 import co.electriccoin.zcash.ui.common.model.AddressBookContact
 import co.electriccoin.zcash.ui.common.provider.AddressBookProviderImpl
@@ -14,6 +17,11 @@ import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.MetadataProviderImpl
 import co.electriccoin.zcash.ui.common.provider.MetadataStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
+import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+import co.electriccoin.zcash.ui.common.model.OnboardingState
+import co.electriccoin.zcash.ui.common.repository.WalletInitializationState
+import co.electriccoin.zcash.ui.common.repository.WalletRepository
+import co.electriccoin.zcash.ui.preference.StandardPreferenceKeys
 import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
 import co.electriccoin.zcash.ui.common.datasource.MetadataDataSourceImpl
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
@@ -29,6 +37,9 @@ import com.google.crypto.tink.InsecureSecretKeyAccess
 import com.google.crypto.tink.util.SecretBytes
 import org.junit.Test
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeout
+import org.koin.core.context.GlobalContext
 import java.io.File
 import java.io.IOException
 import java.io.OutputStream
@@ -36,6 +47,56 @@ import java.nio.file.Files
 import kotlin.time.Instant
 
 class ProjectReviewStorageTest {
+    @Test
+    fun walletlessRecoveryErasesStaleSdkStores() = runBlocking {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val network = ZcashNetwork.fromResources(context)
+        check(context.packageName == "com.personal.zecprivate.testnet.foss.debug")
+        check(context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0)
+        check(Build.HARDWARE in setOf("ranchu", "goldfish"))
+        check(network == ZcashNetwork.Testnet)
+        check(InstrumentationRegistry.getArguments().getString("isolatedTestnet") == "valueless-coins-only")
+
+        val koin = GlobalContext.get()
+        val wallet = koin.get<PersistableWalletProvider>()
+        val prefs = koin.get<StandardPreferenceProvider>()()
+        val repository = koin.get<WalletRepository>()
+        val onboarding = StandardPreferenceKeys.ONBOARDING_STATE
+        check(wallet.getPersistableWallet() == null)
+        check(onboarding.getValue(prefs) == OnboardingState.NONE.toNumber())
+
+        val root = File(context.noBackupFilesDir, "co.electricoin.zcash")
+        val activeDb = File(root, "zcash_sdk_testnet_data.sqlite3")
+        val activeWal = File(root, "${activeDb.name}-wal")
+        val activeShm = File(root, "${activeDb.name}-shm")
+        val legacyCache = context.getDatabasePath("ZcashSdk_testnet_Cache.db")
+        val planPrefsName = "com.zodl.slipstream.submit_plan_${network.id}_zcash_sdk"
+        val planFile = File(context.dataDir, "shared_prefs/$planPrefsName.xml")
+        val staleFiles = listOf(activeDb, activeWal, activeShm, legacyCache, planFile)
+        check(staleFiles.none(File::exists))
+
+        check(root.isDirectory || root.mkdirs())
+        check(legacyCache.parentFile!!.let { it.isDirectory || it.mkdirs() })
+        for (database in listOf(activeDb, legacyCache)) {
+            SQLiteDatabase.openOrCreateDatabase(database, null).use {
+                it.execSQL("CREATE TABLE fixture (value TEXT)")
+            }
+        }
+        activeWal.writeText("synthetic stale WAL")
+        activeShm.writeText("synthetic stale shared memory")
+        check(context.getSharedPreferences(planPrefsName, Context.MODE_PRIVATE).edit().putBoolean("fixture", true).commit())
+        check(staleFiles.all(File::isFile))
+
+        onboarding.putValue(prefs, OnboardingState.READY.toNumber())
+        repository.init()
+        withTimeout(30_000) {
+            onboarding.observe(prefs).first { it == OnboardingState.NONE.toNumber() }
+            repository.walletInitialization.first { it == WalletInitializationState.IDLE }
+        }
+        check(staleFiles.none(File::exists))
+        check(wallet.getPersistableWallet() == null)
+    }
+
     @Test
     fun reloadingMetadataRequiresDirectoryDurability() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext

@@ -941,6 +941,8 @@
     <string name="reportSwap_report">Reportar problema</string>
     <string name="reportSwap_title">Reportar problema con swap</string>
     <string name="reportSwap_msg">Exporta detalles de este swap, como la dirección de depósito y el activo destino. Elige el destinatario y revisa el contenido antes de compartirlo. No se envía ningún informe automáticamente.</string>
+    <string name="reportSwap_shareQuote">Compartir cotización original</string>
+    <string name="reportSwap_shareQuoteDescription">Comparte la cotización firmada por el proveedor con alguien de confianza. Incluye el importe del swap y las direcciones de destino y de reembolso.</string>
     <string name="transaction_detail_support_email_subject">Problema con transacción de swap</string>
     <string name="transaction_detail_support_email_body">Por favor describe tu problema aquí:\n\n\n\nDetalles del swap:\nDirección de depósito: %1$s\nActivo de origen: %2$s\nActivo destino: %3$s</string>
     <string name="swap_mismatch_title">Los detalles del swap no coincidieron</string>

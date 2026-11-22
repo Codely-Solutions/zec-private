@@ -72,7 +72,7 @@ class StyleComparisonActivity : ComponentActivity() {
 
 @Suppress("LongMethod", "MagicNumber")
 @Composable
-private fun ComparisonScreens(requested: String) {
+internal fun ComparisonScreens(requested: String) {
     if (ProjectReviewScene(requested)) return
     var screen by remember { mutableStateOf(requested) }
     val exchangeRate = remember {
@@ -110,10 +110,14 @@ private fun ComparisonScreens(requested: String) {
     var memo by remember { mutableStateOf(MemoState.new("")) }
     var recipient by remember {
         mutableStateOf(
-            if (requested == "send-error") RecipientAddressState.new(
-                "synthetic-invalid-recipient-".repeat(5),
-                AddressType.Invalid("Synthetic address is invalid. Check the complete recipient address."),
-            ) else RecipientAddressState.new("")
+            when (requested) {
+                "send-error" -> RecipientAddressState.new(
+                    "synthetic-invalid-recipient-".repeat(5),
+                    AddressType.Invalid("Synthetic address is invalid. Check the complete recipient address."),
+                )
+                "send-replacement" -> RecipientAddressState.new("synthetic-replacement-receiver", AddressType.Unified)
+                else -> RecipientAddressState.new("")
+            }
         )
     }
     var memoExpanded by remember { mutableStateOf(requested == "donation-message") }
@@ -124,7 +128,7 @@ private fun ComparisonScreens(requested: String) {
     if (RecipientReviewScene(screen, appBar, account, balanceState)) return
     if (AdditionalReviewScene(screen, { screen = "home" }, appBar)) return
     when (screen) {
-        "send", "send-error" -> Send(
+        "send", "send-error", "send-replacement" -> Send(
             balanceWidgetState = balanceState,
             sendStage = SendStage.Form,
             onCreateZecSend = {},

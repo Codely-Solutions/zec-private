@@ -252,6 +252,10 @@ class GiftCardRepositoryImpl(
             }
         shutdown.await()
         giftCardDataSource.awaitPendingCloses()
+        val orphans = giftCardDataSource.findStoredCardWallets()
+        if (orphans.isEmpty()) return
+        orphans.forEach { giftCardDataSource.eraseCardWallet(it) }
+        check(giftCardDataSource.findStoredCardWallets().isEmpty()) { "Could not erase gift card wallets" }
     }
 
     override fun resumeSessions() {

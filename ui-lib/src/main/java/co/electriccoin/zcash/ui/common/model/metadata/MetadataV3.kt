@@ -5,6 +5,7 @@ package co.electriccoin.zcash.ui.common.model.metadata
 import androidx.compose.ui.graphics.Color
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
 import co.electriccoin.zcash.ui.common.serialization.BigDecimalSerializer
 import co.electriccoin.zcash.ui.common.serialization.ColorSerializer
 import co.electriccoin.zcash.ui.common.serialization.InstantSerializer
@@ -134,6 +135,8 @@ data class SwapMetadataV3(
     val reviewedIdentity: String? = null,
     @SerialName("statusUpdatedAt")
     val statusUpdatedAt: kotlin.time.Instant? = null,
+    @SerialName("signedQuoteEvidence")
+    internal val signedQuoteEvidence: NearSignedQuoteEvidence? = null,
 ) {
     @Transient
     val totalFeesUsd: BigDecimal = checkNotNull(totalFeesUsdInternal ?: totalUSDFeesInternal)

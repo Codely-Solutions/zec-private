@@ -38,7 +38,7 @@ internal fun RecipientReviewScene(
 ): Boolean {
     if (screen !in setOf(
             "recipient-swap-mismatch", "recipient-swap-corrected", "recipient-pay-mismatch",
-            "recipient-pay-corrected", "recipient-qr-mismatch", "recipient-swap-empty"
+            "recipient-pay-corrected", "recipient-qr-mismatch", "recipient-swap-empty", "recipient-pay-invalid-amount"
         )) return false
     val btcIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc)
     val btcChain = SwapBlockchain("btc", stringRes("Bitcoin"), btcIcon)
@@ -63,19 +63,26 @@ internal fun RecipientReviewScene(
     val address = "0x1111111111111111111111111111111111111111"
     val empty = screen == "recipient-swap-empty"
     val qr = screen == "recipient-qr-mismatch"
+    val invalidAmount = screen == "recipient-pay-invalid-amount"
     val corrected = screen.endsWith("corrected")
     val selected = if (corrected) wbtc else btc
-    val contact = if (qr || empty) null else EnhancedABContact(
+    val contact = if (qr || empty || invalidAmount) null else EnhancedABContact(
         AddressBookContact("Synthetic WBTC contact", address, Instant.fromEpochMilliseconds(0), "eth"),
         ethChain,
     )
     val assets = SwapAssetsData(data = listOf(btc, wbtc), zecAsset = zec)
-    val recipient = if (empty) "" else if (qr) "ethereum:$address@1" else address
+    val recipient = when {
+        empty -> ""
+        qr -> "ethereum:$address@1"
+        invalidAmount -> "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu"
+        else -> address
+    }
     if (screen.startsWith("recipient-pay")) {
+        val amount = if (invalidAmount) BigDecimal("0.000000009") else BigDecimal("0.00001")
         val state = PayInternalState(
             address = recipient, isABHintVisible = false, selectedABContact = contact, asset = selected,
-            amount = NumberTextFieldInnerState.fromAmount(BigDecimal("0.00001")),
-            fiatAmount = NumberTextFieldInnerState.fromAmount(BigDecimal.ONE), slippage = BigDecimal("2"),
+            amount = NumberTextFieldInnerState.fromAmount(amount),
+            fiatAmount = NumberTextFieldInnerState.fromAmount(amount * BigDecimal("100000")), slippage = BigDecimal("2"),
             isRequestingQuote = false, account = account, swapAssets = assets, isEphemeralAddressLocked = false,
         )
         PayView(

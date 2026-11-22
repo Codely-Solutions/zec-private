@@ -5,6 +5,7 @@ package co.electriccoin.zcash.ui.common.model.near
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 import kotlinx.serialization.json.JsonIgnoreUnknownKeys
 import java.math.BigDecimal
 import kotlin.time.Instant
@@ -17,7 +18,9 @@ data class QuoteResponseDto(
     @SerialName("quoteRequest")
     val quoteRequest: QuoteRequest,
     @SerialName("quote")
-    val quote: QuoteDetails
+    val quote: QuoteDetails,
+    @Transient
+    internal val signedEvidence: NearSignedQuoteEvidence? = null,
 )
 
 @JsonIgnoreUnknownKeys

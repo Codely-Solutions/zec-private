@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.common.model.ZecSimpleSwapAsset
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapMetadataV3
+import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
 import co.electriccoin.zcash.ui.common.provider.MetadataKeyStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
@@ -96,6 +97,7 @@ interface MetadataRepository {
         mode: SwapMode,
         status: SwapStatus,
         reviewedIdentity: String? = null,
+        signedQuoteEvidence: NearSignedQuoteEvidence? = null,
     ): Boolean
 
     /** Persists a refresh for the same account and saved entry that owned the request. */
@@ -203,6 +205,7 @@ class MetadataRepositoryImpl(
         mode: SwapMode,
         status: SwapStatus,
         reviewedIdentity: String?,
+        signedQuoteEvidence: NearSignedQuoteEvidence?,
     ) = updateMetadataAndAwait {
         metadataDataSource.markTxAsSwap(
             depositAddress = depositAddress,
@@ -220,6 +223,7 @@ class MetadataRepositoryImpl(
             mode = mode,
             status = status,
             reviewedIdentity = reviewedIdentity,
+            signedQuoteEvidence = signedQuoteEvidence,
         )
     }
 
@@ -459,6 +463,7 @@ data class TransactionSwapMetadata(
     val reviewedIdentity: String? = null,
     internal val ownerAccount: WalletAccount? = null,
     internal val walletWriteToken: Long? = null,
+    internal val signedQuoteEvidence: NearSignedQuoteEvidence? = null,
 ) {
     val status: SwapStatus
         get() = recordedStatus ?: SwapStatus.SUCCESS
@@ -501,6 +506,7 @@ internal fun SwapMetadataV3.toBusinessObject(
         provider = provider,
         totalFees = totalFees,
         totalFeesUsd = totalFeesUsd,
+        signedQuoteEvidence = signedQuoteEvidence,
         reviewedIdentity = reviewedIdentity,
     )
 }

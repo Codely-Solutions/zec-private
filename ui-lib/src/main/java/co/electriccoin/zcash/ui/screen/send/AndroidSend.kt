@@ -136,18 +136,8 @@ internal fun WrapSend(
     val observeClearSend = koinInject<ObserveClearSendUseCase>()
     val prefillSend = koinInject<PrefillSendUseCase>()
 
-    if (sendArguments.recipientAddress != null && sendArguments.recipientAddressType != null) {
-        viewModel.onRecipientAddressChanged(
-            RecipientAddressState.new(
-                sendArguments.recipientAddress,
-                when (sendArguments.recipientAddressType) {
-                    cash.z.ecc.sdk.model.AddressType.UNIFIED -> AddressType.Unified
-                    cash.z.ecc.sdk.model.AddressType.TRANSPARENT -> AddressType.Transparent
-                    cash.z.ecc.sdk.model.AddressType.SAPLING -> AddressType.Shielded
-                    cash.z.ecc.sdk.model.AddressType.TEX -> AddressType.Tex
-                }
-            )
-        )
+    LaunchedEffect(viewModel, sendArguments) {
+        viewModel.initializeRecipient(sendArguments)
     }
 
     // Amount computation:

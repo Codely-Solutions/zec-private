@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.send
 
+import androidx.lifecycle.SavedStateHandle
 import cash.z.ecc.android.sdk.model.ZecSend
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.usecase.CreateProposalUseCase
@@ -64,5 +65,6 @@ class SendViewModelLedgerTest {
             observeWalletAccounts = mockk(relaxed = true),
             navigateToSelectRecipient = mockk(relaxed = true),
             navigationRouter = mockk<NavigationRouter>(relaxed = true),
+            savedStateHandle = SavedStateHandle(),
         )
 }

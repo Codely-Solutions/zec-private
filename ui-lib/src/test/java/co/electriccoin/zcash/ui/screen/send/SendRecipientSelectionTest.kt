@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.send
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.type.AddressType
@@ -92,6 +93,7 @@ class SendRecipientSelectionTest {
             observeWalletAccounts = getWalletAccounts,
             navigateToSelectRecipient = NavigateToSelectRecipientUseCase(router),
             navigationRouter = router,
+            savedStateHandle = SavedStateHandle(),
         )
         val picker = SelectABRecipientVM(
             getAddressBookContacts = GetABContactsUseCase(addressBook),

@@ -122,20 +122,18 @@ class AuthenticationViewModel(
                     AuthenticationUIState.NotRequired
                 }
 
+                secretState == SecretState.INCOMPLETE && state != AuthenticationUIState.Successful -> {
+                    appAccessAuthentication.value = AuthenticationUIState.Initial
+                    AuthenticationUIState.Required
+                }
+
                 (state == AuthenticationUIState.Initial) -> {
                     when (secretState) {
-                        SecretState.LOADING -> {
-                            AuthenticationUIState.Initial
+                        SecretState.LOADING -> AuthenticationUIState.Initial
+                        SecretState.NONE -> AuthenticationUIState.NotRequired.also {
+                            appAccessAuthentication.value = it
                         }
-
-                        SecretState.NONE -> {
-                            appAccessAuthentication.value = AuthenticationUIState.NotRequired
-                            AuthenticationUIState.NotRequired
-                        }
-
-                        SecretState.READY -> {
-                            AuthenticationUIState.Required
-                        }
+                        SecretState.INCOMPLETE, SecretState.READY -> AuthenticationUIState.Required
                     }
                 }
 

@@ -101,6 +101,16 @@ private fun Content(
             modifier = Modifier.fillMaxWidth(),
             state = state.reportIssueButton
         )
+        state.shareQuoteButton?.let { button ->
+            Spacer(16.dp)
+            Text(
+                text = stringRes(R.string.reportSwap_shareQuoteDescription).getValue(),
+                style = ZashiTypography.textSm,
+                color = ZashiColors.Text.textTertiary,
+            )
+            Spacer(8.dp)
+            ZashiButton(modifier = Modifier.fillMaxWidth(), state = button)
+        }
     }
 }
 

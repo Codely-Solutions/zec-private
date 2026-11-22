@@ -1002,6 +1002,8 @@
     <string name="reportSwap_report">Report Issue</string>
     <string name="reportSwap_title">Report Swap Issue</string>
     <string name="reportSwap_msg">Export details of this swap, including its deposit address and target asset. Choose the recipient yourself and review the contents before sharing. No report is sent automatically.</string>
+    <string name="reportSwap_shareQuote">Share original quote</string>
+    <string name="reportSwap_shareQuoteDescription">Share the provider-signed quote with a recipient you trust. It includes the swap amount, recipient address and refund address.</string>
     <string name="transaction_detail_support_email_subject">Swap Transaction Issue</string>
     <string name="transaction_detail_support_email_body">Please describe your issue here:\n\n\n\nSwap Details:\nDeposit Address: %1$s\nSource Asset: %2$s\nTarget Asset: %3$s</string>
     <string name="swap_mismatch_title">Swap details didn\’t match</string>

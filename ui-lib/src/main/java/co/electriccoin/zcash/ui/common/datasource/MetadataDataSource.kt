@@ -15,6 +15,7 @@ import co.electriccoin.zcash.ui.common.model.metadata.MetadataSimpleSwapAssetV3
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapsMetadataV3
+import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
 import co.electriccoin.zcash.ui.common.provider.MetadataProvider
 import co.electriccoin.zcash.ui.common.provider.MetadataStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
@@ -80,6 +81,7 @@ interface MetadataDataSource {
         status: SwapStatus,
         key: MetadataKey,
         reviewedIdentity: String? = null,
+        signedQuoteEvidence: NearSignedQuoteEvidence? = null,
     ): Boolean
 
     suspend fun updateSwap(
@@ -249,6 +251,7 @@ class MetadataDataSourceImpl(
         status: SwapStatus,
         key: MetadataKey,
         reviewedIdentity: String?,
+        signedQuoteEvidence: NearSignedQuoteEvidence?,
     ) = mutex.withLock {
         updateMetadata(
             key = key,
@@ -284,8 +287,9 @@ class MetadataDataSourceImpl(
                                             status = status,
                                             amountOutFormatted = amountOutFormatted,
                                             reviewedIdentity = reviewedIdentity,
+                                            signedQuoteEvidence = signedQuoteEvidence.takeIf { reviewedIdentity != null },
                                         )
-                                    }
+                                    }.withBoundedQuoteEvidence()
                         ),
                 )
             }
@@ -901,7 +905,7 @@ private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean)
                 candidate.status != null && candidate.statusUpdatedAt != null &&
                 (saved.statusUpdatedAt == null || candidate.statusUpdatedAt > saved.statusUpdatedAt) &&
                 saved.acceptsStatus(candidate.status, candidate.statusUpdatedAt, candidate.amountOutFormatted)
-        },
+        }.withBoundedQuoteEvidence(),
         lastUsedAssetHistory =
             (if (otherIsNewer) other.lastUsedAssetHistory else lastUsedAssetHistory)
                 .take(MAX_SWAP_ASSETS_IN_HISTORY)
@@ -936,6 +940,18 @@ private fun <T> List<T>.mergeById(
 }
 
 private const val MAX_SWAP_ASSETS_IN_HISTORY = 10
+private const val MAX_RETAINED_SIGNED_QUOTES = 64
+
+private fun List<SwapMetadataV3>.withBoundedQuoteEvidence(): List<SwapMetadataV3> {
+    val withEvidence = filter { it.signedQuoteEvidence != null }
+    if (withEvidence.size <= MAX_RETAINED_SIGNED_QUOTES) return this
+    val retained = withEvidence.sortedByDescending { it.lastUpdated }
+        .take(MAX_RETAINED_SIGNED_QUOTES)
+        .mapTo(mutableSetOf()) { it.depositAddress }
+    return map {
+        if (it.signedQuoteEvidence != null && it.depositAddress !in retained) it.copy(signedQuoteEvidence = null) else it
+    }
+}
 
 private const val READ_ATTEMPTS = 3
 

@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SynchronizerError
 import co.electriccoin.zcash.ui.common.model.ZEC_TICKER
+import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
 import co.electriccoin.zcash.ui.common.provider.BlockchainProvider
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.getString
@@ -212,6 +213,13 @@ class SendEmailUseCase(
                             )
                         )
                 )
+        )
+    }
+
+    internal fun shareOriginalQuote(evidence: NearSignedQuoteEvidence) {
+        sendSupportEmail(
+            subject = context.getString(R.string.reportSwap_shareQuote),
+            messageBody = evidence.originalJson,
         )
     }
 

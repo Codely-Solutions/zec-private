@@ -10,7 +10,6 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.contact.ABContactState
 import co.electriccoin.zcash.ui.screen.authentication.AppAccessBoundary
 import co.electriccoin.zcash.ui.screen.authentication.view.AppAccessAuthentication
-import co.electriccoin.zcash.ui.screen.authentication.view.WelcomeAnimationAutostart
 import co.electriccoin.zcash.ui.screen.contact.ABContactView
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiState
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiView
@@ -56,7 +55,6 @@ internal fun ProjectReviewScene(screen: String): Boolean {
         "app-locked" -> AppAccessBoundary(
             session = androidx.compose.runtime.remember { AppAccessSession() },
             lockedContent = {
-                WelcomeAnimationAutostart(showAuthLogo = true, onRetry = {})
                 AppAccessAuthentication(onRetry = {}, showAuthLogo = true, welcomeAnimVisibility = false)
             },
             walletContent = {},

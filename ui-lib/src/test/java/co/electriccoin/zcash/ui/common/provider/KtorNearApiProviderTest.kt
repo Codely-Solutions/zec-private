@@ -4,6 +4,7 @@ import co.electriccoin.zcash.ui.common.model.near.QuoteRequest
 import co.electriccoin.zcash.ui.common.model.near.SubmitDepositTransactionRequest
 import co.electriccoin.zcash.ui.common.model.near.SwapType
 import co.electriccoin.zcash.ui.common.model.near.boundedNearQuoteWire
+import co.electriccoin.zcash.ui.common.model.near.syntheticSignedQuote
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -122,6 +123,15 @@ class KtorNearApiProviderTest {
             assertFailsWith<JsonConvertException> { provider.requestQuote(quoteRequest()) }
             assertEquals(2, diagnosticEvents.count { it.startsWith("stage=CLIENT_CLOSE ") })
         }
+
+    @Test
+    fun malformedOrUntrustedEvidenceDoesNotChangeAnOtherwiseValidQuote() = runBlocking {
+        responseBody = syntheticSignedQuote
+        val untrusted = provider.requestQuote(quoteRequest())
+        assertNull(untrusted.signedEvidence)
+        responseBody = syntheticSignedQuote.replace("\"signature\":\"ed25519:", "\"signature\":\"untrusted:")
+        assertEquals(untrusted, provider.requestQuote(quoteRequest()))
+    }
 
     @Test
     fun statusDecodeRejectsOversizedUsdAndKeepsNullableStatusAmounts() {

@@ -77,6 +77,13 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                         isEnabled = screen == "swap-support-ready",
                         onClick = {},
                     ),
+                    shareQuoteButton = if (screen == "swap-support-ready") {
+                        ButtonState(
+                            text = stringRes(R.string.reportSwap_shareQuote),
+                            style = co.electriccoin.zcash.ui.design.component.ButtonStyle.SECONDARY,
+                            onClick = {},
+                        )
+                    } else null,
                     onBack = {},
                 )
             )

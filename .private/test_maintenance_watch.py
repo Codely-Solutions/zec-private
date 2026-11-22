@@ -43,7 +43,7 @@ def job_activates(job, results, **overrides):
     values.update({f'needs.{name}.result': result for name, result in results.items()})
     values.update(overrides)
     expression = job['if'].removeprefix('${{').removesuffix('}}').strip()
-    expression = expression.replace('always()', 'True').replace('cancelled()', 'False')
+    expression = expression.replace('always()', 'True').replace('cancelled()', repr(values.get('workflow_cancelled', False)))
     expression = re.sub(r'\b(?:github|inputs|needs|vars)(?:\.[a-z_A-Z0-9]+)+\b',
                         lambda match: repr(values.get(match[0], 'skipped')), expression)
     expression = expression.replace('&&', ' and ').replace('||', ' or ')
@@ -85,15 +85,33 @@ class MaintenanceWatchTest(unittest.TestCase):
         blocked = workflow_job('sync-upstream.yml', 'blocked')
         self.assertEqual(['maintenance', 'prepare'], blocked['needs'])
         for results in ({'maintenance': 'failure', 'prepare': 'skipped'},
-                        {'maintenance': 'success', 'prepare': 'failure'}):
+                        {'maintenance': 'success', 'prepare': 'failure'},
+                        {'maintenance': 'cancelled', 'prepare': 'skipped'},
+                        {'maintenance': 'success', 'prepare': 'cancelled'}):
             with self.subTest(results=results):
                 self.assertTrue(job_activates(blocked, results))
                 self.assertFalse(job_activates(blocked, results,
                                               **{'github.ref': 'refs/heads/review/test'}))
-        for state in ('success', 'skipped', 'cancelled'):
+                self.assertFalse(job_activates(blocked, results, workflow_cancelled=True))
+        for state in ('success', 'skipped'):
             self.assertFalse(job_activates(blocked, dict(maintenance=state, prepare='skipped')))
         self.assertIn('MAINTENANCE: ${{ needs.maintenance.result }}', blocked['block'])
         self.assertIn('The watcher failed before candidate preparation', blocked['block'])
+
+    def test_read_only_watcher_has_no_shared_cancellation_group(self):
+        text = (Path(__file__).resolve().parents[1]/'.github/workflows/maintenance-watch.yml').read_text()
+        self.assertNotRegex(text, r'(?m)^\s*concurrency:')
+        self.assertIn("github.event.pull_request.user.login == 'dependabot[bot]'", text)
+        self.assertIn('contents: read', text)
+        self.assertNotIn('contents: write', text)
+
+    def test_verified_recovery_notification_follows_integration_only(self):
+        notification = workflow_job('build-release.yml', 'notify')
+        for state in ('failure', 'cancelled', 'skipped'):
+            self.assertFalse(job_activates(notification, dict(record_integration=state)))
+        self.assertTrue(job_activates(notification, dict(record_integration='success')))
+        self.assertFalse(job_activates(notification, dict(record_integration='success'), workflow_cancelled=True))
+        self.assertIn("RECOVERY_VERIFIED: 'true'", notification['block'])
 
     def test_delayed_timer_is_quiet_without_blocking_live_discovery(self):
         with tempfile.TemporaryDirectory() as temp:

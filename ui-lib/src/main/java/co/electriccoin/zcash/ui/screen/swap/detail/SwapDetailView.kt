@@ -223,6 +223,10 @@ private fun BottomBar(
             Spacer(4.dp)
         }
 
+        state.supportButton?.let {
+            ZashiButton(modifier = Modifier.fillMaxWidth(), state = it)
+            if (state.primaryButton != null) Spacer(8.dp)
+        }
         state.primaryButton?.let {
             ZashiButton(
                 modifier = Modifier.fillMaxWidth(),

@@ -27,4 +27,5 @@ data class SwapDetailState(
     val refundedAmount: TransactionDetailInfoRowState? = null,
     val donationBasisZec: String? = null,
     val showLiveDetails: Boolean = true,
+    val supportButton: ButtonState? = null,
 )

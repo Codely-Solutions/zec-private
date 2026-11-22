@@ -11,6 +11,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -27,7 +28,6 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
-import co.electriccoin.zcash.ui.fixture.ZashiMainTopAppBarStateFixture
 import org.json.JSONObject
 import org.junit.Rule
 import org.junit.Test
@@ -40,6 +40,7 @@ import java.io.File
 import java.security.MessageDigest
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 @RunWith(RobolectricTestRunner::class)
 // The Windows native shader compiler rejects Haze's progressive effect on API 34.
@@ -78,6 +79,63 @@ class ReviewScreenshotTest {
     @Test
     fun captureLargeSetupCorrectionStates() {
         captureSetupStates(listOf("dark"), 2f)
+    }
+
+    @Test
+    fun captureReviewCorrectionStates() {
+        captureReviewCorrections(listOf("light", "dark", "oled"), 1f)
+    }
+
+    @Test
+    fun captureLargeReviewCorrectionStates() {
+        captureReviewCorrections(listOf("dark"), 2f)
+    }
+
+    private fun captureReviewCorrections(themes: List<String>, scale: Float) {
+        compose.runOnUiThread {
+            RuntimeEnvironment.setFontScale(scale)
+            assertEquals(scale, compose.activity.resources.configuration.fontScale)
+        }
+        val screens = listOf(
+            "setup-incomplete" to R.string.wallet_initialization_continue,
+            "setup-failed" to R.string.wallet_initialization_retry,
+            "app-locked" to DesignR.string.splash_authTitle,
+            "send-replacement" to DesignR.string.send_to,
+            "recipient-pay-invalid-amount" to DesignR.string.send_error_invalidAmount,
+            "swap-support-ready" to R.string.reportSwap_shareQuote,
+        )
+        val scene = mutableStateOf(Scene(screens.first().first, themes.first(), scale))
+        show(scene)
+        val review = text(DesignR.string.send_review)
+        for (theme in themes) {
+            for ((screen, label) in screens) {
+                val current = Scene(screen, theme, scale)
+                compose.runOnIdle { scene.value = current }
+                val expected = text(label)
+                val target = compose.onNodeWithText(expected)
+                when (screen) {
+                    "setup-incomplete", "setup-failed" -> target.performScrollTo().assertIsEnabled()
+                    "app-locked" -> compose.onNodeWithContentDescription(
+                        text(DesignR.string.authentication_failed_welcome_icon_cont_desc, text(R.string.app_name))
+                    ).assertIsDisplayed().assertHasClickAction()
+                    "send-replacement" -> {
+                        compose.onNodeWithText("synthetic-replacement-receiver").assertIsDisplayed()
+                        compose.onNodeWithText(review).assertIsEnabled()
+                    }
+                    "recipient-pay-invalid-amount" -> {
+                        target.performScrollTo()
+                        compose.onNodeWithText(review).assertIsNotEnabled()
+                    }
+                    "swap-support-ready" -> {
+                        compose.onNodeWithText(text(R.string.reportSwap_report)).assertIsEnabled().assertHasClickAction()
+                        compose.onNodeWithText(text(R.string.reportSwap_shareQuoteDescription)).assertIsDisplayed()
+                        target.assertIsEnabled().assertHasClickAction()
+                    }
+                }
+                target.assertIsDisplayed()
+                capture(current, "screen", expected)
+            }
+        }
     }
 
     private fun captureSetupStates(themes: List<String>, scale: Float) {
@@ -156,13 +214,7 @@ class ReviewScreenshotTest {
                     isOledEnabled = scene.theme == "oled",
                 ) {
                     Box(Modifier.fillMaxSize().background(ZashiColors.Surfaces.bgPrimary)) {
-                        when (scene.screen) {
-                            "price-warning", "server-save-error" -> AdditionalReviewScene(
-                                scene.screen, {}, ZashiMainTopAppBarStateFixture.new(),
-                            )
-                            "incoming-saved-pending" -> IncomingSwapReviewScene(scene.screen)
-                            else -> ProjectReviewScene(scene.screen)
-                        }
+                        ComparisonScreens(scene.screen)
                     }
                 }
             }

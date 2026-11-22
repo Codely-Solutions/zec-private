@@ -4,6 +4,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.SwapQuote
+import co.electriccoin.zcash.ui.common.model.near.NearSwapQuote
 import co.electriccoin.zcash.ui.common.model.near.reviewedIdentity
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
@@ -38,7 +39,8 @@ class SaveORSwapUseCase(
                 status = SwapStatus.PENDING,
                 origin = quote.originAsset,
                 destination = quote.destinationAsset,
-                reviewedIdentity = identity
+                reviewedIdentity = identity,
+                signedQuoteEvidence = (quote as? NearSwapQuote)?.response?.signedEvidence,
             )) { "Unable to save swap tracking before funding" }
     }
 }

@@ -10,6 +10,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
+import co.electriccoin.zcash.ui.common.mapper.originalQuoteSupportButton
 import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_OUTPUT
@@ -425,7 +426,7 @@ class TransactionDetailVM(
             }
 
             data.swap != null -> {
-                null
+                data.swap.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
             }
 
             data.contact == null -> {
@@ -469,6 +470,9 @@ class TransactionDetailVM(
             )
 
         return when {
+            transaction.swap?.error != null && transaction.swap.status == null ->
+                transaction.swap.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
+
             transaction.swap != null &&
                 transaction.swap.error == null &&
                 transaction.swap.status?.status == SUCCESS

@@ -117,7 +117,7 @@ fun RootNavGraph(
                 }
             }
         } else if (
-            secretState == SecretState.NONE &&
+            (secretState == SecretState.NONE || secretState == SecretState.INCOMPLETE) &&
             navController.currentDestination?.parent?.route != OnboardingGraph::class.qualifiedName
         ) {
             keyboardManager.close()

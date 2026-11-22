@@ -37,6 +37,12 @@ internal fun requireNearTokenDecimals(decimals: Int) {
     require(decimals in 0..MAX_TOKEN_DECIMALS) { "Unsupported 1Click token decimals" }
 }
 
+internal fun BigDecimal.toExactNearQuoteAmountOrNull(decimals: Int): BigDecimal? =
+    takeIf {
+        decimals in 0..MAX_TOKEN_DECIMALS &&
+            signum() > 0 && fitsNearProviderBudget() && stripTrailingZeros().scale() <= decimals
+    }?.movePointRight(decimals)?.setScale(0)?.takeIf { it.fitsNearProviderBudget() }
+
 private fun BigDecimal.fitsNearProviderBudget(): Boolean {
     if (scale() !in (1 - MAX_PRECISION)..MAX_SCALE || unscaledValue().bitLength() > MAX_COEFFICIENT_BITS) {
         return false
@@ -55,5 +61,11 @@ internal object NearProviderDecimalSerializer : KSerializer<BigDecimal> {
     override fun serialize(encoder: Encoder, value: BigDecimal) {
         requireNearProviderDecimals(value)
         encoder.encodeString(value.toPlainString())
+    }
+}
+
+internal object NearQuoteAmountSerializer : KSerializer<BigDecimal> by NearProviderDecimalSerializer {
+    override fun serialize(encoder: Encoder, value: BigDecimal) {
+        NearProviderDecimalSerializer.serialize(encoder, value.setScale(0))
     }
 }

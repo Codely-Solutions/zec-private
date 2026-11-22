@@ -74,6 +74,7 @@ abstract class GiftCardDataSourceTestFixture {
         coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet(ZcashNetwork.Mainnet)
         coEvery { GiftCard.parse(LINK) } returns parsedCard
         coEvery { GiftCardRedeemers.storedAliases(any(), ZcashNetwork.Mainnet) } returns emptySet()
+        coEvery { GiftCardRedeemers.storedAliases(any(), ZcashNetwork.Testnet) } returns emptySet()
         coEvery { isTorEnabledStorageProvider.get() } returns true
         every { GiftCardRedeemers.new(any(), any(), any(), any(), any(), any()) } answers {
             listOf(redeemer, replacementRedeemer)[newRedeemerCalls++]

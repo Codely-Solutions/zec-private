@@ -2,6 +2,8 @@ package co.electriccoin.zcash.ui.screen.swap.detail.support
 
 import android.content.Intent
 import androidx.lifecycle.viewModelScope
+import cash.z.ecc.android.sdk.model.Account
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
@@ -10,7 +12,11 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
+import co.electriccoin.zcash.ui.common.model.near.syntheticSignedQuote
 import co.electriccoin.zcash.ui.common.provider.BlockchainProviderImpl
+import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSupportUseCase
@@ -107,6 +113,7 @@ class SwapSupportVMTest {
             GetReloadableSwapQuoteUseCase(getStatus),
             navigation,
             share,
+            mockk(),
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
         try {
@@ -116,6 +123,57 @@ class SwapSupportVMTest {
             report.onClick()
             runCurrent()
             verify { listOf(navigation, share) wasNot Called }
+        } finally {
+            subscription.cancel()
+            vm.viewModelScope.cancel()
+        }
+    }
+
+    @Test
+    fun sharesOnlyTheExplicitlyRequestedQuoteFromTheCurrentWalletGeneration() = runTest {
+        val application = RuntimeEnvironment.getApplication()
+        val share = SendEmailUseCase(application, mockk(), BlockchainProviderImpl(application))
+        val owner = mockk<ZodlAccount> {
+            every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16)))
+        }
+        val tracked = saved.copy(
+            ownerAccount = owner,
+            walletWriteToken = 2L,
+            signedQuoteEvidence = NearSignedQuoteEvidence(syntheticSignedQuote),
+        )
+        val getStatus = mockk<GetSwapStatusUseCase> {
+            every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData(savedMetadata = tracked))
+        }
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata(saved.depositAddress) } returns tracked.copy(walletWriteToken = 3L)
+            coEvery { reloadSwapMetadata(tracked) } returns tracked
+        }
+        val navigation = mockk<NavigationRouter>(relaxed = true)
+        val vm = SwapSupportVM(
+            SwapSupportArgs(saved.depositAddress),
+            GetReloadableSwapQuoteUseCase(getStatus),
+            navigation,
+            share,
+            metadata,
+        )
+        val subscription = backgroundScope.launch { vm.state.collect {} }
+        try {
+            runCurrent()
+            val shareQuote = assertNotNull(vm.state.value?.shareQuoteButton)
+            assertEquals(stringRes(R.string.reportSwap_shareQuote), shareQuote.text)
+            assertNull(shadowOf(application).nextStartedActivity)
+            shareQuote.onClick()
+            runCurrent()
+            assertNull(shadowOf(application).nextStartedActivity)
+
+            coEvery { metadata.getSwapMetadata(saved.depositAddress) } returns tracked
+            shareQuote.onClick()
+            runCurrent()
+            val chooser = assertNotNull(shadowOf(application).nextStartedActivity)
+            assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+            val shared = assertNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
+            assertEquals(syntheticSignedQuote, shared.getStringExtra(Intent.EXTRA_TEXT))
+            assertFalse(shared.hasExtra(Intent.EXTRA_EMAIL))
         } finally {
             subscription.cancel()
             vm.viewModelScope.cancel()
@@ -143,11 +201,16 @@ class SwapSupportVMTest {
             GetReloadableSwapQuoteUseCase(getStatus),
             navigation,
             share,
+            mockk(),
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
         try {
             runCurrent()
-            statusFlow.value = SwapQuoteStatusData(status = status, isLoading = false, savedMetadata = saved)
+            statusFlow.value = SwapQuoteStatusData(
+                status = status,
+                isLoading = false,
+                savedMetadata = saved.copy(signedQuoteEvidence = NearSignedQuoteEvidence(syntheticSignedQuote)),
+            )
             runCurrent()
             val report = assertNotNull(vm.state.value).reportIssueButton
             assertEquals(stringRes(R.string.reportSwap_report), report.text)
@@ -179,6 +242,7 @@ class SwapSupportVMTest {
                 ),
             )
             assertContains(body, "Synthetic device diagnostics")
+            assertFalse(body.contains("synthetic-recipient"))
             verify(exactly = 1) { getStatus.observe(saved.depositAddress) }
             verify(exactly = 1) { navigation.back() }
         } finally {

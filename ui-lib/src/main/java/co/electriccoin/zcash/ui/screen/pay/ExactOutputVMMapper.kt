@@ -6,6 +6,7 @@ import co.electriccoin.zcash.ui.common.model.errorText
 import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.near.toExactNearQuoteAmountOrNull
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.repository.SwapAssetsData
 import co.electriccoin.zcash.ui.design.component.AssetCardState
@@ -164,10 +165,10 @@ internal class ExactOutputVMMapper {
     }
 
     private fun createAmountErrorState(state: ExactOutputInternalState): StringResource? =
-        if (state.isInsufficientFunds) {
-            stringRes(R.string.send_error_insufficientFunds)
-        } else {
-            null
+        when {
+            state.hasUnrepresentableTokenAmount -> stringRes(co.electriccoin.zcash.ui.design.R.string.send_error_invalidAmount)
+            state.isInsufficientFunds -> stringRes(R.string.send_error_insufficientFunds)
+            else -> null
         }
 
     private fun createAmountState(
@@ -206,7 +207,7 @@ internal class ExactOutputVMMapper {
             },
             isEnabled = !state.isRequestingQuote,
             explicitError =
-                if (state.isInsufficientFunds) {
+                if (state.hasUnrepresentableTokenAmount || state.isInsufficientFunds) {
                     stringRes("")
                 } else {
                     null
@@ -368,7 +369,7 @@ internal class ExactOutputVMMapper {
                     onTryAgainClick()
                 } else {
                     val address = state.selectedABContact?.address ?: state.address
-                    state.getOriginTokenAmount()?.let {
+                    state.getOriginTokenAmount()?.takeUnless { state.hasUnrepresentableTokenAmount }?.let {
                         onRequestSwapQuoteClick(it, state.getOriginFiatAmount(), address)
                     }
                 }
@@ -461,6 +462,11 @@ private data class ExactOutputInternalState(
      * between them.
      */
     val isInsufficientFunds: Boolean = getZatoshi()?.let { canSpend(it) == false } == true
+
+    val hasUnrepresentableTokenAmount: Boolean =
+        amount.amount?.let { value ->
+            asset != null && value.signum() > 0 && value.toExactNearQuoteAmountOrNull(asset.decimals) == null
+        } == true
 
     fun getOriginFiatAmount(): BigDecimal? {
         val tokenAmount = amount.amount

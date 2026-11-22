@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.common.model.near.SwapType
 import co.electriccoin.zcash.ui.common.provider.NearApiProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.runBlocking
@@ -86,6 +87,27 @@ class NearSwapCatalogTest {
                 assertQuoteRequest(Route(zec, asset, SwapType.EXACT_OUTPUT), SwapMode.EXACT_OUTPUT)
             }
         }
+
+    @Test
+    fun roundedInputModesRejectAmountsThatTruncateToZeroBeforeRequestingAQuote() = runBlocking {
+        listOf(
+            SwapMode.EXACT_INPUT to Route(zec, bitcoin, SwapType.EXACT_INPUT),
+            SwapMode.FLEX_INPUT to Route(bitcoin, zec, SwapType.FLEX_INPUT),
+        ).forEach { (mode, route) ->
+            assertFailsWith<IllegalArgumentException> {
+                dataSource.requestQuote(
+                    swapMode = mode,
+                    amount = BigDecimal("0.9").movePointLeft(route.origin.decimals),
+                    refundAddress = route.refund,
+                    originAsset = route.origin,
+                    destinationAddress = route.recipient,
+                    destinationAsset = route.destination,
+                    slippage = BigDecimal.ONE,
+                )
+            }
+        }
+        coVerify(exactly = 0) { nearApiProvider.requestQuote(any()) }
+    }
 
     @Test
     fun quoteRejectsInvalidMinimumsAndFractionalAtomicAmounts() = runBlocking {
@@ -275,7 +297,7 @@ class NearSwapCatalogTest {
     private suspend fun requestQuote(route: Route, mode: SwapMode) =
         dataSource.requestQuote(
             swapMode = mode,
-            amount = ENTERED_AMOUNT,
+            amount = if (mode == SwapMode.EXACT_OUTPUT) route.fixedAmount.formatted else ENTERED_AMOUNT,
             refundAddress = route.refund,
             originAsset = route.origin,
             destinationAddress = route.recipient,

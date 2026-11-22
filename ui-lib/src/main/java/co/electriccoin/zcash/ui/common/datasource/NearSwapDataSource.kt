@@ -25,6 +25,7 @@ import co.electriccoin.zcash.ui.common.model.near.SubmitDepositTransactionReques
 import co.electriccoin.zcash.ui.common.model.near.SwapType
 import co.electriccoin.zcash.ui.common.model.near.requireNearTokenDecimals
 import co.electriccoin.zcash.ui.common.model.near.requireSimpleChainRouting
+import co.electriccoin.zcash.ui.common.model.near.toExactNearQuoteAmountOrNull
 import co.electriccoin.zcash.ui.common.model.near.toNearProviderDecimalOrNull
 import co.electriccoin.zcash.ui.common.provider.BlockchainProvider
 import co.electriccoin.zcash.ui.common.provider.NearApiProvider
@@ -89,9 +90,12 @@ class NearSwapDataSource(
             }
 
         requireNearTokenDecimals(decimals)
-        val shifted = amount.movePointRight(decimals)
-        val integer = shifted.toBigInteger().toBigDecimal()
-        val normalizedAmount = shifted.round(MathContext(integer.precision(), RoundingMode.DOWN))
+        val normalizedAmount = when (swapMode) {
+            SwapMode.EXACT_INPUT, SwapMode.FLEX_INPUT -> amount.movePointRight(decimals).setScale(0, RoundingMode.DOWN)
+            SwapMode.EXACT_OUTPUT -> requireNotNull(amount.toExactNearQuoteAmountOrNull(decimals)) {
+                "Quote amount must be a positive whole number of base units"
+            }
+        }
 
         val slippageToleranceBps = slippage.multiply(BigDecimal(100), MathContext.DECIMAL128).toInt()
 

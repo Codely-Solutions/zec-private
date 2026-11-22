@@ -40,6 +40,7 @@ class SessionTest(unittest.TestCase):
         operation = self.operation(self.first)
         operation['config']['tasks'] = [':ui-lib:testReleaseUnitTest']
         def runner(command, cwd, seconds, root, name, **kwargs):
+            (root/(name+'.log')).write_text('> Task :ui-lib:testReleaseUnitTest\n')
             for module, task, suite in (
                     ('ui-lib', 'testReleaseUnitTest', 'current'),
                     ('ui-lib', 'testDebugUnitTest', 'other-variant'),
@@ -51,6 +52,109 @@ class SessionTest(unittest.TestCase):
         self.run_session([operation], runner)
         receipt = json.loads((self.evidence/'0001.json').read_text())
         self.assertEqual([Path(item['file']).name for item in receipt['reports']], ['TEST-current.xml'])
+
+    def report_operation(self, commit=None):
+        operation = self.operation(commit or self.first)
+        operation['config']['tasks'] = [':ui-lib:testReleaseUnitTest']
+        return operation
+
+    def write_report(self, root, name, outcome='', value='current'):
+        (root/(name+'.log')).write_text('> Task :ui-lib:testReleaseUnitTest'+(' '+outcome if outcome else '')+'\n')
+        path = root/'builds/ui-lib/test-results/testReleaseUnitTest/TEST-current.xml'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('<testsuite name="'+value+'"/>')
+        return path
+
+    def test_first_rejected_pin_records_original_error_without_reports(self):
+        with self.assertRaisesRegex(ValueError, 'full commit'):
+            self.run_session([self.report_operation('HEAD')], mock.Mock())
+        receipt = json.loads((self.evidence/'0001.json').read_text())
+        self.assertFalse(receipt['accepted'])
+        self.assertIn('ValueError', receipt['error'])
+        self.assertEqual(receipt['reports'], [])
+        self.assertNotIn('binding', receipt)
+
+    def test_later_rejected_pin_does_not_borrow_config_or_report(self):
+        def runner(command, cwd, seconds, root, name, **kwargs):
+            self.write_report(root, name)
+            return dict(exitCode=0)
+        rejected = self.operation('HEAD')
+        rejected['config'] = dict(tasks=[':detektAll'])
+        with self.assertRaises(ValueError):
+            self.run_session([self.report_operation(), rejected], runner)
+        receipt = json.loads((self.evidence/'0002.json').read_text())
+        self.assertEqual(receipt['config'], rejected['config'])
+        self.assertEqual(receipt['reports'], [])
+        self.assertEqual(len(list(self.evidence.glob('0001/reports/**/*.xml'))), 1)
+
+    def test_failure_before_test_or_during_evidence_keeps_primary_error(self):
+        def runner(command, cwd, seconds, root, name, **kwargs):
+            if name == '0001':
+                self.write_report(root, name)
+                timing = cwd/'artifact/task-timing.jsonl'
+                timing.parent.mkdir()
+                timing.write_text('first producer\n')
+                return dict(exitCode=0)
+            (root/(name+'.log')).write_text('configuration failed\n')
+            return dict(exitCode=7)
+        with self.assertRaisesRegex(RuntimeError, 'Operation failed'):
+            self.run_session([self.report_operation(), self.report_operation(self.second)], runner)
+        receipt = json.loads((self.evidence/'0002.json').read_text())
+        self.assertEqual(receipt['reports'], [])
+        self.assertNotIn('timing', receipt)
+        self.assertFalse((self.evidence/'0002-task-timing.jsonl').exists())
+
+    def test_incremental_reuse_preserves_report_producer(self):
+        def runner(command, cwd, seconds, root, name, **kwargs):
+            if name == '0001':
+                self.write_report(root, name)
+            else:
+                (root/(name+'.log')).write_text('> Task :ui-lib:testReleaseUnitTest UP-TO-DATE\n')
+            return dict(exitCode=0)
+        self.run_session([self.report_operation(), self.report_operation(self.second)], runner)
+        first, second = [json.loads((self.evidence/(name+'.json')).read_text()) for name in ('0001', '0002')]
+        self.assertEqual(second['reports'][0]['producer'], first['reports'][0]['producer'])
+        self.assertEqual(second['reports'][0]['producer']['source'], self.first)
+        self.assertEqual(second['reports'][0]['outcome'], 'UP-TO-DATE')
+        self.assertNotEqual(first['binding'], second['binding'])
+
+    def test_cache_restoration_records_current_restore_identity(self):
+        def runner(command, cwd, seconds, root, name, **kwargs):
+            self.write_report(root, name, 'FROM-CACHE')
+            return dict(exitCode=0)
+        self.run_session([self.report_operation()], runner)
+        report = json.loads((self.evidence/'0001.json').read_text())['reports'][0]
+        self.assertEqual(report['producer']['outcome'], 'FROM-CACHE')
+        self.assertEqual(report['producer']['source'], self.first)
+
+    def test_failed_test_does_not_relabel_unchanged_xml(self):
+        def runner(command, cwd, seconds, root, name, **kwargs):
+            if name == '0001':
+                self.write_report(root, name)
+                return dict(exitCode=0)
+            (root/(name+'.log')).write_text('> Task :ui-lib:testReleaseUnitTest FAILED\n')
+            return dict(exitCode=1)
+        with self.assertRaises(RuntimeError):
+            self.run_session([self.report_operation(), self.report_operation()], runner)
+        self.assertEqual(json.loads((self.evidence/'0002.json').read_text())['reports'], [])
+
+    def test_collection_failure_records_receipt_without_masking_cancellation(self):
+        def runner(command, cwd, seconds, root, name, **kwargs):
+            self.write_report(root, name)
+            raise KeyboardInterrupt()
+        with mock.patch.object(session, 'collect_reports', side_effect=OSError('synthetic I/O failure')):
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_session([self.report_operation()], runner)
+        receipt = json.loads((self.evidence/'0001.json').read_text())
+        self.assertFalse(receipt['accepted'])
+        self.assertEqual(receipt['evidence_error'], 'OSError')
+        self.assertIn('KeyboardInterrupt', receipt['error'])
+
+    def test_collection_failure_rejects_otherwise_successful_operation(self):
+        with mock.patch.object(session, 'collect_reports', side_effect=OSError()):
+            with self.assertRaisesRegex(RuntimeError, 'evidence collection failed'):
+                self.run_session([self.report_operation()], lambda *a, **k: dict(exitCode=0))
+        self.assertFalse(json.loads((self.evidence/'0001.json').read_text())['accepted'])
 
     def test_static_analysis_does_not_admit_production_assembly(self):
         command = session.gradle(self.root, dict(tasks=[':detektAll']), Path('verified-jdk'))

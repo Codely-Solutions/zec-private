@@ -1,6 +1,5 @@
 package co.electriccoin.zcash.ui.screen.send.model
 
-import androidx.compose.runtime.saveable.mapSaver
 import cash.z.ecc.android.sdk.type.AddressType
 
 data class RecipientAddressState(
@@ -22,83 +21,32 @@ data class RecipientAddressState(
             type: AddressType? = null
         ): RecipientAddressState = RecipientAddressState(address, type)
 
-        internal val Saver
-            get() =
-                run {
-                    mapSaver(
-                        save = { it.toSaverMap() },
-                        restore = {
-                            if (it.isEmpty()) {
-                                null
-                            } else {
-                                val address = (it[KEY_ADDRESS] as String)
-                                val type = (it[KEY_TYPE] as String?)
-                                RecipientAddressState(
-                                    address,
-                                    when (type) {
-                                        TYPE_INVALID -> {
-                                            AddressType.Invalid(
-                                                (it[KEY_INVALID_REASON] as String)
-                                            )
-                                        }
-
-                                        TYPE_SHIELDED -> {
-                                            AddressType.Shielded
-                                        }
-
-                                        TYPE_UNIFIED -> {
-                                            AddressType.Unified
-                                        }
-
-                                        TYPE_TRANSPARENT -> {
-                                            AddressType.Transparent
-                                        }
-
-                                        TYPE_TEX -> {
-                                            AddressType.Tex
-                                        }
-
-                                        else -> {
-                                            null
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    )
+        internal fun fromSavedState(state: HashMap<String, String>): RecipientAddressState =
+            RecipientAddressState(
+                address = state.getValue(KEY_ADDRESS),
+                type = when (state[KEY_TYPE]) {
+                    TYPE_INVALID -> AddressType.Invalid(state.getValue(KEY_INVALID_REASON))
+                    TYPE_SHIELDED -> AddressType.Shielded
+                    TYPE_UNIFIED -> AddressType.Unified
+                    TYPE_TRANSPARENT -> AddressType.Transparent
+                    TYPE_TEX -> AddressType.Tex
+                    else -> null
                 }
+            )
+    }
 
-        private fun RecipientAddressState.toSaverMap(): HashMap<String, Any> {
-            val saverMap = HashMap<String, Any>()
-
-            saverMap[KEY_ADDRESS] = this.address
-
-            if (this.type != null) {
-                saverMap[KEY_TYPE] =
-                    when (this.type) {
-                        is AddressType.Invalid -> {
-                            saverMap[KEY_INVALID_REASON] = this.type.reason
-                            TYPE_INVALID
-                        }
-
-                        AddressType.Unified -> {
-                            TYPE_UNIFIED
-                        }
-
-                        AddressType.Transparent -> {
-                            TYPE_TRANSPARENT
-                        }
-
-                        AddressType.Shielded -> {
-                            TYPE_SHIELDED
-                        }
-
-                        AddressType.Tex -> {
-                            TYPE_TEX
-                        }
-                    }
+    internal fun toSavedState(): HashMap<String, String> = hashMapOf(KEY_ADDRESS to address).apply {
+        when (type) {
+            is AddressType.Invalid -> {
+                put(KEY_INVALID_REASON, type.reason)
+                put(KEY_TYPE, TYPE_INVALID)
             }
-            return saverMap
+
+            AddressType.Shielded -> put(KEY_TYPE, TYPE_SHIELDED)
+            AddressType.Unified -> put(KEY_TYPE, TYPE_UNIFIED)
+            AddressType.Transparent -> put(KEY_TYPE, TYPE_TRANSPARENT)
+            AddressType.Tex -> put(KEY_TYPE, TYPE_TEX)
+            null -> Unit
         }
     }
 }

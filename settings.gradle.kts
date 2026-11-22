@@ -254,6 +254,7 @@ dependencyResolutionManagement {
             library("zcash-sdk", "com.zodl.android:zcash-android-sdk:$zcashSdkVersion")
             library("zcash-sdk-backend", "com.zodl.android:zcash-android-backend:$zcashSdkVersion")
             library("zcash-sdk-incubator", "com.zodl.android:zcash-android-sdk-incubator:$zcashSdkVersion")
+            library("zcash-sdk-slipstream", "com.zodl.android:zcash-android-sdk-slipstream:$zcashSdkVersion")
             library("zcash-bip39", "cash.z.ecc.android:kotlin-bip39:$zcashBip39Version")
             library("zip321", "org.zecdev:zip321:$zip321Version")
             library("zxing", "com.google.zxing:core:$zxingVersion")

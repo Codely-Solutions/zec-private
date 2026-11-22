@@ -23,6 +23,7 @@ import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
 import co.electriccoin.zcash.wallet.foundation.FundingCapability
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.model.near.toExactNearQuoteAmountOrNull
 import co.electriccoin.zcash.ui.common.model.requireSpendable
 import co.electriccoin.zcash.ui.common.model.RecipientAddressPolicy
 import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
@@ -92,6 +93,14 @@ class RequestSwapQuoteUseCase(
         canNavigateToSwapQuote: () -> Boolean,
         contactNetwork: String? = null
     ) {
+        if (amount.toExactNearQuoteAmountOrNull(selectedAsset.decimals) == null) {
+            if (canNavigateToSwapQuote()) {
+                navigateToErrorUseCase(
+                    ErrorArgs.General(IllegalArgumentException("Quote amount must be a positive whole number of base units"))
+                )
+            }
+            return
+        }
         val recipient = validatedRecipient(address, selectedAsset, contactNetwork, canNavigateToSwapQuote) ?: return
         val newAddress = requestFreshAddress() ?: return
         requestQuote(

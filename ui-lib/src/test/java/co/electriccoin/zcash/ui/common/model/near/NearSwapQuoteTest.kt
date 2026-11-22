@@ -146,7 +146,7 @@ class NearSwapQuoteTest {
                     slippageTolerance = slippageBps,
                     originAsset = originAssetId,
                     destinationAsset = destinationAssetId,
-                    amount = amountIn,
+                    amount = amountIn.takeIf { it.signum() > 0 } ?: BigDecimal("100000000"),
                     refundTo = REFUND_ADDRESS,
                     recipient = RECIPIENT_ADDRESS,
                     deadline = EPOCH,

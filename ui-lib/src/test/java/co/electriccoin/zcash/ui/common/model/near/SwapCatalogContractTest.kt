@@ -131,6 +131,24 @@ class SwapCatalogContractTest {
     }
 
     @Test
+    fun quoteRequestEncodesOnlyPositiveIntegerBaseUnitStrings() {
+        val request = response(fixture.nativeZec, fixture.externalAssets.first(), BigDecimal.ONE).quoteRequest
+        val serializer = QuoteRequest.serializer()
+        val encoded = Json.encodeToJsonElement(serializer, request).jsonObject
+        assertEquals(JsonPrimitive("1"), encoded["amount"])
+        assertEquals(
+            JsonPrimitive("1200"),
+            Json.encodeToJsonElement(serializer, request.copy(amount = BigDecimal("1200.00"))).jsonObject["amount"],
+        )
+
+        listOf("0", "-1", "0.9", "12.1").forEach { invalid ->
+            assertFailsWith<IllegalArgumentException> { request.copy(amount = BigDecimal(invalid)) }
+            val invalidRequest = JsonObject(encoded + ("amount" to JsonPrimitive(invalid)))
+            assertFailsWith<IllegalArgumentException> { Json.decodeFromJsonElement(serializer, invalidRequest) }
+        }
+    }
+
+    @Test
     fun quoteRejectsAtomicMismatchAndSubatomicAmountsAtCatalogPrecision() {
         assets.distinctBy { it.decimals }.forEach { asset ->
             val origin = fixture.nativeZec

@@ -92,6 +92,7 @@ class WalletViewModel(
 enum class SecretState {
     LOADING,
     NONE,
+    INCOMPLETE,
     READY
 }
 

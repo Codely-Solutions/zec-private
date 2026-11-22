@@ -6,6 +6,7 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
+import co.electriccoin.zcash.ui.common.mapper.originalQuoteSupportButton
 import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.model.SwapStatus.EXPIRED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.FAILED
@@ -111,6 +112,11 @@ class SwapDetailVM(
                         else -> null
                     },
                     primaryButton = createPrimaryButtonState(swapData, swapData.error),
+                    supportButton = if (swapData.error != null) {
+                        swapData.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
+                    } else {
+                        null
+                    },
                     onBack = ::onBack,
                     showLiveDetails = swapData.status != null || !hasDetails && swapData.error == null,
                     explorerLinks = swapData.status?.let { status ->
@@ -226,7 +232,7 @@ class SwapDetailVM(
             }
 
             else -> {
-                null
+                swapData.savedMetadata?.originalQuoteSupportButton(::onContactSupport)
             }
         }
     }

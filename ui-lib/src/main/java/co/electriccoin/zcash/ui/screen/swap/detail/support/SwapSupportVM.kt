@@ -5,10 +5,13 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.usecase.SwapData
 import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +25,7 @@ class SwapSupportVM(
     getReloadableSwapQuote: GetReloadableSwapQuoteUseCase,
     private val navigationRouter: NavigationRouter,
     private val sendEmailUseCase: SendEmailUseCase,
+    private val metadataRepository: MetadataRepository,
 ) : ViewModel() {
     val state: StateFlow<SwapSupportState?> =
         getReloadableSwapQuote
@@ -36,7 +40,16 @@ class SwapSupportVM(
                             isEnabled = swapData.hasReportDetails,
                             onClick = { onReportIssue(swapData) }
                         ),
-                    onBack = ::onBack
+                    onBack = ::onBack,
+                    shareQuoteButton = swapData.savedMetadata
+                        ?.takeIf { it.signedQuoteEvidence != null }
+                        ?.let { saved ->
+                            ButtonState(
+                                text = stringRes(R.string.reportSwap_shareQuote),
+                                style = ButtonStyle.SECONDARY,
+                                onClick = { onShareOriginalQuote(saved) },
+                            )
+                        }
                 )
             }.stateIn(
                 scope = viewModelScope,
@@ -56,4 +69,16 @@ class SwapSupportVM(
 
     private val SwapData.hasReportDetails: Boolean
         get() = status != null || savedMetadata != null
+
+    private fun onShareOriginalQuote(expected: TransactionSwapMetadata) {
+        val owner = expected.ownerAccount?.sdkAccount?.accountUuid ?: return
+        viewModelScope.launch {
+            val selected = metadataRepository.getSwapMetadata(expected.depositAddress) ?: return@launch
+            if (selected.ownerAccount?.sdkAccount?.accountUuid != owner ||
+                selected.walletWriteToken != expected.walletWriteToken
+            ) return@launch
+            val evidence = metadataRepository.reloadSwapMetadata(expected)?.signedQuoteEvidence ?: return@launch
+            sendEmailUseCase.shareOriginalQuote(evidence)
+        }
+    }
 }

@@ -9,7 +9,8 @@ enum class OnboardingState {
     NONE,
     NEEDS_WARN,
     NEEDS_BACKUP,
-    READY;
+    READY,
+    CLEARING_STALE_DATA;
 
     fun toNumber() = ordinal
 

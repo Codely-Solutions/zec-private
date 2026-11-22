@@ -9,4 +9,5 @@ data class SwapSupportState(
     val message: StringResource,
     val reportIssueButton: ButtonState,
     override val onBack: () -> Unit,
+    val shareQuoteButton: ButtonState? = null,
 ) : ModalBottomSheetState

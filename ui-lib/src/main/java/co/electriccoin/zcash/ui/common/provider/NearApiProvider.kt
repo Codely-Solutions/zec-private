@@ -6,6 +6,7 @@ import co.electriccoin.zcash.ui.common.model.near.QuoteRequest
 import co.electriccoin.zcash.ui.common.model.near.QuoteResponseDto
 import co.electriccoin.zcash.ui.common.model.near.SubmitDepositTransactionRequest
 import co.electriccoin.zcash.ui.common.model.near.SwapStatusResponseDto
+import co.electriccoin.zcash.ui.common.model.near.verifiedNearQuoteEvidence
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.ResponseException
@@ -13,6 +14,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.coroutines.Dispatchers
@@ -58,7 +60,10 @@ class KtorNearApiProvider(
                     setBody(request)
                 }
             }
-            diagnostics.trace(QuoteRequestStage.RESPONSE_DECODE) { response.body() }
+            diagnostics.trace(QuoteRequestStage.RESPONSE_DECODE) {
+                val quote = response.body<QuoteResponseDto>()
+                quote.copy(signedEvidence = verifiedNearQuoteEvidence(response.bodyAsText()))
+            }
         }
 
     override suspend fun submitDepositTransaction(request: SubmitDepositTransactionRequest) {

@@ -114,15 +114,22 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
     @Test
     fun resetWaitsForTheExactCardWalletFilesAfterCloseReturns() = runTest {
         val fixture = resetFixture()
-        coEvery { GiftCardRedeemers.storedAliases(any(), ZcashNetwork.Mainnet) } returnsMany
-            listOf(setOf(ALIAS, OTHER_ALIAS), setOf(OTHER_ALIAS))
+        var aliases = setOf(ALIAS, OTHER_ALIAS)
+        coEvery { GiftCardRedeemers.storedAliases(any(), ZcashNetwork.Mainnet) } answers { aliases }
+        coEvery { GiftCardRedeemers.erase(any(), ZcashNetwork.Mainnet, OTHER_ALIAS) } coAnswers {
+            aliases -= OTHER_ALIAS
+            true
+        }
         val reset = launch { fixture.reset(keepFiles = true) }
         runCurrent()
 
         coVerify(exactly = 1) { redeemer.close() }
+        coVerify(exactly = 0) { GiftCardRedeemers.erase(any(), any(), any()) }
         verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        aliases -= ALIAS
         reset.join()
 
+        coVerify(exactly = 1) { GiftCardRedeemers.erase(any(), ZcashNetwork.Mainnet, OTHER_ALIAS) }
         verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
     }
 
@@ -180,7 +187,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         }
         fixture.reset(keepFiles = false)
 
-        assertEquals(stoppedAt + 1, lookups)
+        assertEquals(stoppedAt + 2, lookups)
         coVerify(exactly = 1) { redeemer.close() }
         coVerify(exactly = 0) { redeemer.redeem(any(), any(), any()) }
         verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
@@ -233,6 +240,72 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         coVerify(exactly = 1) { redeemer.redeem(recipient, any(), any()) }
         coVerify(exactly = 0) { replacementRedeemer.redeem(any(), any(), any()) }
         verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+    }
+
+    @Test
+    fun resetRetriesAndVerifiesAnOrphanLeftByFailedStartupSweep() = runTest {
+        val store = GiftCardLinkStoreImpl()
+        val dataSource = dataSource(this).also { it.scope = backgroundScope }
+        val repository = GiftCardRepositoryImpl(dataSource, store).also { it.scope = backgroundScope }
+        val fixture = ResetFixture(repository, store, "unused-session")
+        val network = ZcashNetwork.Mainnet
+        var aliases = setOf(ALIAS)
+        var eraseCalls = 0
+        coEvery { GiftCardRedeemers.storedAliases(any(), network) } answers { aliases }
+        coEvery { GiftCardRedeemers.erase(any(), network, ALIAS) } coAnswers {
+            when (++eraseCalls) {
+                1 -> throw java.io.IOException("Startup cleanup failure")
+                2 -> false
+                else -> {
+                    aliases = emptySet()
+                    true
+                }
+            }
+        }
+
+        repository.sweepOrphanedCardWallets()
+        assertEquals(1, eraseCalls)
+        assertEquals(listOf(StoredCardWallet(network, ALIAS)), dataSource.findStoredCardWallets())
+
+        assertFailsWith<IllegalStateException> { fixture.reset(keepFiles = false) }
+        fixture.assertPreparationPending(ResetStage.DELETE_LOCAL_FILES)
+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        assertEquals(2, eraseCalls)
+        assertEquals(listOf(StoredCardWallet(network, ALIAS)), dataSource.findStoredCardWallets())
+
+        fixture.reset(keepFiles = false)
+        assertFalse(fixture.reset.isPending.value)
+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        assertEquals(3, eraseCalls)
+        assertTrue(dataSource.findStoredCardWallets().isEmpty())
+    }
+
+    @Test
+    fun resetRetriesOrphanEnumerationBeforeClearingTheWallet() = runTest {
+        val store = GiftCardLinkStoreImpl()
+        val dataSource = dataSource(this).also { it.scope = backgroundScope }
+        val repository = GiftCardRepositoryImpl(dataSource, store).also { it.scope = backgroundScope }
+        val fixture = ResetFixture(repository, store, "unused-session")
+        var aliases = setOf(ALIAS)
+        var lookups = 0
+        coEvery { GiftCardRedeemers.storedAliases(any(), ZcashNetwork.Testnet) } coAnswers {
+            if (++lookups <= 2) throw java.io.IOException("Cannot list helper wallets")
+            aliases
+        }
+        coEvery { GiftCardRedeemers.erase(any(), ZcashNetwork.Testnet, ALIAS) } coAnswers {
+            aliases = emptySet()
+            true
+        }
+
+        repository.sweepOrphanedCardWallets()
+        assertFailsWith<java.io.IOException> { fixture.reset(keepFiles = false) }
+        fixture.assertPreparationPending(ResetStage.DELETE_LOCAL_FILES)
+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+
+        fixture.reset(keepFiles = false)
+        coVerify(exactly = 1) { GiftCardRedeemers.erase(any(), ZcashNetwork.Testnet, ALIAS) }
+        verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        assertFalse(fixture.reset.isPending.value)
     }
 
     private suspend fun TestScope.resetFixture(): ResetFixture {
