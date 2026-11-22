@@ -83,7 +83,7 @@ class ResetZashiUseCase(
 
     private suspend fun prepareReset(keepFiles: Boolean, stage: ResetStage?) {
         val prepared = withTimeoutOrNull(PREPARE_RESET_TIMEOUT) {
-            if (stage == null) migrationAppHooks.cancelMigrationWork()
+            if (stage != ResetStage.CLEAR_PREFERENCES) migrationAppHooks.cancelMigrationWork()
             giftCardRepository.quiesceForWalletReset()
             if (stage == ResetStage.DELETE_LOCAL_FILES || (stage == null && !keepFiles)) {
                 addressBookRepository.delete()

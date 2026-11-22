@@ -30160,7 +30160,7 @@ index d50537e7f..b00724448 100644
 @@ -11,0 +12 @@ data class ResetZashiState(
 +    val isPending: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
-index eb47e1885..4e066fec3 100644
+index eb47e1885..c620981a7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
 @@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -30237,7 +30237,7 @@ index eb47e1885..4e066fec3 100644
 +
 +    private suspend fun prepareReset(keepFiles: Boolean, stage: ResetStage?) {
 +        val prepared = withTimeoutOrNull(PREPARE_RESET_TIMEOUT) {
-+            if (stage == null) migrationAppHooks.cancelMigrationWork()
++            if (stage != ResetStage.CLEAR_PREFERENCES) migrationAppHooks.cancelMigrationWork()
 +            giftCardRepository.quiesceForWalletReset()
 +            if (stage == ResetStage.DELETE_LOCAL_FILES || (stage == null && !keepFiles)) {
 +                addressBookRepository.delete()
@@ -49864,10 +49864,10 @@ index 000000000..4723a7ebd
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt
 new file mode 100644
-index 000000000..a0ac236b9
+index 000000000..4ee7c055c
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt
-@@ -0,0 +1,371 @@
+@@ -0,0 +1,375 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -49967,7 +49967,9 @@ index 000000000..a0ac236b9
 +                every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(listOf(account))
 +                coEvery { getSelectedAccount() } returns account
 +            },
-+            metadataDataSource = MetadataDataSourceImpl(storage, provider, mockk(), walletWriteAccess = fixture.writeAccess),
++            metadataDataSource = MetadataDataSourceImpl(
++                storage, provider, mockk(), walletWriteAccess = fixture.writeAccess,
++            ),
 +            metadataKeyStorageProvider = mockk<MetadataKeyStorageProvider> {
 +                coEvery { get(account.sdkAccount.accountUuid) } returns key
 +            },
@@ -50144,7 +50146,9 @@ index 000000000..a0ac236b9
 +        assertTrue(legacy.isFile)
 +        assertFalse(fixture.contactStorage.getStorageTarget(fixture.contactKey).exists())
 +
-+        val restored = withTimeout(10.seconds) { fixture.contactSource.observe(fixture.contactKey).filterNotNull().first() }
++        val restored = withTimeout(10.seconds) {
++            fixture.contactSource.observe(fixture.contactKey).filterNotNull().first()
++        }
 +        assertEquals(book, restored)
 +        assertFalse(legacy.exists())
 +    }

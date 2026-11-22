@@ -97,7 +97,9 @@ class ResetWalletWriteOwnershipTest {
                 every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(listOf(account))
                 coEvery { getSelectedAccount() } returns account
             },
-            metadataDataSource = MetadataDataSourceImpl(storage, provider, mockk(), walletWriteAccess = fixture.writeAccess),
+            metadataDataSource = MetadataDataSourceImpl(
+                storage, provider, mockk(), walletWriteAccess = fixture.writeAccess,
+            ),
             metadataKeyStorageProvider = mockk<MetadataKeyStorageProvider> {
                 coEvery { get(account.sdkAccount.accountUuid) } returns key
             },
@@ -274,7 +276,9 @@ class ResetWalletWriteOwnershipTest {
         assertTrue(legacy.isFile)
         assertFalse(fixture.contactStorage.getStorageTarget(fixture.contactKey).exists())
 
-        val restored = withTimeout(10.seconds) { fixture.contactSource.observe(fixture.contactKey).filterNotNull().first() }
+        val restored = withTimeout(10.seconds) {
+            fixture.contactSource.observe(fixture.contactKey).filterNotNull().first()
+        }
         assertEquals(book, restored)
         assertFalse(legacy.exists())
     }
