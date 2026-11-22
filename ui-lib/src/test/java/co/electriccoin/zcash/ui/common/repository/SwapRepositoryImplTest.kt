@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.repository
 
 import cash.z.ecc.android.sdk.model.WalletAddress
+import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
@@ -25,6 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import java.math.BigDecimal
+import java.time.Instant
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -673,13 +675,18 @@ class SwapRepositoryImplTest {
         address: String = "deposit-address",
         from: SimpleSwapAsset = SwapAssetTestFixture.simpleAsset(tokenTicker = "btc", chainTicker = "btc"),
         to: SimpleSwapAsset = SwapAssetTestFixture.zecSimpleAsset()
-    ): TransactionSwapMetadata =
-        mockk {
-            every { depositAddress } returns address
-            every { provider } returns "near"
-            every { origin } returns from
-            every { destination } returns to
-        }
+    ): TransactionSwapMetadata = TransactionSwapMetadata(
+        depositAddress = address,
+        provider = "near",
+        totalFees = Zatoshi(0),
+        totalFeesUsd = BigDecimal.ZERO,
+        lastUpdated = Instant.EPOCH,
+        origin = from,
+        destination = to,
+        mode = SwapMode.FLEX_INPUT,
+        recordedStatus = null,
+        amountOutFormatted = BigDecimal.ONE,
+    )
 
     @Suppress("LongParameterList")
     private fun fakeQuote(

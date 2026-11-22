@@ -16,6 +16,16 @@ import androidx.core.content.edit
  * engine-owned); plain prefs (not encrypted) on purpose: two wall-clock instants, no secrets.
  */
 object MigrationWorkerHeartbeat {
+    /** Accounts with app-owned fallback state, including accounts unavailable from the SDK during reset. */
+    fun accountKeyIds(context: Context): Set<String> =
+        prefs(context).all.keys.mapNotNull { key ->
+            when {
+                key.startsWith(KEY_NEXT_WAKE) -> key.removePrefix(KEY_NEXT_WAKE)
+                key.startsWith(KEY_LAST_RUN) -> key.removePrefix(KEY_LAST_RUN)
+                else -> null
+            }?.takeIf { it.isNotEmpty() }
+        }.toSet()
+
     fun stampScheduled(context: Context, accountKeyId: String, dueAtEpochMillis: Long) {
         prefs(context).edit { putLong(KEY_NEXT_WAKE + accountKeyId, dueAtEpochMillis) }
     }

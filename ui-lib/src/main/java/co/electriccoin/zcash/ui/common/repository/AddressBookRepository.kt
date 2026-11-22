@@ -19,6 +19,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
@@ -106,6 +107,7 @@ class AddressBookRepositoryImpl(
         accountDataSource
             .zashiAccount
             .distinctUntilChangedBy { it?.sdkAccount?.accountUuid }
+            .combine(walletWriteAccess.version) { account, _ -> account }
             .map { account ->
                 val token = walletWriteAccess.token()
                 val key = getAddressBookKey(account ?: return@map null, token)

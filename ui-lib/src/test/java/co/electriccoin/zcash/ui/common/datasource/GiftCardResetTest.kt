@@ -10,6 +10,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
+import co.electriccoin.zcash.preference.api.PreferenceProvider
 import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSourceTestValues.ADDRESS
 import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSourceTestValues.ALIAS
 import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSourceTestValues.AMOUNT
@@ -18,8 +19,10 @@ import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSourceTestValues.L
 import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSourceTestValues.OTHER_ALIAS
 import co.electriccoin.zcash.ui.common.datasource.GiftCardDataSourceTestValues.TX_ID
 import co.electriccoin.zcash.ui.common.model.GiftCardPhase
+import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 import co.electriccoin.zcash.ui.common.repository.GiftCardRepositoryImpl
+import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetStage
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiUseCase
@@ -33,6 +36,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -68,14 +72,14 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
 
         verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
         coVerify(exactly = 0) { redeemer.close() }
-        assertFalse(fixture.reset.isPending.value)
+        fixture.assertPreparationPending(ResetStage.ERASE_SDK)
 
         submission.complete(Unit)
         runCurrent()
 
         coVerify(exactly = 1) { redeemer.close() }
         verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
-        coVerify(exactly = 0) { fixture.progressStore.store(any()) }
+        fixture.assertPreparationPending(ResetStage.ERASE_SDK)
 
         close.complete(Unit)
         reset.join()
@@ -83,6 +87,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         verify(exactly = 1) { fixture.walletCoordinator.deleteSdkDataFlow() }
         verify(exactly = 1) { parsedCard.wipe() }
         coVerify(exactly = 1) { fixture.progressStore.store(ResetStage.ERASE_SDK) }
+        assertFalse(fixture.reset.isPending.value)
     }
 
     @Test
@@ -164,7 +169,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         advanceTimeBy(31.seconds)
         assertIs<IllegalStateException>(first.await().exceptionOrNull())
         verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
-        coVerify(exactly = 0) { fixture.progressStore.store(any()) }
+        fixture.assertPreparationPending(ResetStage.DELETE_LOCAL_FILES)
         val stoppedAt = lookups
         advanceTimeBy(31.seconds)
         assertEquals(stoppedAt, lookups)
@@ -190,7 +195,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
 
         coVerify(exactly = 1) { redeemer.close() }
         verify(exactly = 1) { parsedCard.wipe() }
-        coVerify(exactly = 0) { fixture.progressStore.store(any()) }
+        fixture.assertPreparationPending(ResetStage.DELETE_LOCAL_FILES, attempts = 2)
         verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
     }
 
@@ -212,7 +217,7 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
             assertIs<IllegalStateException>(first.await().exceptionOrNull()).message,
         )
         verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
-        coVerify(exactly = 0) { fixture.progressStore.store(any()) }
+        fixture.assertPreparationPending(ResetStage.ERASE_SDK)
         coVerify(exactly = 0) { redeemer.close() }
 
         val blocked = fixture.repository.observeSession(fixture.store.stash(LINK)).first()
@@ -253,9 +258,17 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
         val walletCoordinator = mockk<WalletCoordinator> {
             every { deleteSdkDataFlow() } returns flowOf(true)
         }
+        private val stage = MutableStateFlow<ResetStage?>(null)
+        private val pending = MutableStateFlow(false)
+        private val addressBook = mockk<AddressBookRepository>(relaxed = true)
+        private val metadata = mockk<MetadataRepository>(relaxed = true)
+        private val standardPrefs = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
+        private val encryptedPrefs = mockk<PreferenceProvider> { coEvery { clearPreferences() } returns true }
         val progressStore = mockk<ResetProgressStore>(relaxed = true) {
-            every { isPending } returns MutableStateFlow(false)
-            coEvery { getStage() } returns null
+            every { isPending } returns pending
+            coEvery { getStage() } coAnswers { stage.value }
+            coEvery { store(any()) } coAnswers { recordStage(firstArg()) }
+            coEvery { store(null) } coAnswers { recordStage(null) }
         }
         val reset = ResetZashiUseCase(
             walletCoordinator = walletCoordinator,
@@ -263,23 +276,36 @@ class GiftCardResetTest : GiftCardDataSourceTestFixture() {
                 coEvery { getSynchronizer() } returns mockk<CloseableSynchronizer>(relaxed = true)
             },
             standardPreferenceProvider = mockk<StandardPreferenceProvider> {
-                coEvery { this@mockk.invoke() } returns mockk {
-                    coEvery { clearPreferences() } returns true
-                }
+                coEvery { this@mockk.invoke() } returns standardPrefs
             },
             encryptedPreferenceProvider = mockk<EncryptedPreferenceProvider> {
-                coEvery { this@mockk.invoke() } returns mockk {
-                    coEvery { clearPreferences() } returns true
-                }
+                coEvery { this@mockk.invoke() } returns encryptedPrefs
                 coEvery { purgeQuarantine() } returns true
             },
             homeMessageCacheRepository = mockk(relaxed = true),
             biometricRepository = mockk(relaxed = true),
-            addressBookRepository = mockk(relaxed = true),
-            metadataRepository = mockk(relaxed = true),
+            addressBookRepository = addressBook,
+            metadataRepository = metadata,
             migrationAppHooks = mockk(relaxed = true),
             giftCardRepository = repository,
             progressStore = progressStore,
         )
+
+        fun assertPreparationPending(expected: ResetStage, attempts: Int = 1) {
+            assertEquals(expected, stage.value)
+            assertTrue(reset.isPending.value)
+            coVerify(exactly = attempts) { progressStore.store(expected) }
+            coVerify(exactly = 0) { progressStore.store(ResetStage.CLEAR_PREFERENCES) }
+            coVerify(exactly = 0) { progressStore.store(null) }
+            coVerify(exactly = 0) { addressBook.delete() }
+            coVerify(exactly = 0) { metadata.delete() }
+            coVerify(exactly = 0) { standardPrefs.clearPreferences() }
+            coVerify(exactly = 0) { encryptedPrefs.clearPreferences() }
+        }
+
+        private fun recordStage(value: ResetStage?) {
+            stage.value = value
+            pending.value = value != null
+        }
     }
 }

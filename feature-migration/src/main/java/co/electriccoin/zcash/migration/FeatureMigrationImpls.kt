@@ -67,6 +67,7 @@ import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureA
 import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureScreen
 import co.electriccoin.zcash.work.MigrationScheduler
 import co.electriccoin.zcash.work.MigrationWorker
+import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.launch
@@ -233,7 +234,8 @@ class MigrationAppHooksImpl(
             // Reset must cancel the worker chain even when the synchronizer has no account snapshot.
             val accounts = accountDataSource.allAccounts.value.orEmpty()
             WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name).result.await()
-            accounts.map { it.sdkAccount.accountUuid.toStorageKeyId() }
+            (accounts.map { it.sdkAccount.accountUuid.toStorageKeyId() } +
+                MigrationWorkerHeartbeat.accountKeyIds(context)).distinct()
         } else {
             listOf(accountKeyId)
         }

@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.screen.deletewallet
 
 import android.content.Context
+import cash.z.ecc.android.sdk.CloseableSynchronizer
 import cash.z.ecc.android.sdk.WalletCoordinator
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
@@ -28,11 +29,11 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.Rule
 import org.junit.rules.TemporaryFolder
 import java.io.IOException
@@ -42,13 +43,13 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class ResetWalletReviewProbesTest {
     @get:Rule val directory = TemporaryFolder()
 
     @Test
-    fun failedSdkErasePreservesPreferencesAndRetrySkipsDeletedFiles() = runTest {
+    fun failedSdkErasePreservesPreferencesAndRetrySkipsDeletedFiles() = runBlocking {
         val fixture = Fixture()
         every { fixture.walletCoordinator.deleteSdkDataFlow() } returns flowOf(false)
 
@@ -68,7 +69,7 @@ class ResetWalletReviewProbesTest {
     }
 
     @Test
-    fun resetWaitsForBothFileDeletionsBeforeErasingSdkOrPreferences() = runTest {
+    fun resetWaitsForBothFileDeletionsBeforeErasingSdkOrPreferences() = runBlocking {
         val fixture = Fixture()
         val metadataStarted = CompletableDeferred<Unit>()
         val allowDeletion = CompletableDeferred<Unit>()
@@ -78,19 +79,21 @@ class ResetWalletReviewProbesTest {
         }
 
         val operation = launch { fixture.reset(keepFiles = false) }
-        metadataStarted.await()
-
-        coVerify(exactly = 1) { fixture.addressBookRepository.delete() }
-        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
-        coVerify(exactly = 0) { fixture.encryptedPrefs.clearPreferences() }
-        allowDeletion.complete(Unit)
+        try {
+            withTimeout(10.seconds) { metadataStarted.await() }
+            coVerify(exactly = 1) { fixture.addressBookRepository.delete() }
+            verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+            coVerify(exactly = 0) { fixture.encryptedPrefs.clearPreferences() }
+        } finally {
+            allowDeletion.complete(Unit)
+        }
         operation.join()
 
         coVerify(exactly = 1) { fixture.encryptedPrefs.clearPreferences() }
     }
 
     @Test
-    fun fileDeletionFailurePreventsSdkEraseAndCanBeRetried() = runTest {
+    fun fileDeletionFailurePreventsSdkEraseAndCanBeRetried() = runBlocking {
         val fixture = Fixture()
         coEvery { fixture.metadataRepository.delete() } throws IOException("Synthetic deletion failure")
 
@@ -110,7 +113,7 @@ class ResetWalletReviewProbesTest {
     }
 
     @Test
-    fun preferencesCanRetryAfterRestartWithoutRequiringSdkOrWalletKeys() = runTest {
+    fun preferencesCanRetryAfterRestartWithoutRequiringSdkOrWalletKeys() = runBlocking {
         val fixture = Fixture()
         coEvery { fixture.standardPrefs.clearPreferences() } returns false
         assertFailsWith<IllegalStateException> { fixture.reset(keepFiles = true) }
@@ -133,7 +136,7 @@ class ResetWalletReviewProbesTest {
     }
 
     @Test
-    fun retentionThenOptOutRemovesBothWalletContactBooksAndOwnedArtifacts() = runTest {
+    fun retentionThenOptOutRemovesBothWalletContactBooksAndOwnedArtifacts() = runBlocking {
         val fixture = Fixture()
         val firstWalletKey = addressBookKey(1)
         val currentWalletKey = addressBookKey(2)
@@ -158,8 +161,8 @@ class ResetWalletReviewProbesTest {
     }
 
     @Test
-    fun optOutWithNoCachedKeyOrAccountStillErasesSdkAndPreferences() = runTest {
-        val fixture = Fixture()
+    fun optOutWithoutASynchronizerCachedKeyOrAccountStillErasesSdkAndPreferences() = runBlocking {
+        val fixture = Fixture(synchronizerAvailable = false)
         val unavailableAccount = mockk<AccountDataSource> {
             every { zashiAccount } returns flowOf(null)
             coEvery { getZashiAccount() } coAnswers { awaitCancellation() }
@@ -189,12 +192,14 @@ class ResetWalletReviewProbesTest {
         return AddressBookDataSourceImpl(storage, provider, sync)
     }
 
-    private inner class Fixture {
+    private inner class Fixture(synchronizerAvailable: Boolean = true) {
         val walletCoordinator = mockk<WalletCoordinator> {
             every { deleteSdkDataFlow() } returns flowOf(true)
         }
         private val synchronizerProvider = mockk<SynchronizerProvider> {
-            coEvery { getSynchronizer() } coAnswers { awaitCancellation() }
+            coEvery { getSynchronizer() } coAnswers {
+                if (synchronizerAvailable) mockk<CloseableSynchronizer>(relaxed = true) else awaitCancellation()
+            }
         }
         val standardPrefs = mockk<PreferenceProvider> {
             coEvery { clearPreferences() } returns true

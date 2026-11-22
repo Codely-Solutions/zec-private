@@ -87,26 +87,9 @@ class ResetWalletWriteOwnershipTest {
     @Test
     fun walletEditsCannotRecreateDeletedFilesDuringOrAfterReset() = runBlocking {
         val fixture = Fixture()
-        val account = EditAccountFixtures.zodl()
-        val key = MetadataKey(listOf(SecretBytes.copyFrom(ByteArray(32) { 1 }, InsecureSecretKeyAccess.get())))
-        val storage = MetadataStorageProviderImpl(fixture.context, fixture.sync)
-        val provider = MetadataProviderImpl(MetadataEncryptorImpl(MetadataSerializer()), fixture.sync)
-        val metadata = MetadataRepositoryImpl(
-            accountDataSource = mockk<AccountDataSource> {
-                every { selectedAccount } returns MutableStateFlow<WalletAccount?>(account)
-                every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(listOf(account))
-                coEvery { getSelectedAccount() } returns account
-            },
-            metadataDataSource = MetadataDataSourceImpl(
-                storage, provider, mockk(), walletWriteAccess = fixture.writeAccess,
-            ),
-            metadataKeyStorageProvider = mockk<MetadataKeyStorageProvider> {
-                coEvery { get(account.sdkAccount.accountUuid) } returns key
-            },
-            persistableWalletProvider = fixture.walletProvider,
-            simpleSwapAssetProvider = mockk(),
-            walletWriteAccess = fixture.writeAccess,
-        )
+        val key = fixture.metadataKey
+        val storage = fixture.metadataStorage
+        val metadata = fixture.metadataRepository(EditAccountFixtures.zodl())
         val contacts = fixture.contactRepository()
         val contactFile = fixture.contactStorage.getStorageTarget(fixture.contactKey)
         contacts.saveContact("Before reset", "original-recipient", null)
@@ -139,6 +122,44 @@ class ResetWalletWriteOwnershipTest {
         assertFailsWith<IllegalStateException> { contacts.saveContact("After reset", "late-recipient", null) }
         assertTrue(storage.getStorageFiles(key).isEmpty())
         assertFalse(contactFile.exists())
+    }
+
+    @Test
+    fun aSurvivingMetadataObserverRereadsDiskAfterSameAccountSetup() = runBlocking {
+        val fixture = Fixture()
+        val original = originalWallet()
+        fixture.walletProvider.store(original)
+        val account = EditAccountFixtures.zodl()
+        val accounts = MutableStateFlow<List<WalletAccount>?>(listOf(account))
+        val metadata = fixture.metadataRepository(account, accounts)
+        val uuid = account.sdkAccount.accountUuid
+        val collector = launch { metadata.metadata.collect {} }
+        try {
+            assertTrue(metadata.createOrUpdateTxNote("tx", "before reset"))
+            val saved = withTimeout(10.seconds) {
+                metadata.metadata.first { it[uuid]?.accountMetadata?.annotations?.isNotEmpty() == true }.getValue(uuid)
+            }
+
+            fixture.reset(metadata)(keepFiles = false)
+            accounts.value = null
+            withTimeout(10.seconds) { metadata.metadata.first { it.isEmpty() } }
+
+            val recovered = saved.copy(
+                accountMetadata = saved.accountMetadata.copy(
+                    annotations = saved.accountMetadata.annotations.map { it.copy(content = "after restore") },
+                ),
+            )
+            val key = fixture.metadataKey
+            val file = fixture.metadataStorage.getOrCreateStorageFile(key)
+            fixture.metadataProvider.writeMetadataToFile(file, recovered, key)
+            fixture.walletProvider.store(original)
+            accounts.value = listOf(account)
+
+            val refreshed = withTimeout(10.seconds) { metadata.metadata.first { uuid in it }.getValue(uuid) }
+            assertEquals("after restore", refreshed.accountMetadata.annotations.single().content)
+        } finally {
+            collector.cancelAndJoin()
+        }
     }
 
     @Test
@@ -316,6 +337,9 @@ class ResetWalletWriteOwnershipTest {
             coEvery { purgeQuarantine() } returns true
         }
         val walletProvider = PersistableWalletProviderImpl(encryptedProvider, writeAccess)
+        val metadataKey = MetadataKey(listOf(SecretBytes.copyFrom(ByteArray(32) { 1 }, InsecureSecretKeyAccess.get())))
+        val metadataStorage = MetadataStorageProviderImpl(context, sync)
+        val metadataProvider = MetadataProviderImpl(MetadataEncryptorImpl(MetadataSerializer()), sync)
         val contactStorage = AddressBookStorageProviderImpl(context, sync)
         val contactKey = AddressBookKey(
             SecretBytes.copyFrom(ByteArray(ADDRESS_BOOK_ENCRYPTION_KEY_SIZE) { 1 }, InsecureSecretKeyAccess.get())
@@ -331,6 +355,26 @@ class ResetWalletWriteOwnershipTest {
         val resetCoordinator = mockk<WalletCoordinator> {
             every { deleteSdkDataFlow() } returns flowOf(true)
         }
+
+        fun metadataRepository(
+            account: WalletAccount,
+            accounts: MutableStateFlow<List<WalletAccount>?> = MutableStateFlow(listOf(account)),
+        ) = MetadataRepositoryImpl(
+            accountDataSource = mockk<AccountDataSource> {
+                every { selectedAccount } returns MutableStateFlow<WalletAccount?>(account)
+                every { allAccounts } returns accounts
+                coEvery { getSelectedAccount() } returns account
+            },
+            metadataDataSource = MetadataDataSourceImpl(
+                metadataStorage, metadataProvider, mockk(), walletWriteAccess = writeAccess,
+            ),
+            metadataKeyStorageProvider = mockk<MetadataKeyStorageProvider> {
+                coEvery { get(account.sdkAccount.accountUuid) } returns metadataKey
+            },
+            persistableWalletProvider = walletProvider,
+            simpleSwapAssetProvider = mockk(),
+            walletWriteAccess = writeAccess,
+        )
 
         fun contactRepository(lookup: (suspend () -> ZodlAccount)? = null): AddressBookRepository {
             val account = EditAccountFixtures.zodl()

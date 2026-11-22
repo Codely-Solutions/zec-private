@@ -139,14 +139,17 @@ class MetadataRepositoryImpl(
     private val mutex = Mutex()
 
     private val keyMutex = Mutex()
+    private var observedGeneration: Long? = null
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override val metadata: StateFlow<Map<AccountUuid, MetadataV3>> =
         accountDataSource.allAccounts
             .filterNotNull()
             .distinctUntilChangedBy { accounts -> accounts.map { it.sdkAccount.accountUuid } }
-            .flatMapLatest { accounts ->
-                val previous = metadata.value
+            .combine(walletWriteAccess.version) { accounts, generation -> accounts to generation }
+            .flatMapLatest { (accounts, generation) ->
+                val previous = metadata.value.takeIf { observedGeneration == generation }.orEmpty()
+                observedGeneration = generation
                 accounts
                     .map { account ->
                         val uuid = account.sdkAccount.accountUuid

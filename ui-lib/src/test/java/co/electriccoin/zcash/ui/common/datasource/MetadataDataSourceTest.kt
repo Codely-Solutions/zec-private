@@ -5,6 +5,7 @@ import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
+import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapStatus
@@ -64,6 +65,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
@@ -602,6 +604,8 @@ class MetadataDataSourceTest {
             every { status } returns currentStatus
             every { amountOutFormatted } returns output
             every { mode } returns SwapMode.EXACT_INPUT
+            every { originAsset } returns SwapCatalogTestFixture.nativeZec
+            every { destinationAsset } returns SwapCatalogTestFixture.nativeZec
         }
         val entered = CompletableDeferred<Unit>()
         val releaseOldResponse = CompletableDeferred<Unit>()
@@ -633,8 +637,12 @@ class MetadataDataSourceTest {
         coVerify(exactly = 1) { provider.checkSwapStatus(any()) }
 
         releaseOldResponse.complete(Unit)
-        assertEquals(SwapStatus.PROCESSING, activity.await().status?.status)
-        assertEquals(SwapStatus.SUCCESS, details.await().status?.status)
+        val activityResult = activity.await()
+        val detailResult = details.await()
+        assertNull(activityResult.error)
+        assertNull(detailResult.error)
+        assertEquals(SwapStatus.PROCESSING, activityResult.status?.status)
+        assertEquals(SwapStatus.SUCCESS, detailResult.status?.status)
 
         val restarted = GetSwapStatusUseCase(repository(), provider)("s1")
         assertIs<IllegalStateException>(restarted.error)

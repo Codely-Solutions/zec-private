@@ -1,27 +1,46 @@
 package co.electriccoin.zcash.ui.common.datasource
 
 import android.content.Context
+import cash.z.ecc.android.sdk.model.Account
+import cash.z.ecc.android.sdk.model.AccountUuid
+import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
+import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
+import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.metadata.AccountMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.AnnotationMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.BookmarkMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapsMetadataV3
+import co.electriccoin.zcash.ui.common.model.near.NearSwapQuote
+import co.electriccoin.zcash.ui.common.model.near.QuoteResponseDto
+import co.electriccoin.zcash.ui.common.model.near.SwapType
+import co.electriccoin.zcash.ui.common.model.near.reviewedIdentity
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.MetadataProviderImpl
+import co.electriccoin.zcash.ui.common.provider.MetadataKeyStorageProvider
 import co.electriccoin.zcash.ui.common.provider.MetadataStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.repository.MetadataRepositoryImpl
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataEncryptorImpl
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataKey
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataSerializer
+import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
+import co.electriccoin.zcash.ui.common.usecase.SaveORSwapUseCase
 import com.google.crypto.tink.InsecureSecretKeyAccess
 import com.google.crypto.tink.util.SecretBytes
+import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -29,13 +48,16 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.IOException
 import java.math.BigDecimal
 import java.time.Instant
 import kotlin.io.path.createTempDirectory
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -111,6 +133,64 @@ class MetadataDataSourceFileTest {
         assertEquals("replacement", source().observe(key).first { it != null }
             ?.accountMetadata?.swaps?.swapIds?.single()?.provider)
         assertFalse(File(metadataDir, "$canonicalName.tmp").exists())
+    }
+
+    @Test
+    fun readableIncomingTrackingCannotBypassFailedDirectorySync() = runTest {
+        val sync = TrackingSync()
+        val quote = fundingQuote(SwapType.FLEX_INPUT)
+        val initial = SaveORSwapUseCase(mockk(), repository(sync.provider), mockk())
+        assertFailsWith<IllegalStateException> { initial.persistBeforeFunding(quote) }
+        val readable = storedSwaps().swapIds.single()
+        assertEquals(SwapStatus.PENDING, readable.status)
+        assertEquals(quote.reviewedIdentity(), readable.reviewedIdentity)
+        assertEquals(1, sync.attempts)
+
+        val restarted = repository(sync.provider)
+        val retry = SaveORSwapUseCase(mockk(), restarted, mockk())
+        assertFailsWith<IllegalStateException> { retry.persistBeforeFunding(quote) }
+        assertEquals(2, sync.attempts)
+
+        sync.fail = false
+        retry.persistBeforeFunding(quote)
+        assertEquals(3, sync.attempts)
+        val expected = checkNotNull(restarted.getSwapMetadata("deposit"))
+        val success = mockk<SwapQuoteStatus> {
+            every { status } returns SwapStatus.SUCCESS
+            every { mode } returns SwapMode.FLEX_INPUT
+            every { amountOutFormatted } returns BigDecimal.TEN
+        }
+        assertTrue(restarted.updateSwap(expected, success))
+        val settled = storedSwaps().swapIds.single()
+        assertEquals(SwapStatus.SUCCESS, settled.status)
+        retry.persistBeforeFunding(quote)
+        assertEquals(5, sync.attempts)
+        assertEquals(settled, storedSwaps().swapIds.single())
+    }
+
+    @Test
+    fun outgoingReservationStopsOnDirectorySyncFailureAndRetainsReadableTracking() = runTest {
+        val sync = TrackingSync()
+        val quote = fundingQuote(SwapType.EXACT_INPUT)
+        val destinationAddress = WalletAddress.Unified.new("deposit")
+        val proposal = mockk<SwapTransactionProposal> {
+            every { this@mockk.quote } returns quote
+            every { destination } returns destinationAddress
+            every { totalFees } returns Zatoshi(0)
+            every { totalFeesUsd } returns BigDecimal.ZERO
+        }
+        val initial = ProcessSwapTransactionUseCase(repository(sync.provider), mockk())
+        assertFailsWith<IllegalStateException> { initial.reserveFunding(proposal) {} }
+        assertEquals(1, sync.attempts)
+        val pending = storedSwaps().swapIds.single()
+        assertEquals(SwapStatus.PENDING, pending.status)
+        assertEquals(quote.reviewedIdentity(), pending.reviewedIdentity)
+
+        sync.fail = false
+        val restarted = ProcessSwapTransactionUseCase(repository(sync.provider), mockk())
+        assertFailsWith<IllegalStateException> { restarted.reserveFunding(proposal) {} }
+        assertEquals(1, sync.attempts)
+        assertEquals(pending, storedSwaps().swapIds.single())
     }
 
     @Test
@@ -343,13 +423,83 @@ class MetadataDataSourceFileTest {
             assertFalse(File(metadataDir, canonicalName).length() > 0)
         }
 
-    private fun TestScope.dataSource() =
+    private fun TestScope.dataSource(
+        provider: MetadataProviderImpl = metadataProvider,
+        ownership: WalletWriteAccess = WalletWriteAccess(),
+    ) =
         MetadataDataSourceImpl(
             metadataStorageProvider = storageProvider,
-            metadataProvider = metadataProvider,
+            metadataProvider = provider,
             simpleSwapAssetProvider = simpleSwapAssetProvider,
-            ioDispatcher = StandardTestDispatcher(testScheduler)
+            ioDispatcher = StandardTestDispatcher(testScheduler),
+            walletWriteAccess = ownership
         )
+
+    private fun TestScope.repository(provider: MetadataProviderImpl): MetadataRepositoryImpl {
+        val uuid = AccountUuid.new(ByteArray(16))
+        val wallet = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(uuid) }
+        val accounts = mockk<AccountDataSource> {
+            every { selectedAccount } returns MutableStateFlow<WalletAccount?>(wallet)
+            every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(listOf(wallet))
+            coEvery { getSelectedAccount() } returns wallet
+        }
+        val ownership = WalletWriteAccess()
+        return MetadataRepositoryImpl(
+            accountDataSource = accounts,
+            metadataDataSource = dataSource(provider, ownership),
+            metadataKeyStorageProvider = mockk<MetadataKeyStorageProvider> { coEvery { get(uuid) } returns key },
+            persistableWalletProvider = mockk(),
+            simpleSwapAssetProvider = simpleSwapAssetProvider,
+            walletWriteAccess = ownership
+        )
+    }
+
+    private fun fundingQuote(mode: SwapType): NearSwapQuote {
+        val btc = SwapCatalogTestFixture.externalAssets.single { it.assetId == "nep141:btc.omft.near" }
+        val zec = SwapCatalogTestFixture.nativeZec
+        val (origin, destination) = if (mode == SwapType.FLEX_INPUT) btc to zec else zec to btc
+        val response = Json.decodeFromString<QuoteResponseDto>(
+            """
+            {
+                "timestamp": "2026-11-22T12:00:00Z",
+                "quoteRequest": {
+                    "dry": false, "swapType": "${mode.apiValue}", "slippageTolerance": 100,
+                    "originAsset": "${origin.assetId}", "destinationAsset": "${destination.assetId}",
+                    "depositType": "ORIGIN_CHAIN", "amount": "100000000", "refundTo": "refund",
+                    "refundType": "ORIGIN_CHAIN", "recipient": "recipient", "recipientType": "DESTINATION_CHAIN",
+                    "deadline": "2026-11-22T13:00:00Z", "appFees": []
+                },
+                "quote": {
+                    "depositAddress": "deposit", "amountIn": "100000000", "amountInFormatted": "1",
+                    "amountInUsd": "100", "minAmountIn": "99000000", "amountOut": "100000000",
+                    "amountOutFormatted": "1", "amountOutUsd": "99", "minAmountOut": "99000000",
+                    "deadline": "2026-11-22T13:00:00Z"
+                }
+            }
+            """.trimIndent()
+        )
+        return NearSwapQuote(
+            response = response,
+            originAsset = origin,
+            destinationAsset = destination,
+            depositAddress = DynamicSwapAddress("deposit"),
+            destinationAddress = DynamicSwapAddress("recipient"),
+            refundAddress = DynamicSwapAddress("refund"),
+            expectedSlippageToleranceBps = 100,
+        )
+    }
+
+    private class TrackingSync {
+        var fail = true
+        var attempts = 0
+        val provider = MetadataProviderImpl(
+            metadataEncryptor = MetadataEncryptorImpl(MetadataSerializer()),
+            directorySync = {
+                attempts++
+                if (fail) throw IOException("Synthetic metadata directory sync failure")
+            }
+        )
+    }
 
     /**
      * Collects everything [dataSource] emits for [key] after the initial null and runs the

@@ -39,9 +39,13 @@ import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
+import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
+import co.electriccoin.zcash.ui.common.provider.BlockchainProviderImpl
+import co.electriccoin.zcash.ui.common.provider.TokenIconProviderImpl
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
 import co.electriccoin.zcash.ui.design.util.getString
@@ -104,9 +108,16 @@ class SwapQuoteVMMapperTest {
     @Test
     fun poorOutgoingQuoteKeepsWarningAndContinuationWithExpandableMarketSource() {
         val check = IndependentPriceCheck.Compared(BigDecimal("-15.25"), Long.MAX_VALUE, listOf("Kraken", "Orca"))
+        val context: Application = RuntimeEnvironment.getApplication()
+        val tokens = TokenIconProviderImpl(context)
+        val chains = BlockchainProviderImpl(context)
+        fun renderable(asset: NearSwapAsset) = asset.copy(
+            tokenIcon = tokens.getIcon(asset.tokenTicker),
+            blockchain = chains.getBlockchain(asset.chainTicker),
+        )
         val quote = FakeSwapQuote(
-            destinationAsset = destinationAsset,
-            originAsset = SwapAssetTestFixture.zecAsset(),
+            destinationAsset = renderable(SwapCatalogTestFixture.externalAssets.first { it.chainTicker == "btc" }),
+            originAsset = renderable(SwapCatalogTestFixture.nativeZec),
             mode = SwapMode.EXACT_INPUT,
         )
         val fee = Zatoshi(1000)

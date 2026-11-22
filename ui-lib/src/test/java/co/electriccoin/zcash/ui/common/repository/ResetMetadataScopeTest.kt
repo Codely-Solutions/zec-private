@@ -37,7 +37,7 @@ class ResetMetadataScopeTest {
         }
         val filesDir = directory.newFolder("files")
         val context = mockk<Context> { every { this@mockk.filesDir } returns filesDir }
-        var failSync = true
+        var failSync = false
         var syncAttempts = 0
         val storage = MetadataStorageProviderImpl(context, DirectorySync {
             syncAttempts++
@@ -52,6 +52,8 @@ class ResetMetadataScopeTest {
         val datasource = MetadataDataSourceImpl(storage, mockk(), mockk())
         val repository = MetadataRepositoryImpl(accounts, datasource, mockk(), mockk(), mockk())
 
+        failSync = true
+        syncAttempts = 0
         assertFailsWith<IOException> { repository.delete() }
         listOf(activeFile, removedFile, partial, undecodable).forEach { assertFalse(it.exists()) }
         assertEquals("preserve", unrelated.readText())
