@@ -437,7 +437,7 @@ class ChooseServerVMTest {
                 editor
             }
             val provider = AndroidPreferenceProvider(preferences, Dispatchers.Main)
-            return mockk<EncryptedPreferenceProvider> { coEvery { invoke() } returns provider }
+            return mockk<EncryptedPreferenceProvider> { coEvery { this@mockk.invoke() } returns provider }
         }
     }
 

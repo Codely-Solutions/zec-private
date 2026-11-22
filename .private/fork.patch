@@ -52200,7 +52200,7 @@ index 32d01648d..a9e4d875e 100644
 +            every { loadedBalances } returns balances
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt
 new file mode 100644
-index 000000000..c966e57a4
+index 000000000..ff9582427
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt
 @@ -0,0 +1,455 @@
@@ -52643,7 +52643,7 @@ index 000000000..c966e57a4
 +                editor
 +            }
 +            val provider = AndroidPreferenceProvider(preferences, Dispatchers.Main)
-+            return mockk<EncryptedPreferenceProvider> { coEvery { invoke() } returns provider }
++            return mockk<EncryptedPreferenceProvider> { coEvery { this@mockk.invoke() } returns provider }
 +        }
 +    }
 +
