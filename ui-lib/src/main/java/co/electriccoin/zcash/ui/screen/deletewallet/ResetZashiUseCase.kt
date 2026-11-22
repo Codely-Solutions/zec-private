@@ -58,7 +58,6 @@ class ResetZashiUseCase(
             // even if that transition cancels the first view model.
             withContext(NonCancellable) {
                 progressStore.store(stage ?: if (keepFiles) ResetStage.ERASE_SDK else ResetStage.DELETE_LOCAL_FILES)
-                walletWriteAccess.beginReset()
                 prepareReset(keepFiles, stage)
                 if (stage != ResetStage.CLEAR_PREFERENCES) {
                     closeSynchronizer()
@@ -83,6 +82,7 @@ class ResetZashiUseCase(
 
     private suspend fun prepareReset(keepFiles: Boolean, stage: ResetStage?) {
         val prepared = withTimeoutOrNull(PREPARE_RESET_TIMEOUT) {
+            walletWriteAccess.beginReset()
             if (stage != ResetStage.CLEAR_PREFERENCES) migrationAppHooks.cancelMigrationWork()
             giftCardRepository.quiesceForWalletReset()
             if (stage == ResetStage.DELETE_LOCAL_FILES || (stage == null && !keepFiles)) {

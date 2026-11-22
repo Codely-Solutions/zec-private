@@ -1,5 +1,13 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.fixture.WalletFixture
+import cash.z.ecc.android.sdk.model.PersistableWallet
+import cash.z.ecc.android.sdk.model.SeedPhrase
+import cash.z.ecc.android.sdk.model.ZcashNetwork
+import cash.z.ecc.android.sdk.WalletCoordinator
+import cash.z.ecc.android.sdk.WalletInitMode
+import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
+import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
@@ -8,14 +16,17 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+import kotlin.test.Test
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlin.test.Test
-import kotlin.test.assertTrue
 
 /**
  * MOB-1397: [ObserveSeedMismatchUseCase] runs recovery on every `true` flip of
@@ -106,4 +117,63 @@ class ObserveSeedMismatchUseCaseTest {
             coVerify(exactly = 1) { recoverFromSeedMismatch() }
             verify(exactly = 0) { navigateToError(any(), any()) }
         }
+
+    @Test
+    fun sdkClearingMismatchDuringEraseLetsEnteredRecoveryFinish() = runTest {
+        val mismatch = MutableStateFlow(true)
+        val entered = CompletableDeferred<Unit>()
+        val finishErase = CompletableDeferred<Unit>()
+        val coordinator = mockk<WalletCoordinator> {
+            every { deleteSdkDataFlow() } returns flow {
+                entered.complete(Unit)
+                mismatch.value = false
+                finishErase.await()
+                emit(true)
+            }
+        }
+        val synchronizer = mockk<SynchronizerProvider> {
+            every { isSeedMismatch } returns mismatch
+        }
+        val initial = PersistableWallet(
+            network = ZcashNetwork.Testnet,
+            birthday = WalletFixture.Alice.getBirthday(ZcashNetwork.Testnet),
+            endpoint = LightWalletEndpoint("example.invalid", 443, true),
+            seedPhrase = SeedPhrase.new(WalletFixture.Alice.seedPhrase),
+            walletInitMode = WalletInitMode.ExistingWallet,
+        )
+        val wallet = RecoveryWallet(initial)
+        val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator)
+        val observe = ObserveSeedMismatchUseCase(synchronizer, recover, mockk())
+        backgroundScope.launch { observe() }
+        runCurrent()
+
+        assertTrue(entered.isCompleted)
+        assertEquals(WalletInitMode.ExistingWallet, wallet.requirePersistableWallet().walletInitMode)
+        finishErase.complete(Unit)
+        runCurrent()
+
+        assertEquals(initial.copy(walletInitMode = WalletInitMode.RestoreWallet), wallet.requirePersistableWallet())
+    }
+
+    private class RecoveryWallet(initial: PersistableWallet) : PersistableWalletProvider {
+        override val persistableWallet = MutableStateFlow<PersistableWallet?>(initial)
+
+        override suspend fun store(persistableWallet: PersistableWallet): Unit =
+            error("Recovery must use conditional storage")
+
+        override suspend fun storeIfCurrent(
+            expected: PersistableWallet,
+            replacement: PersistableWallet,
+            version: Long,
+        ): Boolean {
+            assertEquals(writeVersion, version)
+            assertEquals(persistableWallet.value, expected)
+            persistableWallet.value = replacement
+            return true
+        }
+
+        override suspend fun getPersistableWallet() = persistableWallet.value
+
+        override suspend fun requirePersistableWallet() = checkNotNull(persistableWallet.value)
+    }
 }

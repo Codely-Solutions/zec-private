@@ -5,7 +5,7 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 
 /**
  * Runs [RecoverFromSeedMismatchUseCase] whenever [SynchronizerProvider.isSeedMismatch] flips to `true`.
@@ -19,8 +19,9 @@ class ObserveSeedMismatchUseCase(
     private val navigateToError: NavigateToErrorUseCase,
 ) {
     suspend operator fun invoke() {
+        // The SDK clears the flag as it enters the recovery lockout.
         synchronizerProvider.isSeedMismatch
-            .collectLatest { if (it) runRecovery() }
+            .collect { if (it) runRecovery() }
     }
 
     @Suppress("TooGenericExceptionCaught")

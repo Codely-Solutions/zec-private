@@ -28707,16 +28707,18 @@ index f7385365c..1120ed625 100644
 -        val value = swapRepository.quote.value
 +        val value = swapRepository.consumeReview() ?: return
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
-index 546900ef8..548d9f5bd 100644
+index 546900ef8..1338c437c 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCase.kt
 @@ -8 +8 @@ import kotlinx.coroutines.CancellationException
 -import kotlinx.coroutines.flow.filter
-+import kotlinx.coroutines.flow.collectLatest
-@@ -23,2 +23 @@ class ObserveSeedMismatchUseCase(
++import kotlinx.coroutines.flow.collect
+@@ -21,0 +22 @@ class ObserveSeedMismatchUseCase(
++        // The SDK clears the flag as it enters the recovery lockout.
+@@ -23,2 +24 @@ class ObserveSeedMismatchUseCase(
 -            .filter { it }
 -            .collect { runRecovery() }
-+            .collectLatest { if (it) runRecovery() }
++            .collect { if (it) runRecovery() }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
 index eab9cf9da..0c491fdc7 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/OnZip321ScannedUseCase.kt
@@ -30269,7 +30271,7 @@ index d50537e7f..b00724448 100644
 @@ -11,0 +12 @@ data class ResetZashiState(
 +    val isPending: Boolean = false,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
-index eb47e1885..c620981a7 100644
+index eb47e1885..421af5505 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiUseCase.kt
 @@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -30299,7 +30301,7 @@ index eb47e1885..c620981a7 100644
 @@ -39,0 +51,2 @@ class ResetZashiUseCase(
 +        if (!resetMutex.tryLock()) return
 +        running.value = true
-@@ -41,12 +54,19 @@ class ResetZashiUseCase(
+@@ -41,12 +54,18 @@ class ResetZashiUseCase(
 -            requestBiometrics()
 -            // Migration workers are self-rechaining OneTimeWork — a wallet wipe that leaves them
 -            // scheduled produces zombie retries against a wallet that no longer exists (Milan,
@@ -30319,7 +30321,6 @@ index eb47e1885..c620981a7 100644
 +            // even if that transition cancels the first view model.
 +            withContext(NonCancellable) {
 +                progressStore.store(stage ?: if (keepFiles) ResetStage.ERASE_SDK else ResetStage.DELETE_LOCAL_FILES)
-+                walletWriteAccess.beginReset()
 +                prepareReset(keepFiles, stage)
 +                if (stage != ResetStage.CLEAR_PREFERENCES) {
 +                    closeSynchronizer()
@@ -30331,10 +30332,10 @@ index eb47e1885..c620981a7 100644
 +                progressStore.store(null)
 +                walletWriteAccess.finishReset()
 +            }
-@@ -54 +74 @@ class ResetZashiUseCase(
+@@ -54 +73 @@ class ResetZashiUseCase(
 -            // do nothing
 +            // Wait for another confirmation.
-@@ -56 +76,18 @@ class ResetZashiUseCase(
+@@ -56 +75,19 @@ class ResetZashiUseCase(
 -            // do nothing
 +            // Wait for another confirmation.
 +        } finally {
@@ -30346,6 +30347,7 @@ index eb47e1885..c620981a7 100644
 +
 +    private suspend fun prepareReset(keepFiles: Boolean, stage: ResetStage?) {
 +        val prepared = withTimeoutOrNull(PREPARE_RESET_TIMEOUT) {
++            walletWriteAccess.beginReset()
 +            if (stage != ResetStage.CLEAR_PREFERENCES) migrationAppHooks.cancelMigrationWork()
 +            giftCardRepository.quiesceForWalletReset()
 +            if (stage == ResetStage.DELETE_LOCAL_FILES || (stage == null && !keepFiles)) {
@@ -47893,6 +47895,90 @@ index c83f01bb7..3b4114c51 100644
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/NavigateToSwapQuoteIfAvailableUseCaseTest.kt
 @@ -110,0 +111 @@ class NavigateToSwapQuoteIfAvailableUseCaseTest {
 +            every { consumeReview(any()) } returns quote.takeIf { it != SwapQuoteData.Loading }
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
+index 638b04663..3d56ce6a0 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ObserveSeedMismatchUseCaseTest.kt
+@@ -2,0 +3,8 @@ package co.electriccoin.zcash.ui.common.usecase
++import cash.z.ecc.android.sdk.fixture.WalletFixture
++import cash.z.ecc.android.sdk.model.PersistableWallet
++import cash.z.ecc.android.sdk.model.SeedPhrase
++import cash.z.ecc.android.sdk.model.ZcashNetwork
++import cash.z.ecc.android.sdk.WalletCoordinator
++import cash.z.ecc.android.sdk.WalletInitMode
++import co.electriccoin.lightwallet.client.model.LightWalletEndpoint
++import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
+@@ -10,0 +19,3 @@ import io.mockk.verify
++import kotlin.test.assertEquals
++import kotlin.test.assertTrue
++import kotlin.test.Test
+@@ -11,0 +23 @@ import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.CompletableDeferred
+@@ -12,0 +25 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.flow.flow
+@@ -17,2 +29,0 @@ import kotlinx.coroutines.test.runTest
+-import kotlin.test.Test
+-import kotlin.test.assertTrue
+@@ -108,0 +120,59 @@ class ObserveSeedMismatchUseCaseTest {
++
++    @Test
++    fun sdkClearingMismatchDuringEraseLetsEnteredRecoveryFinish() = runTest {
++        val mismatch = MutableStateFlow(true)
++        val entered = CompletableDeferred<Unit>()
++        val finishErase = CompletableDeferred<Unit>()
++        val coordinator = mockk<WalletCoordinator> {
++            every { deleteSdkDataFlow() } returns flow {
++                entered.complete(Unit)
++                mismatch.value = false
++                finishErase.await()
++                emit(true)
++            }
++        }
++        val synchronizer = mockk<SynchronizerProvider> {
++            every { isSeedMismatch } returns mismatch
++        }
++        val initial = PersistableWallet(
++            network = ZcashNetwork.Testnet,
++            birthday = WalletFixture.Alice.getBirthday(ZcashNetwork.Testnet),
++            endpoint = LightWalletEndpoint("example.invalid", 443, true),
++            seedPhrase = SeedPhrase.new(WalletFixture.Alice.seedPhrase),
++            walletInitMode = WalletInitMode.ExistingWallet,
++        )
++        val wallet = RecoveryWallet(initial)
++        val recover = RecoverFromSeedMismatchUseCase(wallet, coordinator)
++        val observe = ObserveSeedMismatchUseCase(synchronizer, recover, mockk())
++        backgroundScope.launch { observe() }
++        runCurrent()
++
++        assertTrue(entered.isCompleted)
++        assertEquals(WalletInitMode.ExistingWallet, wallet.requirePersistableWallet().walletInitMode)
++        finishErase.complete(Unit)
++        runCurrent()
++
++        assertEquals(initial.copy(walletInitMode = WalletInitMode.RestoreWallet), wallet.requirePersistableWallet())
++    }
++
++    private class RecoveryWallet(initial: PersistableWallet) : PersistableWalletProvider {
++        override val persistableWallet = MutableStateFlow<PersistableWallet?>(initial)
++
++        override suspend fun store(persistableWallet: PersistableWallet): Unit =
++            error("Recovery must use conditional storage")
++
++        override suspend fun storeIfCurrent(
++            expected: PersistableWallet,
++            replacement: PersistableWallet,
++            version: Long,
++        ): Boolean {
++            assertEquals(writeVersion, version)
++            assertEquals(persistableWallet.value, expected)
++            persistableWallet.value = replacement
++            return true
++        }
++
++        override suspend fun getPersistableWallet() = persistableWallet.value
++
++        override suspend fun requirePersistableWallet() = checkNotNull(persistableWallet.value)
++    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt
 index 16244cdf4..ac65bbcf1 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt
