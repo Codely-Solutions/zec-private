@@ -49,6 +49,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * Every update returns whether the change was written to disk. A false result means the edit was
  * not saved, because the storage is read-only for this read or the write failed.
  */
+@Suppress("TooManyFunctions")
 interface MetadataDataSource {
     fun observe(key: MetadataKey): Flow<MetadataV3?>
 

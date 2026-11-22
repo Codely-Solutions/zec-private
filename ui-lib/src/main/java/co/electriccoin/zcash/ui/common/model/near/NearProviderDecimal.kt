@@ -22,8 +22,11 @@ internal fun String.toNearProviderDecimalOrNull(): BigDecimal? {
     if (length > MAX_WIRE_LENGTH) return null
     val exponentIndex = indexOf('e', ignoreCase = true)
     val exponent = if (exponentIndex < 0) 0 else substring(exponentIndex + 1).toIntOrNull()
-    if (exponent == null || exponent !in -MAX_WIRE_EXPONENT..MAX_WIRE_EXPONENT) return null
-    return toBigDecimalOrNull()?.takeIf { it.fitsNearProviderBudget() }
+    return if (exponent != null && exponent in -MAX_WIRE_EXPONENT..MAX_WIRE_EXPONENT) {
+        toBigDecimalOrNull()?.takeIf { it.fitsNearProviderBudget() }
+    } else {
+        null
+    }
 }
 
 internal fun requireNearProviderDecimals(vararg amounts: BigDecimal?) {

@@ -302,8 +302,9 @@ class MetadataRepositoryImpl(
     }
 
     override suspend fun reloadSwapMetadata(expected: TransactionSwapMetadata): TransactionSwapMetadata? {
-        val owner = expected.ownerAccount ?: return null
-        val token = expected.walletWriteToken ?: return null
+        val owner = expected.ownerAccount
+        val token = expected.walletWriteToken
+        if (owner == null || token == null) return null
         val key = getMetadataKey(owner, token)
         return mutex.withLock {
             walletWriteAccess.write(token) {
