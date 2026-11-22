@@ -41,9 +41,12 @@ import kotlinx.coroutines.flow.flowOf
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.koin.compose.KoinApplication
+import org.koin.compose.KoinIsolatedContext
+import org.koin.core.context.GlobalContext
+import org.koin.core.context.startKoin
+import org.koin.core.context.stopKoin
 import org.koin.core.module.dsl.viewModel
-import org.koin.dsl.koinConfiguration
+import org.koin.dsl.koinApplication
 import org.koin.dsl.module
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -110,25 +113,28 @@ class ScannedSendRecipientTest {
             single { ValidateAddressUseCase(synchronizerProvider) }
         }
 
+        // Keep an unrelated global context present, as it can be when this test runs with the full suite.
+        val ownedGlobal = if (GlobalContext.getOrNull() == null) startKoin {} else null
+        val testKoin = koinApplication { modules(testModule) }
         val restorationTester = StateRestorationTester(compose)
-        restorationTester.setContent {
-            KoinApplication(configuration = koinConfiguration { modules(testModule) }) {
-                ZcashTheme {
-                    CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
-                        WrapSend(
-                            balanceWidgetState = BalanceWidgetState.loadingPreview,
-                            exchangeRateState = ExchangeRateState.OptedOut,
-                            goToQrScanner = {},
-                            goBack = {},
-                            hasCameraFeature = false,
-                            sendArguments = Send(original, cash.z.ecc.sdk.model.AddressType.UNIFIED),
-                            selectedAccount = account,
-                        )
+        try {
+            restorationTester.setContent {
+                KoinIsolatedContext(context = testKoin) {
+                    ZcashTheme {
+                        CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
+                            WrapSend(
+                                balanceWidgetState = BalanceWidgetState.loadingPreview,
+                                exchangeRateState = ExchangeRateState.OptedOut,
+                                goToQrScanner = {},
+                                goBack = {},
+                                hasCameraFeature = false,
+                                sendArguments = Send(original, cash.z.ecc.sdk.model.AddressType.UNIFIED),
+                                selectedAccount = account,
+                            )
+                        }
                     }
                 }
             }
-        }
-        try {
             fun assertRecipient(expected: String, type: AddressType) {
                 // The semantics query drains Robolectric's main looper, where the ViewModel collects selection events.
                 compose.waitUntil(conditionDescription = "Send displays $expected", timeoutMillis = 5_000) {
@@ -170,7 +176,12 @@ class ScannedSendRecipientTest {
             assertNotSame(originalViewModel, send)
             compose.onNodeWithText(original).assertDoesNotExist()
         } finally {
-            compose.runOnIdle { owner.viewModelStore.clear() }
+            try {
+                compose.runOnUiThread { owner.viewModelStore.clear() }
+            } finally {
+                testKoin.close()
+                if (ownedGlobal != null && GlobalContext.getOrNull() === ownedGlobal.koin) stopKoin()
+            }
         }
     }
 
