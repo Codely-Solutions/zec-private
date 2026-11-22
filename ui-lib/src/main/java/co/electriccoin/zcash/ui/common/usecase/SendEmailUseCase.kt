@@ -5,7 +5,6 @@ import android.content.Intent
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.NEAR_SWAP_PROVIDER
 import co.electriccoin.zcash.ui.common.model.SubmitResult
-import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SynchronizerError
 import co.electriccoin.zcash.ui.common.model.ZEC_TICKER
@@ -183,18 +182,25 @@ class SendEmailUseCase(
      */
     @Suppress("MagicNumber")
     suspend operator fun invoke(swapData: SwapData) {
-        val status = swapData.status ?: return
+        val body =
+            swapData.status?.let { status ->
+                swapIssueBody(
+                    status.depositAddress.address,
+                    swapAssetLabel(status.originAsset.tokenTicker, status.originAsset.chainTicker),
+                    swapAssetLabel(status.destinationAsset.tokenTicker, status.destinationAsset.chainTicker),
+                )
+            } ?: swapData.savedMetadata?.let { saved ->
+                swapIssueBody(
+                    saved.depositAddress,
+                    swapAssetLabel(saved.origin.tokenTicker, saved.origin.chainTicker),
+                    swapAssetLabel(saved.destination.tokenTicker, saved.destination.chainTicker),
+                )
+            } ?: return
         sendSupportEmail(
             subject = context.getString(R.string.transaction_detail_support_email_subject),
             messageBody =
                 EmailUtil.formatMessage(
-                    body =
-                        context.getString(
-                            R.string.transaction_detail_support_email_body,
-                            status.depositAddress.address,
-                            status.originAsset.value(),
-                            status.destinationAsset.value(),
-                        ),
+                    body = body,
                     supportInfo =
                         getSupport().toSupportString(
                             setOf(
@@ -249,7 +255,10 @@ class SendEmailUseCase(
         runCatching { context.startActivity(shareIntent) }
     }
 
-    private fun SwapAsset.value() =
+    private fun swapIssueBody(depositAddress: String, origin: String, destination: String) =
+        context.getString(R.string.transaction_detail_support_email_body, depositAddress, origin, destination)
+
+    private fun swapAssetLabel(tokenTicker: String, chainTicker: String) =
         "$tokenTicker - " +
             blockchainProvider.getBlockchain(chainTicker).chainName.getString(context)
 }

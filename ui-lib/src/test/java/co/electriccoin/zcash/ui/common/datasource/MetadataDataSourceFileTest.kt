@@ -9,6 +9,7 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
+import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
@@ -684,10 +685,7 @@ class MetadataDataSourceFileTest {
 
     private fun swapAsset(token: String, chain: String) =
         swapAssets.getOrPut("$token:$chain") {
-            mockk<SimpleSwapAsset> {
-                every { tokenTicker } returns token
-                every { chainTicker } returns chain
-            }
+            SwapAssetTestFixture.simpleAsset(token, chain)
         }
 
     private fun metadata(

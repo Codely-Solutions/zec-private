@@ -56,7 +56,12 @@ class TransactionDetailRowLayoutTest {
         for (text in listOf("Saved status", "Pending deposit")) {
             val layouts = mutableListOf<TextLayoutResult>()
             compose.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }
-            assertFalse(layouts.single().hasVisualOverflow, "$text must remain complete at 200% text")
+            val layout = layouts.single()
+            assertFalse(
+                layout.hasVisualOverflow,
+                "$text must remain complete at 200% text: ${layout.size}, ${layout.layoutInput.constraints}, " +
+                    "width=${layout.didOverflowWidth}, height=${layout.didOverflowHeight}",
+            )
         }
         val label = compose.onNodeWithText("Saved status").fetchSemanticsNode().boundsInRoot
         val status = compose.onNodeWithText("Pending deposit").fetchSemanticsNode().boundsInRoot

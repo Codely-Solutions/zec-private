@@ -155,7 +155,8 @@ class ChooseServerVMTest {
             screen.state.saveButton.onClick()
             runCurrent()
 
-            val dialog = assertIs<ServerDialogState.Validation>(screen.state.dialogState)
+            val dialog = assertIs<ServerDialogState.SaveFailure>(screen.state.dialogState)
+            assertEquals(stringRes(R.string.choose_server_save_error_title), dialog.state.title)
             assertEquals(bundled, screen.durableEndpoint)
             assertEquals(if (publishBeforeFailure) corrected else bundled, screen.storedEndpoint.value)
             assertFalse(screen.state.saveButton.isLoading)

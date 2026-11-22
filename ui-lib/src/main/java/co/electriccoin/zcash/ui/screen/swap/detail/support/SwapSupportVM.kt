@@ -33,6 +33,7 @@ class SwapSupportVM(
                     reportIssueButton =
                         ButtonState(
                             text = stringRes(R.string.reportSwap_report),
+                            isEnabled = swapData.hasReportDetails,
                             onClick = { onReportIssue(swapData) }
                         ),
                     onBack = ::onBack
@@ -46,9 +47,13 @@ class SwapSupportVM(
     private fun onBack() = navigationRouter.back()
 
     private fun onReportIssue(swapData: SwapData) {
+        if (!swapData.hasReportDetails) return
         viewModelScope.launch {
             sendEmailUseCase.invoke(swapData)
             onBack()
         }
     }
+
+    private val SwapData.hasReportDetails: Boolean
+        get() = status != null || savedMetadata != null
 }

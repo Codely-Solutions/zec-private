@@ -63,9 +63,14 @@ sealed interface ServerState : Itemizable {
 
 sealed interface ServerDialogState {
     val state: AlertDialogState
+    val reason: StringResource?
 
     data class Validation(
         override val state: AlertDialogState,
-        val reason: StringResource?
+        override val reason: StringResource?
     ) : ServerDialogState
+
+    data class SaveFailure(override val state: AlertDialogState) : ServerDialogState {
+        override val reason: StringResource? = null
+    }
 }

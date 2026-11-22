@@ -358,8 +358,7 @@ class WalletRepositoryImpl(
     override suspend fun updateWalletEndpoint(endpoint: LightWalletEndpoint) {
         val version = persistableWalletProvider.writeVersion
         val selectedWallet = persistableWalletProvider.getPersistableWallet() ?: return
-        val selectedEndpoint = selectedWallet.endpoint
-        if (selectedEndpoint == endpoint) return
+        // A failed preference commit may have published this endpoint in memory before it reached disk.
         persistableWalletProvider.storeIfCurrent(selectedWallet, selectedWallet.copy(endpoint = endpoint), version)
     }
 

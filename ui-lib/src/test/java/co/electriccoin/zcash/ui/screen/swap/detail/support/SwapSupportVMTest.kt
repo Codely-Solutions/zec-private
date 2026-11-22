@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.support.model.SupportInfo
+import io.mockk.Called
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
@@ -99,16 +100,22 @@ class SwapSupportVMTest {
         val getStatus = mockk<GetSwapStatusUseCase> {
             every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData())
         }
+        val navigation = mockk<NavigationRouter>()
+        val share = mockk<SendEmailUseCase>()
         val vm = SwapSupportVM(
             SwapSupportArgs(saved.depositAddress),
             GetReloadableSwapQuoteUseCase(getStatus),
-            mockk(),
-            mockk(),
+            navigation,
+            share,
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
         try {
             runCurrent()
-            assertFalse(assertNotNull(vm.state.value).reportIssueButton.isEnabled)
+            val report = assertNotNull(vm.state.value).reportIssueButton
+            assertFalse(report.isEnabled)
+            report.onClick()
+            runCurrent()
+            verify { listOf(navigation, share) wasNot Called }
         } finally {
             subscription.cancel()
             vm.viewModelScope.cancel()

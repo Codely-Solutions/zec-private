@@ -33,7 +33,7 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
     }
     var selectedOled by remember(screen) { mutableStateOf(screen == "dark-look-oled") }
     when (screen) {
-        "server-badged" -> co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerView(
+        "server-badged", "server-save-error" -> co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerView(
             co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerState(
                 connectionMode = co.electriccoin.zcash.ui.screen.chooseserver.ServerConnectionModeState(
                     automatic = RadioButtonState(stringRes("Automatic"), false, onClick = {}),
@@ -53,9 +53,34 @@ internal fun AdditionalReviewScene(screen: String, onBack: () -> Unit, appBar: Z
                     title = stringRes("Other servers"), servers = emptyList(),
                 ),
                 saveButton = ButtonState(stringRes("Save"), onClick = {}),
-                dialogState = null, onBack = onBack,
+                dialogState = if (screen == "server-save-error") {
+                    co.electriccoin.zcash.ui.screen.chooseserver.ServerDialogState.SaveFailure(
+                        AlertDialogState(
+                            title = stringRes(R.string.choose_server_save_error_title),
+                            text = stringRes(R.string.choose_server_save_error_text),
+                            confirmButtonState = ButtonState(
+                                stringRes(co.electriccoin.zcash.ui.design.R.string.general_ok), onClick = {},
+                            ),
+                        )
+                    )
+                } else null,
+                onBack = onBack,
             )
         )
+        "swap-support-loading", "swap-support-ready" -> {
+            co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportView(
+                co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportState(
+                    title = stringRes(R.string.reportSwap_title),
+                    message = stringRes(R.string.reportSwap_msg),
+                    reportIssueButton = ButtonState(
+                        text = stringRes(R.string.reportSwap_report),
+                        isEnabled = screen == "swap-support-ready",
+                        onClick = {},
+                    ),
+                    onBack = {},
+                )
+            )
+        }
         "about", "about-update", "about-update-error" -> co.electriccoin.zcash.ui.screen.about.view.About(
             onBack = onBack,
             configInfo = co.electriccoin.zcash.ui.fixture.ConfigInfoFixture.new(),

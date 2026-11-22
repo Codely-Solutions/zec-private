@@ -205,6 +205,8 @@
     <string name="serverSetup_placeholder">&lt;hostname&gt;:&lt;port&gt;</string>
     <string name="serverSetup_save">Save selection</string>
     <string name="choose_server_saving">Saving selection</string>
+    <string name="choose_server_save_error_title">Unable to save server selection</string>
+    <string name="choose_server_save_error_text">Tap Save selection to try again.</string>
     <string name="choose_server_validation_dialog_error_title">Invalid server endpoint</string>
     <string name="choose_server_validation_dialog_error_text">Error: The attempt to switch endpoints failed.
         Check that the hostname and port are correct, and are formatted as &lt;hostname&gt;:&lt;port&gt;.</string>

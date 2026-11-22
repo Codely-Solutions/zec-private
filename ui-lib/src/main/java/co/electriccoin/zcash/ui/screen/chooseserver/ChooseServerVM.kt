@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.screen.chooseserver
 
 import android.app.Application
+import androidx.annotation.StringRes
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -35,6 +36,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.IOException
 
 @Suppress("TooManyFunctions", "LongParameterList")
 class ChooseServerVM(
@@ -234,13 +236,13 @@ class ChooseServerVM(
             }
 
             local.isAutomatic -> {
-                false
+                local.isSaveRetryPending
             }
 
             else -> {
                 val effectiveEndpoint =
                     if (local.isCustomSelected) local.customEndpoint.endpoint else local.selectedEndpoint
-                effectiveEndpoint != null && effectiveEndpoint != persisted.endpoint
+                effectiveEndpoint != null && (local.isSaveRetryPending || effectiveEndpoint != persisted.endpoint)
             }
         }
 
@@ -393,6 +395,7 @@ class ChooseServerVM(
             val local = innerState.value.requireLocal()
             if (local.isSaveInProgress) return@launch
             innerState.update { it.copy(local = it.requireLocal().copy(isSaveInProgress = true)) }
+            var isSaveRetryPending = local.isSaveRetryPending
             try {
                 if (local.isAutomatic) {
                     persistServerSelection.persistAutomatic()
@@ -404,10 +407,21 @@ class ChooseServerVM(
                     }
                     persistServerSelection.persistManual(ep)
                 }
+                isSaveRetryPending = false
             } catch (e: PersistEndpointException) {
                 showValidationErrorDialog(e.message)
+            } catch (_: IOException) {
+                isSaveRetryPending = true
+                showSaveFailureDialog()
             } finally {
-                innerState.update { it.copy(local = it.requireLocal().copy(isSaveInProgress = false)) }
+                innerState.update {
+                    it.copy(
+                        local = it.requireLocal().copy(
+                            isSaveInProgress = false,
+                            isSaveRetryPending = isSaveRetryPending,
+                        )
+                    )
+                }
             }
         }
 
@@ -418,20 +432,39 @@ class ChooseServerVM(
             it.copy(
                 dialogState =
                     ServerDialogState.Validation(
-                        AlertDialogState(
-                            title = stringRes(R.string.choose_server_validation_dialog_error_title),
-                            text = stringRes(R.string.choose_server_validation_dialog_error_text),
-                            confirmButtonState =
-                                ButtonState(
-                                    text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_ok),
-                                    onClick = ::onConfirmDialogButtonClicked
-                                ),
+                        createErrorDialog(
+                            title = R.string.choose_server_validation_dialog_error_title,
+                            text = R.string.choose_server_validation_dialog_error_text,
                         ),
                         reason = reason?.let { stringRes(it) }
                     )
             )
         }
     }
+
+    private fun showSaveFailureDialog() {
+        innerState.update {
+            it.copy(
+                dialogState = ServerDialogState.SaveFailure(
+                    createErrorDialog(
+                        title = R.string.choose_server_save_error_title,
+                        text = R.string.choose_server_save_error_text,
+                    )
+                )
+            )
+        }
+    }
+
+    private fun createErrorDialog(@StringRes title: Int, @StringRes text: Int) =
+        AlertDialogState(
+            title = stringRes(title),
+            text = stringRes(text),
+            confirmButtonState =
+                ButtonState(
+                    text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_ok),
+                    onClick = ::onConfirmDialogButtonClicked
+                ),
+        )
 }
 
 private data class InnerState(
@@ -450,6 +483,7 @@ private data class InnerState(
         val isCustomSelected: Boolean,
         val isSaveInProgress: Boolean,
         val customEndpoint: EndpointTextFieldInnerState,
+        val isSaveRetryPending: Boolean = false,
     )
 
     data class Persisted(

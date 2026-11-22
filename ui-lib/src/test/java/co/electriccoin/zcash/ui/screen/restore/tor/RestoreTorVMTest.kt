@@ -22,7 +22,6 @@ import co.electriccoin.zcash.ui.screen.restore.seed.RestoreSeedArgs
 import co.electriccoin.zcash.ui.screen.restore.seed.RestoreSeedVM
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.slot
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -142,18 +141,22 @@ class RestoreTorVMTest {
     ).also { viewModels += it }
 
     private suspend fun TestScope.enterBirthday(seed: RestoreSeedVM): RestoreTorArgs {
+        val forwarded = mutableListOf<Any>()
+        every { navigation.forward(*anyVararg()) } answers {
+            (args[0] as Array<*>).filterNotNull().forEach { forwarded.add(it) }
+        }
         assertNotNull(seed.state.first { it != null }?.pasteButton).onClick()
         assertNotNull(seed.state.first { it?.nextButton != null }?.nextButton).onClick()
         runCurrent()
-        val seedRoute = slot<RestoreHeight>()
-        verify(exactly = 1) { navigation.forward(capture(seedRoute)) }
-        val height = RestoreHeightVM(seedRoute.captured, navigation).also { viewModels += it }
+        val seedRoute = assertIs<RestoreHeight>(forwarded.single())
+        val height = RestoreHeightVM(seedRoute, navigation).also { viewModels += it }
         height.state.value.blockHeight.onValueChange(NumberTextFieldInnerState.fromAmount(birthday.toBigDecimal()))
-        assertNotNull(height.state.first { it.primaryButton.isEnabled }.primaryButton).onClick()
-        val torRoute = slot<RestoreTorArgs>()
-        verify(exactly = 1) { navigation.forward(capture(torRoute)) }
-        assertEquals(birthday, torRoute.captured.blockHeight)
-        return torRoute.captured
+        height.state.first { it.primaryButton.isEnabled }.primaryButton.onClick()
+        assertEquals(2, forwarded.size)
+        val torRoute = assertIs<RestoreTorArgs>(forwarded.last())
+        assertEquals(seedRoute.sessionId, torRoute.sessionId)
+        assertEquals(birthday, torRoute.blockHeight)
+        return torRoute
     }
 
     private fun tor(seed: RestoreSeedVM, args: RestoreTorArgs) = RestoreTorVM(

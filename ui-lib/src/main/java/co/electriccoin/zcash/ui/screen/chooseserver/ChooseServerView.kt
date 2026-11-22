@@ -241,34 +241,20 @@ private fun ErrorDialog(dialogState: ServerDialogState) {
     // TODO [#1276]: Consider adding support for a specific exception in AppAlertDialog
     // TODO [#1276]: https://github.com/Electric-Coin-Company/zashi-android/issues/1276
 
-    when (dialogState) {
-        is ServerDialogState.Validation -> {
-            AppAlertDialog(
-                title = dialogState.state.title.getValue(),
-                text = {
-                    Column(
-                        Modifier.verticalScroll(rememberScrollState())
-                    ) {
-                        Text(dialogState.state.text.getValue())
-
-                        if (dialogState.reason != null) {
-                            Spacer(modifier = Modifier.height(ZcashTheme.dimens.spacingDefault))
-
-                            Text(
-                                text = dialogState.reason.getValue(),
-                                fontStyle = FontStyle.Italic
-                            )
-                        }
-                    }
-                },
-                confirmButtonText =
-                    dialogState.state.confirmButtonState
-                        ?.text
-                        ?.getValue(),
-                onConfirmButtonClick = dialogState.state.confirmButtonState?.onClick
-            )
-        }
-    }
+    AppAlertDialog(
+        title = dialogState.state.title.getValue(),
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(dialogState.state.text.getValue())
+                dialogState.reason?.let { reason ->
+                    Spacer(modifier = Modifier.height(ZcashTheme.dimens.spacingDefault))
+                    Text(text = reason.getValue(), fontStyle = FontStyle.Italic)
+                }
+            }
+        },
+        confirmButtonText = dialogState.state.confirmButtonState?.text?.getValue(),
+        onConfirmButtonClick = dialogState.state.confirmButtonState?.onClick
+    )
 }
 
 @Composable
