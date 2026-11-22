@@ -54,6 +54,44 @@ import java.math.BigDecimal
 @OptIn(ExperimentalCoroutinesApi::class)
 class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
     @Test
+    fun quoteExpiryDuringPcztTransactionCreationReachesTheFinalFundingGuard() = runTest(dispatcher) {
+        every { ledgerSigningDataSource.isLinked } returns true
+        coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
+        var currentDeadline = Instant.parse("2100-01-01T00:00:00Z")
+        val origin = mockk<SwapAsset>(relaxed = true) {
+            every { tokenTicker } returns "zec"
+            every { chainTicker } returns "zec"
+            every { blockchain.chainTicker } returns "zec"
+            every { assetId } returns "zec-zec"
+            every { decimals } returns 8
+        }
+        val quote = object : SwapQuote by mockk<SwapQuote>() {
+            override val originAsset = origin
+            override val mode = SwapMode.EXACT_INPUT
+            override val provider = "near"
+            override val depositAddress = DynamicSwapAddress("synthetic-deposit")
+            override val amountInFormatted = BigDecimal.ONE
+            override val deadline: Instant get() = currentDeadline
+        }
+        val approved = ExactInputSwapTransactionProposal(
+            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""), mockk<Proposal>(), quote
+        )
+        givenPczt(ledgerAccount(), proposal = approved)
+        repository.startSigning()
+        runCurrent()
+        var broadcast = false
+        coEvery { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) } answers {
+            currentDeadline = Instant.parse("2000-01-01T00:00:00Z")
+            thirdArg<() -> Unit>().invoke()
+            broadcast = true
+            SubmitResult.Success(listOf("synthetic"))
+        }
+
+        assertFailsWith<IllegalArgumentException> { repository.submit(approved) }
+        assertFalse(broadcast)
+    }
+
+    @Test
     fun quoteExpiringWhileAwaitingProofsAfterSigningCannotBroadcast() = runTest(dispatcher) {
         val proofsGate = CompletableDeferred<Unit>()
         every { ledgerSigningDataSource.isLinked } returns true
@@ -90,7 +128,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         runCurrent()
 
         val error = assertIs<IllegalArgumentException>(submitting.await().exceptionOrNull())
-        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>()) }
+        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) }
         val result = assertIs<SubmitProposalState.Result>(repository.submitState.value)
         assertSame(error, assertIs<SubmitResult.Error>(result.submitResult).cause)
     }
@@ -114,7 +152,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         runCurrent()
 
         assertIs<IllegalStateException>(submitting.await().exceptionOrNull())
-        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>()) }
+        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) }
     }
 
     @Test
@@ -161,7 +199,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             val signed = Pczt(byteArrayOf(5))
             coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns signed
             val submitResult = mockk<SubmitResult>(relaxed = true)
-            coEvery { proposalDataSource.submitTransaction(proofsPczt, signed) } returns submitResult
+            coEvery { proposalDataSource.submitTransaction(proofsPczt, signed, any()) } returns submitResult
 
             repository.startSigning()
             runCurrent()
@@ -170,7 +208,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             val result = repository.submit()
 
             assertEquals(submitResult, result)
-            coVerify(exactly = 1) { proposalDataSource.submitTransaction(proofsPczt, signed) }
+            coVerify(exactly = 1) { proposalDataSource.submitTransaction(proofsPczt, signed, any()) }
         }
 
     @Test
@@ -274,7 +312,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             val signed = Pczt(byteArrayOf(5))
             coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns signed
             val submitResult = mockk<SubmitResult>(relaxed = true)
-            coEvery { proposalDataSource.submitTransaction(proofsPczt, signed) } returns submitResult
+            coEvery { proposalDataSource.submitTransaction(proofsPczt, signed, any()) } returns submitResult
             repository.startSigning()
             runCurrent()
             proofsGate.complete(Unit)
@@ -305,7 +343,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 
         assertEquals(LedgerSigningState.Signed, repository.signingState.value)
         coVerify(exactly = 0) { processSwapTransaction.reserveFunding(any(), any()) }
-        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>()) }
+        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) }
     }
 
     @Test
@@ -367,7 +405,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             every { ledgerSigningDataSource.isLinked } returns true
             coEvery { ledgerSigningDataSource.sign(any(), any(), any()) } returns Pczt(byteArrayOf(5))
             val submitResult = mockk<SubmitResult>(relaxed = true)
-            coEvery { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>()) } returns submitResult
+            coEvery { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) } returns submitResult
             repository.startSigning()
             runCurrent()
             repository.submit()

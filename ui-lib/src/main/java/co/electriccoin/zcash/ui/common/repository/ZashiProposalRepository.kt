@@ -185,7 +185,13 @@ class ZashiProposalRepositoryImpl(
                         val result =
                             proposalDataSource.submitTransaction(
                                 proposal = transactionProposal.proposal,
-                                usk = spendingKey
+                                usk = spendingKey,
+                                beforeFirstSubmission = {
+                                    requireCurrentProposal(transactionProposal)
+                                    if (transactionProposal is SwapTransactionProposal) {
+                                        ZecSwapComposition.validate(transactionProposal.quote)
+                                    }
+                                }
                             )
                         submitState.update { SubmitProposalState.Result(result) }
                         result

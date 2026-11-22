@@ -59,7 +59,7 @@ class ZashiProposalRepositoryTest {
 
         val error = assertFailsWith<IllegalArgumentException> { repository.submit(reviewed) }
 
-        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
+        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any()) }
         val result = assertIs<SubmitProposalState.Result>(repository.submitState.value)
         assertSame(error, assertIs<SubmitResult.Error>(result.submitResult).cause)
     }
@@ -73,10 +73,10 @@ class ZashiProposalRepositoryTest {
             WalletAddress.Unified.new("synthetic-recipient"), Zatoshi(1), Memo(""), proposal
         )
         coEvery { keys.getZashiSpendingKey() } returns key
-        coEvery { proposals.submitTransaction(proposal, key) } returns expected
+        coEvery { proposals.submitTransaction(proposal, key, any()) } returns expected
 
         assertEquals(expected, repository.submit())
-        coVerify(exactly = 1) { proposals.submitTransaction(proposal, key) }
+        coVerify(exactly = 1) { proposals.submitTransaction(proposal, key, any()) }
     }
 
     @Test
@@ -91,7 +91,7 @@ class ZashiProposalRepositoryTest {
         assertFailsWith<IllegalStateException> { repository.submit(reviewed) }
 
         coVerify(exactly = 0) { keys.getZashiSpendingKey() }
-        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
+        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any()) }
     }
 
     @Test
@@ -103,13 +103,13 @@ class ZashiProposalRepositoryTest {
         coEvery { keys.getZashiSpendingKey() } returns key
         coEvery { metadata.getSwapMetadata(any()) } returns null
         coEvery { metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns true
-        coEvery { proposals.submitTransaction(reviewed.proposal, key) } returns expected
+        coEvery { proposals.submitTransaction(reviewed.proposal, key, any()) } returns expected
 
         assertEquals(expected, repository.submit(reviewed))
 
         coVerifyOrder {
             metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
-            proposals.submitTransaction(reviewed.proposal, key)
+            proposals.submitTransaction(reviewed.proposal, key, any())
         }
     }
 
@@ -140,7 +140,7 @@ class ZashiProposalRepositoryTest {
         }
         approval.await()
 
-        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
+        coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any()) }
     }
 
     private suspend fun swapProposal() = ExactInputSwapTransactionProposal(

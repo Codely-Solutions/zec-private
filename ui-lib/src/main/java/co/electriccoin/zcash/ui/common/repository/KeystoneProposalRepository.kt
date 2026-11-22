@@ -289,7 +289,13 @@ class KeystoneProposalRepositoryImpl(
                 val result =
                     proposalDataSource.submitTransaction(
                         pcztWithProofs = proofs,
-                        pcztWithSignatures = signed
+                        pcztWithSignatures = signed,
+                        beforeFirstSubmission = {
+                            requireCurrentApproval(prepared)
+                            if (proposal is SwapTransactionProposal) {
+                                ZecSwapComposition.validate(proposal.quote)
+                            }
+                        }
                     )
                 submitState.update { SubmitProposalState.Result(result) }
                 result

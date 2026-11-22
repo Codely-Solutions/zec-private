@@ -76,9 +76,19 @@ interface ProposalDataSource {
     @Throws(PcztException.AddProofsToPcztException::class)
     suspend fun addProofsToPczt(pczt: Pczt): Pczt
 
-    suspend fun submitTransaction(pcztWithProofs: Pczt, pcztWithSignatures: Pczt): SubmitResult
+    /** Runs [beforeFirstSubmission] after preparation and endpoint lookup, once before any broadcast. */
+    suspend fun submitTransaction(
+        pcztWithProofs: Pczt,
+        pcztWithSignatures: Pczt,
+        beforeFirstSubmission: () -> Unit = {},
+    ): SubmitResult
 
-    suspend fun submitTransaction(proposal: Proposal, usk: UnifiedSpendingKey): SubmitResult
+    /** Runs [beforeFirstSubmission] after preparation and endpoint lookup, once before any broadcast. */
+    suspend fun submitTransaction(
+        proposal: Proposal,
+        usk: UnifiedSpendingKey,
+        beforeFirstSubmission: () -> Unit = {},
+    ): SubmitResult
 
     @Throws(PcztException.RedactPcztForSignerException::class)
     suspend fun redactPcztForSigner(pczt: Pczt): Pczt
@@ -256,16 +266,24 @@ class ProposalDataSourceImpl(
                 .addProofsToPczt(pczt)
         }
 
-    override suspend fun submitTransaction(pcztWithProofs: Pczt, pcztWithSignatures: Pczt): SubmitResult =
-        submitTransactionInternal(MULTI_SUBMIT_PCZT_TAG) {
+    override suspend fun submitTransaction(
+        pcztWithProofs: Pczt,
+        pcztWithSignatures: Pczt,
+        beforeFirstSubmission: () -> Unit,
+    ): SubmitResult =
+        submitTransactionInternal(MULTI_SUBMIT_PCZT_TAG, beforeFirstSubmission) {
             it.broadcaster.createTransactionFromPczt(
                 pcztWithProofs = pcztWithProofs,
                 pcztWithSignatures = pcztWithSignatures,
             )
         }
 
-    override suspend fun submitTransaction(proposal: Proposal, usk: UnifiedSpendingKey): SubmitResult =
-        submitTransactionInternal(MULTI_SUBMIT_TAG) {
+    override suspend fun submitTransaction(
+        proposal: Proposal,
+        usk: UnifiedSpendingKey,
+        beforeFirstSubmission: () -> Unit,
+    ): SubmitResult =
+        submitTransactionInternal(MULTI_SUBMIT_TAG, beforeFirstSubmission) {
             it.broadcaster.createProposedTransactions(
                 proposal = proposal,
                 usk = usk,
@@ -282,6 +300,7 @@ class ProposalDataSourceImpl(
     @Suppress("CyclomaticComplexMethod", "TooGenericExceptionCaught")
     private suspend fun submitTransactionInternal(
         logTag: String,
+        beforeFirstSubmission: () -> Unit,
         block: suspend (Synchronizer) -> List<CreatedTransaction>
     ): SubmitResult =
         withContext(Dispatchers.IO) {
@@ -301,6 +320,10 @@ class ProposalDataSourceImpl(
                 "$logTag Created ${transactions.size} transaction(s); submitting to ${endpoints.size} endpoint(s)."
             }
 
+            // Preparation and endpoint selection can suspend past the reviewed deadline. Check once
+            // before starting broadcast; after that, every leg must retain the SDK's retry plan even
+            // if the quote expires or an endpoint's response is uncertain.
+            beforeFirstSubmission()
             val submitResults =
                 submitCreatedTransactions(
                     synchronizer = synchronizer,
