@@ -88,7 +88,7 @@ class ResetZashiVMTest {
             erase.complete(true)
         }
 
-        awaitState { it.content?.isPending == false && it.content?.buttonState?.isLoading == false }
+        awaitState { it.content?.isPending == false && !it.content.buttonState.isLoading }
         assertNull(progress.getStage())
         coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
         verify(exactly = 1) { coordinator.deleteSdkDataFlow() }
@@ -148,7 +148,7 @@ class ResetZashiVMTest {
         val dismissed = assertNotNull(awaitState { it.error == null && it.content?.isPending == true }.content)
         dismissed.buttonState.onClick()
 
-        val completed = awaitState { it.content?.isPending == false && it.content?.buttonState?.isLoading == false }
+        val completed = awaitState { it.content?.isPending == false && !it.content.buttonState.isLoading }
         assertNull(completed.content?.confirmationDialog)
         assertNull(completed.error)
         assertNull(progress.getStage())
