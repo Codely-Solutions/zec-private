@@ -167,7 +167,8 @@ class WalletRepositoryImplTest {
             Dispatchers.setMain(StandardTestDispatcher(testScheduler))
             val (previous, previousHarness) = newRepository(OnboardingState.NONE, null)
             previous.useTestScope(testScheduler)
-            coEvery { previousHarness.restoringProvider.store(any()) } throws IOException("Interrupted after wallet write")
+            coEvery { previousHarness.restoringProvider.store(any()) } throws
+                IOException("Interrupted after wallet write")
             assertFailsWith<IllegalStateException> { previous.restoreFixture().await() }
             val storedWallet = previousHarness.walletProvider.requirePersistableWallet()
             val (repository, harness) = newRepository(OnboardingState.NONE, storedWallet)

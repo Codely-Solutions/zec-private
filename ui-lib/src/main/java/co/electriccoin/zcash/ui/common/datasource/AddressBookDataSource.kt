@@ -7,7 +7,6 @@ import co.electriccoin.zcash.ui.common.provider.AddressBookProvider
 import co.electriccoin.zcash.ui.common.provider.AddressBookStorageProvider
 import co.electriccoin.zcash.ui.common.provider.DirectorySync
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
-import co.electriccoin.zcash.ui.common.serialization.ADDRESS_BOOK_SERIALIZATION_V2
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookKey
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -117,7 +116,10 @@ class AddressBookDataSourceImpl(
         return when {
             encrypted != null -> addressBookProvider.readAddressBookFromFile(encrypted, addressBookKey).also { book ->
                 // The authenticated replacement must contain the complete legacy book before unlinking it.
-                if (hasLegacy && runCatchingRecoverable { readLegacy(legacy) }.getOrNull() == book) {
+                val legacyMatches = hasLegacy && runCatchingRecoverable {
+                    addressBookProvider.readLegacyUnencryptedAddressBookFromFile(legacy)
+                }.getOrNull() == book
+                if (legacyMatches) {
                     directorySync.sync(checkNotNull(encrypted.parentFile))
                     retireLegacy(legacy)
                 } else if (!hasLegacy && !legacyDirectorySynced) {
@@ -126,7 +128,7 @@ class AddressBookDataSourceImpl(
                 }
             }
             hasLegacy -> {
-                val book = readLegacy(legacy)
+                val book = addressBookProvider.readLegacyUnencryptedAddressBookFromFile(legacy)
                 writeToLocalStorage(book, addressBookKey)
                 retireLegacy(legacy)
                 book
@@ -134,9 +136,6 @@ class AddressBookDataSourceImpl(
             else -> AddressBook(lastUpdated = getTimestampNow(), contacts = emptyList())
         }
     }
-
-    private fun readLegacy(file: File): AddressBook =
-        addressBookProvider.readLegacyUnencryptedAddressBookFromFile(file).copy(version = ADDRESS_BOOK_SERIALIZATION_V2)
 
     private fun retireLegacy(file: File) {
         legacyDirectorySynced = false

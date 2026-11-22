@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.provider
 
 import co.electriccoin.zcash.ui.common.model.AddressBook
+import co.electriccoin.zcash.ui.common.serialization.ADDRESS_BOOK_SERIALIZATION_V2
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookEncryptor
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookKey
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookSerializer
@@ -21,6 +22,7 @@ interface AddressBookProvider {
         addressBookKey: AddressBookKey
     ): AddressBook
 
+    /** Decodes legacy plaintext and normalizes it to the format used by encrypted storage. */
     fun readLegacyUnencryptedAddressBookFromFile(file: File): AddressBook
 }
 
@@ -72,9 +74,9 @@ class AddressBookProviderImpl(
 
     override fun readLegacyUnencryptedAddressBookFromFile(file: File): AddressBook =
         file.inputStream().use { stream ->
-            addressBookSerializer.deserializeAddressBook(stream).also {
-                require(stream.read() == -1) { "Unexpected trailing data in legacy address book" }
-            }
+            val legacy = addressBookSerializer.deserializeAddressBook(stream)
+            require(stream.read() == -1) { "Unexpected trailing data in legacy address book" }
+            legacy.copy(version = ADDRESS_BOOK_SERIALIZATION_V2)
         }
 }
 

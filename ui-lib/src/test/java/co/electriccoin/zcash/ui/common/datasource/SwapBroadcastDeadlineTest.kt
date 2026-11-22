@@ -107,7 +107,9 @@ class SwapBroadcastDeadlineTest {
         val synchronizer = mockk<Synchronizer>()
         val metadata = mockk<MetadataRepository>(relaxed = true)
         val transactions = (1..legs).map {
-            CreatedTransaction(FirstClassByteArray(byteArrayOf(it.toByte())), FirstClassByteArray(byteArrayOf(1, 2)), null)
+            CreatedTransaction(
+                FirstClassByteArray(byteArrayOf(it.toByte())), FirstClassByteArray(byteArrayOf(1, 2)), null
+            )
         }
         private val endpoint = LightWalletEndpoint("synthetic.invalid", 443, true)
         private val entered = CompletableDeferred<Unit>()
@@ -137,7 +139,9 @@ class SwapBroadcastDeadlineTest {
         init {
             every { synchronizer.broadcaster } returns mockk()
             coEvery { metadata.getSwapMetadata(any()) } returns null
-            coEvery { metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns true
+            coEvery {
+                metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            } returns true
             coEvery { synchronizer.broadcaster.createProposedTransactions(any(), any()) } coAnswers {
                 if (!pauseEndpoints) pause()
                 transactions

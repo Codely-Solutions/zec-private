@@ -46,7 +46,8 @@ class ResetMetadataScopeTest {
         val activeFile = storage.getOrCreateStorageFile(metadataKey(1)).also { it.writeText("active") }
         val removedFile = storage.getOrCreateStorageFile(metadataKey(2)).also { it.writeText("removed") }
         val partial = removedFile.resolveSibling(removedFile.name + ".tmp").also { it.writeText("partial") }
-        val undecodable = removedFile.resolveSibling(removedFile.name + ".undecodable-17").also { it.writeText("aside") }
+        val undecodable = removedFile.resolveSibling(removedFile.name + ".undecodable-17")
+        undecodable.writeText("aside")
         val unrelated = File(filesDir, "unrelated").also { it.writeText("preserve") }
         val datasource = MetadataDataSourceImpl(storage, mockk(), mockk())
         val repository = MetadataRepositoryImpl(accounts, datasource, mockk(), mockk(), mockk())

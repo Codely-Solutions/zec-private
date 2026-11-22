@@ -146,7 +146,12 @@ class ReviewTransactionVMTest {
         ).also { it.scope = backgroundScope }
         val vm = vm(
             metadata = emptyMap(),
-            observeProposal = ObserveProposalUseCase(keystoneRepository, ledgerPipeline, zashiRepository, accountDataSource),
+            observeProposal = ObserveProposalUseCase(
+                keystoneProposalRepository = keystoneRepository,
+                ledgerProposalPipeline = ledgerPipeline,
+                zashiProposalRepository = zashiRepository,
+                accountDataSource = accountDataSource,
+            ),
             submitProposal = submit,
         )
         collect(vm)

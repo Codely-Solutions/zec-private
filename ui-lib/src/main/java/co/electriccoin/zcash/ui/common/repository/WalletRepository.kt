@@ -150,7 +150,11 @@ class WalletRepositoryImpl(
         }
 
     override val walletInitialization =
-        combine(initialization, onboardingState, persistableWalletProvider.persistableWallet) { operation, state, wallet ->
+        combine(
+            initialization,
+            onboardingState,
+            persistableWalletProvider.persistableWallet
+        ) { operation, state, wallet ->
             when {
                 operation != WalletInitializationState.IDLE -> operation
                 wallet != null && state != OnboardingState.READY -> WalletInitializationState.INCOMPLETE

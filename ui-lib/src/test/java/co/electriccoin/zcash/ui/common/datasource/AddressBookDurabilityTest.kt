@@ -116,7 +116,8 @@ class AddressBookDurabilityTest {
         assertFalse(fixture.legacy.exists())
         retry.saveContact("New", "recipient", null, fixture.key)
         assertFalse(orphan.exists())
-        assertEquals(listOf("First", "Second", "New"), retry.observe(fixture.key).filterNotNull().first().contacts.map { it.name })
+        val saved = retry.observe(fixture.key).filterNotNull().first()
+        assertEquals(listOf("First", "Second", "New"), saved.contacts.map { it.name })
     }
 
     @Test
@@ -126,7 +127,9 @@ class AddressBookDurabilityTest {
         val failingSync = DirectorySync { directory ->
             if (directory == fixture.legacy.parentFile) throw IOException("Synthetic legacy directory flush failure")
         }
-        assertFailsWith<IOException> { fixture.dataSource(sync = failingSync).observe(fixture.key).filterNotNull().first() }
+        assertFailsWith<IOException> {
+            fixture.dataSource(sync = failingSync).observe(fixture.key).filterNotNull().first()
+        }
         assertEquals(oldBook, fixture.provider.readAddressBookFromFile(fixture.file, fixture.key))
         assertFalse(fixture.legacy.exists())
         assertFailsWith<IOException> {

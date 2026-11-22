@@ -177,32 +177,47 @@ private fun OnboardingMainContent(
             Spacer(modifier = Modifier.height(ZashiDimensions.Spacing.spacingMd))
         }
 
-        ZashiButton(
-            onClick = when (initialization) {
-                WalletInitializationState.INCOMPLETE -> onContinueWallet
-                WalletInitializationState.FAILED -> onRetrySetup
-                else -> onCreateWallet
-            },
-            enabled = initialization != WalletInitializationState.CHECKING,
-            isLoading = initialization == WalletInitializationState.CHECKING ||
-                initialization == WalletInitializationState.RUNNING,
-            text = stringResource(
-                when (initialization) {
-                    WalletInitializationState.CHECKING -> R.string.wallet_initialization_checking
-                    WalletInitializationState.RUNNING -> R.string.wallet_initialization_running
-                    WalletInitializationState.INCOMPLETE -> R.string.wallet_initialization_continue
-                    WalletInitializationState.FAILED -> R.string.wallet_initialization_retry
-                    WalletInitializationState.IDLE -> R.string.plainOnboarding_button_createNewWallet
-                }
-            ),
-            modifier = Modifier.fillMaxWidth().let {
-                when (initialization) {
-                    WalletInitializationState.IDLE -> it.testTag(OnboardingTags.CREATE_NEW_WALLET)
-                    WalletInitializationState.INCOMPLETE -> it.testTag(OnboardingTags.CONTINUE_WALLET_SETUP)
-                    else -> it
-                }
-            },
-            hapticFeedbackType = HapticFeedbackType.Confirm
+        OnboardingPrimaryAction(
+            initialization = initialization,
+            onCreateWallet = onCreateWallet,
+            onContinueWallet = onContinueWallet,
+            onRetrySetup = onRetrySetup
         )
     }
+}
+
+@Composable
+private fun OnboardingPrimaryAction(
+    initialization: WalletInitializationState,
+    onCreateWallet: () -> Unit,
+    onContinueWallet: () -> Unit,
+    onRetrySetup: () -> Unit,
+) {
+    val isWorking = initialization == WalletInitializationState.CHECKING ||
+        initialization == WalletInitializationState.RUNNING
+    val modifier = Modifier.fillMaxWidth()
+    ZashiButton(
+        onClick = when (initialization) {
+            WalletInitializationState.INCOMPLETE -> onContinueWallet
+            WalletInitializationState.FAILED -> onRetrySetup
+            else -> onCreateWallet
+        },
+        enabled = !isWorking,
+        isLoading = isWorking,
+        text = stringResource(
+            when (initialization) {
+                WalletInitializationState.CHECKING -> R.string.wallet_initialization_checking
+                WalletInitializationState.RUNNING -> R.string.wallet_initialization_running
+                WalletInitializationState.INCOMPLETE -> R.string.wallet_initialization_continue
+                WalletInitializationState.FAILED -> R.string.wallet_initialization_retry
+                WalletInitializationState.IDLE -> R.string.plainOnboarding_button_createNewWallet
+            }
+        ),
+        modifier = when (initialization) {
+            WalletInitializationState.IDLE -> modifier.testTag(OnboardingTags.CREATE_NEW_WALLET)
+            WalletInitializationState.INCOMPLETE -> modifier.testTag(OnboardingTags.CONTINUE_WALLET_SETUP)
+            else -> modifier
+        },
+        hapticFeedbackType = HapticFeedbackType.Confirm
+    )
 }

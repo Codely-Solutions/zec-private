@@ -31,8 +31,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
 import cash.z.ecc.android.sdk.exception.GiftCardException as SdkGiftCardException
 import cash.z.ecc.android.sdk.model.GiftCardOrigin as SdkGiftCardOrigin
 
@@ -89,7 +91,7 @@ interface GiftCardDataSource {
     fun close(handle: GiftCardHandle)
 
     /**
-     * Waits for queued card wallet closures and confirms that their files were removed. The caller bounds the wait.
+     * Waits for queued card wallet closures and confirms that their files were removed within a bounded wait.
      * A failed SDK close leaves reset blocked until the process, and its SDK state, are restarted.
      */
     suspend fun awaitPendingCloses()
@@ -200,7 +202,7 @@ class GiftCardDataSourceImpl(
     }
 
     override suspend fun check(handle: GiftCardHandle): GiftCardStatus {
-        val held = held(handle)
+        val held = synchronized(lock) { cards[handle] } ?: throw GiftCardException.UnknownHandle()
         held.priorClose?.join()
         val status =
             try {
@@ -239,7 +241,7 @@ class GiftCardDataSourceImpl(
         toAddress: String,
         beforeSubmission: () -> Unit,
     ): GiftCardRedemption {
-        val held = held(handle)
+        val held = synchronized(lock) { cards[handle] } ?: throw GiftCardException.UnknownHandle()
         held.priorClose?.join()
         val recipient = RecipientAddress.new(toAddress, held.network)
         val memo = redeemMemo(label = application.getString(R.string.redeemGift_memo), message = held.card.description)
@@ -285,18 +287,22 @@ class GiftCardDataSourceImpl(
     }
 
     override suspend fun awaitPendingCloses() {
-        synchronized(lock) { closeJobs.values.toList() }.joinAll()
-        val targets = synchronized(lock) {
-            check(!closeFailed) { "Could not close a gift card wallet. Restart the app before trying reset again." }
-            closedWallets.groupBy { it.network }
-        }
-        // SDK close may return while its teardown erases the helper wallet in the background.
-        for ((network, wallets) in targets) {
-            val aliases = wallets.map { it.alias }.toSet()
-            while (GiftCardRedeemers.storedAliases(application, network).any(aliases::contains)) {
-                delay(CARD_WALLET_ERASE_CHECK_INTERVAL)
+        val closed = withTimeoutOrNull(CARD_WALLET_CLOSE_TIMEOUT) {
+            synchronized(lock) { closeJobs.values.toList() }.joinAll()
+            val targets = synchronized(lock) {
+                check(!closeFailed) { "Could not close a gift card wallet. Restart the app before trying reset again." }
+                closedWallets.groupBy { it.network }
             }
+            // SDK close may return while its teardown erases the helper wallet in the background.
+            for ((network, wallets) in targets) {
+                val aliases = wallets.map { it.alias }.toSet()
+                while (GiftCardRedeemers.storedAliases(application, network).any(aliases::contains)) {
+                    delay(CARD_WALLET_ERASE_CHECK_INTERVAL)
+                }
+            }
+            true
         }
+        check(closed == true) { "Timed out waiting for gift card wallet closure" }
         synchronized(lock) { closedWallets.clear() }
     }
 
@@ -308,9 +314,6 @@ class GiftCardDataSourceImpl(
     override suspend fun eraseCardWallet(wallet: StoredCardWallet) {
         GiftCardRedeemers.erase(application, wallet.network, wallet.alias)
     }
-
-    private fun held(handle: GiftCardHandle): HeldCard =
-        synchronized(lock) { cards[handle] } ?: throw GiftCardException.UnknownHandle()
 
     /**
      * A redeemer whose card wallet connects as the main synchronizer does: over Tor exactly when the user's Tor
@@ -441,6 +444,7 @@ private fun String.truncatedToUtf8Bytes(maxBytes: Int): String {
 private const val CONTINUATION_BYTE_MASK = 0xC0
 private const val CONTINUATION_BYTE = 0x80
 private val CARD_WALLET_ERASE_CHECK_INTERVAL = 100.milliseconds
+private val CARD_WALLET_CLOSE_TIMEOUT = 30.seconds
 
 private fun SdkGiftCardException.InvalidLink.toAppException(): GiftCardException =
     when (reason) {
