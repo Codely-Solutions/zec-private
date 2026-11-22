@@ -19,6 +19,7 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.isDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -29,6 +30,8 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
+import co.electriccoin.zcash.ui.screen.pay.PayTag
+import co.electriccoin.zcash.ui.screen.send.SendTag
 import org.json.JSONObject
 import org.junit.Rule
 import org.junit.Test
@@ -90,6 +93,41 @@ class ReviewScreenshotTest {
     @Test
     fun captureLargeReviewCorrectionStates() {
         captureReviewCorrections(listOf("dark"), 2f)
+    }
+
+    @Test
+    fun captureScrolledReviewControls() {
+        captureScrolledReviewControls(listOf("light", "dark", "oled"), 1f)
+    }
+
+    @Test
+    fun captureLargeScrolledReviewControls() {
+        captureScrolledReviewControls(listOf("dark"), 2f)
+    }
+
+    private fun captureScrolledReviewControls(themes: List<String>, scale: Float) {
+        compose.runOnUiThread {
+            RuntimeEnvironment.setFontScale(scale)
+            assertEquals(scale, compose.activity.resources.configuration.fontScale)
+        }
+        val scene = mutableStateOf(Scene("send-replacement", themes.first(), scale))
+        show(scene)
+        val review = text(DesignR.string.send_review)
+        val screens = listOf(
+            "send-replacement" to SendTag.SEND_FORM_BUTTON,
+            "recipient-pay-invalid-amount" to PayTag.PAY_REVIEW_BUTTON,
+        )
+        for (theme in themes) {
+            for ((screen, tag) in screens) {
+                val current = Scene(screen, theme, scale)
+                compose.runOnIdle { scene.value = current }
+                val button = compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
+                if (screen == "send-replacement") button.assertIsEnabled() else button.assertIsNotEnabled()
+                val node = button.fetchSemanticsNode()
+                assertEquals(node.size.height.toFloat(), node.boundsInRoot.height, 1f, "Visible Review button height")
+                capture(current, "scrolled-review", review)
+            }
+        }
     }
 
     private fun captureReviewCorrections(themes: List<String>, scale: Float) {
