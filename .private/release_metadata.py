@@ -24,18 +24,27 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def artifact_producer_job(run, jobs, asset, attempt, *, role, strict_timestamps=False):
-    def timestamp(value):
-        require(isinstance(value, str), 'Missing GitHub artifact or job timestamp')
-        parsed = datetime.fromisoformat(value)
-        require(parsed.tzinfo is not None, 'GitHub artifact or job timestamp must include timezone')
-        return parsed
+def job_timestamp(value):
+    require(isinstance(value, str), 'Missing GitHub artifact or job timestamp')
+    parsed = datetime.fromisoformat(value)
+    require(parsed.tzinfo is not None, 'GitHub artifact or job timestamp must include timezone')
+    return parsed
 
-    created = timestamp(asset.get('created_at'))
+
+def copied_job_matches(original, copy):
+    fields = ('status', 'conclusion', 'started_at', 'completed_at', 'runner_id', 'steps')
+    return (type(original.get('runner_id')) is int and original['runner_id'] > 0 and original.get('steps')
+            and type(copy.get('id')) is int and copy['id'] > 0 and copy['id'] != original['id']
+            and copy['run_attempt'] > original['run_attempt']
+            and all(copy.get(field) == original.get(field) for field in fields))
+
+
+def artifact_producer_job(run, jobs, asset, attempt, *, role, strict_timestamps=False):
+    created = job_timestamp(asset.get('created_at'))
     matches = []
     for job in jobs:
-        started = timestamp(job['started_at']) if job.get('started_at') else None
-        completed = timestamp(job['completed_at']) if job.get('completed_at') else None
+        started = job_timestamp(job['started_at']) if job.get('started_at') else None
+        completed = job_timestamp(job['completed_at']) if job.get('completed_at') else None
         if strict_timestamps and job.get('conclusion') == 'success':
             require(started is not None and completed is not None, 'Missing GitHub artifact or job timestamp')
         if started is not None and started <= created and (completed is None or created <= completed):
@@ -52,7 +61,7 @@ def artifact_producer_job(run, jobs, asset, attempt, *, role, strict_timestamps=
         require(type(number) is int and 1 <= number <= current, f'Invalid {role} producer attempt')
         if number not in attempts:
             attempts[number] = attempt(number)
-        attempt_started = timestamp(attempts[number].get('run_started_at'))
+        attempt_started = job_timestamp(attempts[number].get('run_started_at'))
         if started >= attempt_started:
             producers.append(job)
         else:
@@ -67,10 +76,7 @@ def artifact_producer_job(run, jobs, asset, attempt, *, role, strict_timestamps=
     if copies:
         # GitHub reruns can copy a successful job into a later attempt under
         # a new job ID. Its original execution finished before that attempt.
-        fields = ('status', 'conclusion', 'started_at', 'completed_at', 'runner_id', 'steps')
-        require(type(job.get('runner_id')) is int and job['runner_id'] > 0 and job.get('steps')
-                and all(copy['run_attempt'] > job['run_attempt']
-                        and all(copy.get(field) == job.get(field) for field in fields) for copy in copies),
+        require(all(copied_job_matches(job, copy) for copy in copies),
                 f'Copied {role} producer does not match the original execution')
     return job
 

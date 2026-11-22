@@ -236,22 +236,15 @@ class QuoteRecoveryTests(unittest.TestCase):
     def test_linked_reservation_requires_positive_pre_wallet_failure_evidence(self):
         prior = 'd' * 40
         reservation = 'e' * 40
-        metadata = Mock(gh='gh', repo='repos/' + REPOSITORY)
-        run = dict(id=8, path=WORKFLOW, event='workflow_dispatch', head_branch='main', head_sha=prior,
-                   head_repository={'full_name': REPOSITORY}, actor={'id': OPERATOR_ID},
-                   status='completed', conclusion='failure', run_attempt=1)
-        jobs = [dict(id=i, name=name, conclusion=result, run_id=8, head_sha=prior)
-                for i, (name, result) in enumerate((('build / admit_hosted', 'success'),
-                    ('build / hosted_core / reserve', 'success'), ('build / hosted_core / wallet', 'failure'),
-                    ('build / publish', 'skipped')), 1)]
-        metadata.pages.return_value = jobs
+        run = self.recovery_run(8, prior, dict(admit_hosted='success', publish='skipped',
+                                              **{RESERVE: 'success', WALLET: 'failure'}), ())
+        metadata = self.recovery_metadata(run, reservation=reservation)
         safe = b'Hosted lifecycle failed at networkTargets, claim state no-POST'
         preclaim = b'CORE_STAGE sender passed\nHosted lifecycle failed at preclaim_readiness, claim state no-POST'
         for log, error in ((safe, None), (preclaim, None), (b'no-POST', 'did not prove'),
                            (preclaim.replace(b'no-POST', b'uncertain'), 'did not prove'),
                            (preclaim + b'\nCORE_STAGE fund passed', 'did not prove'),
                            (safe + b'\nCORE_STAGE sender passed', 'did not prove')):
-            metadata.api.side_effect = [run, {'object': {'sha': reservation}}]
             with self.subTest(error=error), patch('quote_recovery.git', return_value=prior.encode()), \
                     patch('quote_recovery.verify_delta'), patch('release_inputs.version_code', return_value=42), \
                     patch('hosted_claim.verify') as verify, patch('subprocess.check_output', return_value=log):
@@ -262,16 +255,14 @@ class QuoteRecoveryTests(unittest.TestCase):
                 else:
                     self.assertEqual(unused_reservation(Path('.'), SOURCE, MAIN, '7', OLD, '8', metadata), reservation)
                     self.assertEqual(verify.call_args.args[0]['run'], 8)
-        metadata.api.side_effect = [run, {'object': {'sha': reservation}}]
         with patch('quote_recovery.git', return_value=prior.encode()), \
                 patch('release_inputs.version_code', return_value=42), patch('hosted_claim.verify'), \
                 patch('quote_recovery.subprocess.check_output', return_value=preclaim):
             self.assertEqual(unused_reservation(Path('.'), SOURCE, MAIN, '8', prior, '8', metadata), reservation)
-        jobs[2]['conclusion'] = 'success'
-        metadata.api.side_effect = [run]
+        next(job for job in run[1] if job['name'] == 'build / ' + WALLET)['conclusion'] = 'success'
         with patch('quote_recovery.git', return_value=prior.encode()), \
                 patch('quote_recovery.verify_delta'), patch('quote_recovery.subprocess.check_output') as log:
-            with self.assertRaisesRegex(ValueError, 'Prior run lacks.*hosted_core / wallet'):
+            with self.assertRaisesRegex(ValueError, 'required boundary: build / hosted_core / wallet'):
                 unused_reservation(Path('.'), SOURCE, MAIN, '7', OLD, '8', metadata)
             log.assert_not_called()
 
@@ -535,27 +526,37 @@ class QuoteRecoveryTests(unittest.TestCase):
 
     def test_linked_quote_survives_preparation_failure_and_later_wallet_signer_failure(self):
         quote_controller, wallet_controller = 'd' * 40, 'e' * 40
+        reservation = 'f' * 40
         original = self.recovery_run(7, OLD, dict(BUILD_JOBS, publish='skipped', **{
             QUOTE: 'failure', WALLET: 'failure', PREPARE: 'success', RESERVE: 'success',
         }), BUILD_ARTIFACTS)
+        failed_rerun = self.rerun(original, dict(unsigned='failure', publish='skipped', **{WALLET: 'skipped'}))
+        reserve = next(job for job in original[1] if job['name'] == 'build / ' + RESERVE)
+        failed_rerun[1].append(dict(reserve, id=reserve['id'] + 40, run_attempt=2))
         quote = self.recovery_run(8, quote_controller, dict(admit_hosted='success', publish='skipped', **{
             LINKED_QUOTE: 'success', PREPARE: 'failure', WALLET: 'skipped', RESERVE: 'skipped',
         }), ('hosted-quote-receipt',))
         wallet = self.recovery_run(9, wallet_controller, dict(admit_hosted='success', publish='failure', **{
             WALLET: 'success', PREPARE: 'success', RESERVE: 'success',
         }), ('hosted-core-receipt', 'core-direct-candidate'))
-        metadata = self.recovery_metadata(original, quote, wallet)
+        metadata = self.recovery_metadata(original, failed_rerun, quote, wallet, reservation=reservation)
         preparation_fix = b'.private/prepare_direct_core.py\0'
         with patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_delta'), \
                 patch('release_inputs.version_code', return_value=42), \
-                patch('quote_recovery.unused_reservation', return_value='f' * 40) as reservation:
-            with patch('quote_recovery.git', side_effect=[quote_controller.encode(), preparation_fix]):
+                patch('hosted_claim.verify') as verify, \
+                patch('quote_recovery.subprocess.check_output',
+                      return_value=b'Hosted lifecycle failed at networkTargets, claim state no-POST') as no_post:
+            with patch('quote_recovery.git', side_effect=[OLD.encode(), quote_controller.encode(), preparation_fix]):
                 result = resolve(Path('.'), SOURCE, wallet_controller, '7', metadata, quote_run='8', preclaim_run='7')
             self.assertEqual(result['quote_receipt_id'], '81')
-            self.assertEqual(result['previous_reservation'], 'f' * 40)
+            self.assertEqual(result['previous_reservation'], reservation)
             self.assertEqual(result['run_missing_core'], 'true')
-            reservation.assert_called_once()
-            reservation.reset_mock()
+            verify.assert_called_once_with(
+                dict(source=SOURCE, controller=OLD, version=42, run=7, rehearsal=False), reservation, metadata)
+            original_wallet = next(job for job in original[1] if job['name'] == 'build / ' + WALLET)
+            self.assertTrue(no_post.call_args.args[0][-1].endswith(f'/actions/jobs/{original_wallet["id"]}/logs'))
+            verify.reset_mock()
+            no_post.reset_mock()
             with patch('quote_recovery.git', side_effect=[wallet_controller.encode(), b'.private/publish.py\0',
                                                            quote_controller.encode(), preparation_fix]):
                 result = resolve(Path('.'), SOURCE, MAIN, '7', metadata, quote_run='8', core_run='9')
@@ -563,7 +564,8 @@ class QuoteRecoveryTests(unittest.TestCase):
             self.assertEqual((result['quote_controller'], result['core_controller']),
                              (quote_controller, wallet_controller))
             self.assertNotIn('run_missing_core', result)
-            reservation.assert_not_called()
+            verify.assert_not_called()
+            no_post.assert_not_called()
 
     def test_passing_wallet_survives_failed_sibling_quote_with_claim_preserved(self):
         wallet_controller = 'd' * 40
@@ -584,6 +586,43 @@ class QuoteRecoveryTests(unittest.TestCase):
             self.assertNotIn('run_missing_core', result)
             with self.assertRaisesRegex(ValueError, 'already has a protected funding reservation'):
                 resolve(Path('.'), SOURCE, MAIN, '7', metadata)
+
+    def test_preclaim_proof_requires_no_later_funding_execution_or_publication(self):
+        original = self.recovery_run(7, OLD, dict(BUILD_JOBS, publish='skipped',
+                                                 **{WALLET: 'failure', RESERVE: 'success'}), BUILD_ARTIFACTS)
+        reservation = 'f' * 40
+        reserve = next(job for job in original[1] if job['name'] == 'build / ' + RESERVE)
+        copied = dict(reserve, id=reserve['id'] + 40, run_attempt=2)
+        for states, extras, archives, error in (
+            ({'unsigned': 'failure'}, [], [], None),
+            ({'unsigned': 'failure', RESERVE: 'skipped'}, [], [], None),
+            ({WALLET: 'success'}, [copied], [], 'later attempt executed the prior wallet'),
+            ({WALLET: 'failure'}, [], [], 'later attempt executed the prior wallet'),
+            ({RESERVE: 'success'}, [], [], 'later attempt executed a new funding reservation'),
+            ({RESERVE: 'failure'}, [], [], 'later attempt executed a new funding reservation'),
+            ({}, [dict(copied, runner_id=999)], [], 'later attempt executed a new funding reservation'),
+            ({}, [dict(copied, id=reserve['id'])], [], 'later attempt executed a new funding reservation'),
+            ({'publish': 'success'}, [], [], 'required boundary: build / publish'),
+            ({}, [], [{'name': 'release-attestation-2'}], 'no publication attestation'),
+            ({}, [], [{'name': 'hosted-core-receipt'}], 'without a wallet receipt'),
+        ):
+            later, jobs, artifacts = self.rerun(original, states)
+            metadata = self.recovery_metadata(original, (later, jobs + extras, artifacts + archives),
+                                              reservation=reservation)
+            with self.subTest(error=error), patch('quote_recovery.git', return_value=OLD.encode()), \
+                    patch('release_inputs.version_code', return_value=42), patch('hosted_claim.verify') as verify, \
+                    patch('quote_recovery.subprocess.check_output',
+                          return_value=b'Hosted lifecycle failed at networkTargets, claim state no-POST') as no_post:
+                if error:
+                    with self.assertRaisesRegex(ValueError, error):
+                        unused_reservation(Path('.'), SOURCE, MAIN, '7', OLD, '7', metadata)
+                    no_post.assert_not_called()
+                    verify.assert_not_called()
+                else:
+                    self.assertEqual(unused_reservation(Path('.'), SOURCE, MAIN, '7', OLD, '7', metadata),
+                                     reservation)
+                    no_post.assert_called_once()
+                    verify.assert_called_once()
 
     def test_passing_quote_survives_failed_sibling_installed_upgrade(self):
         quote_controller = 'd' * 40
@@ -734,7 +773,7 @@ class QuoteRecoveryTests(unittest.TestCase):
         return run, jobs, artifacts
 
     @staticmethod
-    def recovery_metadata(*runs, refs=None):
+    def recovery_metadata(*runs, refs=None, reservation=None):
         meta = Mock(gh='gh-offline-fixture', repo='repos/fixture')
         endpoints = {}
         pages = {}
@@ -746,6 +785,8 @@ class QuoteRecoveryTests(unittest.TestCase):
         def api(path):
             if refs is not None and path.startswith('/git/matching-refs/'):
                 return refs
+            if reservation is not None and path.startswith('/git/ref/heads/testnet-claims/'):
+                return {'object': {'sha': reservation}}
             return endpoints[path]
 
         meta.api.side_effect = api

@@ -6,7 +6,7 @@ import subprocess
 
 from custom_release import OPERATOR_ID, REPOSITORY, WORKFLOW, require_dispatch, verify_custom_child
 from maintenance_cadence import MARKER as MAINTENANCE_MARKER, changed_marker, git
-from release_metadata import artifact_producer_job, require
+from release_metadata import artifact_producer_job, copied_job_matches, job_timestamp, require
 
 RECOVERY_PATHS = {
     '.github/workflows/build-release.yml', '.github/workflows/custom-release.yml',
@@ -385,30 +385,39 @@ def funded_recovery_artifacts(root, source, history, metadata):
 def unused_reservation(root, source, controller, original_run, original, prior_run, metadata):
     from hosted_claim import binding, ref_for, verify
     from release_inputs import version_code
-    import subprocess
 
     require(re.fullmatch(r'[1-9][0-9]*', prior_run),
             'Exact prior pre-claim run required')
     run = metadata.api('/actions/runs/' + prior_run)
     prior = run['head_sha']
-    require(trusted_producer(run, prior_run, maintenance=prior_run == original_run)
-            and run['conclusion'] == 'failure' and run['run_attempt'] == 1 and prior != controller
+    require(trusted_producer(run, prior_run, maintenance=prior_run == original_run) and prior != controller
             and git(root, 'merge-base', prior, controller).decode().strip() == prior,
             'Prior pre-claim run does not match the trusted recovery controller')
     if prior_run == original_run:
         require(prior == original, 'Original pre-claim run has a different controller')
     else:
         verify_delta(root, source, original, prior)
-    jobs = metadata.pages(f'/actions/runs/{prior_run}/attempts/1/jobs', 'jobs')
-    wallet = None
-    for name, conclusion in (('build / admit_hosted', 'success'), ('build / hosted_core / reserve', 'success'),
-                             ('build / hosted_core / wallet', 'failure'), ('build / publish', 'skipped')):
-        matching = [job for job in jobs if job['name'] == name]
-        require(len(matching) == 1 and matching[0]['conclusion'] == conclusion
-                and matching[0]['run_id'] == int(prior_run) and matching[0]['head_sha'] == prior,
-                'Prior run lacks the required pre-claim job state: ' + name)
-        if name.endswith('/ wallet'):
-            wallet = matching[0]['id']
+    history = UnpublishedRun(metadata, run)
+    initial = history.attempt(1)
+    require(initial['conclusion'] == 'failure' and not history.contains(*WALLET_RECEIPTS),
+            'Expected a failed first pre-claim attempt without a wallet receipt')
+    reserve_name, wallet_name = 'hosted_core / reserve', 'hosted_core / wallet'
+    for name, conclusion in (('admit_hosted', 'success'), (reserve_name, 'success'),
+                             (wallet_name, 'failure'), ('publish', 'skipped')):
+        history.state(name, (conclusion,))
+    reserve = history.job(reserve_name, 1)
+    for number in range(2, run['run_attempt'] + 1):
+        require(history.state(wallet_name, attempt=number) in ('skipped', None),
+                'A later attempt executed the prior wallet')
+        later = history.job(reserve_name, number)
+        if history.state(reserve_name, attempt=number) in ('skipped', None):
+            continue
+        require(copied_job_matches(reserve, later) and
+                job_timestamp(initial.get('run_started_at')) <= job_timestamp(reserve.get('started_at')) <=
+                job_timestamp(reserve.get('completed_at')) <
+                job_timestamp(history.attempt(number).get('run_started_at')),
+                'A later attempt executed a new funding reservation')
+    wallet = history.job(wallet_name, 1)['id']
     log = subprocess.check_output([metadata.gh, 'api', '--allow-escape-sequences',
                                    metadata.repo + f'/actions/jobs/{int(wallet)}/logs'], timeout=30)
     startup_failed = (b'Hosted lifecycle failed at networkTargets, claim state no-POST' in log
