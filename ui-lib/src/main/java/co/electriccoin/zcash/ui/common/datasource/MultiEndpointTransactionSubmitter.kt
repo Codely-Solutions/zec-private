@@ -33,6 +33,7 @@ internal interface MultiEndpointTransactionSubmitter {
             timeoutDrain: Duration = 2.seconds,
             gracePeriod: Duration = 5.seconds,
             logger: MultiEndpointTransactionSubmitterLogger = TwigMultiEndpointTransactionSubmitterLogger,
+            beforeFirstSubmission: () -> Unit = {},
             submit: suspend (CreatedTransaction, LightWalletEndpoint) -> TransactionSubmitResult
         ): MultiEndpointTransactionSubmitter =
             MultiEndpointTransactionSubmitterImpl(
@@ -41,6 +42,7 @@ internal interface MultiEndpointTransactionSubmitter {
                 timeoutDrain = timeoutDrain,
                 gracePeriod = gracePeriod,
                 logger = logger,
+                beforeFirstSubmission = beforeFirstSubmission,
                 submit = submit
             )
     }
@@ -52,9 +54,17 @@ private class MultiEndpointTransactionSubmitterImpl(
     private val timeoutDrain: Duration,
     private val gracePeriod: Duration,
     private val logger: MultiEndpointTransactionSubmitterLogger,
+    beforeFirstSubmission: () -> Unit,
     private val submit: suspend (CreatedTransaction, LightWalletEndpoint) -> TransactionSubmitResult
 ) : MultiEndpointTransactionSubmitter,
     CloseableScopeHolder by closeableScopeHolder {
+    // Every endpoint shares one decision at actual SDK entry. Cache failure as well as success:
+    // no worker may submit after another worker refused the reviewed funding. After first entry,
+    // all legs retain their SDK retry plans even if the quote expires or a response is uncertain.
+    private val firstSubmission = lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        runCatching(beforeFirstSubmission)
+    }
+
     override suspend fun submitTransactions(
         transactions: List<CreatedTransaction>,
         endpoints: List<LightWalletEndpoint>,
@@ -147,6 +157,12 @@ private class MultiEndpointTransactionSubmitterImpl(
 
                 scope
                     .async {
+                        firstSubmission.value.exceptionOrNull()?.let { cause ->
+                            completion.completeExceptionally(cause)
+                            return@async EndpointSubmission(
+                                endpointLabel, TransactionSubmitResult.NotAttempted(transaction.txId)
+                            )
+                        }
                         val submission =
                             EndpointSubmission(
                                 endpointLabel = endpointLabel,

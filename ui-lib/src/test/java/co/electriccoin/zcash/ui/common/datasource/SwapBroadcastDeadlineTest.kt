@@ -118,16 +118,12 @@ class SwapBroadcastDeadlineTest {
         private val signer = mockk<co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider>()
         private val dataSource = ProposalDataSourceImpl(
             mockk { coEvery { getSynchronizer() } returns synchronizer },
-            mockk {
-                coEvery { getEndpoints() } coAnswers {
-                    if (pauseEndpoints) pause()
-                    listOf(endpoint)
-                }
-            },
+            mockk { every { getEndpoints() } returns listOf(endpoint) },
             mockk { coEvery { get() } returns true },
             mockk {
-                coEvery { requirePersistableWallet() } returns mockk wallet@{
-                    every { this@wallet.endpoint } returns this@Fixture.endpoint
+                coEvery { requirePersistableWallet() } coAnswers {
+                    if (pauseEndpoints) pause()
+                    mockk wallet@{ every { this@wallet.endpoint } returns this@Fixture.endpoint }
                 }
             }
         )

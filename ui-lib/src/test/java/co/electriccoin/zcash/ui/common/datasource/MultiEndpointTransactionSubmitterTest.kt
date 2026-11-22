@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.util.CloseableScopeHolderImpl
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
@@ -18,10 +19,66 @@ import java.util.Collections
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertSame
 import kotlin.test.assertIs
 import kotlin.time.Duration.Companion.milliseconds
 
 class MultiEndpointTransactionSubmitterTest {
+    @Test
+    fun aQueuedBroadcastChecksFundingAtSdkEntryAndCachesRefusalForEveryEndpoint() = runTest {
+        var allowed = true
+        var checks = 0
+        var submissions = 0
+        val refusal = IllegalStateException("Synthetic expired review")
+        val submitter = MultiEndpointTransactionSubmitter(
+            closeableScopeHolder = CloseableScopeHolderImpl(backgroundScope),
+            logger = noOpLogger,
+            beforeFirstSubmission = {
+                checks++
+                if (!allowed) throw refusal
+            },
+            submit = { transaction, _ ->
+                submissions++
+                TransactionSubmitResult.Success(transaction.txId)
+            }
+        )
+        val pending = async {
+            assertFailsWith<IllegalStateException> {
+                submitter.submitTransactions(listOf(transaction(1)), listOf(endpoint("one"), endpoint("two")), LOG_TAG)
+            }
+        }
+        assertFalse(pending.isCompleted)
+        allowed = false
+        assertSame(refusal, pending.await())
+        assertEquals(1, checks)
+        assertEquals(0, submissions)
+    }
+
+    @Test
+    fun fundingIsCheckedOnceAcrossEveryEndpointAndSubsequentTransaction() = runTest {
+        var allowed = true
+        var checks = 0
+        var submissions = 0
+        val submitter = MultiEndpointTransactionSubmitter(
+            closeableScopeHolder = CloseableScopeHolderImpl(backgroundScope),
+            logger = noOpLogger,
+            beforeFirstSubmission = { checks++; check(allowed) },
+            submit = { transaction, _ ->
+                submissions++
+                allowed = false
+                TransactionSubmitResult.Success(transaction.txId)
+            }
+        )
+        val results = submitter.submitTransactions(
+            listOf(transaction(1), transaction(2)), listOf(endpoint("one"), endpoint("two")), LOG_TAG
+        )
+        assertEquals(2, results.size)
+        assertEquals(1, checks)
+        assertEquals(4, submissions)
+    }
+
     @Test
     fun manualModeSubmitsOnlyToSelectedEndpoint() =
         runTest {

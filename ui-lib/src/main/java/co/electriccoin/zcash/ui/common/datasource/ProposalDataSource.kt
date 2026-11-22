@@ -320,16 +320,13 @@ class ProposalDataSourceImpl(
                 "$logTag Created ${transactions.size} transaction(s); submitting to ${endpoints.size} endpoint(s)."
             }
 
-            // Preparation and endpoint selection can suspend past the reviewed deadline. Check once
-            // before starting broadcast; after that, every leg must retain the SDK's retry plan even
-            // if the quote expires or an endpoint's response is uncertain.
-            beforeFirstSubmission()
             val submitResults =
                 submitCreatedTransactions(
                     synchronizer = synchronizer,
                     transactions = transactions,
                     endpoints = endpoints,
-                    logTag = logTag
+                    logTag = logTag,
+                    beforeFirstSubmission = beforeFirstSubmission
                 )
 
             Twig.debug { "Internal transaction submit results: $submitResults" }
@@ -349,9 +346,11 @@ class ProposalDataSourceImpl(
         synchronizer: Synchronizer,
         transactions: List<CreatedTransaction>,
         endpoints: List<LightWalletEndpoint>,
-        logTag: String
+        logTag: String,
+        beforeFirstSubmission: () -> Unit,
     ): List<TransactionSubmitResult> =
         MultiEndpointTransactionSubmitter(
+            beforeFirstSubmission = beforeFirstSubmission,
             submit = { transaction, endpoint ->
                 synchronizer.broadcaster.submit(transaction, endpoint)
             }
