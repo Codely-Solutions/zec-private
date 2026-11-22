@@ -1,4 +1,5 @@
 import org.gradle.api.file.FileCollection
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.gradle.api.tasks.Classpath
 import org.gradle.process.CommandLineArgumentProvider
 
@@ -11,8 +12,10 @@ class MockKStartupAgent implements CommandLineArgumentProvider {
     @Override
     Iterable<String> asArguments() {
         def agents = agentClasspath.files
-        if (agents.empty) return []
-        if (agents.size() != 1) throw new GradleException('Expected one locked Byte Buddy test agent')
+        if (agents.isEmpty()) return []
+        if (agents.size() != 1) {
+            throw new GradleException("Expected one locked Byte Buddy test agent; found ${agents.size()}")
+        }
         return ["-javaagent:${agents.first().absolutePath}".toString()]
     }
 }
@@ -23,7 +26,19 @@ allprojects {
         jvmArgs '-XX:+ExitOnOutOfMemoryError', '-XX:-HeapDumpOnOutOfMemoryError'
         systemProperty 'robolectric.dependency.repo.url', 'https://repo.maven.apache.org/maven2'
         def agents = project.files(project.provider {
-            testTask.classpath.filter { it.name ==~ /byte-buddy-agent-[0-9][0-9A-Za-z.\-]*\.jar/ }
+            def variant = testTask.name
+            if (variant.startsWith('test') && variant != 'test') {
+                def suffix = variant.substring(4)
+                variant = suffix.substring(0, 1).toLowerCase(Locale.ROOT) + suffix.substring(1)
+            }
+            def runtime = project.configurations.findByName(variant + 'RuntimeClasspath')
+            if (runtime == null) return project.files()
+            runtime.incoming.artifactView {
+                componentFilter { id ->
+                    id instanceof ModuleComponentIdentifier &&
+                        id.group == 'net.bytebuddy' && id.module == 'byte-buddy-agent'
+                }
+            }.files
         })
         jvmArgumentProviders.add(new MockKStartupAgent(agentClasspath: agents))
     }
