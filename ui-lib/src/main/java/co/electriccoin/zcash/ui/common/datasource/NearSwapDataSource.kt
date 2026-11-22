@@ -23,7 +23,9 @@ import co.electriccoin.zcash.ui.common.model.near.RecipientType
 import co.electriccoin.zcash.ui.common.model.near.RefundType
 import co.electriccoin.zcash.ui.common.model.near.SubmitDepositTransactionRequest
 import co.electriccoin.zcash.ui.common.model.near.SwapType
+import co.electriccoin.zcash.ui.common.model.near.requireNearTokenDecimals
 import co.electriccoin.zcash.ui.common.model.near.requireSimpleChainRouting
+import co.electriccoin.zcash.ui.common.model.near.toNearProviderDecimalOrNull
 import co.electriccoin.zcash.ui.common.provider.BlockchainProvider
 import co.electriccoin.zcash.ui.common.provider.NearApiProvider
 import co.electriccoin.zcash.ui.common.provider.ResponseWithNearErrorException
@@ -86,6 +88,7 @@ class NearSwapDataSource(
                 SwapMode.EXACT_OUTPUT -> destinationAsset.decimals
             }
 
+        requireNearTokenDecimals(decimals)
         val shifted = amount.movePointRight(decimals)
         val integer = shifted.toBigInteger().toBigDecimal()
         val normalizedAmount = shifted.round(MathContext(integer.precision(), RoundingMode.DOWN))
@@ -123,9 +126,8 @@ class NearSwapDataSource(
                     e.error.message.contains("Amount is too low for bridge, try at least", true) -> {
                         val errorAmount =
                             e.error.message
-                                .split(" ")
-                                .lastOrNull()
-                                ?.toBigDecimalOrNull() ?: throw e
+                                .substringAfterLast(' ')
+                                .toNearProviderDecimalOrNull() ?: throw e
                         val errorAsset =
                             when (swapMode) {
                                 SwapMode.FLEX_INPUT -> originAsset

@@ -3,7 +3,6 @@
 package co.electriccoin.zcash.ui.common.model.near
 
 import co.electriccoin.zcash.ui.common.serialization.NearSwapStatusSerializer
-import co.electriccoin.zcash.ui.common.serialization.NullableBigDecimalSerializer
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -36,22 +35,22 @@ data class SwapDetails(
     // @SerialName("nearTxHashes")
     // val nearTxHashes: List<String>,
     @SerialName("amountIn")
-    @Serializable(NullableBigDecimalSerializer::class)
+    @Serializable(NearProviderDecimalSerializer::class)
     val amountIn: BigDecimal? = null,
     @SerialName("amountInFormatted")
-    @Serializable(NullableBigDecimalSerializer::class)
+    @Serializable(NearProviderDecimalSerializer::class)
     val amountInFormatted: BigDecimal? = null,
     @SerialName("amountInUsd")
-    @Serializable(NullableBigDecimalSerializer::class)
+    @Serializable(NearProviderDecimalSerializer::class)
     val amountInUsd: BigDecimal? = null,
     @SerialName("amountOut")
-    @Serializable(NullableBigDecimalSerializer::class)
+    @Serializable(NearProviderDecimalSerializer::class)
     val amountOut: BigDecimal? = null,
     @SerialName("amountOutFormatted")
-    @Serializable(NullableBigDecimalSerializer::class)
+    @Serializable(NearProviderDecimalSerializer::class)
     val amountOutFormatted: BigDecimal? = null,
     @SerialName("amountOutUsd")
-    @Serializable(NullableBigDecimalSerializer::class)
+    @Serializable(NearProviderDecimalSerializer::class)
     val amountOutUsd: BigDecimal? = null,
     @SerialName("slippage")
     val slippage: Int? = null,
@@ -60,23 +59,32 @@ data class SwapDetails(
     @SerialName("destinationChainTxHashes")
     val destinationChainTxHashes: List<TransactionChainHash>? = null,
     @SerialName("refundedAmount")
-    @Serializable(NullableBigDecimalSerializer::class)
+    @Serializable(NearProviderDecimalSerializer::class)
     val refundedAmount: BigDecimal? = null,
     @SerialName("refundedAmountFormatted")
-    @Serializable(NullableBigDecimalSerializer::class)
+    @Serializable(NearProviderDecimalSerializer::class)
     val refundedAmountFormatted: BigDecimal? = null,
     @SerialName("refundedAmountUsd")
-    val refundedAmountUsd: String? = null,
+    @Serializable(NearProviderDecimalSerializer::class)
+    val refundedAmountUsd: BigDecimal? = null,
     @SerialName("depositedAmount")
-    @Serializable(NullableBigDecimalSerializer::class)
+    @Serializable(NearProviderDecimalSerializer::class)
     val depositedAmount: BigDecimal? = null,
     @SerialName("depositedAmountFormatted")
-    @Serializable(NullableBigDecimalSerializer::class)
+    @Serializable(NearProviderDecimalSerializer::class)
     val depositedAmountFormatted: BigDecimal? = null,
     @SerialName("depositedAmountUsd")
-    @Serializable(NullableBigDecimalSerializer::class)
+    @Serializable(NearProviderDecimalSerializer::class)
     val depositedAmountUsd: BigDecimal? = null
-)
+) {
+    init {
+        requireNearProviderDecimals(
+            amountIn, amountInFormatted, amountInUsd, amountOut, amountOutFormatted, amountOutUsd,
+            refundedAmount, refundedAmountFormatted, refundedAmountUsd,
+            depositedAmount, depositedAmountFormatted, depositedAmountUsd
+        )
+    }
+}
 
 enum class SwapStatus(
     val apiValue: String

@@ -432,6 +432,26 @@ class NearSwapDataSourceTest {
     }
 
     @Test
+    fun requestQuoteRethrowsAmountTooLowWithAnOversizedMinimumHint() {
+        runBlocking {
+            coEvery { nearApiProvider.requestQuote(any()) } throws
+                nearError("Amount is too low for bridge, try at least 1E+10000")
+
+            assertFailsWith<ResponseWithNearErrorException> {
+                dataSource.requestQuote(
+                    swapMode = SwapMode.EXACT_INPUT,
+                    amount = BigDecimal.ONE,
+                    refundAddress = "refund",
+                    originAsset = origin,
+                    destinationAddress = "destination",
+                    destinationAsset = zec,
+                    slippage = BigDecimal("2")
+                )
+            }
+        }
+    }
+
+    @Test
     fun submitDepositTransactionForwardsTxHashAndAddressToProvider() =
         runBlocking {
             val request = slot<SubmitDepositTransactionRequest>()

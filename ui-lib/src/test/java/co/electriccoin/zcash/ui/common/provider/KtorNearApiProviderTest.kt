@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.common.provider
 import co.electriccoin.zcash.ui.common.model.near.QuoteRequest
 import co.electriccoin.zcash.ui.common.model.near.SubmitDepositTransactionRequest
 import co.electriccoin.zcash.ui.common.model.near.SwapType
+import co.electriccoin.zcash.ui.common.model.near.boundedNearQuoteWire
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
@@ -14,6 +15,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.TextContent
 import io.ktor.http.headersOf
+import io.ktor.serialization.JsonConvertException
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
@@ -105,6 +107,48 @@ class KtorNearApiProviderTest {
             assertNoAuthorization(request)
             assertRespectsTorPreference()
         }
+
+    @Test
+    fun quoteDecodeRejectsTheCompactOversizedOutputFromTheAdmissionProbe() =
+        runBlocking {
+            responseBody = boundedNearQuoteWire
+            assertEquals(BigDecimal("100000000"), provider.requestQuote(quoteRequest()).quote.amountOut)
+
+            responseBody = boundedNearQuoteWire
+                .replace("\"amountOut\":\"100000000\"", "\"amountOut\":\"1E+10000\"")
+                .replace("\"amountOutFormatted\":\"1\"", "\"amountOutFormatted\":\"1E+9992\"")
+                .replace("\"minAmountOut\":\"99000000\"", "\"minAmountOut\":\"1E+10000\"")
+            assertTrue(responseBody.length < 2_000)
+            assertFailsWith<JsonConvertException> { provider.requestQuote(quoteRequest()) }
+            assertEquals(2, diagnosticEvents.count { it.startsWith("stage=CLIENT_CLOSE ") })
+        }
+
+    @Test
+    fun statusDecodeRejectsOversizedUsdAndKeepsNullableStatusAmounts() {
+        runBlocking {
+            responseBody = """{
+                "status":"REFUNDED", "updatedAt":"2026-11-20T00:00:00Z", "quoteResponse":$boundedNearQuoteWire,
+                "swapDetails":{"refundedAmount":"100000000", "refundedAmountUsd":"3.5", "depositedAmountUsd":null}
+            }"""
+            val decoded = provider.checkSwapStatus("synthetic-deposit")
+            assertEquals(BigDecimal("3.5"), decoded.swapDetails?.refundedAmountUsd)
+            assertNull(decoded.swapDetails?.depositedAmountUsd)
+
+            responseBody = responseBody.replace("\"refundedAmountUsd\":\"3.5\"", "\"refundedAmountUsd\":\"1E-10000\"")
+            assertFailsWith<JsonConvertException> { provider.checkSwapStatus("synthetic-deposit") }
+        }
+    }
+
+    @Test
+    fun tokenListDecodeRejectsOversizedUsdPrice() {
+        runBlocking {
+            responseBody = """[{"assetId":"asset","decimals":24,"blockchain":"near","symbol":"TOKEN","price":"2.79"}]"""
+            assertEquals(BigDecimal("2.79"), provider.getSupportedTokens().single().price)
+
+            responseBody = responseBody.replace("\"2.79\"", "\"1E+10000\"")
+            assertFailsWith<JsonConvertException> { provider.getSupportedTokens() }
+        }
+    }
 
     @Test
     fun errorResponseWithNearErrorBodyMapsToTypedException() {

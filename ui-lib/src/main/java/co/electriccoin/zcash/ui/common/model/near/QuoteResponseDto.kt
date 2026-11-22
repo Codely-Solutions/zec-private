@@ -2,7 +2,6 @@
 
 package co.electriccoin.zcash.ui.common.model.near
 
-import co.electriccoin.zcash.ui.common.serialization.BigDecimalSerializer
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -27,28 +26,28 @@ data class QuoteDetails(
     @SerialName("depositAddress")
     val depositAddress: String,
     @SerialName("amountIn")
-    @Serializable(with = BigDecimalSerializer::class)
+    @Serializable(with = NearProviderDecimalSerializer::class)
     val amountIn: BigDecimal,
     @SerialName("amountInFormatted")
-    @Serializable(with = BigDecimalSerializer::class)
+    @Serializable(with = NearProviderDecimalSerializer::class)
     val amountInFormatted: BigDecimal,
     @SerialName("amountInUsd")
-    @Serializable(with = BigDecimalSerializer::class)
+    @Serializable(with = NearProviderDecimalSerializer::class)
     val amountInUsd: BigDecimal,
     @SerialName("minAmountIn")
-    @Serializable(with = BigDecimalSerializer::class)
+    @Serializable(with = NearProviderDecimalSerializer::class)
     val minAmountIn: BigDecimal,
     @SerialName("amountOut")
-    @Serializable(with = BigDecimalSerializer::class)
+    @Serializable(with = NearProviderDecimalSerializer::class)
     val amountOut: BigDecimal,
     @SerialName("amountOutFormatted")
-    @Serializable(with = BigDecimalSerializer::class)
+    @Serializable(with = NearProviderDecimalSerializer::class)
     val amountOutFormatted: BigDecimal,
     @SerialName("amountOutUsd")
-    @Serializable(with = BigDecimalSerializer::class)
+    @Serializable(with = NearProviderDecimalSerializer::class)
     val amountOutUsd: BigDecimal,
     @SerialName("minAmountOut")
-    @Serializable(with = BigDecimalSerializer::class)
+    @Serializable(with = NearProviderDecimalSerializer::class)
     val minAmountOut: BigDecimal,
     @SerialName("deadline")
     val deadline: Instant,
@@ -62,7 +61,14 @@ data class QuoteDetails(
     val virtualChainRefundRecipient: String? = null,
     @SerialName("customRecipientMsg")
     val customRecipientMsg: String? = null,
-)
+) {
+    init {
+        requireNearProviderDecimals(
+            amountIn, amountInFormatted, amountInUsd, minAmountIn,
+            amountOut, amountOutFormatted, amountOutUsd, minAmountOut
+        )
+    }
+}
 
 @JsonIgnoreUnknownKeys
 @Serializable

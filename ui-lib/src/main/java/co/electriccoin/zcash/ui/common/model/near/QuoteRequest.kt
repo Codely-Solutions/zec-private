@@ -2,7 +2,6 @@
 
 package co.electriccoin.zcash.ui.common.model.near
 
-import co.electriccoin.zcash.ui.common.serialization.BigDecimalSerializer
 import co.electriccoin.zcash.ui.common.serialization.NearRecipientTypeSerializer
 import co.electriccoin.zcash.ui.common.serialization.NearRefundTypeSerializer
 import co.electriccoin.zcash.ui.common.serialization.NearSwapTypeSerializer
@@ -32,7 +31,7 @@ data class QuoteRequest(
     @SerialName("destinationAsset")
     val destinationAsset: String,
     @SerialName("amount")
-    @Serializable(BigDecimalSerializer::class)
+    @Serializable(NearProviderDecimalSerializer::class)
     val amount: BigDecimal,
     @SerialName("refundTo")
     val refundTo: String,
@@ -62,7 +61,11 @@ data class QuoteRequest(
     val virtualChainRefundRecipient: String? = null,
     @SerialName("customRecipientMsg")
     val customRecipientMsg: String? = null,
-)
+) {
+    init {
+        requireNearProviderDecimals(amount)
+    }
+}
 
 @JsonIgnoreUnknownKeys
 @Serializable

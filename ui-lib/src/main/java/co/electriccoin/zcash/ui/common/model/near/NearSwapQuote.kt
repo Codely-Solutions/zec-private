@@ -149,6 +149,7 @@ internal fun requireConsistent(
     formatted: BigDecimal?,
     decimals: Int
 ) {
+    requireNearTokenDecimals(decimals)
     if (raw == null || formatted == null) return
     if (raw.compareTo(formatted.movePointRight(decimals)) != 0) {
         throw SwapQuoteMismatchException.AmountInconsistency(
