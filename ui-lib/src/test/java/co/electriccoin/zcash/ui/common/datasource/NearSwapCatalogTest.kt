@@ -118,6 +118,11 @@ class NearSwapCatalogTest {
         val plain = quoteJson(route)
         val cases = listOf(
             plain.replace("\"depositAddress\":", "\"depositMemo\": \"123\", \"depositAddress\":"),
+            plain.replace(
+                "\"depositAddress\":",
+                "\"chainDepositAddresses\": [{\"address\": \"${route.deposit}\", \"memo\": \"123\"}], " +
+                    "\"depositAddress\":"
+            ),
             plain.replace("\"depositMode\": \"SIMPLE\"", "\"depositMode\": \"MEMO\""),
             plain.replace("\"depositType\": \"ORIGIN_CHAIN\"", "\"depositType\": \"INTENTS\""),
             plain.replace("\"refundType\": \"ORIGIN_CHAIN\"", "\"refundType\": \"INTENTS\""),

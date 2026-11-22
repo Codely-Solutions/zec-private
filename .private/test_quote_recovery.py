@@ -436,6 +436,7 @@ class QuoteRecoveryTests(unittest.TestCase):
                     ('wrong wallet job', 'Recovery job run, attempt'),
                     ('expired wallet receipt', 'exact trusted run and role'),
                     ('wrong prepared artifact', 'exact trusted run and role'),
+                    ('late preparation archive', 'successful core-direct-candidate'),
                     ('publication attestation', 'no publication attestation'),
                 ):
                     changed_run, changed_jobs, changed_artifacts = self.recovery_run(8, repair, recovery_jobs, names)
@@ -445,10 +446,13 @@ class QuoteRecoveryTests(unittest.TestCase):
                         next(job for job in changed_jobs if job['name'].endswith('/ wallet'))['run_id'] = 7
                     elif change == 'expired wallet receipt':
                         changed_artifacts[0]['expired'] = True
-                    elif change == 'wrong prepared artifact':
+                    elif change in ('wrong prepared artifact', 'late preparation archive'):
                         if keep_prepared:
                             continue
-                        changed_artifacts[1]['workflow_run']['head_sha'] = OLD
+                        if change == 'wrong prepared artifact':
+                            changed_artifacts[1]['workflow_run']['head_sha'] = OLD
+                        else:
+                            changed_artifacts[1]['created_at'] = '2026-11-22T08:10:00Z'
                     else:
                         changed_artifacts.append({'name': 'release-attestation-1'})
                     with self.subTest(change=change), self.assertRaisesRegex(ValueError, error):
@@ -623,6 +627,20 @@ class QuoteRecoveryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'retained publication attestation'):
                 resolve(Path('.'), SOURCE, MAIN, '7', self.recovery_metadata(original, attested))
 
+    def test_later_original_build_attempt_cannot_authorize_fresh_wallet_acceptance(self):
+        original = self.recovery_run(7, OLD, dict(BUILD_JOBS, unsigned='failure', publish='skipped',
+                                                  hosted_core='skipped'), ())
+        later = self.rerun(original, dict(BUILD_JOBS, publish='skipped', hosted_core='skipped'))
+        _, _, artifacts = self.recovery_run(7, OLD, {}, BUILD_ARTIFACTS)
+        for artifact in artifacts:
+            artifact['created_at'] = '2026-11-22T08:10:00Z'
+        metadata = self.recovery_metadata(original, (*later[:2], artifacts), refs=[])
+        with patch('quote_recovery.require_dispatch'), patch('quote_recovery.verify_delta'), \
+                patch('release_inputs.version_code', return_value=42):
+            with self.assertRaisesRegex(ValueError, 'Fresh wallet acceptance requires the original build attempt'):
+                resolve(Path('.'), SOURCE, MAIN, '7', metadata)
+        self.verify_receipts.assert_not_called()
+
     def test_quote_archive_must_be_uploaded_by_exact_eligible_execution(self):
         quote_controller = 'd' * 40
         build = self.recovery_run(7, OLD, BUILD_JOBS, BUILD_ARTIFACTS)
@@ -717,7 +735,7 @@ class QuoteRecoveryTests(unittest.TestCase):
 
     @staticmethod
     def recovery_metadata(*runs, refs=None):
-        meta = Mock()
+        meta = Mock(gh='gh-offline-fixture', repo='repos/fixture')
         endpoints = {}
         pages = {}
         for run, jobs, artifacts in runs:
@@ -725,7 +743,12 @@ class QuoteRecoveryTests(unittest.TestCase):
             endpoints.update({path: run, path + f'/attempts/{run["run_attempt"]}': run})
             endpoints.update({f'/actions/artifacts/{row["id"]}': row for row in artifacts if 'id' in row})
             pages.update({path + f'/attempts/{run["run_attempt"]}/jobs': jobs, path + '/artifacts': artifacts})
-        meta.api.side_effect = lambda path: refs if refs is not None and path.startswith('/git/matching-refs/') else endpoints[path]
+        def api(path):
+            if refs is not None and path.startswith('/git/matching-refs/'):
+                return refs
+            return endpoints[path]
+
+        meta.api.side_effect = api
         meta.pages.side_effect = lambda path, key: pages[path]
         return meta
 

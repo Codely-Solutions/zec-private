@@ -211,7 +211,7 @@ private fun Zatoshi.toCsvQuantity(): String =
 
 internal fun BufferedWriter.writeCsvRow(fields: List<String>) {
     write(fields.joinToString(",") { field ->
-        if (field.any { it == ',' || it == '"' || it == '\r' || it == '\n' }) {
+        if (field.any { it in ",\"\r\n" }) {
             "\"" + field.replace("\"", "\"\"") + "\""
         } else {
             field

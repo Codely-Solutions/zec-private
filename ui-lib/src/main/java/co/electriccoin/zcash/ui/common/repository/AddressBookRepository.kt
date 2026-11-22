@@ -108,10 +108,11 @@ class AddressBookRepositoryImpl(
             .distinctUntilChangedBy { it?.sdkAccount?.accountUuid }
             .map { account ->
                 val token = walletWriteAccess.token()
-                walletWriteAccess.write(token) { getAddressBookKey(account ?: return@write null) }
+                val key = getAddressBookKey(account ?: return@map null, token)
+                walletWriteAccess.write(token) { addressBookDataSource.observe(key) }
             }
             .distinctUntilChanged()
-            .flatMapLatest { if (it == null) flowOf(null) else addressBookDataSource.observe(it) }
+            .flatMapLatest { it ?: flowOf(null) }
             .retryWhen { _, attempt ->
                 delay(attempt.coerceAtMost(3).seconds)
                 true
@@ -190,15 +191,16 @@ class AddressBookRepositoryImpl(
 
     private suspend fun updateAB(block: suspend (AddressBookKey) -> Unit) {
         val token = walletWriteAccess.token()
+        val selectedAccount = accountDataSource.getZashiAccount()
+        val key = getAddressBookKey(selectedAccount, token)
         mutex.withLock {
             checkNotNull(walletWriteAccess.write(token) {
-                val selectedAccount = accountDataSource.getZashiAccount()
-                block(getAddressBookKey(selectedAccount))
+                block(key)
             }) { "Wallet changed before the contact could be saved" }
         }
     }
 
-    private suspend fun getAddressBookKey(zashiAccount: ZodlAccount): AddressBookKey {
+    private suspend fun getAddressBookKey(zashiAccount: ZodlAccount, token: Long): AddressBookKey {
         val key = addressBookKeyStorageProvider.getAddressBookKey()
 
         return if (key != null) {
@@ -211,7 +213,9 @@ class AddressBookRepositoryImpl(
                     network = persistableWallet.network,
                     account = zashiAccount
                 )
-            addressBookKeyStorageProvider.storeAddressBookKey(newKey)
+            checkNotNull(walletWriteAccess.write(token) {
+                addressBookKeyStorageProvider.storeAddressBookKey(newKey)
+            }) { "Wallet changed before its contact key could be saved" }
             newKey
         }
     }

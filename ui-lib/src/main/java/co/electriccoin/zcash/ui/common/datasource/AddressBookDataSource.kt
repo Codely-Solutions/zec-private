@@ -51,6 +51,7 @@ interface AddressBookDataSource {
     suspend fun deleteAll()
 }
 
+@Suppress("TooManyFunctions")
 class AddressBookDataSourceImpl(
     private val addressBookStorageProvider: AddressBookStorageProvider,
     private val addressBookProvider: AddressBookProvider,
@@ -65,7 +66,9 @@ class AddressBookDataSourceImpl(
     override fun observe(key: AddressBookKey): Flow<AddressBook?> {
         val token = walletWriteAccess.token()
         return revision
-            .map<Long, AddressBook?> { walletWriteAccess.write(token) { mutex.withLock { getAddressBookInternal(key) } } }
+            .map<Long, AddressBook?> {
+                walletWriteAccess.write(token) { mutex.withLock { getAddressBookInternal(key) } }
+            }
             .onStart { emit(null) }
             .distinctUntilChanged()
             .flowOn(Dispatchers.IO)

@@ -57,9 +57,7 @@ class ResetZashiUseCase(
             // The pending screen can replace the initiating screen. Finish each confirmed attempt
             // even if that transition cancels the first view model.
             withContext(NonCancellable) {
-                if (stage == null) {
-                    progressStore.store(if (keepFiles) ResetStage.ERASE_SDK else ResetStage.DELETE_LOCAL_FILES)
-                }
+                progressStore.store(stage ?: if (keepFiles) ResetStage.ERASE_SDK else ResetStage.DELETE_LOCAL_FILES)
                 walletWriteAccess.beginReset()
                 prepareReset(keepFiles, stage)
                 if (stage != ResetStage.CLEAR_PREFERENCES) {

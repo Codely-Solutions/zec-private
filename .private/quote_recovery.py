@@ -177,8 +177,10 @@ class UnpublishedRun:
                     'Recovery job run, attempt or controller differs')
             self.jobs[number] = jobs
             publisher = self.job('publish', number)
-            require(publisher is None or publisher['conclusion'] in
-                    ('skipped', 'failure', 'cancelled', None),
+            active = number == latest and run['status'] != 'completed'
+            require(publisher is None or (publisher['status'] == 'completed'
+                                          and publisher['conclusion'] in ('skipped', 'failure', 'cancelled'))
+                    or (active and publisher['conclusion'] is None),
                     'Recovery job did not reach the required boundary: build / publish')
 
     def attempt(self, number):
@@ -257,10 +259,8 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
                        and int(os.environ.get('GITHUB_RUN_ATTEMPT', '1')) > 1)
     original_preclaim = preclaim_run == run_id
     approved_upgrade = wallet == 'success' and reserve == 'skipped' and history.contains('hosted-upgrade-receipt')
-    outputs = {
-        'original_controller': original,
-        **{key: history.retained(name)[0] for key, name in ARTIFACTS.items() if key != 'core_receipt_id'},
-    }
+    builds = {key: history.retained(name) for key, name in ARTIFACTS.items() if key != 'core_receipt_id'}
+    outputs = {'original_controller': original, **{key: value[0] for key, value in builds.items()}}
     if wallet == 'success':
         receipt = 'hosted-upgrade-receipt' if approved_upgrade else 'hosted-core-receipt'
         other = next(name for name in WALLET_RECEIPTS if name != receipt)
@@ -305,6 +305,8 @@ def resolve(root, source, controller, run_id, metadata, quote_run='', *, signing
         if missing_core and not original_preclaim:
             require(not any(job['name'].startswith('build / hosted_core /') for job in history.jobs[1]),
                     'Skipped-wallet recovery requires no previous wallet execution')
+        require(all(job['run_attempt'] == 1 for _, job in builds.values()),
+                'Fresh wallet acceptance requires the original build attempt')
         from hosted_claim import PREFIX
         from release_inputs import version_code
 

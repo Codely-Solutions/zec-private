@@ -217,12 +217,14 @@ class MetadataRepositoryImpl(
         )
     }
 
-    override suspend fun updateSwap(expected: TransactionSwapMetadata, result: SwapQuoteStatus): Boolean =
-        mutex.withLock {
-            val token = expected.walletWriteToken ?: return@withLock false
+    override suspend fun updateSwap(expected: TransactionSwapMetadata, result: SwapQuoteStatus): Boolean {
+        val account = expected.ownerAccount
+        val token = expected.walletWriteToken
+        if (account == null || token == null) return false
+        val updatedAt = (result as? NearSwapQuoteStatus)?.response?.updatedAt?.let { kotlin.time.Instant.parse(it) }
+        val key = getMetadataKey(account, token)
+        return mutex.withLock {
             walletWriteAccess.write(token) {
-                val account = accountDataSource.getSelectedAccount()
-                if (account.sdkAccount.accountUuid != expected.ownerAccount) return@write false
                 metadataDataSource.updateSwap(
                     depositAddress = expected.depositAddress,
                     amountOutFormatted = result.amountOutFormatted,
@@ -230,13 +232,14 @@ class MetadataRepositoryImpl(
                     mode = result.mode,
                     origin = expected.origin,
                     destination = expected.destination,
-                    key = getMetadataKey(account),
-                    statusUpdatedAt = (result as? NearSwapQuoteStatus)
-                        ?.response?.updatedAt?.let { kotlin.time.Instant.parse(it) },
+                    key = key,
+                    statusUpdatedAt = updatedAt,
                     expectedCreatedAt = expected.lastUpdated,
+                    expectedReviewedIdentity = expected.reviewedIdentity,
                 )
             } ?: false
         }
+    }
 
     // override fun deleteSwap(depositAddress: String) =
     //     updateMetadata {
@@ -284,8 +287,7 @@ class MetadataRepositoryImpl(
     override suspend fun getSwapMetadata(depositAddress: String): TransactionSwapMetadata? {
         val token = walletWriteAccess.token()
         val (owner, content) = combine(accountDataSource.selectedAccount, metadata) { account, all ->
-            val uuid = account?.sdkAccount?.accountUuid
-            uuid?.let { id -> all[id]?.let { id to it } }
+            account?.let { owner -> all[owner.sdkAccount.accountUuid]?.let { owner to it } }
         }.filterNotNull().first()
         return content.accountMetadata.swaps.swapIds
             .firstOrNull { it.depositAddress == depositAddress }
@@ -316,8 +318,9 @@ class MetadataRepositoryImpl(
         flow {
             emit(initial)
             val token = walletWriteAccess.token()
-            val key = walletWriteAccess.write(token) { getMetadataKey(account) } ?: return@flow
-            emitAll(metadataDataSource.observe(key).dropWhile { it == null })
+            val key = getMetadataKey(account, token)
+            val observations = walletWriteAccess.write(token) { metadataDataSource.observe(key) } ?: return@flow
+            emitAll(observations.dropWhile { it == null })
         }.catch { e -> Twig.error(e) { "Unable to read Metadata" } }
 
     override suspend fun setAccountColor(account: WalletAccount, color: Color): Boolean =
@@ -352,18 +355,16 @@ class MetadataRepositoryImpl(
         block: suspend (MetadataKey) -> Boolean,
         token: Long,
     ): Boolean =
-        mutex.withLock {
-            try {
-                (walletWriteAccess.write(token) {
-                    val key = getMetadataKey(account ?: accountDataSource.getSelectedAccount())
-                    block(key)
-                } ?: false).also { isSaved ->
+        try {
+            val key = getMetadataKey(account ?: accountDataSource.getSelectedAccount(), token)
+            mutex.withLock {
+                (walletWriteAccess.write(token) { block(key) } ?: false).also { isSaved ->
                     if (!isSaved) Twig.error { "Unable to update Metadata, the change was not saved" }
                 }
-            } catch (e: Exception) {
-                Twig.error(e) { "Unable to update Metadata" }
-                false
             }
+        } catch (e: Exception) {
+            Twig.error(e) { "Unable to update Metadata" }
+            false
         }
 
     /**
@@ -371,7 +372,7 @@ class MetadataRepositoryImpl(
      * every account but the Zodl one, the account's viewing key, then stored. Derivations run one at
      * a time and check the storage again first, so two readers never derive the same key twice.
      */
-    private suspend fun getMetadataKey(account: WalletAccount): MetadataKey =
+    private suspend fun getMetadataKey(account: WalletAccount, token: Long = walletWriteAccess.token()): MetadataKey =
         metadataKeyStorageProvider.get(account.sdkAccount.accountUuid) ?: keyMutex.withLock {
             val key = metadataKeyStorageProvider.get(account.sdkAccount.accountUuid)
 
@@ -393,7 +394,9 @@ class MetadataRepositoryImpl(
                                 is ZodlAccount -> null
                             }
                     )
-                metadataKeyStorageProvider.store(account.sdkAccount.accountUuid, newKey)
+                checkNotNull(walletWriteAccess.write(token) {
+                    metadataKeyStorageProvider.store(account.sdkAccount.accountUuid, newKey)
+                }) { "Wallet changed before its metadata key could be saved" }
                 newKey
             }
         }
@@ -425,7 +428,7 @@ data class TransactionSwapMetadata(
     val recordedStatus: SwapStatus?,
     val amountOutFormatted: BigDecimal,
     val reviewedIdentity: String? = null,
-    internal val ownerAccount: AccountUuid? = null,
+    internal val ownerAccount: WalletAccount? = null,
     internal val walletWriteToken: Long? = null,
 ) {
     val status: SwapStatus

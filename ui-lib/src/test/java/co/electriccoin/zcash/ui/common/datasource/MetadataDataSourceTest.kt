@@ -22,6 +22,7 @@ import co.electriccoin.zcash.ui.common.provider.MetadataProvider
 import co.electriccoin.zcash.ui.common.provider.MetadataKeyStorageProvider
 import co.electriccoin.zcash.ui.common.provider.MetadataStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.MetadataRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.serialization.UnknownEncryptionVersionException
@@ -586,12 +587,16 @@ class MetadataDataSourceTest {
             coEvery { getSelectedAccount() } returns wallet
         }
         val simpleAsset = swapAsset()
+        val ownership = WalletWriteAccess()
         fun repository() = MetadataRepositoryImpl(
             accountDataSource = accounts,
             metadataDataSource = dataSource(),
             metadataKeyStorageProvider = mockk<MetadataKeyStorageProvider> { coEvery { get(uuid) } returns key },
             persistableWalletProvider = mockk(),
-            simpleSwapAssetProvider = mockk<SimpleSwapAssetProvider> { every { get(any(), any()) } returns simpleAsset }
+            simpleSwapAssetProvider = mockk<SimpleSwapAssetProvider> {
+                every { get(any(), any()) } returns simpleAsset
+            },
+            walletWriteAccess = ownership
         )
         fun response(currentStatus: SwapStatus, output: BigDecimal) = mockk<SwapQuoteStatus> {
             every { status } returns currentStatus
@@ -636,6 +641,14 @@ class MetadataDataSourceTest {
         assertEquals(SwapStatus.SUCCESS, restarted.savedMetadata?.status)
         assertEquals(BigDecimal.TEN, restarted.savedMetadata?.amountOutFormatted)
         assertEquals(SwapStatus.SUCCESS, saved.get().accountMetadata.swaps.swapIds.single().status)
+
+        val metadata = repository()
+        val beforeReset = checkNotNull(metadata.getSwapMetadata("s1"))
+        ownership.beginReset()
+        ownership.finishReset()
+        ownership.replaceWallet {}
+        assertFalse(metadata.updateSwap(beforeReset, response(SwapStatus.SUCCESS, BigDecimal.ONE)))
+        assertEquals(BigDecimal.TEN, saved.get().accountMetadata.swaps.swapIds.single().amountOutFormatted)
     }
 
     @Test

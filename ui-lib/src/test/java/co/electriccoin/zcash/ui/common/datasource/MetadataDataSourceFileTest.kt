@@ -264,7 +264,7 @@ class MetadataDataSourceFileTest {
     fun restartedStorageKeepsReviewedIdentityAndRejectsStaleStatus() = runTest {
         val reviewedIdentity = "synthetic-reviewed-identity"
         val initial = dataSource()
-        assertTrue(markSwap(initial, provider = "near", mode = SwapMode.EXACT_INPUT, reviewedIdentity = reviewedIdentity))
+        assertTrue(markSwap(initial, "near", SwapMode.EXACT_INPUT, reviewedIdentity))
         val createdAt = storedSwaps().swapIds.single().lastUpdated
 
         suspend fun refresh(
@@ -282,6 +282,7 @@ class MetadataDataSourceFileTest {
             key = key,
             statusUpdatedAt = kotlin.time.Instant.parse(updatedAt),
             expectedCreatedAt = createdAt,
+            expectedReviewedIdentity = reviewedIdentity,
         )
 
         assertTrue(refresh(initial, SwapStatus.FAILED, "2026-11-22T00:00:00.0001Z", BigDecimal.ONE))
@@ -298,6 +299,9 @@ class MetadataDataSourceFileTest {
         assertEquals(kotlin.time.Instant.parse("2026-11-22T00:00:00.0003Z"), saved.statusUpdatedAt)
         assertEquals(reviewedIdentity, saved.reviewedIdentity)
         assertEquals(true, saved.exactInput)
+        assertFalse(markSwap(restarted, "near", SwapMode.EXACT_INPUT, "another-reviewed-identity"))
+        assertTrue(markSwap(restarted, "near", SwapMode.EXACT_INPUT, reviewedIdentity))
+        assertEquals(saved, storedSwaps().swapIds.single())
     }
 
     @Test
