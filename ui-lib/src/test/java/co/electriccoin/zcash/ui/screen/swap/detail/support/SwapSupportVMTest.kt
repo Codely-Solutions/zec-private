@@ -7,6 +7,7 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
@@ -27,9 +28,11 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.support.model.SupportInfo
 import io.mockk.Called
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
@@ -114,6 +117,7 @@ class SwapSupportVMTest {
             navigation,
             share,
             mockk(),
+            AppAccessSession().apply { unlock() },
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
         try {
@@ -131,6 +135,81 @@ class SwapSupportVMTest {
 
     @Test
     fun sharesOnlyTheExplicitlyRequestedQuoteFromTheCurrentWalletGeneration() = runTest {
+        withQuoteSupport {
+            coEvery { metadata.getSwapMetadata(tracked.depositAddress) } returns tracked.copy(walletWriteToken = 3L)
+            val shareQuote = assertNotNull(vm.state.value?.shareQuoteButton)
+            assertEquals(stringRes(R.string.reportSwap_shareQuote), shareQuote.text)
+            assertNull(nextChooser())
+            shareQuote.onClick()
+            runCurrent()
+            assertNull(nextChooser())
+
+            coEvery { metadata.getSwapMetadata(tracked.depositAddress) } returns tracked
+            shareQuote.onClick()
+            runCurrent()
+            val chooser = assertNotNull(nextChooser())
+            assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+            val shared = assertNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
+            assertEquals(syntheticSignedQuote, shared.getStringExtra(Intent.EXTRA_TEXT))
+            assertFalse(shared.hasExtra(Intent.EXTRA_EMAIL))
+        }
+    }
+
+    @Test
+    fun relockRevokesTheDisplayedShareCallbackEvenAfterUnlock() = runTest {
+        withQuoteSupport {
+            val staleAction = assertNotNull(vm.state.value?.shareQuoteButton).onClick
+            session.lock()
+            staleAction()
+            runCurrent()
+            assertNull(vm.state.value?.shareQuoteButton)
+            assertNull(nextChooser())
+
+            session.unlock()
+            runCurrent()
+            staleAction()
+            runCurrent()
+            assertNull(nextChooser())
+            coVerify(exactly = 0) { metadata.reloadSwapMetadata(any()) }
+
+            assertNotNull(vm.state.value?.shareQuoteButton).onClick()
+            runCurrent()
+            assertEquals(Intent.ACTION_CHOOSER, assertNotNull(nextChooser()).action)
+        }
+    }
+
+    @Test
+    fun relockDuringEitherMetadataReadDiscardsThePendingShare() = runTest {
+        for (pauseDuringReload in listOf(true, false)) {
+            withQuoteSupport {
+                val entered = CompletableDeferred<Unit>()
+                val resume = CompletableDeferred<Unit>()
+                suspend fun pausedRead(): TransactionSwapMetadata {
+                    entered.complete(Unit)
+                    resume.await()
+                    return tracked
+                }
+                if (pauseDuringReload) {
+                    coEvery { metadata.reloadSwapMetadata(tracked) } coAnswers { pausedRead() }
+                } else {
+                    coEvery { metadata.getSwapMetadata(tracked.depositAddress) } coAnswers { pausedRead() }
+                }
+
+                assertNotNull(vm.state.value?.shareQuoteButton).onClick()
+                runCurrent()
+                assertTrue(entered.isCompleted)
+                session.lock()
+                runCurrent()
+                assertNull(nextChooser())
+                session.unlock()
+                resume.complete(Unit)
+                runCurrent()
+                assertNull(nextChooser())
+            }
+        }
+    }
+
+    private fun TestScope.withQuoteSupport(test: QuoteSupportFixture.() -> Unit) {
         val application = RuntimeEnvironment.getApplication()
         val share = SendEmailUseCase(application, mockk(), BlockchainProviderImpl(application))
         val owner = mockk<ZodlAccount> {
@@ -145,40 +224,35 @@ class SwapSupportVMTest {
             every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData(savedMetadata = tracked))
         }
         val metadata = mockk<MetadataRepository> {
-            coEvery { getSwapMetadata(saved.depositAddress) } returns tracked.copy(walletWriteToken = 3L)
+            coEvery { getSwapMetadata(saved.depositAddress) } returns tracked
             coEvery { reloadSwapMetadata(tracked) } returns tracked
         }
-        val navigation = mockk<NavigationRouter>(relaxed = true)
+        val session = AppAccessSession().apply { unlock() }
         val vm = SwapSupportVM(
             SwapSupportArgs(saved.depositAddress),
             GetReloadableSwapQuoteUseCase(getStatus),
-            navigation,
+            mockk(relaxed = true),
             share,
             metadata,
+            session,
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
         try {
             runCurrent()
-            val shareQuote = assertNotNull(vm.state.value?.shareQuoteButton)
-            assertEquals(stringRes(R.string.reportSwap_shareQuote), shareQuote.text)
-            assertNull(shadowOf(application).nextStartedActivity)
-            shareQuote.onClick()
-            runCurrent()
-            assertNull(shadowOf(application).nextStartedActivity)
-
-            coEvery { metadata.getSwapMetadata(saved.depositAddress) } returns tracked
-            shareQuote.onClick()
-            runCurrent()
-            val chooser = assertNotNull(shadowOf(application).nextStartedActivity)
-            assertEquals(Intent.ACTION_CHOOSER, chooser.action)
-            val shared = assertNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
-            assertEquals(syntheticSignedQuote, shared.getStringExtra(Intent.EXTRA_TEXT))
-            assertFalse(shared.hasExtra(Intent.EXTRA_EMAIL))
+            QuoteSupportFixture(vm, metadata, tracked, session) { shadowOf(application).nextStartedActivity }.test()
         } finally {
             subscription.cancel()
             vm.viewModelScope.cancel()
         }
     }
+
+    private class QuoteSupportFixture(
+        val vm: SwapSupportVM,
+        val metadata: MetadataRepository,
+        val tracked: TransactionSwapMetadata,
+        val session: AppAccessSession,
+        val nextChooser: () -> Intent?,
+    )
 
     private fun TestScope.assertReportHandoff(status: SwapQuoteStatus?, origin: String, destination: String) {
         val application = RuntimeEnvironment.getApplication()
@@ -202,6 +276,7 @@ class SwapSupportVMTest {
             navigation,
             share,
             mockk(),
+            AppAccessSession().apply { unlock() },
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
         try {

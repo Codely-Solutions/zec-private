@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
@@ -17,7 +18,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -27,11 +28,12 @@ class SwapSupportVM(
     private val navigationRouter: NavigationRouter,
     private val sendEmailUseCase: SendEmailUseCase,
     private val metadataRepository: MetadataRepository,
+    private val appAccessSession: AppAccessSession,
 ) : ViewModel() {
     val state: StateFlow<SwapSupportState?> =
         getReloadableSwapQuote
             .observe(args.depositAddress)
-            .map { swapData ->
+            .combine(appAccessSession.grant) { swapData, grant ->
                 SwapSupportState(
                     title = stringRes(R.string.reportSwap_title),
                     message = stringRes(R.string.reportSwap_msg),
@@ -43,12 +45,12 @@ class SwapSupportVM(
                         ),
                     onBack = ::onBack,
                     shareQuoteButton = swapData.savedMetadata
-                        ?.takeIf { it.signedQuoteEvidence != null }
+                        ?.takeIf { it.signedQuoteEvidence != null && grant != null }
                         ?.let { saved ->
                             ButtonState(
                                 text = stringRes(R.string.reportSwap_shareQuote),
                                 style = ButtonStyle.SECONDARY,
-                                onClick = { onShareOriginalQuote(saved) },
+                                onClick = { onShareOriginalQuote(saved, grant) },
                             )
                         }
                 )
@@ -71,17 +73,19 @@ class SwapSupportVM(
     private val SwapData.hasReportDetails: Boolean
         get() = status != null || savedMetadata != null
 
-    private fun onShareOriginalQuote(expected: TransactionSwapMetadata) {
+    private fun onShareOriginalQuote(expected: TransactionSwapMetadata, grant: AppAccessSession.Grant?) {
         val owner = expected.ownerAccount?.sdkAccount?.accountUuid ?: return
         viewModelScope.launch {
+            if (!appAccessSession.permits(grant)) return@launch
             val evidence = runCatchingRecoverable {
                 metadataRepository.reloadSwapMetadata(expected)?.signedQuoteEvidence
             }.getOrNull() ?: return@launch
+            if (!appAccessSession.permits(grant)) return@launch
             val selected = metadataRepository.getSwapMetadata(expected.depositAddress) ?: return@launch
             if (selected.ownerAccount?.sdkAccount?.accountUuid != owner ||
                 selected.walletWriteToken != expected.walletWriteToken || selected.signedQuoteEvidence != evidence
             ) return@launch
-            sendEmailUseCase.shareOriginalQuote(evidence)
+            if (appAccessSession.permits(grant)) sendEmailUseCase.shareOriginalQuote(evidence)
         }
     }
 }

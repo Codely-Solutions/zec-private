@@ -35401,49 +35401,59 @@ index 202849dc7..3b0e96ebb 100644
 @@ -11,0 +12 @@ data class SwapSupportState(
 +    val shareQuoteButton: ButtonState? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVM.kt
-index 7d4aa2a1c..11dbb4ed1 100644
+index 7d4aa2a1c..3a16f9ea6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVM.kt
-@@ -7,0 +8,3 @@ import co.electriccoin.zcash.ui.R
+@@ -7,0 +8,4 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 +import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-@@ -11,0 +15 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
+@@ -11,0 +16 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
 +import co.electriccoin.zcash.ui.design.component.ButtonStyle
-@@ -24,0 +29 @@ class SwapSupportVM(
+@@ -16 +21 @@ import kotlinx.coroutines.flow.WhileSubscribed
+-import kotlinx.coroutines.flow.map
++import kotlinx.coroutines.flow.combine
+@@ -24,0 +30,2 @@ class SwapSupportVM(
 +    private val metadataRepository: MetadataRepository,
-@@ -35,0 +41 @@ class SwapSupportVM(
++    private val appAccessSession: AppAccessSession,
+@@ -29 +36 @@ class SwapSupportVM(
+-            .map { swapData ->
++            .combine(appAccessSession.grant) { swapData, grant ->
+@@ -35,0 +43 @@ class SwapSupportVM(
 +                            isEnabled = swapData.hasReportDetails,
-@@ -38 +44,10 @@ class SwapSupportVM(
+@@ -38 +46,10 @@ class SwapSupportVM(
 -                    onBack = ::onBack
 +                    onBack = ::onBack,
 +                    shareQuoteButton = swapData.savedMetadata
-+                        ?.takeIf { it.signedQuoteEvidence != null }
++                        ?.takeIf { it.signedQuoteEvidence != null && grant != null }
 +                        ?.let { saved ->
 +                            ButtonState(
 +                                text = stringRes(R.string.reportSwap_shareQuote),
 +                                style = ButtonStyle.SECONDARY,
-+                                onClick = { onShareOriginalQuote(saved) },
++                                onClick = { onShareOriginalQuote(saved, grant) },
 +                            )
 +                        }
-@@ -48,0 +64 @@ class SwapSupportVM(
+@@ -48,0 +66 @@ class SwapSupportVM(
 +        if (!swapData.hasReportDetails) return
-@@ -53,0 +70,17 @@ class SwapSupportVM(
+@@ -53,0 +72,19 @@ class SwapSupportVM(
 +
 +    private val SwapData.hasReportDetails: Boolean
 +        get() = status != null || savedMetadata != null
 +
-+    private fun onShareOriginalQuote(expected: TransactionSwapMetadata) {
++    private fun onShareOriginalQuote(expected: TransactionSwapMetadata, grant: AppAccessSession.Grant?) {
 +        val owner = expected.ownerAccount?.sdkAccount?.accountUuid ?: return
 +        viewModelScope.launch {
++            if (!appAccessSession.permits(grant)) return@launch
 +            val evidence = runCatchingRecoverable {
 +                metadataRepository.reloadSwapMetadata(expected)?.signedQuoteEvidence
 +            }.getOrNull() ?: return@launch
++            if (!appAccessSession.permits(grant)) return@launch
 +            val selected = metadataRepository.getSwapMetadata(expected.depositAddress) ?: return@launch
 +            if (selected.ownerAccount?.sdkAccount?.accountUuid != owner ||
 +                selected.walletWriteToken != expected.walletWriteToken || selected.signedQuoteEvidence != evidence
 +            ) return@launch
-+            sendEmailUseCase.shareOriginalQuote(evidence)
++            if (appAccessSession.permits(grant)) sendEmailUseCase.shareOriginalQuote(evidence)
 +        }
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportView.kt
@@ -58773,10 +58783,10 @@ index 000000000..ffa604c97
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVMTest.kt
 new file mode 100644
-index 000000000..cacaaa366
+index 000000000..d4fc0878f
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVMTest.kt
-@@ -0,0 +1,253 @@
+@@ -0,0 +1,328 @@
 +package co.electriccoin.zcash.ui.screen.swap.detail.support
 +
 +import android.content.Intent
@@ -58786,6 +58796,7 @@ index 000000000..cacaaa366
 +import cash.z.ecc.android.sdk.model.Zatoshi
 +import co.electriccoin.zcash.ui.NavigationRouter
 +import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.model.AppAccessSession
 +import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 +import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 +import co.electriccoin.zcash.ui.common.model.SwapMode
@@ -58806,9 +58817,11 @@ index 000000000..cacaaa366
 +import co.electriccoin.zcash.ui.screen.support.model.SupportInfo
 +import io.mockk.Called
 +import io.mockk.coEvery
++import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
 +import io.mockk.verify
++import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.cancel
@@ -58893,6 +58906,7 @@ index 000000000..cacaaa366
 +            navigation,
 +            share,
 +            mockk(),
++            AppAccessSession().apply { unlock() },
 +        )
 +        val subscription = backgroundScope.launch { vm.state.collect {} }
 +        try {
@@ -58910,6 +58924,81 @@ index 000000000..cacaaa366
 +
 +    @Test
 +    fun sharesOnlyTheExplicitlyRequestedQuoteFromTheCurrentWalletGeneration() = runTest {
++        withQuoteSupport {
++            coEvery { metadata.getSwapMetadata(tracked.depositAddress) } returns tracked.copy(walletWriteToken = 3L)
++            val shareQuote = assertNotNull(vm.state.value?.shareQuoteButton)
++            assertEquals(stringRes(R.string.reportSwap_shareQuote), shareQuote.text)
++            assertNull(nextChooser())
++            shareQuote.onClick()
++            runCurrent()
++            assertNull(nextChooser())
++
++            coEvery { metadata.getSwapMetadata(tracked.depositAddress) } returns tracked
++            shareQuote.onClick()
++            runCurrent()
++            val chooser = assertNotNull(nextChooser())
++            assertEquals(Intent.ACTION_CHOOSER, chooser.action)
++            val shared = assertNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
++            assertEquals(syntheticSignedQuote, shared.getStringExtra(Intent.EXTRA_TEXT))
++            assertFalse(shared.hasExtra(Intent.EXTRA_EMAIL))
++        }
++    }
++
++    @Test
++    fun relockRevokesTheDisplayedShareCallbackEvenAfterUnlock() = runTest {
++        withQuoteSupport {
++            val staleAction = assertNotNull(vm.state.value?.shareQuoteButton).onClick
++            session.lock()
++            staleAction()
++            runCurrent()
++            assertNull(vm.state.value?.shareQuoteButton)
++            assertNull(nextChooser())
++
++            session.unlock()
++            runCurrent()
++            staleAction()
++            runCurrent()
++            assertNull(nextChooser())
++            coVerify(exactly = 0) { metadata.reloadSwapMetadata(any()) }
++
++            assertNotNull(vm.state.value?.shareQuoteButton).onClick()
++            runCurrent()
++            assertEquals(Intent.ACTION_CHOOSER, assertNotNull(nextChooser()).action)
++        }
++    }
++
++    @Test
++    fun relockDuringEitherMetadataReadDiscardsThePendingShare() = runTest {
++        for (pauseDuringReload in listOf(true, false)) {
++            withQuoteSupport {
++                val entered = CompletableDeferred<Unit>()
++                val resume = CompletableDeferred<Unit>()
++                suspend fun pausedRead(): TransactionSwapMetadata {
++                    entered.complete(Unit)
++                    resume.await()
++                    return tracked
++                }
++                if (pauseDuringReload) {
++                    coEvery { metadata.reloadSwapMetadata(tracked) } coAnswers { pausedRead() }
++                } else {
++                    coEvery { metadata.getSwapMetadata(tracked.depositAddress) } coAnswers { pausedRead() }
++                }
++
++                assertNotNull(vm.state.value?.shareQuoteButton).onClick()
++                runCurrent()
++                assertTrue(entered.isCompleted)
++                session.lock()
++                runCurrent()
++                assertNull(nextChooser())
++                session.unlock()
++                resume.complete(Unit)
++                runCurrent()
++                assertNull(nextChooser())
++            }
++        }
++    }
++
++    private fun TestScope.withQuoteSupport(test: QuoteSupportFixture.() -> Unit) {
 +        val application = RuntimeEnvironment.getApplication()
 +        val share = SendEmailUseCase(application, mockk(), BlockchainProviderImpl(application))
 +        val owner = mockk<ZodlAccount> {
@@ -58924,40 +59013,35 @@ index 000000000..cacaaa366
 +            every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData(savedMetadata = tracked))
 +        }
 +        val metadata = mockk<MetadataRepository> {
-+            coEvery { getSwapMetadata(saved.depositAddress) } returns tracked.copy(walletWriteToken = 3L)
++            coEvery { getSwapMetadata(saved.depositAddress) } returns tracked
 +            coEvery { reloadSwapMetadata(tracked) } returns tracked
 +        }
-+        val navigation = mockk<NavigationRouter>(relaxed = true)
++        val session = AppAccessSession().apply { unlock() }
 +        val vm = SwapSupportVM(
 +            SwapSupportArgs(saved.depositAddress),
 +            GetReloadableSwapQuoteUseCase(getStatus),
-+            navigation,
++            mockk(relaxed = true),
 +            share,
 +            metadata,
++            session,
 +        )
 +        val subscription = backgroundScope.launch { vm.state.collect {} }
 +        try {
 +            runCurrent()
-+            val shareQuote = assertNotNull(vm.state.value?.shareQuoteButton)
-+            assertEquals(stringRes(R.string.reportSwap_shareQuote), shareQuote.text)
-+            assertNull(shadowOf(application).nextStartedActivity)
-+            shareQuote.onClick()
-+            runCurrent()
-+            assertNull(shadowOf(application).nextStartedActivity)
-+
-+            coEvery { metadata.getSwapMetadata(saved.depositAddress) } returns tracked
-+            shareQuote.onClick()
-+            runCurrent()
-+            val chooser = assertNotNull(shadowOf(application).nextStartedActivity)
-+            assertEquals(Intent.ACTION_CHOOSER, chooser.action)
-+            val shared = assertNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
-+            assertEquals(syntheticSignedQuote, shared.getStringExtra(Intent.EXTRA_TEXT))
-+            assertFalse(shared.hasExtra(Intent.EXTRA_EMAIL))
++            QuoteSupportFixture(vm, metadata, tracked, session) { shadowOf(application).nextStartedActivity }.test()
 +        } finally {
 +            subscription.cancel()
 +            vm.viewModelScope.cancel()
 +        }
 +    }
++
++    private class QuoteSupportFixture(
++        val vm: SwapSupportVM,
++        val metadata: MetadataRepository,
++        val tracked: TransactionSwapMetadata,
++        val session: AppAccessSession,
++        val nextChooser: () -> Intent?,
++    )
 +
 +    private fun TestScope.assertReportHandoff(status: SwapQuoteStatus?, origin: String, destination: String) {
 +        val application = RuntimeEnvironment.getApplication()
@@ -58981,6 +59065,7 @@ index 000000000..cacaaa366
 +            navigation,
 +            share,
 +            mockk(),
++            AppAccessSession().apply { unlock() },
 +        )
 +        val subscription = backgroundScope.launch { vm.state.collect {} }
 +        try {
