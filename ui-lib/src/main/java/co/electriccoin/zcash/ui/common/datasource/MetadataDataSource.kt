@@ -53,7 +53,7 @@ import kotlin.time.Duration.Companion.milliseconds
 interface MetadataDataSource {
     fun observe(key: MetadataKey): Flow<MetadataV3?>
 
-    /** Reads the current file under the datasource lock; the repository owns wallet write admission. */
+    /** Publishes and returns canonical metadata after its directory sync. The caller owns wallet admission. */
     suspend fun read(key: MetadataKey): MetadataV3?
 
     suspend fun flipTxAsBookmarked(txId: String, key: MetadataKey): Boolean
@@ -148,7 +148,20 @@ class MetadataDataSourceImpl(
 
     private val isFlushFailureLogged = AtomicBoolean(false)
 
-    override suspend fun read(key: MetadataKey): MetadataV3? = mutex.withLock { getMetadataInternal(key) }
+    override suspend fun read(key: MetadataKey): MetadataV3? =
+        mutex.withLock {
+            withContext(ioDispatcher) {
+                if (!readMetadata(key).isWritable) return@withContext null
+                val canonicalName = key.fileIdentifier()
+                val canonicalFile = metadataStorageProvider.getStorageFiles(key)
+                    .firstOrNull { it.name == canonicalName } ?: return@withContext null
+                // Recovery can leave a merged snapshot in memory after a failed replacement.
+                readWithRetry(canonicalFile, key, skipCacheFingerprint = null).decoded()?.also { metadata ->
+                    metadataProvider.syncDirectoryOf(canonicalFile)
+                    metadataUpdatePipeline.emit(key to metadata)
+                }
+            }
+        }
 
     /**
      * Null, then the file content, then every later update for [key]. The updates are subscribed to

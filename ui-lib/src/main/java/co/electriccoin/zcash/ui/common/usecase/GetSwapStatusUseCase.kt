@@ -79,7 +79,7 @@ class GetSwapStatusUseCase(
                                 isLoading = false,
                                 error = e,
                                 savedMetadata = latest ?: it.savedMetadata,
-                                status = if (latest != null) null else it.status,
+                                status = it.status?.takeIf { live -> latest == null || live.matchesSavedStatus(latest) },
                             )
                         }
                     }
@@ -89,6 +89,9 @@ class GetSwapStatusUseCase(
 
             awaitClose()
         }
+
+    private fun SwapQuoteStatus.matchesSavedStatus(saved: TransactionSwapMetadata): Boolean =
+        status == saved.status && amountOutFormatted.compareTo(saved.amountOutFormatted) == 0
 
     private suspend fun refresh(depositAddress: String, expected: TransactionSwapMetadata): SwapQuoteStatus {
         val refresh = synchronized(refreshes) {

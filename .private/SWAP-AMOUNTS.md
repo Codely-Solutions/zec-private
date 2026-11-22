@@ -26,6 +26,8 @@ Keep complete provider identities for status recovery independently of live pric
 
 New tracking records bind the exact echoed asset IDs, swap mode, recipient, refund and deposit reference to the reviewed quote. Records created before this binding use the existing deposit and asset-pair checks. Refreshes for one deposit run in order, and storage rejects older provider updates and changes to completed settlement or refund outcomes. The swap creation time continues to order Activity. [1Click status contract](https://docs.near-intents.org/api-reference/oneclick/check-swap-execution-status)
 
+After a refused refresh, the wallet can reload the matching entry for the original account and wallet session. It publishes the canonical snapshot only after syncing its directory, since a failed sync can leave a replacement file readable. An unchanged saved status and amount leave the accepted live details visible.
+
 The signed **Value difference** compares received USD with total USD to fund, including known separately paid wallet fees. Quoted costs are already reflected once. It uses the coherent quote snapshot, includes an EXACT_OUTPUT allowance and assumes no future refund. It excludes unknown external-wallet fees, hides on missing/non-positive values or quote expiry, and is not independent market-price verification.
 
 Show only positive provider-reported refunds, including successful swaps. Never derive a refund from deposit minus execution. The provider reports origin/destination transaction lists without a dedicated refund-hash field; retain neutral chain labels for ambiguous origin transactions, preserve the wallet-known deposit separately, and keep copy-ID for unsupported explorer chains.

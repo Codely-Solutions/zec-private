@@ -313,7 +313,8 @@ class MetadataRepositoryImpl(
                     ?.toBusinessObject(simpleSwapAssetProvider)
                     ?.takeIf {
                         it.provider == expected.provider && it.lastUpdated == expected.lastUpdated &&
-                            it.reviewedIdentity == expected.reviewedIdentity && it.mode == expected.mode &&
+                            it.reviewedIdentity == expected.reviewedIdentity &&
+                            (expected.reviewedIdentity == null || it.mode == expected.mode) &&
                             it.origin.tokenTicker == expected.origin.tokenTicker &&
                             it.origin.chainTicker == expected.origin.chainTicker &&
                             it.destination.tokenTicker == expected.destination.tokenTicker &&
