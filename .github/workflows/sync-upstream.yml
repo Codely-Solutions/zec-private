@@ -67,8 +67,8 @@ jobs:
       RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
       MAINTENANCE_APP_PRIVATE_KEY: ${{ secrets.MAINTENANCE_APP_PRIVATE_KEY }}
   blocked:
-    if: ${{ always() && github.ref == 'refs/heads/main' && needs.prepare.result == 'failure' }}
-    needs: prepare
+    if: ${{ always() && github.ref == 'refs/heads/main' && (needs.maintenance.result == 'failure' || needs.prepare.result == 'failure') }}
+    needs: [maintenance, prepare]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -81,5 +81,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NTFY_URL: ${{ secrets.NTFY_URL }}
           MAKE_ISSUE: 'true'
+          MAINTENANCE: ${{ needs.maintenance.result }}
         run: |
-          python3 .private/notify.py "ZEC Private update blocked: upstream patch or security review required. Last working release remains available."
+          if [[ "$MAINTENANCE" == failure ]]; then
+            python3 .private/notify.py "ZEC Private maintenance blocked. The watcher failed before candidate preparation; check discovery and publication-reconciliation proof. Last working release remains available."
+          else
+            python3 .private/notify.py "ZEC Private update blocked: upstream patch or security review required. Last working release remains available."
+          fi

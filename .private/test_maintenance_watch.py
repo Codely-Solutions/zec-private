@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -10,7 +11,90 @@ from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, main, pending
                                verified_wrapper, wrapper_patch)
 
 
+def workflow_job(workflow, name):
+    """Read the maintained block-style job; refuse missing or duplicate fields."""
+    text = (Path(__file__).resolve().parents[1]/'.github/workflows'/workflow).read_text()
+    jobs = dict(re.findall(r'^  ([a-z_]+):\n(.*?)(?=^  [a-z_]+:|\Z)', text, re.M | re.S))
+    block = jobs[name]
+    fields = {}
+    for key in ('if', 'needs'):
+        values = re.findall(r'^    '+key+r': (.+)$', block, re.M)
+        if len(values) != 1:
+            raise ValueError('Expected one inline job '+key)
+        fields[key] = values[0]
+    fields['needs'] = [item.strip() for item in fields['needs'].strip('[]').split(',')]
+    fields['block'] = block
+    return fields
+
+
+def job_activates(job, results, **overrides):
+    # Evaluate the checked-in expression, including branch/input guards. A missing
+    # result is skipped, matching a failed prerequisite's downstream jobs.
+    values = {'github.ref': 'refs/heads/main', 'github.run_attempt': 1,
+              'inputs.preflight_only': False, 'inputs.hosted': True,
+              'inputs.preclaim_run': '', 'inputs.recover_run': '7',
+              'inputs.validation_only': False, 'inputs.reconciliation_run': '',
+              'inputs.resume_draft': False, 'inputs.build_emulator': False,
+              'vars.PRODUCTION_SIGNING_READY': 'true',
+              'needs.admit_hosted.outputs.same_controller_retry': 'true',
+              'needs.admit_hosted.outputs.quote_receipt_id': '',
+              'needs.admit_hosted.outputs.core_receipt_id': '74',
+              'needs.preflight.outputs.signing_changed': 'false'}
+    values.update({f'needs.{name}.result': result for name, result in results.items()})
+    values.update(overrides)
+    expression = job['if'].removeprefix('${{').removesuffix('}}').strip()
+    expression = expression.replace('always()', 'True').replace('cancelled()', 'False')
+    expression = re.sub(r'\b(?:github|inputs|needs|vars)(?:\.[a-z_A-Z0-9]+)+\b',
+                        lambda match: repr(values.get(match[0], 'skipped')), expression)
+    expression = expression.replace('&&', ' and ').replace('||', ' or ')
+    expression = re.sub(r'!(?!=)', ' not ', expression)
+    return bool(eval(expression.strip(), {'__builtins__': {}}, {}))
+
+
 class MaintenanceWatchTest(unittest.TestCase):
+    def test_each_release_prerequisite_failure_notifies_with_skipped_downstream_jobs(self):
+        failed = workflow_job('build-release.yml', 'failed')
+        self.assertIn('reserve_quote_retry', failed['needs'])
+        for name in failed['needs']:
+            with self.subTest(failed=name):
+                self.assertTrue(job_activates(failed, {name: 'failure'}))
+                self.assertFalse(job_activates(failed, {name: 'failure'},
+                                              **{'github.ref': 'refs/heads/review/test'}))
+                self.assertFalse(job_activates(failed, {name: 'failure'},
+                                              **{'inputs.preflight_only': True}))
+        for state in ('success', 'skipped'):
+            self.assertFalse(job_activates(failed, dict.fromkeys(failed['needs'], state)))
+        self.assertTrue(job_activates(failed, {'emulator': 'cancelled'}))
+        block = failed['block']
+        self.assertIn('QUOTE_RESERVATION: ${{ needs.reserve_quote_retry.result }}', block)
+        self.assertIn('The protected one-use retry reservation failed', block)
+
+    def test_failed_retry_reservation_notifies_without_opening_quote_or_publication_gates(self):
+        results = dict(admit_hosted='success', preflight='success', signing_smoke='skipped',
+                       quote_bridge='success', reserve_quote_retry='failure')
+        self.assertTrue(job_activates(workflow_job('build-release.yml', 'failed'), results))
+        self.assertFalse(job_activates(workflow_job('build-release.yml', 'hosted_quotes'), results))
+        self.assertFalse(job_activates(workflow_job('build-release.yml', 'publish'), results))
+        results['reserve_quote_retry'] = 'success'
+        self.assertTrue(job_activates(workflow_job('build-release.yml', 'hosted_quotes'), results))
+        self.assertFalse(job_activates(workflow_job('build-release.yml', 'publish'), results))
+        results['hosted_quotes'] = 'success'
+        self.assertTrue(job_activates(workflow_job('build-release.yml', 'publish'), results))
+
+    def test_watcher_and_preparation_failures_notify_independently(self):
+        blocked = workflow_job('sync-upstream.yml', 'blocked')
+        self.assertEqual(['maintenance', 'prepare'], blocked['needs'])
+        for results in ({'maintenance': 'failure', 'prepare': 'skipped'},
+                        {'maintenance': 'success', 'prepare': 'failure'}):
+            with self.subTest(results=results):
+                self.assertTrue(job_activates(blocked, results))
+                self.assertFalse(job_activates(blocked, results,
+                                              **{'github.ref': 'refs/heads/review/test'}))
+        for state in ('success', 'skipped', 'cancelled'):
+            self.assertFalse(job_activates(blocked, dict(maintenance=state, prepare='skipped')))
+        self.assertIn('MAINTENANCE: ${{ needs.maintenance.result }}', blocked['block'])
+        self.assertIn('The watcher failed before candidate preparation', blocked['block'])
+
     def test_delayed_timer_is_quiet_without_blocking_live_discovery(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
