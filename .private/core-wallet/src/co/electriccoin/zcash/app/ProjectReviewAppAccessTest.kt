@@ -29,6 +29,8 @@ import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.ui.MainActivity
+import co.electriccoin.zcash.ui.MainAppGraph
+import androidx.navigation.NavController
 import co.electriccoin.zcash.ui.BiometricActivity
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
@@ -170,10 +172,27 @@ class ProjectReviewAppAccessTest {
             val continueWallet = waitForBounds("continue interrupted setup", requireClick = true) {
                 matchesLabel(it, continueLabel)
             }
+            reportState("interrupted_setup_authenticated", emptySet(), activity)
             check(!hasWalletAction())
             tap(continueWallet)
             withTimeout(WALLET_TIMEOUT_MILLIS) { repository.secretState.first { it == SecretState.READY } }
-            waitFor("authenticated wallet action") { hasWalletAction() }
+            try {
+                // Continuation resumes RESTORING, whose full-screen KeepOpen instructions can cover Home.
+                // Require actual credential authorization and wallet-graph entry rather than a covered Home row.
+                waitFor("authenticated wallet graph") {
+                    onMain {
+                        val controller = MainActivity::class.java.getMethod("getNavControllerForTesting")
+                            .invoke(activity) as NavController
+                        val model = androidx.lifecycle.ViewModelProvider(activity)[AuthenticationViewModel::class.java]
+                        val auth = AuthenticationViewModel::class.java.getDeclaredField("appAccessAuthenticationResultState")
+                            .apply { isAccessible = true }.get(model) as StateFlow<*>
+                        controller.currentDestination?.parent?.route == MainAppGraph::class.qualifiedName &&
+                            auth.value?.javaClass?.simpleName == "Successful"
+                    } && !hasLabel(lockedTitle) && !hasLabel(continueLabel)
+                }
+            } finally {
+                reportState("interrupted_setup_wallet_graph", emptySet(), activity)
+            }
             report("interrupted_setup_continued")
         } finally {
             onMain { activity.finish() }
@@ -677,6 +696,14 @@ class ProjectReviewAppAccessTest {
                 .put("activity_destroyed", activity.isDestroyed)
                 .put("activity_focused", activity.hasWindowFocus())
             if (!activity.isDestroyed) {
+                val controller = MainActivity::class.java.getMethod("getNavControllerForTesting")
+                    .invoke(activity) as NavController
+                val destination = controller.currentDestination
+                receipt.put("main_graph", destination?.parent?.route == MainAppGraph::class.qualifiedName)
+                    .put("home_route", destination?.route?.startsWith("co.electriccoin.zcash.ui.screen.home.HomeArgs") == true)
+                    .put("restore_instructions_route", destination?.route?.startsWith(
+                        "co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs") == true)
+                    .put("ready", dependency<WalletRepository>().secretState.value == SecretState.READY)
                 val model = androidx.lifecycle.ViewModelProvider(activity)[AuthenticationViewModel::class.java]
                 fun value(name: String): Any? = AuthenticationViewModel::class.java.getDeclaredField(name)
                     .apply { isAccessible = true }.get(model).let { (it as StateFlow<*>).value }
