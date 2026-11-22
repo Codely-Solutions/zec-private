@@ -72,6 +72,7 @@ import kotlin.time.Duration.Companion.seconds
  * model observes the session for its whole lifetime, so the UI no longer collecting its state does not close the card.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass") // Keep screen intents, async destination binding and reset on the same session fixture.
 class RedeemGiftVMTest {
     private lateinit var dispatcher: TestDispatcher
 

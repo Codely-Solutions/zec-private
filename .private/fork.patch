@@ -15240,10 +15240,12 @@ index 1c946b382..d56790dbc 100644
 -org.jetbrains.kotlinx:kover-jvm-agent:0.9.7=koverJvmAgent,koverJvmReporter
 +org.jetbrains.kotlinx:kover-jvm-agent:0.9.11=koverJvmAgent,koverJvmReporter
 diff --git a/preference-api-lib/src/commonMain/kotlin/co/electriccoin/zcash/preference/api/PreferenceProvider.kt b/preference-api-lib/src/commonMain/kotlin/co/electriccoin/zcash/preference/api/PreferenceProvider.kt
-index 70f171d11..986c6a22b 100644
+index 70f171d11..64d02e341 100644
 --- a/preference-api-lib/src/commonMain/kotlin/co/electriccoin/zcash/preference/api/PreferenceProvider.kt
 +++ b/preference-api-lib/src/commonMain/kotlin/co/electriccoin/zcash/preference/api/PreferenceProvider.kt
-@@ -13,0 +14,6 @@ interface PreferenceProvider {
+@@ -5,0 +6 @@ import kotlinx.coroutines.flow.Flow
++@Suppress("TooManyFunctions") // Keep acknowledged string writes with the existing preference I/O contract.
+@@ -13,0 +15,6 @@ interface PreferenceProvider {
 +    /**
 +     * Writes a string and retains the previous visible value on failure. The default delegates to
 +     * [putString], so providers whose cache can publish before acknowledgement must override this.
@@ -15257,7 +15259,7 @@ index 245c01c78..24b627df4 100644
 @@ -3 +2,0 @@ plugins {
 -    kotlin("android")
 diff --git a/preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/AndroidPreferenceProvider.kt b/preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/AndroidPreferenceProvider.kt
-index 482d6da57..edf456718 100644
+index 482d6da57..0b31afda1 100644
 --- a/preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/AndroidPreferenceProvider.kt
 +++ b/preference-impl-android-lib/src/main/java/co/electriccoin/zcash/preference/AndroidPreferenceProvider.kt
 @@ -18 +18 @@ import kotlinx.coroutines.flow.Flow
@@ -15267,13 +15269,15 @@ index 482d6da57..edf456718 100644
 +import kotlinx.coroutines.flow.update
 @@ -26,0 +28 @@ import java.io.CharConversionException
 +import java.io.IOException
-@@ -51 +53 @@ class AndroidPreferenceProvider(
+@@ -46,0 +49 @@ import kotlin.time.Duration.Companion.milliseconds
++@Suppress("TooManyFunctions") // One provider serializes ordinary and compensating preference writes.
+@@ -51 +54 @@ class AndroidPreferenceProvider(
 -    private val clearPipeline = MutableSharedFlow<Unit>()
 +    private val clearRevision = MutableStateFlow(0L)
-@@ -70 +72 @@ class AndroidPreferenceProvider(
+@@ -70 +73 @@ class AndroidPreferenceProvider(
 -            editor.commit()
 +            editor.commitOrThrow()
-@@ -75,0 +78,19 @@ class AndroidPreferenceProvider(
+@@ -75,0 +79,19 @@ class AndroidPreferenceProvider(
 +    @SuppressLint("ApplySharedPref")
 +    override suspend fun putStringWithRollback(key: PreferenceKey, value: String?) = withContext(dispatcher) {
 +        mutex.withLock {
@@ -15293,16 +15297,16 @@ index 482d6da57..edf456718 100644
 +        }
 +    }
 +
-@@ -86 +107 @@ class AndroidPreferenceProvider(
+@@ -86 +108 @@ class AndroidPreferenceProvider(
 -            editor.commit()
 +            editor.commitOrThrow()
-@@ -105 +126 @@ class AndroidPreferenceProvider(
+@@ -105 +127 @@ class AndroidPreferenceProvider(
 -            editor.commit()
 +            editor.commitOrThrow()
-@@ -121 +142 @@ class AndroidPreferenceProvider(
+@@ -121 +143 @@ class AndroidPreferenceProvider(
 -            sharedPreferences.getString(key.key, null)
 +            mutex.withLock { sharedPreferences.getString(key.key, null) }
-@@ -132,7 +153,9 @@ class AndroidPreferenceProvider(
+@@ -132,7 +154,9 @@ class AndroidPreferenceProvider(
 -            val editor = sharedPreferences.edit()
 -
 -            editor.clear()
@@ -15319,14 +15323,14 @@ index 482d6da57..edf456718 100644
 +                    clearRevision.update { it + 1 }
 +                }
 +            }
-@@ -151 +174 @@ class AndroidPreferenceProvider(
+@@ -151 +175 @@ class AndroidPreferenceProvider(
 -                clearPipeline.collect {
 +                clearRevision.collect {
-@@ -156,3 +178,0 @@ class AndroidPreferenceProvider(
+@@ -156,3 +179,0 @@ class AndroidPreferenceProvider(
 -            // Kickstart the emissions
 -            trySend(Unit)
 -
-@@ -168,5 +188,3 @@ class AndroidPreferenceProvider(
+@@ -168,5 +189,3 @@ class AndroidPreferenceProvider(
 -            val editor = sharedPreferences.edit()
 -
 -            editor.remove(key.key)
@@ -15335,7 +15339,7 @@ index 482d6da57..edf456718 100644
 +            mutex.withLock {
 +                sharedPreferences.edit().remove(key.key).commitOrThrow()
 +            }
-@@ -176 +194,6 @@ class AndroidPreferenceProvider(
+@@ -176 +195,6 @@ class AndroidPreferenceProvider(
 -    companion object Factory : AndroidPreferenceFactory by AndroidPreferenceFactoryImpl()
 +    companion object Factory : AndroidPreferenceFactory by AndroidPreferenceFactoryImpl() {
 +        // A failed disk commit can already have changed Android's in-memory value.
@@ -47411,7 +47415,7 @@ index dd9e18236..5d8637365 100644
 +            verify { addressBookKeyStorageProvider wasNot Called }
 +        }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
-index bd304eb7c..f2a0551e4 100644
+index bd304eb7c..be514649d 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AutomaticServerRepositoryTest.kt
 @@ -10 +9,0 @@ import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
@@ -47564,21 +47568,23 @@ index bd304eb7c..f2a0551e4 100644
 +                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
 +                )
 +            }
-@@ -389 +408 @@ class AutomaticServerRepositoryTest {
+@@ -389 +408,3 @@ class AutomaticServerRepositoryTest {
 -            coEvery { walletRepository.updateWalletEndpoint(any()) } throws IllegalStateException("prefs failed")
-+            coEvery { serverSelectionProvider.storeServerSelection(any(), any(), any()) } throws IllegalStateException("prefs failed")
-@@ -398 +417,5 @@ class AutomaticServerRepositoryTest {
++            coEvery {
++                serverSelectionProvider.storeServerSelection(any(), any(), any())
++            } throws IllegalStateException("prefs failed")
+@@ -398 +419,5 @@ class AutomaticServerRepositoryTest {
 -            coVerify(exactly = 1) { walletRepository.updateWalletEndpoint(known.last()) }
 +            coVerify(exactly = 1) {
 +                serverSelectionProvider.storeServerSelection(
 +                    WalletServerSelection(known.last(), true), 7L, WalletServerSelection(known.first(), true)
 +                )
 +            }
-@@ -421,2 +444 @@ class AutomaticServerRepositoryTest {
+@@ -421,2 +446 @@ class AutomaticServerRepositoryTest {
 -        coEvery { isAutomaticProvider.get() } returns true
 -        coEvery { persistableWalletProvider.getPersistableWallet() } returns wallet
 +        selectServer(true)
-@@ -427,0 +450,4 @@ class AutomaticServerRepositoryTest {
+@@ -427,0 +452,4 @@ class AutomaticServerRepositoryTest {
 +    private fun selectServer(isAutomatic: Boolean?, endpoint: LightWalletEndpoint = known.first()) {
 +        coEvery { serverSelectionProvider.getServerSelection() } returns WalletServerSelection(endpoint, isAutomatic)
 +    }
@@ -48448,7 +48454,7 @@ index 000000000..a403feaf3
 +
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
-index 0bc7a1124..6e6276aba 100644
+index 0bc7a1124..e77fafd35 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 @@ -3,0 +4,2 @@ import android.app.Application
@@ -48487,9 +48493,11 @@ index 0bc7a1124..6e6276aba 100644
 +import kotlin.test.assertFailsWith
 +import kotlin.test.assertNull
 +import kotlin.test.assertTrue
-@@ -70,0 +95 @@ class WalletRepositoryImplTest {
+@@ -55,0 +80 @@ import kotlin.test.assertEquals
++@Suppress("LargeClass") // Keep interrupted setup transitions with the shared persistence/reconstruction fixture.
+@@ -70,0 +96 @@ class WalletRepositoryImplTest {
 +        Dispatchers.resetMain()
-@@ -131,0 +157,450 @@ class WalletRepositoryImplTest {
+@@ -131,0 +158,452 @@ class WalletRepositoryImplTest {
 +    @Test
 +    fun repeatedCreateTriggersKeepTheFirstAcceptedWallet() =
 +        runTest {
@@ -48752,7 +48760,8 @@ index 0bc7a1124..6e6276aba 100644
 +            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
 +
 +            val stored = harness.walletProvider.requirePersistableWallet()
-+            val committedState = OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
++            val committedState =
++                OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
 +            val (interrupted, interruptedHarness) = newRepository(committedState, stored)
 +            assertEquals(SecretState.NONE, interrupted.secretState.first { it != SecretState.LOADING })
 +            interrupted.walletInitialization.first { it == WalletInitializationState.INCOMPLETE }
@@ -48768,7 +48777,8 @@ index 0bc7a1124..6e6276aba 100644
 +            assertEquals(ready, harness.fakePrefs.committedString(key))
 +            repository.secretState.first { it == SecretState.READY }
 +
-+            val recoveredState = OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
++            val recoveredState =
++                OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
 +            val (recovered, _) = newRepository(recoveredState, stored)
 +            assertEquals(SecretState.READY, recovered.secretState.first { it != SecretState.LOADING })
 +        }
@@ -48940,9 +48950,9 @@ index 0bc7a1124..6e6276aba 100644
 +            enableTor = enableTor
 +        )
 +
-@@ -202,0 +678 @@ class WalletRepositoryImplTest {
+@@ -202,0 +681 @@ class WalletRepositoryImplTest {
 +                    every { writeVersion } returns 0L
-@@ -222,0 +699,69 @@ class WalletRepositoryImplTest {
+@@ -222,0 +702,71 @@ class WalletRepositoryImplTest {
 +    @Test
 +    fun uncheckedRestoreDisablesTorAfterInterruptedSetup() =
 +        runTest {
@@ -49003,7 +49013,9 @@ index 0bc7a1124..6e6276aba 100644
 +            assertTrue(harness.events.isEmpty())
 +            assertNull(harness.walletProvider.getPersistableWallet())
 +            assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
-+            assertFailsWith<WalletInitializationConflictException> { repository.restoreFixture(enableTor = false).await() }
++            assertFailsWith<WalletInitializationConflictException> {
++                repository.restoreFixture(enableTor = false).await()
++            }
 +
 +            torPreferences.beforeStringCommit = { _, _ -> }
 +            repository.restoreFixture(enableTor = true).await()
@@ -49012,31 +49024,31 @@ index 0bc7a1124..6e6276aba 100644
 +            assertTrue(IsTorEnabledUseCase(IsTorEnabledStorageProviderImpl(encrypted)).observe().first())
 +        }
 +
-@@ -256,0 +802 @@ class WalletRepositoryImplTest {
+@@ -256,0 +807 @@ class WalletRepositoryImplTest {
 +        torPreference: IsTorEnabledStorageProvider = mockk(relaxed = true),
-@@ -286,0 +833 @@ class WalletRepositoryImplTest {
+@@ -286,0 +838 @@ class WalletRepositoryImplTest {
 +        fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())
-@@ -303 +850,2 @@ class WalletRepositoryImplTest {
+@@ -303 +855,2 @@ class WalletRepositoryImplTest {
 -        val sdkEncryptedPreferenceRecoveryProvider = FakeSdkEncryptedPreferenceRecoveryProvider(events)
 +        val sdkEncryptedPreferenceRecoveryProvider = mockk<SdkEncryptedPreferenceRecoveryProvider>()
 +        coEvery { sdkEncryptedPreferenceRecoveryProvider.ensureReadable() } coAnswers { events += "sdkRepair" }
-@@ -317,0 +866 @@ class WalletRepositoryImplTest {
+@@ -317,0 +871 @@ class WalletRepositoryImplTest {
 +                isTorEnabledStorageProvider = torPreference,
-@@ -320,2 +868,0 @@ class WalletRepositoryImplTest {
+@@ -320,2 +873,0 @@ class WalletRepositoryImplTest {
 -        fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())
 -
-@@ -325 +872,4 @@ class WalletRepositoryImplTest {
+@@ -325 +877,4 @@ class WalletRepositoryImplTest {
 -        return repository to TestHarness(events, fakePrefs)
 +        return repository to TestHarness(
 +            events, fakePrefs, persistableWalletProvider, walletRestoringStateProvider,
 +            sdkEncryptedPreferenceRecoveryProvider, walletBackupFlagStorageProvider
 +        )
-@@ -330,0 +881,4 @@ class WalletRepositoryImplTest {
+@@ -330,0 +886,4 @@ class WalletRepositoryImplTest {
 +        val walletProvider: PersistableWalletProvider,
 +        val restoringProvider: WalletRestoringStateProvider,
 +        val recoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
 +        val backupProvider: WalletBackupFlagStorageProvider,
-@@ -334,12 +887,0 @@ class WalletRepositoryImplTest {
+@@ -334,12 +892,0 @@ class WalletRepositoryImplTest {
 -/**
 - * Records `"sdkRepair"` into the shared events list, so tests can assert where the SDK secret
 - * store repair lands relative to the onboarding-flag write and the SDK data erase.
@@ -49049,11 +49061,11 @@ index 0bc7a1124..6e6276aba 100644
 -    }
 -}
 -
-@@ -356,0 +899,3 @@ private class FakePersistableWalletProvider(
+@@ -356,0 +904,3 @@ private class FakePersistableWalletProvider(
 +    private val writeAccess = WalletWriteAccess()
 +    var failWrites = false
 +    var failWritesBeforePublishing = false
-@@ -359,5 +904,18 @@ private class FakePersistableWalletProvider(
+@@ -359,5 +909,18 @@ private class FakePersistableWalletProvider(
 -
 -    override suspend fun store(persistableWallet: PersistableWallet) {
 -        walletFlow.value = persistableWallet
@@ -49077,7 +49089,7 @@ index 0bc7a1124..6e6276aba 100644
 +            true
 +        }
 +    } ?: false
-@@ -367,0 +926,8 @@ private class FakePersistableWalletProvider(
+@@ -367,0 +931,8 @@ private class FakePersistableWalletProvider(
 +
 +    private fun write(wallet: PersistableWallet) {
 +        if (failWritesBeforePublishing) throw IOException("Cannot persist wallet")
@@ -49086,19 +49098,19 @@ index 0bc7a1124..6e6276aba 100644
 +        if (failWrites) throw IOException("Synthetic persistence failure")
 +        events += "wallet"
 +    }
-@@ -385,0 +952,6 @@ private class WalletStoredAfterFirstReadProvider(
+@@ -385,0 +957,6 @@ private class WalletStoredAfterFirstReadProvider(
 +    override suspend fun storeIfCurrent(
 +        expected: PersistableWallet,
 +        replacement: PersistableWallet,
 +        version: Long,
 +    ): Boolean = error("This wallet setup fixture does not run seed-mismatch recovery")
 +
-@@ -402,0 +975,2 @@ private class RecordingPreferenceProvider(
+@@ -402,0 +980,2 @@ private class RecordingPreferenceProvider(
 +    private val committedValues = mutableMapOf<String, String?>()
 +    var beforeStringCommit: suspend (PreferenceKey, String?) -> Unit = { _, _ -> }
-@@ -416,0 +991 @@ private class RecordingPreferenceProvider(
+@@ -416,0 +996 @@ private class RecordingPreferenceProvider(
 +        committedValues[key.key] = value
-@@ -418,0 +994,7 @@ private class RecordingPreferenceProvider(
+@@ -418,0 +999,7 @@ private class RecordingPreferenceProvider(
 +    fun committedString(key: PreferenceKey): String? = committedValues[key.key]
 +
 +    fun reopen(): RecordingPreferenceProvider =
@@ -49106,12 +49118,12 @@ index 0bc7a1124..6e6276aba 100644
 +            committedValues.forEach { (key, value) -> reopened.seed(PreferenceKey(key), value) }
 +        }
 +
-@@ -429,0 +1012,2 @@ private class RecordingPreferenceProvider(
+@@ -429,0 +1017,2 @@ private class RecordingPreferenceProvider(
 +        beforeStringCommit(key, value)
 +        committedValues[key.key] = value
-@@ -451,0 +1036 @@ private class RecordingPreferenceProvider(
+@@ -451,0 +1041 @@ private class RecordingPreferenceProvider(
 +        committedValues.remove(key.key)
-@@ -455,0 +1041 @@ private class RecordingPreferenceProvider(
+@@ -455,0 +1046 @@ private class RecordingPreferenceProvider(
 +        committedValues.clear()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 new file mode 100644
@@ -52188,10 +52200,10 @@ index 32d01648d..a9e4d875e 100644
 +            every { loadedBalances } returns balances
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt
 new file mode 100644
-index 000000000..2c938865f
+index 000000000..a94b09e70
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt
-@@ -0,0 +1,419 @@
+@@ -0,0 +1,455 @@
 +package co.electriccoin.zcash.ui.screen.chooseserver
 +
 +import android.content.SharedPreferences
@@ -52210,6 +52222,7 @@ index 000000000..2c938865f
 +import co.electriccoin.zcash.ui.common.component.EndpointTextFieldInnerState
 +import co.electriccoin.zcash.ui.common.component.ZashiEndpointTextFieldParser
 +import co.electriccoin.zcash.ui.common.model.FastestServersState
++import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 +import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -52344,10 +52357,42 @@ index 000000000..2c938865f
 +    }
 +
 +    @Test
++    fun failedRollbackDoesNotFlushTheRejectedSelectionWithAnotherPreferenceWrite() = runTest {
++        val previous = initialSelection(isAutomatic = true)
++        val next = initialSelection(isAutomatic = false)
++        val disk = PreferenceDisk(previous.endpoint, true)
++        withScreen(disk) { screen ->
++            selectOtherMode(screen, initiallyAutomatic = true)
++            disk.commitsToFail = 2
++            screen.state.saveButton.onClick()
++            runCurrent()
++
++            assertIs<ServerDialogState.SaveFailure>(screen.state.dialogState)
++            assertEquals(2, disk.attempts)
++            assertEquals(previous, screen.walletProvider.getServerSelection())
++            screen.torPreference.store(true)
++        }
++        withScreen(disk) { reopened ->
++            assertEquals(true, reopened.torPreference.get())
++            reopened.assertSelected(previous)
++            selectOtherMode(reopened, initiallyAutomatic = true)
++            reopened.state.saveButton.onClick()
++            runCurrent()
++
++            reopened.assertSelected(next)
++            assertEquals(4, disk.attempts)
++        }
++        withScreen(disk) { reopened ->
++            reopened.assertSelected(next)
++            assertEquals(true, reopened.torPreference.get())
++        }
++    }
++
++    @Test
 +    fun failedManualEndpointChangeCanBeRetried() = runTest {
 +        val disk = PreferenceDisk(bundled, false)
 +        withScreen(disk) { screen ->
-+            disk.failNextCommit = true
++            disk.commitsToFail = 1
 +            screen.enter(corrected)
 +            runCurrent()
 +            screen.state.saveButton.onClick()
@@ -52405,7 +52450,7 @@ index 000000000..2c938865f
 +        withScreen(disk) { screen ->
 +            screen.assertSelected(previous)
 +            selectOtherMode(screen, initiallyAutomatic)
-+            disk.failNextCommit = true
++            disk.commitsToFail = 1
 +            screen.state.saveButton.onClick()
 +            runCurrent()
 +
@@ -52499,7 +52544,9 @@ index 000000000..2c938865f
 +        val synchronizer = mockk<Synchronizer> {
 +            coEvery { validateServerEndpoint(any(), corrected) } returns ServerValidation.Valid
 +        }
-+        val walletProvider = PersistableWalletProviderImpl(disk.open(), writeAccess)
++        private val encryptedPreferences = disk.open()
++        val walletProvider = PersistableWalletProviderImpl(encryptedPreferences, writeAccess)
++        val torPreference = IsTorEnabledStorageProviderImpl(encryptedPreferences)
 +        private val repository = mockk<WalletRepository> {
 +            every { fastestEndpoints } returns MutableStateFlow(FastestServersState(listOf(bundled), false))
 +        }
@@ -52556,7 +52603,7 @@ index 000000000..2c938865f
 +        )
 +        var attempts = 0
 +            private set
-+        var failNextCommit = false
++        var commitsToFail = 0
 +
 +        fun open(): EncryptedPreferenceProvider {
 +            val cache = durable.toMutableMap()
@@ -52584,11 +52631,12 @@ index 000000000..2c938865f
 +                        if (value == null) cache.remove(key) else cache[key] = value
 +                        listeners.forEach { it.onSharedPreferenceChanged(preferences, key) }
 +                    }
-+                    val succeeded = !failNextCommit
-+                    failNextCommit = false
++                    val succeeded = commitsToFail == 0
 +                    if (succeeded) {
 +                        durable.clear()
 +                        durable.putAll(cache)
++                    } else {
++                        commitsToFail--
 +                    }
 +                    succeeded
 +                }
@@ -54788,7 +54836,7 @@ index 461fb8fbb..64d0c613c 100644
 +        assertFalse(HandleExternalLinkUseCase(launchNavigation)("gift.zodl.com.evil.example", isRedelivery = false))
 +        assertEquals(LaunchNavigationRequests.Kind.THIRD_PARTY_SCAN, launchNavigation.changes.value.single().kind)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
-index 1dec990ab..3b9c03f3e 100644
+index 1dec990ab..4804e8d55 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/redeemgift/RedeemGiftVMTest.kt
 @@ -5,0 +6 @@ import androidx.lifecycle.ViewModelStore
@@ -54802,14 +54850,16 @@ index 1dec990ab..3b9c03f3e 100644
 @@ -38 +42 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 -import kotlinx.coroutines.flow.Flow
 +import kotlinx.coroutines.awaitCancellation
-@@ -118 +122 @@ class RedeemGiftVMTest {
+@@ -70,0 +75 @@ import kotlin.time.Duration.Companion.seconds
++@Suppress("LargeClass") // Keep screen intents, async destination binding and reset on the same session fixture.
+@@ -118 +123 @@ class RedeemGiftVMTest {
 -    fun theDisclaimerNamesNoWalletUntilTheSelectedAccountIsKnown() =
 +    fun redemptionWaitsUntilTheSelectedAccountCanBeDisplayed() =
-@@ -120 +124,2 @@ class RedeemGiftVMTest {
+@@ -120 +125,2 @@ class RedeemGiftVMTest {
 -            val vm = Env(this, account = null).startedVm()
 +            val env = Env(this, account = null)
 +            val vm = env.startedVm()
-@@ -123,0 +129,11 @@ class RedeemGiftVMTest {
+@@ -123,0 +130,11 @@ class RedeemGiftVMTest {
 +            assertFalse(state.redeemButton.isEnabled)
 +            state.redeemButton.onClick()
 +            runCurrent()
@@ -54821,7 +54871,7 @@ index 1dec990ab..3b9c03f3e 100644
 +            val ready = assertIs<RedeemGiftState.Ready>(vm.state.value)
 +            assertEquals(stringRes(R.string.redeemGift_ready_disclaimer, account.name), ready.disclaimer)
 +            assertTrue(ready.redeemButton.isEnabled)
-@@ -202,0 +219,81 @@ class RedeemGiftVMTest {
+@@ -202,0 +220,81 @@ class RedeemGiftVMTest {
 +    @Test
 +    fun redemptionUsesTheAccountNamedByTheTappedReadyStateAcrossSelectionChanges() = runTest(dispatcher) {
 +        val reviewed = zashiAccount()
@@ -54903,15 +54953,15 @@ index 1dec990ab..3b9c03f3e 100644
 +        }
 +    }
 +
-@@ -743 +840 @@ class RedeemGiftVMTest {
+@@ -743 +841 @@ class RedeemGiftVMTest {
 -        private val account: WalletAccount? = zashiAccount(),
 +        account: WalletAccount? = zashiAccount(),
-@@ -747,0 +845 @@ class RedeemGiftVMTest {
+@@ -747,0 +846 @@ class RedeemGiftVMTest {
 +        val selectedAccount = MutableStateFlow(account)
-@@ -761,0 +860,2 @@ class RedeemGiftVMTest {
+@@ -761,0 +861,2 @@ class RedeemGiftVMTest {
 +        suspend fun quiesceForWalletReset() = repository.quiesceForWalletReset()
 +
-@@ -766,18 +866,15 @@ class RedeemGiftVMTest {
+@@ -766,18 +867,15 @@ class RedeemGiftVMTest {
 -        fun newVm(linkId: String = this.linkId): RedeemGiftVM {
 -            val accounts: Flow<WalletAccount?> = MutableStateFlow(account)
 -            val getSelectedWalletAccount =

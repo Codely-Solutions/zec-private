@@ -46,6 +46,7 @@ import kotlin.time.Duration.Companion.milliseconds
  * [sharedPreferences]; EncryptedSharedPreferences are not thread-safe, so every operation is
  * confined to it.
  */
+@Suppress("TooManyFunctions") // One provider serializes ordinary and compensating preference writes.
 class AndroidPreferenceProvider(
     private val sharedPreferences: SharedPreferences,
     private val dispatcher: CoroutineDispatcher

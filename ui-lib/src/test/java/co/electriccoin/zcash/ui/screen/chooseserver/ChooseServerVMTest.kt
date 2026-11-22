@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.component.EndpointTextFieldInnerState
 import co.electriccoin.zcash.ui.common.component.ZashiEndpointTextFieldParser
 import co.electriccoin.zcash.ui.common.model.FastestServersState
+import co.electriccoin.zcash.ui.common.provider.IsTorEnabledStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.LightWalletEndpointProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
@@ -150,10 +151,42 @@ class ChooseServerVMTest {
     }
 
     @Test
+    fun failedRollbackDoesNotFlushTheRejectedSelectionWithAnotherPreferenceWrite() = runTest {
+        val previous = initialSelection(isAutomatic = true)
+        val next = initialSelection(isAutomatic = false)
+        val disk = PreferenceDisk(previous.endpoint, true)
+        withScreen(disk) { screen ->
+            selectOtherMode(screen, initiallyAutomatic = true)
+            disk.commitsToFail = 2
+            screen.state.saveButton.onClick()
+            runCurrent()
+
+            assertIs<ServerDialogState.SaveFailure>(screen.state.dialogState)
+            assertEquals(2, disk.attempts)
+            assertEquals(previous, screen.walletProvider.getServerSelection())
+            screen.torPreference.store(true)
+        }
+        withScreen(disk) { reopened ->
+            assertEquals(true, reopened.torPreference.get())
+            reopened.assertSelected(previous)
+            selectOtherMode(reopened, initiallyAutomatic = true)
+            reopened.state.saveButton.onClick()
+            runCurrent()
+
+            reopened.assertSelected(next)
+            assertEquals(4, disk.attempts)
+        }
+        withScreen(disk) { reopened ->
+            reopened.assertSelected(next)
+            assertEquals(true, reopened.torPreference.get())
+        }
+    }
+
+    @Test
     fun failedManualEndpointChangeCanBeRetried() = runTest {
         val disk = PreferenceDisk(bundled, false)
         withScreen(disk) { screen ->
-            disk.failNextCommit = true
+            disk.commitsToFail = 1
             screen.enter(corrected)
             runCurrent()
             screen.state.saveButton.onClick()
@@ -211,7 +244,7 @@ class ChooseServerVMTest {
         withScreen(disk) { screen ->
             screen.assertSelected(previous)
             selectOtherMode(screen, initiallyAutomatic)
-            disk.failNextCommit = true
+            disk.commitsToFail = 1
             screen.state.saveButton.onClick()
             runCurrent()
 
@@ -305,7 +338,9 @@ class ChooseServerVMTest {
         val synchronizer = mockk<Synchronizer> {
             coEvery { validateServerEndpoint(any(), corrected) } returns ServerValidation.Valid
         }
-        val walletProvider = PersistableWalletProviderImpl(disk.open(), writeAccess)
+        private val encryptedPreferences = disk.open()
+        val walletProvider = PersistableWalletProviderImpl(encryptedPreferences, writeAccess)
+        val torPreference = IsTorEnabledStorageProviderImpl(encryptedPreferences)
         private val repository = mockk<WalletRepository> {
             every { fastestEndpoints } returns MutableStateFlow(FastestServersState(listOf(bundled), false))
         }
@@ -362,7 +397,7 @@ class ChooseServerVMTest {
         )
         var attempts = 0
             private set
-        var failNextCommit = false
+        var commitsToFail = 0
 
         fun open(): EncryptedPreferenceProvider {
             val cache = durable.toMutableMap()
@@ -390,11 +425,12 @@ class ChooseServerVMTest {
                         if (value == null) cache.remove(key) else cache[key] = value
                         listeners.forEach { it.onSharedPreferenceChanged(preferences, key) }
                     }
-                    val succeeded = !failNextCommit
-                    failNextCommit = false
+                    val succeeded = commitsToFail == 0
                     if (succeeded) {
                         durable.clear()
                         durable.putAll(cache)
+                    } else {
+                        commitsToFail--
                     }
                     succeeded
                 }

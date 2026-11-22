@@ -77,6 +77,7 @@ import kotlin.test.assertTrue
  * a wallet-less app from ever presenting [SecretState.READY].
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass") // Keep interrupted setup transitions with the shared persistence/reconstruction fixture.
 class WalletRepositoryImplTest {
     private val scopes = mutableListOf<CoroutineScope>()
 
@@ -416,7 +417,8 @@ class WalletRepositoryImplTest {
             assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
 
             val stored = harness.walletProvider.requirePersistableWallet()
-            val committedState = OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
+            val committedState =
+                OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
             val (interrupted, interruptedHarness) = newRepository(committedState, stored)
             assertEquals(SecretState.NONE, interrupted.secretState.first { it != SecretState.LOADING })
             interrupted.walletInitialization.first { it == WalletInitializationState.INCOMPLETE }
@@ -432,7 +434,8 @@ class WalletRepositoryImplTest {
             assertEquals(ready, harness.fakePrefs.committedString(key))
             repository.secretState.first { it == SecretState.READY }
 
-            val recoveredState = OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
+            val recoveredState =
+                OnboardingState.fromNumber(checkNotNull(harness.fakePrefs.committedString(key)).toInt())
             val (recovered, _) = newRepository(recoveredState, stored)
             assertEquals(SecretState.READY, recovered.secretState.first { it != SecretState.LOADING })
         }
@@ -756,7 +759,9 @@ class WalletRepositoryImplTest {
             assertTrue(harness.events.isEmpty())
             assertNull(harness.walletProvider.getPersistableWallet())
             assertEquals(SecretState.NONE, repository.secretState.first { it != SecretState.LOADING })
-            assertFailsWith<WalletInitializationConflictException> { repository.restoreFixture(enableTor = false).await() }
+            assertFailsWith<WalletInitializationConflictException> {
+                repository.restoreFixture(enableTor = false).await()
+            }
 
             torPreferences.beforeStringCommit = { _, _ -> }
             repository.restoreFixture(enableTor = true).await()

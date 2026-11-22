@@ -405,7 +405,9 @@ class AutomaticServerRepositoryTest {
     fun theLaneSurvivesAFailureToApplyTheSwitch() =
         runTest {
             stubSwitchDecision(balances = emptyMap())
-            coEvery { serverSelectionProvider.storeServerSelection(any(), any(), any()) } throws IllegalStateException("prefs failed")
+            coEvery {
+                serverSelectionProvider.storeServerSelection(any(), any(), any())
+            } throws IllegalStateException("prefs failed")
 
             val foregroundEdges = MutableSharedFlow<Unit>()
             repository.observeSwitchCandidates(foregroundEdges).launchIn(backgroundScope)

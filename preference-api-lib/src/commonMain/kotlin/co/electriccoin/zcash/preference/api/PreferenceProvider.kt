@@ -3,6 +3,7 @@ package co.electriccoin.zcash.preference.api
 import co.electriccoin.zcash.preference.model.entry.PreferenceKey
 import kotlinx.coroutines.flow.Flow
 
+@Suppress("TooManyFunctions") // Keep acknowledged string writes with the existing preference I/O contract.
 interface PreferenceProvider {
     suspend fun hasKey(key: PreferenceKey): Boolean
 
