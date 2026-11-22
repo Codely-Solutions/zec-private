@@ -119,7 +119,7 @@ class SwapBroadcastDeadlineTest {
         private val accounts = mockk<AccountDataSource>()
         private val signer = mockk<co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider>()
         private val dataSource = ProposalDataSourceImpl(
-            mockk { coEvery { getSynchronizer() } returns synchronizer },
+            mockk { coEvery { getSynchronizer() } returns this@Fixture.synchronizer },
             mockk { every { getEndpoints() } returns listOf(endpoint) },
             mockk { coEvery { get() } returns true },
             mockk {

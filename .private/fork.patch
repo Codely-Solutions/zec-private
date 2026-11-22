@@ -41530,7 +41530,7 @@ index 000000000..f011047b2
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
 new file mode 100644
-index 000000000..6e5f4f2c3
+index 000000000..3339f2768
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
 @@ -0,0 +1,215 @@
@@ -41655,7 +41655,7 @@ index 000000000..6e5f4f2c3
 +        private val accounts = mockk<AccountDataSource>()
 +        private val signer = mockk<co.electriccoin.zcash.ui.common.provider.KeystoneSDKProvider>()
 +        private val dataSource = ProposalDataSourceImpl(
-+            mockk { coEvery { getSynchronizer() } returns synchronizer },
++            mockk { coEvery { getSynchronizer() } returns this@Fixture.synchronizer },
 +            mockk { every { getEndpoints() } returns listOf(endpoint) },
 +            mockk { coEvery { get() } returns true },
 +            mockk {

@@ -2771,7 +2771,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/ServerSelectionPolicyTest.kt": "a6bc6380c28a3d8162108946f1a23a5b0890b23c1b4410423765d46ae6c8e3e7",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SubmissionFundingGuardTest.kt": "66e16e604dc63760bd15f4d9e4761612185be8009f31170f07ade949da2c31ca",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SubmitResultMixedFailureMappingTest.kt": "3c266495241afdcf89b4130ff3f288309d67a216c1a739db969abb1acc9aab26",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt": "77f3ccd272250fd3f5823614b5fcdc013dfec59d139740a2b8d11e3965b8e9e5",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt": "77c29171ab2b6f0d9715bdd866fa2ff8e969ea499439342560723f985e9466a6",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt": "0a16e97c736543a8c4a7aabd6e1c2c38cf8d2af112952efcf977fa0baf663136",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapperTest.kt": "e25ffb6bdc0819283553d2d78cdddd68821cfc42186f9473745adbd1b234e268",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/model/AccountIdOffsetTest.kt": "6168c188a68c41119809541cb3c09af83b5557acfdf7980c1ded749a2a18a5b9",
