@@ -55861,10 +55861,10 @@ index 000000000..107f7dc47
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendRecipientSelectionTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendRecipientSelectionTest.kt
 new file mode 100644
-index 000000000..00531848d
+index 000000000..ad38579aa
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendRecipientSelectionTest.kt
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,150 @@
 +package co.electriccoin.zcash.ui.screen.send
 +
 +import androidx.lifecycle.viewModelScope
@@ -55936,7 +55936,10 @@ index 000000000..00531848d
 +        val accountDataSource = mockk<AccountDataSource> { every { allAccounts } returns accounts }
 +        val addressBook = mockk<AddressBookRepository> {
 +            every { contacts } returns flowOf(listOf(contact))
-+            every { observeContactByAddress(any()) } answers { flowOf(contact.takeIf { it.address == firstArg() }) }
++            every { observeContactByAddress(any()) } answers {
++                val address = firstArg<String>()
++                flowOf(contact.takeIf { it.address == address })
++            }
 +        }
 +        val synchronizer = mockk<Synchronizer> {
 +            coEvery { validateAddress(contact.address) } returns AddressType.Transparent

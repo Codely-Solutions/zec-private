@@ -69,7 +69,10 @@ class SendRecipientSelectionTest {
         val accountDataSource = mockk<AccountDataSource> { every { allAccounts } returns accounts }
         val addressBook = mockk<AddressBookRepository> {
             every { contacts } returns flowOf(listOf(contact))
-            every { observeContactByAddress(any()) } answers { flowOf(contact.takeIf { it.address == firstArg() }) }
+            every { observeContactByAddress(any()) } answers {
+                val address = firstArg<String>()
+                flowOf(contact.takeIf { it.address == address })
+            }
         }
         val synchronizer = mockk<Synchronizer> {
             coEvery { validateAddress(contact.address) } returns AddressType.Transparent
