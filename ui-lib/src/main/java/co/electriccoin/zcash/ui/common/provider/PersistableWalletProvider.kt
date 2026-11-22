@@ -15,6 +15,7 @@ interface PersistableWalletProvider {
 
     suspend fun store(persistableWallet: PersistableWallet)
 
+    /** Writes only while the persisted snapshot and wallet generation match. */
     suspend fun storeIfCurrent(expected: PersistableWallet, replacement: PersistableWallet, version: Long): Boolean
 
     suspend fun getPersistableWallet(): PersistableWallet?
@@ -49,7 +50,7 @@ class PersistableWalletProviderImpl(
     ): Boolean {
         return walletWriteAccess.write(version) {
             val current = persistableWalletStorageProvider.get()
-            if (current == null || current.network != expected.network || current.seedPhrase != expected.seedPhrase) {
+            if (current == null || !current.matchesPersistedSnapshot(expected)) {
                 false
             } else {
                 persistableWalletStorageProvider.store(replacement)
@@ -62,6 +63,10 @@ class PersistableWalletProviderImpl(
 
     override suspend fun requirePersistableWallet() = checkNotNull(persistableWalletStorageProvider.get())
 }
+
+private fun PersistableWallet.matchesPersistedSnapshot(expected: PersistableWallet): Boolean =
+    network == expected.network && seedPhrase == expected.seedPhrase &&
+        birthday == expected.birthday && endpoint == expected.endpoint
 
 private interface PersistableWalletStorageProvider : NullableStorageProvider<PersistableWallet>
 

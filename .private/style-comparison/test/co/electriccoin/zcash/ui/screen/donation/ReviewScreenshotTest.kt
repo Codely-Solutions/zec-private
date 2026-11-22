@@ -2,23 +2,24 @@ package co.electriccoin.zcash.ui.screen.donation
 
 import android.graphics.Bitmap
 import android.os.Build
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.State
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.unit.Density
+import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.platform.app.InstrumentationRegistry
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
@@ -45,7 +46,7 @@ import kotlin.test.assertTrue
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class ReviewScreenshotTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun referenceScreenRenders() {
@@ -59,9 +60,23 @@ class ReviewScreenshotTest {
 
     @Test
     fun captureUpdatedScenes() {
-        val scene = mutableStateOf(Scene("reset-retention", "light"))
+        captureScenes(listOf("light", "dark", "oled"), fontScale = 1f)
+    }
+
+    @Test
+    fun captureLargeTextScenes() {
+        captureScenes(listOf("dark"), fontScale = 2f)
+    }
+
+    private fun captureScenes(themes: List<String>, fontScale: Float) {
+        // Dialog and tooltip windows create their own Compose owners from Android resources.
+        compose.runOnUiThread {
+            RuntimeEnvironment.setFontScale(fontScale)
+            assertEquals(fontScale, compose.activity.resources.configuration.fontScale)
+        }
+        val scene = mutableStateOf(Scene("reset-retention", themes.first(), fontScale))
         show(scene)
-        for ((theme, fontScale) in appearances) {
+        for (theme in themes) {
             for (screen in listOf("reset-retention", "reset-retention-off", "incoming-saved-pending")) {
                 val current = Scene(screen, theme, fontScale)
                 compose.runOnIdle { scene.value = current }
@@ -92,21 +107,18 @@ class ReviewScreenshotTest {
     private fun show(active: State<Scene>) {
         compose.setContent {
             val scene = active.value
-            val density = LocalDensity.current.density
-            CompositionLocalProvider(LocalDensity provides Density(density, scene.fontScale)) {
-                key(scene) {
-                    ZcashTheme(
-                        appearanceMode = if (scene.theme == "light") AppearanceMode.LIGHT else AppearanceMode.DARK,
-                        isOledEnabled = scene.theme == "oled",
-                    ) {
-                        Box(Modifier.fillMaxSize().background(ZashiColors.Surfaces.bgPrimary)) {
-                            when (scene.screen) {
-                                "price-warning" -> AdditionalReviewScene(
-                                    scene.screen, {}, ZashiMainTopAppBarStateFixture.new(),
-                                )
-                                "incoming-saved-pending" -> IncomingSwapReviewScene(scene.screen)
-                                else -> ProjectReviewScene(scene.screen)
-                            }
+            key(scene) {
+                ZcashTheme(
+                    appearanceMode = if (scene.theme == "light") AppearanceMode.LIGHT else AppearanceMode.DARK,
+                    isOledEnabled = scene.theme == "oled",
+                ) {
+                    Box(Modifier.fillMaxSize().background(ZashiColors.Surfaces.bgPrimary)) {
+                        when (scene.screen) {
+                            "price-warning" -> AdditionalReviewScene(
+                                scene.screen, {}, ZashiMainTopAppBarStateFixture.new(),
+                            )
+                            "incoming-saved-pending" -> IncomingSwapReviewScene(scene.screen)
+                            else -> ProjectReviewScene(scene.screen)
                         }
                     }
                 }
@@ -119,6 +131,12 @@ class ReviewScreenshotTest {
 
     private fun capture(scene: Scene, state: String, expected: String) {
         compose.waitForIdle()
+        val layouts = mutableListOf<TextLayoutResult>()
+        compose.onNodeWithText(expected).performSemanticsAction(SemanticsActions.GetTextLayoutResult) { getLayout ->
+            assertTrue(getLayout(layouts), "Missing text layout for $expected")
+        }
+        val visibleFontScale = layouts.map { it.layoutInput.density.fontScale }.distinct().single()
+        assertEquals(scene.fontScale, visibleFontScale, "Rendered font scale for $expected")
         // The viewport snapshot includes the dialog and tooltip windows as well as the host activity.
         val bitmap = checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
         try {
@@ -139,7 +157,8 @@ class ReviewScreenshotTest {
                 .put("screen", scene.screen)
                 .put("state", state)
                 .put("theme", scene.theme)
-                .put("fontScale", scene.fontScale.toDouble())
+                .put("requestedFontScale", scene.fontScale.toDouble())
+                .put("fontScale", visibleFontScale.toDouble())
                 .put("width", bitmap.width)
                 .put("height", bitmap.height)
                 .put("density", compose.density.density.toDouble())
@@ -157,6 +176,4 @@ class ReviewScreenshotTest {
     }
 
     private data class Scene(val screen: String, val theme: String, val fontScale: Float = 1f)
-
-    private val appearances = listOf("light" to 1f, "dark" to 1f, "oled" to 1f, "dark" to 2f)
 }

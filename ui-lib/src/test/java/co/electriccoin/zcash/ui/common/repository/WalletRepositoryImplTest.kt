@@ -776,7 +776,7 @@ private class FakePersistableWalletProvider(
         version: Long,
     ): Boolean = writeAccess.write(version) {
         val wallet = walletFlow.value
-        if (wallet == null || wallet.network != expected.network || wallet.seedPhrase != expected.seedPhrase) {
+        if (wallet?.copy(walletInitMode = expected.walletInitMode) != expected) {
             false
         } else {
             write(replacement)
