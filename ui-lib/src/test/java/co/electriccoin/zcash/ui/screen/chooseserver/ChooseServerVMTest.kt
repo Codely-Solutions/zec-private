@@ -406,11 +406,9 @@ class ChooseServerVMTest {
             every { preferences.getString(any(), null) } answers { cache[firstArg()] }
             every { preferences.registerOnSharedPreferenceChangeListener(any()) } answers {
                 listeners.add(firstArg())
-                Unit
             }
             every { preferences.unregisterOnSharedPreferenceChangeListener(any()) } answers {
                 listeners.remove(firstArg())
-                Unit
             }
             every { preferences.edit() } answers {
                 val updates = mutableMapOf<String, String?>()

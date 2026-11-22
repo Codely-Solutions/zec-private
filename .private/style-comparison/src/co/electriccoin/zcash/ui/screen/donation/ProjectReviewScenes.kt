@@ -29,12 +29,14 @@ internal fun ProjectReviewScene(screen: String): Boolean {
                 onBack = {},
             )
         )
-        "setup-incomplete" -> co.electriccoin.zcash.ui.screen.onboarding.view.Onboarding(
+        "setup-incomplete", "setup-failed" -> co.electriccoin.zcash.ui.screen.onboarding.view.Onboarding(
             onImportWallet = {},
             onCreateWallet = {},
             onContinueWallet = {},
             onRetrySetup = {},
-            initialization = co.electriccoin.zcash.ui.common.repository.WalletInitializationState.INCOMPLETE,
+            initialization = if (screen == "setup-failed") {
+                co.electriccoin.zcash.ui.common.repository.WalletInitializationState.FAILED
+            } else co.electriccoin.zcash.ui.common.repository.WalletInitializationState.INCOMPLETE,
         )
         "restore-tor-enabled", "restore-tor-disabled" -> co.electriccoin.zcash.ui.screen.restore.tor.RestoreTorView(
             co.electriccoin.zcash.ui.screen.restore.tor.RestoreTorState(

@@ -77,13 +77,14 @@ class ReviewScreenshotTest {
         for ((theme, scale) in listOf("light" to 1f, "dark" to 1f, "oled" to 1f, "dark" to 2f)) {
             compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
             for (screen in listOf(
-                "setup-incomplete", "server-save-error", "restore-tor-disabled", "restore-tor-enabled",
+                "setup-incomplete", "setup-failed", "server-save-error", "restore-tor-disabled", "restore-tor-enabled",
                 "gift-reviewed-account", "gift-unknown-account",
             )) {
                 val current = Scene(screen, theme, scale)
                 compose.runOnIdle { scene.value = current }
                 val expected = when (screen) {
                     "setup-incomplete" -> text(R.string.wallet_initialization_continue)
+                    "setup-failed" -> text(R.string.wallet_initialization_retry)
                     "server-save-error" -> text(R.string.choose_server_save_error_text)
                     "gift-reviewed-account", "gift-unknown-account" -> text(R.string.redeemGift_redeem)
                     else -> text(R.string.root_existingWallet_restore)

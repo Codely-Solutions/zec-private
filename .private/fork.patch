@@ -52200,10 +52200,10 @@ index 32d01648d..a9e4d875e 100644
 +            every { loadedBalances } returns balances
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt
 new file mode 100644
-index 000000000..ff9582427
+index 000000000..906b3ca2a
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/chooseserver/ChooseServerVMTest.kt
-@@ -0,0 +1,455 @@
+@@ -0,0 +1,453 @@
 +package co.electriccoin.zcash.ui.screen.chooseserver
 +
 +import android.content.SharedPreferences
@@ -52612,11 +52612,9 @@ index 000000000..ff9582427
 +            every { preferences.getString(any(), null) } answers { cache[firstArg()] }
 +            every { preferences.registerOnSharedPreferenceChangeListener(any()) } answers {
 +                listeners.add(firstArg())
-+                Unit
 +            }
 +            every { preferences.unregisterOnSharedPreferenceChangeListener(any()) } answers {
 +                listeners.remove(firstArg())
-+                Unit
 +            }
 +            every { preferences.edit() } answers {
 +                val updates = mutableMapOf<String, String?>()
