@@ -671,23 +671,6 @@ class SwapRepositoryImplTest {
             assertEquals(status, repository.checkSwapStatus(swapMetadata()))
         }
 
-    private fun swapMetadata(
-        address: String = "deposit-address",
-        from: SimpleSwapAsset = SwapAssetTestFixture.simpleAsset(tokenTicker = "btc", chainTicker = "btc"),
-        to: SimpleSwapAsset = SwapAssetTestFixture.zecSimpleAsset()
-    ): TransactionSwapMetadata = TransactionSwapMetadata(
-        depositAddress = address,
-        provider = "near",
-        totalFees = Zatoshi(0),
-        totalFeesUsd = BigDecimal.ZERO,
-        lastUpdated = Instant.EPOCH,
-        origin = from,
-        destination = to,
-        mode = SwapMode.FLEX_INPUT,
-        recordedStatus = null,
-        amountOutFormatted = BigDecimal.ONE,
-    )
-
     @Suppress("LongParameterList")
     private fun fakeQuote(
         originAsset: SwapAsset = zec,
@@ -779,3 +762,20 @@ class SwapRepositoryImplTest {
     private suspend fun loadedRepository(dataSource: SwapDataSource): SwapRepositoryImpl =
         repository(dataSource).also { it.requestRefreshAssetsOnce() }
 }
+
+private fun swapMetadata(
+    address: String = "deposit-address",
+    from: SimpleSwapAsset = SwapAssetTestFixture.simpleAsset(tokenTicker = "btc", chainTicker = "btc"),
+    to: SimpleSwapAsset = SwapAssetTestFixture.zecSimpleAsset()
+): TransactionSwapMetadata = TransactionSwapMetadata(
+    depositAddress = address,
+    provider = "near",
+    totalFees = Zatoshi(0),
+    totalFeesUsd = BigDecimal.ZERO,
+    lastUpdated = Instant.EPOCH,
+    origin = from,
+    destination = to,
+    mode = SwapMode.FLEX_INPUT,
+    recordedStatus = null,
+    amountOutFormatted = BigDecimal.ONE,
+)

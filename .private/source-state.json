@@ -2831,7 +2831,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapQuoteLifecycleTest.kt": "490c59bd2a562f39a99ab89a51f95ddb573ed49d5acd1ff8aab0833273fb0d23",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRecoveryRoutingTest.kt": "b3d67693a2bddc84568feec7a65771254e6d08eb4ea8207d0e38497107105bcd",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryAssetRefreshTest.kt": "8af91b115fe7b8437d6e0ea727faf946c4fb6ff105e9373dd8921d7161cea9c7",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt": "70b536ac5081e669524a4bda6e2921fdb274e91b954b3b55d2bcca9573ebb007",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt": "dae28717fd07a413e465efa7f5eda69062cc48c6c555bbb1aa66d8f986a32d38",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapReviewReadinessTest.kt": "26dd9bb0286ccd1e57fdcd1364d1b0bdf0f9c1f4e1bf65dbde36765a727dba92",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionRepositorySelectDisplayRecipientTest.kt": "3f1363d2ca956ae6493b47d286360ea4799514b3837c64f650bad8c21db77c3d",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionRepositorySentTransactionAmountTest.kt": "92530c0a879eb0c77504747c9ecef1fb4ee10ccf3a556695ab63660b3f6fb08c",

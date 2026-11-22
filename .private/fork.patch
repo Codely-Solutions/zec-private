@@ -46568,7 +46568,7 @@ index fb0bd4b18..c3ec06f61 100644
 +            assertEquals(listOf(btc), repository.assets.value.data)
 +            assertEquals(listOf(zec, btc, unpriced), repository.assets.value.recoveryAssets)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
-index d55620b20..2c87a642a 100644
+index d55620b20..a9661ee09 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapRepositoryImplTest.kt
 @@ -4 +4 @@ import cash.z.ecc.android.sdk.model.WalletAddress
@@ -46630,28 +46630,39 @@ index d55620b20..2c87a642a 100644
 @@ -656,0 +660,2 @@ class SwapRepositoryImplTest {
 +                    every { depositAddress } returns
 +                        co.electriccoin.zcash.ui.common.model.DynamicSwapAddress("deposit-address")
-@@ -673,6 +678,12 @@ class SwapRepositoryImplTest {
+@@ -669,11 +673,0 @@ class SwapRepositoryImplTest {
+-    private fun swapMetadata(
+-        address: String = "deposit-address",
+-        from: SimpleSwapAsset = SwapAssetTestFixture.simpleAsset(tokenTicker = "btc", chainTicker = "btc"),
+-        to: SimpleSwapAsset = SwapAssetTestFixture.zecSimpleAsset()
 -    ): TransactionSwapMetadata =
 -        mockk {
 -            every { depositAddress } returns address
 -            every { origin } returns from
 -            every { destination } returns to
 -        }
-+    ): TransactionSwapMetadata = TransactionSwapMetadata(
-+        depositAddress = address,
-+        provider = "near",
-+        totalFees = Zatoshi(0),
-+        totalFeesUsd = BigDecimal.ZERO,
-+        lastUpdated = Instant.EPOCH,
-+        origin = from,
-+        destination = to,
-+        mode = SwapMode.FLEX_INPUT,
-+        recordedStatus = null,
-+        amountOutFormatted = BigDecimal.ONE,
-+    )
-@@ -764 +775 @@ class SwapRepositoryImplTest {
+-
+@@ -764 +758 @@ class SwapRepositoryImplTest {
 -            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any(), any()) } returns quote
 +            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
+@@ -770,0 +765,17 @@ class SwapRepositoryImplTest {
++
++private fun swapMetadata(
++    address: String = "deposit-address",
++    from: SimpleSwapAsset = SwapAssetTestFixture.simpleAsset(tokenTicker = "btc", chainTicker = "btc"),
++    to: SimpleSwapAsset = SwapAssetTestFixture.zecSimpleAsset()
++): TransactionSwapMetadata = TransactionSwapMetadata(
++    depositAddress = address,
++    provider = "near",
++    totalFees = Zatoshi(0),
++    totalFeesUsd = BigDecimal.ZERO,
++    lastUpdated = Instant.EPOCH,
++    origin = from,
++    destination = to,
++    mode = SwapMode.FLEX_INPUT,
++    recordedStatus = null,
++    amountOutFormatted = BigDecimal.ONE,
++)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapReviewReadinessTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/SwapReviewReadinessTest.kt
 new file mode 100644
 index 000000000..a403feaf3
