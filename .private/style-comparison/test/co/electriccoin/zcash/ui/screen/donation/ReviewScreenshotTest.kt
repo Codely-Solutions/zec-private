@@ -122,16 +122,16 @@ class ReviewScreenshotTest {
         // The viewport snapshot includes the dialog and tooltip windows as well as the host activity.
         val bitmap = checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
         try {
-            assertEquals(1080, bitmap.width)
-            assertEquals(1920, bitmap.height)
             val background = bitmap.getPixel(0, 0)
-            assertTrue((0 until bitmap.height step 8).any { y ->
+            val hasContent = (0 until bitmap.height step 8).any { y ->
                 (0 until bitmap.width step 8).any { x -> bitmap.getPixel(x, y) != background }
-            }, "The captured viewport contains no visible content")
-            val root = File(checkNotNull(System.getenv("CODEX_GUARD_OUTPUT")))
-            val directory = File(root, "captures").apply { check(isDirectory || mkdirs()) }
+            }
+            val directory = System.getProperty("private.review.captureDir")?.let(::File)
+                ?: File(checkNotNull(System.getenv("CODEX_GUARD_OUTPUT")), "captures")
+            check(directory.isDirectory || directory.mkdirs())
             val name = "${scene.screen}-${scene.theme}-${scene.fontScale}-$state.png"
             val target = File(directory, name)
+            check(target.createNewFile()) { "Capture already exists: $name" }
             target.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
             val digest = MessageDigest.getInstance("SHA-256").digest(target.readBytes())
             val receipt = JSONObject()
@@ -145,8 +145,12 @@ class ReviewScreenshotTest {
                 .put("density", compose.density.density.toDouble())
                 .put("expected", expected)
                 .put("sdk", Build.VERSION.SDK_INT)
+                .put("validViewport", bitmap.width == 1080 && bitmap.height == 1920 && hasContent)
                 .put("sha256", digest.joinToString("") { "%02x".format(it) })
             File(directory, "captures.jsonl").appendText("$receipt\n")
+            assertEquals(1080, bitmap.width)
+            assertEquals(1920, bitmap.height)
+            assertTrue(hasContent, "The captured viewport contains no visible content")
         } finally {
             bitmap.recycle()
         }
