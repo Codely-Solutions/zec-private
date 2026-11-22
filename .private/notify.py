@@ -39,7 +39,7 @@ def current_state(body):
 def with_current(body, state, message, diagnosis, run):
     section = (START+'\n<!-- state: '+json.dumps(state, sort_keys=True)+' -->\n'
                'Current blocker: '+message+'\n\n'+('Diagnosis: '+diagnosis+'\n\n' if diagnosis else '')+
-               'Workflow evidence: '+run+'\n\nLast published APK is unchanged.\n'+END)
+               'Workflow evidence: '+run+'\n\nPublication and recovery status: see the linked workflow.\n'+END)
     pattern = re.escape(START)+r'.*?'+re.escape(END)
     if re.search(pattern, body, re.S):
         return re.sub(pattern, lambda _: section, body, count=1, flags=re.S)

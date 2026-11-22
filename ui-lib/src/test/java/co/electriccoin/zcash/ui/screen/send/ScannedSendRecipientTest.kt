@@ -7,6 +7,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.SavedStateHandle
@@ -129,9 +130,14 @@ class ScannedSendRecipientTest {
         }
         try {
             fun assertRecipient(expected: String, type: AddressType) {
-                compose.waitUntil(timeoutMillis = 5_000) { send.recipientAddressState.value.address == expected }
-                compose.onNodeWithText(expected).assertExists()
-                compose.runOnIdle { assertEquals(type, send.recipientAddressState.value.type) }
+                // The semantics query drains Robolectric's main looper, where the ViewModel collects selection events.
+                compose.waitUntil(conditionDescription = "Send displays $expected", timeoutMillis = 5_000) {
+                    compose.onAllNodesWithText(expected).fetchSemanticsNodes().size == 1
+                }
+                compose.runOnIdle {
+                    assertEquals(expected, send.recipientAddressState.value.address)
+                    assertEquals(type, send.recipientAddressState.value.type)
+                }
             }
 
             assertRecipient(original, AddressType.Unified)
@@ -160,8 +166,8 @@ class ScannedSendRecipientTest {
                 owner = EntryOwner()
             }
             restorationTester.emulateSavedInstanceStateRestore()
-            assertNotSame(originalViewModel, send)
             assertRecipient(manual, AddressType.Tex)
+            assertNotSame(originalViewModel, send)
             compose.onNodeWithText(original).assertDoesNotExist()
         } finally {
             compose.runOnIdle { owner.viewModelStore.clear() }

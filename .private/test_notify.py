@@ -126,6 +126,11 @@ class NotifyTest(unittest.TestCase):
             self.run_notice()
         self.assertEqual(len(self.messages), 3)
 
+    def test_publication_reconciliation_does_not_claim_the_apk_is_unchanged(self):
+        self.run_notice('Publication needs reconciliation: recording failed', BLOCKER_DIAGNOSIS='integration=failure')
+        self.assertIn('recording failed', self.issue['body'])
+        self.assertNotIn('Last published APK is unchanged', self.issue['body'])
+
 
 if __name__ == '__main__':
     unittest.main()
