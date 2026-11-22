@@ -233,6 +233,49 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun reloadMustAcknowledgeTheDirectoryBeforeReturningAnUnacknowledgedReplacement() = runTest {
+        val sync = TrackingSync().apply { fail = false }
+        val metadata = repository(sync.provider)
+        SaveORSwapUseCase(mockk(), metadata, mockk()).persistBeforeFunding(fundingQuote(SwapType.FLEX_INPUT))
+        val expected = checkNotNull(metadata.getSwapMetadata("deposit"))
+        val settled = mockk<SwapQuoteStatus> {
+            every { amountOutFormatted } returns BigDecimal.ONE
+            every { status } returns SwapStatus.SUCCESS
+            every { mode } returns SwapMode.FLEX_INPUT
+        }
+        sync.fail = true
+        assertFalse(metadata.updateSwap(expected, settled))
+        assertEquals(SwapStatus.SUCCESS, storedSwaps().swapIds.single().status)
+        assertFailsWith<IOException> { metadata.reloadSwapMetadata(expected) }
+        sync.fail = false
+        assertEquals(SwapStatus.SUCCESS, metadata.reloadSwapMetadata(expected)?.status)
+    }
+
+    @Test
+    fun aLegacySwapCanRecoverTheProviderModeWithoutChangingItsRoute() = runTest {
+        assertTrue(markSwap(dataSource(), "near", SwapMode.EXACT_INPUT))
+        val original = read(canonicalName)
+        write(canonicalName, original.copy(accountMetadata = original.accountMetadata.copy(
+            swaps = original.accountMetadata.swaps.copy(
+                swapIds = original.accountMetadata.swaps.swapIds.map { it.copy(exactInput = null) },
+            ),
+        )))
+        val metadata = repository(metadataProvider)
+        val expected = checkNotNull(metadata.getSwapMetadata("deposit"))
+        assertEquals(SwapMode.EXACT_INPUT, expected.mode)
+        val settled = mockk<SwapQuoteStatus> {
+            every { amountOutFormatted } returns BigDecimal.ONE
+            every { status } returns SwapStatus.SUCCESS
+            every { mode } returns SwapMode.EXACT_OUTPUT
+        }
+        assertTrue(metadata.updateSwap(expected, settled))
+        val reloaded = checkNotNull(metadata.reloadSwapMetadata(expected))
+        assertEquals(SwapStatus.SUCCESS, reloaded.status)
+        assertEquals(SwapMode.EXACT_OUTPUT, reloaded.mode)
+        assertEquals(expected.lastUpdated, reloaded.lastUpdated)
+    }
+
+    @Test
     fun trackingRequiresDirectoryDurabilityForCreationReplacementAndRestart() = runTest {
         var failSync = true
         var directorySyncs = 0
