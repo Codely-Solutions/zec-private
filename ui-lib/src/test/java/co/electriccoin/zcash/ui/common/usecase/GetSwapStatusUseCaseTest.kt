@@ -41,6 +41,34 @@ class GetSwapStatusUseCaseTest {
     private val btc = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc")
     private val zec = SwapAssetTestFixture.zecAsset()
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun refusingAnOlderResponseKeepsTheAlreadyAcceptedLiveDetails() = runTest {
+        val expected = mockk<TransactionSwapMetadata>()
+        val accepted = mockk<TransactionSwapMetadata> {
+            every { status } returns SwapStatus.PROCESSING
+            every { amountOutFormatted } returns BigDecimal("1.23")
+        }
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata("deposit") } returns expected
+            coEvery { updateSwap(expected, any()) } returnsMany listOf(true, false)
+            coEvery { reloadSwapMetadata(expected) } returns accepted
+        }
+        val processing = swapStatusResult(swapStatus = SwapStatus.PROCESSING)
+        val repository = mockk<SwapRepository> { coEvery { checkSwapStatus(expected) } returns processing }
+        val states = mutableListOf<SwapQuoteStatusData>()
+        val observer = backgroundScope.launch {
+            GetSwapStatusUseCase(metadata, repository).observe("deposit").collect { states += it }
+        }
+        runCurrent()
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertSame(accepted, states.last().savedMetadata)
+        assertSame(processing, states.last().status)
+        assertIs<IllegalStateException>(states.last().error)
+        observer.cancel()
+    }
+
     @Test
     fun emitsStatusAndPersistsMetadataOnSuccess() =
         runTest {
