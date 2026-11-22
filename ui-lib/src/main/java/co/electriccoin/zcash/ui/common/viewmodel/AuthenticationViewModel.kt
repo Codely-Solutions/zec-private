@@ -122,7 +122,7 @@ class AuthenticationViewModel(
                     AuthenticationUIState.NotRequired
                 }
 
-                secretState == SecretState.INCOMPLETE && state != AuthenticationUIState.Successful -> {
+                secretState == SecretState.INCOMPLETE && state == AuthenticationUIState.NotRequired -> {
                     appAccessAuthentication.value = AuthenticationUIState.Initial
                     AuthenticationUIState.Required
                 }

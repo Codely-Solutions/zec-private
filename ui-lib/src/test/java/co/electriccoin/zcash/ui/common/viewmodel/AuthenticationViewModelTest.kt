@@ -40,8 +40,8 @@ import kotlin.time.Duration.Companion.minutes
  * Regression coverage for MOB-1447: opening the app before any wallet has been created or
  * restored must never surface the app-access authentication prompt.
  *
- * [WalletViewModel.secretState] starts at [SecretState.LOADING] and only resolves to
- * [SecretState.NONE] or [SecretState.READY] once preferences and configuration finish loading.
+ * [WalletViewModel.secretState] starts at [SecretState.LOADING] and settles once the encrypted
+ * wallet, onboarding preference and configuration finish loading.
  * [AuthenticationViewModel.appAccessAuthenticationResultState] must defer to
  * [AuthenticationUIState.Initial] while that resolution is pending, instead of racing ahead to
  * [AuthenticationUIState.Required] and triggering a biometric prompt that a moment later turns

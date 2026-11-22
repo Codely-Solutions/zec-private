@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
@@ -73,11 +74,13 @@ class SwapSupportVM(
     private fun onShareOriginalQuote(expected: TransactionSwapMetadata) {
         val owner = expected.ownerAccount?.sdkAccount?.accountUuid ?: return
         viewModelScope.launch {
+            val evidence = runCatchingRecoverable {
+                metadataRepository.reloadSwapMetadata(expected)?.signedQuoteEvidence
+            }.getOrNull() ?: return@launch
             val selected = metadataRepository.getSwapMetadata(expected.depositAddress) ?: return@launch
             if (selected.ownerAccount?.sdkAccount?.accountUuid != owner ||
-                selected.walletWriteToken != expected.walletWriteToken
+                selected.walletWriteToken != expected.walletWriteToken || selected.signedQuoteEvidence != evidence
             ) return@launch
-            val evidence = metadataRepository.reloadSwapMetadata(expected)?.signedQuoteEvidence ?: return@launch
             sendEmailUseCase.shareOriginalQuote(evidence)
         }
     }

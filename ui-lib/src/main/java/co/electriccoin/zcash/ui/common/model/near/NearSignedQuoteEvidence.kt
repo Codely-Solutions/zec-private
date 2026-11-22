@@ -13,6 +13,7 @@ import java.security.GeneralSecurityException
 import java.security.MessageDigest
 
 /** A verified original response. It carries private routing data and is shared only on request. */
+@ConsistentCopyVisibility
 @Serializable
 data class NearSignedQuoteEvidence internal constructor(internal val originalJson: String) {
     init {

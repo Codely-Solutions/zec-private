@@ -186,12 +186,12 @@ class WalletRepositoryImpl(
             configurationRepository.configurationFlow,
             onboardingWithWallet,
             storedByCurrentSetup
-        ) { config, (onboardingState, hasWallet), storedHere ->
+        ) { config, (onboardingState, hasWallet), _ ->
             resolveSecretState(
                 isConfigurationLoaded = config != null,
                 onboardingState = onboardingState,
                 hasWallet = hasWallet,
-                storedByCurrentSetup = storedHere
+                storedByCurrentSetup = storedByCurrentSetup.value
             )
         }.stateIn(
             scope = sharingScope,

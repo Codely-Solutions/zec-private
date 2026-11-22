@@ -945,7 +945,7 @@ private const val MAX_RETAINED_SIGNED_QUOTES = 64
 private fun List<SwapMetadataV3>.withBoundedQuoteEvidence(): List<SwapMetadataV3> {
     val withEvidence = filter { it.signedQuoteEvidence != null }
     if (withEvidence.size <= MAX_RETAINED_SIGNED_QUOTES) return this
-    val retained = withEvidence.sortedByDescending { it.lastUpdated }
+    val retained = withEvidence.asReversed().sortedByDescending { it.lastUpdated }
         .take(MAX_RETAINED_SIGNED_QUOTES)
         .mapTo(mutableSetOf()) { it.depositAddress }
     return map {

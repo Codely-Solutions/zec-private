@@ -23369,7 +23369,7 @@ index cd30d81f4..21d69fa61 100644
 +private val CARD_WALLET_ERASE_CHECK_INTERVAL = 100.milliseconds
 +private val CARD_WALLET_CLOSE_TIMEOUT = 30.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
-index abf14322d..e37a0628f 100644
+index abf14322d..ceadae28e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
 @@ -17,0 +18 @@ import co.electriccoin.zcash.ui.common.model.metadata.SwapsMetadataV3
@@ -23532,7 +23532,7 @@ index abf14322d..e37a0628f 100644
 +private fun List<SwapMetadataV3>.withBoundedQuoteEvidence(): List<SwapMetadataV3> {
 +    val withEvidence = filter { it.signedQuoteEvidence != null }
 +    if (withEvidence.size <= MAX_RETAINED_SIGNED_QUOTES) return this
-+    val retained = withEvidence.sortedByDescending { it.lastUpdated }
++    val retained = withEvidence.asReversed().sortedByDescending { it.lastUpdated }
 +        .take(MAX_RETAINED_SIGNED_QUOTES)
 +        .mapTo(mutableSetOf()) { it.depositAddress }
 +    return map {
@@ -24919,17 +24919,16 @@ index 000000000..ae3bfb5e5
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSignedQuoteEvidence.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSignedQuoteEvidence.kt
 new file mode 100644
-index 000000000..28346740a
+index 000000000..7b1a03888
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSignedQuoteEvidence.kt
-@@ -0,0 +1,137 @@
+@@ -0,0 +1,138 @@
 +package co.electriccoin.zcash.ui.common.model.near
 +
 +import com.google.crypto.tink.signature.Ed25519PublicKey
 +import com.google.crypto.tink.signature.subtle.Ed25519Verifier
 +import com.google.crypto.tink.util.Bytes
 +import kotlinx.serialization.Serializable
-+import kotlinx.serialization.SerializationException
 +import kotlinx.serialization.json.Json
 +import kotlinx.serialization.json.JsonNull
 +import kotlinx.serialization.json.JsonObject
@@ -24939,6 +24938,7 @@ index 000000000..28346740a
 +import java.security.MessageDigest
 +
 +/** A verified original response. It carries private routing data and is shared only on request. */
++@ConsistentCopyVisibility
 +@Serializable
 +data class NearSignedQuoteEvidence internal constructor(internal val originalJson: String) {
 +    init {
@@ -24976,16 +24976,15 @@ index 000000000..28346740a
 +        originalJson.encodeToByteArray().size > MAX_QUOTE_EVIDENCE_BYTES
 +    ) return null
 +    return try {
-+        val response = Json.parseToJsonElement(originalJson) as? JsonObject ?: return null
-+        val request = response["quoteRequest"] as? JsonObject ?: return null
-+        val quote = response["quote"] as? JsonObject ?: return null
-+        if (request["dry"] != JsonPrimitive(false)) return null
-+        val signature = (response["signature"] as? JsonPrimitive)?.takeIf { it.isString } ?: return null
++        val response = requireNotNull(Json.parseToJsonElement(originalJson) as? JsonObject)
++        val request = requireNotNull(response["quoteRequest"] as? JsonObject)
++        val quote = requireNotNull(response["quote"] as? JsonObject)
++        require(request["dry"] == JsonPrimitive(false))
++        val signature = requireNotNull(response["signature"] as? JsonPrimitive)
++        require(signature.isString)
 +        val key = Ed25519PublicKey.create(Bytes.copyFrom(decodeBase58(managerPublicKey)))
 +        Ed25519Verifier.create(key).verify(decodeBase58(signature.content), quoteMessage(response, request, quote))
 +        NearSignedQuoteEvidence(originalJson)
-+    } catch (_: SerializationException) {
-+        null
 +    } catch (_: IllegalArgumentException) {
 +        null
 +    } catch (_: ArithmeticException) {
@@ -25010,15 +25009,17 @@ index 000000000..28346740a
 +    optional: Set<String>,
 +) {
 +    for ((name, value) in this) {
-+        if (name in fields || name in optional && value != JsonNull && value != JsonPrimitive(false)) {
++        if (name in fields || name in optional) {
 +            val primitive = requireNotNull(value as? JsonPrimitive)
 +            val normalized = primitive.canonicalize()
-+            if (name in fields || normalized != JsonPrimitive(0) && normalized != JsonPrimitive("")) {
++            if (name in fields || normalized !in optionalSignedFieldEmptyValues) {
 +                signedFields[name] = normalized
 +            }
 +        }
 +    }
 +}
++
++private val optionalSignedFieldEmptyValues = setOf(JsonNull, JsonPrimitive(false), JsonPrimitive(0), JsonPrimitive(""))
 +
 +// The signed numeric fields in supported routes are small integers. Decline evidence for other
 +// numeric forms rather than hashing a spelling different from JavaScript's JSON.stringify.
@@ -28664,7 +28665,7 @@ index 26bf877f4..db3df438d 100644
 +                                                    }
 +                                                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
-index fa652b038..3f66f8b2f 100644
+index fa652b038..612ebcb01 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/WalletRepository.kt
 @@ -6 +5,0 @@ import androidx.annotation.VisibleForTesting
@@ -28769,11 +28770,11 @@ index fa652b038..3f66f8b2f 100644
 -        ) { config, (onboardingState, hasWallet) ->
 +            onboardingWithWallet,
 +            storedByCurrentSetup
-+        ) { config, (onboardingState, hasWallet), storedHere ->
++        ) { config, (onboardingState, hasWallet), _ ->
 @@ -163 +193,2 @@ class WalletRepositoryImpl(
 -                hasWallet = hasWallet
 +                hasWallet = hasWallet,
-+                storedByCurrentSetup = storedHere
++                storedByCurrentSetup = storedByCurrentSetup.value
 @@ -257,0 +289 @@ class WalletRepositoryImpl(
 +                    val version = persistableWalletProvider.writeVersion
 @@ -259,3 +291,3 @@ class WalletRepositoryImpl(
@@ -30677,7 +30678,7 @@ index 3e12c9c99..bd85a60d3 100644
 +                    Zip321ParseUriValidation.Invalid
 +                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/viewmodel/AuthenticationViewModel.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/viewmodel/AuthenticationViewModel.kt
-index 5c0129d9c..c525434f4 100644
+index 5c0129d9c..86b70953b 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/viewmodel/AuthenticationViewModel.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/viewmodel/AuthenticationViewModel.kt
 @@ -4,0 +5 @@ import android.app.Application
@@ -30705,7 +30706,7 @@ index 5c0129d9c..c525434f4 100644
 +            showWelcomeAnimation,
 +        ) { required, state, secretState, animate ->
 @@ -115,0 +125,5 @@ class AuthenticationViewModel(
-+                secretState == SecretState.INCOMPLETE && state != AuthenticationUIState.Successful -> {
++                secretState == SecretState.INCOMPLETE && state == AuthenticationUIState.NotRequired -> {
 +                    appAccessAuthentication.value = AuthenticationUIState.Initial
 +                    AuthenticationUIState.Required
 +                }
@@ -35388,19 +35389,20 @@ index 202849dc7..3b0e96ebb 100644
 @@ -11,0 +12 @@ data class SwapSupportState(
 +    val shareQuoteButton: ButtonState? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVM.kt
-index 7d4aa2a1c..ca19b6992 100644
+index 7d4aa2a1c..11dbb4ed1 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportVM.kt
-@@ -7,0 +8,2 @@ import co.electriccoin.zcash.ui.R
+@@ -7,0 +8,3 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 +import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-@@ -11,0 +14 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
+@@ -11,0 +15 @@ import co.electriccoin.zcash.ui.design.component.ButtonState
 +import co.electriccoin.zcash.ui.design.component.ButtonStyle
-@@ -24,0 +28 @@ class SwapSupportVM(
+@@ -24,0 +29 @@ class SwapSupportVM(
 +    private val metadataRepository: MetadataRepository,
-@@ -35,0 +40 @@ class SwapSupportVM(
+@@ -35,0 +41 @@ class SwapSupportVM(
 +                            isEnabled = swapData.hasReportDetails,
-@@ -38 +43,10 @@ class SwapSupportVM(
+@@ -38 +44,10 @@ class SwapSupportVM(
 -                    onBack = ::onBack
 +                    onBack = ::onBack,
 +                    shareQuoteButton = swapData.savedMetadata
@@ -35412,9 +35414,9 @@ index 7d4aa2a1c..ca19b6992 100644
 +                                onClick = { onShareOriginalQuote(saved) },
 +                            )
 +                        }
-@@ -48,0 +63 @@ class SwapSupportVM(
+@@ -48,0 +64 @@ class SwapSupportVM(
 +        if (!swapData.hasReportDetails) return
-@@ -53,0 +69,15 @@ class SwapSupportVM(
+@@ -53,0 +70,17 @@ class SwapSupportVM(
 +
 +    private val SwapData.hasReportDetails: Boolean
 +        get() = status != null || savedMetadata != null
@@ -35422,19 +35424,27 @@ index 7d4aa2a1c..ca19b6992 100644
 +    private fun onShareOriginalQuote(expected: TransactionSwapMetadata) {
 +        val owner = expected.ownerAccount?.sdkAccount?.accountUuid ?: return
 +        viewModelScope.launch {
++            val evidence = runCatchingRecoverable {
++                metadataRepository.reloadSwapMetadata(expected)?.signedQuoteEvidence
++            }.getOrNull() ?: return@launch
 +            val selected = metadataRepository.getSwapMetadata(expected.depositAddress) ?: return@launch
 +            if (selected.ownerAccount?.sdkAccount?.accountUuid != owner ||
-+                selected.walletWriteToken != expected.walletWriteToken
++                selected.walletWriteToken != expected.walletWriteToken || selected.signedQuoteEvidence != evidence
 +            ) return@launch
-+            val evidence = metadataRepository.reloadSwapMetadata(expected)?.signedQuoteEvidence ?: return@launch
 +            sendEmailUseCase.shareOriginalQuote(evidence)
 +        }
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportView.kt
-index f790b0ce7..103b41a87 100644
+index f790b0ce7..0d5a4d9ad 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/support/SwapSupportView.kt
-@@ -103,0 +104,10 @@ private fun Content(
+@@ -9,0 +10 @@ import androidx.compose.foundation.layout.size
++import androidx.compose.foundation.rememberScrollState
+@@ -10,0 +12 @@ import androidx.compose.foundation.shape.CircleShape
++import androidx.compose.foundation.verticalScroll
+@@ -59,0 +62 @@ private fun Content(
++                .verticalScroll(rememberScrollState())
+@@ -103,0 +107,10 @@ private fun Content(
 +        state.shareQuoteButton?.let { button ->
 +            Spacer(16.dp)
 +            Text(
@@ -53209,7 +53219,7 @@ index 000000000..75b1a6427
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/viewmodel/AuthenticationViewModelTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/viewmodel/AuthenticationViewModelTest.kt
-index a5aa383dd..ffc294e55 100644
+index a5aa383dd..c4922eb21 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/viewmodel/AuthenticationViewModelTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/viewmodel/AuthenticationViewModelTest.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.spackle.AndroidApiVersion
@@ -53217,6 +53227,11 @@ index a5aa383dd..ffc294e55 100644
 @@ -32,0 +34,2 @@ import kotlin.test.assertFalse
 +import kotlin.test.assertNotNull
 +import kotlin.test.assertNull
+@@ -40,2 +43,2 @@ import kotlin.time.Duration.Companion.minutes
+- * [WalletViewModel.secretState] starts at [SecretState.LOADING] and only resolves to
+- * [SecretState.NONE] or [SecretState.READY] once preferences and configuration finish loading.
++ * [WalletViewModel.secretState] starts at [SecretState.LOADING] and settles once the encrypted
++ * wallet, onboarding preference and configuration finish loading.
 @@ -169,0 +173,3 @@ class AuthenticationViewModelTest {
 +            advanceUntilIdle()
 +            val session = viewModel.appAccessSession
