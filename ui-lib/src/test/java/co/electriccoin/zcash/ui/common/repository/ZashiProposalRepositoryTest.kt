@@ -43,6 +43,16 @@ class ZashiProposalRepositoryTest {
     )
 
     @Test
+    fun migrationAdoptionReturnsTheExactReviewIdentityPublishedForAuthentication() {
+        val sdkProposal = mockk<Proposal>()
+        val adopted = repository.setMigrationSweepProposal(sdkProposal, Zatoshi(1234))
+
+        assertSame(adopted, repository.transactionProposal.value)
+        assertSame(sdkProposal, adopted.proposal)
+        assertEquals(Zatoshi(1234), adopted.amount)
+    }
+
+    @Test
     fun quoteExpiringDuringSpendingKeyAcquisitionCannotBroadcast() = runBlocking {
         var currentDeadline = Instant.parse("2100-01-01T00:00:00Z")
         val quote = object : SwapQuote by quote() {

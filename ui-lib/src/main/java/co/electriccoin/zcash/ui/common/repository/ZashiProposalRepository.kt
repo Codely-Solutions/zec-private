@@ -57,8 +57,9 @@ interface ZashiProposalRepository {
      * Adopt an already-built IMMEDIATE send-max migration [proposal] as the current transaction, so
      * the migration sweep goes through the shared submit + Transaction Progress pipeline exactly
      * like a regular send (mirrors [KeystoneProposalRepository.setMigrationSweepProposal]).
+     * Returns the exact adopted review identity for the authentication handoff.
      */
-    fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi)
+    fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi): MigrationSweepTransactionProposal
 
     suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult
 
@@ -136,9 +137,8 @@ class ZashiProposalRepositoryImpl(
         }
     }
 
-    override fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi) {
-        transactionProposal.update { MigrationSweepTransactionProposal(amount, proposal) }
-    }
+    override fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi): MigrationSweepTransactionProposal =
+        MigrationSweepTransactionProposal(amount, proposal).also { sweep -> transactionProposal.update { sweep } }
 
     @Suppress("TooGenericExceptionCaught", "UseCheckOrError")
     override suspend fun submit(expectedProposal: TransactionProposal?): SubmitResult =

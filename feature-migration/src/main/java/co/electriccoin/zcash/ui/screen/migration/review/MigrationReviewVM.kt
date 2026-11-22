@@ -515,8 +515,8 @@ class MigrationReviewVM(
                 keystoneProposalRepository.approveForSigning()
                 navigationRouter.forward(SignKeystoneTransactionArgs)
             } else {
-                zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
-                submitProposal()
+                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
+                submitProposal(reviewed)
             }
         }
 

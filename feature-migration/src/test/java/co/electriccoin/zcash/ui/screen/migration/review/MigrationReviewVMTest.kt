@@ -15,6 +15,7 @@ import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
+import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.MutableLce
@@ -83,6 +84,8 @@ class MigrationReviewVMTest {
                 }
             val router = FakeNavigationRouter()
             val zashiProposalRepository = mockk<ZashiProposalRepository>(relaxed = true)
+            val reviewed = MigrationSweepTransactionProposal(Zatoshi(500_000L), proposal)
+            every { zashiProposalRepository.setMigrationSweepProposal(proposal, reviewed.amount) } returns reviewed
             val submitProposal = mockk<SubmitProposalUseCase>(relaxed = true)
             val vm =
                 vm(
@@ -99,7 +102,7 @@ class MigrationReviewVMTest {
             // broadcast, and the Transaction Progress navigation).
             coVerifyOrder {
                 zashiProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
-                submitProposal()
+                submitProposal(reviewed)
             }
         }
 
@@ -321,7 +324,7 @@ class MigrationReviewVMTest {
             coVerify(exactly = 0) { zashiProposalRepository.setMigrationSweepProposal(any(), any()) }
             coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
             coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal() }
-            coVerify(exactly = 0) { submitProposal() }
+            coVerify(exactly = 0) { submitProposal(any()) }
             assertEquals(emptyList(), router.forwardedRoutes)
         }
 

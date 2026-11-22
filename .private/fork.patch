@@ -2549,11 +2549,16 @@ index ca5f70e55..b65f58a35 100644
 @@ -341,0 +337 @@ class MigrationCompleteVM(
 +            keystoneProposalRepository.approveForSigning()
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
-index ccdc9db31..2e9ff1860 100644
+index ccdc9db31..2ba786566 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 @@ -514,0 +515 @@ class MigrationReviewVM(
 +                keystoneProposalRepository.approveForSigning()
+@@ -517,2 +518,2 @@ class MigrationReviewVM(
+-                zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
+-                submitProposal()
++                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
++                submitProposal(reviewed)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVM.kt
 index e84eff32e..dfed08306 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/setup/MigrationSetupVM.kt
@@ -2588,6 +2593,21 @@ index 05231840e..525d04198 100644
 +            recovery { deferredRequests++ }
 @@ -147,0 +153 @@ class CheckMigrationRecoveryUseCaseTest {
 +            assertEquals(1, deferredRequests)
+diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
+index d0838db0c..2fd0629df 100644
+--- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
++++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVMTest.kt
+@@ -17,0 +18 @@ import co.electriccoin.zcash.ui.common.datasource.ZashiSpendingKeyDataSource
++import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
+@@ -85,0 +87,2 @@ class MigrationReviewVMTest {
++            val reviewed = MigrationSweepTransactionProposal(Zatoshi(500_000L), proposal)
++            every { zashiProposalRepository.setMigrationSweepProposal(proposal, reviewed.amount) } returns reviewed
+@@ -102 +105 @@ class MigrationReviewVMTest {
+-                submitProposal()
++                submitProposal(reviewed)
+@@ -324 +327 @@ class MigrationReviewVMTest {
+-            coVerify(exactly = 0) { submitProposal() }
++            coVerify(exactly = 0) { submitProposal(any()) }
 diff --git a/feature-viewing-key/build.gradle.kts b/feature-viewing-key/build.gradle.kts
 index 334eef98c..795262fae 100644
 --- a/feature-viewing-key/build.gradle.kts
@@ -27196,7 +27216,7 @@ index fa652b038..b51fdc430 100644
 +    RUNNING,
 +    FAILED
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
-index 0a5bfe73c..c9b4b594e 100644
+index 0a5bfe73c..bebde683a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepository.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.repository
@@ -27209,12 +27229,17 @@ index 0a5bfe73c..c9b4b594e 100644
 @@ -37,0 +42,2 @@ interface ZashiProposalRepository {
 +    suspend fun createDonationProposal(zecSend: ZecSend): RegularTransactionProposal
 +
-@@ -57 +63 @@ interface ZashiProposalRepository {
+@@ -53,0 +60 @@ interface ZashiProposalRepository {
++     * Returns the exact adopted review identity for the authentication handoff.
+@@ -55 +62 @@ interface ZashiProposalRepository {
+-    fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi)
++    fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi): MigrationSweepTransactionProposal
+@@ -57 +64 @@ interface ZashiProposalRepository {
 -    suspend fun submit(): SubmitResult
 +    suspend fun submit(expectedProposal: TransactionProposal? = null): SubmitResult
-@@ -68,0 +75 @@ class ZashiProposalRepositoryImpl(
+@@ -68,0 +76 @@ class ZashiProposalRepositoryImpl(
 +    private val processSwapTransaction: ProcessSwapTransactionUseCase,
-@@ -83,0 +91,8 @@ class ZashiProposalRepositoryImpl(
+@@ -83,0 +92,8 @@ class ZashiProposalRepositoryImpl(
 +    override suspend fun createDonationProposal(zecSend: ZecSend): RegularTransactionProposal =
 +        createProposalInternal {
 +            val account = accountDataSource.getSelectedAccount()
@@ -27223,6 +27248,12 @@ index 0a5bfe73c..c9b4b594e 100644
 +            proposalDataSource.createProposal(account, zecSend).copy(isDonation = true)
 +        }
 +
+@@ -124,3 +140,2 @@ class ZashiProposalRepositoryImpl(
+-    override fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi) {
+-        transactionProposal.update { MigrationSweepTransactionProposal(amount, proposal) }
+-    }
++    override fun setMigrationSweepProposal(proposal: Proposal, amount: Zatoshi): MigrationSweepTransactionProposal =
++        MigrationSweepTransactionProposal(amount, proposal).also { sweep -> transactionProposal.update { sweep } }
 @@ -129 +144 @@ class ZashiProposalRepositoryImpl(
 -    override suspend fun submit(): SubmitResult =
 +    override suspend fun submit(expectedProposal: TransactionProposal?): SubmitResult =
@@ -45589,10 +45620,10 @@ index 0bc7a1124..8ef2900ff 100644
 +        if (failWrites) throw IOException("Synthetic persistence failure")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 new file mode 100644
-index 000000000..e21dccaa2
+index 000000000..ad0a2253b
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
-@@ -0,0 +1,165 @@
+@@ -0,0 +1,175 @@
 +package co.electriccoin.zcash.ui.common.repository
 +
 +import cash.z.ecc.android.sdk.model.Memo
@@ -45636,6 +45667,16 @@ index 000000000..e21dccaa2
 +    private val repository = ZashiProposalRepositoryImpl(
 +        mockk<AccountDataSource>(), proposals, keys, ProcessSwapTransactionUseCase(metadata, mockk())
 +    )
++
++    @Test
++    fun migrationAdoptionReturnsTheExactReviewIdentityPublishedForAuthentication() {
++        val sdkProposal = mockk<Proposal>()
++        val adopted = repository.setMigrationSweepProposal(sdkProposal, Zatoshi(1234))
++
++        assertSame(adopted, repository.transactionProposal.value)
++        assertSame(sdkProposal, adopted.proposal)
++        assertEquals(Zatoshi(1234), adopted.amount)
++    }
 +
 +    @Test
 +    fun quoteExpiringDuringSpendingKeyAcquisitionCannotBroadcast() = runBlocking {
