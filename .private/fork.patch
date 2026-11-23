@@ -63131,7 +63131,7 @@ index 1d445dd11..1c3a07e3d 100644
 +                    walletServerSelectionProvider = mockk(),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
 new file mode 100644
-index 000000000..d69d25f03
+index 000000000..5b389b2f1
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
 @@ -0,0 +1,524 @@
@@ -63318,7 +63318,7 @@ index 000000000..d69d25f03
 +            if (fromScan) {
 +                scan(parse(fixture.TEXT.encodeToByteArray()), ScanArgs(ScanFlow.SEND))
 +            } else {
-+                coEvery { synchronizer.proposeSend(account.sdkAccount, any()) } returns sdkProposal
++                coEvery { synchronizer.proposeTransfer(account.sdkAccount, any(), any(), any()) } returns sdkProposal
 +                repository.createProposal(
 +                    ZecSend(WalletAddress.Unified.new(fixture.RECIPIENT), Zatoshi(100_000), Memo(""), null)
 +                )

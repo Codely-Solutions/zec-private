@@ -2937,7 +2937,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateSwapABContactAddressUseCaseTest.kt": "0c5d2da9e557ec38c397f82362f269b0e9016ab98d0768b8ff4de277f6a5149c",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ViewOnlySpendGuardTest.kt": "b97809b76fd28456896d6dc7a930c607b55b61dbc0701631c9a50ba27f81b8d8",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/WalletBackupMessageUseCaseImplTest.kt": "f25ba1ab7f39055739cc7f6600335e5a07bce690ce5637c5dfb8a6cc08f8f151",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt": "501ea82ec18dbc7a0fc8a131d6f524bd0c9e56a251869bc1bd187a2045725bbc",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt": "73221a74d9bcf1dfa8249005524f7606103af07bfd72ad26259beec43d805f82",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321PaymentCountTest.kt": "678cae9529b45009d5ce3d8c98e624bc78d59963123671597ae4ab46138e1a96",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/viewmodel/AuthenticationViewModelTest.kt": "2c87fa34a0e96cf3607567a7228074daffcc8dba07a2ab962f2d4ad12d2203e4",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/viewmodel/WalletViewModelTest.kt": "657c8f4de45784dc34cf49919c5a397eca5d2a48f9fdfe0febf6a40515bbe5af",

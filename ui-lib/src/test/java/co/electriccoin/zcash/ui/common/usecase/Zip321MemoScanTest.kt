@@ -181,7 +181,7 @@ class Zip321MemoScanTest {
             if (fromScan) {
                 scan(parse(fixture.TEXT.encodeToByteArray()), ScanArgs(ScanFlow.SEND))
             } else {
-                coEvery { synchronizer.proposeSend(account.sdkAccount, any()) } returns sdkProposal
+                coEvery { synchronizer.proposeTransfer(account.sdkAccount, any(), any(), any()) } returns sdkProposal
                 repository.createProposal(
                     ZecSend(WalletAddress.Unified.new(fixture.RECIPIENT), Zatoshi(100_000), Memo(""), null)
                 )
