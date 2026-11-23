@@ -61,7 +61,7 @@ Production Detekt retains its rules and existing baseline. Its release-only init
 
 | Area | Automatic regression and behavior |
 |---|---|
-| Quote cancellation | `SwapRequestCancellationTest`, request/navigation and Pay/Swap tests: both directions, cancelled success/failure, continued handoff, replacement and delayed dismissal ownership with virtual time. |
+| Quote cancellation | `SwapRequestCancellationTest`, real-repository `*ProposalPreparationCancellationTest`, request/navigation and Pay/Swap tests: both directions, cancelled success/failure, continued handoff, replacement and delayed dismissal with virtual time. A late external proposal/PCZT result cannot replace or clear newer software, Keystone or Ledger preparation. |
 | Manual birthday | `RestoreHeightBoundaryReviewTest`: exact parser and real Restore/Resync/shared enrollment actions; fractions, wraparound, negative/range bounds and retained callbacks. |
 | Note persistence | `NotePersistenceBoundaryTest`, editor and mutation tests: retained draft after false/throw/uncertain rename, retry, deletion, account change, reset and reopened durable state; existing metadata file tests retain encrypted restart coverage. |
 | FLEX_INPUT | `NearSwapQuoteTest` and quote validation: real decoded atomic amounts, both minima, integer floor and historical status compatibility. |

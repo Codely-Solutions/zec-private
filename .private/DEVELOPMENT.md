@@ -60,6 +60,10 @@ Run `SwapRequestCancellationTest` through the real Pay/Swap mapper, VM, reposito
 external proposal preparation and advancing dismissal with virtual time. Include fresh-address and replaced-request ownership;
 sheet visibility alone cannot authorize terminal callbacks. Select `RestoreHeightBoundaryReviewTest` for the production
 number parser and all three birthday consumers, including retained callbacks and the SDK range boundaries.
+Select `*ProposalPreparationCancellationTest` in both UI and Ledger release JVM tasks for the real software/Keystone/Ledger
+repository guards. The external preparation port deliberately completes independently of cancellation: late success or
+failure must preserve the replacement proposal, and late hardware PCZT creation must preserve the newer preparation
+even when its transaction identity is unchanged. Keep the composed VM handoff tests alongside these lower-boundary cases.
 
 For note persistence, keep `NotePersistenceBoundaryTest`, `TransactionNoteViewModelTest` and
 `TransactionMetadataEditUseCaseTest` together. False acknowledgement preserves the draft and mutation actions even when
