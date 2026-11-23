@@ -2,7 +2,6 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import androidx.compose.ui.graphics.Color
 import cash.z.ecc.android.sdk.model.Account
-import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -39,9 +38,9 @@ import kotlin.time.Duration.Companion.seconds
  * second time nor reports the account the first call just created as already imported. Registered
  * as a single, so every caller shares the one lock.
  *
- * Once the import starts it runs to the restarted synchronizer even if the caller is cancelled, so
- * an account is never left imported but unselected; only the navigation is skipped then. A colour
- * picked for the account is stored in its metadata on the way, best-effort.
+ * Once admitted, the import and its finalization run across caller cancellation. If selection
+ * fails, the pending import retains the created account so retry can finish selecting it. A
+ * cancelled caller skips navigation.
  */
 internal class ImportViewOnlyAccountUseCase(
     private val pendingImportRepository: ViewOnlyPendingImportRepository,
@@ -65,35 +64,41 @@ internal class ImportViewOnlyAccountUseCase(
     }
 
     private suspend fun import(pending: PendingViewOnlyImport) {
-        val route = withContext(NonCancellable) { importAndSelect(pending, pending.birthday) }
+        val route = withContext(NonCancellable) { importAndSelect(pending) }
         currentCoroutineContext().ensureActive()
-        navigationRouter.forward(route)
+        route?.let { navigationRouter.forward(it) }
     }
 
     /**
      * Imports and selects the account, forgets the key and restarts the synchronizer, and returns
      * where the flow goes next.
      */
-    private suspend fun importAndSelect(
-        pending: PendingViewOnlyImport,
-        birthday: BlockHeight?,
-    ): Any {
-        val created =
+    private suspend fun importAndSelect(pending: PendingViewOnlyImport): Any? {
+        val approved = if (pending.importedAccount == null) {
             try {
-                accountDataSource.importViewOnlyAccount(
+                val created = accountDataSource.importViewOnlyAccount(
                     ufvk = pending.ufvk,
                     name = pending.name,
-                    birthday = birthday,
+                    birthday = pending.birthday,
                 )
+                pending.copy(importedAccount = created).also {
+                    if (!pendingImportRepository.replace(pending, it)) {
+                        synchronizerProvider.resetSynchronizer()
+                        return null
+                    }
+                }
             } catch (_: ViewOnlyAccountAlreadyExistsException) {
-                pendingImportRepository.clear()
-                return AlreadyImportedVKArgs
+                return AlreadyImportedVKArgs.takeIf { pendingImportRepository.replace(pending, null) }
             }
+        } else {
+            pending
+        }
+        val created = checkNotNull(approved.importedAccount)
         accountDataSource.selectAccount(created)
-        pending.color?.let { storeColor(created, it) }
-        pendingImportRepository.clear()
+        approved.color?.let { storeColor(created, it) }
         synchronizerProvider.resetSynchronizer()
-        return if (birthday != null) KeepOpenArgs(KeepOpenFlow.VIEW_ONLY) else ImportedVKArgs
+        if (!pendingImportRepository.replace(approved, null)) return null
+        return if (approved.birthday != null) KeepOpenArgs(KeepOpenFlow.VIEW_ONLY) else ImportedVKArgs
     }
 
     /**

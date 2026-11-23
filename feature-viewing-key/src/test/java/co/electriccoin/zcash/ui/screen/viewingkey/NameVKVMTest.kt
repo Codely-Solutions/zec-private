@@ -1,14 +1,20 @@
 package co.electriccoin.zcash.ui.screen.viewingkey
 
+import android.content.SharedPreferences
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.isSpecified
 import cash.z.ecc.android.sdk.model.BlockHeight
+import co.electriccoin.zcash.preference.AndroidPreferenceProvider
+import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AccountNameLimit
 import co.electriccoin.zcash.ui.common.model.LceError
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccountImportException
 import co.electriccoin.zcash.ui.common.model.ViewOnlyPendingImportMissingException
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
+import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.PendingViewOnlyImport
 import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
@@ -19,10 +25,14 @@ import co.electriccoin.zcash.ui.design.R
 import co.electriccoin.zcash.ui.design.util.ImageResource
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerArgs
+import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
+import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
+import co.electriccoin.zcash.ui.screen.viewingkey.alreadyimported.AlreadyImportedVKArgs
 import co.electriccoin.zcash.ui.screen.viewingkey.name.NameVKState
 import co.electriccoin.zcash.ui.screen.viewingkey.name.NameVKVM
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.coVerifyOrder
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -38,6 +48,7 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import java.util.Base64
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -466,6 +477,62 @@ class NameVKVMTest {
         }
 
     @Test
+    fun sameNameContinuesAfterTheImportedAccountAppearsAndItsSelectionCommitFailed() = runTest {
+        val previous = ViewOnlyAccountFixtures.zodlUuid
+        val previousEncoding = Base64.getEncoder().encodeToString(previous.value)
+        val storage = SelectionStorage(previousEncoding)
+        val preferences = AndroidPreferenceProvider(storage.preferences, StandardTestDispatcher(testScheduler))
+        val selected = SelectedAccountUUIDProviderImpl(mockk<EncryptedPreferenceProvider> {
+            coEvery { this@mockk.invoke() } returns preferences
+        })
+        val visible = ViewOnlyAccountFixtures.viewOnly(customName = "Vault")
+        val created = visible.sdkAccount
+        val accountDataSource = mockk<AccountDataSource> {
+            every { allAccounts } returns accounts
+            coEvery { importViewOnlyAccount(UFVK, "Vault", BIRTHDAY) } coAnswers {
+                accounts.value = listOf(ViewOnlyAccountFixtures.zodl(), visible)
+                created
+            }
+            coEvery { selectAccount(created) } coAnswers { selected.setUUID(created.accountUuid) }
+        }
+        val synchronizer = mockk<SynchronizerProvider>(relaxed = true)
+        val importer = ImportViewOnlyAccountUseCase(
+            repository, accountDataSource, synchronizer, navigationRouter, mockk(relaxed = true)
+        )
+        val vm = vm(importer)
+        collect(vm)
+        type(vm, "Vault")
+
+        vm.content().continueButton.onClick()
+        runCurrent()
+
+        assertIs<LceError.BottomSheet>(vm.state.value.error)
+        assertEquals(previous, selected.getUUID())
+        assertEquals(previousEncoding, storage.durable)
+        assertEquals(created, repository.get()?.importedAccount)
+        assertTrue(vm.content().continueButton.isEnabled)
+        assertFalse(vm.content().nameField.field.isEnabled)
+        verify(exactly = 0) { synchronizer.resetSynchronizer() }
+        verify(exactly = 0) { navigationRouter.forward(*anyVararg()) }
+
+        vm.content().continueButton.onClick()
+        runCurrent()
+
+        assertEquals(created.accountUuid, selected.getUUID())
+        assertEquals(Base64.getEncoder().encodeToString(created.accountUuid.value), storage.durable)
+        assertNull(repository.get())
+        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(any(), any(), any()) }
+        coVerify(exactly = 2) { accountDataSource.selectAccount(created) }
+        verify(exactly = 1) { synchronizer.resetSynchronizer() }
+        verify(exactly = 0) { navigationRouter.forward(AlreadyImportedVKArgs) }
+        coVerifyOrder {
+            accountDataSource.selectAccount(created)
+            synchronizer.resetSynchronizer()
+            navigationRouter.forward(KeepOpenArgs(KeepOpenFlow.VIEW_ONLY))
+        }
+    }
+
+    @Test
     fun backWhileImportingAndEditsWhileImportingAreIgnored() =
         runTest {
             val importing = CompletableDeferred<Unit>()
@@ -695,13 +762,13 @@ class NameVKVMTest {
         runCurrent()
     }
 
-    private fun vm() =
+    private fun vm(importer: ImportViewOnlyAccountUseCase = importViewOnlyAccount) =
         NameVKVM(
             pendingImportRepository = repository,
             navigationRouter = navigationRouter,
             navigateToColorPicker = navigateToColorPicker,
             isAccountNameTaken = isAccountNameTaken,
-            importViewOnlyAccount = importViewOnlyAccount,
+            importViewOnlyAccount = importer,
             errorStateMapper = errorStateMapper,
         )
 
@@ -713,6 +780,38 @@ class NameVKVMTest {
     private fun StringResource.text() = (this as StringResource.ByString).value
 
     private fun StringResource.args() = (this as StringResource.ByResource).args.toList()
+
+    private class SelectionStorage(initial: String) {
+        var durable: String? = initial
+            private set
+        private var cached: String? = initial
+        private var staged: String? = initial
+        private var failed = false
+
+        val preferences = mockk<SharedPreferences> {
+            every { getString("selected_account_uuid", null) } answers { cached }
+        }
+
+        init {
+            val editor = mockk<SharedPreferences.Editor> {
+                every { putString("selected_account_uuid", any()) } answers {
+                    staged = secondArg()
+                    this@mockk
+                }
+                every { commit() } answers {
+                    cached = staged
+                    if (failed) {
+                        durable = staged
+                        true
+                    } else {
+                        failed = true
+                        false
+                    }
+                }
+            }
+            every { preferences.edit() } returns editor
+        }
+    }
 
     private companion object {
         const val UFVK = "uview1namefixture"

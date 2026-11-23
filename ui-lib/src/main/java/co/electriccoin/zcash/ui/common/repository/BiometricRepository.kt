@@ -10,15 +10,18 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.getString
-import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 interface BiometricRepository {
     val allowedAuthenticators: Int
@@ -31,7 +34,6 @@ interface BiometricRepository {
 
 data class BiometricRequest(
     val message: StringResource,
-    val requestCode: String = UUID.randomUUID().toString(),
 )
 
 sealed interface BiometricResult {
@@ -59,9 +61,7 @@ class BiometricRepositoryImpl(
     private val biometricManager: BiometricManager,
     private val appAccessSession: AppAccessSession
 ) : BiometricRepository {
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-
-    private val onBiometricsResult = MutableSharedFlow<BiometricResult>()
+    private val pending = ConcurrentHashMap<String, CompletableDeferred<BiometricResult>>()
 
     override val allowedAuthenticators: Int
         get() =
@@ -90,9 +90,7 @@ class BiometricRepositoryImpl(
             }
 
     override fun onBiometricResult(result: BiometricResult) {
-        scope.launch {
-            onBiometricsResult.emit(result)
-        }
+        pending[result.requestCode]?.complete(result)
     }
 
     override suspend fun requestBiometrics(request: BiometricRequest) {
@@ -110,16 +108,7 @@ class BiometricRepositoryImpl(
             throw BiometricsFailureException()
         }
 
-        context.startActivity(
-            BiometricActivity.createIntent(
-                context = context,
-                requestCode = request.requestCode,
-                subtitle = request.message.getString(context)
-            )
-        )
-        when (
-            onBiometricsResult.filter { it.requestCode == request.requestCode }.first()
-        ) {
+        when (awaitResult(request, grant)) {
             is BiometricResult.Cancelled -> {
                 throw BiometricsCancelledException()
             }
@@ -133,6 +122,33 @@ class BiometricRepositoryImpl(
             }
         }
     }
+
+    private suspend fun awaitResult(request: BiometricRequest, grant: AppAccessSession.Grant): BiometricResult =
+        coroutineScope {
+            // Each launch owns a fresh callback ID, including a retry of the same request.
+            val callbackId = UUID.randomUUID().toString()
+            val result = CompletableDeferred<BiometricResult>()
+            pending[callbackId] = result
+            val revoked = async(start = CoroutineStart.UNDISPATCHED) { appAccessSession.grant.first { it !== grant } }
+            try {
+                currentCoroutineContext().ensureActive()
+                if (!appAccessSession.permits(grant)) throw BiometricsCancelledException()
+                context.startActivity(
+                    BiometricActivity.createIntent(
+                        context = context,
+                        requestCode = callbackId,
+                        subtitle = request.message.getString(context)
+                    )
+                )
+                select {
+                    revoked.onAwait { BiometricResult.Cancelled(callbackId) }
+                    result.onAwait { it }
+                }
+            } finally {
+                pending.remove(callbackId)
+                revoked.cancel()
+            }
+        }
 }
 
 /**

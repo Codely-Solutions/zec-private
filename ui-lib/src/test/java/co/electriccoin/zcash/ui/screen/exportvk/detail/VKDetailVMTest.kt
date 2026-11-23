@@ -241,7 +241,7 @@ class VKDetailVMTest {
                     qrData = KEY,
                     shareText = stringRes(KEY),
                     sharePickerText = stringRes(R.string.exportViewingKey_share_picker_title),
-                    filenamePrefix = "zodl_viewing_key_qr_",
+                    filenamePrefix = match { it.startsWith("zodl_viewing_key_qr_") },
                     centerIcon = null,
                     isAllowed = any()
                 )
@@ -264,7 +264,7 @@ class VKDetailVMTest {
                     qrData = KEY,
                     shareText = stringRes(KEY),
                     sharePickerText = stringRes(R.string.exportViewingKey_share_picker_title),
-                    filenamePrefix = "zodl_viewing_key_qr_",
+                    filenamePrefix = match { it.startsWith("zodl_viewing_key_qr_") },
                     centerIcon = null,
                     isAllowed = any()
                 )
@@ -334,13 +334,19 @@ class VKDetailVMTest {
     fun leavingTheScreenDeletesTheViewingKeyQrPng() =
         runTest(dispatcher) {
             val deleteSharedQRImages = mockk<DeleteSharedQRImagesUseCase>(relaxed = true)
-            val vm = startedVm(deleteSharedQRImages = deleteSharedQRImages)
+            val share = mockk<ShareQRUseCase>(relaxed = true)
+            val vm = startedVm(shareQR = share, deleteSharedQRImages = deleteSharedQRImages)
             val store = ViewModelStore()
             ViewModelProvider.create(store, viewModelFactory { initializer { vm } })[VKDetailVM::class]
+            reveal(vm)
+            requireNotNull(vm.state.value).secondaryButton.onClick()
+            advanceUntilIdle()
+            val prefix = io.mockk.slot<String>()
+            coVerify(exactly = 1) { share(any(), any(), any(), capture(prefix), any(), any()) }
 
             store.clear()
 
-            verify(exactly = 1) { deleteSharedQRImages("zodl_viewing_key_qr_") }
+            verify(exactly = 1) { deleteSharedQRImages(prefix.captured) }
         }
 
     @Test

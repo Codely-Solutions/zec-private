@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.WalletCoordinator
 import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.preference.StandardPreferenceProvider
 import co.electriccoin.zcash.preference.api.PreferenceProvider
+import co.electriccoin.zcash.spackle.getInternalCacheDirSuspend
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.AddressBookDataSourceImpl
 import co.electriccoin.zcash.ui.common.provider.AddressBookKeyStorageProvider
@@ -21,6 +22,9 @@ import co.electriccoin.zcash.ui.common.serialization.ADDRESS_BOOK_ENCRYPTION_KEY
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookEncryptorImpl
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookKey
 import co.electriccoin.zcash.ui.common.serialization.addressbook.AddressBookSerializer
+import co.electriccoin.zcash.ui.common.usecase.CACHE_SUBDIR
+import co.electriccoin.zcash.ui.common.usecase.DeleteSharedQRImagesUseCase
+import co.electriccoin.zcash.ui.common.usecase.VK_QR_FILENAME_PREFIX
 import com.google.crypto.tink.InsecureSecretKeyAccess
 import com.google.crypto.tink.util.SecretBytes
 import io.mockk.coEvery
@@ -185,6 +189,49 @@ class ResetWalletReviewProbesTest {
         SecretBytes.copyFrom(ByteArray(ADDRESS_BOOK_ENCRYPTION_KEY_SIZE) { marker }, InsecureSecretKeyAccess.get())
     )
 
+    @Test
+    fun resetRemovesPriorProcessViewingKeySharesWithEitherRetentionChoice() = runBlocking {
+        val fixture = Fixture()
+        val shareDirectory = fixture.shareCacheDir()
+        val unrelated = shareDirectory.resolve("unrelated.png").apply { writeText("keep") }
+        val otherCacheFile = fixture.cache.resolve("unrelated.txt").apply { writeText("keep") }
+
+        for (keepFiles in listOf(true, false)) {
+            val orphan = shareDirectory.resolve("${VK_QR_FILENAME_PREFIX}synthetic.png").apply {
+                writeText("synthetic export from an interrupted process")
+            }
+
+            fixture.newReset()(keepFiles)
+
+            assertNull(fixture.progressStore().getStage())
+            assertFalse(orphan.exists())
+            assertEquals("keep", unrelated.readText())
+            assertEquals("keep", otherCacheFile.readText())
+        }
+        coVerify(exactly = 1) { fixture.addressBookRepository.delete() }
+        coVerify(exactly = 1) { fixture.metadataRepository.delete() }
+    }
+
+    @Test
+    fun shareCacheDeletionFailureKeepsResetPendingAndRetryPreservesRetentionChoice() = runBlocking {
+        val fixture = Fixture()
+        val blocked = fixture.shareCacheDir().resolve("${VK_QR_FILENAME_PREFIX}blocked.png").apply { mkdir() }
+        val blocker = blocked.resolve("child").apply { writeText("synthetic deletion blocker") }
+
+        assertFailsWith<IOException> { fixture.reset(keepFiles = true) }
+        assertEquals(ResetStage.ERASE_SDK, fixture.progressStore().getStage())
+        verify(exactly = 0) { fixture.walletCoordinator.deleteSdkDataFlow() }
+        coVerify(exactly = 0) { fixture.standardPrefs.clearPreferences() }
+
+        assertTrue(blocker.delete())
+        fixture.newReset()(keepFiles = false)
+
+        assertFalse(blocked.exists())
+        assertNull(fixture.progressStore().getStage())
+        coVerify(exactly = 0) { fixture.addressBookRepository.delete() }
+        coVerify(exactly = 0) { fixture.metadataRepository.delete() }
+    }
+
     private fun addressBookSource(storage: AddressBookStorageProviderImpl): AddressBookDataSourceImpl {
         val sync = DirectorySync {}
         val serializer = AddressBookSerializer()
@@ -217,9 +264,11 @@ class ResetWalletReviewProbesTest {
         val addressBookRepository = mockk<AddressBookRepository>(relaxed = true)
         val metadataRepository = mockk<MetadataRepository>(relaxed = true)
         private val files = directory.newFolder("files")
+        val cache = directory.newFolder("cache")
         private val context = mockk<Context> {
             every { noBackupFilesDir } returns directory.root
             every { filesDir } returns files
+            every { cacheDir } returns cache
         }
 
         private val writeAccess = WalletWriteAccess(progressStore())
@@ -227,6 +276,8 @@ class ResetWalletReviewProbesTest {
         fun progressStore() = ResetProgressStore(context, DirectorySync {})
 
         fun addressBookStorage() = AddressBookStorageProviderImpl(context, DirectorySync {})
+
+        suspend fun shareCacheDir() = context.getInternalCacheDirSuspend(CACHE_SUBDIR)
 
         fun contactRepository(
             source: AddressBookDataSourceImpl,
@@ -250,6 +301,7 @@ class ResetWalletReviewProbesTest {
             migrationAppHooks = mockk(relaxed = true),
             giftCardRepository = mockk(relaxed = true),
             progressStore = progressStore(),
+            deleteSharedQRImages = DeleteSharedQRImagesUseCase(context),
             walletWriteAccess = writeAccess,
         )
     }

@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -238,6 +239,42 @@ class ImportViewOnlyAccountUseCaseTest {
             verify(exactly = 1) { navigationRouter.forward(ImportedVKArgs) }
             assertNull(repository.get())
         }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun cancellationDuringAFailedSelectionKeepsTheCreatedAccountAvailableForRetry() = runTest {
+        repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings"))
+        val finishWrite = CompletableDeferred<Unit>()
+        coEvery { accountDataSource.selectAccount(created) } coAnswers {
+            finishWrite.await()
+            throw IOException()
+        }
+
+        val caller = launch {
+            try {
+                useCase()
+            } catch (_: IOException) {
+                // The original screen can leave while its acknowledged write is pending.
+            }
+        }
+        runCurrent()
+        caller.cancel()
+        finishWrite.complete(Unit)
+        caller.join()
+
+        assertEquals(created, repository.get()?.importedAccount)
+        verify(exactly = 0) { navigationRouter.forward(*anyVararg()) }
+        verify(exactly = 0) { synchronizerProvider.resetSynchronizer() }
+
+        coEvery { accountDataSource.selectAccount(created) } returns Unit
+        useCase()
+
+        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(any(), any(), any()) }
+        coVerify(exactly = 2) { accountDataSource.selectAccount(created) }
+        verify(exactly = 1) { synchronizerProvider.resetSynchronizer() }
+        verify(exactly = 1) { navigationRouter.forward(ImportedVKArgs) }
+        assertNull(repository.get())
+    }
 
     @Test
     fun nothingPendingFailsWithoutTouchingTheWallet() =

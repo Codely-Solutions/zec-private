@@ -445,6 +445,7 @@ class ResetWalletWriteOwnershipTest {
             migrationAppHooks = mockk(relaxed = true),
             giftCardRepository = giftRepository,
             progressStore = progress,
+            deleteSharedQRImages = mockk(relaxed = true),
             walletWriteAccess = writeAccess,
         )
     }

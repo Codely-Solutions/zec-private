@@ -71,7 +71,7 @@ val featureLedgerModule =
         singleOf(::LedgerSelectedDeviceRepositoryImpl) bind LedgerSelectedDeviceRepository::class
         singleOf(::LedgerRepairTargetRepositoryImpl) bind LedgerRepairTargetRepository::class
 
-        factoryOf(::CreateLedgerAccountUseCase)
+        singleOf(::CreateLedgerAccountUseCase)
         factoryOf(::ObserveLedgerDevicesUseCase)
         factoryOf(::PairLedgerDeviceUseCase)
         factoryOf(::ConnectLedgerDeviceUseCase)

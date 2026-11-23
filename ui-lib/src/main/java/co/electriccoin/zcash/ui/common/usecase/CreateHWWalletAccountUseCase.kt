@@ -12,6 +12,11 @@ import co.electriccoin.zcash.ui.screen.connectkeystone.connected.KeystoneConnect
 import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
 import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * The one place the shared enrollment screens dispatch on vendor: everything else about them —
@@ -55,16 +60,7 @@ class CreateHWWalletAccountUseCase(
     ) {
         when (enrollment) {
             is HWWalletEnrollment.Keystone -> {
-                val accounts = keystoneSession.resolve(enrollment.sessionId)
-                val account = accounts?.accounts?.firstOrNull()
-                if (accounts == null || account == null) {
-                    navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, ScanKeystoneSignInRequest)
-                    return
-                }
-                createKeystoneAccount(accounts, account, birthday)
-                keystoneSession.clear(enrollment.sessionId)
-                val next = if (birthday == null) KeystoneConnectedArgs else KeepOpenArgs(KeepOpenFlow.KEYSTONE)
-                navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, next)
+                importKeystone(enrollment.sessionId, birthday)
             }
 
             is HWWalletEnrollment.Ledger -> {
@@ -82,6 +78,26 @@ class CreateHWWalletAccountUseCase(
                     navigationRouter.backToRoot()
                 }
             }
+        }
+    }
+
+    private suspend fun importKeystone(sessionId: String, birthday: BlockHeight?) {
+        val pending = keystoneSession.enrollment(sessionId)
+        val account = pending?.accounts?.accounts?.firstOrNull()
+        if (pending == null || account == null) {
+            navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, ScanKeystoneSignInRequest)
+            return
+        }
+        keystoneSession.importMutex.withLock {
+            if (keystoneSession.enrollment(sessionId) !== pending) return
+            val approvedBirthday = withContext(NonCancellable) {
+                createKeystoneAccount(pending, account, birthday)
+            }
+            if (keystoneSession.enrollment(sessionId) !== pending) return
+            keystoneSession.clear(sessionId)
+            currentCoroutineContext().ensureActive()
+            val next = if (approvedBirthday == null) KeystoneConnectedArgs else KeepOpenArgs(KeepOpenFlow.KEYSTONE)
+            navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, next)
         }
     }
 }

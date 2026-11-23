@@ -51,6 +51,7 @@ internal data class NameVKState(
             color: Color?,
             isDuplicate: Boolean,
             isImporting: Boolean,
+            isFinalizing: Boolean = false,
             onAvatarEditClick: () -> Unit,
             onValueChange: (String) -> Unit,
             onContinueClick: () -> Unit,
@@ -71,7 +72,10 @@ internal data class NameVKState(
                         subtitle = stringRes(R.string.view_only_import_subtitle),
                         header =
                             AccountFormHeaderState.createAccountName(
-                                avatar = vkAvatar(color = color, onEditClick = onAvatarEditClick)
+                                avatar = vkAvatar(
+                                    color = color,
+                                    onEditClick = onAvatarEditClick.takeUnless { isFinalizing },
+                                )
                             ),
                     ),
                 nameField =
@@ -81,7 +85,7 @@ internal data class NameVKState(
                         isDuplicate = isDuplicate,
                         onValueChange = onValueChange,
                         submit = continueButton,
-                        isEnabled = !isImporting,
+                        isEnabled = !isImporting && !isFinalizing,
                     ),
                 continueButton = continueButton,
                 onBack = onBack,

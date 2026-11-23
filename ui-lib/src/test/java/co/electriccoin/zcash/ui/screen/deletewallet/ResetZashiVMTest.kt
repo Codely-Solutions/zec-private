@@ -181,6 +181,7 @@ class ResetZashiVMTest {
             migrationAppHooks = mockk(relaxed = true),
             giftCardRepository = mockk(relaxed = true),
             progressStore = progress,
+            deleteSharedQRImages = mockk(relaxed = true),
         )
         vm = ResetZashiVM(navigation, reset, ErrorMapperUseCase(mockk(), mockk()))
     }

@@ -4,8 +4,8 @@ import cash.z.ecc.android.sdk.exception.InitializeException
 import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 import com.keystone.module.ZcashAccount
-import com.keystone.module.ZcashAccounts
 
 class CreateKeystoneAccountUseCase(
     private val accountDataSource: AccountDataSource,
@@ -20,19 +20,22 @@ class CreateKeystoneAccountUseCase(
         InitializeException.ImportAccountException::class,
         InitializeException.ImportAccountCollisionException::class,
     )
-    suspend operator fun invoke(
-        accounts: ZcashAccounts,
+    internal suspend operator fun invoke(
+        pending: KeystoneEnrollmentSession.Pending,
         account: ZcashAccount,
         birthday: BlockHeight? = null,
-    ) {
-        val createdAccount =
-            accountDataSource.importKeystoneAccount(
+    ): BlockHeight? {
+        val imported = pending.imported ?: KeystoneEnrollmentSession.Imported(
+            account = accountDataSource.importKeystoneAccount(
                 ufvk = account.ufvk,
-                seedFingerprint = accounts.seedFingerprint,
+                seedFingerprint = pending.accounts.seedFingerprint,
                 index = account.index.toLong(),
                 birthday = birthday,
-            )
-        accountDataSource.selectAccount(createdAccount)
+            ),
+            birthday = birthday,
+        ).also { pending.imported = it }
+        accountDataSource.selectAccount(imported.account)
         synchronizerProvider.resetSynchronizer()
+        return imported.birthday
     }
 }

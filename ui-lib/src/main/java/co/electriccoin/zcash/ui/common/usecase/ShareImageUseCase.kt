@@ -2,19 +2,25 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
 import android.graphics.Bitmap
+import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.spackle.getInternalCacheDirSuspend
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.util.FileShareUtil
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.nio.file.Files
 
 internal const val CACHE_SUBDIR = "zodl_qr_images"
 
 class ShareImageUseCase(
     private val context: Context,
-    private val versionInfoProvider: GetVersionInfoProvider
+    private val versionInfoProvider: GetVersionInfoProvider,
+    private val walletWriteAccess: WalletWriteAccess,
 ) {
     suspend operator fun invoke(
         shareImageBitmap: Bitmap,
@@ -23,19 +29,26 @@ class ShareImageUseCase(
         filePrefix: String = "",
         fileSuffix: String = "",
         isAllowed: () -> Boolean = { true }
-    ) = shareData(
-        context = context,
-        shareImageBitmap = shareImageBitmap,
-        versionInfo = versionInfoProvider(),
-        filePrefix = filePrefix,
-        fileSuffix = fileSuffix,
-        shareText = shareText,
-        sharePickerText = sharePickerText,
-        isAllowed = isAllowed,
-    )
+    ): Boolean {
+        val share: suspend () -> Boolean = {
+            shareData(
+                shareImageBitmap = shareImageBitmap,
+                versionInfo = versionInfoProvider(),
+                filePrefix = filePrefix,
+                fileSuffix = fileSuffix,
+                shareText = shareText,
+                sharePickerText = sharePickerText,
+                isAllowed = isAllowed,
+            )
+        }
+        return if (filePrefix.startsWith(VK_QR_FILENAME_PREFIX)) {
+            walletWriteAccess.write(walletWriteAccess.token(), share) == true
+        } else {
+            share()
+        }
+    }
 
     private suspend fun shareData(
-        context: Context,
         shareImageBitmap: Bitmap,
         shareText: String?,
         sharePickerText: String,
@@ -43,49 +56,63 @@ class ShareImageUseCase(
         filePrefix: String,
         fileSuffix: String,
         isAllowed: () -> Boolean,
-    ): Boolean =
-        runCatching {
-            val bitmapFile =
-                withContext(Dispatchers.IO) {
+    ): Boolean {
+        var staged: File? = null
+        var launched = false
+        try {
+            return runCatchingRecoverable {
+                val bitmapFile = withContext(Dispatchers.IO) {
+                    require(filePrefix.length >= MIN_TEMP_FILE_PREFIX_LENGTH)
                     val cacheDir = context.getInternalCacheDirSuspend(CACHE_SUBDIR)
-                    if (cacheDir.exists()) cacheDir.listFiles()?.forEach { it.delete() }
-                    File
-                        .createTempFile(
-                            filePrefix,
-                            fileSuffix,
-                            cacheDir,
-                        ).also {
-                            it.storeBitmap(shareImageBitmap)
-                        }
+                    cacheDir.listFiles { file ->
+                        file.name.startsWith(filePrefix) && file.name.endsWith(fileSuffix)
+                    }?.forEach { it.delete() }
+                    File.createTempFile(filePrefix, fileSuffix, cacheDir).also { file ->
+                        staged = file
+                        file.storeBitmap(shareImageBitmap)
+                    }
                 }
 
-            val shareIntent =
-                FileShareUtil.newShareContentIntent(
-                    context = context,
-                    dataFilePath = bitmapFile.absolutePath,
-                    fileType = FileShareUtil.ZASHI_QR_CODE_MIME_TYPE,
-                    shareText = shareText,
-                    sharePickerText = sharePickerText,
-                    versionInfo = versionInfo,
-                )
+                val shareIntent =
+                    FileShareUtil.newShareContentIntent(
+                        context = context,
+                        file = bitmapFile,
+                        fileType = FileShareUtil.ZASHI_QR_CODE_MIME_TYPE,
+                        shareText = shareText,
+                        sharePickerText = sharePickerText,
+                        versionInfo = versionInfo,
+                    )
 
-            withContext(Dispatchers.Main.immediate) {
-                if (isAllowed()) {
-                    context.startActivity(shareIntent)
-                    true
-                } else {
-                    bitmapFile.delete()
-                    false
+                withContext(Dispatchers.Main.immediate) {
+                    if (isAllowed()) {
+                        context.startActivity(shareIntent)
+                        launched = true
+                    }
+                    launched
                 }
-            }
-        }.getOrElse { false }
-
-    private suspend fun File.storeBitmap(bitmap: Bitmap) =
-        withContext(Dispatchers.IO) {
-            outputStream().use { fOut ->
-                @Suppress("MagicNumber")
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, fOut)
-                fOut.flush()
+            }.getOrElse { false }
+        } finally {
+            if (!launched) {
+                staged?.let { file ->
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        runCatchingRecoverable { Files.deleteIfExists(file.toPath()) }
+                            .onFailure { Twig.warn(it) { "Could not remove an unshared QR image" } }
+                    }
+                }
             }
         }
+    }
+
+    private fun File.storeBitmap(bitmap: Bitmap) {
+        outputStream().use { output ->
+            @Suppress("MagicNumber")
+            check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+                "Could not encode the QR image"
+            }
+        }
+    }
+
+    private companion object {
+        const val MIN_TEMP_FILE_PREFIX_LENGTH = 3
+    }
 }

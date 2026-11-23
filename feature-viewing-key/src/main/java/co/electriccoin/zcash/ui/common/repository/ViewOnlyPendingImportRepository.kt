@@ -1,9 +1,11 @@
 package co.electriccoin.zcash.ui.common.repository
 
 import androidx.compose.ui.graphics.Color
+import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.BlockHeight
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Holds the full viewing key, the birthday, the name and the icon colour a view-only import collected
@@ -11,21 +13,39 @@ import kotlinx.coroutines.flow.update
  * log, and process death drops it, after which the flow has to start again.
  */
 internal interface ViewOnlyPendingImportRepository {
+    val pendingImport: StateFlow<PendingViewOnlyImport?>
+
     fun get(): PendingViewOnlyImport?
 
     fun set(pendingImport: PendingViewOnlyImport)
 
     fun clear()
+
+    fun replace(expected: PendingViewOnlyImport, replacement: PendingViewOnlyImport?): Boolean
 }
 
 internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportRepository {
     private val pending = MutableStateFlow<PendingViewOnlyImport?>(null)
+    override val pendingImport = pending.asStateFlow()
 
     override fun get(): PendingViewOnlyImport? = pending.value
 
-    override fun set(pendingImport: PendingViewOnlyImport) = pending.update { pendingImport }
+    @Synchronized
+    override fun set(pendingImport: PendingViewOnlyImport) {
+        pending.value = pendingImport
+    }
 
-    override fun clear() = pending.update { null }
+    @Synchronized
+    override fun clear() {
+        pending.value = null
+    }
+
+    @Synchronized
+    override fun replace(expected: PendingViewOnlyImport, replacement: PendingViewOnlyImport?): Boolean {
+        if (pending.value !== expected) return false
+        pending.value = replacement
+        return true
+    }
 }
 
 /**
@@ -38,6 +58,7 @@ internal data class PendingViewOnlyImport(
     val name: String,
     val color: Color? = null,
     val birthday: BlockHeight? = null,
+    val importedAccount: Account? = null,
 ) {
     /**
      * Overridden so the viewing key is never printed.

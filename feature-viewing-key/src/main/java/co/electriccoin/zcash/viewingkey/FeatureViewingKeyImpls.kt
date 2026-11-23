@@ -101,7 +101,11 @@ internal class ViewOnlyAccountImporterImpl(
 
     override fun continueWithBirthday(birthday: BlockHeight?) {
         val pending = pendingImportRepository.get() ?: throw ViewOnlyPendingImportMissingException()
-        pendingImportRepository.set(pending.copy(birthday = birthday))
+        if (pending.importedAccount == null) {
+            if (!pendingImportRepository.replace(pending, pending.copy(birthday = birthday))) {
+                throw ViewOnlyPendingImportMissingException()
+            }
+        }
         navigationRouter.forward(NameVKArgs)
     }
 }

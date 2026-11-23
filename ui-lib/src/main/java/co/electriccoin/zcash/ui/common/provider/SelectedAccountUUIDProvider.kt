@@ -51,7 +51,7 @@ private class SelectedAccountUUIDPreferenceDefault : PreferenceDefault<AccountUu
     override suspend fun putValue(
         preferenceProvider: PreferenceProvider,
         newValue: AccountUuid?
-    ) = preferenceProvider.putString(key, newValue?.value?.encode())
+    ) = preferenceProvider.putStringWithRollback(key, newValue?.value?.encode())
 
     @OptIn(ExperimentalEncodingApi::class)
     private fun ByteArray.encode() = Base64.encode(this)

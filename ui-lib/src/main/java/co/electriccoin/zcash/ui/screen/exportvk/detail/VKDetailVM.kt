@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.usecase.DeleteSharedQRImagesUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetVKUseCase
 import co.electriccoin.zcash.ui.common.usecase.ShareQRUseCase
+import co.electriccoin.zcash.ui.common.usecase.VK_QR_FILENAME_PREFIX
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.SegmentedControlItem
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 @Suppress("TooManyFunctions")
 internal class VKDetailVM(
@@ -39,6 +41,7 @@ internal class VKDetailVM(
     private val appAccessSession: AppAccessSession,
 ) : ViewModel() {
     private val key = MutableStateFlow<String?>(null)
+    private val shareFilePrefix = "$VK_QR_FILENAME_PREFIX${UUID.randomUUID()}_"
 
     private val reveal = SensitiveReveal(appAccessSession)
 
@@ -188,14 +191,14 @@ internal class VKDetailVM(
                 qrData = key,
                 shareText = stringRes(key),
                 sharePickerText = stringRes(R.string.exportViewingKey_share_picker_title),
-                filenamePrefix = VK_QR_FILENAME_PREFIX,
+                filenamePrefix = shareFilePrefix,
                 centerIcon = null,
                 isAllowed = { reveal.permits(grant) },
             )
         }
 
     override fun onCleared() {
-        deleteSharedQRImages(VK_QR_FILENAME_PREFIX)
+        deleteSharedQRImages(shareFilePrefix)
         super.onCleared()
     }
 
@@ -235,5 +238,3 @@ internal class VKDetailVM(
 private val HIDDEN_KEY_PLACEHOLDER = "*".repeat(HIDDEN_KEY_PLACEHOLDER_LENGTH)
 
 private const val HIDDEN_KEY_PLACEHOLDER_LENGTH = 300
-
-private const val VK_QR_FILENAME_PREFIX = "zodl_viewing_key_qr_"

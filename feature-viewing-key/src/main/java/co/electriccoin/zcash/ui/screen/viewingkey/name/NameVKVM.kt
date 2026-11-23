@@ -58,14 +58,26 @@ internal class NameVKVM(
      * repeat; until the accounts load, the name shows without the error.
      */
     val state: StateFlow<LceState<NameVKState>> =
-        combine(isAccountNameTaken.observe(name), color, importLce.state) { check, color, lce ->
-            createState(check.name, color, isDuplicate = check.isTaken, isImporting = lce.loading)
+        combine(
+            isAccountNameTaken.observe(name), color, importLce.state, pendingImportRepository.pendingImport
+        ) { check, color, lce, pending ->
+            val approved = pending?.takeIf { it.importedAccount != null }
+            createState(
+                approved?.name ?: check.name,
+                if (approved != null) approved.color else color,
+                isDuplicate = approved == null && check.isTaken,
+                isImporting = lce.loading,
+                isFinalizing = approved != null,
+            )
         }.withLce(importLce, errorStateMapper::mapToState)
             .stateIn(
                 viewModel = this,
                 initialValue =
                     LceState(
-                        content = createState(name.value, color.value, isDuplicate = false, isImporting = false)
+                        content = createState(
+                            name.value, color.value, isDuplicate = false, isImporting = false,
+                            isFinalizing = pendingImportRepository.get()?.importedAccount != null,
+                        )
                     )
             )
 
@@ -80,11 +92,13 @@ internal class NameVKVM(
         color: Color?,
         isDuplicate: Boolean,
         isImporting: Boolean,
+        isFinalizing: Boolean,
     ) = NameVKState.create(
         name = name,
         color = color,
         isDuplicate = isDuplicate,
         isImporting = isImporting,
+        isFinalizing = isFinalizing,
         onAvatarEditClick = ::onAvatarEditClick,
         onValueChange = ::onValueChange,
         onContinueClick = ::onContinueClick,
@@ -93,6 +107,7 @@ internal class NameVKVM(
 
     private fun onAvatarEditClick() =
         importLce.guardLoading {
+            if (pendingImportRepository.get()?.importedAccount != null) return@guardLoading
             if (colorPickerJob?.isActive == true) return@guardLoading
             colorPickerJob =
                 viewModelScope.launch {
@@ -102,7 +117,9 @@ internal class NameVKVM(
 
     private fun onValueChange(value: String) =
         importLce.guardLoading {
-            name.update { AccountNameLimit.cap(value) }
+            if (pendingImportRepository.get()?.importedAccount == null) {
+                name.update { AccountNameLimit.cap(value) }
+            }
         }
 
     /**
@@ -116,13 +133,16 @@ internal class NameVKVM(
             if (normalized.isEmpty()) return@guardLoading
             continueJob =
                 viewModelScope.launch {
-                    if (isAccountNameTaken(normalized)) return@launch
                     val pending = pendingImportRepository.get()
                     if (pending?.birthday == null) {
                         navigationRouter.backToRoot()
                         return@launch
                     }
-                    pendingImportRepository.set(pending.copy(name = normalized, color = color.value))
+                    if (pending.importedAccount == null) {
+                        if (isAccountNameTaken(normalized)) return@launch
+                        val approved = pending.copy(name = normalized, color = color.value)
+                        if (!pendingImportRepository.replace(pending, approved)) return@launch
+                    }
                     importLce.execute {
                         try {
                             importViewOnlyAccount()

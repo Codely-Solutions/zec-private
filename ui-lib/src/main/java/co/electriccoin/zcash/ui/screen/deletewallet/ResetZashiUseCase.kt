@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
 import co.electriccoin.zcash.ui.common.repository.GiftCardRepository
 import co.electriccoin.zcash.ui.common.repository.HomeMessageCacheRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+import co.electriccoin.zcash.ui.common.usecase.DeleteSharedQRImagesUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,6 +40,7 @@ class ResetZashiUseCase(
     private val migrationAppHooks: MigrationAppHooks,
     private val giftCardRepository: GiftCardRepository,
     private val progressStore: ResetProgressStore,
+    private val deleteSharedQRImages: DeleteSharedQRImagesUseCase,
     private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) {
     private val resetMutex = Mutex()
@@ -85,6 +87,7 @@ class ResetZashiUseCase(
             walletWriteAccess.beginReset()
             if (stage != ResetStage.CLEAR_PREFERENCES) migrationAppHooks.cancelMigrationWork()
             giftCardRepository.quiesceForWalletReset()
+            deleteSharedQRImages.deleteViewingKeyImages()
             if (stage == ResetStage.DELETE_LOCAL_FILES || (stage == null && !keepFiles)) {
                 addressBookRepository.delete()
                 metadataRepository.delete()

@@ -15,6 +15,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.electriccoin.zcash.di.koinActivityViewModel
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.compose.SecureScreen
 import co.electriccoin.zcash.ui.common.viewmodel.WalletViewModel
 import co.electriccoin.zcash.ui.design.component.CircularScreenProgressIndicator
 import co.electriccoin.zcash.ui.screen.scankeystone.view.ScanKeystoneView
@@ -26,6 +27,7 @@ import org.koin.compose.koinInject
 
 @Composable
 internal fun WrapScanKeystoneSignInRequest() {
+    SecureScreen()
     val navigationRouter = koinInject<NavigationRouter>()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
