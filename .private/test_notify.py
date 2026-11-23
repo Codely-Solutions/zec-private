@@ -19,8 +19,10 @@ class NotifyTest(unittest.TestCase):
 
     def gh(self, *args):
         self.commands.append(args)
-        if args[:2] == ('issue', 'list'):
-            return json.dumps([self.issue] if self.issue else [])
+        if args[0] == 'api':
+            return json.dumps([[self.issue] if self.issue else []])
+        if args[:2] == ('issue', 'view'):
+            return json.dumps(dict(self.issue, state='OPEN') if self.issue else {'state': 'CLOSED'})
         if args[:2] in (('issue', 'edit'), ('issue', 'create')):
             body = Path(args[args.index('--body-file')+1]).read_text(encoding='utf-8')
             if self.issue is None:
@@ -30,6 +32,8 @@ class NotifyTest(unittest.TestCase):
         if args[:2] == ('issue', 'close'):
             self.issue = None
             return ''
+        if args[:2] == ('issue', 'comment'):
+            return ''
         raise AssertionError(args)
 
     def post(self, request, **kwargs):
@@ -38,7 +42,9 @@ class NotifyTest(unittest.TestCase):
 
     def run_notice(self, message='Blocked at build', **environment):
         values = dict(GITHUB_REPOSITORY='example/wallet', GITHUB_RUN_ID='20', MAKE_ISSUE='true',
-                      NTFY_URL='https://secret.invalid/topic', RECOVERY_VERIFIED='', BLOCKER_DIAGNOSIS='build=failure')
+                      NTFY_URL='https://secret.invalid/topic', RECOVERY_VERIFIED='', BLOCKER_DIAGNOSIS='build=failure',
+                      GITHUB_RUN_ATTEMPT='1', BLOCKER_OPERATION='release', BLOCKER_CANDIDATE='candidate-a',
+                      BLOCKER_ATTESTATION='')
         values.update(environment)
         with patch_environment(values), patch.object(notify, 'gh', side_effect=self.gh), \
                 patch.object(notify.urllib.request, 'urlopen', side_effect=self.post), patch('builtins.print'):
@@ -92,7 +98,8 @@ class NotifyTest(unittest.TestCase):
             if args[:2] == ('issue', 'edit'):
                 raise RuntimeError('synthetic GitHub failure')
             return self.gh(*args)
-        with patch_environment(dict(GITHUB_REPOSITORY='example/wallet', GITHUB_RUN_ID='20', MAKE_ISSUE='true')), \
+        with patch_environment(dict(GITHUB_REPOSITORY='example/wallet', GITHUB_RUN_ID='20', MAKE_ISSUE='true',
+                                    BLOCKER_OPERATION='release', BLOCKER_CANDIDATE='candidate-a')), \
                 patch.object(notify, 'gh', side_effect=failing), patch.object(notify.urllib.request, 'urlopen') as post:
             with self.assertRaises(RuntimeError):
                 notify.main('Blocked')
@@ -115,10 +122,66 @@ class NotifyTest(unittest.TestCase):
         self.assertEqual(len(self.messages), 4)
 
     def test_older_recovery_preserves_later_failure(self):
-        self.run_notice(GITHUB_RUN_ID='30')
-        self.run_notice('Verified earlier publication', MAKE_ISSUE='', RECOVERY_VERIFIED='true', GITHUB_RUN_ID='29')
+        self.run_notice(GITHUB_RUN_ID='30', GITHUB_RUN_ATTEMPT='2')
+        for run, attempt in (('29', '3'), ('30', '1')):
+            self.run_notice('Verified earlier publication', MAKE_ISSUE='', RECOVERY_VERIFIED='true',
+                            GITHUB_RUN_ID=run, GITHUB_RUN_ATTEMPT=attempt)
         self.assertIsNotNone(self.issue)
-        self.assertIn('/actions/runs/30', self.issue['body'])
+        self.assertIn('/actions/runs/30/attempts/2', self.issue['body'])
+
+    def test_late_failure_cannot_replace_a_newer_run_or_attempt(self):
+        self.run_notice('Verification failed', GITHUB_RUN_ID='31', GITHUB_RUN_ATTEMPT='2')
+        for run, attempt in (('30', '7'), ('31', '1')):
+            self.run_notice('Late preflight failure', GITHUB_RUN_ID=run, GITHUB_RUN_ATTEMPT=attempt,
+                            BLOCKER_DIAGNOSIS='preflight=failure')
+        self.assertIn('Verification failed', self.issue['body'])
+        self.assertIn('/actions/runs/31/attempts/2', self.issue['body'])
+        self.assertEqual(len(self.messages), 1)
+
+    def test_inflight_acknowledgement_preserves_newer_blocker(self):
+        original_post = self.post
+
+        def interleaved_post(request, **kwargs):
+            if b'/actions/runs/40/' in request.data:
+                self.run_notice('Later core failure', GITHUB_RUN_ID='41', NTFY_URL='',
+                                BLOCKER_DIAGNOSIS='core=failure')
+            return original_post(request, **kwargs)
+
+        with patch.object(self, 'post', side_effect=interleaved_post):
+            self.run_notice(GITHUB_RUN_ID='40')
+        self.assertIn('Later core failure', self.issue['body'])
+        self.assertIn('/actions/runs/41/', self.issue['body'])
+        self.assertEqual(notify.current_state(self.issue['body'])['delivery'], 'pending')
+
+    def test_inflight_acknowledgement_preserves_operator_edit(self):
+        original_post = self.post
+
+        def interleaved_post(request, **kwargs):
+            self.issue['body'] += '\n\nNew operator notes.'
+            return original_post(request, **kwargs)
+
+        with patch.object(self, 'post', side_effect=interleaved_post):
+            self.run_notice()
+        self.assertIn('New operator notes.', self.issue['body'])
+        self.assertEqual(notify.current_state(self.issue['body'])['delivery'], 'accepted')
+
+    def test_later_unrelated_publication_preserves_blocker(self):
+        for scope in (dict(BLOCKER_CANDIDATE='candidate-b'), dict(BLOCKER_OPERATION='discovery')):
+            self.run_notice(**scope)
+            self.run_notice('Unrelated publication verified', MAKE_ISSUE='', RECOVERY_VERIFIED='true',
+                            GITHUB_RUN_ID='21')
+            self.assertIsNotNone(self.issue)
+
+    def test_verified_original_attestation_retires_its_publication_blocker(self):
+        self.run_notice('Recording failed', BLOCKER_ATTESTATION='123')
+        self.run_notice('Different output verified', MAKE_ISSUE='', RECOVERY_VERIFIED='true', GITHUB_RUN_ID='21',
+                        BLOCKER_OPERATION='reconciliation', BLOCKER_CANDIDATE='publisher:20:1:999',
+                        BLOCKER_ATTESTATION='999')
+        self.assertIsNotNone(self.issue)
+        self.run_notice('Original output verified', MAKE_ISSUE='', RECOVERY_VERIFIED='true', GITHUB_RUN_ID='22',
+                        BLOCKER_OPERATION='reconciliation', BLOCKER_CANDIDATE='publisher:20:1:123',
+                        BLOCKER_ATTESTATION='123')
+        self.assertIsNone(self.issue)
 
     def test_malformed_saved_state_is_treated_as_undelivered(self):
         for state in ('null', '[]', 'invalid'):

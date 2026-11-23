@@ -69,6 +69,9 @@ jobs:
   blocked:
     if: ${{ always() && !cancelled() && github.ref == 'refs/heads/main' && (needs.maintenance.result == 'failure' || needs.maintenance.result == 'cancelled' || needs.prepare.result == 'failure' || needs.prepare.result == 'cancelled') }}
     needs: [maintenance, prepare]
+    concurrency:
+      group: zec-private-blocker
+      queue: max
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -81,6 +84,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NTFY_URL: ${{ secrets.NTFY_URL }}
           MAKE_ISSUE: 'true'
+          BLOCKER_OPERATION: discovery
+          BLOCKER_CANDIDATE: ${{ github.sha }}
           MAINTENANCE: ${{ needs.maintenance.result }}
           BLOCKER_DIAGNOSIS: watcher=${{ needs.maintenance.result }}; preparation=${{ needs.prepare.result }}
         run: |

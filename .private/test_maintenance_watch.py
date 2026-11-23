@@ -11,11 +11,18 @@ from maintenance_watch import (WRAPPER_PROPERTIES, classify_paths, main, pending
                                verified_wrapper, wrapper_patch)
 
 
+def workflow_text(workflow):
+    return (Path(__file__).resolve().parents[1]/'.github/workflows'/workflow).read_text(encoding='utf-8')
+
+
+def workflow_blocks(workflow):
+    header, jobs = workflow_text(workflow).split('\njobs:\n', maxsplit=1)
+    return header+'\n', dict(re.findall(r'^  ([a-z_-]+):\n(.*?)(?=^  [a-z_-]+:|\Z)', jobs, re.M | re.S))
+
+
 def workflow_job(workflow, name):
     """Read the maintained block-style job; refuse missing or duplicate fields."""
-    text = (Path(__file__).resolve().parents[1]/'.github/workflows'/workflow).read_text()
-    jobs = dict(re.findall(r'^  ([a-z_]+):\n(.*?)(?=^  [a-z_]+:|\Z)', text, re.M | re.S))
-    block = jobs[name]
+    block = workflow_blocks(workflow)[1][name]
     fields = {}
     for key in ('if', 'needs'):
         values = re.findall(r'^    '+key+r': (.+)$', block, re.M)
@@ -25,6 +32,17 @@ def workflow_job(workflow, name):
     fields['needs'] = [item.strip() for item in fields['needs'].strip('[]').split(',')]
     fields['block'] = block
     return fields
+
+
+def evaluate_expression(expression, values):
+    expression = expression.removeprefix('${{').removesuffix('}}').strip()
+    expression = expression.replace('always()', 'True').replace('cancelled()', repr(values.get('workflow_cancelled', False)))
+    expression = expression.replace('needs.*.result', repr(values.get('needs.*.result', [])))
+    expression = re.sub(r'\b(?:github|inputs|needs|vars)(?:\.[a-z_A-Z0-9]+)+\b',
+                        lambda match: repr(values.get(match[0], 'skipped')), expression)
+    expression = expression.replace('&&', ' and ').replace('||', ' or ')
+    expression = re.sub(r'!(?!=)', ' not ', expression)
+    return eval(expression.strip(), {'__builtins__': {}, 'contains': lambda items, value: value in items}, {})
 
 
 def job_activates(job, results, **overrides):
@@ -41,33 +59,82 @@ def job_activates(job, results, **overrides):
               'needs.admit_hosted.outputs.core_receipt_id': '74',
               'needs.preflight.outputs.signing_changed': 'false'}
     values.update({f'needs.{name}.result': result for name, result in results.items()})
+    values['needs.*.result'] = [results.get(name, 'skipped') for name in job['needs']]
     values.update(overrides)
-    expression = job['if'].removeprefix('${{').removesuffix('}}').strip()
-    expression = expression.replace('always()', 'True').replace('cancelled()', repr(values.get('workflow_cancelled', False)))
-    expression = re.sub(r'\b(?:github|inputs|needs|vars)(?:\.[a-z_A-Z0-9]+)+\b',
-                        lambda match: repr(values.get(match[0], 'skipped')), expression)
-    expression = expression.replace('&&', ' and ').replace('||', ' or ')
-    expression = re.sub(r'!(?!=)', ' not ', expression)
-    return bool(eval(expression.strip(), {'__builtins__': {}}, {}))
+    return bool(evaluate_expression(job['if'], values))
+
+
+def concurrency_settings(block, indent=0):
+    match = re.search(r'^ {'+str(indent)+r'}concurrency:\n((?:^ {'+str(indent + 2)+r'}[^ ].*\n)+)', block, re.M)
+    return dict(line.strip().split(': ', 1) for line in match[1].splitlines()) if match else {}
 
 
 class MaintenanceWatchTest(unittest.TestCase):
-    def test_each_release_prerequisite_failure_notifies_with_skipped_downstream_jobs(self):
+    def test_each_release_prerequisite_failure_and_independent_cancellation_notifies(self):
         failed = workflow_job('build-release.yml', 'failed')
         self.assertIn('reserve_quote_retry', failed['needs'])
-        for name in failed['needs']:
-            with self.subTest(failed=name):
-                self.assertTrue(job_activates(failed, {name: 'failure'}))
-                self.assertFalse(job_activates(failed, {name: 'failure'},
-                                              **{'github.ref': 'refs/heads/review/test'}))
-                self.assertFalse(job_activates(failed, {name: 'failure'},
-                                              **{'inputs.preflight_only': True}))
+        for state in ('failure', 'cancelled'):
+            for name in failed['needs']:
+                with self.subTest(job=name, result=state):
+                    results = {name: state}
+                    self.assertTrue(job_activates(failed, results))
+                    self.assertFalse(job_activates(failed, results, workflow_cancelled=True))
+                    self.assertFalse(job_activates(failed, results, **{'github.ref': 'refs/heads/review/test'}))
+                    self.assertFalse(job_activates(failed, results, **{'inputs.preflight_only': True}))
         for state in ('success', 'skipped'):
             self.assertFalse(job_activates(failed, dict.fromkeys(failed['needs'], state)))
-        self.assertTrue(job_activates(failed, {'emulator': 'cancelled'}))
         block = failed['block']
         self.assertIn('QUOTE_RESERVATION: ${{ needs.reserve_quote_retry.result }}', block)
         self.assertIn('The protected one-use retry reservation failed', block)
+
+    def test_cancellation_after_publication_keeps_recovery_evidence_and_blocks_success_notice(self):
+        workflow = 'build-release.yml'
+        failed = workflow_job(workflow, 'failed')
+        for stage in ('verify_publication', 'record_integration'):
+            results = {'publish': 'success', stage: 'cancelled'}
+            self.assertTrue(job_activates(failed, results))
+            self.assertFalse(job_activates(workflow_job(workflow, 'notify'), results))
+        self.assertIn('"$PUBLIC_VERIFICATION" == cancelled', failed['block'])
+        self.assertIn('"$INTEGRATION" == cancelled', failed['block'])
+        self.assertIn('needs.publish.outputs.attestation_id || needs.reconcile.outputs.attestation_id', failed['block'])
+
+    def test_diagnostic_runs_cannot_displace_pending_production_runs(self):
+        release = concurrency_settings(workflow_blocks('build-release.yml')[0])
+        self.assertEqual(release['queue'], 'max')
+        self.assertNotEqual(release.get('cancel-in-progress'), 'true')
+        defaults = {'inputs.validation_only': False, 'inputs.preflight_only': False,
+                    'github.ref': 'refs/heads/main'}
+        production = evaluate_expression(release['group'], defaults)
+        self.assertEqual(production, evaluate_expression(release['group'], dict(defaults, **{
+            'inputs.reconciliation_run': '123'})))
+        for change in ({'inputs.validation_only': True}, {'inputs.preflight_only': True},
+                       {'github.ref': 'refs/heads/review/test'}):
+            self.assertNotEqual(production, evaluate_expression(release['group'], dict(defaults, **change)))
+        for workflow in ('upgrade-acceptance.yml', 'verify-signing-environment.yml'):
+            diagnostic = concurrency_settings(workflow_blocks(workflow)[0])
+            self.assertNotEqual(production, diagnostic.get('group'))
+
+    def test_all_protected_signing_jobs_share_one_non_replacing_queue(self):
+        jobs = {}
+        for workflow in ('build-release.yml', 'upgrade-acceptance.yml', 'verify-signing-environment.yml'):
+            header, blocks = workflow_blocks(workflow)
+            self.assertNotEqual(concurrency_settings(header).get('group'), 'zec-private-release')
+            for name, block in blocks.items():
+                if 'environment: production-signing' in block:
+                    jobs[(workflow, name)] = concurrency_settings(block, indent=4)
+        self.assertEqual(set(jobs), {('build-release.yml', 'signing_smoke'), ('build-release.yml', 'publish'),
+                                    ('build-release.yml', 'resume_draft'), ('upgrade-acceptance.yml', 'sign'),
+                                    ('verify-signing-environment.yml', 'verify-key')})
+        self.assertTrue(all(settings == {'group': 'zec-private-release', 'queue': 'max'}
+                            for settings in jobs.values()))
+
+    def test_issue_writers_share_one_non_replacing_queue(self):
+        for workflow, name in (('build-release.yml', 'failed'), ('build-release.yml', 'notify'),
+                               ('sync-upstream.yml', 'blocked')):
+            block = workflow_job(workflow, name)['block']
+            self.assertEqual(concurrency_settings(block, indent=4), {'group': 'zec-private-blocker', 'queue': 'max'})
+            self.assertIn('BLOCKER_OPERATION:', block)
+            self.assertIn('BLOCKER_CANDIDATE:', block)
 
     def test_failed_retry_reservation_notifies_without_opening_quote_or_publication_gates(self):
         results = dict(admit_hosted='success', preflight='success', signing_smoke='skipped',
@@ -201,8 +268,8 @@ class MaintenanceWatchTest(unittest.TestCase):
             old_properties = ('distributionUrl=https\\://services.gradle.org/distributions/gradle-9.9.1-bin.zip\n'
                               'distributionSha256Sum=' + 'a'*64 + '\n')
             new_properties = old_properties.replace('9.9.1', '9.9.2').replace('a'*64, 'b'*64)
-            (root/WRAPPER_PROPERTIES).write_text(old_properties)
-            (root/'gradle.properties').write_text('ZCASH_VERSION_CODE=3234021\nZCASH_VERSION_NAME=3.19.0\n')
+            (root/WRAPPER_PROPERTIES).write_text(old_properties, encoding='ascii', newline='\n')
+            (root/'gradle.properties').write_bytes(b'ZCASH_VERSION_CODE=3234021\nZCASH_VERSION_NAME=3.19.0\n')
             git('add', '.')
             git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'upstream')
             upstream = git('rev-parse', 'HEAD')
@@ -305,13 +372,9 @@ class MaintenanceWatchTest(unittest.TestCase):
                                  pending_recovery('repos/fork/wallet', Path(temp), resolve))
 
     def test_recovery_quote_failure_selects_the_blocker_notification(self):
-        workflow = (Path(__file__).resolve().parents[1]/'.github/workflows/build-release.yml').read_text()
-        failed = workflow.split('\n  failed:\n', 1)[1]
-        condition = failed.split('\n    needs:', 1)[0]
-        import re
-        checks = re.findall(r"needs\.([a-z_]+)\.result == 'failure'", condition)
-        self.assertIn('hosted_quotes', checks)
-        self.assertIn('recovery_quotes', checks)
+        failed = workflow_job('build-release.yml', 'failed')
+        for job in ('hosted_quotes', 'recovery_quotes'):
+            self.assertTrue(job_activates(failed, {job: 'failure'}))
 
     def test_automatic_recovery_requires_the_latest_exact_attestation(self):
         tag = 'v3.19.0-private.21'

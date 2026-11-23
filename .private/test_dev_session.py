@@ -211,7 +211,7 @@ class SessionTest(unittest.TestCase):
         self.assertEqual(metadata.read_bytes(), b'original')
         self.assertFalse((self.evidence/'oversized/verification-metadata.xml').exists())
 
-    def test_verification_generation_keeps_reused_checkout_clean(self):
+    def verification_operation(self):
         metadata = self.source/'gradle/verification-metadata.xml'
         metadata.parent.mkdir()
         metadata.write_bytes(b'original')
@@ -220,6 +220,10 @@ class SessionTest(unittest.TestCase):
         commit = self.git('rev-parse', 'HEAD')
         operation = self.operation(commit)
         operation['config']['write_verification_metadata'] = ['sha256']
+        return operation
+
+    def test_verification_generation_keeps_reused_checkout_clean(self):
+        operation = self.verification_operation()
         def runner(command, cwd, *args, **kwargs):
             self.assertIn('--write-verification-metadata', command)
             self.assertEqual((cwd/'gradle/verification-metadata.xml').read_bytes(), b'original')
@@ -230,6 +234,49 @@ class SessionTest(unittest.TestCase):
             receipt = json.loads((self.evidence/(name + '.json')).read_text())
             self.assertTrue(receipt['accepted'])
             self.assertEqual((self.evidence/receipt['verification_metadata']['file']).read_bytes(), b'generated\n')
+            self.assertEqual(receipt['verification_metadata']['outcome'], 'generated')
+        self.assertEqual((self.root/'src/gradle/verification-metadata.xml').read_bytes(), b'original')
+
+    def test_generation_does_not_export_untouched_committed_metadata(self):
+        operation = self.verification_operation()
+        with self.assertRaisesRegex(ValueError, 'did not generate'):
+            self.run_session([operation], lambda *args, **kwargs: dict(exitCode=0))
+        receipt = json.loads((self.evidence/'0001.json').read_bytes())
+        self.assertFalse(receipt['accepted'])
+        self.assertIsNone(receipt['verification_metadata'])
+        self.assertEqual((self.root/'src/gradle/verification-metadata.xml').read_bytes(), b'original')
+
+    def test_generation_accepts_byte_identical_replacement(self):
+        operation = self.verification_operation()
+
+        def runner(command, cwd, *args, **kwargs):
+            metadata = cwd/'gradle/verification-metadata.xml'
+            replacement = metadata.with_suffix('.new')
+            replacement.write_bytes(metadata.read_bytes())
+            replacement.replace(metadata)
+            return dict(exitCode=0)
+
+        self.run_session([operation], runner)
+        receipt = json.loads((self.evidence/'0001.json').read_bytes())
+        self.assertTrue(receipt['accepted'])
+        metadata = receipt['verification_metadata']
+        self.assertEqual(metadata['outcome'], 'regenerated-identical')
+        self.assertEqual(metadata['original_sha256'], metadata['sha256'])
+
+    def test_command_interrupt_stays_primary_when_metadata_export_fails(self):
+        operation = self.verification_operation()
+
+        def runner(command, cwd, *args, **kwargs):
+            with (cwd/'gradle/verification-metadata.xml').open('wb') as stream:
+                stream.truncate(session.VERIFICATION_METADATA_MAX_BYTES + 1)
+            raise KeyboardInterrupt('synthetic command interruption')
+
+        with self.assertRaisesRegex(KeyboardInterrupt, 'synthetic command interruption'):
+            self.run_session([operation], runner)
+        receipt = json.loads((self.evidence/'0001.json').read_bytes())
+        self.assertFalse(receipt['accepted'])
+        self.assertEqual(receipt['error'], 'KeyboardInterrupt: synthetic command interruption')
+        self.assertEqual(receipt['verification_metadata_error'], 'ValueError: Verification metadata exceeds 4 MiB')
         self.assertEqual((self.root/'src/gradle/verification-metadata.xml').read_bytes(), b'original')
 
     def test_missing_generated_metadata_fails_closed(self):

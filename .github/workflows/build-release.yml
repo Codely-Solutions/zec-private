@@ -75,8 +75,8 @@ on:
         required: true
 permissions: {}
 concurrency:
-  group: zec-private-release
-  cancel-in-progress: false
+  group: ${{ (inputs.validation_only || inputs.preflight_only || github.ref != 'refs/heads/main') && 'zec-private-release-validation' || 'zec-private-release-production' }}
+  queue: max
 jobs:
   admit_hosted:
     if: inputs.hosted && !inputs.reconciliation_run && github.ref == 'refs/heads/main'
@@ -115,6 +115,9 @@ jobs:
           PREFLIGHT_ONLY: ${{ inputs.preflight_only }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          if [[ "$PREFLIGHT_ONLY" != true ]]; then
+            PYTHONPATH=.private python3 -B -c 'import os; from publish import require_current_controller; require_current_controller(os.environ["GITHUB_SHA"])'
+          fi
           git fetch --no-tags origin "$SOURCE_SHA"
           PYTHONPATH=.private python3 -B - <<'PY'
           import os
@@ -174,6 +177,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 -B .private/signing_wiring.py
+      - name: Recheck production controller after queueing
+        if: github.ref == 'refs/heads/main' && !inputs.hosted && !inputs.validation_only && !inputs.preflight_only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=.private python3 -B -c 'import os; from publish import require_current_controller; require_current_controller(os.environ["GITHUB_SHA"])'
       - name: Verify signing credentials are absent outside the environment
         if: steps.wiring.outputs.changed == 'true'
         env:
@@ -253,6 +261,9 @@ jobs:
   signing_smoke:
     needs: preflight
     if: github.ref == 'refs/heads/main' && needs.preflight.outputs.signing_changed == 'true'
+    concurrency:
+      group: zec-private-release
+      queue: max
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     permissions:
@@ -263,6 +274,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Recheck controller before opening the signing key
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=.private python3 -B -c 'import os; from publish import require_current_controller; require_current_controller(os.environ["GITHUB_SHA"])'
       - name: Verify protected certificate and private-key access
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
@@ -502,6 +517,9 @@ jobs:
   publish:
     if: ${{ always() && !cancelled() && needs.preflight.result == 'success' && (needs.signing_smoke.result == 'success' || (needs.signing_smoke.result == 'skipped' && needs.preflight.outputs.signing_changed != 'true')) && !inputs.preflight_only && github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true' && !inputs.validation_only && !inputs.reconciliation_run && !inputs.resume_draft && ((inputs.hosted && (needs.hosted_quotes.result == 'success' || needs.recovery_quotes.result == 'success' || needs.admit_hosted.outputs.quote_receipt_id != '') && (needs.hosted_core.result == 'success' || needs.admit_hosted.outputs.core_receipt_id != '')) || (!inputs.hosted && (needs.promotion.result == 'success' || (needs.unsigned.result == 'success' && (!inputs.build_emulator || needs.emulator.result == 'success'))))) }}
     needs: [preflight, signing_smoke, unsigned, emulator, promotion, testnet_apk, hosted_core, hosted_quotes, recovery_quotes, admit_hosted]
+    concurrency:
+      group: zec-private-release
+      queue: max
     environment: production-signing
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -600,6 +618,9 @@ jobs:
         run: python3 -B .private/publish.py
   resume_draft:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.resume_draft && inputs.reconciliation_run && inputs.reconciliation_attempt && inputs.reconciliation_artifact && !inputs.candidate_run && !inputs.build_emulator && !inputs.validation_only && vars.PRODUCTION_SIGNING_READY == 'true'
+    concurrency:
+      group: zec-private-release
+      queue: max
     environment: production-signing
     runs-on: ubuntu-24.04
     timeout-minutes: 8
@@ -707,6 +728,9 @@ jobs:
   notify:
     if: ${{ always() && !cancelled() && needs.record_integration.result == 'success' }}
     needs: [publish, reconcile, record_integration]
+    concurrency:
+      group: zec-private-blocker
+      queue: max
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -722,10 +746,16 @@ jobs:
           RELEASE_TAG: ${{ needs.publish.outputs.release_tag || needs.reconcile.outputs.release_tag }}
           GH_TOKEN: ${{ github.token }}
           RECOVERY_VERIFIED: 'true'
+          BLOCKER_OPERATION: ${{ inputs.reconciliation_run && 'reconciliation' || 'release' }}
+          BLOCKER_CANDIDATE: ${{ inputs.reconciliation_run && format('publisher:{0}:{1}:{2}', inputs.reconciliation_run, inputs.reconciliation_attempt, inputs.reconciliation_artifact) || inputs.source_sha || inputs.candidate_run && format('validation:{0}', inputs.candidate_run) || github.sha }}
+          BLOCKER_ATTESTATION: ${{ needs.publish.outputs.attestation_id || needs.reconcile.outputs.attestation_id }}
         run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
   failed:
-    if: ${{ always() && !inputs.preflight_only && github.ref == 'refs/heads/main' && (needs.admit_hosted.result == 'failure' || needs.preflight.result == 'failure' || needs.quote_bridge.result == 'failure' || needs.signing_smoke.result == 'failure' || needs.unsigned.result == 'failure' || needs.emulator.result == 'failure' || needs.emulator.result == 'cancelled' || needs.testnet_apk.result == 'failure' || needs.hosted_core.result == 'failure' || needs.reserve_quote_retry.result == 'failure' || needs.hosted_quotes.result == 'failure' || needs.recovery_quotes.result == 'failure' || needs.publish.result == 'failure' || needs.promotion.result == 'failure' || needs.resume_draft.result == 'failure' || needs.reconcile.result == 'failure' || needs.verify_publication.result == 'failure' || needs.record_integration.result == 'failure') }}
+    if: ${{ always() && !cancelled() && !inputs.preflight_only && github.ref == 'refs/heads/main' && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     needs: [admit_hosted, preflight, quote_bridge, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, reserve_quote_retry, hosted_quotes, recovery_quotes, promotion, publish, resume_draft, reconcile, verify_publication, record_integration]
+    concurrency:
+      group: zec-private-blocker
+      queue: max
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -739,16 +769,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NTFY_URL: ${{ secrets.NTFY_URL }}
           MAKE_ISSUE: 'true'
+          BLOCKER_OPERATION: ${{ inputs.reconciliation_run && 'reconciliation' || inputs.validation_only && 'validation' || 'release' }}
+          BLOCKER_CANDIDATE: ${{ inputs.reconciliation_run && format('publisher:{0}:{1}:{2}', inputs.reconciliation_run, inputs.reconciliation_attempt, inputs.reconciliation_artifact) || inputs.source_sha || inputs.candidate_run && format('validation:{0}', inputs.candidate_run) || github.sha }}
+          BLOCKER_ATTESTATION: ${{ needs.publish.outputs.attestation_id || needs.reconcile.outputs.attestation_id }}
+          PUBLICATION: ${{ needs.publish.result }}
+          RECONCILIATION: ${{ needs.reconcile.result }}
           PUBLIC_VERIFICATION: ${{ needs.verify_publication.result }}
           INTEGRATION: ${{ needs.record_integration.result }}
           HOSTED_ADMISSION: ${{ needs.admit_hosted.result }}
           QUOTE_RESERVATION: ${{ needs.reserve_quote_retry.result }}
           BLOCKER_DIAGNOSIS: admission=${{ needs.admit_hosted.result }}; preflight=${{ needs.preflight.result }}; quote-bridge=${{ needs.quote_bridge.result }}; signing-smoke=${{ needs.signing_smoke.result }}; unsigned=${{ needs.unsigned.result }}; emulator=${{ needs.emulator.result }}; testnet=${{ needs.testnet_apk.result }}; core=${{ needs.hosted_core.result }}; reservation=${{ needs.reserve_quote_retry.result }}; quotes=${{ needs.hosted_quotes.result }}; recovery-quotes=${{ needs.recovery_quotes.result }}; promotion=${{ needs.promotion.result }}; publish=${{ needs.publish.result }}; resume=${{ needs.resume_draft.result }}; reconcile=${{ needs.reconcile.result }}; verification=${{ needs.verify_publication.result }}; integration=${{ needs.record_integration.result }}
         run: |
-          if [[ "$PUBLIC_VERIFICATION" == failure ]]; then
-            python3 .private/notify.py "ZEC Private publication needs reconciliation. Independent public verification failed."
-          elif [[ "$INTEGRATION" == failure ]]; then
-            python3 .private/notify.py "ZEC Private publication needs reconciliation. The verified release was published, but recording integration failed."
+          if [[ "$PUBLIC_VERIFICATION" == failure || "$PUBLIC_VERIFICATION" == cancelled ]]; then
+            python3 .private/notify.py "ZEC Private publication needs reconciliation. Independent public verification result is $PUBLIC_VERIFICATION."
+          elif [[ "$INTEGRATION" == failure || "$INTEGRATION" == cancelled ]]; then
+            python3 .private/notify.py "ZEC Private publication needs reconciliation. The verified release is public. The integration result is $INTEGRATION."
+          elif [[ "$PUBLICATION" == cancelled || "$RECONCILIATION" == cancelled ]]; then
+            python3 .private/notify.py "ZEC Private publication or reconciliation was independently cancelled. Check public state before resuming."
           elif [[ "$HOSTED_ADMISSION" == failure ]]; then
             python3 .private/notify.py "ZEC Private update stopped before building. See the hosted admission check for the blocking prerequisite."
           elif [[ "$QUOTE_RESERVATION" == failure ]]; then

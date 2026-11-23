@@ -105,18 +105,26 @@ def read_verification_metadata(metadata):
     return data
 
 
-def export_verification_metadata(src, evidence, name, original):
+def metadata_identity(path):
+    stat = path.stat()
+    return stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+
+
+def export_verification_metadata(src, evidence, name, original, *, before=None):
     metadata = src/'gradle/verification-metadata.xml'
     try:
         if not metadata.is_file():
             return None
         data = read_verification_metadata(metadata)
+        if data == original and metadata_identity(metadata) == before:
+            return None
         target = evidence/name/'verification-metadata.xml'
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open('xb') as stream:
             stream.write(data)
         return dict(file=str(target.relative_to(evidence)), sha256=hashlib.sha256(data).hexdigest(),
-                    original_sha256=hashlib.sha256(original).hexdigest() if original is not None else None)
+                    original_sha256=hashlib.sha256(original).hexdigest() if original is not None else None,
+                    outcome='regenerated-identical' if data == original else 'generated')
     finally:
         if original is None:
             metadata.unlink(missing_ok=True)
@@ -259,16 +267,27 @@ def execute(manifest, root, evidence, runner, clock=time.monotonic, sleep=time.s
             writing_verification = 'write_verification_metadata' in config
             metadata = src/'gradle/verification-metadata.xml'
             original_metadata = read_verification_metadata(metadata) if writing_verification and metadata.is_file() else None
+            before_metadata = metadata_identity(metadata) if original_metadata is not None else None
+            command_failed = False
             try:
                 command_started = True
                 result = runner(command, src, seconds, root, name, environment=env, monitor=check_log,
                                 memory_bytes=6*1024**3, process_limit=32)
                 receipt['process'] = result
+                if result.get('exitCode') != 0 or any(result.get(k) for k in ('error', 'timedOut', 'ownedSurvivors', 'cleanupErrors')):
+                    raise RuntimeError('Operation failed; session stops')
+            except BaseException:
+                command_failed = True
+                raise
             finally:
                 if writing_verification:
-                    receipt['verification_metadata'] = export_verification_metadata(src, evidence, name, original_metadata)
-            if result.get('exitCode') != 0 or any(result.get(k) for k in ('error', 'timedOut', 'ownedSurvivors', 'cleanupErrors')):
-                raise RuntimeError('Operation failed; session stops')
+                    try:
+                        receipt['verification_metadata'] = export_verification_metadata(
+                            src, evidence, name, original_metadata, before=before_metadata)
+                    except BaseException as error:
+                        receipt['verification_metadata_error'] = f'{type(error).__name__}: {error}'
+                        if not command_failed:
+                            raise
             if writing_verification and receipt['verification_metadata'] is None:
                 raise ValueError('Gradle did not generate verification metadata')
             receipt['accepted'] = True

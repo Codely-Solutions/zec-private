@@ -193,10 +193,11 @@ def main(latest=None, wrapper=None, *, expected_commit=None):
         for path in ('docs/UPSTREAM-README.md','docs/UPSTREAM-dependabot.yml'):
             shutil.copy2(ROOT/path,candidate/path)
         props=candidate/'gradle.properties'
-        properties, count=re.subn(r'^ZCASH_VERSION_CODE=\d+$',f'ZCASH_VERSION_CODE={code}',props.read_text(),flags=re.M)
-        if count!=1 or re.findall(r'^ZCASH_VERSION_NAME=(.+)$',properties,re.M)!=[tag.rsplit('-',1)[0]]:
+        properties, count=re.subn(rb'^ZCASH_VERSION_CODE=\d+(?=\r?$)',f'ZCASH_VERSION_CODE={code}'.encode(),
+                                  props.read_bytes(),flags=re.M)
+        if count!=1 or re.findall(rb'^ZCASH_VERSION_NAME=([^\r\n]+)\r?$',properties,re.M)!=[tag.rsplit('-',1)[0].encode()]:
             raise RuntimeError('Upstream Gradle release coordinates disagree with the stable tag')
-        props.write_text(properties)
+        props.write_bytes(properties)
         (candidate/'.private/release-revision.json').write_text(json.dumps({'private_revision':revision})+'\n')
         record = dict(tag=tag, sha=commit, published_at=latest['published_at'], versionCode=code,
                       acceptance=requirements(changes))

@@ -7,12 +7,12 @@ on:
         type: boolean
         default: true
 permissions: {}
-concurrency:
-  group: zec-private-release
-  cancel-in-progress: false
 jobs:
   verify-key:
     if: github.ref == 'refs/heads/main'
+    concurrency:
+      group: zec-private-release
+      queue: max
     runs-on: ubuntu-24.04
     timeout-minutes: 3
     environment: production-signing
@@ -23,6 +23,10 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Recheck controller before opening the signing key
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=.private python3 -B -c 'import os; from publish import require_current_controller; require_current_controller(os.environ["GITHUB_SHA"])'
       - name: Verify certificate and private key
         env:
           RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}

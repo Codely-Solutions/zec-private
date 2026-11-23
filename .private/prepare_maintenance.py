@@ -83,11 +83,11 @@ def prepare(number, head, controller):
     revision, code = next_release_version(revisions, json.loads(revision_path.read_text())['private_revision'],
                                          state['versionCode'], version(state['tag'])[3])
     app_properties = ROOT / 'gradle.properties'
-    content, changed = re.subn(r'^ZCASH_VERSION_CODE=[0-9]+$', f'ZCASH_VERSION_CODE={code}',
-                               app_properties.read_text(), flags=re.M)
+    content, changed = re.subn(rb'^ZCASH_VERSION_CODE=[0-9]+(?=\r?$)', f'ZCASH_VERSION_CODE={code}'.encode(),
+                               app_properties.read_bytes(), flags=re.M)
     require(changed == 1, 'Expected one existing Android versionCode')
-    app_properties.write_text(content)
-    (ROOT / WRAPPER_PROPERTIES).write_text(properties)
+    app_properties.write_bytes(content)
+    (ROOT / WRAPPER_PROPERTIES).write_text(properties, encoding='ascii', newline='\n')
     revision_path.write_text(json.dumps({'private_revision': revision}) + '\n')
     # A historical upstream candidate marker is not this dependency proposal.
     (ROOT / '.private/candidate.json').unlink(missing_ok=True)

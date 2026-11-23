@@ -244,12 +244,13 @@ class SyncTests(unittest.TestCase):
             original('git','worktree','add','--detach',str(upstream),self.state['sha'])
             try:
                 new_file=upstream/'feature-voting/upstream-only-change.txt'
-                new_file.write_text('Disposable excluded feature change\n')
+                new_file.write_bytes(b'Disposable excluded feature change\n')
                 original('git','add',str(new_file),cwd=upstream)
                 properties = upstream/'gradle.properties'
-                text = properties.read_text()
+                text = properties.read_text(encoding='utf-8')
                 self.assertIn('ZCASH_VERSION_CODE=1\n', text)
-                properties.write_text(text.replace('ZCASH_VERSION_CODE=1\n', 'ZCASH_VERSION_CODE=2\n'))
+                properties.write_text(text.replace('ZCASH_VERSION_CODE=1\n', 'ZCASH_VERSION_CODE=2\n'),
+                                      encoding='utf-8', newline='\n')
                 original('git', 'add', 'gradle.properties', cwd=upstream)
                 original('git','-c','user.name=Excluded feature test','-c',
                          'user.email=zec-private@users.noreply.github.com','commit','-m',

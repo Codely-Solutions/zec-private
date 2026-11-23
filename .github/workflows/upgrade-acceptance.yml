@@ -3,8 +3,8 @@ on:
   workflow_dispatch:
 permissions: {}
 concurrency:
-  group: zec-private-release
-  cancel-in-progress: false
+  group: zec-private-upgrade-simulation
+  queue: max
 jobs:
   prepare:
     runs-on: ubuntu-24.04
@@ -94,6 +94,9 @@ jobs:
   sign:
     if: github.ref == 'refs/heads/main' && vars.PRODUCTION_SIGNING_READY == 'true'
     needs: [prepare, unsigned]
+    concurrency:
+      group: zec-private-release
+      queue: max
     environment: production-signing
     runs-on: ubuntu-24.04
     timeout-minutes: 15
