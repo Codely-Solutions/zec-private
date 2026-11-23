@@ -50,6 +50,28 @@ import kotlin.test.assertTrue
 @Config(sdk = [34])
 class TaxExportFailureTest {
     @Test
+    fun downloadKeepsTheAccountShownByItsCallback() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val approved = EditAccountFixtures.zodl()
+        val selected = MutableStateFlow<WalletAccount?>(approved)
+        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns selected }
+        val export = mockk<ExportTaxUseCase> { coEvery { this@mockk(any()) } returns Unit }
+        val vm = TaxExportViewModel(GetSelectedWalletAccountUseCase(accounts), export, mockk(relaxed = true))
+        val store = ViewModelStore().apply { put("tax", vm) }
+        val observer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
+        try {
+            val approvedCallback = vm.state.value.exportButton.onClick
+            selected.value = EditAccountFixtures.keystone()
+            approvedCallback()
+            coVerify(exactly = 1) { export(approved) }
+        } finally {
+            observer.cancel()
+            store.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun blockedCacheWriteStaysOnScreenAndCanRetryTheRealExport() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val cache = Files.createTempDirectory(
@@ -114,7 +136,7 @@ class TaxExportFailureTest {
         val export = mockk<ExportTaxUseCase>()
         val entered = CompletableDeferred<Unit>()
         val cancelled = CompletableDeferred<Unit>()
-        coEvery { export() } coAnswers {
+        coEvery { export(any()) } coAnswers {
             entered.complete(Unit)
             try { awaitCancellation() } finally { cancelled.complete(Unit) }
         }
@@ -130,7 +152,7 @@ class TaxExportFailureTest {
             assertTrue(vm.state.value.exportButton.isLoading)
             assertFalse(vm.state.value.exportButton.isEnabled)
             staleClick()
-            coVerify(exactly = 1) { export() }
+            coVerify(exactly = 1) { export(any()) }
             store.clear()
             cancelled.await()
             assertNull(vm.state.value.error)

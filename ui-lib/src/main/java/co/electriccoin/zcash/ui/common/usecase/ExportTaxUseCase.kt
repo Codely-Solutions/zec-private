@@ -11,6 +11,7 @@ import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
@@ -40,7 +41,7 @@ class ExportTaxUseCase(
     private val navigationRouter: NavigationRouter,
     private val viewOnlyContent: ViewOnlyContent,
 ) {
-    suspend operator fun invoke() =
+    suspend operator fun invoke(approvedAccount: WalletAccount? = null) =
         withContext(Dispatchers.IO) {
             val previousYear =
                 Year
@@ -51,7 +52,7 @@ class ExportTaxUseCase(
                         it.format(formatter)
                     }
 
-            val selectedAccount = accountDataSource.getSelectedAccount()
+            val selectedAccount = approvedAccount ?: accountDataSource.getSelectedAccount()
             val directory = File(context.cacheDir, "tax_exports").apply { mkdirs() }
             val staging = Files.createTempDirectory(directory.toPath(), "tax-").toFile()
             val outputFile =

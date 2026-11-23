@@ -295,9 +295,11 @@ internal class PayVM(
                     return@launch
                 }
                 val current = internalState.value
-                if (current.asset?.assetId != asset.assetId || current.address != snapshot.address ||
-                    current.selectedABContact != snapshot.selectedABContact || current.amount != snapshot.amount
-                ) return@launch
+                val sameRecipient =
+                    current.address == snapshot.address && current.selectedABContact == snapshot.selectedABContact
+                if (!sameRecipient || current.asset?.assetId != asset.assetId || current.amount != snapshot.amount) {
+                    return@launch
+                }
                 internalState.update { it.copy(isRequestingQuote = true) }
                 requestSwapQuote.requestExactOutput(
                     amount = amount,
@@ -354,20 +356,22 @@ internal class PayVM(
     }
 
     private fun InternalStateImpl.applyRequestAmount(): InternalStateImpl {
-        val selected = asset ?: return this
-        if (hasEditedRequestAmount || selectedABContact != null) return this
-        if (requestAmountAssetId != null && (requestAmountAssetId != selected.assetId || amount.amount != null)) {
-            return this
-        }
+        val selected = asset
+        val canPrefill = requestAmountAssetId == null ||
+            (requestAmountAssetId == selected?.assetId && amount.amount == null)
+        val canUseAddress = !hasEditedRequestAmount && selectedABContact == null
+        if (selected == null || !canPrefill || !canUseAddress) return this
+
         val recipient = validateSwapRecipient(
             address, selected.chainTicker, selected.tokenTicker, tokenContract = selected.contractAddress
         )
-        val requested = recipient.input?.amount?.takeIf { recipient.isValid } ?: return this
-        return copy(
-            amount = NumberTextFieldInnerState.fromAmount(requested),
-            fiatAmount = NumberTextFieldInnerState(),
-            requestAmountAssetId = selected.assetId
-        )
+        return recipient.input?.amount?.takeIf { recipient.isValid }?.let { requested ->
+            copy(
+                amount = NumberTextFieldInnerState.fromAmount(requested),
+                fiatAmount = NumberTextFieldInnerState(),
+                requestAmountAssetId = selected.assetId
+            )
+        } ?: this
     }
 
     private fun InternalStateImpl.clearRequestAmount(keepBinding: Boolean = false): InternalStateImpl =

@@ -63,6 +63,7 @@ import kotlin.test.assertNull
  * flow (back while requesting, then confirm/dismiss) drives the cancel sheet.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass") // Keep Pay state transitions with their shared ViewModel fixture.
 class PayVMTest {
     private val mainDispatcher = UnconfinedTestDispatcher()
 

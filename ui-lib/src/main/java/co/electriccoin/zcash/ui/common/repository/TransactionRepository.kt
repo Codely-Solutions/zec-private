@@ -66,6 +66,7 @@ interface TransactionRepository {
     suspend fun resolveWalletAddress(address: String): WalletAddress?
 }
 
+@Suppress("TooManyFunctions") // The selected-account feed and explicit snapshots share one repository.
 class TransactionRepositoryImpl(
     accountDataSource: AccountDataSource,
     private val synchronizerProvider: SynchronizerProvider,
@@ -104,7 +105,7 @@ class TransactionRepositoryImpl(
             )
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    @Suppress("TooGenericExceptionCaught")
+    @Suppress("CyclomaticComplexMethod", "TooGenericExceptionCaught") // Shared transaction mapping and enrichment.
     private fun observeTransactions(accountUuids: Flow<AccountUuid?>): Flow<List<Transaction>?> =
         accountUuids
             .flatMapLatest { uuid ->

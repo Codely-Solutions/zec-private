@@ -49,18 +49,24 @@ class CreateLedgerAccountUseCase(
     }
 
     private suspend fun importAndSelect(pairing: LedgerAccountPairing, birthday: BlockHeight?): Any? {
-        val imported = ledgerPairingRepository.importedAccount(pairing) ?: ImportedLedgerAccount(
-            account = accountDataSource.importLedgerAccount(pairing, birthday),
-            birthday = birthday,
-        ).also {
-            if (!ledgerPairingRepository.recordImport(pairing, it)) {
-                synchronizerProvider.resetSynchronizer()
-                return null
-            }
-        }
+        val imported = ledgerPairingRepository.importedAccount(pairing) ?: importAccount(pairing, birthday)
+        if (imported == null) return null
         accountDataSource.selectAccount(imported.account)
         synchronizerProvider.resetSynchronizer()
-        if (!ledgerPairingRepository.clear(pairing)) return null
-        return if (imported.birthday == null) LedgerConnectedArgs else KeepOpenArgs(KeepOpenFlow.LEDGER)
+        return when {
+            !ledgerPairingRepository.clear(pairing) -> null
+            imported.birthday == null -> LedgerConnectedArgs
+            else -> KeepOpenArgs(KeepOpenFlow.LEDGER)
+        }
+    }
+
+    private suspend fun importAccount(pairing: LedgerAccountPairing, birthday: BlockHeight?): ImportedLedgerAccount? {
+        val imported = ImportedLedgerAccount(
+            account = accountDataSource.importLedgerAccount(pairing, birthday),
+            birthday = birthday,
+        )
+        if (ledgerPairingRepository.recordImport(pairing, imported)) return imported
+        synchronizerProvider.resetSynchronizer()
+        return null
     }
 }

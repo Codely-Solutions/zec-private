@@ -93,11 +93,12 @@ class CreateHWWalletAccountUseCase(
             val approvedBirthday = withContext(NonCancellable) {
                 createKeystoneAccount(pending, account, birthday)
             }
-            if (keystoneSession.enrollment(sessionId) !== pending) return
-            keystoneSession.clear(sessionId)
-            currentCoroutineContext().ensureActive()
-            val next = if (approvedBirthday == null) KeystoneConnectedArgs else KeepOpenArgs(KeepOpenFlow.KEYSTONE)
-            navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, next)
+            if (keystoneSession.enrollment(sessionId) === pending) {
+                keystoneSession.clear(sessionId)
+                currentCoroutineContext().ensureActive()
+                val next = if (approvedBirthday == null) KeystoneConnectedArgs else KeepOpenArgs(KeepOpenFlow.KEYSTONE)
+                navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, next)
+            }
         }
     }
 }

@@ -1,8 +1,12 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.model.Zatoshi
+import cash.z.ecc.android.sdk.model.ZcashNetwork
+import android.net.Uri
+import androidx.core.content.FileProvider
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.model.DistributionDimension
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
@@ -10,6 +14,8 @@ import co.electriccoin.zcash.ui.common.repository.TransactionRepository
 import io.mockk.coEvery
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -49,18 +55,30 @@ class ExportTaxUseCaseTest {
             every { fee } returns null
         }
         val transactions = mockk<TransactionRepository> {
-            coEvery { getTransactions() } returns
+            coEvery { getTransactions(any()) } returns
                 listOf(belowGroupingBoundary, aboveGroupingBoundary, sendWithFee, sendWithoutFee)
         }
         val accounts = mockk<AccountDataSource> {
-            coEvery { getSelectedAccount() } returns mockk<ZodlAccount>()
+            coEvery { getSelectedAccount() } returns EditAccountFixtures.zodl()
         }
         val versions = mockk<GetVersionInfoProvider>()
-        every { versions.invoke() } throws IllegalStateException("External sharing is disabled in this fixture")
+        every { versions.invoke() } returns mockk {
+            every { network } returns ZcashNetwork.Mainnet
+            every { distribution } returns DistributionDimension.FOSS
+            every { isDebuggable } returns true
+        }
+        lateinit var output: File
+        mockkStatic(FileProvider::class)
+        try {
+            every { FileProvider.getUriForFile(context, any(), any()) } answers {
+                output = thirdArg()
+                Uri.parse("content://synthetic/tax.csv")
+            }
+            ExportTaxUseCase(transactions, accounts, versions, context, mockk(relaxed = true), mockk())()
+        } finally {
+            unmockkStatic(FileProvider::class)
+        }
 
-        ExportTaxUseCase(transactions, accounts, versions, context, mockk(relaxed = true), mockk())()
-
-        val output = File(context.cacheDir, "tax_exports/Zodl_Transaction_History_$year.csv")
         val rows = output.readLines().map { it.split(',') }
         val date = "06/15/$year 12:00:00"
         assertEquals(

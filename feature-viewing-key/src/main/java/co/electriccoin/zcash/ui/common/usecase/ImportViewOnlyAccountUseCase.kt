@@ -74,31 +74,37 @@ internal class ImportViewOnlyAccountUseCase(
      * where the flow goes next.
      */
     private suspend fun importAndSelect(pending: PendingViewOnlyImport): Any? {
-        val approved = if (pending.importedAccount == null) {
+        val approved =
             try {
-                val created = accountDataSource.importViewOnlyAccount(
-                    ufvk = pending.ufvk,
-                    name = pending.name,
-                    birthday = pending.birthday,
-                )
-                pending.copy(importedAccount = created).also {
-                    if (!pendingImportRepository.replace(pending, it)) {
-                        synchronizerProvider.resetSynchronizer()
-                        return null
-                    }
-                }
+                pending.takeIf { it.importedAccount != null } ?: importAccount(pending)
             } catch (_: ViewOnlyAccountAlreadyExistsException) {
                 return AlreadyImportedVKArgs.takeIf { pendingImportRepository.replace(pending, null) }
             }
-        } else {
-            pending
-        }
+        return approved?.let { finishImport(it) }
+    }
+
+    private suspend fun importAccount(pending: PendingViewOnlyImport): PendingViewOnlyImport? {
+        val created = accountDataSource.importViewOnlyAccount(
+            ufvk = pending.ufvk,
+            name = pending.name,
+            birthday = pending.birthday,
+        )
+        val approved = pending.copy(importedAccount = created)
+        if (pendingImportRepository.replace(pending, approved)) return approved
+        synchronizerProvider.resetSynchronizer()
+        return null
+    }
+
+    private suspend fun finishImport(approved: PendingViewOnlyImport): Any? {
         val created = checkNotNull(approved.importedAccount)
         accountDataSource.selectAccount(created)
         approved.color?.let { storeColor(created, it) }
         synchronizerProvider.resetSynchronizer()
-        if (!pendingImportRepository.replace(approved, null)) return null
-        return if (approved.birthday != null) KeepOpenArgs(KeepOpenFlow.VIEW_ONLY) else ImportedVKArgs
+        return when {
+            !pendingImportRepository.replace(approved, null) -> null
+            approved.birthday != null -> KeepOpenArgs(KeepOpenFlow.VIEW_ONLY)
+            else -> ImportedVKArgs
+        }
     }
 
     /**

@@ -48,9 +48,9 @@ class TaxExportViewModel(
                 ButtonState(
                     text = stringRes(R.string.taxExport_download),
                     hapticFeedbackType = HapticFeedbackType.Confirm,
-                    isEnabled = !loading,
+                    isEnabled = !loading && selectedAccount != null,
                     isLoading = loading,
-                    onClick = ::onExportClick
+                    onClick = { selectedAccount?.let(::onExportClick) }
                 ),
             onBack = ::onBack,
             error = stringRes(R.string.taxExport_error).takeIf { error },
@@ -66,12 +66,12 @@ class TaxExportViewModel(
                 )
         )
 
-    private fun onExportClick() {
+    private fun onExportClick(selectedAccount: WalletAccount) {
         if (leaving || !exporting.compareAndSet(expect = false, update = true)) return
         failed.value = false
         exportJob = viewModelScope.launch {
             try {
-                exportTax()
+                exportTax(selectedAccount)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
