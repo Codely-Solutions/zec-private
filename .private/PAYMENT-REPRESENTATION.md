@@ -19,6 +19,6 @@ inspection establishes that adapter contract; JVM regressions establish the app'
 substituted. They do not execute a native binary-memo transaction.
 [Pinned SDK adapter](https://github.com/zodl-inc/zcash-android-wallet-sdk/blob/f4da36be5ca78ca7fefe48cac0d3f6920a044cef/backend-lib/src/main/rust/lib.rs#L2652)
 
-ZIP-321 builder/parser and proposal failure diagnostics record fixed operation/category messages. Keep request URIs,
+ZIP-321 builder/parser and proposal failure logs record fixed operation/category messages. Keep request URIs,
 parsed payments, addresses, memo data and provider exception content out of those diagnostics, including debug builds.
 The [regression procedure](DEVELOPMENT.md#review-boundary-regressions) names the real consumer tests and evidence limits.
