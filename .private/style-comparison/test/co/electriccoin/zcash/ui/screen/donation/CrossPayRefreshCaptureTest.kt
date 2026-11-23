@@ -45,18 +45,18 @@ class CrossPayRefreshCaptureTest {
     fun captureDarkRefreshedFields() = capture(AppearanceMode.DARK, 1f)
 
     @Test
-    fun captureOledRefreshedFields() = capture(AppearanceMode.OLED, 1f)
+    fun captureOledRefreshedFields() = capture(AppearanceMode.DARK, 1f, oled = true)
 
     @Test
     fun captureLargeRefreshedFields() = capture(AppearanceMode.DARK, 2f)
 
-    private fun capture(theme: AppearanceMode, scale: Float) {
+    private fun capture(theme: AppearanceMode, scale: Float, oled: Boolean = false) {
         compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
         assertEquals(scale, compose.activity.resources.configuration.fontScale)
         val active = mutableStateOf("recipient-pay-refresh-fiat")
         compose.setContent {
             key(active.value) {
-                ZcashTheme(appearanceMode = theme) {
+                ZcashTheme(appearanceMode = theme, isOledEnabled = oled) {
                     Box(Modifier.fillMaxSize().background(ZashiColors.Surfaces.bgPrimary)) {
                         ComparisonScreens(active.value)
                     }
@@ -69,7 +69,8 @@ class CrossPayRefreshCaptureTest {
             assertField(PayTag.PAY_AMOUNT_TOKEN_FIELD, token)
             assertField(PayTag.PAY_AMOUNT_FIAT_FIELD, fiat)
             compose.onNodeWithTag(PayTag.PAY_REVIEW_BUTTON).assertIsDisplayed()
-            val name = "$screen-${theme.name.lowercase()}-$scale-screen.png"
+            val themeName = if (oled) "oled" else theme.name.lowercase()
+            val name = "$screen-$themeName-$scale-screen.png"
             saveFrame(name)
         }
     }

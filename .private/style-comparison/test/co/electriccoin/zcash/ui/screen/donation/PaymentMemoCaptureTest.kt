@@ -66,10 +66,9 @@ class PaymentMemoCaptureTest {
             key(active.value) {
                 val appearance = when (theme) {
                     "light" -> AppearanceMode.LIGHT
-                    "oled" -> AppearanceMode.OLED
                     else -> AppearanceMode.DARK
                 }
-                ZcashTheme(appearanceMode = appearance) {
+                ZcashTheme(appearanceMode = appearance, isOledEnabled = theme == "oled") {
                     Box(Modifier.fillMaxSize().background(ZashiColors.Surfaces.bgPrimary)) {
                         PaymentMemoReviewScene(active.value)
                     }
