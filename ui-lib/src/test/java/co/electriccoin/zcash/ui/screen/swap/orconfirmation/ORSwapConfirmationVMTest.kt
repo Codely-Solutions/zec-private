@@ -137,7 +137,7 @@ class ORSwapConfirmationVMTest {
         val save = mockk<SaveORSwapUseCase>(relaxed = true)
         val vm = startedVm(saveORSwap = save)
         requireNotNull(vm.state.value)
-        coVerify(exactly = 1) { save.persistBeforeFunding(any()) }
+        coVerify(exactly = 1) { save.persistBeforeFunding(any(), null) }
     }
 
     @Test
@@ -218,7 +218,6 @@ class ORSwapConfirmationVMTest {
                 runCurrent()
                 assertNull(vm.state.value)
             }
-            io.mockk.clearMocks(context, answers = false)
         } finally {
             unmockkObject(FileShareUtil)
         }

@@ -74,31 +74,22 @@ class OnZip321ScannedUseCase(
         )
     }
 
+    private suspend fun prepareProposal(uri: String) =
+        when (accountDataSource.getSelectedAccount()) {
+            is KeystoneAccount -> keystoneProposalRepository.createZip321Proposal(uri).also {
+                keystoneProposalRepository.createPCZTFromProposal()
+            }
+            is LedgerAccount -> ledgerProposalPipeline.createZip321Proposal(uri).also {
+                ledgerProposalPipeline.createPCZTFromProposal()
+            }
+            is ViewOnlyAccount -> throw AccountOperationUnsupportedException.viewOnly()
+            is ZodlAccount -> zashiProposalRepository.createZip321Proposal(uri)
+        }
+
     @Suppress("TooGenericExceptionCaught")
     private suspend fun homepageFlow(zip321: Zip321ParseUriValidation.Valid): Boolean =
         try {
-            val proposal =
-                when (accountDataSource.getSelectedAccount()) {
-                    is KeystoneAccount -> {
-                        val result = keystoneProposalRepository.createZip321Proposal(zip321.zip321Uri)
-                        keystoneProposalRepository.createPCZTFromProposal()
-                        result
-                    }
-
-                    is LedgerAccount -> {
-                        val result = ledgerProposalPipeline.createZip321Proposal(zip321.zip321Uri)
-                        ledgerProposalPipeline.createPCZTFromProposal()
-                        result
-                    }
-
-                    is ViewOnlyAccount -> {
-                        throw AccountOperationUnsupportedException.viewOnly()
-                    }
-
-                    is ZodlAccount -> {
-                        zashiProposalRepository.createZip321Proposal(zip321.zip321Uri)
-                    }
-                }
+            val proposal = prepareProposal(zip321.zip321Uri)
 
             if (proposal.binaryMemoByteCount == null) prefillSend.request(
                 PrefillSendData.All(
@@ -153,28 +144,7 @@ class OnZip321ScannedUseCase(
     @Suppress("TooGenericExceptionCaught")
     private suspend fun sendFlow(zip321: Zip321ParseUriValidation.Valid): Boolean =
         try {
-            val proposal =
-                when (accountDataSource.getSelectedAccount()) {
-                    is KeystoneAccount -> {
-                        val result = keystoneProposalRepository.createZip321Proposal(zip321.zip321Uri)
-                        keystoneProposalRepository.createPCZTFromProposal()
-                        result
-                    }
-
-                    is LedgerAccount -> {
-                        val result = ledgerProposalPipeline.createZip321Proposal(zip321.zip321Uri)
-                        ledgerProposalPipeline.createPCZTFromProposal()
-                        result
-                    }
-
-                    is ViewOnlyAccount -> {
-                        throw AccountOperationUnsupportedException.viewOnly()
-                    }
-
-                    is ZodlAccount -> {
-                        zashiProposalRepository.createZip321Proposal(zip321.zip321Uri)
-                    }
-                }
+            val proposal = prepareProposal(zip321.zip321Uri)
 
             if (proposal.binaryMemoByteCount == null) prefillSend.request(
                 PrefillSendData.All(

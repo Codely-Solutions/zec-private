@@ -138,6 +138,22 @@ class NearSwapQuoteStatusTest {
     }
 
     @Test
+    fun settlementDecoderRejectsFractionalBaseUnitsAndKeepsSparseWholeValues() {
+        val original = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
+        val quote = Json.encodeToString(QuoteResponseDto.serializer(), original.response.quoteResponse)
+        fun response(details: String) = Json.decodeFromString<SwapStatusResponseDto>(
+            """{"quoteResponse":$quote,"status":"SUCCESS","updatedAt":"2026-11-23T00:00:00Z",
+                "swapDetails":$details}"""
+        )
+
+        for (field in listOf("amountIn", "amountOut", "depositedAmount", "refundedAmount")) {
+            kotlin.test.assertFailsWith<IllegalArgumentException> { response("""{"$field":"0.5"}""") }
+        }
+        val resolved = original.copy(response = response("""{"amountOut":"2300001.0"}"""))
+        assertEquals(BigDecimal("2.3000010"), resolved.executedAmountOut)
+    }
+
+    @Test
     fun rawZeroInputDoesNotDiscardPendingStatusOrQuotedFundingRequirement() {
         val original = nearSwapQuoteStatus(SwapStatus.INCOMPLETE_DEPOSIT, Clock.System.now() + 1.hours)
         val status = original.copy(response = original.response.copy(

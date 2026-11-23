@@ -65,7 +65,7 @@ class ORSwapConfirmationVM(
                 _dialogState.value = null
                 if (publication is SwapQuoteData.Success) {
                     try {
-                        saveORSwap.persistBeforeFunding(publication.quote)
+                        saveORSwap.persistBeforeFunding(publication.quote, publication.incomingOwner)
                         if (swapRepository.quote.value === publication) emit(publication)
                     } catch (error: CancellationException) {
                         throw error
@@ -81,7 +81,7 @@ class ORSwapConfirmationVM(
                 }
             }) { publication, _ -> publication }
             .map { publication ->
-                if (publication == null || swapRepository.quote.value !== publication) return@map null
+                if (publication == null || !isCurrent(publication)) return@map null
                 val quote = publication.quote
                 val fundingEnabled = canFund(publication)
                 ORSwapConfirmationState(
@@ -164,7 +164,11 @@ class ORSwapConfirmationVM(
     private var onSentFundsClickJob: Job? = null
 
     private fun canFund(publication: SwapQuoteData.Success): Boolean =
-        swapRepository.quote.value === publication && clock.now() < publication.quote.deadline
+        isCurrent(publication) && clock.now() < publication.quote.deadline
+
+    private fun isCurrent(publication: SwapQuoteData.Success): Boolean =
+        swapRepository.quote.value === publication &&
+            (publication.incomingOwner == null || saveORSwap.isWalletCurrent(publication))
 
     private fun onBack(publication: SwapQuoteData.Success) {
         if (onSentFundsClickJob?.isActive == true) return
@@ -196,7 +200,7 @@ class ORSwapConfirmationVM(
     }
 
     private fun onSentFundsClick(publication: SwapQuoteData.Success) {
-        if (onSentFundsClickJob?.isActive == true || swapRepository.quote.value !== publication) return
+        if (onSentFundsClickJob?.isActive == true || !isCurrent(publication)) return
         _dialogState.value = null
         onSentFundsClickJob = viewModelScope.launch { saveORSwap(publication) }
     }

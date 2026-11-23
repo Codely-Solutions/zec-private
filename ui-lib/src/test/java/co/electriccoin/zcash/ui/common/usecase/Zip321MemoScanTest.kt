@@ -197,7 +197,10 @@ class Zip321MemoScanTest {
             runCurrent()
 
             val state = assertNotNull(vm.state.value)
-            assertEquals(stringRes(R.string.private_review_unavailable_title), state.items.filterIsInstance<MessageState>().single().title)
+            assertEquals(
+                stringRes(R.string.private_review_unavailable_title),
+                state.items.filterIsInstance<MessageState>().single().title,
+            )
             assertEquals(stringRes(R.string.general_back), state.primaryButton.text)
             assertEquals(ReviewTransactionArgs, restored.currentBackStackEntry?.toRoute<ReviewTransactionArgs>())
             state.primaryButton.onClick()

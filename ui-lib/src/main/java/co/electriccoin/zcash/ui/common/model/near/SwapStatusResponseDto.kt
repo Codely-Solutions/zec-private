@@ -83,6 +83,9 @@ data class SwapDetails(
             refundedAmount, refundedAmountFormatted, refundedAmountUsd,
             depositedAmount, depositedAmountFormatted, depositedAmountUsd
         )
+        require(listOfNotNull(amountIn, amountOut, depositedAmount, refundedAmount).all {
+            it.stripTrailingZeros().scale() <= 0
+        }) { "Swap status contains a fractional base-unit amount" }
     }
 }
 

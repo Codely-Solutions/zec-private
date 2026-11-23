@@ -501,7 +501,7 @@ class RequestSwapQuoteUseCaseTest {
     fun incomingQuotesUseIndependentShieldedRecipients() =
         runBlocking {
             val instance = useCase(SwapQuoteData.Error(SwapMode.FLEX_INPUT, TestException()))
-            coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returnsMany
+            coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true, account = any()) } returnsMany
                 listOf("shielded-first", "shielded-second")
             instance.flex()
             instance.flex()
@@ -511,7 +511,8 @@ class RequestSwapQuoteUseCaseTest {
                     refundAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
                     destinationAddress = "shielded-first",
                     originAsset = btc,
-                    slippage = BigDecimal("2")
+                    slippage = BigDecimal("2"),
+                    owner = any(),
                 )
             }
             coVerify(exactly = 1) {
@@ -520,7 +521,8 @@ class RequestSwapQuoteUseCaseTest {
                     refundAddress = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",
                     destinationAddress = "shielded-second",
                     originAsset = btc,
-                    slippage = BigDecimal("2")
+                    slippage = BigDecimal("2"),
+                    owner = any(),
                 )
             }
         }
@@ -557,7 +559,7 @@ class RequestSwapQuoteUseCaseTest {
     fun addressGenerationFailureNeverRequestsASwapQuote() =
         runBlocking {
             val instance = useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, TestException()))
-            coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } throws
+            coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true, account = any()) } throws
                 FreshShieldedAddressUnavailableException()
             instance.exactInput()
             instance.exactOutput()
@@ -565,7 +567,7 @@ class RequestSwapQuoteUseCaseTest {
             verify(exactly = 0) {
                 swapRepository.requestExactInputQuote(any(), any(), any(), any(), any())
                 swapRepository.requestExactOutputQuote(any(), any(), any(), any(), any())
-                swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any())
+                swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
             }
             verify(exactly = 3) { navigateToError(any(), any()) }
         }
@@ -601,7 +603,7 @@ class RequestSwapQuoteUseCaseTest {
         verify(exactly = 0) {
             swapRepository.requestExactInputQuote(any(), any(), any(), any(), any())
             swapRepository.requestExactOutputQuote(any(), any(), any(), any(), any())
-            swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any())
+            swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
         }
         verify(exactly = 3) {
             navigateToError(
@@ -646,7 +648,7 @@ class RequestSwapQuoteUseCaseTest {
         verify(exactly = 0) {
             swapRepository.requestExactOutputQuote(any(), any(), any(), any(), any())
             swapRepository.requestExactInputQuote(any(), any(), any(), any(), any())
-            swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any())
+            swapRepository.requestFlexInputIntoZec(any(), any(), any(), any(), any(), any())
         }
     }
 
@@ -777,7 +779,9 @@ class RequestSwapQuoteUseCaseTest {
         val synchronizerProvider = mockk<SynchronizerProvider> {
             coEvery { getSynchronizer() } returns this@RequestSwapQuoteUseCaseTest.synchronizer
         }
-        coEvery { accountDataSource.requestNextShieldedAddress(requireFresh = true) } returns shieldedAddress
+        coEvery {
+            accountDataSource.requestNextShieldedAddress(requireFresh = true, account = any())
+        } returns shieldedAddress
         coEvery { accountDataSource.getSelectedAccount() } returns selectedAccount
         return RequestSwapQuoteUseCase(
             navigationRouter = navigationRouter,

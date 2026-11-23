@@ -243,6 +243,23 @@ class SwapRecoveryBoundaryTest {
         }
     }
 
+    @Test
+    fun newQuotesRejectWhitespaceInProviderDepositInstructions() = runTest {
+        coEvery { api.getSupportedTokens() } returns listOf(eth.dto(), zec.dto())
+        val repository = SwapRepositoryImpl(dataSource, cache).also {
+            it.scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
+        }
+        repository.requestRefreshAssetsOnce()
+        val valid = "0x76b4c56085ED136a8744D52bE956396624a730E8"
+        for (address in listOf("", "deposit with spaces", "deposit\\nnext", valid)) {
+            coEvery { api.requestQuote(any()) } returns response(address).quoteResponse
+            repository.requestFlexInputIntoZec(BigDecimal.ONE, "synthetic-external-refund",
+                "synthetic-zec-recipient", eth, BigDecimal.ONE)
+            if (address == valid) assertIs<SwapQuoteData.Success>(repository.quote.value)
+            else assertIs<SwapQuoteData.Error>(repository.quote.value)
+        }
+    }
+
     private suspend fun readStatus(echoedAddress: String = "tracked-deposit", scope: CoroutineScope) =
         SwapRepositoryImpl(dataSource, cache).also { it.scope = scope }.let { repository ->
             coEvery { metadata.getSwapMetadata("tracked-deposit") } returns stored

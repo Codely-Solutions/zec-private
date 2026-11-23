@@ -30,7 +30,10 @@ import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.provider.QuoteRequestDiagnostics
 import co.electriccoin.zcash.ui.common.provider.QuoteRequestStage
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.repository.IncomingSwapOwner
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
@@ -65,6 +68,7 @@ class RequestSwapQuoteUseCase(
     private val accountDataSource: AccountDataSource,
     private val synchronizerProvider: SynchronizerProvider,
     private val diagnostics: QuoteRequestDiagnostics = QuoteRequestDiagnostics(),
+    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) {
     private val latestRequest = AtomicReference<RequestOwner?>()
 
@@ -161,7 +165,10 @@ class RequestSwapQuoteUseCase(
         val refund = validatedRecipient(
             refundAddress, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
         ) ?: return@runRequest
-        val newAddress = requestFreshAddress(canNavigateToSwapQuote) ?: return@runRequest
+        val token = walletWriteAccess.token()
+        val owner = IncomingSwapOwner(accountDataSource.getSelectedAccount(), token)
+        val newAddress = requestFreshAddress(canNavigateToSwapQuote, owner.account) ?: return@runRequest
+        if (!walletWriteAccess.permits(token)) return@runRequest
         requestQuote(
             requestQuote = {
                 swapRepository
@@ -170,18 +177,19 @@ class RequestSwapQuoteUseCase(
                         refundAddress = refund,
                         destinationAddress = newAddress,
                         originAsset = selectedAsset,
-                        slippage = slippage
+                        slippage = slippage,
+                        owner = owner,
                     )
             },
             funding = ZecSwapComposition.funding(FLEX_INPUT),
-            canNavigateToSwapQuote = canNavigateToSwapQuote
+            canNavigateToSwapQuote = { walletWriteAccess.permits(token) && canNavigateToSwapQuote() }
         )
     }
 
-    private suspend fun requestFreshAddress(canNavigate: () -> Boolean): String? =
+    private suspend fun requestFreshAddress(canNavigate: () -> Boolean, account: WalletAccount? = null): String? =
         try {
             diagnostics.trace(QuoteRequestStage.FRESH_ADDRESS) {
-                accountDataSource.requestNextShieldedAddress(requireFresh = true)
+                accountDataSource.requestNextShieldedAddress(requireFresh = true, account = account)
             }
         } catch (e: FreshShieldedAddressUnavailableException) {
             currentCoroutineContext().ensureActive()

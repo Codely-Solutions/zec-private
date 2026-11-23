@@ -2,6 +2,13 @@ package co.electriccoin.zcash.ui.common.datasource
 
 import android.content.Context
 import androidx.lifecycle.viewModelScope
+import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
+import co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl
+import co.electriccoin.zcash.ui.common.repository.SwapAssetsData
+import co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCase
+import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteArgs
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.FiatCurrency
@@ -502,6 +509,75 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun incomingTrackingUsesTheAccountThatReservedTheAddressAcrossSelectionAndReset() = runTest {
+        val refund = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
+        val quote = fundingQuote(SwapType.FLEX_INPUT, refundAddress = refund)
+        val originalUuid = AccountUuid.new(ByteArray(16))
+        val otherUuid = AccountUuid.new(ByteArray(16) { 1 })
+        val original = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(originalUuid) }
+        val other = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(otherUuid) }
+        val selected = MutableStateFlow<WalletAccount?>(original)
+        val addressEntered = CompletableDeferred<Unit>()
+        val addressReady = CompletableDeferred<Unit>()
+        val accounts = mockk<AccountDataSource> {
+            every { selectedAccount } returns selected
+            every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(listOf(original, other))
+            coEvery { getSelectedAccount() } answers { checkNotNull(selected.value) }
+            coEvery { requestNextShieldedAddress(requireFresh = true, account = original) } coAnswers {
+                addressEntered.complete(Unit)
+                addressReady.await()
+                quote.destinationAddress.address
+            }
+        }
+        val ownership = WalletWriteAccess()
+        val keys = mockk<MetadataKeyStorageProvider> {
+            coEvery { get(originalUuid) } returns key
+            coEvery { get(otherUuid) } returns metadataKey(2, 3)
+        }
+        val metadata = MetadataRepositoryImpl(
+            accountDataSource = accounts,
+            metadataDataSource = dataSource(ownership = ownership),
+            metadataKeyStorageProvider = keys,
+            persistableWalletProvider = mockk(),
+            simpleSwapAssetProvider = simpleSwapAssetProvider,
+            walletWriteAccess = ownership,
+        )
+        val swaps = SwapRepositoryImpl(mockk {
+            coEvery { requestQuote(any(), any(), any(), any(), any(), any(), any()) } returns quote
+        }, mockk()).apply {
+            scope = backgroundScope
+            assets.value = SwapAssetsData(data = listOf(quote.originAsset), zecAsset = quote.destinationAsset)
+        }
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val request = RequestSwapQuoteUseCase(
+            router, NavigateToErrorUseCase(router), swaps, mockk(), mockk(), mockk(), accounts, mockk(),
+            walletWriteAccess = ownership,
+        )
+        val pending = async {
+            request.requestFlexInputIntoZec(BigDecimal.ONE, refund, quote.originAsset, BigDecimal.ONE, { true })
+        }
+        addressEntered.await()
+        selected.value = other
+        addressReady.complete(Unit)
+        pending.await()
+        verify(exactly = 1) { router.forward(SwapQuoteArgs) }
+
+        val publication = assertNotNull(swaps.quote.value as? SwapQuoteData.Success)
+        val tracking = SaveORSwapUseCase(swaps, metadata, router, ownership)
+        tracking.persistBeforeFunding(publication.quote, publication.incomingOwner)
+        assertNull(metadata.getSwapMetadata("deposit", other))
+        assertEquals(quote.reviewedIdentity(), metadata.getSwapMetadata("deposit", original)?.reviewedIdentity)
+
+        ownership.beginReset()
+        ownership.finishReset()
+        ownership.replaceWallet {}
+        assertFalse(tracking.isWalletCurrent(publication))
+        assertFailsWith<IllegalStateException> {
+            tracking.persistBeforeFunding(publication.quote, publication.incomingOwner)
+        }
+    }
+
+    @Test
     fun outgoingTrackingKeepsTheReviewedAccountAcrossSuspendedLookupAndSelectionChange() = runTest {
         val quote = fundingQuote(SwapType.EXACT_INPUT)
         val reviewedUuid = AccountUuid.new(ByteArray(16))
@@ -969,7 +1045,11 @@ class MetadataDataSourceFileTest {
         )
     }
 
-    private fun fundingQuote(mode: SwapType, evidence: NearSignedQuoteEvidence? = null): NearSwapQuote {
+    private fun fundingQuote(
+        mode: SwapType,
+        evidence: NearSignedQuoteEvidence? = null,
+        refundAddress: String = "refund",
+    ): NearSwapQuote {
         val btc = SwapCatalogTestFixture.externalAssets.single { it.assetId == "nep141:btc.omft.near" }
         val zec = SwapCatalogTestFixture.nativeZec
         val (origin, destination) = if (mode == SwapType.FLEX_INPUT) btc to zec else zec to btc
@@ -980,7 +1060,7 @@ class MetadataDataSourceFileTest {
                 "quoteRequest": {
                     "dry": false, "swapType": "${mode.apiValue}", "slippageTolerance": 100,
                     "originAsset": "${origin.assetId}", "destinationAsset": "${destination.assetId}",
-                    "depositType": "ORIGIN_CHAIN", "amount": "100000000", "refundTo": "refund",
+                    "depositType": "ORIGIN_CHAIN", "amount": "100000000", "refundTo": "$refundAddress",
                     "refundType": "ORIGIN_CHAIN", "recipient": "recipient", "recipientType": "DESTINATION_CHAIN",
                     "deadline": "2026-11-22T13:00:00Z", "appFees": []
                 },
@@ -999,7 +1079,7 @@ class MetadataDataSourceFileTest {
             destinationAsset = destination,
             depositAddress = DynamicSwapAddress("deposit"),
             destinationAddress = DynamicSwapAddress("recipient"),
-            refundAddress = DynamicSwapAddress("refund"),
+            refundAddress = DynamicSwapAddress(refundAddress),
             expectedSlippageToleranceBps = 100,
         )
     }

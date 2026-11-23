@@ -118,7 +118,7 @@ interface AccountDataSource {
         birthday: BlockHeight? = null
     ): Account
 
-    suspend fun requestNextShieldedAddress(requireFresh: Boolean = false): String
+    suspend fun requestNextShieldedAddress(requireFresh: Boolean = false, account: WalletAccount? = null): String
 
     suspend fun deleteAccount(account: WalletAccount)
 
@@ -355,11 +355,11 @@ class AccountDataSourceImpl(
         }
 
     @Suppress("TooGenericExceptionCaught")
-    override suspend fun requestNextShieldedAddress(requireFresh: Boolean): String {
+    override suspend fun requestNextShieldedAddress(requireFresh: Boolean, account: WalletAccount?): String {
         var result: String? = null
         scope
             .launch {
-                val accountUuid = getSelectedAccount().sdkAccount.accountUuid
+                val accountUuid = (account ?: getSelectedAccount()).sdkAccount.accountUuid
                 log("requestNextShieldedAddress for $accountUuid")
                 val responseChannel = Channel<String>(1)
                 requestNextShieldedAddressChannel.emit(AddressRequest(accountUuid, responseChannel))
@@ -378,7 +378,7 @@ class AccountDataSourceImpl(
         return result ?: if (requireFresh) {
             throw FreshShieldedAddressUnavailableException()
         } else {
-            getSelectedAccount().unifiedAddress
+            (account ?: getSelectedAccount()).unifiedAddress
         }
     }
 

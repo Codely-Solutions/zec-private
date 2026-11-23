@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.common.datasource.NEAR_SWAP_PROVIDER
 import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.model.SwapAsset
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapMode.EXACT_OUTPUT
@@ -77,7 +78,8 @@ interface SwapRepository {
         refundAddress: String,
         destinationAddress: String,
         originAsset: SwapAsset,
-        slippage: BigDecimal
+        slippage: BigDecimal,
+        owner: IncomingSwapOwner? = null,
     )
 
     @Throws(ResponseException::class)
@@ -102,9 +104,12 @@ interface SwapRepository {
     fun consumeReview(expected: SwapQuoteData? = null): SwapQuoteData?
 }
 
+data class IncomingSwapOwner(val account: WalletAccount, val walletWriteToken: Long)
+
 sealed interface SwapQuoteData {
     data class Success(
-        val quote: SwapQuote
+        val quote: SwapQuote,
+        val incomingOwner: IncomingSwapOwner? = null,
     ) : SwapQuoteData
 
     data class Error(
@@ -339,7 +344,8 @@ class SwapRepositoryImpl(
         refundAddress: String,
         destinationAddress: String,
         originAsset: SwapAsset,
-        slippage: BigDecimal
+        slippage: BigDecimal,
+        owner: IncomingSwapOwner?,
     ) {
         launchQuoteRequest { generation ->
             val catalog = assets.value
@@ -393,7 +399,7 @@ class SwapRepositoryImpl(
                     expected = destinationAddress,
                     actual = result.destinationAddress.address
                 )
-                publishQuote(generation, SwapQuoteData.Success(quote = result))
+                publishQuote(generation, SwapQuoteData.Success(quote = result, incomingOwner = owner))
             } catch (e: SwapQuoteMismatchException) {
                 currentCoroutineContext().ensureActive()
                 GlobalCrashReporter.reportCaughtException(swapQuoteMismatchSignal(e))

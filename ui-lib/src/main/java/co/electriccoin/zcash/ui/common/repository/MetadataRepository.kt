@@ -101,6 +101,7 @@ interface MetadataRepository {
         reviewedIdentity: String? = null,
         signedQuoteEvidence: NearSignedQuoteEvidence? = null,
         account: WalletAccount? = null,
+        walletWriteToken: Long? = null,
     ): Boolean
 
     /** Persists a refresh for the same account and saved entry that owned the request. */
@@ -246,7 +247,8 @@ class MetadataRepositoryImpl(
         reviewedIdentity: String?,
         signedQuoteEvidence: NearSignedQuoteEvidence?,
         account: WalletAccount?,
-    ) = updateMetadataAndAwait(account) {
+        walletWriteToken: Long?,
+    ) = updateMetadataAndAwait(account, walletWriteToken ?: walletWriteAccess.token()) {
         metadataDataSource.markTxAsSwap(
             depositAddress = depositAddress,
             provider = provider,

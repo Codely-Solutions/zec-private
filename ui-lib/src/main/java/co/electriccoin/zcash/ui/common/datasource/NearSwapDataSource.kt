@@ -178,6 +178,10 @@ class NearSwapDataSource(
                 "TEX swap deposits require an intermediate transparent wallet address and are not supported."
             }
             response.requireSimpleChainRouting()
+            val deposit = response.quote.depositAddress
+            require(deposit.isNotEmpty() && deposit.all { it in '!'..'~' }) {
+                "Swap quote deposit address must be a single address"
+            }
             NearSwapQuote(
                 response = response,
                 originAsset = originAsset,
