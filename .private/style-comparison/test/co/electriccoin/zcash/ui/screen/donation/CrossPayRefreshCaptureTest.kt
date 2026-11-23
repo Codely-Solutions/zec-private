@@ -42,6 +42,12 @@ class CrossPayRefreshCaptureTest {
     fun captureRefreshedFields() = capture(AppearanceMode.LIGHT, 1f)
 
     @Test
+    fun captureDarkRefreshedFields() = capture(AppearanceMode.DARK, 1f)
+
+    @Test
+    fun captureOledRefreshedFields() = capture(AppearanceMode.OLED, 1f)
+
+    @Test
     fun captureLargeRefreshedFields() = capture(AppearanceMode.DARK, 2f)
 
     private fun capture(theme: AppearanceMode, scale: Float) {

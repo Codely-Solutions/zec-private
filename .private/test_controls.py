@@ -94,7 +94,7 @@ for clear in (False, True):
     def test_current_source(self):
         self.assertEqual([],checks.check())
 
-    def test_fee_and_auth_regressions_block(self):
+    def test_quote_policy_regressions_block(self):
         # Copy only static-check inputs; never touch real release state or keys.
         with fixture_directory() as temp:
             root=Path(temp)
@@ -106,6 +106,18 @@ for clear in (False, True):
                 target.parent.mkdir(parents=True,exist_ok=True)
                 if source.is_dir(): shutil.copytree(source,target)
                 else: shutil.copy2(source,target)
+            p=root/checks.COMMON/'usecase/RequestSwapQuoteUseCase.kt'
+            original=p.read_text()
+            for before, after, expected in (
+                ('requestFreshAddress(canNavigateToSwapQuote) ?: return@runRequest',
+                 'requestFreshAddress(canNavigateToSwapQuote)!!', 'Fresh shielded recipient/refund derivation changed'),
+                ('requestNextShieldedAddress(requireFresh = true)',
+                 'requestNextShieldedAddress(requireFresh = false)', 'Swap address requests may fall back to an existing address'),
+            ):
+                with self.subTest(expected=expected):
+                    p.write_text(original.replace(before,after,1))
+                    self.assertIn(expected,checks.check(root))
+            p.write_text(original)
             p=root/checks.COMMON/'datasource/NearSwapDataSource.kt'
             original=p.read_text()
             p.write_text(original.replace('appFees = emptyList()','appFees = listOf(AppFee("regression", 67))'))

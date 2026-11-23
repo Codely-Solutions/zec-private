@@ -49,6 +49,12 @@ class PaymentMemoCaptureTest {
     fun capturePaymentMemoStates() = capture(theme = "light", fontScale = 1f)
 
     @Test
+    fun captureDarkPaymentMemoStates() = capture(theme = "dark", fontScale = 1f)
+
+    @Test
+    fun captureOledPaymentMemoStates() = capture(theme = "oled", fontScale = 1f)
+
+    @Test
     fun captureLargePaymentMemoStates() = capture(theme = "dark", fontScale = 2f)
 
     private fun capture(theme: String, fontScale: Float) {
@@ -58,7 +64,12 @@ class PaymentMemoCaptureTest {
         val active = mutableStateOf(reviewScreen)
         compose.setContent {
             key(active.value) {
-                ZcashTheme(appearanceMode = if (theme == "light") AppearanceMode.LIGHT else AppearanceMode.DARK) {
+                val appearance = when (theme) {
+                    "light" -> AppearanceMode.LIGHT
+                    "oled" -> AppearanceMode.OLED
+                    else -> AppearanceMode.DARK
+                }
+                ZcashTheme(appearanceMode = appearance) {
                     Box(Modifier.fillMaxSize().background(ZashiColors.Surfaces.bgPrimary)) {
                         PaymentMemoReviewScene(active.value)
                     }
