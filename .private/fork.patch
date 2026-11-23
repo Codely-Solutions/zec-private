@@ -30475,7 +30475,7 @@ index 9174c2293..1c2415bd7 100644
 @@ -58,0 +59 @@ data class SwapData(
 +    val savedMetadata = data.savedMetadata
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-index a33c847ad..80c4c6c86 100644
+index a33c847ad..e70bf0085 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 @@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -30521,13 +30521,13 @@ index a33c847ad..80c4c6c86 100644
 -                        data.update { it.copy(isLoading = false, error = e) }
 -                        break
 +                        val latest = (e as? SwapRefreshNotSavedException)?.savedMetadata
-+                        data.update {
-+                            it.copy(
++                        data.update { current ->
++                            current.copy(
 +                                isLoading = false,
 +                                error = e,
-+                                savedMetadata = latest ?: it.savedMetadata,
-+                                status = it.status?.takeIf {
-+                                    latest == null || it.savedMetadata?.matchesSavedStatus(latest) == true
++                                savedMetadata = latest ?: current.savedMetadata,
++                                status = current.status?.takeIf {
++                                    latest == null || current.savedMetadata?.matchesSavedStatus(latest) == true
 +                                },
 +                            )
 +                        }
