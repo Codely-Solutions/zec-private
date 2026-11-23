@@ -53,7 +53,10 @@ class NearSwapQuoteTest {
             minAmountOut = BigDecimal("710379"),
         )
         fun decode(value: QuoteResponseDto): QuoteResponseDto =
-            Json.decodeFromString(QuoteResponseDto.serializer(), Json.encodeToString(QuoteResponseDto.serializer(), value))
+            Json.decodeFromString(
+                QuoteResponseDto.serializer(),
+                Json.encodeToString(QuoteResponseDto.serializer(), value),
+            )
 
         val boundary = nearSwapQuote(decode(response), expectedSlippageToleranceBps = 137)
         assertEquals(BigDecimal("0.00009863"), boundary.minimumAmountIn)

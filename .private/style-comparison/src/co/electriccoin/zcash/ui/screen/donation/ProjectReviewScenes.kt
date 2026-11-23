@@ -110,7 +110,7 @@ internal fun ProjectReviewScene(screen: String): Boolean {
                 )
             )
         }
-        else -> return HeightBoundaryReviewScene(screen) || CorrectionReviewScene(screen)
+        else -> return HeightBoundaryReviewScene(screen) || PaymentMemoReviewScene(screen) || CorrectionReviewScene(screen)
     }
     return true
 }

@@ -13,6 +13,7 @@ import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl
@@ -48,6 +49,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -56,6 +58,8 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertSame
 import kotlin.test.assertNull
@@ -89,12 +93,23 @@ class SwapRequestCancellationTest {
     fun lateFailureCannotClearNewerQuoteOrProposal() =
         exercise(SwapMode.EXACT_OUTPUT, InsufficientFundsException(), replace = true)
 
-    @Suppress("LongMethod")
+    @Test
+    fun dismissalCannotPopReplacementWhileItPreparesARefundAddress() =
+        exercise(SwapMode.EXACT_OUTPUT, replaceBeforeRoot = true)
+
+    @Test
+    fun refreshedCrossPayKeepsLastEditedUnitAndRejectsThePreviousQuoteButton() =
+        exercise(SwapMode.EXACT_OUTPUT, checkPriceRefresh = true)
+
+    // Exercises both production screens with the same ports, virtual clock and replacement ordering.
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     private fun exercise(
         mode: SwapMode,
         failure: Exception? = null,
         shouldContinue: Boolean = false,
         replace: Boolean = false,
+        replaceBeforeRoot: Boolean = false,
+        checkPriceRefresh: Boolean = false,
     ) = runTest(timeout = 15.seconds) {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         mockkObject(FiatCurrency.USD)
@@ -147,7 +162,11 @@ class SwapRequestCancellationTest {
                 every { canSpend(any()) } returns true
             }
             val accountSource = mockk<AccountDataSource> {
-                coEvery { requestNextShieldedAddress(requireFresh = true) } returns refund
+                var freshAddressRequests = 0
+                coEvery { requestNextShieldedAddress(requireFresh = true) } coAnswers {
+                    if (freshAddressRequests++ > 0 && replaceBeforeRoot) CompletableDeferred<Unit>().await()
+                    refund
+                }
                 coEvery { getSelectedAccount() } returns account
             }
             val synchronizer = mockk<Synchronizer> {
@@ -230,6 +249,10 @@ class SwapRequestCancellationTest {
                     fun form() = assertNotNull(pay.state.value)
                     form().address.onValueChange(recipient)
                     runCurrent()
+                    if (checkPriceRefresh) {
+                        checkPriceRefresh(pay, repository, assertIs<NearSwapAsset>(btc))
+                        return@runTest
+                    }
                     form().amount.onValueChange(NumberTextFieldInnerState.fromAmount(amount))
                     runCurrent()
                     val button = assertNotNull(form().primaryButton)
@@ -281,6 +304,13 @@ class SwapRequestCancellationTest {
                     else -> {
                         assertNotNull(sheet.negativeButton.onClick).invoke()
                         runCurrent()
+                        if (replaceBeforeRoot) {
+                            backgroundScope.launch {
+                                request.requestExactOutput(amount, recipient, btc, BigDecimal("2"), { true })
+                            }
+                            runCurrent()
+                            assertNull(repository.quote.value)
+                        }
                         finish.complete(Unit)
                         runCurrent()
                         verify(exactly = 0) {
@@ -292,7 +322,7 @@ class SwapRequestCancellationTest {
                         }
                         advanceTimeBy(350)
                         runCurrent()
-                        verify(exactly = 1) { router.backToRoot() }
+                        verify(exactly = if (replaceBeforeRoot) 0 else 1) { router.backToRoot() }
                         assertNull(repository.quote.value)
                     }
                 }
@@ -305,5 +335,35 @@ class SwapRequestCancellationTest {
             unmockkObject(FiatCurrency.USD)
             Dispatchers.resetMain()
         }
+    }
+
+    private fun TestScope.checkPriceRefresh(pay: PayVM, repository: SwapRepositoryImpl, btc: NearSwapAsset) {
+        fun form() = assertNotNull(pay.state.value)
+        fun refresh(price: String) {
+            val repriced = btc.copy(usdPrice = BigDecimal(price))
+            repository.assets.value = repository.assets.value.copy(data = listOf(repriced))
+            runCurrent()
+        }
+        fun assertAmounts(token: String, fiat: String) {
+            assertEquals(0, BigDecimal(token).compareTo(form().amount.innerState.amount))
+            assertEquals(0, BigDecimal(fiat).compareTo(form().amountFiat.innerState.amount))
+        }
+
+        refresh("2")
+        form().amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("100")))
+        runCurrent()
+        assertAmounts("50", "100")
+        val stale = assertNotNull(form().primaryButton?.onClick)
+        refresh("3")
+        assertAmounts("33.33333333", "100")
+        stale()
+        runCurrent()
+        assertNull(repository.quote.value)
+
+        form().amount.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("50")))
+        runCurrent()
+        assertAmounts("50", "150")
+        refresh("4")
+        assertAmounts("50", "200")
     }
 }

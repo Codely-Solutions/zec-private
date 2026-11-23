@@ -7,7 +7,6 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
-import co.electriccoin.zcash.ui.common.model.isSame
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
@@ -186,23 +185,6 @@ internal fun requireQuoteMatchesUserAmount(quoted: BigDecimal, requested: BigDec
             message =
                 "Swap quote does not match user-requested amount: " +
                     "quote=$quoted, requested=$truncated (at $decimals decimals)"
-        )
-    }
-}
-
-internal fun requireMatchingAsset(
-    name: String,
-    type: SwapQuoteMismatchType,
-    expectedTokenTicker: String,
-    expectedChainTicker: String,
-    actual: SwapAsset
-) {
-    if (!actual.isSame(expectedTokenTicker, expectedChainTicker)) {
-        throw SwapQuoteMismatchException.Rejected(
-            type = type,
-            message =
-                "Swap asset mismatch: expected $name=$expectedTokenTicker/$expectedChainTicker " +
-                    "but server returned ${actual.tokenTicker}/${actual.chainTicker}"
         )
     }
 }

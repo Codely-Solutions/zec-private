@@ -4,6 +4,12 @@ The quote is an estimate of output. Its minimum output is the provider's base-un
 
 For incoming FLEX_INPUT, expandable **Quote details** shows the provider's positive `minAmountIn` at exact origin-asset precision. The minimum must reach the deposit address before the quote expires. The deposit screen displays and copies the suggested `amountIn`.
 
+New FLEX_INPUT funding quotes validate both minima against the requested tolerance: each minimum must be at least
+`floor(estimate × (10000 − requestedBps) / 10000)` in that asset's whole base units. The existing positivity and upper
+bounds still apply. The provider applies slippage to both input and output; its atomic minima round down. A one-unit
+rounding remainder is therefore permitted by the formula. Historical status decoding keeps its compatibility policy.
+[FLEX_INPUT contract](https://docs.near-intents.org/integration/distribution-channels/1click-api/swap-types)
+
 At funding admission, estimated amounts and minima must be positive integers in the corresponding base units, and each minimum must be at most its estimate. The quote must use SIMPLE deposit instructions with the requested origin-chain deposit and refund and destination-chain recipient. A deposit memo or additional recipient instruction blocks funding. [1Click quote contract](https://docs.near-intents.org/api-reference/oneclick/request-a-swap-quote)
 
 The 1Click boundary limits decimal text and the absolute wire exponent to 512, precision and expanded integer width to 128 digits, and scale to −127 through 320. Token metadata accepts 0 through 255 decimals. These limits leave room for the 78 digits of an unsigned 256-bit atomic amount, every ERC-20 `uint8` decimal count and fractional USD estimates. Decimal values keep their exact precision. The budget covers quote and status decimals, catalog prices and minimum-amount error hints. An over-budget value fails the existing provider request or refresh path. Saved swap metadata remains readable through its existing serializer. [Token amount representation](https://eips.ethereum.org/EIPS/eip-20), [1Click token metadata](https://docs.near-intents.org/api-reference/oneclick/get-supported-tokens), [1Click status amounts](https://docs.near-intents.org/api-reference/oneclick/check-swap-execution-status)
@@ -13,6 +19,9 @@ For EXACT_OUTPUT, `amountIn` is the deposit including the input allowance; `minA
 CrossPay's exact output must be representable at the selected token's precision. Positive subunit or over-precision input shows **Invalid amount** and disables Review. The request use case and DTO independently require a positive whole base-unit amount, and serialization emits its integer string. Exact-input and flexible-input conversions retain their existing deliberate rounding. `CrossPayAtomicAmountTest` follows the production parser, form, request, data source and serializer with pinned assets at 6, 8, 18 and 24 decimals. `NearSwapDataSourceTest` covers the wire conversion at zero decimals.
 
 A payment URI prefills the token and fiat fields for the compatible selected asset. An untouched prefill belongs to that URI and asset. Changing the payment or asset clears the prior prefill. A compatible replacement URI can supply a new amount, and returning to the original asset can restore the unchanged URI's amount. Editing either amount field makes the amount user-entered.
+
+[Payment representation](PAYMENT-REPRESENTATION.md) defines which edited unit owns the CrossPay draft during a rate
+refresh and how ZIP-321 non-text memo payloads are reviewed without lossy text conversion.
 
 Status output comes from the provider's settled amount when available, including raw base-unit output when the formatted field is absent. Encrypted metadata keeps the reviewed quote and provider execution separately. Sparse refreshes retain known execution across restart; equal timestamps may fill missing execution but cannot replace a conflicting known value. Legacy saved amounts retain unknown provenance until an actual execution field arrives. Activity and both Detail paths distinguish quoted, saved unknown and provider-reported values. A missing USD execution valuation is not replaced by a quote valuation. Otherwise the displayed value remains explicitly quoted. Provider output is not an independently measured wallet credit. The wallet's received transaction records its own scanned net value. A provider/bridge reporting difference must not be silently corrected with a guessed constant.
 

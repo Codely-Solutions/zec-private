@@ -43,7 +43,9 @@ import kotlin.test.assertNotNull
 class NotePersistenceBoundaryTest {
     private val owner = AccountUuid.new(ByteArray(16))
     private val account = mockk<WalletAccount> { every { sdkAccount } returns Account.new(owner) }
-    private val other = mockk<WalletAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16) { 1 })) }
+    private val other = mockk<WalletAccount> {
+        every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16) { 1 }))
+    }
     private val selected = MutableStateFlow<WalletAccount?>(account)
     private val key = mockk<MetadataKey>()
     private val storage = mockk<MetadataDataSource>()

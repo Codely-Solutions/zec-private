@@ -59,7 +59,8 @@ class Zip321PaymentCountTest {
         val messages = ShadowLog.getLogs().map { it.msg }
         assertTrue(messages.any { "Built ZIP321 request" in it })
         assertTrue(messages.any { "ZIP321 parsing completed" in it })
-        for (sensitive in listOf(uri, fixture.RECIPIENT, fixture.TEXT, fixture.encoded(fixture.TEXT.encodeToByteArray()))) {
+        val encodedMemo = fixture.encoded(fixture.TEXT.encodeToByteArray())
+        for (sensitive in listOf(uri, fixture.RECIPIENT, fixture.TEXT, encodedMemo)) {
             assertFalse(messages.any { sensitive in it })
         }
     }

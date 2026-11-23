@@ -53,6 +53,8 @@ import kotlinx.coroutines.withContext
 import java.math.BigDecimal
 import java.util.concurrent.atomic.AtomicReference
 
+// Keeps the three request modes and their common admission and proposal paths together.
+@Suppress("TooManyFunctions")
 class RequestSwapQuoteUseCase(
     private val navigationRouter: NavigationRouter,
     private val navigateToErrorUseCase: NavigateToErrorUseCase,
@@ -64,17 +66,23 @@ class RequestSwapQuoteUseCase(
     private val synchronizerProvider: SynchronizerProvider,
     private val diagnostics: QuoteRequestDiagnostics = QuoteRequestDiagnostics(),
 ) {
-    private val activeRequest = AtomicReference<Job?>()
+    private val latestRequest = AtomicReference<RequestOwner?>()
 
-    private suspend fun runRequest(block: suspend () -> Unit) = coroutineScope {
-        val owner = coroutineContext.job
-        activeRequest.getAndSet(owner)?.cancel()
-        try {
+    internal fun captureNavigationOwnership(caller: Job?): () -> Boolean {
+        val request = latestRequest.get()
+        return { request != null && request.caller === caller && latestRequest.get() === request }
+    }
+
+    private suspend fun runRequest(block: suspend () -> Unit) {
+        val caller = currentCoroutineContext().job
+        coroutineScope {
+            val request = RequestOwner(caller, coroutineContext.job)
+            latestRequest.getAndSet(request)?.child?.cancel()
             block()
-        } finally {
-            activeRequest.compareAndSet(owner, null)
         }
     }
+
+    private class RequestOwner(val caller: Job, val child: Job)
 
     suspend fun requestExactInput(
         amount: BigDecimal,
@@ -217,7 +225,6 @@ class RequestSwapQuoteUseCase(
         return true
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private suspend fun requestQuote(
         requestQuote: suspend () -> Unit,
         funding: FundingCapability,
@@ -238,48 +245,57 @@ class RequestSwapQuoteUseCase(
             return
         }
 
-        if (result is SwapQuoteData.Success) {
-            if (rejectUnsupportedFunding(funding, result, canNavigateToSwapQuote)) return
-            currentCoroutineContext().ensureActive()
-            if (swapRepository.quote.value !== result) return
-            try {
-                ZecSwapComposition.validate(result.quote)
-            } catch (e: IllegalArgumentException) {
-                if (canNavigateToSwapQuote()) {
-                    swapRepository.clearQuote()
-                    navigateToErrorUseCase(ErrorArgs.General(e))
-                }
-                return
-            }
-        }
-
-        if (result is SwapQuoteData.Success && funding == FundingCapability.LOCAL_TRANSACTION) {
-            try {
-                diagnostics.trace(QuoteRequestStage.PROPOSAL) { createProposal(result.quote) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: TexUnsupportedOnKSException) {
-                val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
-                onPreparationFailure(result, canNavigateToSwapQuote) {
-                    navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
-                }
-                return
-            } catch (_: InsufficientFundsException) {
-                onPreparationFailure(result, canNavigateToSwapQuote) {
-                    navigationRouter.forward(InsufficientFundsArgs)
-                }
-                return
-            } catch (e: Exception) {
-                onPreparationFailure(result, canNavigateToSwapQuote) {
-                    navigateToErrorUseCase(ErrorArgs.General(e))
-                }
-                return
-            }
+        if (result is SwapQuoteData.Success && !prepareForReview(result, funding, canNavigateToSwapQuote)) {
+            return
         }
 
         currentCoroutineContext().ensureActive()
         navigateToPreparedReview(result, canNavigateToSwapQuote)
     }
+
+    private suspend fun prepareForReview(
+        result: SwapQuoteData.Success,
+        funding: FundingCapability,
+        canNavigate: () -> Boolean
+    ): Boolean {
+        if (rejectUnsupportedFunding(funding, result, canNavigate)) return false
+        currentCoroutineContext().ensureActive()
+        if (swapRepository.quote.value !== result) return false
+        try {
+            ZecSwapComposition.validate(result.quote)
+        } catch (e: IllegalArgumentException) {
+            if (canNavigate()) {
+                swapRepository.clearQuote()
+                navigateToErrorUseCase(ErrorArgs.General(e))
+            }
+            return false
+        }
+        return funding != FundingCapability.LOCAL_TRANSACTION || prepareProposal(result, canNavigate)
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private suspend fun prepareProposal(
+        result: SwapQuoteData.Success,
+        canNavigate: () -> Boolean
+    ): Boolean =
+        try {
+            diagnostics.trace(QuoteRequestStage.PROPOSAL) { createProposal(result.quote) }
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: TexUnsupportedOnKSException) {
+            val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
+            onPreparationFailure(result, canNavigate) {
+                navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
+            }
+            false
+        } catch (_: InsufficientFundsException) {
+            onPreparationFailure(result, canNavigate) { navigationRouter.forward(InsufficientFundsArgs) }
+            false
+        } catch (e: Exception) {
+            onPreparationFailure(result, canNavigate) { navigateToErrorUseCase(ErrorArgs.General(e)) }
+            false
+        }
 
     private suspend fun onPreparationFailure(
         result: SwapQuoteData,

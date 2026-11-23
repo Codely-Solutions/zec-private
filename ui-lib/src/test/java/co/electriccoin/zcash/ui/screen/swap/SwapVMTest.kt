@@ -481,14 +481,14 @@ class SwapVMTest {
             harness.onBack() // now resolves the cancel confirmation
 
             assertNull(harness.vm.cancelState.value)
-            coVerify { harness.navigateToSwapQuoteIfAvailable(any()) }
+            coVerify { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
         }
 
     @Test
     fun cancelConfirmationNegativeButtonCancelsSwap() =
         runTest {
             val harness = harness()
-            coEvery { harness.cancelSwap.afterDismissal(any()) } coAnswers { firstArg<suspend () -> Unit>()() }
+            coEvery { harness.cancelSwap.afterDismissal(any(), any()) } coAnswers { secondArg<suspend () -> Unit>()() }
             harness.collectState(this)
             harness.makeQuoteHang()
             harness.onAddressChange(BTC_ADDRESS)
@@ -502,7 +502,7 @@ class SwapVMTest {
             mainDispatcher.scheduler.advanceUntilIdle() // let the 350ms dismiss delay elapse
 
             assertNull(harness.vm.cancelState.value)
-            coVerify(exactly = 1) { harness.cancelSwap.afterDismissal(any()) }
+            coVerify(exactly = 1) { harness.cancelSwap.afterDismissal(any(), any()) }
         }
 
     @Test
@@ -521,7 +521,7 @@ class SwapVMTest {
                 ?.invoke()
 
             assertNull(harness.vm.cancelState.value)
-            coVerify { harness.navigateToSwapQuoteIfAvailable(any()) }
+            coVerify { harness.navigateToSwapQuoteIfAvailable(any(), any()) }
         }
 
     // endregion
@@ -864,7 +864,9 @@ class SwapVMTest {
             mockk<NavigateToSwapRefundWarningUseCase> {
                 coEvery { this@mockk.invoke(any(), any()) } returns refundWarningResult
             }
-        val requestSwapQuote = mockk<RequestSwapQuoteUseCase>(relaxed = true)
+        val requestSwapQuote = mockk<RequestSwapQuoteUseCase>(relaxed = true) {
+            every { captureNavigationOwnership(any()) } returns { true }
+        }
         val cancelSwap = mockk<CancelSwapUseCase>(relaxed = true)
         val navigateToSwapQuoteIfAvailable = mockk<NavigateToSwapQuoteIfAvailableUseCase>(relaxed = true)
         val navigationRouter = mockk<NavigationRouter>(relaxed = true)

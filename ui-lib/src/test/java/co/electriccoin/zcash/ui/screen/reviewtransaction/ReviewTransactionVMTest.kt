@@ -27,6 +27,7 @@ import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.design.R
 import co.electriccoin.zcash.ui.design.util.ImageResource
 import co.electriccoin.zcash.ui.design.util.imageRes
+import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressArgs
 import io.mockk.coEvery
@@ -52,6 +53,7 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import co.electriccoin.zcash.ui.R as UiR
 
 /**
  * The sending account's row shows the account's icon as the rest of the app does: the Zodl mark on
@@ -105,6 +107,37 @@ class ReviewTransactionVMTest {
     @Test
     fun zip321ConfirmsTheDisplayedProposalAcrossAuthentication() = runTest {
         confirmAfterReplacingProposal(zip321Proposal(), zip321Proposal(amount = 4321L))
+    }
+
+    @Test
+    fun zip321NonTextMemoIsDisclosedWithoutReplacementText() = runTest {
+        val proposals = MutableStateFlow<SendTransactionProposal>(zip321Proposal(binaryMemoByteCount = 4))
+        val vm = vm(
+            metadata = emptyMap(),
+            observeProposal = mockk { every { filterSend() } returns proposals },
+        )
+        collect(vm)
+        val items = assertNotNull(vm.state.value).items
+        assertEquals(
+            stringRes(UiR.string.zip321_binary_memo, 4),
+            items.filterIsInstance<MessageState>().single().message,
+        )
+
+        proposals.value = zip321Proposal(memo = "Synthetic text memo")
+        runCurrent()
+        assertEquals(
+            stringRes("Synthetic text memo"),
+            assertNotNull(vm.state.value).items.filterIsInstance<MessageState>().single().message,
+        )
+
+        proposals.value = zip321Proposal()
+        runCurrent()
+        assertEquals(emptyList(), assertNotNull(vm.state.value).items.filterIsInstance<MessageState>())
+    }
+
+    @Test
+    fun zip321NonTextMemoReplacementRequiresNewAuthenticationAtTheSameAmount() = runTest {
+        confirmAfterReplacingProposal(zip321Proposal(binaryMemoByteCount = 4), zip321Proposal(binaryMemoByteCount = 4))
     }
 
     private fun TestScope.confirmAfterReplacingProposal(
@@ -216,9 +249,15 @@ class ReviewTransactionVMTest {
                 },
         )
 
-    private suspend fun zip321Proposal(amount: Long = 1234L): SendTransactionProposal {
+    private suspend fun zip321Proposal(
+        amount: Long = 1234L,
+        memo: String = "",
+        binaryMemoByteCount: Int? = null,
+    ): SendTransactionProposal {
         val regular = proposal(amount)
-        return Zip321TransactionProposal(regular.destination, regular.amount, regular.memo, regular.proposal)
+        return Zip321TransactionProposal(
+            regular.destination, regular.amount, Memo(memo), regular.proposal, binaryMemoByteCount,
+        )
     }
 
     private fun TestScope.collect(vm: ReviewTransactionVM) {

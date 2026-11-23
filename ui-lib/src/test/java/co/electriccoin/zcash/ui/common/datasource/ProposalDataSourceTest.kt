@@ -80,7 +80,6 @@ class ProposalDataSourceTest {
         val dataSource = dataSource(synchronizer)
         val cases = listOf(
             MemoCase(null, ""),
-            MemoCase(byteArrayOf(), ""),
             MemoCase(fixture.TEXT.encodeToByteArray(), fixture.TEXT),
             MemoCase(fixture.TEXT.encodeToByteArray().copyOf(512), fixture.TEXT),
             MemoCase(byteArrayOf(0xf6.toByte()).copyOf(512), ""),
@@ -98,6 +97,15 @@ class ProposalDataSourceTest {
             assertEquals(case.bytes?.size?.takeIf { case.text == null }, proposal.binaryMemoByteCount)
             coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, uri) }
         }
+    }
+
+    @Test
+    fun anExplicitEmptyMemoIsRejectedByThePinnedUriParserBeforeTheSdk() = runBlocking {
+        val synchronizer = mockk<Synchronizer>()
+        assertFailsWith<TransactionProposalNotCreatedException> {
+            dataSource(synchronizer).createZip321Proposal(account, Zip321MemoFixture.uri(byteArrayOf()))
+        }
+        coVerify(exactly = 0) { synchronizer.proposeFulfillingPaymentUri(any(), any()) }
     }
 
     @Test

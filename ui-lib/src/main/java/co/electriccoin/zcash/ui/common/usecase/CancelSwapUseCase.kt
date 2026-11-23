@@ -12,9 +12,10 @@ class CancelSwapUseCase(
         navigationRouter.backToRoot()
     }
 
-    suspend fun afterDismissal(dismiss: suspend () -> Unit) {
+    suspend fun afterDismissal(canReturnToRoot: () -> Boolean, dismiss: suspend () -> Unit) {
+        if (!canReturnToRoot()) return
         swapRepository.clear()
         dismiss()
-        if (swapRepository.quote.value == null) navigationRouter.backToRoot()
+        if (canReturnToRoot() && swapRepository.quote.value == null) navigationRouter.backToRoot()
     }
 }

@@ -218,7 +218,7 @@ class ReviewTransactionVM(
     )
 
     private fun createZip321State(
-        transactionProposal: SendTransactionProposal,
+        transactionProposal: Zip321TransactionProposal,
         addressBookContact: EnhancedABContact?,
         selectedWallet: WalletAccount,
         selectedWalletIcon: ImageResource,
@@ -264,13 +264,10 @@ class ReviewTransactionVM(
                             onClick = { onAddContactClick(transactionProposal.destination.address) }
                         ).takeIf { addressBookContact == null }
                 ),
-                transactionProposal.memo.takeIf { it.value.isNotEmpty() || transactionProposal.binaryMemoByteCount != null }?.let {
-                    MessageState(
-                        title = stringRes(R.string.send_requestPayment_for),
-                        message = transactionProposal.binaryMemoByteCount?.let { count ->
-                            stringRes(R.string.zip321_binary_memo, count)
-                        } ?: stringRes(it.value)
-                    )
+                transactionProposal.run {
+                    val message = binaryMemoByteCount?.let { stringRes(R.string.zip321_binary_memo, it) }
+                        ?: memo.value.takeIf { it.isNotEmpty() }?.let { stringRes(it) }
+                    message?.let { MessageState(title = stringRes(R.string.send_requestPayment_for), message = it) }
                 },
                 FinancialInfoState(
                     title = stringRes(R.string.private_wallet_transaction_fee),

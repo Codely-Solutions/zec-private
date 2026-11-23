@@ -1,0 +1,40 @@
+[
+  {
+    "name": "duplicate native ZEC with zero price",
+    "append": {"assetId":"nep141:zec.omft.near","symbol":"ZEC","blockchain":"zec","decimals":8,"price":"0"},
+    "unavailable": "nep141:zec.omft.near"
+  },
+  {
+    "name": "duplicate BTC with a different symbol and no price",
+    "append": {"assetId":"nep141:btc.omft.near","symbol":"OTHER","blockchain":"btc","decimals":8},
+    "unavailable": "nep141:btc.omft.near"
+  },
+  {
+    "name": "distinct BTC alias with same display identity",
+    "append": {"assetId":"1cs_v1:btc:native:coin","symbol":"BTC","blockchain":"btc","decimals":8,"price":"1"}
+  },
+  {
+    "name": "BTC with missing price",
+    "replace": {"assetId":"nep141:btc.omft.near","symbol":"BTC","blockchain":"btc","decimals":8},
+    "unavailable": "nep141:btc.omft.near"
+  },
+  {
+    "name": "native ZEC with missing price",
+    "replace": {"assetId":"nep141:zec.omft.near","symbol":"ZEC","blockchain":"zec","decimals":8},
+    "unavailable": "nep141:zec.omft.near"
+  },
+  {
+    "name": "BTC with zero price",
+    "replace": {"assetId":"nep141:btc.omft.near","symbol":"BTC","blockchain":"btc","decimals":8,"price":"0"},
+    "unavailable": "nep141:btc.omft.near"
+  },
+  {
+    "name": "USDC with a changed contract",
+    "replace": {
+      "assetId":"nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near",
+      "symbol":"USDC","blockchain":"eth","decimals":6,"price":"1",
+      "contractAddress":"0x1111111111111111111111111111111111111111"
+    },
+    "unavailable": "nep141:eth-0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48.omft.near"
+  }
+]

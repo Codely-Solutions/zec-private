@@ -187,7 +187,7 @@ internal class TransactionNoteViewModel(
     }
 
     /**
-     * Ignored while a save runs: the save leaves the sheet itself when it returns, so a back or a
+     * Ignored while a save runs: an acknowledged save leaves the sheet, so a back or a
      * dismissal now would make that second back pop the screen underneath. Every dismiss path of
      * the sheet, back, scrim tap and drag down, ends here.
      */

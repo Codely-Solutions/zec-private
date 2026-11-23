@@ -80,7 +80,7 @@ internal fun TransactionNoteView(
 
 /**
  * A sheet state that refuses to hide while a save runs, so the sheet cannot be dragged or tapped
- * away before the save leaves it.
+ * away before the save result is known. A failed save keeps the editor available for retry.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

@@ -126,7 +126,8 @@ internal class ExactOutputVMMapper {
         return fiatInnerState.copy(
             innerTextFieldState =
                 fiatInnerState.innerTextFieldState.copy(
-                    value = fiat?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) } ?: stringRes(""),
+                    value = fiat?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) }
+                        ?: stringRes(""),
                     selection = TextSelection.End
                 ),
             amount = fiat,

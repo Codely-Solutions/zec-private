@@ -96,7 +96,7 @@ internal class SwapVM(
             )
         )
 
-    private val isCancelStateVisible = MutableStateFlow(false)
+    private val cancelSheet = MutableStateFlow<(() -> Boolean)?>(null)
     private var quoteActionInProgress = false
     private var quoteRequestJob: Job? = null
     private var isCancellingQuote = false
@@ -109,9 +109,9 @@ internal class SwapVM(
     private val isSelectedAccountSpendable = MutableStateFlow<Boolean?>(null)
 
     val cancelState =
-        isCancelStateVisible
-            .map { isVisible ->
-                if (isVisible) {
+        cancelSheet
+            .map { owner ->
+                if (owner != null) {
                     SwapCancelState(
                         icon = imageRes(R.drawable.ic_swap_quote_cancel),
                         title = stringRes(R.string.swapAndPay_canceltitle),
@@ -119,12 +119,12 @@ internal class SwapVM(
                         negativeButton =
                             ButtonState(
                                 text = stringRes(R.string.swapAndPay_cancelPayment),
-                                onClick = ::onCancelSwapClick
+                                onClick = { onCancelSwapClick(owner) }
                             ),
                         positiveButton =
                             ButtonState(
                                 text = stringRes(R.string.swap_cancel_positive),
-                                onClick = ::onDismissCancelClick
+                                onClick = { onDismissCancelClick(owner) }
                             ),
                         onBack = ::onBack
                     )
@@ -190,7 +190,9 @@ internal class SwapVM(
             onSwapAssetPickerClick = ::onSwapAssetPickerClick,
             onSwapCurrencyTypeClick = ::onSwapCurrencyTypeClick,
             onSlippageClick = ::onSlippageClick,
-            onRequestSwapQuoteClick = ::onRequestSwapQuoteClick,
+            onRequestSwapQuoteClick = { amount, fiatAmount, address ->
+                onRequestSwapQuoteClick(internalState.value, amount, fiatAmount, address)
+            },
             onTryAgainClick = ::onTryAgainClick,
             onAddressChange = ::onAddressChange,
             onTextFieldChange = ::onTextFieldChange,
@@ -207,9 +209,7 @@ internal class SwapVM(
             internalState = rendered,
             callbacks = callbacks.copy(
                 onRequestSwapQuoteClick = { amount, fiatAmount, address ->
-                    val current = internalState.value
-                    val ownedAtRender = rendered.copy(account = current.account, swapAssets = current.swapAssets)
-                    if (current == ownedAtRender) onRequestSwapQuoteClick(amount, fiatAmount, address)
+                    onRequestSwapQuoteClick(rendered, amount, fiatAmount, address)
                 }
             )
         )
@@ -299,37 +299,43 @@ internal class SwapVM(
     private fun onBack() =
         viewModelScope.launch {
             if (isCancellingQuote) return@launch
-            if (internalState.value.isRequestingQuote) {
-                isCancelStateVisible.update { true }
-            } else if (isCancelStateVisible.value) {
-                isCancelStateVisible.update { false }
-                navigateToSwapQuoteIfAvailable { hideCancelBottomSheet() }
-            } else {
-                isCancellingQuote = true
-                cancelSwap()
+            val owner = cancelSheet.value
+            when {
+                internalState.value.isRequestingQuote -> {
+                    if (owner == null) {
+                        cancelSheet.value = requestSwapQuote.captureNavigationOwnership(quoteRequestJob)
+                    }
+                }
+                owner != null -> continueQuote(owner)
+                else -> {
+                    isCancellingQuote = true
+                    cancelSwap()
+                }
             }
         }
 
-    private fun onCancelSwapClick() =
+    private fun onCancelSwapClick(owner: () -> Boolean) =
         viewModelScope.launch {
-            if (isCancellingQuote || !isCancelStateVisible.value) return@launch
+            if (isCancellingQuote || cancelSheet.value !== owner || !owner()) return@launch
             isCancellingQuote = true
             quoteRequestJob?.cancel()
-            cancelSwap.afterDismissal { hideCancelBottomSheet() }
+            cancelSheet.value = null
+            cancelSwap.afterDismissal(owner) { awaitCancelSheetDismissal() }
         }
 
-    private fun onDismissCancelClick() =
+    private fun onDismissCancelClick(owner: () -> Boolean) =
         viewModelScope.launch {
-            if (isCancellingQuote || !isCancelStateVisible.value) return@launch
-            isCancelStateVisible.update { false }
-            navigateToSwapQuoteIfAvailable { hideCancelBottomSheet() }
+            if (isCancellingQuote || cancelSheet.value !== owner) return@launch
+            continueQuote(owner)
         }
+
+    private suspend fun continueQuote(owner: () -> Boolean) {
+        cancelSheet.value = null
+        navigateToSwapQuoteIfAvailable(owner) { awaitCancelSheetDismissal() }
+    }
 
     @Suppress("MagicNumber")
-    private suspend fun hideCancelBottomSheet() {
-        isCancelStateVisible.update { false }
-        delay(350.milliseconds)
-    }
+    private suspend fun awaitCancelSheetDismissal() = delay(350.milliseconds)
 
     private fun onSwapCurrencyTypeClick(newTextFieldAmount: BigDecimal?) {
         internalState.update {
@@ -365,10 +371,14 @@ internal class SwapVM(
         internalState.update { it.copy(amountTextState = new) }
 
     /** Gates the quote request behind the refund warning, on the direction snapshotted at tap time. */
-    private fun onRequestSwapQuoteClick(amount: BigDecimal, fiatAmount: BigDecimal?, address: String) =
+    private fun onRequestSwapQuoteClick(
+        rendered: InternalStateImpl,
+        amount: BigDecimal,
+        fiatAmount: BigDecimal?,
+        address: String,
+    ) =
         viewModelScope.launch {
-            val snapshot = internalState.value
-            if (snapshot.isRequestingQuote || quoteActionInProgress || isCancellingQuote) return@launch
+            val snapshot = currentQuoteDraft(rendered) ?: return@launch
             val asset = snapshot.swapAsset ?: return@launch
             if (asset.positiveUsdPrice == null || swapRepository.assets.value.zecAsset.positiveUsdPrice == null) {
                 return@launch
@@ -387,7 +397,7 @@ internal class SwapVM(
                 if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = direction.toSwapMode())) {
                     return@launch
                 }
-                if (isCancellingQuote) return@launch
+                if (isCancellingQuote || currentQuoteDraft(rendered, checkAction = false) == null) return@launch
                 quoteRequestJob = coroutineContext.job
                 internalState.update { it.copy(isRequestingQuote = true) }
                 when (direction) {
@@ -397,7 +407,7 @@ internal class SwapVM(
                             address = address,
                             selectedAsset = asset,
                             slippage = slippage,
-                            canNavigateToSwapQuote = { !isCancellingQuote && !isCancelStateVisible.value },
+                            canNavigateToSwapQuote = { !isCancellingQuote && cancelSheet.value == null },
                             contactNetwork = contactNetwork
                         )
                     }
@@ -408,7 +418,7 @@ internal class SwapVM(
                             refundAddress = address,
                             selectedAsset = asset,
                             slippage = slippage,
-                            canNavigateToSwapQuote = { !isCancellingQuote && !isCancelStateVisible.value },
+                            canNavigateToSwapQuote = { !isCancellingQuote && cancelSheet.value == null },
                             contactNetwork = contactNetwork
                         )
                     }
@@ -419,6 +429,17 @@ internal class SwapVM(
                 internalState.update { it.copy(isRequestingQuote = false) }
             }
         }
+
+    private fun currentQuoteDraft(rendered: InternalStateImpl, checkAction: Boolean = true): InternalStateImpl? {
+        val current = internalState.value
+        if (current.isRequestingQuote || isCancellingQuote || (checkAction && quoteActionInProgress)) return null
+        val renderedZecPrice = rendered.swapAssets.zecAsset.positiveUsdPrice
+        if (rendered.swapDirection == SWAP_FROM_ZEC && renderedZecPrice != null &&
+            renderedZecPrice != swapRepository.assets.value.zecAsset.positiveUsdPrice
+        ) return null
+        val ownedAtRender = rendered.copy(account = current.account, swapAssets = current.swapAssets)
+        return current.takeIf { it == ownedAtRender }
+    }
 
     private fun onSwapInfoClick() = navigateToSwapInfo()
 

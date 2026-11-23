@@ -2,17 +2,20 @@ package co.electriccoin.zcash.ui.common.model
 
 import java.nio.charset.CharacterCodingException
 
+private const val FIRST_OPAQUE_MEMO_MARKER = 0xf5
+private const val EMPTY_MEMO_MARKER = 0xf6
+
 /** ZIP 302 text presentation. Binary/future formats retain their bytes in the original URI. */
-fun ByteArray.zip321MemoTextOrNull(): String? {
-    val first = firstOrNull()?.toInt()?.and(0xff) ?: return ""
-    if (first == 0xf6 && drop(1).all { it == 0.toByte() }) return ""
-    if (first >= 0xf5) return null
-    val end = indexOfLast { it != 0.toByte() } + 1
-    return try {
-        decodeToString(endIndex = end, throwOnInvalidSequence = true)
+fun ByteArray.zip321MemoTextOrNull(): String? =
+    when (val first = firstOrNull()?.toUByte()?.toInt()) {
+        null -> ""
+        EMPTY_MEMO_MARKER -> "".takeIf { drop(1).all { it == 0.toByte() } }
+        else -> if (first >= FIRST_OPAQUE_MEMO_MARKER) null else decodeZip321MemoText()
+    }
+
+private fun ByteArray.decodeZip321MemoText(): String? =
+    try {
+        decodeToString(endIndex = indexOfLast { it != 0.toByte() } + 1, throwOnInvalidSequence = true)
     } catch (_: CharacterCodingException) {
         null
     }
-}
-
-class UneditableZip321MemoException : Exception("A binary payment memo cannot be converted to editable text")

@@ -45,6 +45,13 @@ For external-navigation acceptance, isolate the callback/browser boundary from w
 
 ## Historical orchestration and experimental work
 
+For the review after `16c74516`, run the existing `ReviewScreenshotTest.referenceScreenRenders` first and inspect it.
+Then select `ReviewScreenshotTest.captureNoteRetryStates`, `HeightBoundaryCaptureTest`, `PaymentMemoCaptureTest` and
+`CrossPayRefreshCaptureTest` using the same opt-in host and a new `privateReviewCaptureDir`. They render the retained
+note draft/actions, exact-height action eligibility, non-text memo Review/fallback explanation, and refreshed linked
+CrossPay values. Inspect the normal and large-text frames and scroll actions. Synthetic frames establish presentation;
+the composed JVM tests establish state transitions and payload/ownership behavior.
+
 In the surrounding workspace, `records/INDEX.md` locates archived `donations_ui_adapter.py`, `donations_ui_scenario.py` and `donations_acceptance.py`. They contain prior artifact checks, theme switching, settled-frame capture and navigation. Recover selected files for inspection. Their automatic-donation assumptions and root-relative paths require review; they are historical examples, not current launch commands.
 
 `.private/donation-review/include.gradle` provides a standalone opt-in donation review host. The CI UI artifact currently selects the broader `StyleComparisonActivity` below; use it for donation captures from that artifact. Both use production components with synthetic state and are absent from production and ordinary debug builds. Recovery words are visibly synthetic and copy actions inert. Screenshots establish layout, not authentication or payment.

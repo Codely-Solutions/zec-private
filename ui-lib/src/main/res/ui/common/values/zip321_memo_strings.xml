@@ -2,5 +2,5 @@
 <resources>
     <string name="zip321_binary_memo">Non-text memo (%1$d bytes). The payment will include the original memo.</string>
     <string name="zip321_non_text_memo_title">Non-text payment memo</string>
-    <string name="zip321_non_text_memo_edit_error">This payment request can’t be edited in Send. Scan it again or ask the recipient for a payment request with a text memo.</string>
+    <string name="zip321_non_text_memo_edit_error">This payment request can’t be edited in Send. Ask the recipient for a new request with a text memo.</string>
 </resources>

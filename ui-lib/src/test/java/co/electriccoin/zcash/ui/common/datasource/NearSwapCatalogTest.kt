@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.ZcashShieldedSwapAddress
+import co.electriccoin.zcash.ui.common.model.positiveUsdPrice
 import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
 import co.electriccoin.zcash.ui.common.model.near.NearTokenDto
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuoteStatus
@@ -17,12 +18,17 @@ import co.electriccoin.zcash.ui.common.model.near.QuoteResponseDto
 import co.electriccoin.zcash.ui.common.model.near.SwapStatusResponseDto
 import co.electriccoin.zcash.ui.common.model.near.SwapType
 import co.electriccoin.zcash.ui.common.provider.NearApiProvider
+import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl
+import co.electriccoin.zcash.ui.common.usecase.GetCuratedSwapAssetsUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -77,6 +83,44 @@ class NearSwapCatalogTest {
             assertEquals(omni.assetId, mapped.single { it.tokenTicker == "BTC(OMNI)" }.assetId)
         }
     }
+
+    @Test
+    fun rawIdentityAdmissionMatchesReleaseCheckerFixturesInEitherOrder() = runTest {
+        fun resource(name: String) = checkNotNull(javaClass.getResourceAsStream(name))
+            .bufferedReader().use { it.readText() }
+        val baseline = Json.decodeFromString<List<NearTokenDto>>(resource("/swap-catalog.json"))
+            .map { it.copy(price = BigDecimal.ONE) }
+        val curatedAssets = SimpleSwapAssetProviderImpl(
+            SwapCatalogTestFixture.tokenIcons, SwapCatalogTestFixture.tokenNames, SwapCatalogTestFixture.blockchains
+        )
+        val repository = SwapRepositoryImpl(dataSource, mockk(relaxed = true)).also { it.scope = backgroundScope }
+        val curated = GetCuratedSwapAssetsUseCase(repository, curatedAssets)
+
+        for (case in Json.decodeFromString<List<CatalogAdmissionCase>>(resource("/swap-catalog-admission.json"))) {
+            val rows = case.append?.let { baseline + it } ?: baseline.map { row ->
+                case.replace?.takeIf { it.assetId == row.assetId } ?: row
+            }
+            val expected = baseline.map { it.assetId }.toSet() - listOfNotNull(case.unavailable).toSet()
+            for (order in listOf(rows, rows.reversed())) {
+                coEvery { nearApiProvider.getSupportedTokens() } returns order
+                repository.requestRefreshAssetsOnce()
+                val state = curated()
+                val pricedZec = state.zecAsset?.takeIf { it.positiveUsdPrice != null }
+                val actual = (state.data.orEmpty() + listOfNotNull(pricedZec)).map { it.assetId }.toSet()
+                assertEquals(expected, actual, case.name)
+                val recovered = state.recoveryAssets.orEmpty().take(order.size).map { it.assetId }
+                assertEquals(order.map { it.assetId }, recovered, case.name)
+            }
+        }
+    }
+
+    @Serializable
+    private data class CatalogAdmissionCase(
+        val name: String,
+        val append: NearTokenDto? = null,
+        val replace: NearTokenDto? = null,
+        val unavailable: String? = null,
+    )
 
     @Test
     fun quoteRequestsPreserveCatalogIdentityAndNormalizeTheFixedSide() =

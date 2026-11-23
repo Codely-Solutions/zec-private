@@ -49,8 +49,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 
 /**
- * Every update returns whether the change was written to disk. A false result means the edit was
- * not saved, because the storage is read-only for this read or the write failed.
+ * Every update returns whether persistence was acknowledged. A false result can mean read-only
+ * storage or a write failure, including a failed acknowledgement after rename. Callers retain
+ * their desired edit for an idempotent retry instead of assuming either persisted value.
  */
 @Suppress("TooManyFunctions")
 interface MetadataDataSource {

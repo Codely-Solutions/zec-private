@@ -46,7 +46,7 @@ class NavigateToSwapQuoteIfAvailableUseCaseTest {
     @Test
     fun successHidesSheetThenNavigates() =
         runTest {
-            useCase(SwapQuoteData.Success(mockk<SwapQuote>())).invoke(hideBottomSheet)
+            useCase(SwapQuoteData.Success(mockk<SwapQuote>())).invoke(hideBottomSheet = hideBottomSheet)
 
             assertContentEquals(listOf("hide", "forward"), events)
             assertEquals(SwapQuoteArgs, forwarded.single())
@@ -56,7 +56,7 @@ class NavigateToSwapQuoteIfAvailableUseCaseTest {
     fun errorHidesSheetThenNavigates() =
         runTest {
             useCase(SwapQuoteData.Error(SwapMode.EXACT_INPUT, RuntimeException("boom")))
-                .invoke(hideBottomSheet)
+                .invoke(hideBottomSheet = hideBottomSheet)
 
             assertContentEquals(listOf("hide", "forward"), events)
             assertEquals(SwapQuoteArgs, forwarded.single())
@@ -70,7 +70,7 @@ class NavigateToSwapQuoteIfAvailableUseCaseTest {
     fun mismatchErrorHidesSheetThenOpensTheMismatchSheet() =
         runTest {
             val swapRepository = repository(mismatchError())
-            NavigateToSwapQuoteIfAvailableUseCase(swapRepository, router).invoke(hideBottomSheet)
+            NavigateToSwapQuoteIfAvailableUseCase(swapRepository, router).invoke(hideBottomSheet = hideBottomSheet)
 
             assertContentEquals(listOf("hide", "forward"), events)
             verify(exactly = 1) { swapRepository.clearQuote() }
@@ -87,7 +87,7 @@ class NavigateToSwapQuoteIfAvailableUseCaseTest {
     @Test
     fun loadingDoesNothing() =
         runTest {
-            useCase(SwapQuoteData.Loading).invoke(hideBottomSheet)
+            useCase(SwapQuoteData.Loading).invoke(hideBottomSheet = hideBottomSheet)
 
             assertTrue(events.isEmpty())
             assertTrue(forwarded.isEmpty())
@@ -96,7 +96,7 @@ class NavigateToSwapQuoteIfAvailableUseCaseTest {
     @Test
     fun nullQuoteDoesNothing() =
         runTest {
-            useCase(null).invoke(hideBottomSheet)
+            useCase(null).invoke(hideBottomSheet = hideBottomSheet)
 
             assertTrue(events.isEmpty())
             assertTrue(forwarded.isEmpty())

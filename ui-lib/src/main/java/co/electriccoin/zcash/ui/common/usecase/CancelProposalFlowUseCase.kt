@@ -5,7 +5,9 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.MigrationSweepTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.migration.MigrationNavigator
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -15,6 +17,7 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
+import co.electriccoin.zcash.ui.screen.donation.DonationArgs
 import co.electriccoin.zcash.ui.screen.pay.PayArgs
 import co.electriccoin.zcash.ui.screen.send.Send
 import co.electriccoin.zcash.ui.screen.swap.SwapArgs
@@ -72,16 +75,25 @@ class CancelProposalFlowUseCase(
                 navigationRouter.back()
             }
 
-            else -> {
-                if (proposal is co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal &&
-                    proposal.isDonation
-                ) {
-                    navigationRouter.backTo(co.electriccoin.zcash.ui.screen.donation.DonationArgs::class)
+            is Zip321TransactionProposal -> {
+                if (proposal.binaryMemoByteCount != null) {
+                    // The review replaced the scanner without creating a Send draft.
+                    navigationRouter.back()
                 } else {
-                    if (clearSendForm) observeClearSend.requestClear()
-                    navigationRouter.backTo(Send::class)
+                    backToSend(clearSendForm)
                 }
             }
+
+            is RegularTransactionProposal -> {
+                if (proposal.isDonation) navigationRouter.backTo(DonationArgs::class) else backToSend(clearSendForm)
+            }
+
+            else -> backToSend(clearSendForm)
         }
+    }
+
+    private fun backToSend(clearSendForm: Boolean) {
+        if (clearSendForm) observeClearSend.requestClear()
+        navigationRouter.backTo(Send::class)
     }
 }

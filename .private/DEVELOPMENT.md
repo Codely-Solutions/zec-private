@@ -55,6 +55,23 @@ On Windows, the session gives child JVMs a deliberately absent owned `jdk.net.un
 
 ## Review boundary regressions
 
+For the five findings after `16c74516`, use the eight-area matrix in [core coverage](core-coverage.md#review-transition-regressions).
+Run `SwapRequestCancellationTest` through the real Pay/Swap mapper, VM, repository and request/cancel use cases, holding
+external proposal preparation and advancing dismissal with virtual time. Include fresh-address and replaced-request ownership;
+sheet visibility alone cannot authorize terminal callbacks. Select `RestoreHeightBoundaryReviewTest` for the production
+number parser and all three birthday consumers, including retained callbacks and the SDK range boundaries.
+
+For note persistence, keep `NotePersistenceBoundaryTest`, `TransactionNoteViewModelTest` and
+`TransactionMetadataEditUseCaseTest` together. False acknowledgement preserves the draft and mutation actions even when
+the storage port already performed a rename. Retry uses the displayed account and original wallet generation; reset rejects
+that editor. Reopening tests read the durable result rather than the former draft. Keep existing encrypted metadata/restart
+and reset ownership tests alongside these cases when changing storage. Native power loss remains a separate check.
+
+Payment representation checks include `Zip321PaymentCountTest`, `ProposalDataSourceTest`, `Zip321MemoScanTest`,
+`ReviewTransactionVMTest` and `SubmitProposalUseCaseTest`. Keep URI parsing, review and the original URI handoff real;
+substitute SDK proposal/signing I/O. Non-text memo disclosure and editable fallback rules are described in
+[payment representation](PAYMENT-REPRESENTATION.md). These JVM tests run in the ordinary UI release suite.
+
 For pending Keystone enrollment, run `*KeystoneEnrollmentSavedStateTest`, `*HWEnrollmentVMTest` and `*CreateHWWalletAccountUseCaseTest`. The production destination graph and actual NavController Parcel restoration must contain only opaque session IDs. Loss of the process-local session returns to scanning. Keep scanner interruption/re-entry separate from successful enrollment and retry. The activity navigation-version gate rejects older saved payloads; it cannot recall copies already retained outside the current process.
 
 The activity discards older navigation stacks after route changes. This resets the open screen and preserves wallet data. Keep the gate version aligned with typed route serializer changes, and verify old/current Parcel restoration through the production gate.

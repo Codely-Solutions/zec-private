@@ -89,7 +89,7 @@ internal class PayVM(
             )
         )
 
-    private val isCancelStateVisible = MutableStateFlow(false)
+    private val cancelSheet = MutableStateFlow<(() -> Boolean)?>(null)
     private var quoteActionInProgress = false
     private var quoteRequestJob: Job? = null
     private var isCancellingQuote = false
@@ -104,9 +104,9 @@ internal class PayVM(
             }
 
     val cancelState =
-        isCancelStateVisible
-            .map { isVisible ->
-                if (isVisible) {
+        cancelSheet
+            .map { owner ->
+                if (owner != null) {
                     SwapCancelState(
                         icon = imageRes(R.drawable.ic_swap_quote_cancel),
                         title = stringRes(R.string.swapAndPay_canceltitle),
@@ -114,12 +114,12 @@ internal class PayVM(
                         negativeButton =
                             ButtonState(
                                 text = stringRes(R.string.swapAndPay_cancelSwap),
-                                onClick = ::onCancelSwapClick
+                                onClick = { onCancelSwapClick(owner) }
                             ),
                         positiveButton =
                             ButtonState(
                                 text = stringRes(R.string.swap_cancel_positive),
-                                onClick = ::onDismissCancelClick
+                                onClick = { onDismissCancelClick(owner) }
                             ),
                         onBack = ::onBack
                     )
@@ -133,13 +133,15 @@ internal class PayVM(
             )
 
     // Stable handlers; quote dispatch adds a guard for the state used by each rendered button.
-    private val callbacks =
+    private fun callbacks(state: InternalStateImpl) =
         ExactOutputStateCallbacks(
             onBack = ::onBack,
             onSwapInfoClick = ::onInfoClick,
             onSwapAssetPickerClick = ::onSwapAssetPickerClick,
             onSlippageClick = ::onSlippageClick,
-            onRequestSwapQuoteClick = ::onRequestSwapQuoteClick,
+            onRequestSwapQuoteClick = { amount, fiatAmount, address ->
+                onRequestSwapQuoteClick(state, amount, fiatAmount, address)
+            },
             onTryAgainClick = ::onTryAgainClick,
             onAddressChange = ::onAddressChange,
             onTokenAmountChange = ::onTokenAmountChange,
@@ -163,11 +165,7 @@ internal class PayVM(
                         account = account,
                         isABHintVisible = isABHintVisible
                     ),
-                callbacks = callbacks.copy(
-                    onRequestSwapQuoteClick = { amount, fiatAmount, address ->
-                        if (internalState.value == state) onRequestSwapQuoteClick(amount, fiatAmount, address)
-                    }
-                )
+                callbacks = callbacks(state)
             )
         }.stateIn(
             scope = viewModelScope,
@@ -235,37 +233,43 @@ internal class PayVM(
     private fun onBack() =
         viewModelScope.launch {
             if (isCancellingQuote) return@launch
-            if (internalState.value.isRequestingQuote) {
-                isCancelStateVisible.update { true }
-            } else if (isCancelStateVisible.value) {
-                isCancelStateVisible.update { false }
-                navigateToSwapQuoteIfAvailable { hideCancelBottomSheet() }
-            } else {
-                isCancellingQuote = true
-                cancelSwap()
+            val owner = cancelSheet.value
+            when {
+                internalState.value.isRequestingQuote -> {
+                    if (owner == null) {
+                        cancelSheet.value = requestSwapQuote.captureNavigationOwnership(quoteRequestJob)
+                    }
+                }
+                owner != null -> continueQuote(owner)
+                else -> {
+                    isCancellingQuote = true
+                    cancelSwap()
+                }
             }
         }
 
-    private fun onCancelSwapClick() =
+    private fun onCancelSwapClick(owner: () -> Boolean) =
         viewModelScope.launch {
-            if (isCancellingQuote || !isCancelStateVisible.value) return@launch
+            if (isCancellingQuote || cancelSheet.value !== owner || !owner()) return@launch
             isCancellingQuote = true
             quoteRequestJob?.cancel()
-            cancelSwap.afterDismissal { hideCancelBottomSheet() }
+            cancelSheet.value = null
+            cancelSwap.afterDismissal(owner) { awaitCancelSheetDismissal() }
         }
 
-    private fun onDismissCancelClick() =
+    private fun onDismissCancelClick(owner: () -> Boolean) =
         viewModelScope.launch {
-            if (isCancellingQuote || !isCancelStateVisible.value) return@launch
-            isCancelStateVisible.update { false }
-            navigateToSwapQuoteIfAvailable { hideCancelBottomSheet() }
+            if (isCancellingQuote || cancelSheet.value !== owner) return@launch
+            continueQuote(owner)
         }
+
+    private suspend fun continueQuote(owner: () -> Boolean) {
+        cancelSheet.value = null
+        navigateToSwapQuoteIfAvailable(owner) { awaitCancelSheetDismissal() }
+    }
 
     @Suppress("MagicNumber")
-    private suspend fun hideCancelBottomSheet() {
-        isCancelStateVisible.update { false }
-        delay(350.milliseconds)
-    }
+    private suspend fun awaitCancelSheetDismissal() = delay(350.milliseconds)
 
     private fun onTokenAmountChange(amount: NumberTextFieldInnerState) {
         internalState.update { state ->
@@ -283,10 +287,14 @@ internal class PayVM(
         copy(hasEditedRequestAmount = true, requestAmountAssetId = null).recomputeLinkedAmount()
 
     /** Gates the quote request behind the refund warning before the CTA starts spinning. */
-    private fun onRequestSwapQuoteClick(amount: BigDecimal, fiatAmount: BigDecimal?, address: String) =
+    private fun onRequestSwapQuoteClick(
+        snapshot: InternalStateImpl,
+        amount: BigDecimal,
+        fiatAmount: BigDecimal?,
+        address: String,
+    ) =
         viewModelScope.launch {
-            val snapshot = internalState.value
-            if (snapshot.isRequestingQuote || quoteActionInProgress || isCancellingQuote) return@launch
+            if (!canStartQuote(snapshot)) return@launch
             val asset = snapshot.asset ?: return@launch
             if (asset.positiveUsdPrice == null || swapRepository.assets.value.zecAsset.positiveUsdPrice == null) {
                 return@launch
@@ -304,12 +312,7 @@ internal class PayVM(
                     return@launch
                 }
                 if (isCancellingQuote) return@launch
-                val current = internalState.value
-                val sameRecipient =
-                    current.address == snapshot.address && current.selectedABContact == snapshot.selectedABContact
-                if (!sameRecipient || current.asset?.assetId != asset.assetId || current.amount != snapshot.amount) {
-                    return@launch
-                }
+                if (!hasSameQuoteInputs(snapshot)) return@launch
                 quoteRequestJob = coroutineContext.job
                 internalState.update { it.copy(isRequestingQuote = true) }
                 requestSwapQuote.requestExactOutput(
@@ -317,7 +320,7 @@ internal class PayVM(
                     address = address,
                     selectedAsset = asset,
                     slippage = slippage,
-                    canNavigateToSwapQuote = { !isCancellingQuote && !isCancelStateVisible.value },
+                    canNavigateToSwapQuote = { !isCancellingQuote && cancelSheet.value == null },
                     contactNetwork = contactNetwork
                 )
             } finally {
@@ -326,6 +329,15 @@ internal class PayVM(
                 internalState.update { it.copy(isRequestingQuote = false) }
             }
         }
+
+    private fun canStartQuote(snapshot: InternalStateImpl): Boolean =
+        internalState.value === snapshot && !snapshot.isRequestingQuote && !quoteActionInProgress && !isCancellingQuote
+
+    private fun hasSameQuoteInputs(snapshot: InternalStateImpl): Boolean {
+        val current = internalState.value
+        return current.address == snapshot.address && current.selectedABContact == snapshot.selectedABContact &&
+            current.asset?.assetId == snapshot.asset?.assetId && current.amount == snapshot.amount
+    }
 
     private fun onInfoClick() = navigationRouter.forward(PayInfoArgs)
 

@@ -70,6 +70,23 @@ class SwapPriceCatalogTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     checker.check(rows)
 
+    def test_exact_id_admission_matches_the_runtime_fixtures_in_either_order(self):
+        fixture = ROOT / 'ui-lib/src/test/resources/swap-catalog-admission.json'
+        for case in json.loads(fixture.read_text(encoding='utf-8')):
+            rows = self.catalog()
+            if 'append' in case:
+                rows.append(case['append'])
+            else:
+                replacement = case['replace']
+                rows = [replacement if row['assetId'] == replacement['assetId'] else row for row in rows]
+            for order in (rows, rows[::-1]):
+                with self.subTest(case=case['name'], first_asset=order[0]['assetId']):
+                    if 'unavailable' in case:
+                        with self.assertRaisesRegex(ValueError, case['unavailable']):
+                            checker.check(order)
+                    else:
+                        self.assertEqual(checker.check(order), 33)
+
     @staticmethod
     def catalog():
         source = ROOT / 'ui-lib/src/test/resources/swap-catalog.json'

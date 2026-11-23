@@ -38,7 +38,8 @@ internal fun RecipientReviewScene(
 ): Boolean {
     if (screen !in setOf(
             "recipient-swap-mismatch", "recipient-swap-corrected", "recipient-pay-mismatch",
-            "recipient-pay-corrected", "recipient-qr-mismatch", "recipient-swap-empty", "recipient-pay-invalid-amount"
+            "recipient-pay-corrected", "recipient-qr-mismatch", "recipient-swap-empty", "recipient-pay-invalid-amount",
+            "recipient-pay-refresh-fiat", "recipient-pay-refresh-token",
         )) return false
     val btcIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc)
     val btcChain = SwapBlockchain("btc", stringRes("Bitcoin"), btcIcon)
@@ -64,29 +65,44 @@ internal fun RecipientReviewScene(
     val empty = screen == "recipient-swap-empty"
     val qr = screen == "recipient-qr-mismatch"
     val invalidAmount = screen == "recipient-pay-invalid-amount"
+    val fiatRefresh = screen == "recipient-pay-refresh-fiat"
+    val tokenRefresh = screen == "recipient-pay-refresh-token"
+    val refresh = fiatRefresh || tokenRefresh
     val corrected = screen.endsWith("corrected")
-    val selected = if (corrected) wbtc else btc
-    val contact = if (qr || empty || invalidAmount) null else EnhancedABContact(
+    val selected = when {
+        fiatRefresh -> btc.copy(usdPrice = BigDecimal("4"))
+        tokenRefresh -> btc.copy(usdPrice = BigDecimal("3"))
+        corrected -> wbtc
+        else -> btc
+    }
+    val contact = if (qr || empty || invalidAmount || refresh) null else EnhancedABContact(
         AddressBookContact("Synthetic WBTC contact", address, Instant.fromEpochMilliseconds(0), "eth"),
         ethChain,
     )
-    val assets = SwapAssetsData(data = listOf(btc, wbtc), zecAsset = zec)
+    val assets = SwapAssetsData(data = listOf(if (refresh) selected else btc, wbtc), zecAsset = zec)
     val recipient = when {
         empty -> ""
         qr -> "ethereum:$address@1"
-        invalidAmount -> "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu"
+        invalidAmount || refresh -> "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu"
         else -> address
     }
     if (screen.startsWith("recipient-pay")) {
         val amount = if (invalidAmount) BigDecimal("0.000000009") else BigDecimal("0.00001")
+        val mapper = ExactOutputVMMapper()
+        val blank = NumberTextFieldInnerState()
+        val token = NumberTextFieldInnerState.fromAmount(if (tokenRefresh) BigDecimal("50") else amount)
+        val fiat = NumberTextFieldInnerState.fromAmount(
+            if (fiatRefresh) BigDecimal("100") else amount * BigDecimal("100000")
+        )
         val state = PayInternalState(
             address = recipient, isABHintVisible = false, selectedABContact = contact, asset = selected,
-            amount = NumberTextFieldInnerState.fromAmount(amount),
-            fiatAmount = NumberTextFieldInnerState.fromAmount(amount * BigDecimal("100000")), slippage = BigDecimal("2"),
+            amount = if (fiatRefresh) mapper.createAmountInnerState(fiat, blank, selected) else token,
+            fiatAmount = if (tokenRefresh) mapper.createFiatAmountInnerState(token, blank, selected) else fiat,
+            slippage = BigDecimal("2"),
             isRequestingQuote = false, account = account, swapAssets = assets, isEphemeralAddressLocked = false,
         )
         PayView(
-            ExactOutputVMMapper().createState(state, ExactOutputStateCallbacks(
+            mapper.createState(state, ExactOutputStateCallbacks(
                 onBack = {}, onSwapInfoClick = {}, onSwapAssetPickerClick = {}, onSlippageClick = {},
                 onRequestSwapQuoteClick = { _, _, _ -> }, onTryAgainClick = {}, onAddressChange = {},
                 onTokenAmountChange = {}, onFiatAmountChange = {}, onQrCodeScannerClick = {}, onAddressBookClick = {},

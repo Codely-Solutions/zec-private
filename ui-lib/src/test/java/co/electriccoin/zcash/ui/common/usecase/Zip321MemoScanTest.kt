@@ -62,7 +62,15 @@ class Zip321MemoScanTest {
     private val router = mockk<NavigationRouter>(relaxed = true)
     private val prefill = PrefillSendUseCase()
     private val error = NavigateToErrorUseCase(router)
-    private val scan = OnZip321ScannedUseCase(mockk(relaxed = true), mockk(relaxed = true), repository, accounts, router, prefill, error)
+    private val scan = OnZip321ScannedUseCase(
+        keystoneProposalRepository = mockk(relaxed = true),
+        ledgerProposalPipeline = mockk(relaxed = true),
+        zashiProposalRepository = repository,
+        accountDataSource = accounts,
+        navigationRouter = router,
+        prefillSend = prefill,
+        navigateToErrorUseCase = error,
+    )
 
     @Test
     fun homeScanOpensDirectReviewForANonTextMemo() = runBlocking {
@@ -74,6 +82,29 @@ class Zip321MemoScanTest {
         verify(exactly = 1) { router.replace(ReviewTransactionArgs) }
         verify(exactly = 0) { router.replace(Send(), ReviewTransactionArgs) }
         assertNoDraft()
+    }
+
+    @Test
+    fun cancelingDirectReviewGoesBackAndKeepsTheExistingSendDraft() = runBlocking {
+        val clearSend = mockk<ObserveClearSendUseCase>()
+        val cancel = CancelProposalFlowUseCase(
+            zashiProposalRepository = repository,
+            keystoneProposalRepository = mockk(relaxed = true),
+            ledgerProposalPipeline = mockk(relaxed = true),
+            navigationRouter = router,
+            observeClearSend = clearSend,
+            accountDataSource = accounts,
+            swapRepository = mockk(),
+            migrationNavigator = mockk(),
+        )
+        scan(parse(fixture.binary), ScanArgs(ScanFlow.HOMEPAGE))
+
+        cancel()
+
+        assertNull(repository.transactionProposal.value)
+        verify(exactly = 1) { router.back() }
+        verify(exactly = 0) { router.backTo(Send::class) }
+        verify(exactly = 0) { clearSend.requestClear() }
     }
 
     @Test
@@ -139,5 +170,6 @@ class Zip321MemoScanTest {
         assertNull(state.negative)
     }
 
-    private fun expectedTextDraft() = PrefillSendData.All(Zatoshi(100_000), fixture.RECIPIENT, null, listOf(fixture.TEXT))
+    private fun expectedTextDraft() =
+        PrefillSendData.All(Zatoshi(100_000), fixture.RECIPIENT, null, listOf(fixture.TEXT))
 }
