@@ -2866,7 +2866,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetABSwapContactsUseCaseTest.kt": "103c7952c3593798331bc183ae66d24e06fc23e19befbf36c25ea81a16756edc",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetAutomaticEndpointUseCaseTest.kt": "b1df7586e908105bd1b907823bcfcba9e229c6aee9eea4719a50ef7d01679155",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetBalancePoolsUseCaseTest.kt": "d1cd3259cfbc753fffac0b9cb0302ba409ff46cf36841005a70bb7ccf7267d71",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetCuratedSwapAssetsUseCaseTest.kt": "8b26b9233dd617dd8bf0fcd7d4af182cd7f9d7b3dd61e2d6bc3e79d425b6ef54",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetCuratedSwapAssetsUseCaseTest.kt": "2ecc3bf087442f0cb407ece94cd211f1270a0dbb80651bb7df1f3293dbfdec14",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetFilteredActivitiesUseCaseTest.kt": "bf01f6d6ac6d35504e15869aca88f36924aaf3a9ccb8ed680e8534b557999b80",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetGiftCardDestinationAddressUseCaseTest.kt": "04846dcf7cc570ad0c4a68b653eaf6843344803310d5bc3fb400365e76791463",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetHomeMessageUseCaseBackupPriorityTest.kt": "fa989415be9211c10c79e88656947384dfbc32c4806e3baaf46e28188d9fcf65",

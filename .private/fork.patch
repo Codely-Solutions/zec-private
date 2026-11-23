@@ -55012,7 +55012,7 @@ index 000000000..f479ca58c
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetCuratedSwapAssetsUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetCuratedSwapAssetsUseCaseTest.kt
-index 8d1810539..a000f96bd 100644
+index 8d1810539..c5db5d7e8 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetCuratedSwapAssetsUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetCuratedSwapAssetsUseCaseTest.kt
 @@ -5,0 +6 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
@@ -55020,14 +55020,15 @@ index 8d1810539..a000f96bd 100644
 @@ -23 +24 @@ class GetCuratedSwapAssetsUseCaseTest {
 -    private val eth = swapAsset(token = "ETH", chain = "eth")
 +    private val eth = SwapCatalogTestFixture.assets.single { it.assetId == "nep141:eth.omft.near" }
-@@ -41,0 +43,10 @@ class GetCuratedSwapAssetsUseCaseTest {
+@@ -41,0 +43,11 @@ class GetCuratedSwapAssetsUseCaseTest {
 +    @Test
 +    fun sameDisplayContractAndUnknownIdCannotBecomeNewQuoteSelections() {
 +        val twin = eth.copy(assetId = "synthetic:eth-twin")
 +        val wrongContract = eth.copy(contractAddress = "synthetic:wrong-contract")
 +        for (order in listOf(listOf(twin, eth, wrongContract), listOf(wrongContract, eth, twin))) {
 +            every { swapRepository.assets } returns MutableStateFlow(SwapAssetsData(data = order))
-+            assertEquals(listOf(eth), useCase().data)
++            // A duplicate provider ID is ambiguous even when one row has the pinned metadata.
++            assertEquals(emptyList(), useCase().data)
 +        }
 +    }
 +
