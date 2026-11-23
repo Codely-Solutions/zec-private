@@ -28,6 +28,7 @@ import co.electriccoin.zcash.ui.screen.scan.ScanFlow.HOMEPAGE
 import co.electriccoin.zcash.ui.screen.scan.ScanFlow.SEND
 import co.electriccoin.zcash.ui.screen.send.Send
 import co.electriccoin.zcash.ui.screen.texunsupported.TEXUnsupportedArgs
+import kotlinx.coroutines.CancellationException
 
 class OnZip321ScannedUseCase(
     private val keystoneProposalRepository: KeystoneProposalRepository,
@@ -38,14 +39,16 @@ class OnZip321ScannedUseCase(
     private val prefillSend: PrefillSendUseCase,
     private val navigateToErrorUseCase: NavigateToErrorUseCase
 ) {
-    suspend operator fun invoke(zip321: Zip321ParseUriValidation.Valid, scanArgs: ScanArgs) {
+    /** Returns whether navigation removed the scanner from the back stack. */
+    suspend operator fun invoke(zip321: Zip321ParseUriValidation.Valid, scanArgs: ScanArgs): Boolean {
         if (zip321.payment.payments.size != 1) {
             navigateToErrorUseCase(ErrorArgs.General(UnsupportedZip321PaymentCountException()))
-            return
+            return false
         }
-        when (scanArgs.flow) {
+        return when (scanArgs.flow) {
             ADDRESS_BOOK -> {
                 addressBookFlow(zip321)
+                true
             }
 
             SEND -> {
@@ -72,7 +75,7 @@ class OnZip321ScannedUseCase(
     }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun homepageFlow(zip321: Zip321ParseUriValidation.Valid) {
+    private suspend fun homepageFlow(zip321: Zip321ParseUriValidation.Valid): Boolean =
         try {
             val proposal =
                 when (accountDataSource.getSelectedAccount()) {
@@ -113,35 +116,42 @@ class OnZip321ScannedUseCase(
             } else {
                 navigationRouter.replace(ReviewTransactionArgs)
             }
+            true
         } catch (_: TexUnsupportedOnKSException) {
             val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
             navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()
             zashiProposalRepository.clear()
+            false
         } catch (_: InsufficientFundsException) {
             zashiProposalRepository.clear()
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()
             navigationRouter.replace(InsufficientFundsArgs)
+            true
         } catch (_: TransactionProposalNotCreatedException) {
-            if (canEdit(zip321)) {
-                prefillSend.requestFromZip321(zip321.payment)
-                navigationRouter.replace(Send())
-            }
             zashiProposalRepository.clear()
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()
+            canEdit(zip321).also { editable ->
+                if (editable) {
+                    prefillSend.requestFromZip321(zip321.payment)
+                    navigationRouter.replace(Send())
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
             navigateToErrorUseCase(ErrorArgs.General(e))
             zashiProposalRepository.clear()
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()
+            false
         }
-    }
 
     @Suppress("TooGenericExceptionCaught")
-    private suspend fun sendFlow(zip321: Zip321ParseUriValidation.Valid) {
+    private suspend fun sendFlow(zip321: Zip321ParseUriValidation.Valid): Boolean =
         try {
             val proposal =
                 when (accountDataSource.getSelectedAccount()) {
@@ -178,35 +188,42 @@ class OnZip321ScannedUseCase(
                 )
             )
             navigationRouter.replace(ReviewTransactionArgs)
+            true
         } catch (_: TexUnsupportedOnKSException) {
             val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
             navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()
             zashiProposalRepository.clear()
+            false
         } catch (_: InsufficientFundsException) {
             zashiProposalRepository.clear()
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()
             navigationRouter.replace(InsufficientFundsArgs)
+            true
         } catch (_: TransactionProposalNotCreatedException) {
             zashiProposalRepository.clear()
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()
-            if (canEdit(zip321)) {
-                prefillSend.requestFromZip321(zip321.payment)
-                navigationRouter.back()
+            canEdit(zip321).also { editable ->
+                if (editable) {
+                    prefillSend.requestFromZip321(zip321.payment)
+                    navigationRouter.back()
+                }
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
             zashiProposalRepository.clear()
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()
             navigateToErrorUseCase(ErrorArgs.General(e)) { replace(it) }
+            true
         }
-    }
 
-    private fun sendFlowWithDisabledZip321(zip321: Zip321ParseUriValidation.Valid) {
-        if (!canEdit(zip321)) return
+    private fun sendFlowWithDisabledZip321(zip321: Zip321ParseUriValidation.Valid): Boolean {
+        if (!canEdit(zip321)) return false
         prefillSend.request(
             PrefillSendData.FromAddressScan(
                 address =
@@ -215,6 +232,7 @@ class OnZip321ScannedUseCase(
             )
         )
         navigationRouter.back()
+        return true
     }
 
     private fun canEdit(zip321: Zip321ParseUriValidation.Valid): Boolean {

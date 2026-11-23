@@ -36,4 +36,6 @@
     <string name="private_updates_current">You’re up to date</string>
     <string name="private_updates_failed">Couldn’t check for updates. Try again.</string>
     <string name="private_updates_obtainium">Automatic updates with Obtainium</string>
+    <string name="private_review_unavailable_title">Payment review expired</string>
+    <string name="private_review_unavailable_message">Go back to prepare the payment again.</string>
 </resources>

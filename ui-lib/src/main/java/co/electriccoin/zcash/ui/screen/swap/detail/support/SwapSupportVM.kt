@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.screen.swap.detail.support
 
 import androidx.lifecycle.ViewModel
+import cash.z.ecc.android.sdk.model.AccountUuid
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -35,22 +37,26 @@ class SwapSupportVM(
     accountDataSource: AccountDataSource,
     private val walletWriteAccess: WalletWriteAccess,
 ) : ViewModel() {
+    private class Selection(val account: AccountUuid?)
+
     private val selectedAccount = accountDataSource.selectedAccount
         .map { it?.sdkAccount?.accountUuid }
+        .distinctUntilChanged()
+        .map(::Selection)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     val state: StateFlow<SwapSupportState?> =
         getReloadableSwapQuote
             .observe(args.depositAddress)
             .combine(appAccessSession.grant) { swapData, grant -> swapData to grant }
-            .combine(selectedAccount) { (swapData, grant), account ->
+            .combine(selectedAccount) { (swapData, grant), selection ->
                 val saved = swapData.savedMetadata
                 val token = saved?.walletWriteToken
-                val canReport = token != null && account != null &&
-                    account == saved.ownerAccount?.sdkAccount?.accountUuid
+                val owner = saved?.ownerAccount?.sdkAccount?.accountUuid
                 val isAllowed = {
-                    canReport && token != null && walletWriteAccess.permits(token) &&
-                        selectedAccount.value == account && appAccessSession.permits(grant)
+                    token != null && owner != null && selection?.account == owner &&
+                        selectedAccount.value === selection && walletWriteAccess.permits(token) &&
+                        appAccessSession.permits(grant)
                 }
                 SwapSupportState(
                     title = stringRes(R.string.reportSwap_title),

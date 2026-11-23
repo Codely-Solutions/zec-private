@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.usecase.NavigateToRedeemGiftCardUseCase
 import co.electriccoin.zcash.ui.common.usecase.OnAddressScannedUseCase
 import co.electriccoin.zcash.ui.common.usecase.OnZip321ScannedUseCase
@@ -28,6 +29,15 @@ internal class ScanZashiAddressVM(
     private val mutex = Mutex()
 
     private var hasBeenScannedSuccessfully = false
+    private var awaitingOverlayDismissal = false
+
+    fun onResumed() {
+        if (!awaitingOverlayDismissal) return
+        awaitingOverlayDismissal = false
+        state.value = ScanValidationState.NONE
+    }
+
+    private val acceptsScan get() = !hasBeenScannedSuccessfully && !awaitingOverlayDismissal
 
     /**
      * Gift card links are handled first and open the redeem flow: a link carries a spending secret, so it must never
@@ -36,12 +46,12 @@ internal class ScanZashiAddressVM(
     fun onScanned(result: String) =
         viewModelScope.launch {
             mutex.withLock {
-                if (!hasBeenScannedSuccessfully) {
+                if (acceptsScan) {
                     if (navigateToRedeemGiftCard.isGiftCardLink(result)) {
                         onGiftCardScanned(result)
                         return@withLock
                     }
-                    runCatching {
+                    runCatchingRecoverable {
                         val zip321ValidationResult = zip321ParseUriValidationUseCase(result)
                         val addressValidationResult = synchronizerProvider.getSynchronizer().validateAddress(result)
 
@@ -93,24 +103,22 @@ internal class ScanZashiAddressVM(
                 .getSynchronizer()
                 .validateAddress(zip321ValidationResult.address)
         if (singleAddressValidation is AddressType.Invalid) {
-            state.update { ScanValidationState.INVALID }
+            onInvalidScan()
         } else {
-            state.update { ScanValidationState.VALID }
-            onAddressScanned(zip321ValidationResult.address, singleAddressValidation, args)
+            onAddressScanned(zip321ValidationResult.address, singleAddressValidation)
         }
-        hasBeenScannedSuccessfully = true
     }
 
     private suspend fun onZip321Scanned(zip321ValidationResult: Zip321ParseUriValidation.Valid) {
         state.update { ScanValidationState.VALID }
-        zip321Scanned(zip321ValidationResult, args)
-        hasBeenScannedSuccessfully = true
+        hasBeenScannedSuccessfully = zip321Scanned(zip321ValidationResult, args)
+        awaitingOverlayDismissal = !hasBeenScannedSuccessfully
     }
 
     fun onScannedError() =
         viewModelScope.launch {
             mutex.withLock {
-                if (!hasBeenScannedSuccessfully) {
+                if (acceptsScan) {
                     state.update { ScanValidationState.INVALID }
                 }
             }
@@ -119,7 +127,7 @@ internal class ScanZashiAddressVM(
     fun onImageScanned(result: ImageToQrCodeResult) =
         viewModelScope.launch {
             mutex.withLock {
-                if (!hasBeenScannedSuccessfully) {
+                if (acceptsScan) {
                     when (result) {
                         is ImageToQrCodeResult.SingleCode -> {
                             onScanned(result.text)

@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.electriccoin.zcash.di.koinActivityViewModel
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -30,6 +31,11 @@ internal fun ScanZashiAddressScreen(args: ScanArgs) {
     val synchronizer = walletViewModel.synchronizer.collectAsStateWithLifecycle().value
     val state by viewModel.state.collectAsStateWithLifecycle()
     val navigationRouter = koinInject<NavigationRouter>()
+
+    LifecycleResumeEffect(viewModel) {
+        viewModel.onResumed()
+        onPauseOrDispose { }
+    }
 
     BackHandler {
         navigationRouter.back()

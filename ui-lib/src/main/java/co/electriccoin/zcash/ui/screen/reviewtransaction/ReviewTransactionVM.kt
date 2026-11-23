@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
@@ -80,7 +81,7 @@ class ReviewTransactionVM(
             combine(observeSelectedWalletAccount.require(), observeAccountIcon.observeAll()) { wallet, colors ->
                 wallet to observeAccountIcon.iconOf(colors, wallet)
             },
-            observeProposal.filterSend(),
+            observeProposal.observeSendReview(),
             isReceiverExpanded,
             exchangeRate,
             getWalletAccounts.observe()
@@ -88,6 +89,7 @@ class ReviewTransactionVM(
             Quintuple(wallet, zecSend, isReceiverExpanded, exchangeRate, accounts)
         }.flatMapLatest { (selected, proposal, isReceiverExpanded, exchangeRate, accounts) ->
             val (selectedWallet, selectedWalletIcon) = selected
+            if (proposal == null) return@flatMapLatest flowOf(null)
             observeContactByAddress(
                 if (proposal is ExactOutputSwapTransactionProposal) {
                     proposal.quote.destinationAddress.address
@@ -123,12 +125,24 @@ class ReviewTransactionVM(
 
     val state =
         combine(baseState, orchardWarningSheet) { base, sheet ->
-            base.copy(orchardWarningSheet = sheet)
+            base?.copy(orchardWarningSheet = sheet) ?: unavailableReview()
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
             initialValue = null
         )
+
+    private fun unavailableReview() = ReviewTransactionState(
+        title = stringRes(R.string.send_review),
+        items = listOf(
+            MessageState(
+                title = stringRes(R.string.private_review_unavailable_title),
+                message = stringRes(R.string.private_review_unavailable_message),
+            )
+        ),
+        primaryButton = ButtonState(text = stringRes(R.string.general_back), onClick = navigationRouter::back),
+        onBack = navigationRouter::back,
+    )
 
     private var onConfirmClickJob: Job? = null
 

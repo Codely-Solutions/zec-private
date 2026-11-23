@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 
 class ObserveProposalUseCase(
     private val keystoneProposalRepository: KeystoneProposalRepository,
@@ -21,18 +22,9 @@ class ObserveProposalUseCase(
     private val zashiProposalRepository: ZashiProposalRepository,
     private val accountDataSource: AccountDataSource,
 ) {
-    @OptIn(ExperimentalCoroutinesApi::class)
-    operator fun invoke() =
-        accountDataSource.selectedAccount
-            .filterNotNull()
-            .flatMapLatest {
-                when (it) {
-                    is KeystoneAccount -> keystoneProposalRepository.transactionProposal
-                    is LedgerAccount -> ledgerProposalPipeline.transactionProposal
-                    is ViewOnlyAccount -> flowOf(null)
-                    is ZodlAccount -> zashiProposalRepository.transactionProposal
-                }
-            }.filterNotNull()
+    operator fun invoke() = observeNullable().filterNotNull()
+
+    internal fun observeSendReview() = observeNullable().map { it as? SendTransactionProposal }
 
     fun filterSend() = this().filterIsInstance<SendTransactionProposal>()
 

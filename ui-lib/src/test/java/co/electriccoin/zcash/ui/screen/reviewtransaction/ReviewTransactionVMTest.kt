@@ -114,7 +114,7 @@ class ReviewTransactionVMTest {
         val proposals = MutableStateFlow<SendTransactionProposal>(zip321Proposal(binaryMemoByteCount = 4))
         val vm = vm(
             metadata = emptyMap(),
-            observeProposal = mockk { every { filterSend() } returns proposals },
+            observeProposal = mockk { every { filterSend() } returns proposals; every { observeSendReview() } returns proposals },
         )
         collect(vm)
         val items = assertNotNull(vm.state.value).items
@@ -233,7 +233,10 @@ class ReviewTransactionVMTest {
         val proposal = proposal()
         return vm(
             metadata,
-            mockk<ObserveProposalUseCase> { every { filterSend() } returns MutableStateFlow(proposal) },
+            mockk<ObserveProposalUseCase> {
+                every { filterSend() } returns MutableStateFlow(proposal)
+                every { observeSendReview() } returns MutableStateFlow(proposal)
+            },
         )
     }
 

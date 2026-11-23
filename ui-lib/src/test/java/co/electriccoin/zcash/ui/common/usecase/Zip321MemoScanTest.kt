@@ -1,6 +1,12 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import android.os.Parcel
 import androidx.lifecycle.ViewModelStore
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.ComposeNavigator
+import androidx.navigation.compose.composable
+import androidx.navigation.createGraph
+import androidx.navigation.toRoute
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.exception.TransactionEncoderException
 import cash.z.ecc.android.sdk.model.Proposal
@@ -13,6 +19,7 @@ import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepositoryImpl
@@ -25,11 +32,15 @@ import co.electriccoin.zcash.ui.screen.error.ErrorDialog
 import co.electriccoin.zcash.ui.screen.error.ErrorVM
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsArgs
+import co.electriccoin.zcash.ui.screen.redeemgift.navigateToRedeemGiftCard
 import co.electriccoin.zcash.ui.screen.reviewtransaction.MessageState
 import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionArgs
 import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionVM
+import co.electriccoin.zcash.ui.screen.scan.ImageToQrCodeResult
 import co.electriccoin.zcash.ui.screen.scan.ScanArgs
 import co.electriccoin.zcash.ui.screen.scan.ScanFlow
+import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
+import co.electriccoin.zcash.ui.screen.scan.ScanZashiAddressVM
 import co.electriccoin.zcash.ui.screen.send.Send
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -55,6 +66,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import kotlin.test.assertEquals
@@ -149,6 +161,54 @@ class Zip321MemoScanTest {
     }
 
     @Test
+    fun restoredReviewOffersBackThroughTheActualRestoredStack() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val original = sendNavigationController().also { it.graph = sendReviewGraph(it) }
+            scan(parse(fixture.TEXT.encodeToByteArray()), ScanArgs(ScanFlow.SEND))
+            assertNotNull(repository.transactionProposal.value)
+            original.navigate(ReviewTransactionArgs)
+
+            val restored = sendNavigationController()
+            val parcel = Parcel.obtain()
+            try {
+                parcel.writeBundle(assertNotNull(original.saveState()))
+                parcel.setDataPosition(0)
+                restored.restoreState(parcel.readBundle(javaClass.classLoader))
+            } finally {
+                parcel.recycle()
+            }
+            restored.graph = sendReviewGraph(restored)
+            assertEquals(ReviewTransactionArgs, restored.currentBackStackEntry?.toRoute<ReviewTransactionArgs>())
+
+            val freshRepository = ZashiProposalRepositoryImpl(
+                accountDataSource = accounts,
+                proposalDataSource = proposalDataSource,
+                zashiSpendingKeyDataSource = mockk(),
+                processSwapTransaction = mockk(),
+            )
+            val recoveryRouter = mockk<NavigationRouter> {
+                every { back() } answers { check(restored.popBackStack()) }
+            }
+            val vm = newReviewVM(freshRepository, recoveryRouter)
+            store.put("restored-review", vm)
+            backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
+            runCurrent()
+
+            val state = assertNotNull(vm.state.value)
+            assertEquals(stringRes(R.string.private_review_unavailable_title), state.items.filterIsInstance<MessageState>().single().title)
+            assertEquals(stringRes(R.string.general_back), state.primaryButton.text)
+            assertEquals(ReviewTransactionArgs, restored.currentBackStackEntry?.toRoute<ReviewTransactionArgs>())
+            state.primaryButton.onClick()
+            assertEquals(Send(), restored.currentBackStackEntry?.toRoute<Send>())
+        } finally {
+            store.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun cancelingDirectReviewGoesBackAndKeepsTheExistingSendDraft() = runBlocking {
         val clearSend = mockk<ObserveClearSendUseCase>()
         val cancel = CancelProposalFlowUseCase(
@@ -235,6 +295,51 @@ class Zip321MemoScanTest {
     }
 
     @Test
+    fun scannerResumesAfterTheNonTextMemoOverlayAndProcessesGalleryOnce() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val uri = fixture.uri(fixture.binary)
+            coEvery { synchronizer.validateAddress(uri) } returns AddressType.Invalid("Not a raw address")
+            val scanner = ScanZashiAddressVM(
+                args = ScanArgs(ScanFlow.SEND, isScanZip321Enabled = false),
+                synchronizerProvider = provider,
+                zip321ParseUriValidationUseCase = Zip321ParseUriValidationUseCase(provider),
+                onAddressScanned = OnAddressScannedUseCase(router, prefill, mockk()),
+                zip321Scanned = scan,
+                navigateToRedeemGiftCard = navigateToRedeemGiftCard(GiftCardLinkStoreImpl(), router),
+            )
+            store.put("scanner", scanner)
+            scanner.onScanned(uri).join()
+            assertUneditableError()
+            verify(exactly = 1) { router.forward(ErrorDialog) }
+
+            scanner.onScanned(uri).join()
+            scanner.onImageScanned(ImageToQrCodeResult.SingleCode(fixture.RECIPIENT)).join()
+            verify(exactly = 1) { router.forward(ErrorDialog) }
+            verify(exactly = 0) { router.back() }
+
+            val dialog = ErrorVM(error.requireCurrentArgs(), error, router, mockk(), mockk())
+            dialog.state.value.onBack()
+            verify(exactly = 1) { router.back() }
+
+            scanner.onResumed()
+            assertEquals(ScanValidationState.NONE, scanner.state.value)
+            scanner.onImageScanned(ImageToQrCodeResult.SingleCode(fixture.RECIPIENT)).join()
+            runCurrent()
+            scanner.onScanned(fixture.RECIPIENT).join()
+
+            verify(exactly = 2) { router.back() }
+            val draft = withContext(Dispatchers.Default) { withTimeout(5_000) { prefill().first() } }
+            assertEquals(PrefillSendData.FromAddressScan(fixture.RECIPIENT), draft)
+            assertEquals(ScanValidationState.VALID, scanner.state.value)
+        } finally {
+            store.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun directPrefillRefusesNonTextAndKeepsStrictPaddedText() = runBlocking {
         for (bytes in listOf(fixture.binary, fixture.invalidUtf8)) {
             val request = parse(bytes)
@@ -265,11 +370,25 @@ class Zip321MemoScanTest {
         assertNull(withTimeoutOrNull(250) { prefill().first() })
     }
 
-    private val reviewVM: ReviewTransactionVM by lazy {
+    private fun sendNavigationController() = NavHostController(RuntimeEnvironment.getApplication()).apply {
+        navigatorProvider.addNavigator(ComposeNavigator())
+    }
+
+    private fun sendReviewGraph(controller: NavHostController) = controller.createGraph(startDestination = Send()) {
+        composable<Send> { }
+        composable<ReviewTransactionArgs> { }
+    }
+
+    private val reviewVM: ReviewTransactionVM by lazy { newReviewVM(repository) }
+
+    private fun newReviewVM(
+        repository: ZashiProposalRepositoryImpl,
+        reviewRouter: NavigationRouter = router,
+    ): ReviewTransactionVM {
         val keystone = mockk<KeystoneProposalRepository>()
         val ledger = mockk<LedgerProposalPipeline>()
         val observeProposal = ObserveProposalUseCase(keystone, ledger, repository, accounts)
-        ReviewTransactionVM(
+        return ReviewTransactionVM(
             getWalletAccounts = GetWalletAccountsUseCase(accounts),
             observeContactByAddress = ObserveContactByAddressUseCase(mockk {
                 every { observeContactByAddress(any()) } returns flowOf(null)
@@ -283,7 +402,7 @@ class Zip321MemoScanTest {
             getExchangeRate = GetExchangeRateUseCase(mockk {
                 every { state } returns MutableStateFlow(ExchangeRateState.OptedOut)
             }),
-            navigationRouter = router,
+            navigationRouter = reviewRouter,
             submitProposal = SubmitProposalUseCase(
                 router, accounts, repository, keystone, ledger, mockk(), mockk(), mockk(), mockk(), prefill, error,
             ),
