@@ -358,6 +358,11 @@ class ResetWalletWriteOwnershipTest {
                 beforePreferenceWrite()
                 androidPreferences.putString(key, value)
             }
+
+            override suspend fun putStringWithRollback(key: PreferenceKey, value: String?) {
+                beforePreferenceWrite()
+                androidPreferences.putStringWithRollback(key, value)
+            }
         }
         private val encryptedProvider = mockk<EncryptedPreferenceProvider> {
             coEvery { this@mockk.invoke() } returns preferences
