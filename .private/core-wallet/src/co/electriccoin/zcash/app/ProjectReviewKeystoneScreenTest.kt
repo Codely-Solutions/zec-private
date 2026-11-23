@@ -11,6 +11,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import cash.z.ecc.android.sdk.model.ZcashNetwork
 import cash.z.ecc.sdk.type.fromResources
 import co.electriccoin.zcash.ui.MainActivity
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.OnboardingGraph
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
@@ -55,7 +56,7 @@ class ProjectReviewKeystoneScreenTest {
                 windowHasVisibleContent(activity)
             }
 
-            onMain { activity.navControllerForTesting.navigate(ScanKeystoneSignInRequest) }
+            onMain { koin.get<NavigationRouter>().forward(ScanKeystoneSignInRequest) }
             await("secured production scanner window") {
                 onMain { activity.hasWindowFocus() && activity.route() == scanner && activity.isSecure }
             }
@@ -63,7 +64,7 @@ class ProjectReviewKeystoneScreenTest {
                 !windowHasVisibleContent(activity)
             }
 
-            onMain { check(activity.navControllerForTesting.popBackStack()) }
+            onMain { koin.get<NavigationRouter>().back() }
             await("scanner window protection released") {
                 onMain { activity.hasWindowFocus() && activity.graphRoute() == onboarding && !activity.isSecure }
             }
@@ -78,10 +79,20 @@ class ProjectReviewKeystoneScreenTest {
     private val MainActivity.isSecure: Boolean
         get() = window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0
 
-    private fun MainActivity.route(): String? = navControllerForTesting.currentDestination?.route
+    // Match the existing app-access probe: navigation is an implementation dependency of ui-lib.
+    private fun MainActivity.destination(): Any? {
+        val controller = MainActivity::class.java.getMethod("getNavControllerForTesting").invoke(this)
+        return controller.javaClass.getMethod("getCurrentDestination").invoke(controller)
+    }
+
+    private fun MainActivity.route(): String? = destination()?.let {
+        it.javaClass.getMethod("getRoute").invoke(it) as String?
+    }
 
     private fun MainActivity.graphRoute(): String? = runCatching {
-        navControllerForTesting.currentDestination?.parent?.route
+        val destination = destination() ?: return@runCatching null
+        val parent = destination.javaClass.getMethod("getParent").invoke(destination) ?: return@runCatching null
+        parent.javaClass.getMethod("getRoute").invoke(parent) as String?
     }.getOrNull()
 
     private suspend fun await(description: String, condition: () -> Boolean) {
