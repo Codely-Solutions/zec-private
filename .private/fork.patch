@@ -2619,10 +2619,10 @@ index 48b59db8e..60a94c2fc 100644
 +    <string name="ledger_error_unknown_inlineMessage">ZEC Private couldn’t connect to your Ledger.\nMake sure it’s unlocked and nearby, then try again.</string>
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalPreparationCancellationTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalPreparationCancellationTest.kt
 new file mode 100644
-index 000000000..8f91d249a
+index 000000000..701f494b9
 --- /dev/null
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalPreparationCancellationTest.kt
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,92 @@
 +package co.electriccoin.zcash.ui.common.repository
 +
 +import cash.z.ecc.android.sdk.model.Memo
@@ -2712,7 +2712,8 @@ index 000000000..8f91d249a
 +        repository.clear()
 +    }
 +
-+    private fun send(recipient: String) = ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(100), Memo(""), null)
++    private suspend fun send(recipient: String) =
++        ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(100), Memo(""), null)
 +}
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
 index 4ae26a42d..456705bc2 100644
@@ -57270,10 +57271,10 @@ index 918c80169..059bea271 100644
 +            assertFalse(repository.createOrUpdateTxNote("tx1", "note", owner, 0))
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ProposalPreparationCancellationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ProposalPreparationCancellationTest.kt
 new file mode 100644
-index 000000000..88ff96ed8
+index 000000000..b87cb182f
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ProposalPreparationCancellationTest.kt
-@@ -0,0 +1,123 @@
+@@ -0,0 +1,125 @@
 +package co.electriccoin.zcash.ui.common.repository
 +
 +import cash.z.ecc.android.sdk.model.Memo
@@ -57312,8 +57313,6 @@ index 000000000..88ff96ed8
 +    }
 +    private val dataSource = mockk<ProposalDataSource>()
 +    private val quote = mockk<SwapQuote>()
-+    private val oldSend = send("synthetic-old")
-+    private val newSend = send("synthetic-new")
 +
 +    @Test
 +    fun cancelledSoftwareProposalCannotReplaceOrClearTheNewProposal() = runTest {
@@ -57334,6 +57333,7 @@ index 000000000..88ff96ed8
 +    @Test
 +    fun cancelledKeystonePcztCannotReplacePreparationForTheSameProposal() = runTest {
 +        val repository = keystone()
++        val newSend = send("synthetic-new")
 +        val currentProposal = proposal(newSend)
 +        coEvery { dataSource.createExactInputProposal(account, newSend, quote) } returns currentProposal
 +        repository.createExactInputSwapProposal(newSend, quote)
@@ -57363,6 +57363,8 @@ index 000000000..88ff96ed8
 +        state: StateFlow<TransactionProposal?>,
 +        prepare: suspend (ZecSend) -> Unit,
 +    ) {
++        val oldSend = send("synthetic-old")
++        val newSend = send("synthetic-new")
 +        val lateResults = listOf(
 +            Result.success(proposal(oldSend)),
 +            Result.failure(InsufficientFundsException()),
@@ -57395,7 +57397,8 @@ index 000000000..88ff96ed8
 +    private fun proposal(send: ZecSend) =
 +        ExactInputSwapTransactionProposal(send.destination, send.amount, send.memo, mockk(), quote, account)
 +
-+    private fun send(recipient: String) = ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(100), Memo(""), null)
++    private suspend fun send(recipient: String) =
++        ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(100), Memo(""), null)
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ResetMetadataScopeTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ResetMetadataScopeTest.kt
 new file mode 100644

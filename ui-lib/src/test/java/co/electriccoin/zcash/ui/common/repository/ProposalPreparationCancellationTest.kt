@@ -36,8 +36,6 @@ class ProposalPreparationCancellationTest {
     }
     private val dataSource = mockk<ProposalDataSource>()
     private val quote = mockk<SwapQuote>()
-    private val oldSend = send("synthetic-old")
-    private val newSend = send("synthetic-new")
 
     @Test
     fun cancelledSoftwareProposalCannotReplaceOrClearTheNewProposal() = runTest {
@@ -58,6 +56,7 @@ class ProposalPreparationCancellationTest {
     @Test
     fun cancelledKeystonePcztCannotReplacePreparationForTheSameProposal() = runTest {
         val repository = keystone()
+        val newSend = send("synthetic-new")
         val currentProposal = proposal(newSend)
         coEvery { dataSource.createExactInputProposal(account, newSend, quote) } returns currentProposal
         repository.createExactInputSwapProposal(newSend, quote)
@@ -87,6 +86,8 @@ class ProposalPreparationCancellationTest {
         state: StateFlow<TransactionProposal?>,
         prepare: suspend (ZecSend) -> Unit,
     ) {
+        val oldSend = send("synthetic-old")
+        val newSend = send("synthetic-new")
         val lateResults = listOf(
             Result.success(proposal(oldSend)),
             Result.failure(InsufficientFundsException()),
@@ -119,5 +120,6 @@ class ProposalPreparationCancellationTest {
     private fun proposal(send: ZecSend) =
         ExactInputSwapTransactionProposal(send.destination, send.amount, send.memo, mockk(), quote, account)
 
-    private fun send(recipient: String) = ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(100), Memo(""), null)
+    private suspend fun send(recipient: String) =
+        ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(100), Memo(""), null)
 }

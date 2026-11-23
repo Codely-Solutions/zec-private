@@ -87,5 +87,6 @@ class LedgerProposalPreparationCancellationTest : LedgerProposalRepositoryTestBa
         repository.clear()
     }
 
-    private fun send(recipient: String) = ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(100), Memo(""), null)
+    private suspend fun send(recipient: String) =
+        ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(100), Memo(""), null)
 }
