@@ -92,7 +92,7 @@ class TaxExportFailureTest {
             verify(exactly = 0) { navigation.back() }
             every { context.startActivity(any()) } returns Unit
             val shared = CompletableDeferred<Unit>()
-            every { navigation.back() } answers { shared.complete(Unit); Unit }
+            every { navigation.back() } answers { shared.complete(Unit) }
             vm.state.value.exportButton.onClick()
             shared.await()
             vm.state.first { !it.exportButton.isLoading }
