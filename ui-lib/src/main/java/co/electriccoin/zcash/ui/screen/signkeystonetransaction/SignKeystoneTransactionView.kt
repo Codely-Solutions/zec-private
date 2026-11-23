@@ -105,8 +105,8 @@ fun SignKeystoneTransactionView(state: SignKeystoneTransactionState) {
                 modifier =
                     Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
                         .scaffoldPadding(it)
+                        .verticalScroll(rememberScrollState())
                         .padding(horizontal = ZashiDimensions.Spacing.spacingMd)
             ) {
                 ZashiAccountInfoListItem(
@@ -158,20 +158,19 @@ private fun ZashiAccountInfoListItem(
             )
         },
         content = {
-            ZashiListItemDefaults.ContentItem(
-                modifier = it,
-                text = state.title.getValue(),
-                subtitle = state.subtitle.getValue().let(::AnnotatedString),
-                titleIcons = persistentListOf(),
-                isEnabled = true
-            )
+            Column(modifier = it) {
+                ZashiListItemDefaults.ContentItem(
+                    modifier = Modifier.fillMaxWidth(),
+                    text = state.title.getValue(),
+                    subtitle = state.subtitle.getValue().let(::AnnotatedString),
+                    titleIcons = persistentListOf(),
+                    isEnabled = true
+                )
+                Spacer(Modifier.height(8.dp))
+                ZashiBadge(text = badgeText.getValue(), colors = ZashiBadgeDefaults.hyperBlueColors())
+            }
         },
-        trailing = {
-            ZashiBadge(
-                text = badgeText.getValue(),
-                colors = ZashiBadgeDefaults.hyperBlueColors()
-            )
-        },
+        trailing = null,
         border = BorderStroke(1.dp, color.borderColor),
         onClick = null
     )
@@ -189,12 +188,20 @@ private fun ColumnScope.QrContent(ksState: SignKeystoneTransactionState) {
                     foreground = Color.Black
                 )
         )
+    } else if (ksState.preparation == KeystoneQrPreparation.ERROR) {
+        Column(horizontalAlignment = CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = stringRes(co.electriccoin.zcash.ui.R.string.private_keystone_qr_error).getValue(),
+                style = ZashiTypography.textMd,
+                color = ZashiColors.Text.textPrimary,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.height(16.dp))
+            ksState.retryButton?.let {
+                ZashiButton(state = it, defaultPrimaryColors = ZashiButtonDefaults.secondaryColors())
+            }
+        }
     } else {
-        // Encoding the transaction/batch into its first animated-QR part (createKeystoneProposalPCZTEncoder,
-        // called from init{}) can take a while for a large proposal, with no progress feedback across
-        // that boundary — previously this left the screen looking broken (title/buttons rendered,
-        // QR area silently blank) until it suddenly appeared. Same size as the QR itself so nothing
-        // shifts once qrData arrives.
         Box(
             modifier = Modifier.align(CenterHorizontally).size(ZashiQrDefaults.width),
             contentAlignment = Alignment.Center,

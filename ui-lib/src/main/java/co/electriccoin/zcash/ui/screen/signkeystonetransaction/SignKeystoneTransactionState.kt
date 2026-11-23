@@ -17,6 +17,8 @@ data class SignKeystoneTransactionState(
     val secondaryButton: ButtonState?,
     val positiveButton: ButtonState,
     val negativeButton: ButtonState,
+    val preparation: KeystoneQrPreparation = KeystoneQrPreparation.READY,
+    val retryButton: ButtonState? = null,
 ) {
     fun toQrState(
         contentDescription: StringResource? = null,
@@ -30,6 +32,8 @@ data class SignKeystoneTransactionState(
         )
     }
 }
+
+enum class KeystoneQrPreparation { LOADING, ERROR, READY }
 
 data class ZashiAccountInfoListItemState(
     @field:DrawableRes val icon: Int,

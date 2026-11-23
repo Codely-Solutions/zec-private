@@ -2,81 +2,93 @@ package co.electriccoin.zcash.ui.screen.signkeystonetransaction
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.BuildConfig
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
+import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.CancelProposalFlowUseCase
 import co.electriccoin.zcash.ui.common.usecase.CreateKeystoneProposalPCZTEncoderUseCase
-import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
-import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
 import co.electriccoin.zcash.ui.common.usecase.SharePCZTUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.addressbook.ADDRESS_MAX_LENGTH
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
 import com.sparrowwallet.hummingbird.UREncoder
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
 class SignKeystoneTransactionVM(
-    observeSelectedWalletAccount: ObserveSelectedWalletAccountUseCase,
-    observeProposalUseCase: ObserveProposalUseCase,
+    getWalletAccounts: GetWalletAccountsUseCase,
+    keystoneProposalRepository: KeystoneProposalRepository,
     private val navigationRouter: NavigationRouter,
     private val createKeystoneProposalPCZTEncoder: CreateKeystoneProposalPCZTEncoderUseCase,
     private val cancelKeystoneProposalFlow: CancelProposalFlowUseCase,
     private val sharePCZT: SharePCZTUseCase
 ) : ViewModel() {
-    private var encoder: UREncoder? = null
-
-    private val isBottomSheetVisible = MutableStateFlow(false)
-
-    private val currentQrPart = MutableStateFlow<String?>(null)
+    private val retryRequests = MutableStateFlow(0)
+    private val preparation = MutableStateFlow<Preparation?>(null)
+    private val proposals = keystoneProposalRepository.transactionProposal
+    private val wallets = getWalletAccounts.observe()
+    // The repository holds a single approved proposal even when the selected Keystone account changes.
+    private var signingAccount = wallets.value.selectedKeystone()?.sdkAccount?.accountUuid
+    private val rejection = MutableStateFlow<Attempt?>(null)
 
     val bottomSheetState =
-        isBottomSheetVisible
-            .map { isVisible ->
-                if (isVisible) {
-                    SignKeystoneTransactionBottomSheetState(
-                        onBack = ::onCloseBottomSheetClick,
-                        positiveButton =
-                            ButtonState(
-                                text = stringRes(R.string.keystoneTransactionReject_goBack),
-                                onClick = ::onCloseBottomSheetClick
-                            ),
-                        negativeButton =
-                            ButtonState(
-                                text = stringRes(R.string.keystoneTransactionReject_rejectSig),
-                                onClick = ::onRejectBottomSheetClick
-                            ),
-                    )
-                } else {
-                    null
-                }
-            }.stateIn(
-                scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
-                initialValue = null
+        combine(rejection, proposals, wallets, preparation) { attempt, _, _, _ ->
+            if (attempt == null || !isCurrent(attempt)) return@combine null
+            SignKeystoneTransactionBottomSheetState(
+                onBack = { closeRejection(attempt) },
+                positiveButton =
+                    ButtonState(
+                        text = stringRes(R.string.keystoneTransactionReject_goBack),
+                        onClick = { closeRejection(attempt) }
+                    ),
+                negativeButton =
+                    ButtonState(
+                        text = stringRes(R.string.keystoneTransactionReject_rejectSig),
+                        onClick = { confirmRejection(attempt) }
+                    ),
             )
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
+            initialValue = null
+        )
 
     val state: StateFlow<SignKeystoneTransactionState?> =
         combine(
-            observeProposalUseCase(),
-            observeSelectedWalletAccount.require(),
-            currentQrPart
-        ) { proposal, wallet, qrData ->
-            if (wallet !is KeystoneAccount) return@combine null
+            proposals,
+            wallets,
+            preparation
+        ) { proposal, wallets, prepared ->
+            val wallet = wallets.selectedKeystone() ?: return@combine null
+            val account = wallet.sdkAccount.accountUuid
+            if (signingAccount != null && signingAccount != account) return@combine null
+            val current = prepared?.takeIf { it.attempt.proposal === proposal && it.attempt.account == account }
+            val attempt = current?.attempt
+            val phase = current?.phase ?: KeystoneQrPreparation.LOADING
+            val ready = phase == KeystoneQrPreparation.READY
             SignKeystoneTransactionState(
                 barTitle = stringRes(R.string.keystone_signWith_signTransaction),
                 title = stringRes(R.string.keystone_signWith_title),
@@ -93,24 +105,41 @@ class SignKeystoneTransactionVM(
                             }
                     ),
                 badgeText = stringRes(R.string.keystone_signWith_hardware),
-                generateNextQrCode = { currentQrPart.update { encoder?.nextPart() } },
-                qrData = qrData,
+                generateNextQrCode = { if (attempt != null && ready) generateNextQrCode(attempt) },
+                qrData = current?.qrData,
+                preparation = phase,
+                retryButton = attempt?.takeIf { phase == KeystoneQrPreparation.ERROR }?.let {
+                    ButtonState(
+                        text = stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
+                        onClick = { retryPreparation(it) }
+                    )
+                },
                 positiveButton =
                     ButtonState(
                         text = stringRes(R.string.keystone_signWith_getSignature),
-                        onClick = ::onSignTransactionClick
+                        onClick = {
+                            if (attempt != null && ready && isReady(attempt)) {
+                                navigationRouter.forward(ScanKeystonePCZTRequest)
+                            }
+                        },
+                        isEnabled = ready
                     ),
                 negativeButton =
                     ButtonState(
                         text = stringRes(R.string.keystone_signWith_reject),
-                        onClick = ::onRejectClick
+                        onClick = { reject(attempt, proposal, wallet) }
                     ),
                 secondaryButton =
                     ButtonState(
                         text = stringRes("Share PCZT"),
-                        onClick = ::onSharePCZTClick
+                        onClick = {
+                            if (attempt != null && ready) {
+                                viewModelScope.launch { if (isReady(attempt)) sharePCZT() }
+                            }
+                        },
+                        isEnabled = ready
                     ).takeIf { BuildConfig.DEBUG },
-                onBack = ::onBack,
+                onBack = { reject(attempt, proposal, wallet) },
             )
         }.stateIn(
             scope = viewModelScope,
@@ -120,41 +149,97 @@ class SignKeystoneTransactionVM(
 
     init {
         viewModelScope.launch {
-            try {
-                encoder = createKeystoneProposalPCZTEncoder()
-                currentQrPart.update { encoder?.nextPart() }
-            } catch (_: Exception) {
-                // do nothing
-            }
+            val selected = wallets.map { it.selectedKeystone() }.distinctUntilChangedBy { it?.sdkAccount?.accountUuid }
+            combine(proposals, selected, retryRequests) { proposal, wallet, _ -> proposal to wallet }
+                .collectLatest { (proposal, wallet) ->
+                    rejection.value = null
+                    preparation.value = null
+                    val account = wallet?.sdkAccount?.accountUuid ?: return@collectLatest
+                    if (signingAccount == null) signingAccount = account
+                    if (signingAccount != account || proposal == null) return@collectLatest
+                    val attempt = Attempt(account, proposal)
+                    preparation.value = Preparation(attempt)
+                    if (!isCurrent(attempt)) return@collectLatest
+                    try {
+                        val encoder = createKeystoneProposalPCZTEncoder()
+                        currentCoroutineContext().ensureActive()
+                        val part = checkNotNull(encoder.nextPart())
+                        if (isCurrent(attempt)) {
+                            preparation.value = Preparation(attempt, KeystoneQrPreparation.READY, encoder, part)
+                        }
+                    } catch (_: Exception) {
+                        currentCoroutineContext().ensureActive()
+                        if (isCurrent(attempt)) preparation.value = Preparation(attempt, KeystoneQrPreparation.ERROR)
+                    }
+                }
         }
     }
 
-    private fun onRejectBottomSheetClick() {
+    private fun retryPreparation(attempt: Attempt) {
+        if (isCurrent(attempt) && preparation.value?.phase == KeystoneQrPreparation.ERROR) {
+            preparation.value = Preparation(attempt)
+            retryRequests.update { it + 1 }
+        }
+    }
+
+    private fun generateNextQrCode(attempt: Attempt) {
+        val current = preparation.value ?: return
+        if (!isReady(attempt)) return
+        try {
+            val part = checkNotNull(current.encoder?.nextPart())
+            preparation.value = current.copy(qrData = part)
+        } catch (_: Exception) {
+            preparation.value = Preparation(attempt, KeystoneQrPreparation.ERROR)
+        }
+    }
+
+    private fun reject(attempt: Attempt?, proposal: TransactionProposal?, wallet: KeystoneAccount) {
+        if (attempt != null && isCurrent(attempt) && preparation.value?.isRejecting == false) {
+            rejection.value = attempt
+        } else if (
+            proposal == null && proposals.value == null && isActiveSigningAccount(wallet.sdkAccount.accountUuid)
+        ) {
+            navigationRouter.back()
+        }
+    }
+
+    private fun confirmRejection(attempt: Attempt) {
+        if (rejection.value !== attempt || !isCurrent(attempt)) return
+        rejection.value = null
+        preparation.value = Preparation(attempt, isRejecting = true)
         viewModelScope.launch {
-            isBottomSheetVisible.update { false }
             delay(350.milliseconds)
-            cancelKeystoneProposalFlow()
+            if (isCurrent(attempt)) cancelKeystoneProposalFlow()
         }
     }
 
-    private fun onCloseBottomSheetClick() {
-        isBottomSheetVisible.update { false }
+    private fun closeRejection(attempt: Attempt) {
+        if (rejection.value === attempt) rejection.value = null
     }
 
-    private fun onSharePCZTClick() =
-        viewModelScope.launch {
-            sharePCZT()
-        }
+    private fun isCurrent(attempt: Attempt): Boolean =
+        isActiveSigningAccount(attempt.account) && preparation.value?.attempt === attempt &&
+            proposals.value === attempt.proposal
 
-    private fun onBack() {
-        isBottomSheetVisible.update { !it }
-    }
+    private fun isActiveSigningAccount(account: AccountUuid): Boolean =
+        viewModelScope.isActive && wallets.value.selectedKeystone()?.sdkAccount?.accountUuid == account
 
-    private fun onRejectClick() {
-        isBottomSheetVisible.update { true }
-    }
+    private fun isReady(attempt: Attempt): Boolean =
+        isCurrent(attempt) && preparation.value?.phase == KeystoneQrPreparation.READY
 
-    private fun onSignTransactionClick() {
-        navigationRouter.forward(ScanKeystonePCZTRequest)
-    }
+    private fun List<WalletAccount>?.selectedKeystone(): KeystoneAccount? =
+        this?.firstOrNull { it.isSelected } as? KeystoneAccount
+
+    private class Attempt(
+        val account: AccountUuid,
+        val proposal: TransactionProposal,
+    )
+
+    private data class Preparation(
+        val attempt: Attempt,
+        val phase: KeystoneQrPreparation = KeystoneQrPreparation.LOADING,
+        val encoder: UREncoder? = null,
+        val qrData: String? = null,
+        val isRejecting: Boolean = false,
+    )
 }
