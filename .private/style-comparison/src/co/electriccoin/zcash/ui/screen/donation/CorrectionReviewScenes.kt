@@ -23,6 +23,10 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.ZashiAccountInfoL
 internal fun CorrectionReviewScene(screen: String): Boolean {
     when (screen) {
         "note-save-retry" -> co.electriccoin.zcash.ui.screen.transactionnote.view.TransactionNoteView(
+            // Capture the retry state after presentation; opening animation is tested separately.
+            sheetState = co.electriccoin.zcash.ui.design.component.rememberScreenModalBottomSheetState(
+                initialValue = androidx.compose.material3.SheetValue.Expanded,
+            ),
             state = co.electriccoin.zcash.ui.screen.transactionnote.model.TransactionNoteState(
                 onBack = {}, title = stringRes(R.string.annotation_edit),
                 note = TextFieldState(value = stringRes("Draft retained after failed save"), onValueChange = {}),

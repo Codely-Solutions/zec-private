@@ -18219,6 +18219,21 @@ index 6742c1802..59d7d81e9 100644
 @@ -209 +215 @@ fun Modifier.zashiFrostSource(hazeState: HazeState): Modifier =
 -    if (hazeState.blurEnabled) {
 +    if (isZashiFrostBlurEnabled()) {
+diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiNumberTextField.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiNumberTextField.kt
+index f3f682346..1b326c55b 100644
+--- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiNumberTextField.kt
++++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiNumberTextField.kt
+@@ -131 +131,2 @@ private fun createTextFieldState(state: NumberTextFieldState): EnhancedTextField
+-                if (newText != text) {
++                val isSelectionOnlyChange = newText == text
++                if (!isSelectionOnlyChange) {
+@@ -149 +150,2 @@ private fun createTextFieldState(state: NumberTextFieldState): EnhancedTextField
+-                        lastValidAmount = lastValidAmount
++                        lastValidAmount = lastValidAmount,
++                        isSelectionOnlyChange = isSelectionOnlyChange,
+@@ -174,0 +177,2 @@ data class NumberTextFieldInnerState(
++    /** Set on value-change callbacks when only the caret or selection moved. */
++    val isSelectionOnlyChange: Boolean = false,
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt
 index 2d38073f4..3dea5aa4d 100644
 --- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiRadioButton.kt
@@ -38567,7 +38582,7 @@ index b6549dd8b..6604dfc04 100644
 +    val onTokenAmountChange: (NumberTextFieldInnerState) -> Unit,
 +    val onFiatAmountChange: (NumberTextFieldInnerState) -> Unit,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayVM.kt
-index 5cf20b207..d3015abff 100644
+index 5cf20b207..6b7fc9eb0 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayVM.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.R
@@ -38576,47 +38591,49 @@ index 5cf20b207..d3015abff 100644
 +import co.electriccoin.zcash.ui.common.model.positiveUsdPrice
 @@ -10,0 +13 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
 +import co.electriccoin.zcash.ui.common.model.SwapPriceMarkets
-@@ -35,0 +39 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -30,0 +34 @@ import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
++import co.electriccoin.zcash.ui.design.component.TextSelection
+@@ -35,0 +40 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.Job
-@@ -45,0 +50 @@ import kotlinx.coroutines.flow.update
+@@ -45,0 +51 @@ import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.job
-@@ -87 +92,4 @@ internal class PayVM(
+@@ -87 +93,4 @@ internal class PayVM(
 -    private val isCancelStateVisible = MutableStateFlow(false)
 +    private val cancelSheet = MutableStateFlow<(() -> Boolean)?>(null)
 +    private var quoteActionInProgress = false
 +    private var quoteRequestJob: Job? = null
 +    private var isCancellingQuote = false
-@@ -99,3 +107,3 @@ internal class PayVM(
+@@ -99,3 +108,3 @@ internal class PayVM(
 -        isCancelStateVisible
 -            .map { isVisible ->
 -                if (isVisible) {
 +        cancelSheet
 +            .map { owner ->
 +                if (owner != null) {
-@@ -109 +117 @@ internal class PayVM(
+@@ -109 +118 @@ internal class PayVM(
 -                                onClick = ::onCancelSwapClick
 +                                onClick = { onCancelSwapClick(owner) }
-@@ -114 +122 @@ internal class PayVM(
+@@ -114 +123 @@ internal class PayVM(
 -                                onClick = ::onDismissCancelClick
 +                                onClick = { onDismissCancelClick(owner) }
-@@ -127,2 +135,2 @@ internal class PayVM(
+@@ -127,2 +136,2 @@ internal class PayVM(
 -    // Stable method references — created once and reused across every state emission.
 -    private val callbacks =
 +    // Stable handlers; quote dispatch adds a guard for the state used by each rendered button.
 +    private fun callbacks(state: InternalStateImpl) =
-@@ -134 +142,3 @@ internal class PayVM(
+@@ -134 +143,3 @@ internal class PayVM(
 -            onRequestSwapQuoteClick = ::onRequestSwapQuoteClick,
 +            onRequestSwapQuoteClick = { amount, fiatAmount, address ->
 +                onRequestSwapQuoteClick(state, amount, fiatAmount, address)
 +            },
-@@ -137 +147,2 @@ internal class PayVM(
+@@ -137 +148,2 @@ internal class PayVM(
 -            onTextFieldChange = ::onTextFieldChange,
 +            onTokenAmountChange = ::onTokenAmountChange,
 +            onFiatAmountChange = ::onFiatAmountChange,
-@@ -157 +168 @@ internal class PayVM(
+@@ -157 +169 @@ internal class PayVM(
 -                callbacks = callbacks
 +                callbacks = callbacks(state)
-@@ -168,5 +179,3 @@ internal class PayVM(
+@@ -168,5 +180,3 @@ internal class PayVM(
 -            val currentAssets = swapRepository.assets.value
 -            val resolvedAsset =
 -                currentAssets.data?.firstOrNull { it.assetId == asset.assetId }
@@ -38625,9 +38642,9 @@ index 5cf20b207..d3015abff 100644
 +            internalState.update {
 +                if (it.selectedAssetId == null) it.selectAsset(asset) else it
 +            }
-@@ -176 +184,0 @@ internal class PayVM(
+@@ -176 +185,0 @@ internal class PayVM(
 -                val catalog = assets.data ?: return@collect
-@@ -178,9 +186,3 @@ internal class PayVM(
+@@ -178,9 +187,3 @@ internal class PayVM(
 -                    val selected = state.asset ?: return@update state
 -                    val refreshed = catalog.firstOrNull { it.assetId == selected.assetId }
 -                    when {
@@ -38640,17 +38657,17 @@ index 5cf20b207..d3015abff 100644
 +                    val selected = state.asset
 +                    val refreshed = SwapPriceMarkets.findAsset(assets.data, state.selectedAssetId)
 +                    if (refreshed == selected) state else state.withAsset(refreshed)
-@@ -198 +200 @@ internal class PayVM(
+@@ -198 +201 @@ internal class PayVM(
 -            val selected = navigateToSelectSwapRecipient()
 +            val selected = navigateToSelectSwapRecipient(network = internalState.value.asset?.chainTicker)
-@@ -201 +203,5 @@ internal class PayVM(
+@@ -201 +204,5 @@ internal class PayVM(
 -                internalState.update { it.copy(selectedABContact = selected, address = "") }
 +                internalState.update {
 +                    it.clearRequestAmount().copy(
 +                        address = "", selectedABContact = selected, hasEditedRequestAmount = false
 +                    )
 +                }
-@@ -210,12 +216 @@ internal class PayVM(
+@@ -210,12 +217 @@ internal class PayVM(
 -                internalState.update {
 -                    it.copy(
 -                        selectedABContact = null,
@@ -38664,7 +38681,7 @@ index 5cf20b207..d3015abff 100644
 -                    )
 -                }
 +                onAddressChange(result.rawInput ?: result.address)
-@@ -240,8 +235,12 @@ internal class PayVM(
+@@ -240,8 +236,12 @@ internal class PayVM(
 -            if (internalState.value.isRequestingQuote) {
 -                isCancelStateVisible.update { true }
 -            } else if (isCancelStateVisible.value) {
@@ -38685,12 +38702,12 @@ index 5cf20b207..d3015abff 100644
 +                else -> {
 +                    isCancellingQuote = true
 +                    cancelSwap()
-@@ -249 +247,0 @@ internal class PayVM(
+@@ -249 +248,0 @@ internal class PayVM(
 -                cancelSwap()
-@@ -253 +251 @@ internal class PayVM(
+@@ -253 +252 @@ internal class PayVM(
 -    private fun onCancelSwapClick() =
 +    private fun onCancelSwapClick(owner: () -> Boolean) =
-@@ -255,4 +253,5 @@ internal class PayVM(
+@@ -255,4 +254,5 @@ internal class PayVM(
 -            if (isCancelStateVisible.value) {
 -                hideCancelBottomSheet()
 -            }
@@ -38700,21 +38717,21 @@ index 5cf20b207..d3015abff 100644
 +            quoteRequestJob?.cancel()
 +            cancelSheet.value = null
 +            cancelSwap.afterDismissal(owner) { awaitCancelSheetDismissal() }
-@@ -261 +260 @@ internal class PayVM(
+@@ -261 +261 @@ internal class PayVM(
 -    private fun onDismissCancelClick() =
 +    private fun onDismissCancelClick(owner: () -> Boolean) =
-@@ -263,2 +262,2 @@ internal class PayVM(
+@@ -263,2 +263,2 @@ internal class PayVM(
 -            isCancelStateVisible.update { false }
 -            navigateToSwapQuoteIfAvailable { hideCancelBottomSheet() }
 +            if (isCancellingQuote || cancelSheet.value !== owner) return@launch
 +            continueQuote(owner)
-@@ -266,0 +266,5 @@ internal class PayVM(
+@@ -266,0 +267,5 @@ internal class PayVM(
 +    private suspend fun continueQuote(owner: () -> Boolean) {
 +        cancelSheet.value = null
 +        navigateToSwapQuoteIfAvailable(owner) { awaitCancelSheetDismissal() }
 +    }
 +
-@@ -268,3 +272,6 @@ internal class PayVM(
+@@ -268,3 +273,10 @@ internal class PayVM(
 -    private suspend fun hideCancelBottomSheet() {
 -        isCancelStateVisible.update { false }
 -        delay(350.milliseconds)
@@ -38722,20 +38739,31 @@ index 5cf20b207..d3015abff 100644
 +
 +    private fun onTokenAmountChange(amount: NumberTextFieldInnerState) {
 +        internalState.update { state ->
-+            state.copy(amount = amount, isFiatEdited = false).withEditedAmount()
++            if (amount.isSelectionOnlyChange) {
++                state.copy(amount = state.amount.withSelection(amount.innerTextFieldState.selection))
++            } else {
++                state.copy(amount = amount, isFiatEdited = false).withEditedAmount()
++            }
 +        }
-@@ -273,2 +280,4 @@ internal class PayVM(
+@@ -273,2 +285,8 @@ internal class PayVM(
 -    private fun onTextFieldChange(amount: NumberTextFieldInnerState, fiat: NumberTextFieldInnerState) {
 -        internalState.update { it.copy(amount = amount, fiatAmount = fiat) }
 +    private fun onFiatAmountChange(amount: NumberTextFieldInnerState) {
 +        internalState.update { state ->
-+            state.copy(fiatAmount = amount, isFiatEdited = true).withEditedAmount()
++            if (amount.isSelectionOnlyChange) {
++                state.copy(fiatAmount = state.fiatAmount.withSelection(amount.innerTextFieldState.selection))
++            } else {
++                state.copy(fiatAmount = amount, isFiatEdited = true).withEditedAmount()
++            }
 +        }
-@@ -276,0 +286,3 @@ internal class PayVM(
+@@ -276,0 +295,6 @@ internal class PayVM(
++    private fun NumberTextFieldInnerState.withSelection(selection: TextSelection) =
++        copy(innerTextFieldState = innerTextFieldState.copy(selection = selection))
++
 +    private fun InternalStateImpl.withEditedAmount() =
 +        copy(hasEditedRequestAmount = true, requestAmountAssetId = null).recomputeLinkedAmount()
 +
-@@ -278 +290,6 @@ internal class PayVM(
+@@ -278 +302,6 @@ internal class PayVM(
 -    private fun onRequestSwapQuoteClick(amount: BigDecimal, fiatAmount: BigDecimal?, address: String) =
 +    private fun onRequestSwapQuoteClick(
 +        snapshot: InternalStateImpl,
@@ -38743,14 +38771,14 @@ index 5cf20b207..d3015abff 100644
 +        fiatAmount: BigDecimal?,
 +        address: String,
 +    ) =
-@@ -280,3 +297,3 @@ internal class PayVM(
+@@ -280,3 +309,3 @@ internal class PayVM(
 -            val asset = internalState.value.asset ?: return@launch
 -            val slippage = internalState.value.slippage
 -            if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = SwapMode.EXACT_OUTPUT)) {
 +            if (!canStartQuote(snapshot)) return@launch
 +            val asset = snapshot.asset ?: return@launch
 +            if (asset.positiveUsdPrice == null || swapRepository.assets.value.zecAsset.positiveUsdPrice == null) {
-@@ -285,9 +302,29 @@ internal class PayVM(
+@@ -285,9 +314,29 @@ internal class PayVM(
 -            internalState.update { it.copy(isRequestingQuote = true) }
 -            requestSwapQuote.requestExactOutput(
 -                amount = amount,
@@ -38789,7 +38817,7 @@ index 5cf20b207..d3015abff 100644
 +                quoteActionInProgress = false
 +                internalState.update { it.copy(isRequestingQuote = false) }
 +            }
-@@ -295,0 +333,9 @@ internal class PayVM(
+@@ -295,0 +345,9 @@ internal class PayVM(
 +    private fun canStartQuote(snapshot: InternalStateImpl): Boolean =
 +        internalState.value === snapshot && !snapshot.isRequestingQuote && !quoteActionInProgress && !isCancellingQuote
 +
@@ -38799,7 +38827,7 @@ index 5cf20b207..d3015abff 100644
 +            current.asset?.assetId == snapshot.asset?.assetId && current.amount == snapshot.amount
 +    }
 +
-@@ -299 +345,9 @@ internal class PayVM(
+@@ -299 +357,9 @@ internal class PayVM(
 -        internalState.update { it.copy(selectedABContact = null, address = new) }
 +        internalState.update { state ->
 +            val edited = (if (new == state.address) state else state.clearRequestAmount()).copy(
@@ -38810,7 +38838,7 @@ index 5cf20b207..d3015abff 100644
 +            val withRequestAmount = edited.applyRequestAmount()
 +            if (withRequestAmount == edited) edited else withRequestAmount.recomputeLinkedAmount()
 +        }
-@@ -303,7 +357 @@ internal class PayVM(
+@@ -303,7 +369 @@ internal class PayVM(
 -            val asset =
 -                navigateToSwapAssetPicker(
 -                    onlyChainTicker =
@@ -38819,10 +38847,10 @@ index 5cf20b207..d3015abff 100644
 -                            ?.chainTicker
 -                )
 +            val asset = navigateToSwapAssetPicker()
-@@ -311 +359 @@ internal class PayVM(
+@@ -311 +371 @@ internal class PayVM(
 -                internalState.update { it.withAsset(asset) }
 +                internalState.update { it.selectAsset(asset) }
-@@ -315,7 +363,44 @@ internal class PayVM(
+@@ -315,7 +375,44 @@ internal class PayVM(
 -    /**
 -     * Sets the selected asset and atomically recomputes the fiat amount inner state in a single
 -     * update so the displayed fiat value always reflects the current asset's USD price — without an
@@ -38874,11 +38902,11 @@ index 5cf20b207..d3015abff 100644
 +
 +    private fun InternalStateImpl.recomputeLinkedAmount(): InternalStateImpl =
 +        if (isFiatEdited) {
-@@ -323 +407,0 @@ internal class PayVM(
+@@ -323 +419,0 @@ internal class PayVM(
 -                asset = asset,
-@@ -333 +416,0 @@ internal class PayVM(
+@@ -333 +428,0 @@ internal class PayVM(
 -                asset = asset,
-@@ -376 +459,6 @@ internal data class InternalStateImpl(
+@@ -376 +471,6 @@ internal data class InternalStateImpl(
 -    override val isEphemeralAddressLocked: Boolean
 +    override val isEphemeralAddressLocked: Boolean,
 +    val selectedAssetId: String? = null,
@@ -65604,6 +65632,72 @@ index d59e700c3..8c904f8a1 100644
 -            onTextFieldChange = { _, _ -> },
 +            onTokenAmountChange = {},
 +            onFiatAmountChange = {},
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/NumberTextFieldEditEventsTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/NumberTextFieldEditEventsTest.kt
+new file mode 100644
+index 000000000..c39e9479f
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/NumberTextFieldEditEventsTest.kt
+@@ -0,0 +1,60 @@
++package co.electriccoin.zcash.ui.screen.pay
++
++import androidx.activity.ComponentActivity
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.ui.semantics.SemanticsActions
++import androidx.compose.ui.test.hasSetTextAction
++import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
++import androidx.compose.ui.test.performSemanticsAction
++import androidx.compose.ui.test.performTextReplacement
++import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
++import co.electriccoin.zcash.ui.design.component.NumberTextFieldState
++import co.electriccoin.zcash.ui.design.component.ZashiNumberTextField
++import co.electriccoin.zcash.ui.design.theme.ZcashTheme
++import co.electriccoin.zcash.ui.design.util.stringRes
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import java.math.BigDecimal
++import kotlin.test.assertEquals
++import kotlin.test.assertFalse
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class NumberTextFieldEditEventsTest {
++    @get:Rule
++    val compose = createAndroidComposeRule<ComponentActivity>()
++
++    @Test
++    fun caretMovementIsDistinctFromEditingTextWithTheSameNumericValue() {
++        val one = NumberTextFieldInnerState.fromAmount(BigDecimal.ONE)
++        val initial = one.copy(innerTextFieldState = one.innerTextFieldState.copy(value = stringRes("1")))
++        val active = mutableStateOf(initial)
++        val updates = mutableListOf<NumberTextFieldInnerState>()
++        compose.setContent {
++            ZcashTheme {
++                ZashiNumberTextField(NumberTextFieldState(innerState = active.value) {
++                    updates += it
++                    active.value = it
++                })
++            }
++        }
++        val field = compose.onNode(hasSetTextAction())
++        field.performSemanticsAction(SemanticsActions.SetSelection) { setSelection ->
++            assertTrue(setSelection(1, 1, false))
++        }
++        compose.runOnIdle {
++            assertEquals(BigDecimal.ONE, updates.last().amount)
++            assertTrue(updates.last().isSelectionOnlyChange)
++        }
++
++        field.performTextReplacement("1.0")
++        compose.runOnIdle {
++            assertEquals(BigDecimal("1.0"), updates.last().amount)
++            assertFalse(updates.last().isSelectionOnlyChange)
++        }
++    }
++}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayCatalogRecoveryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayCatalogRecoveryTest.kt
 new file mode 100644
 index 000000000..8c7bf7e80
@@ -66225,12 +66319,13 @@ index 73415ae6a..cdb0070a5 100644
 +                requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/SwapRequestCancellationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/SwapRequestCancellationTest.kt
 new file mode 100644
-index 000000000..c1f3d935c
+index 000000000..2abfd0586
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/SwapRequestCancellationTest.kt
-@@ -0,0 +1,378 @@
+@@ -0,0 +1,397 @@
 +package co.electriccoin.zcash.ui.screen.pay
 +
++import androidx.compose.ui.text.TextRange
 +import androidx.lifecycle.viewModelScope
 +import cash.z.ecc.android.sdk.Synchronizer
 +import cash.z.ecc.android.sdk.model.FiatCurrency
@@ -66258,6 +66353,8 @@ index 000000000..c1f3d935c
 +import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapRefundWarningUseCase
 +import co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCase
 +import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
++import co.electriccoin.zcash.ui.design.component.NumberTextFieldState
++import co.electriccoin.zcash.ui.design.component.TextSelection
 +import co.electriccoin.zcash.ui.screen.error.ErrorDialog
 +import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 +import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsArgs
@@ -66588,11 +66685,24 @@ index 000000000..c1f3d935c
 +            assertEquals(0, BigDecimal(token).compareTo(form().amount.innerState.amount))
 +            assertEquals(0, BigDecimal(fiat).compareTo(form().amountFiat.innerState.amount))
 +        }
++        fun moveCaret(field: NumberTextFieldState, index: Int) {
++            val selection = TextSelection.ByTextRange(TextRange(index))
++            val state = field.innerState
++            field.onValueChange(
++                state.copy(
++                    innerTextFieldState = state.innerTextFieldState.copy(selection = selection),
++                    isSelectionOnlyChange = true,
++                )
++            )
++            runCurrent()
++        }
 +
 +        refresh("2")
 +        form().amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("100")))
 +        runCurrent()
 +        assertAmounts("50", "100")
++        moveCaret(form().amount, 1)
++        assertEquals(TextSelection.ByTextRange(TextRange(1)), form().amount.innerState.innerTextFieldState.selection)
 +        val stale = assertNotNull(form().primaryButton?.onClick)
 +        refresh("3")
 +        assertAmounts("33.33333333", "100")
@@ -66603,6 +66713,9 @@ index 000000000..c1f3d935c
 +        form().amount.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("50")))
 +        runCurrent()
 +        assertAmounts("50", "150")
++        moveCaret(form().amountFiat, 2)
++        val fiatSelection = form().amountFiat.innerState.innerTextFieldState.selection
++        assertEquals(TextSelection.ByTextRange(TextRange(2)), fiatSelection)
 +        refresh("4")
 +        assertAmounts("50", "200")
 +    }

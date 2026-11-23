@@ -46,7 +46,7 @@ For external-navigation acceptance, isolate the callback/browser boundary from w
 ## Historical orchestration and experimental work
 
 For the review after `16c74516`, run the existing `ReviewScreenshotTest.referenceScreenRenders` first and inspect it.
-Then select `ReviewScreenshotTest.captureNoteRetryStates`, `HeightBoundaryCaptureTest`, `PaymentMemoCaptureTest` and
+Then select `ReviewScreenshotTest.captureNoteRetryStates`, `captureLargeNoteRetryState`, `HeightBoundaryCaptureTest`, `PaymentMemoCaptureTest` and
 `CrossPayRefreshCaptureTest` using the same opt-in host and a new `privateReviewCaptureDir`. They render the retained
 note draft/actions, exact-height action eligibility, non-text memo Review/fallback explanation, and refreshed linked
 CrossPay values. Inspect the normal and large-text frames and scroll actions. Synthetic frames establish presentation;

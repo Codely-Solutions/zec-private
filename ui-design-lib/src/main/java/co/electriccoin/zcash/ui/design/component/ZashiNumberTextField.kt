@@ -128,7 +128,8 @@ private fun createTextFieldState(state: NumberTextFieldState): EnhancedTextField
                 val amount: BigDecimal?
                 val lastValidAmount: BigDecimal?
 
-                if (newText != text) {
+                val isSelectionOnlyChange = newText == text
+                if (!isSelectionOnlyChange) {
                     normalized = ZashiNumberTextFieldParser.normalizeInput(innerState.value.getString(context))
                     amount = ZashiNumberTextFieldParser.toBigDecimalOrNull(normalized)
                     lastValidAmount = amount ?: state.innerState.lastValidAmount
@@ -146,7 +147,8 @@ private fun createTextFieldState(state: NumberTextFieldState): EnhancedTextField
                                 selection = innerState.selection
                             ),
                         amount = amount,
-                        lastValidAmount = lastValidAmount
+                        lastValidAmount = lastValidAmount,
+                        isSelectionOnlyChange = isSelectionOnlyChange,
                     )
                 state.onValueChange(new)
             }
@@ -172,6 +174,8 @@ data class NumberTextFieldInnerState(
         ),
     val amount: BigDecimal? = null,
     val lastValidAmount: BigDecimal? = null,
+    /** Set on value-change callbacks when only the caret or selection moved. */
+    val isSelectionOnlyChange: Boolean = false,
 ) {
     val isError = amount == null && !innerTextFieldState.value.isEmpty()
 

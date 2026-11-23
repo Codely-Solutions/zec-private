@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.screen.pay
 
+import androidx.compose.ui.text.TextRange
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.model.FiatCurrency
@@ -27,6 +28,8 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapQuoteIfAvailableUse
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapRefundWarningUseCase
 import co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCase
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
+import co.electriccoin.zcash.ui.design.component.NumberTextFieldState
+import co.electriccoin.zcash.ui.design.component.TextSelection
 import co.electriccoin.zcash.ui.screen.error.ErrorDialog
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsArgs
@@ -357,11 +360,24 @@ class SwapRequestCancellationTest {
             assertEquals(0, BigDecimal(token).compareTo(form().amount.innerState.amount))
             assertEquals(0, BigDecimal(fiat).compareTo(form().amountFiat.innerState.amount))
         }
+        fun moveCaret(field: NumberTextFieldState, index: Int) {
+            val selection = TextSelection.ByTextRange(TextRange(index))
+            val state = field.innerState
+            field.onValueChange(
+                state.copy(
+                    innerTextFieldState = state.innerTextFieldState.copy(selection = selection),
+                    isSelectionOnlyChange = true,
+                )
+            )
+            runCurrent()
+        }
 
         refresh("2")
         form().amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("100")))
         runCurrent()
         assertAmounts("50", "100")
+        moveCaret(form().amount, 1)
+        assertEquals(TextSelection.ByTextRange(TextRange(1)), form().amount.innerState.innerTextFieldState.selection)
         val stale = assertNotNull(form().primaryButton?.onClick)
         refresh("3")
         assertAmounts("33.33333333", "100")
@@ -372,6 +388,9 @@ class SwapRequestCancellationTest {
         form().amount.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("50")))
         runCurrent()
         assertAmounts("50", "150")
+        moveCaret(form().amountFiat, 2)
+        val fiatSelection = form().amountFiat.innerState.innerTextFieldState.selection
+        assertEquals(TextSelection.ByTextRange(TextRange(2)), fiatSelection)
         refresh("4")
         assertAmounts("50", "200")
     }

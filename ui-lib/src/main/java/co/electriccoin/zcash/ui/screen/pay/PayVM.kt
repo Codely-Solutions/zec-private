@@ -31,6 +31,7 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapRefundWarningUseCas
 import co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
+import co.electriccoin.zcash.ui.design.component.TextSelection
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.pay.info.PayInfoArgs
@@ -273,15 +274,26 @@ internal class PayVM(
 
     private fun onTokenAmountChange(amount: NumberTextFieldInnerState) {
         internalState.update { state ->
-            state.copy(amount = amount, isFiatEdited = false).withEditedAmount()
+            if (amount.isSelectionOnlyChange) {
+                state.copy(amount = state.amount.withSelection(amount.innerTextFieldState.selection))
+            } else {
+                state.copy(amount = amount, isFiatEdited = false).withEditedAmount()
+            }
         }
     }
 
     private fun onFiatAmountChange(amount: NumberTextFieldInnerState) {
         internalState.update { state ->
-            state.copy(fiatAmount = amount, isFiatEdited = true).withEditedAmount()
+            if (amount.isSelectionOnlyChange) {
+                state.copy(fiatAmount = state.fiatAmount.withSelection(amount.innerTextFieldState.selection))
+            } else {
+                state.copy(fiatAmount = amount, isFiatEdited = true).withEditedAmount()
+            }
         }
     }
+
+    private fun NumberTextFieldInnerState.withSelection(selection: TextSelection) =
+        copy(innerTextFieldState = innerTextFieldState.copy(selection = selection))
 
     private fun InternalStateImpl.withEditedAmount() =
         copy(hasEditedRequestAmount = true, requestAmountAssetId = null).recomputeLinkedAmount()

@@ -33,7 +33,7 @@ internal fun PaymentMemoReviewScene(screen: String): Boolean {
                     AmountState(null, Zatoshi(100_000), ExchangeRateState.OptedOut),
                     SenderState(
                         stringRes(R.string.accounts_sendingFrom),
-                        imageRes(DesignR.drawable.ic_item_zodl_glyph),
+                        imageRes(DesignR.drawable.ic_item_zashi),
                         stringRes("Synthetic account"),
                     ),
                     ReceiverExpandedState(

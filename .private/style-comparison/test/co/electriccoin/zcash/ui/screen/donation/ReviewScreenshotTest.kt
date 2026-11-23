@@ -69,11 +69,16 @@ class ReviewScreenshotTest {
     }
 
     @Test
-    fun captureNoteRetryStates() {
+    fun captureNoteRetryStates() = captureNoteRetryStates(listOf("light", "dark", "oled"), 1f)
+
+    @Test
+    fun captureLargeNoteRetryState() = captureNoteRetryStates(listOf("dark"), 2f)
+
+    private fun captureNoteRetryStates(themes: List<String>, scale: Float) {
+        compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
         val scene = mutableStateOf(Scene("note-save-retry", "light"))
         show(scene)
-        for ((theme, scale) in listOf("light" to 1f, "dark" to 1f, "oled" to 1f, "dark" to 2f)) {
-            compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
+        for (theme in themes) {
             val current = Scene("note-save-retry", theme, scale)
             compose.runOnIdle { scene.value = current }
             compose.onNodeWithText("Draft retained after failed save").assertIsDisplayed()

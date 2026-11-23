@@ -15,8 +15,11 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.platform.app.InstrumentationRegistry
 import co.electriccoin.zcash.ui.R
@@ -77,11 +80,24 @@ class PaymentMemoCaptureTest {
         }
         val context = RuntimeEnvironment.getApplication()
         val memoText = context.getString(R.string.zip321_binary_memo, REVIEW_MEMO_BYTE_COUNT)
-        val memo = compose.onNodeWithText(memoText).performScrollTo().assertIsDisplayed()
+        val largeText = fontScale > 1f
         val confirm = compose.onNodeWithTag(ReviewTransactionTag.REVIEW_TX_PRIMARY_BUTTON)
             .assertIsDisplayed().assertIsEnabled()
-        assertTrue(memo.fetchSemanticsNode().boundsInRoot.bottom <= confirm.fetchSemanticsNode().boundsInRoot.top)
-        saveFrame(reviewScreen, theme, fontScale, memoText)
+        if (largeText) {
+            saveFrame(reviewScreen, theme, fontScale, context.getString(R.string.tabs_send), "action")
+        }
+
+        val memo = compose.onNodeWithText(memoText).performScrollTo().assertIsDisplayed()
+        if (largeText) {
+            // The fixed Send footer can overlap the edge of the scroll container. A further scroll
+            // brings the disclosure above it after Compose brings the memo into the viewport.
+            compose.onRoot().performTouchInput { swipeUp(startY = height * 0.7f, endY = height * 0.35f) }
+        }
+        saveFrame(reviewScreen, theme, fontScale, memoText, if (largeText) "memo" else "screen")
+        assertTrue(
+            memo.fetchSemanticsNode().boundsInRoot.bottom <= confirm.fetchSemanticsNode().boundsInRoot.top,
+            "The disclosure must be visible above the fixed Send footer after scrolling",
+        )
 
         compose.runOnIdle { active.value = errorScreen }
         val errorText = context.getString(R.string.zip321_non_text_memo_edit_error)
@@ -90,7 +106,7 @@ class PaymentMemoCaptureTest {
         saveFrame(errorScreen, theme, fontScale, errorText)
     }
 
-    private fun saveFrame(screen: String, theme: String, fontScale: Float, expected: String) {
+    private fun saveFrame(screen: String, theme: String, fontScale: Float, expected: String, state: String = "screen") {
         val layouts = mutableListOf<TextLayoutResult>()
         compose.onNodeWithText(expected).assertIsDisplayed()
             .performSemanticsAction(SemanticsActions.GetTextLayoutResult) { assertTrue(it(layouts)) }
@@ -101,7 +117,7 @@ class PaymentMemoCaptureTest {
             val directory = System.getProperty("private.review.captureDir")?.let(::File)
                 ?: File(checkNotNull(System.getenv("CODEX_GUARD_OUTPUT")), "captures")
             check(directory.isDirectory || directory.mkdirs())
-            val name = "$screen-$theme-$fontScale-screen.png"
+            val name = "$screen-$theme-$fontScale-$state.png"
             val target = File(directory, name)
             check(target.createNewFile()) { "Capture already exists: $name" }
             target.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) }
@@ -115,7 +131,7 @@ class PaymentMemoCaptureTest {
             val receipt = JSONObject()
                 .put("file", name)
                 .put("screen", screen)
-                .put("state", "screen")
+                .put("state", state)
                 .put("theme", theme)
                 .put("requestedFontScale", fontScale.toDouble())
                 .put("fontScale", actualScale.toDouble())

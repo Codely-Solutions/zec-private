@@ -3,6 +3,8 @@
 The last edited CrossPay unit owns its draft. A valid refreshed token price recomputes the linked field while preserving
 that unit's entered value. Token-owned drafts keep token units; fiat-owned drafts keep fiat value. Quote Review remains
 the explicit provider quote and authorization boundary. [Amount and slippage rules](SWAP-AMOUNTS.md) govern admission.
+Moving the caret or selection preserves the draft's owner; changing its text claims that unit, including an edit that
+keeps the same numeric value.
 
 ZIP-321 memo data is a byte payload, not necessarily text. Text presentation strips trailing zero padding and decodes
 strict UTF-8. The ZIP 302 no-memo marker is empty; opaque, reserved and undecodable content is identified as a non-text

@@ -71,10 +71,10 @@ class CrossPayRefreshCaptureTest {
             compose.runOnIdle { active.value = screen }
             assertField(PayTag.PAY_AMOUNT_TOKEN_FIELD, token)
             assertField(PayTag.PAY_AMOUNT_FIAT_FIELD, fiat)
-            compose.onNodeWithTag(PayTag.PAY_REVIEW_BUTTON).assertIsDisplayed()
             val themeName = if (oled) "oled" else theme.name.lowercase()
-            val name = "$screen-$themeName-$scale-screen.png"
-            saveFrame(name)
+            if (scale > 1f) saveFrame("$screen-$themeName-$scale-fields.png")
+            compose.onNodeWithTag(PayTag.PAY_REVIEW_BUTTON).performScrollTo().assertIsDisplayed()
+            saveFrame("$screen-$themeName-$scale-screen.png")
         }
     }
 
