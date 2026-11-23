@@ -68,20 +68,22 @@ interface MetadataRepository {
      */
     suspend fun setTxBookmark(txId: String, isBookmarked: Boolean, accountUuid: AccountUuid, token: Long): Boolean
 
+    suspend fun readTxNote(txId: String, accountUuid: AccountUuid, token: Long): String?
+
     /**
      * Returns whether the note was saved; see [setTxBookmark].
      */
-    suspend fun createOrUpdateTxNote(txId: String, note: String): Boolean
+    suspend fun createOrUpdateTxNote(txId: String, note: String, accountUuid: AccountUuid, token: Long): Boolean
 
     /**
      * Returns whether the note was deleted; see [setTxBookmark].
      */
-    suspend fun deleteTxNote(txId: String): Boolean
+    suspend fun deleteTxNote(txId: String, accountUuid: AccountUuid, token: Long): Boolean
 
     /**
      * A background write: a failure is only logged.
      */
-    fun markTxMemoAsRead(txId: String)
+    fun markTxMemoAsRead(txId: String, accountUuid: AccountUuid, token: Long)
 
     /**
      * Returns whether the swap was saved; see [setTxBookmark].
@@ -181,32 +183,55 @@ class MetadataRepositoryImpl(
         accountUuid: AccountUuid,
         token: Long,
     ): Boolean {
-        if (token != walletWriteAccess.token()) return false
-        val account = accountDataSource.allAccounts.value
-            ?.firstOrNull { it.sdkAccount.accountUuid == accountUuid }
-        return if (account == null) {
-            false
-        } else {
-            updateMetadataAndAwait(account, token) { key ->
-                metadataDataSource.setTxBookmark(txId, isBookmarked, key)
-            }
+        val account = findWritableAccount(accountUuid, token) ?: return false
+        return updateMetadataAndAwait(account, token) { key ->
+            metadataDataSource.setTxBookmark(txId, isBookmarked, key)
         }
     }
 
-    override suspend fun createOrUpdateTxNote(txId: String, note: String) =
-        updateMetadataAndAwait {
+    override suspend fun readTxNote(txId: String, accountUuid: AccountUuid, token: Long): String? {
+        check(token == walletWriteAccess.token()) { "Wallet changed before the note could be read" }
+        val account = checkNotNull(findAccount(accountUuid)) { "Transaction account is unavailable" }
+        val key = getMetadataKey(account, token)
+        return mutex.withLock {
+            val result = walletWriteAccess.write(token) { NoteRead(metadataDataSource.readTxNote(txId, key)) }
+            checkNotNull(result) { "Wallet changed before the note could be read" }.note
+        }
+    }
+
+    override suspend fun createOrUpdateTxNote(
+        txId: String,
+        note: String,
+        accountUuid: AccountUuid,
+        token: Long,
+    ): Boolean {
+        val account = findWritableAccount(accountUuid, token) ?: return false
+        return updateMetadataAndAwait(account, token) {
             metadataDataSource.createOrUpdateTxNote(txId = txId, key = it, note = note)
         }
+    }
 
-    override suspend fun deleteTxNote(txId: String) =
-        updateMetadataAndAwait {
+    override suspend fun deleteTxNote(txId: String, accountUuid: AccountUuid, token: Long): Boolean {
+        val account = findWritableAccount(accountUuid, token) ?: return false
+        return updateMetadataAndAwait(account, token) {
             metadataDataSource.deleteTxNote(txId = txId, key = it)
         }
+    }
 
-    override fun markTxMemoAsRead(txId: String) =
-        updateMetadata {
-            metadataDataSource.markTxMemoAsRead(txId = txId, key = it)
+    override fun markTxMemoAsRead(txId: String, accountUuid: AccountUuid, token: Long) {
+        val account = findWritableAccount(accountUuid, token) ?: return
+        scope.launch {
+            updateMetadataLocked(account, token = token) { metadataDataSource.markTxMemoAsRead(txId, it) }
         }
+    }
+
+    private fun findWritableAccount(accountUuid: AccountUuid, token: Long): WalletAccount? =
+        if (token == walletWriteAccess.token()) findAccount(accountUuid) else null
+
+    private fun findAccount(accountUuid: AccountUuid): WalletAccount? =
+        accountDataSource.allAccounts.value?.firstOrNull { it.sdkAccount.accountUuid == accountUuid }
+
+    private data class NoteRead(val note: String?)
 
     override suspend fun markTxAsSwap(
         depositAddress: String,
@@ -406,7 +431,7 @@ class MetadataRepositoryImpl(
         token: Long = walletWriteAccess.token(),
         block: suspend (MetadataKey) -> Boolean
     ): Boolean {
-        return scope.async { updateMetadataLocked(account, block, token) }.await()
+        return scope.async { updateMetadataLocked(account, token, block) }.await()
     }
 
     /**
@@ -416,8 +441,8 @@ class MetadataRepositoryImpl(
     @Suppress("TooGenericExceptionCaught")
     private suspend fun updateMetadataLocked(
         account: WalletAccount? = null,
-        block: suspend (MetadataKey) -> Boolean,
         token: Long,
+        block: suspend (MetadataKey) -> Boolean,
     ): Boolean =
         try {
             val key = getMetadataKey(account ?: accountDataSource.getSelectedAccount(), token)

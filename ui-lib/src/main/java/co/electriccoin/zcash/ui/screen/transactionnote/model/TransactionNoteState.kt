@@ -15,4 +15,6 @@ data class TransactionNoteState(
     val secondaryButton: ButtonState?,
     val negative: ButtonState?,
     val isSaving: Boolean = false,
+    val loadMessage: StringResource? = null,
+    val retry: ButtonState? = null,
 ) : ModalBottomSheetState

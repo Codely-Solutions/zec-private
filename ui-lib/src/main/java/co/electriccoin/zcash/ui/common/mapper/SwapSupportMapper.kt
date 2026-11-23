@@ -100,7 +100,7 @@ class SwapSupportMapper {
 
     private fun createIncompleteDepositMessage(quoteStatus: SwapQuoteStatus): ZashiMessageState {
         val missingAmount =
-            (quoteStatus.amountInFormatted - (quoteStatus.depositedAmountFormatted ?: BigDecimal.ZERO))
+            (quoteStatus.quotedAmountIn - (quoteStatus.depositedAmountFormatted ?: BigDecimal.ZERO))
                 .coerceAtLeast(BigDecimal.ZERO)
 
         val deadline =

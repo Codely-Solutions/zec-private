@@ -230,6 +230,23 @@ class SwapQuoteLifecycleTest {
             assertEquals(current, repository.quote.value)
         }
 
+    @Test
+    fun catalogBecomingAmbiguousWhileQuoteIsPendingRefusesLateSuccess() = runTest {
+        val finish = CompletableDeferred<SwapQuote>()
+        val source = dataSourceReturning(flexQuote())
+        coEvery { source.requestQuote(any(), any(), any(), any(), any(), any(), any()) } coAnswers { finish.await() }
+        val repository = loadedRepository(source)
+        requestIncoming(repository)
+        assertIs<SwapQuoteData.Loading>(repository.quote.value)
+        val duplicate = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ZERO, decimals = btc.decimals - 1)
+        coEvery { source.getSupportedTokens() } returns listOf(zec, btc, duplicate)
+        repository.requestRefreshAssetsOnce()
+        finish.complete(flexQuote())
+        assertIs<SwapQuoteData.Error>(repository.quote.value)
+        assertTrue(repository.assets.value.data.orEmpty().none { it.assetId == btc.assetId })
+        assertEquals(3, repository.assets.value.recoveryAssets?.size)
+    }
+
     private fun requestIncoming(repository: SwapRepositoryImpl, recipient: String = "destination") =
         repository.requestFlexInputIntoZec(
             amount = BigDecimal("2"),

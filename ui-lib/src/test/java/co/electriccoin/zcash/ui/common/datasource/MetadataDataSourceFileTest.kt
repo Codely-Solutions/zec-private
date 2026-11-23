@@ -742,6 +742,64 @@ class MetadataDataSourceFileTest {
         }
 
     @Test
+    fun noteAndMemoEditsStayWithTheDisplayedAccountAfterSelectionChanges() = runTest {
+        val owner = AccountUuid.new(ByteArray(16))
+        val other = AccountUuid.new(ByteArray(16) { 7 })
+        val ownerWallet = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(owner) }
+        val otherWallet = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(other) }
+        val otherKey = metadataKey(7, 8)
+        val selected = MutableStateFlow<WalletAccount?>(ownerWallet)
+        val accounts = mockk<AccountDataSource> {
+            every { selectedAccount } returns selected
+            every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(listOf(ownerWallet, otherWallet))
+        }
+        val ownership = WalletWriteAccess()
+        val repository = MetadataRepositoryImpl(
+            accountDataSource = accounts,
+            metadataDataSource = dataSource(ownership = ownership),
+            metadataKeyStorageProvider = mockk<MetadataKeyStorageProvider> {
+                coEvery { get(owner) } returns key
+                coEvery { get(other) } returns otherKey
+            },
+            persistableWalletProvider = mockk(),
+            simpleSwapAssetProvider = simpleSwapAssetProvider,
+            walletWriteAccess = ownership,
+        )
+        val transaction = ReceiveTransaction.Success(
+            id = TransactionId.new(ByteArray(32) { 6 }),
+            amount = Zatoshi(1),
+            timestamp = Instant.EPOCH,
+            memoCount = 1,
+            transactionOutputs = emptyList(),
+            overview = mockk(),
+            recipient = null,
+            accountUuid = owner,
+        )
+        val txId = transaction.id.txIdString()
+        val token = ownership.token()
+        assertTrue(repository.createOrUpdateTxNote(txId, "Original", owner, token))
+        assertTrue(repository.createOrUpdateTxNote(txId, "Other account", other, token))
+        val displayed = repository.observeTransactionMetadata(transaction).first()
+        assertEquals("Original", displayed.note)
+
+        selected.value = otherWallet
+        val displayedToken = assertNotNull(displayed.bookmarkWriteToken)
+        assertEquals("Original", repository.readTxNote(txId, owner, displayedToken))
+        assertTrue(repository.createOrUpdateTxNote(txId, "Edited", owner, displayedToken))
+        repository.markTxMemoAsRead(txId, owner, displayedToken)
+        repository.observeTransactionMetadata(transaction).first { it.isRead }
+        assertEquals("Edited", read(canonicalName).accountMetadata.annotations.single().content)
+        assertEquals(listOf(txId), read(canonicalName).accountMetadata.read)
+
+        assertTrue(repository.deleteTxNote(txId, owner, displayedToken))
+        assertNull(repository.readTxNote(txId, owner, displayedToken))
+        val otherFile = File(metadataDir, otherKey.fileIdentifier())
+        val otherMetadata = metadataProvider.readMetadataFromFile(otherFile, otherKey).accountMetadata
+        assertEquals("Other account", otherMetadata.annotations.single().content)
+        assertTrue(otherMetadata.read.isEmpty())
+    }
+
+    @Test
     fun markingAMemoAsReadTwiceKeepsOneEntry() =
         runTest {
             val dataSource = dataSource()

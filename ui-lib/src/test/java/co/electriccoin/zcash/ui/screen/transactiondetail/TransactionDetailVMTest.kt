@@ -18,6 +18,7 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.near.SwapOutputProvenanceFixture
+import co.electriccoin.zcash.ui.common.model.near.SwapInputProvenanceFixture
 import co.electriccoin.zcash.ui.common.model.near.SwapType
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
@@ -31,6 +32,7 @@ import co.electriccoin.zcash.ui.common.usecase.ReloadHandle
 import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.design.util.TickerLocation.HIDDEN
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.design.util.stringResByTransactionId
@@ -116,7 +118,7 @@ class TransactionDetailVMTest {
     fun ordinaryReceivedDetailUsesTheLocalReceiptWithoutSwapControls() = runTest(dispatcher) {
         val received = ReceiveTransaction.Success(
             TransactionId.new(ByteArray(32) { 2 }), Zatoshi(123_000_000), Instant.EPOCH,
-            0, emptyList(), overview, null
+            0, emptyList(), overview, null, accountUuid = cash.z.ecc.android.sdk.model.AccountUuid.new(ByteArray(16))
         )
         val state = state(data(received))
         assertEquals(stringRes(R.string.transaction_received), state.header.title)
@@ -286,6 +288,31 @@ class TransactionDetailVMTest {
         }
     }
 
+    @Test
+    fun outgoingDetailPairsSparseInputAndUsdWithSavedOutputMetadata() = runTest(dispatcher) {
+        val origin = SwapCatalogTestFixture.nativeZec
+        val destination = SwapCatalogTestFixture.externalAssets.first()
+        val saved = swapMetadata(SwapStatus.SUCCESS, SwapCatalogTestFixture.simple(origin))
+        for (mode in listOf(SwapType.EXACT_INPUT, SwapType.EXACT_OUTPUT)) {
+            for ((fields, amount, usd) in SwapInputProvenanceFixture.cases) {
+                val status = SwapInputProvenanceFixture.status(origin, destination, saved.depositAddress, mode, fields)
+                val detail = state(data(sent, saved, SwapQuoteStatusData(status = status, isLoading = false)))
+                val input = assertNotNull(assertIs<SendSwapState>(detail.info).quoteHeader.from)
+                val inputNumber = (input.amount as StringResource.ByNumber).number as BigDecimal
+                assertEquals(0, BigDecimal(amount).compareTo(inputNumber), "$mode $fields")
+                assertEquals(usd?.let { stringResByDynamicCurrencyNumber(BigDecimal(it), FiatCurrency.USD.symbol) }
+                    ?: stringRes(""), input.fiatAmount, "$mode $fields")
+                if (status.executedAmountIn == null) {
+                    val retained = saved.copy(executedAmountOut = BigDecimal("0.9"))
+                    val sparse = SwapQuoteStatusData(status = status, isLoading = false, savedMetadata = retained)
+                    val row = assertIs<SendSwapState>(state(data(sent, retained, sparse)).info).quoteHeader.from
+                    assertEquals(input.amount, row?.amount)
+                    assertEquals(input.fiatAmount, row?.fiatAmount)
+                }
+            }
+        }
+    }
+
     private fun assertLocalFunding(state: TransactionDetailState, assetId: String) {
         assertEquals(stringRes(sent.amount, HIDDEN), state.header.amount, assetId)
         val info = assertIs<SendSwapState>(state.info, assetId)
@@ -339,7 +366,7 @@ class TransactionDetailVMTest {
         transaction = transaction,
         memos = emptyList(),
         contact = null,
-        metadata = TransactionMetadata(false, true, null, metadata),
+        metadata = TransactionMetadata(false, true, null, metadata, bookmarkWriteToken = 0),
         swap = swap,
         reloadHandle = reload,
         recipient = null

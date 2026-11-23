@@ -69,8 +69,8 @@ internal fun TransactionNoteView(
                 focusRequester = focusRequester,
                 modifier = Modifier.weight(1f, false)
             )
-            LaunchedEffect(sheetState.currentValue) {
-                if (sheetState.currentValue == SheetValue.Expanded) {
+            LaunchedEffect(sheetState.currentValue, state.loadMessage) {
+                if (sheetState.currentValue == SheetValue.Expanded && state.loadMessage == null) {
                     onSheetOpen(focusRequester)
                 }
             }
@@ -111,29 +111,17 @@ private fun BottomSheetContent(
                         bottom = contentPadding.calculateBottomPadding()
                     )
         ) {
-            ZashiTextField(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 24.dp)
-                        .focusRequester(focusRequester),
-                state = state.note,
-                minLines = 4,
-                placeholder = {
-                    Text(
-                        text = "Write an optional note to describe this transaction...",
-                        style = ZashiTypography.textMd,
-                        color = ZashiColors.Inputs.Default.text
-                    )
-                }
-            )
-
-            Spacer(Modifier.height(6.dp))
-            Text(
-                modifier = Modifier.padding(horizontal = 24.dp),
-                text = state.noteCharacters.getValue(),
-                style = ZashiTypography.textSm,
-            )
+            val loadMessage = state.loadMessage
+            if (loadMessage != null) {
+                Text(
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                    text = loadMessage.getValue(),
+                    style = ZashiTypography.textMd,
+                    color = ZashiColors.Text.textPrimary,
+                )
+            } else {
+                NoteField(state, focusRequester)
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 
@@ -144,6 +132,8 @@ private fun BottomSheetContent(
                         .padding(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                state.retry?.let { ZashiButton(state = it, modifier = Modifier.weight(1f)) }
+
                 state.negative?.let {
                     ZashiButton(
                         state = it,
@@ -185,6 +175,33 @@ private fun BottomSheetContent(
             }
         )
     }
+}
+
+@Composable
+private fun NoteField(state: TransactionNoteState, focusRequester: FocusRequester) {
+    ZashiTextField(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .focusRequester(focusRequester),
+        state = state.note,
+        minLines = 4,
+        placeholder = {
+            Text(
+                text = "Write an optional note to describe this transaction...",
+                style = ZashiTypography.textMd,
+                color = ZashiColors.Inputs.Default.text
+            )
+        }
+    )
+
+    Spacer(Modifier.height(6.dp))
+    Text(
+        modifier = Modifier.padding(horizontal = 24.dp),
+        text = state.noteCharacters.getValue(),
+        style = ZashiTypography.textSm,
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

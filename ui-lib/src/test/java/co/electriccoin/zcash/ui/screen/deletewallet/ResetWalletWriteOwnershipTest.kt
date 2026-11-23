@@ -90,11 +90,13 @@ class ResetWalletWriteOwnershipTest {
         val fixture = Fixture()
         val key = fixture.metadataKey
         val storage = fixture.metadataStorage
-        val metadata = fixture.metadataRepository(EditAccountFixtures.zodl())
+        val account = EditAccountFixtures.zodl()
+        val owner = account.sdkAccount.accountUuid
+        val metadata = fixture.metadataRepository(account)
         val contacts = fixture.contactRepository()
         val contactFile = fixture.contactStorage.getStorageTarget(fixture.contactKey)
         contacts.saveContact("Before reset", "original-recipient", null)
-        assertTrue(metadata.createOrUpdateTxNote("original-tx", "before reset"))
+        assertTrue(metadata.createOrUpdateTxNote("original-tx", "before reset", owner, 0))
         assertTrue(contactFile.isFile)
         assertEquals(1, storage.getStorageFiles(key).size)
         val sdkEraseEntered = CompletableDeferred<Unit>()
@@ -111,7 +113,7 @@ class ResetWalletWriteOwnershipTest {
             assertEquals(ResetStage.ERASE_SDK, fixture.progress.getStage())
             assertTrue(storage.getStorageFiles(key).isEmpty())
             assertFalse(contactFile.exists())
-            assertFalse(metadata.createOrUpdateTxNote("late-tx", "during reset"))
+            assertFalse(metadata.createOrUpdateTxNote("late-tx", "during reset", owner, 0))
             assertFailsWith<IllegalStateException> { contacts.saveContact("During reset", "late-recipient", null) }
         } finally {
             finishSdkErase.complete(Unit)
@@ -119,7 +121,7 @@ class ResetWalletWriteOwnershipTest {
         operation.join()
 
         assertNull(fixture.progress.getStage())
-        assertFalse(metadata.createOrUpdateTxNote("late-tx", "after reset"))
+        assertFalse(metadata.createOrUpdateTxNote("late-tx", "after reset", owner, 0))
         assertFailsWith<IllegalStateException> { contacts.saveContact("After reset", "late-recipient", null) }
         assertTrue(storage.getStorageFiles(key).isEmpty())
         assertFalse(contactFile.exists())
@@ -136,7 +138,7 @@ class ResetWalletWriteOwnershipTest {
         val uuid = account.sdkAccount.accountUuid
         val collector = launch { metadata.metadata.collect {} }
         try {
-            assertTrue(metadata.createOrUpdateTxNote("tx", "before reset"))
+            assertTrue(metadata.createOrUpdateTxNote("tx", "before reset", uuid, fixture.walletProvider.writeVersion))
             val saved = withTimeout(10.seconds) {
                 metadata.metadata.first { it[uuid]?.accountMetadata?.annotations?.isNotEmpty() == true }.getValue(uuid)
             }

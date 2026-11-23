@@ -15,12 +15,16 @@ import co.electriccoin.zcash.ui.common.provider.SwapAssetCacheProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl
+import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import java.math.BigDecimal
@@ -201,6 +205,42 @@ class SwapRecoveryBoundaryTest {
         coEvery { api.checkSwapStatus("tracked-deposit") } returns original
         assertEquals(SwapStatus.SUCCESS, useCase("tracked-deposit").status?.status)
         coVerify(exactly = 1) { metadata.updateSwap(bound, any()) }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun zeroPriceDuplicateCannotEnterAnOfferThenFailStatusInEitherOrder() = runTest {
+        val conflicting = eth.dto().copy(price = BigDecimal.ZERO, decimals = eth.decimals - 1)
+        for (rows in listOf(listOf(eth.dto(), conflicting, zec.dto()), listOf(conflicting, eth.dto(), zec.dto()))) {
+            coEvery { api.getSupportedTokens() } returns rows
+            coEvery { api.checkSwapStatus("tracked-deposit") } returns response("tracked-deposit")
+            coEvery { metadata.getSwapMetadata("tracked-deposit") } returns stored
+            val repository = SwapRepositoryImpl(dataSource, cache).also {
+                it.scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler))
+            }
+            repository.requestRefreshAssetsOnce()
+            assertEquals(emptyList(), repository.assets.value.data)
+            assertEquals(3, repository.assets.value.recoveryAssets?.size)
+            repository.requestFlexInputIntoZec(BigDecimal.ONE, "synthetic-external-refund",
+                "synthetic-zec-recipient", eth, BigDecimal.ONE)
+            assertIs<SwapQuoteData.Error>(repository.quote.value)
+            coVerify(exactly = 0) { api.requestQuote(any()) }
+            val rejected = GetSwapStatusUseCase(metadata, repository)("tracked-deposit")
+            assertIs<AssetNotFoundException>(rejected.error)
+            assertEquals(stored, rejected.savedMetadata)
+            coVerify(exactly = 0) { metadata.updateSwap(any(), any()) }
+
+            // A unique catalog recovers both quote admission and status using the real decoder/resolver.
+            coEvery { api.getSupportedTokens() } returns listOf(eth.dto(), zec.dto())
+            coEvery { api.requestQuote(any()) } returns response("tracked-deposit").quoteResponse
+            repository.requestRefreshAssetsOnce()
+            repository.requestFlexInputIntoZec(BigDecimal.ONE, "synthetic-external-refund",
+                "synthetic-zec-recipient", eth, BigDecimal.ONE)
+            assertIs<SwapQuoteData.Success>(repository.quote.value)
+            val recovered = GetSwapStatusUseCase(metadata, repository)("tracked-deposit")
+            assertEquals(SwapStatus.SUCCESS, recovered.status?.status)
+            io.mockk.clearMocks(api, metadata, answers = false)
+        }
     }
 
     private suspend fun readStatus(echoedAddress: String = "tracked-deposit", scope: CoroutineScope) =

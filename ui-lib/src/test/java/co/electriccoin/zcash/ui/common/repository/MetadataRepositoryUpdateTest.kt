@@ -57,8 +57,8 @@ class MetadataRepositoryUpdateTest {
             coEvery { metadataDataSource.deleteTxNote("tx1", key) } returns true
 
             assertTrue(repository.setTxBookmark("tx1", true, owner, 0))
-            assertTrue(repository.createOrUpdateTxNote("tx1", "note"))
-            assertTrue(repository.deleteTxNote("tx1"))
+            assertTrue(repository.createOrUpdateTxNote("tx1", "note", owner, 0))
+            assertTrue(repository.deleteTxNote("tx1", owner, 0))
         }
 
     @Test
@@ -72,8 +72,8 @@ class MetadataRepositoryUpdateTest {
             } returns false
 
             assertFalse(repository.setTxBookmark("tx1", false, owner, 0))
-            assertFalse(repository.createOrUpdateTxNote("tx1", "note"))
-            assertFalse(repository.deleteTxNote("tx1"))
+            assertFalse(repository.createOrUpdateTxNote("tx1", "note", owner, 0))
+            assertFalse(repository.deleteTxNote("tx1", owner, 0))
             assertFalse(markSwap())
         }
 
@@ -82,7 +82,7 @@ class MetadataRepositoryUpdateTest {
         runTest {
             coEvery { metadataDataSource.createOrUpdateTxNote("tx1", "note", key) } throws IOException()
 
-            assertFalse(repository.createOrUpdateTxNote("tx1", "note"))
+            assertFalse(repository.createOrUpdateTxNote("tx1", "note", owner, 0))
         }
 
     private suspend fun markSwap() =

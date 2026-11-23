@@ -341,9 +341,10 @@ class MainActivity : FragmentActivity() {
 
     companion object {
         private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
-        private const val NAVIGATION_STATE_VERSION = 2
+        private const val NAVIGATION_STATE_VERSION = 3
 
-        // Older navigation state can contain a plaintext restore phrase or Keystone export.
+        // Forget older navigation stacks when their routes or saved payloads change.
+        // Version 3 adds the transaction note's account and wallet session to its typed route.
         internal fun restorableNavigationState(state: Bundle?): Bundle? =
             state?.takeIf { it.getInt(NAVIGATION_STATE_VERSION_KEY) == NAVIGATION_STATE_VERSION }
 

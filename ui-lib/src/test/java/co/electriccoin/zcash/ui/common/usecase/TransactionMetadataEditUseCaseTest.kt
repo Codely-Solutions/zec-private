@@ -16,6 +16,7 @@ import kotlin.test.assertTrue
  * only when it was not, and still leaving the note sheet either way.
  */
 class TransactionMetadataEditUseCaseTest {
+    private val owner = AccountUuid.new(ByteArray(16))
     private val metadataRepository = mockk<MetadataRepository>()
     private val navigationRouter = mockk<NavigationRouter>(relaxed = true)
     private val showError = mockk<ShowErrorUseCase>(relaxed = true)
@@ -24,14 +25,14 @@ class TransactionMetadataEditUseCaseTest {
     fun savingANoteReturnsTheRepositoryResultAndGoesBack() =
         runTest {
             val useCase = CreateOrUpdateTransactionNoteUseCase(metadataRepository, navigationRouter, showError)
-            coEvery { metadataRepository.createOrUpdateTxNote("tx1", "note") } returns false
+            coEvery { metadataRepository.createOrUpdateTxNote("tx1", "note", owner, 0) } returns false
 
-            assertFalse(useCase("tx1", "  note  "))
+            assertFalse(useCase("tx1", "  note  ", owner, 0))
             verify(exactly = 1) { navigationRouter.back() }
             verify(exactly = 1) { showError(any()) }
 
-            coEvery { metadataRepository.createOrUpdateTxNote("tx1", "note") } returns true
-            assertTrue(useCase("tx1", "note"))
+            coEvery { metadataRepository.createOrUpdateTxNote("tx1", "note", owner, 0) } returns true
+            assertTrue(useCase("tx1", "note", owner, 0))
             verify(exactly = 2) { navigationRouter.back() }
             verify(exactly = 1) { showError(any()) }
         }
@@ -40,14 +41,14 @@ class TransactionMetadataEditUseCaseTest {
     fun deletingANoteReturnsTheRepositoryResultAndGoesBack() =
         runTest {
             val useCase = DeleteTransactionNoteUseCase(metadataRepository, navigationRouter, showError)
-            coEvery { metadataRepository.deleteTxNote("tx1") } returns false
+            coEvery { metadataRepository.deleteTxNote("tx1", owner, 0) } returns false
 
-            assertFalse(useCase("tx1"))
+            assertFalse(useCase("tx1", owner, 0))
             verify(exactly = 1) { navigationRouter.back() }
             verify(exactly = 1) { showError(any()) }
 
-            coEvery { metadataRepository.deleteTxNote("tx1") } returns true
-            assertTrue(useCase("tx1"))
+            coEvery { metadataRepository.deleteTxNote("tx1", owner, 0) } returns true
+            assertTrue(useCase("tx1", owner, 0))
             verify(exactly = 2) { navigationRouter.back() }
             verify(exactly = 1) { showError(any()) }
         }

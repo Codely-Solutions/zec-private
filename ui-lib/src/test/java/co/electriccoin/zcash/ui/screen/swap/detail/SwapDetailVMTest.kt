@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.near.SwapOutputProvenanceFixture
+import co.electriccoin.zcash.ui.common.model.near.SwapInputProvenanceFixture
 import co.electriccoin.zcash.ui.common.model.near.SwapType
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
@@ -24,6 +25,7 @@ import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.component.ZashiMessageState
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringResByDateTime
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
@@ -299,6 +301,30 @@ class SwapDetailVMTest {
             val fiat = expectedUsd?.let { stringResByDynamicCurrencyNumber(it, FiatCurrency.USD.symbol) }
             assertEquals(destination.chainName + stringRes(" · ") + stringRes(label), output.chain)
             assertEquals(fiat ?: stringRes(""), output.fiatAmount)
+        }
+    }
+
+    @Test
+    fun incomingDetailPairsSparseInputAndUsdWithSavedOutputMetadata() = runTest {
+        val origin = SwapCatalogTestFixture.externalAssets.first()
+        val destination = SwapCatalogTestFixture.nativeZec
+        val harness = harness(SwapQuoteStatusData(isLoading = true))
+        for ((fields, amount, usd) in SwapInputProvenanceFixture.cases) {
+            val status = SwapInputProvenanceFixture.status(origin, destination, DEPOSIT, SwapType.FLEX_INPUT, fields)
+            harness.emit(SwapQuoteStatusData(status = status, isLoading = false))
+            runCurrent()
+            val input = assertNotNull(harness.state().quoteHeader.from)
+            val inputNumber = (input.amount as StringResource.ByNumber).number as BigDecimal
+            assertEquals(0, BigDecimal(amount).compareTo(inputNumber), fields)
+            assertEquals(usd?.let { stringResByDynamicCurrencyNumber(BigDecimal(it), FiatCurrency.USD.symbol) }
+                ?: stringRes(""), input.fiatAmount, fields)
+            if (status.executedAmountIn == null) {
+                val retained = saved(SwapStatus.SUCCESS).copy(executedAmountOut = BigDecimal("0.9"))
+                harness.emit(SwapQuoteStatusData(status = status, isLoading = false, savedMetadata = retained))
+                runCurrent()
+                assertEquals(input.amount, harness.state().quoteHeader.from?.amount)
+                assertEquals(input.fiatAmount, harness.state().quoteHeader.from?.fiatAmount)
+            }
         }
     }
 

@@ -138,6 +138,18 @@ class NearSwapQuoteStatusTest {
     }
 
     @Test
+    fun rawZeroInputDoesNotDiscardPendingStatusOrQuotedFundingRequirement() {
+        val original = nearSwapQuoteStatus(SwapStatus.INCOMPLETE_DEPOSIT, Clock.System.now() + 1.hours)
+        val status = original.copy(response = original.response.copy(
+            swapDetails = SwapDetails(amountIn = BigDecimal.ZERO)
+        ))
+        assertEquals(ModelSwapStatus.INCOMPLETE_DEPOSIT, status.status)
+        assertEquals(BigDecimal.ZERO.setScale(8), status.executedAmountIn)
+        assertEquals(BigDecimal("1"), status.quotedAmountIn)
+        assertEquals(null, status.amountInUsd)
+    }
+
+    @Test
     fun missingExecutionRemainsExplicitEvenWhenStatusIsSuccessful() {
         val swap = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
         assertEquals(null, swap.executedAmountOut)

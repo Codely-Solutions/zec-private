@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.os.Parcel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.ComposeNavigator
+import androidx.navigation.compose.DialogNavigator
 import androidx.navigation.compose.composable
 import androidx.navigation.createGraph
 import androidx.navigation.toRoute
@@ -21,6 +22,7 @@ import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
 import co.electriccoin.zcash.ui.screen.scankeystone.viewmodel.ScanKeystoneSignInRequestViewModel
 import co.electriccoin.zcash.ui.screen.selectkeystoneaccount.SelectKeystoneAccount
+import co.electriccoin.zcash.ui.screen.transactionnote.TransactionNote
 import com.keystone.module.DecodeResult
 import com.keystone.module.ZcashAccount
 import com.keystone.module.ZcashAccounts
@@ -36,6 +38,8 @@ import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -162,23 +166,47 @@ class KeystoneEnrollmentSavedStateTest {
     @Test
     fun olderActivityStateIsDiscarded() {
         val previous = Bundle().apply {
-            putInt("wallet_navigation_state_version", 1)
+            putInt(NAVIGATION_VERSION_KEY, 1)
             putString("keystone_enrollment", SYNTHETIC_UFVK)
         }
         assertNull(MainActivity.restorableNavigationState(previous))
         assertNull(MainActivity.restorableNavigationState(Bundle()))
     }
 
-    private fun roundTrip(first: NavHostController): NavHostController {
+    @Test
+    fun oldNoteRouteIsDiscardedAndCurrentNoteRouteRestores() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val previous = newController().apply {
+                graph = createGraph(startDestination = HomeArgs) {
+                    composable<HomeArgs> { }
+                    dialogComposable<Version2TransactionNote> { }
+                }
+            }
+            val oldNote = Version2TransactionNote("fixture-tx")
+            previous.navigate(oldNote)
+            assertEquals(oldNote, previous.currentBackStackEntry?.toRoute<Version2TransactionNote>())
+            assertEquals(HomeArgs, roundTrip(previous, version = 2).currentBackStackEntry?.toRoute<HomeArgs>())
+
+            val current = newController().also { it.installGraph() }
+            val currentNote = TransactionNote("fixture-tx", "00112233445566778899aabbccddeeff", 0L)
+            current.navigate(currentNote)
+            assertEquals(currentNote, roundTrip(current).currentBackStackEntry?.toRoute<TransactionNote>())
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    private fun roundTrip(first: NavHostController, version: Int = 3): NavHostController {
         val restored = newController()
         val parcel = Parcel.obtain()
         try {
-            parcel.writeBundle(assertNotNull(first.saveState()))
+            parcel.writeBundle(assertNotNull(first.saveState()).apply { putInt(NAVIGATION_VERSION_KEY, version) })
             val serialized = parcel.marshall()
             assertFalse(serialized.toString(Charsets.UTF_8).contains(SYNTHETIC_UFVK))
             assertFalse(serialized.toString(Charsets.UTF_16LE).contains(SYNTHETIC_UFVK))
             parcel.setDataPosition(0)
-            restored.restoreState(parcel.readBundle(javaClass.classLoader))
+            restored.restoreState(MainActivity.restorableNavigationState(parcel.readBundle(javaClass.classLoader)))
         } finally {
             parcel.recycle()
         }
@@ -187,6 +215,7 @@ class KeystoneEnrollmentSavedStateTest {
 
     private fun newController() = NavHostController(RuntimeEnvironment.getApplication()).apply {
         navigatorProvider.addNavigator(ComposeNavigator())
+        navigatorProvider.addNavigator(DialogNavigator())
     }
 
     private fun newNavigator(controller: NavHostController) =
@@ -197,10 +226,16 @@ class KeystoneEnrollmentSavedStateTest {
             composable<HomeArgs> { }
             hardwareEnrollmentScreens()
             composable<ThirdPartyScan> { }
+            dialogComposable<TransactionNote> { }
         }
     }
 
     private companion object {
+        const val NAVIGATION_VERSION_KEY = "wallet_navigation_state_version"
         const val SYNTHETIC_UFVK = "uview1synthetic-keystone-enrollment-fixture"
     }
 }
+
+@Serializable
+@SerialName("co.electriccoin.zcash.ui.screen.transactionnote.TransactionNote")
+private data class Version2TransactionNote(val txId: String)

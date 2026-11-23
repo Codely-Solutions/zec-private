@@ -61,6 +61,9 @@ interface MetadataDataSource {
 
     suspend fun setTxBookmark(txId: String, isBookmarked: Boolean, key: MetadataKey): Boolean
 
+    /** Reads the note only when this account's metadata can be edited. */
+    suspend fun readTxNote(txId: String, key: MetadataKey): String?
+
     suspend fun createOrUpdateTxNote(
         txId: String,
         note: String,
@@ -202,6 +205,13 @@ class MetadataDataSourceImpl(
                     lastUpdated = Instant.now(),
                 )
             }
+        }
+
+    override suspend fun readTxNote(txId: String, key: MetadataKey): String? =
+        mutex.withLock {
+            val content = readMetadata(key)
+            if (!content.isWritable) throw IOException("Transaction metadata is unavailable")
+            content.metadata.accountMetadata.annotations.find { it.txId == txId }?.content
         }
 
     override suspend fun createOrUpdateTxNote(txId: String, note: String, key: MetadataKey) =

@@ -247,8 +247,12 @@ class SwapRepositoryImpl(
         assets.update { it.copy(isLoading = true, error = null) }
         try {
             val tokens = swapDataSource.getSupportedTokens()
-            val filtered = filterSwapAssets(tokens)
-            val zecAsset = SwapPriceMarkets.findNativeZec(tokens)
+            // Price filtering must not turn an ambiguous raw ID into a selectable identity.
+            // Keep the raw rows for recovery, whose resolver also rejects duplicate IDs.
+            val uniqueIds = tokens.groupingBy { it.assetId }.eachCount().filterValues { it == 1 }.keys
+            val selectable = tokens.filter { it.assetId in uniqueIds }
+            val filtered = filterSwapAssets(selectable)
+            val zecAsset = SwapPriceMarkets.findNativeZec(selectable)
             try {
                 // Historical identities must remain resolvable when a price or offer disappears.
                 swapAssetCacheProvider.store(mergeRecoveryAssets(tokens, assets.value.recoveryAssets.orEmpty()))

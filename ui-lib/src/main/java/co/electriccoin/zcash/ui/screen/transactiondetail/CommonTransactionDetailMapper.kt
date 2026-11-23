@@ -92,7 +92,9 @@ class CommonTransactionDetailMapper {
                     bigIcon = originAsset.swapQuoteTokenIcon(),
                     smallIcon = originAsset.swapQuoteChainIcon(isShielded = true),
                     amount = stringResByNumber(swap.amountInFormatted),
-                    fiatAmount = stringResByDynamicCurrencyNumber(swap.amountInUsd, FiatCurrency.USD.symbol),
+                    fiatAmount = swap.amountInUsd?.let {
+                        stringResByDynamicCurrencyNumber(it, FiatCurrency.USD.symbol)
+                    } ?: stringRes(""),
                     token = stringRes(originAsset.tokenTicker),
                     chain = originAsset.chainName
                 ),

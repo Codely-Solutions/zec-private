@@ -25,6 +25,7 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
 import co.electriccoin.zcash.ui.common.repository.ShieldTransaction
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.DetailedTransactionData
 import co.electriccoin.zcash.ui.common.usecase.GetTransactionDetailByIdUseCase
@@ -138,8 +139,10 @@ class TransactionDetailVM(
         viewModelScope.launch {
             withContext(Dispatchers.Default) {
                 val transaction = transaction.filterNotNull().first()
-                if (transaction.transaction.memoCount > 0) {
-                    markTxMemoAsRead(transactionDetailArgs.transactionId)
+                val accountUuid = transaction.transaction.accountUuid
+                val token = transaction.metadata.bookmarkWriteToken
+                if (transaction.transaction.memoCount > 0 && accountUuid != null && token != null) {
+                    markTxMemoAsRead(transactionDetailArgs.transactionId, accountUuid, token)
                 }
             }
         }
@@ -196,10 +199,6 @@ class TransactionDetailVM(
             testnet = testnet,
             router = navigationRouter
         )
-    }
-
-    private fun onAddOrEditNoteClick() {
-        navigationRouter.forward(TransactionNote(transactionDetailArgs.transactionId))
     }
 
     @Suppress("CyclomaticComplexMethod")
@@ -464,16 +463,24 @@ class TransactionDetailVM(
     }
 
     private fun createSecondaryButtonState(transaction: DetailedTransactionData): ButtonState? {
-        fun createAddNoteButtonState() =
-            ButtonState(
+        fun createAddNoteButtonState(): ButtonState? {
+            val accountUuid = transaction.transaction.accountUuid
+            val token = transaction.metadata.bookmarkWriteToken
+            if (accountUuid == null || token == null) return null
+            return ButtonState(
                 text =
                     if (transaction.metadata.note != null) {
                         stringRes(R.string.transaction_detail_edit_note)
                     } else {
                         stringRes(R.string.annotation_addArticle)
                     },
-                onClick = ::onAddOrEditNoteClick
+                onClick = {
+                    navigationRouter.forward(
+                        TransactionNote(transactionDetailArgs.transactionId, accountUuid.toStorageKeyId(), token)
+                    )
+                }
             )
+        }
 
         return when {
             transaction.swap?.error != null && transaction.swap.status == null ->

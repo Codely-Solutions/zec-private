@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="transaction_note_loading">Loading note…</string>
+    <string name="transaction_note_load_failed">Couldn’t load the note.</string>
+    <string name="transaction_note_retry">Try again</string>
+</resources>

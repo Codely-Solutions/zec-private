@@ -4,6 +4,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
+import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.usecase.CreateOrUpdateTransactionNoteUseCase
@@ -17,6 +18,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.transactionnote.TransactionNote
 import co.electriccoin.zcash.ui.screen.transactionnote.model.TransactionNoteState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -34,31 +36,31 @@ internal class TransactionNoteViewModel(
     private val createOrUpdateTransactionNote: CreateOrUpdateTransactionNoteUseCase,
     private val deleteTransactionNote: DeleteTransactionNoteUseCase
 ) : ViewModel() {
-    private val noteText = MutableStateFlow("")
-    private val foundNote = MutableStateFlow<String?>(null)
+    private val editor = MutableStateFlow<NoteEditor>(NoteEditor.Loading)
     private val runningSave = MutableStateFlow<NoteSave?>(null)
-    private var saveJob: Job? = null
+    private var loadJob: Job? = null
+    private var dismissed = false
 
     val state: StateFlow<TransactionNoteState> =
-        combine(noteText, foundNote, runningSave) { noteText, foundNote, runningSave ->
-            createState(noteText = noteText, foundNote = foundNote, runningSave = runningSave)
-        }.stateIn(
+        combine(editor, runningSave, ::createState).stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
-            initialValue = createState(noteText = "", foundNote = null, runningSave = null)
+            initialValue = createState(editor.value, runningSave = null)
         )
 
     private fun createState(
-        noteText: String,
-        foundNote: String?,
+        editor: NoteEditor,
         runningSave: NoteSave?
     ): TransactionNoteState {
-        val noteTextNormalized = noteText.trim()
+        val ready = editor as? NoteEditor.Ready
+        val noteText = ready?.text.orEmpty()
         val isNoteTextTooLong = noteText.length > MAX_NOTE_LENGTH
+        val canEdit = !dismissed && runningSave == null
+        val canSave = canEdit && !isNoteTextTooLong && noteText.isNotBlank()
         return TransactionNoteState(
             onBack = ::onBack,
             title =
-                if (foundNote == null) {
+                if (ready?.hasSavedNote != true) {
                     stringRes(R.string.annotation_addArticle)
                 } else {
                     stringRes(R.string.annotation_edit)
@@ -67,7 +69,8 @@ internal class TransactionNoteViewModel(
                 TextFieldState(
                     value = stringRes(noteText),
                     error = stringRes("").takeIf { isNoteTextTooLong },
-                    onValueChange = ::onNoteTextChanged
+                    isEnabled = ready != null && canEdit,
+                    onValueChange = if (ready != null) ::onNoteTextChanged else { _ -> },
                 ),
             noteCharacters =
                 stringRes(R.string.transaction_note_max_length, noteText.length.toString())
@@ -80,66 +83,108 @@ internal class TransactionNoteViewModel(
                 ButtonState(
                     text = stringRes(R.string.annotation_add),
                     onClick = ::onAddOrUpdateNoteClick,
-                    isEnabled = !isNoteTextTooLong && noteTextNormalized.isNotEmpty(),
+                    isEnabled = canSave,
                     isLoading = runningSave == NoteSave.SAVE,
                     hapticFeedbackType = HapticFeedbackType.Confirm
-                ).takeIf { foundNote == null },
+                ).takeIf { ready?.hasSavedNote == false },
             secondaryButton =
                 ButtonState(
                     text = stringRes(R.string.annotation_save),
                     onClick = ::onAddOrUpdateNoteClick,
-                    isEnabled = !isNoteTextTooLong && noteTextNormalized.isNotEmpty(),
+                    isEnabled = canSave,
                     isLoading = runningSave == NoteSave.SAVE,
                     hapticFeedbackType = HapticFeedbackType.Confirm
-                ).takeIf { foundNote != null },
+                ).takeIf { ready?.hasSavedNote == true },
             negative =
                 ButtonState(
                     text = stringRes(R.string.annotation_delete),
+                    isEnabled = canEdit,
                     onClick = ::onDeleteNoteClick,
                     isLoading = runningSave == NoteSave.DELETE,
                     hapticFeedbackType = HapticFeedbackType.Confirm
-                ).takeIf { foundNote != null },
+                ).takeIf { ready?.hasSavedNote == true },
             isSaving = runningSave != null,
+            loadMessage = when (editor) {
+                NoteEditor.Loading -> stringRes(R.string.transaction_note_loading)
+                NoteEditor.Failed -> stringRes(R.string.transaction_note_load_failed)
+                is NoteEditor.Ready -> null
+            },
+            retry = ButtonState(
+                text = stringRes(R.string.transaction_note_retry),
+                onClick = ::onRetryLoad,
+            ).takeIf { editor == NoteEditor.Failed },
         )
     }
 
     init {
-        viewModelScope.launch {
-            val metadata = getTransactionNote(transactionNote.txId)
-            foundNote.update { metadata.note }
-            noteText.update { metadata.note.orEmpty() }
+        loadNote()
+    }
+
+    private fun onRetryLoad() {
+        if (!dismissed && editor.value == NoteEditor.Failed) loadNote()
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    private fun loadNote() {
+        editor.value = NoteEditor.Loading
+        loadJob = viewModelScope.launch {
+            try {
+                val accountUuid = checkNotNull(transactionNote.accountUuid())
+                val token = checkNotNull(transactionNote.walletWriteToken)
+                val note = getTransactionNote(transactionNote.txId, accountUuid, token)
+                editor.value = NoteEditor.Ready(note.orEmpty(), hasSavedNote = note != null)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Twig.warn(e) { "Unable to load transaction note" }
+                editor.value = NoteEditor.Failed
+            }
         }
     }
 
-    private fun onAddOrUpdateNoteClick() =
+    private fun onAddOrUpdateNoteClick() {
+        val ready = editor.value as? NoteEditor.Ready ?: return
+        if (ready.text.isBlank() || ready.text.length > MAX_NOTE_LENGTH) return
         runSave(NoteSave.SAVE) {
-            createOrUpdateTransactionNote(txId = transactionNote.txId, note = noteText.value)
+            createOrUpdateTransactionNote(
+                txId = transactionNote.txId,
+                note = ready.text,
+                accountUuid = checkNotNull(transactionNote.accountUuid()),
+                token = checkNotNull(transactionNote.walletWriteToken),
+            )
         }
+    }
 
-    private fun onDeleteNoteClick() =
+    private fun onDeleteNoteClick() {
+        val ready = editor.value as? NoteEditor.Ready ?: return
+        if (!ready.hasSavedNote) return
         runSave(NoteSave.DELETE) {
-            deleteTransactionNote(transactionNote.txId)
+            deleteTransactionNote(
+                transactionNote.txId,
+                checkNotNull(transactionNote.accountUuid()),
+                checkNotNull(transactionNote.walletWriteToken),
+            )
         }
+    }
 
-    /**
-     * Runs one save at a time: a tap while a save is running is ignored, and the pressed button
-     * shows loading until the save returns.
-     */
     private fun runSave(save: NoteSave, block: suspend () -> Unit) {
-        if (saveJob?.isActive == true) return
-        runningSave.update { save }
-        saveJob =
-            viewModelScope.launch {
-                try {
-                    block()
-                } finally {
-                    runningSave.update { null }
-                }
+        if (dismissed || runningSave.value != null) return
+        runningSave.value = save
+        viewModelScope.launch {
+            try {
+                block()
+                dismissed = true
+            } finally {
+                runningSave.value = null
             }
+        }
     }
 
     private fun onNoteTextChanged(newValue: String) {
-        noteText.update { newValue }
+        if (dismissed || runningSave.value != null) return
+        editor.update { current ->
+            if (current is NoteEditor.Ready) current.copy(text = newValue) else current
+        }
     }
 
     /**
@@ -148,9 +193,19 @@ internal class TransactionNoteViewModel(
      * the sheet, back, scrim tap and drag down, ends here.
      */
     private fun onBack() {
-        if (runningSave.value != null) return
+        if (dismissed || runningSave.value != null) return
+        dismissed = true
+        loadJob?.cancel()
         navigationRouter.back()
     }
+}
+
+private sealed interface NoteEditor {
+    data object Loading : NoteEditor
+
+    data object Failed : NoteEditor
+
+    data class Ready(val text: String, val hasSavedNote: Boolean) : NoteEditor
 }
 
 private const val MAX_NOTE_LENGTH = 90
