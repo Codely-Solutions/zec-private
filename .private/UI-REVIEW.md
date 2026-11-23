@@ -51,6 +51,8 @@ Then select `ReviewScreenshotTest.captureNoteRetryStates`, `captureLargeNoteRetr
 note draft/actions, exact-height action eligibility, non-text memo Review/fallback explanation, and refreshed linked
 CrossPay values. Inspect the normal and large-text frames and scroll actions. Synthetic frames establish presentation;
 the composed JVM tests establish state transitions and payload/ownership behavior.
+CrossPay stacks its existing amount controls from 150% text size. At 200%, inspect both whole linked amounts and
+the scrolled Review action. Include the caret-at-end geometry regression from the ordinary release JVM suite.
 
 In the surrounding workspace, `records/INDEX.md` locates archived `donations_ui_adapter.py`, `donations_ui_scenario.py` and `donations_acceptance.py`. They contain prior artifact checks, theme switching, settled-frame capture and navigation. Recover selected files for inspection. Their automatic-donation assumptions and root-relative paths require review; they are historical examples, not current launch commands.
 

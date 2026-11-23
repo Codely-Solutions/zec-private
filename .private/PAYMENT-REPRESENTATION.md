@@ -5,6 +5,8 @@ that unit's entered value. Token-owned drafts keep token units; fiat-owned draft
 the explicit provider quote and authorization boundary. [Amount and slippage rules](SWAP-AMOUNTS.md) govern admission.
 Moving the caret or selection preserves the draft's owner; changing its text claims that unit, including an edit that
 keeps the same numeric value.
+At font scales of 150% and above, the existing amount fields stack vertically so both complete values remain visible.
+The ordinary layout keeps them side by side. Keep the numeric edit controls and their selection behavior shared.
 
 ZIP-321 memo data is a byte payload, not necessarily text. Text presentation strips trailing zero padding and decodes
 strict UTF-8. The ZIP 302 no-memo marker is empty; opaque, reserved and undecodable content is identified as a non-text

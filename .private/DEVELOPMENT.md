@@ -72,6 +72,11 @@ Payment representation checks include `Zip321PaymentCountTest`, `ProposalDataSou
 substitute SDK proposal/signing I/O. Non-text memo disclosure and editable fallback rules are described in
 [payment representation](PAYMENT-REPRESENTATION.md). These JVM tests run in the ordinary UI release suite.
 
+Include `NumberTextFieldEditEventsTest` and `PayVMTest` when changing amount editing or repricing. Drive actual
+selection and text events: a caret move preserves unit ownership, while a textual edit claims it even when its number
+is unchanged. The former also measures the production `PayAmountTextFields` at 312dp and 200% with the caret at the end;
+the complete intrinsic text width must fit. Android capture establishes the platform drawing separately.
+
 For pending Keystone enrollment, run `*KeystoneEnrollmentSavedStateTest`, `*HWEnrollmentVMTest` and `*CreateHWWalletAccountUseCaseTest`. The production destination graph and actual NavController Parcel restoration must contain only opaque session IDs. Loss of the process-local session returns to scanning. Keep scanner interruption/re-entry separate from successful enrollment and retry. The activity navigation-version gate rejects older saved payloads; it cannot recall copies already retained outside the current process.
 
 The activity discards older navigation stacks after route changes. This resets the open screen and preserves wallet data. Keep the gate version aligned with typed route serializer changes, and verify old/current Parcel restoration through the production gate.

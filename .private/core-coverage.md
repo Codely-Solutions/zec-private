@@ -68,7 +68,7 @@ Production Detekt retains its rules and existing baseline. Its release-only init
 | Catalog admission | `test_swap_price_catalog`, `NearSwapCatalogTest` and `SwapAssetAdmissionTest`: shared raw fixture, duplicate exact IDs before filtering, aliases, either order, price and contract changes. |
 | Notifier ordering | `test_notify`: real handler with clean/open/closed history, repeated success, late reruns, newer failures, attestation identity and bounded eviction. |
 | Publication read-back | `test_publish`, `test_maintenance_watch`: real disposable Git integration, exact existing record, conflicting proof, unrelated main, lost push acknowledgement and protected-ref read-back. |
-| Payment representation | Pay form tests preserve the last edited unit across rates/assets. ZIP-321 parser/proposal/scan/review tests preserve the original URI, disclose non-text payloads, refuse lossy editable fallback and check metadata-only diagnostics. |
+| Payment representation | `PayVMTest` and `NumberTextFieldEditEventsTest` preserve the last edited unit across rates/assets and distinguish actual text edits from caret movement. The actual adaptive Pay fields fit complete amounts at 200% and 312dp. `Zip321MemoScanTest` and parser/proposal/review tests preserve the original URI, disclose non-text payloads, refuse lossy editing and check metadata-only diagnostics. |
 
 UI JVM regressions run in `release_checks.sh`; Python controller/catalog regressions run in preflight and the non-main
 `automation-test.yml` suite. Optional layout captures follow [UI review](UI-REVIEW.md). These checks substitute external
