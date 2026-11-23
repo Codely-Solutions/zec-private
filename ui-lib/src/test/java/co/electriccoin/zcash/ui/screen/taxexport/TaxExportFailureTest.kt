@@ -171,7 +171,7 @@ class TaxExportFailureTest {
             RuntimeEnvironment.getApplication().cacheDir.toPath(), "tax-cancel-"
         ).toFile()
         val prior = File(cache, "tax_exports/prior/history.csv").apply {
-            parentFile.mkdirs()
+            checkNotNull(parentFile).mkdirs()
             writeText("previously authorized CSV")
         }
         val context = mockk<Context> { every { cacheDir } returns cache }
