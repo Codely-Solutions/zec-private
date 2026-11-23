@@ -588,8 +588,9 @@ class SwapRepositoryImpl(
     private fun publishQuote(generation: RequestId, result: SwapQuoteData) {
         synchronized(this) {
             if (quoteGeneration.isCurrent(generation)) {
-                quote.value = result
+                // The result can resume a collector that immediately prepares or consumes it.
                 readyReview = result.takeIf { it is SwapQuoteData.Error }
+                quote.value = result
             }
         }
     }

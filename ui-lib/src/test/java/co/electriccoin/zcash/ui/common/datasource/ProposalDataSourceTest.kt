@@ -72,10 +72,11 @@ class ProposalDataSourceTest {
     @Test
     fun zip321ProposalsPreserveTheOriginalMemoBytesAndExposeOnlyStrictTextForReview() = runBlocking {
         val fixture = Zip321MemoFixture
+        val sdkAccount = account.sdkAccount
         val sdkProposal = mockk<Proposal>()
         val synchronizer = mockk<Synchronizer> {
             coEvery { validateAddress(fixture.RECIPIENT) } returns AddressType.Shielded
-            coEvery { proposeFulfillingPaymentUri(account.sdkAccount, any()) } returns sdkProposal
+            coEvery { proposeFulfillingPaymentUri(sdkAccount, any()) } returns sdkProposal
         }
         val dataSource = dataSource(synchronizer)
         val cases = listOf(
@@ -95,7 +96,7 @@ class ProposalDataSourceTest {
             assertSame(sdkProposal, proposal.proposal)
             assertEquals(case.text.orEmpty(), proposal.memo.value)
             assertEquals(case.bytes?.size?.takeIf { case.text == null }, proposal.binaryMemoByteCount)
-            coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, uri) }
+            coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(sdkAccount, uri) }
         }
     }
 

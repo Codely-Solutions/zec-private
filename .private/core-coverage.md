@@ -65,7 +65,7 @@ Production Detekt retains its rules and existing baseline. Its release-only init
 | Manual birthday | `RestoreHeightBoundaryReviewTest`: exact parser and real Restore/Resync/shared enrollment actions; fractions, wraparound, negative/range bounds and retained callbacks. |
 | Note persistence | `NotePersistenceBoundaryTest`, editor and mutation tests: retained draft after false/throw/uncertain rename, retry, deletion, account change, reset and reopened durable state; existing metadata file tests retain encrypted restart coverage. |
 | FLEX_INPUT | `NearSwapQuoteTest` and quote validation: real decoded atomic amounts, both minima, integer floor and historical status compatibility. |
-| Catalog admission | `test_swap_price_catalog` and `SwapAssetAdmissionTest`: shared raw fixture, duplicate exact IDs before filtering, aliases, either order, price and contract changes. |
+| Catalog admission | `test_swap_price_catalog`, `NearSwapCatalogTest` and `SwapAssetAdmissionTest`: shared raw fixture, duplicate exact IDs before filtering, aliases, either order, price and contract changes. |
 | Notifier ordering | `test_notify`: real handler with clean/open/closed history, repeated success, late reruns, newer failures, attestation identity and bounded eviction. |
 | Publication read-back | `test_publish`, `test_maintenance_watch`: real disposable Git integration, exact existing record, conflicting proof, unrelated main, lost push acknowledgement and protected-ref read-back. |
 | Payment representation | Pay form tests preserve the last edited unit across rates/assets. ZIP-321 parser/proposal/scan/review tests preserve the original URI, disclose non-text payloads, refuse lossy editable fallback and check metadata-only diagnostics. |

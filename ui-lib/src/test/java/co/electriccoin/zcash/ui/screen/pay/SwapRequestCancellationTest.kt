@@ -84,10 +84,10 @@ class SwapRequestCancellationTest {
     }
 
     @Test
-    fun continuingEachDirectionOpensExactlyOneReview() {
-        exercise(SwapMode.EXACT_OUTPUT, shouldContinue = true)
-        exercise(SwapMode.FLEX_INPUT, shouldContinue = true)
-    }
+    fun continuingCrossPayOpensExactlyOneReview() = exercise(SwapMode.EXACT_OUTPUT, shouldContinue = true)
+
+    @Test
+    fun continuingIncomingSwapOpensExactlyOneReview() = exercise(SwapMode.FLEX_INPUT, shouldContinue = true)
 
     @Test
     fun lateFailureCannotClearNewerQuoteOrProposal() =
@@ -300,9 +300,11 @@ class SwapRequestCancellationTest {
                     shouldContinue -> {
                         finish.complete(Unit)
                         runCurrent()
+                        assertSame(firstQuote, assertIs<SwapQuoteData.Success>(repository.quote.value).quote)
                         verify(exactly = 0) { router.forward(SwapQuoteArgs) }
                         assertNotNull(sheet.positiveButton.onClick).invoke()
                         runCurrent()
+                        assertNull(cancelState.value)
                         advanceTimeBy(350)
                         runCurrent()
                         verify(exactly = 1) { router.forward(SwapQuoteArgs) }

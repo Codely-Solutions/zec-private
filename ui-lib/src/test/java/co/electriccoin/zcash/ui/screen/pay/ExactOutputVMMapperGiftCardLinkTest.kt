@@ -125,20 +125,16 @@ class ExactOutputVMMapperGiftCardLinkTest {
     }
 
     @Test
-    fun fiatEditUsesExactAtomicTokenAmount() {
+    fun fiatEditForwardsTheTypedFiatState() {
         val asset = SwapAssetTestFixture.asset(usdPrice = BigDecimal.ONE, decimals = 6)
         var updated: NumberTextFieldInnerState? = null
         val state = mapper.createState(
             internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu").copy(asset = asset),
-            callbacks.copy(onTokenAmountChange = { updated = it })
+            callbacks.copy(onFiatAmountChange = { updated = it })
         )
-        state.amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499")))
-        val expected = BigDecimal("0.122839")
-        assertEquals(expected, assertNotNull(updated).amount)
-        assertEquals(
-            stringResByNumber(expected, minDecimals = 0, includeGroupingSeparator = false),
-            assertNotNull(updated).innerTextFieldState.value
-        )
+        val typed = NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499"))
+        state.amountFiat.onValueChange(typed)
+        assertEquals(typed, updated)
     }
 
     private fun internalState(
