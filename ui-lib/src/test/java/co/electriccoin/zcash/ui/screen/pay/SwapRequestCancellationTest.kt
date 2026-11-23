@@ -161,10 +161,11 @@ class SwapRequestCancellationTest {
                 every { isSpendable } returns true
                 every { canSpend(any()) } returns true
             }
+            val replacementAddress = CompletableDeferred<Unit>()
             val accountSource = mockk<AccountDataSource> {
                 var freshAddressRequests = 0
                 coEvery { requestNextShieldedAddress(requireFresh = true) } coAnswers {
-                    if (freshAddressRequests++ > 0 && replaceBeforeRoot) CompletableDeferred<Unit>().await()
+                    if (freshAddressRequests++ > 0) replacementAddress.await()
                     refund
                 }
                 coEvery { getSelectedAccount() } returns account
@@ -281,7 +282,13 @@ class SwapRequestCancellationTest {
                 val sheet = assertNotNull(cancelState.value)
                 when {
                     replace -> {
-                        request.requestExactOutput(amount, recipient, btc, BigDecimal("2"), { true })
+                        backgroundScope.launch {
+                            request.requestExactOutput(amount, recipient, btc, BigDecimal("2"), { true })
+                        }
+                        runCurrent()
+                        assertNull(repository.quote.value)
+                        replacementAddress.complete(Unit)
+                        runCurrent()
                         assertSame(nextQuote, (repository.quote.value as SwapQuoteData.Success).quote)
                         finish.complete(Unit)
                         runCurrent()

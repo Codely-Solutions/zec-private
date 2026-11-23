@@ -394,10 +394,7 @@ internal class SwapVM(
             ) return@launch
             quoteActionInProgress = true
             try {
-                if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = direction.toSwapMode())) {
-                    return@launch
-                }
-                if (isCancellingQuote || currentQuoteDraft(rendered, checkAction = false) == null) return@launch
+                if (!confirmQuoteDraft(rendered, fiatAmount, direction)) return@launch
                 quoteRequestJob = coroutineContext.job
                 internalState.update { it.copy(isRequestingQuote = true) }
                 when (direction) {
@@ -432,14 +429,25 @@ internal class SwapVM(
 
     private fun currentQuoteDraft(rendered: InternalStateImpl, checkAction: Boolean = true): InternalStateImpl? {
         val current = internalState.value
-        if (current.isRequestingQuote || isCancellingQuote || (checkAction && quoteActionInProgress)) return null
-        val renderedZecPrice = rendered.swapAssets.zecAsset.positiveUsdPrice
-        if (rendered.swapDirection == SWAP_FROM_ZEC && renderedZecPrice != null &&
-            renderedZecPrice != swapRepository.assets.value.zecAsset.positiveUsdPrice
-        ) return null
+        if (current.isRequestingQuote || isCancellingQuote) return null
         val ownedAtRender = rendered.copy(account = current.account, swapAssets = current.swapAssets)
-        return current.takeIf { it == ownedAtRender }
+        val available = !checkAction || !quoteActionInProgress
+        return current.takeIf { available && it == ownedAtRender && hasSameOriginPrice(rendered) }
     }
+
+    private fun hasSameOriginPrice(rendered: InternalStateImpl): Boolean {
+        val renderedZecPrice = rendered.swapAssets.zecAsset.positiveUsdPrice
+        return rendered.swapDirection != SWAP_FROM_ZEC || renderedZecPrice == null ||
+            renderedZecPrice == swapRepository.assets.value.zecAsset.positiveUsdPrice
+    }
+
+    private suspend fun confirmQuoteDraft(
+        rendered: InternalStateImpl,
+        fiatAmount: BigDecimal?,
+        direction: SwapDirection,
+    ): Boolean =
+        navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = direction.toSwapMode()) &&
+            currentQuoteDraft(rendered, checkAction = false) != null
 
     private fun onSwapInfoClick() = navigateToSwapInfo()
 

@@ -77,7 +77,12 @@ class RequestSwapQuoteUseCase(
         val caller = currentCoroutineContext().job
         coroutineScope {
             val request = RequestOwner(caller, coroutineContext.job)
-            latestRequest.getAndSet(request)?.child?.cancel()
+            latestRequest.getAndSet(request)?.let { previous ->
+                previous.child.cancel()
+                // Provider work is repository-owned. Retire its quote before the successor's
+                // recipient/address checks can suspend and expose the previous result to Continue.
+                swapRepository.clearQuote()
+            }
             block()
         }
     }
@@ -261,17 +266,21 @@ class RequestSwapQuoteUseCase(
         if (rejectUnsupportedFunding(funding, result, canNavigate)) return false
         currentCoroutineContext().ensureActive()
         if (swapRepository.quote.value !== result) return false
+        return validateComposition(result, canNavigate) &&
+            (funding != FundingCapability.LOCAL_TRANSACTION || prepareProposal(result, canNavigate))
+    }
+
+    private fun validateComposition(result: SwapQuoteData.Success, canNavigate: () -> Boolean): Boolean =
         try {
             ZecSwapComposition.validate(result.quote)
+            true
         } catch (e: IllegalArgumentException) {
             if (canNavigate()) {
                 swapRepository.clearQuote()
                 navigateToErrorUseCase(ErrorArgs.General(e))
             }
-            return false
+            false
         }
-        return funding != FundingCapability.LOCAL_TRANSACTION || prepareProposal(result, canNavigate)
-    }
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun prepareProposal(
