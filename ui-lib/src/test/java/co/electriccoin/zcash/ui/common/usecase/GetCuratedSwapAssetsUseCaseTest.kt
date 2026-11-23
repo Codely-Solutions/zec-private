@@ -46,7 +46,8 @@ class GetCuratedSwapAssetsUseCaseTest {
         val wrongContract = eth.copy(contractAddress = "synthetic:wrong-contract")
         for (order in listOf(listOf(twin, eth, wrongContract), listOf(wrongContract, eth, twin))) {
             every { swapRepository.assets } returns MutableStateFlow(SwapAssetsData(data = order))
-            assertEquals(listOf(eth), useCase().data)
+            // A duplicate provider ID is ambiguous even when one row has the pinned metadata.
+            assertEquals(emptyList(), useCase().data)
         }
     }
 
