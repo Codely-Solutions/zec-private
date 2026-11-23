@@ -116,6 +116,21 @@ Gaps remain in complete visual combinations, less-used settings/onboarding flows
 
 Controller regressions `test_dev_session`, `test_notify` and `test_maintenance_watch` cover rejected operation inputs, failure/cancellation during report collection, current versus retained XML, incremental/cache provenance, changed blocker stages, unavailable or failed delivery, verified recovery and independent watcher cancellation. They execute real local receipt/body serialization and disposable Git state with external GitHub/push calls mocked. Hosted validation-only execution and YAML parsing remain separate checks; no notification is sent by these suites.
 
+## Review interaction regressions
+
+These maintained cases cover the eight interaction areas identified by the November 23 review. Execution receipts retain their exact source and configuration; the existence of a test is not a current release attestation.
+
+| Area | Maintained regressions | Boundary |
+|---|---|---|
+| Pinned admission | `SwapAssetAdmissionTest`, `CrossPayCatalogDriftReviewTest`, catalog/preselection/Pay/Swap tests | All 33 frozen identities, ID/ticker/network/precision/contract mutations, automatic/history selection, refresh, final quote admission and in-flight drift. Recovery keeps its broader historical catalog. |
+| URI amount ownership | `PayCatalogRecoveryTest`, `CrossPayAtomicAmountTest` | Untouched inherited values clear on incompatible recipient or asset replacement, including native/contract assets on one network; explicit manual edits remain authoritative. |
+| Output valuation provenance | `NearSwapQuoteStatusTest`, both Detail VM tests | Complete and sparse executed amount/USD in both directions; quote, saved execution and unknown historical provenance remain distinct. |
+| Enrollment finalization | Name/view-only, Keystone and Ledger import tests | Real Name/import/preference composition, cache-publishing failed commits, SDK-list updates, same-account retry, cancellation and binding retention. Native SDK mutation and process-local session loss are separate boundaries. |
+| Sensitive share staging | `ShareImageUseCaseTest`, Reset review/ownership tests | Chooser failure, grant loss, cancellation, old-process cache residue, both retention choices and failed cleanup retry, preserving unrelated files. Recipient copies remain outside reset. |
+| Request and Tax export | Request unit-preservation, Tax VM/failure/CSV and account repository tests | Final zatoshi representability in all receive modes, stale callbacks and rate recovery; exact CSV, approved-account A–B–A query, isolated staging, errors, retry and cancellation. |
+| Blocker recovery and queue admission | `test_notify`, `test_maintenance_watch`, workflow checks | Independent unresolved scopes, original attestation, quiet repeats, verified discovery/validation recovery and separate non-main discovery admission. Hosted queue collision is contract/configuration evidence. |
+| Original execution and platform timing | `test_release_preparation`, `test_packaging`, `test_dev_session`, biometric tests and Keystone instrumentation | Upload-window producer selection through preparation/promotion; timestamp-only metadata rejection, replacement/restoration/double failure; callback-during-launch and owner retirement. Seedless Android secure-window checks do not establish live CameraX capture or physical authentication. |
+
 ## Historical funded coverage
 
 See [published status](STATUS.md) for the current release and its bound acceptance record.
