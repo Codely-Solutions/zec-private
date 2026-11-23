@@ -54015,10 +54015,10 @@ index 000000000..9f3f94fe2
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt
 new file mode 100644
-index 000000000..6212101ad
+index 000000000..6c9614328
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt
-@@ -0,0 +1,318 @@
+@@ -0,0 +1,319 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -54264,6 +54264,7 @@ index 000000000..6212101ad
 +        }
 +    }
 +
++    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun newQuotesRejectWhitespaceInProviderDepositInstructions() = runTest {
 +        coEvery { api.getSupportedTokens() } returns listOf(eth.dto(), zec.dto())

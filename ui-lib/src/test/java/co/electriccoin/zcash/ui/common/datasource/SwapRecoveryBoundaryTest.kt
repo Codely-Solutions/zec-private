@@ -243,6 +243,7 @@ class SwapRecoveryBoundaryTest {
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun newQuotesRejectWhitespaceInProviderDepositInstructions() = runTest {
         coEvery { api.getSupportedTokens() } returns listOf(eth.dto(), zec.dto())
