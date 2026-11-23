@@ -17,13 +17,12 @@ class SaveORSwapUseCase(
     private val navigationRouter: NavigationRouter,
     // private val ephemeralAddressRepository: EphemeralAddressRepository,
 ) {
-    suspend operator fun invoke() {
-        val quote = (swapRepository.quote.value as? SwapQuoteData.Success)?.quote
-        if (quote != null) {
-            persistBeforeFunding(quote)
-            swapRepository.clear()
-            navigationRouter.backToRoot()
-        }
+    suspend operator fun invoke(expected: SwapQuoteData.Success) {
+        if (swapRepository.quote.value !== expected) return
+        persistBeforeFunding(expected.quote)
+        if (swapRepository.quote.value !== expected) return
+        swapRepository.clear()
+        navigationRouter.backToRoot()
     }
 
     suspend fun persistBeforeFunding(quote: SwapQuote) {

@@ -181,8 +181,7 @@ class SendEmailUseCase(
     /**
      * Sends a support email for swap issues.
      */
-    @Suppress("MagicNumber")
-    suspend operator fun invoke(swapData: SwapData) {
+    suspend operator fun invoke(swapData: SwapData, isAllowed: () -> Boolean): Boolean {
         val body =
             swapData.status?.let { status ->
                 swapIssueBody(
@@ -196,8 +195,9 @@ class SendEmailUseCase(
                     swapAssetLabel(saved.origin.tokenTicker, saved.origin.chainTicker),
                     swapAssetLabel(saved.destination.tokenTicker, saved.destination.chainTicker),
                 )
-            } ?: return
-        sendSupportEmail(
+            } ?: return false
+        return sendSupportEmail(
+            isAllowed = isAllowed,
             subject = context.getString(R.string.transaction_detail_support_email_subject),
             messageBody =
                 EmailUtil.formatMessage(
@@ -226,8 +226,9 @@ class SendEmailUseCase(
     /**
      * Sends a support email for a swap quote that failed the request-vs-response validation (MOB-1340).
      */
-    suspend operator fun invoke(args: SwapQuoteMismatchArgs) {
+    suspend operator fun invoke(args: SwapQuoteMismatchArgs, isAllowed: () -> Boolean): Boolean =
         sendSupportEmail(
+            isAllowed = isAllowed,
             subject = context.getString(R.string.swap_mismatch_support_email_subject),
             messageBody =
                 EmailUtil.formatMessage(
@@ -247,20 +248,19 @@ class SendEmailUseCase(
                         )
                 )
         )
-    }
-
-    /**
+/**
      * Export diagnostics through a user-selected share target; no upstream recipient.
      */
     private fun sendSupportEmail(
         subject: String,
-        messageBody: String
-    ) {
+        messageBody: String,
+        isAllowed: () -> Boolean = { true },
+    ): Boolean {
         val shareIntent = Intent.createChooser(
             EmailUtil.newTextShareIntent(subject = subject, messageBody = messageBody),
             null
         ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-        runCatching { context.startActivity(shareIntent) }
+        return isAllowed() && runCatching { context.startActivity(shareIntent) }.isSuccess
     }
 
     private fun swapIssueBody(depositAddress: String, origin: String, destination: String) =

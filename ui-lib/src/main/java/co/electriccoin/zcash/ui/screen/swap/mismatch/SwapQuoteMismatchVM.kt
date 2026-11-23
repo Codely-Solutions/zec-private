@@ -4,21 +4,27 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.stringRes
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class SwapQuoteMismatchVM(
     private val args: SwapQuoteMismatchArgs,
     private val navigationRouter: NavigationRouter,
     private val sendEmailUseCase: SendEmailUseCase,
+    private val appAccessSession: AppAccessSession,
+    private val walletWriteAccess: WalletWriteAccess,
 ) : ViewModel() {
     val state: StateFlow<SwapQuoteMismatchState?> =
-        MutableStateFlow<SwapQuoteMismatchState?>(
+        combine(appAccessSession.grant, walletWriteAccess.version) { grant, token ->
+            val isAllowed = { appAccessSession.permits(grant) && walletWriteAccess.permits(token) }
             SwapQuoteMismatchState(
                 title = stringRes(R.string.swap_mismatch_title),
                 paragraphs =
@@ -35,18 +41,18 @@ class SwapQuoteMismatchVM(
                 reportButton =
                     ButtonState(
                         text = stringRes(R.string.send_report),
-                        onClick = ::onReport
+                        isEnabled = isAllowed(),
+                        onClick = { onReport(isAllowed) }
                     ),
                 onBack = ::onBack
             )
-        ).asStateFlow()
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private fun onBack() = navigationRouter.back()
 
-    private fun onReport() {
+    private fun onReport(isAllowed: () -> Boolean) {
         viewModelScope.launch {
-            sendEmailUseCase(args)
-            onBack()
+            if (isAllowed() && sendEmailUseCase(args, isAllowed)) onBack()
         }
     }
 }

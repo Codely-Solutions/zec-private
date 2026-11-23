@@ -5,7 +5,9 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
@@ -19,6 +21,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -29,19 +32,34 @@ class SwapSupportVM(
     private val sendEmailUseCase: SendEmailUseCase,
     private val metadataRepository: MetadataRepository,
     private val appAccessSession: AppAccessSession,
+    accountDataSource: AccountDataSource,
+    private val walletWriteAccess: WalletWriteAccess,
 ) : ViewModel() {
+    private val selectedAccount = accountDataSource.selectedAccount
+        .map { it?.sdkAccount?.accountUuid }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     val state: StateFlow<SwapSupportState?> =
         getReloadableSwapQuote
             .observe(args.depositAddress)
-            .combine(appAccessSession.grant) { swapData, grant ->
+            .combine(appAccessSession.grant) { swapData, grant -> swapData to grant }
+            .combine(selectedAccount) { (swapData, grant), account ->
+                val saved = swapData.savedMetadata
+                val token = saved?.walletWriteToken
+                val canReport = token != null && account != null &&
+                    account == saved.ownerAccount?.sdkAccount?.accountUuid
+                val isAllowed = {
+                    canReport && token != null && walletWriteAccess.permits(token) &&
+                        selectedAccount.value == account && appAccessSession.permits(grant)
+                }
                 SwapSupportState(
                     title = stringRes(R.string.reportSwap_title),
                     message = stringRes(R.string.reportSwap_msg),
                     reportIssueButton =
                         ButtonState(
                             text = stringRes(R.string.reportSwap_report),
-                            isEnabled = swapData.hasReportDetails,
-                            onClick = { onReportIssue(swapData) }
+                            isEnabled = isAllowed(),
+                            onClick = { onReportIssue(swapData, isAllowed) }
                         ),
                     onBack = ::onBack,
                     shareQuoteButton = swapData.savedMetadata
@@ -62,16 +80,11 @@ class SwapSupportVM(
 
     private fun onBack() = navigationRouter.back()
 
-    private fun onReportIssue(swapData: SwapData) {
-        if (!swapData.hasReportDetails) return
+    private fun onReportIssue(swapData: SwapData, isAllowed: () -> Boolean) {
         viewModelScope.launch {
-            sendEmailUseCase.invoke(swapData)
-            onBack()
+            if (isAllowed() && sendEmailUseCase(swapData, isAllowed)) onBack()
         }
     }
-
-    private val SwapData.hasReportDetails: Boolean
-        get() = status != null || savedMetadata != null
 
     private fun onShareOriginalQuote(expected: TransactionSwapMetadata, grant: AppAccessSession.Grant?) {
         val owner = expected.ownerAccount?.sdkAccount?.accountUuid ?: return

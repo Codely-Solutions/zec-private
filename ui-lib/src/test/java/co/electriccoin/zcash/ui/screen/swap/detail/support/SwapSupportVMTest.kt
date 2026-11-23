@@ -7,6 +7,8 @@ import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
@@ -118,6 +120,8 @@ class SwapSupportVMTest {
             share,
             mockk(),
             AppAccessSession().apply { unlock() },
+            accountSource(MutableStateFlow(reportOwner(0))),
+            WalletWriteAccess(),
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
         try {
@@ -209,6 +213,70 @@ class SwapSupportVMTest {
         }
     }
 
+    @Test
+    fun pendingGenericReportRequiresTheOriginalGrantAccountAndWallet() = runTest {
+        for (revoke in listOf("relock", "account", "wallet")) assertRevokedReport(revoke)
+    }
+
+    private suspend fun TestScope.assertRevokedReport(revoke: String) {
+        val application = RuntimeEnvironment.getApplication()
+        val diagnosticsEntered = CompletableDeferred<Unit>()
+        val releaseDiagnostics = CompletableDeferred<Unit>()
+        val supportInfo = mockk<SupportInfo> {
+            every { toSupportString(any()) } returns "Synthetic device diagnostics"
+        }
+        val getSupport = mockk<GetSupportUseCase> {
+            coEvery { this@mockk() } coAnswers {
+                diagnosticsEntered.complete(Unit)
+                releaseDiagnostics.await()
+                supportInfo
+            }
+        }
+        val owner = reportOwner(0)
+        val selection = MutableStateFlow<ZodlAccount?>(owner)
+        val writeAccess = WalletWriteAccess()
+        val tracked = saved.copy(ownerAccount = owner, walletWriteToken = writeAccess.token())
+        val getStatus = mockk<GetSwapStatusUseCase> {
+            every { observe(saved.depositAddress) } returns flowOf(SwapQuoteStatusData(savedMetadata = tracked))
+        }
+        val navigation = mockk<NavigationRouter>(relaxed = true)
+        val session = AppAccessSession().apply { unlock() }
+        val vm = SwapSupportVM(
+            SwapSupportArgs(saved.depositAddress),
+            GetReloadableSwapQuoteUseCase(getStatus),
+            navigation,
+            SendEmailUseCase(application, getSupport, BlockchainProviderImpl(application)),
+            mockk(),
+            session,
+            accountSource(selection),
+            writeAccess,
+        )
+        val subscription = backgroundScope.launch { vm.state.collect {} }
+        try {
+            runCurrent()
+            assertNotNull(vm.state.value?.reportIssueButton).onClick()
+            runCurrent()
+            assertTrue(diagnosticsEntered.isCompleted)
+            when (revoke) {
+                "relock" -> {
+                    session.lock()
+                    session.unlock()
+                }
+                "account" -> selection.value = reportOwner(1)
+                "wallet" -> writeAccess.beginReset()
+            }
+            runCurrent()
+            releaseDiagnostics.complete(Unit)
+            runCurrent()
+
+            assertNull(shadowOf(application).nextStartedActivity)
+            verify(exactly = 0) { navigation.back() }
+        } finally {
+            subscription.cancel()
+            vm.viewModelScope.cancel()
+        }
+    }
+
     private fun TestScope.withQuoteSupport(test: QuoteSupportFixture.() -> Unit) {
         val application = RuntimeEnvironment.getApplication()
         val share = SendEmailUseCase(application, mockk(), BlockchainProviderImpl(application))
@@ -235,6 +303,8 @@ class SwapSupportVMTest {
             share,
             metadata,
             session,
+            accountSource(MutableStateFlow(owner)),
+            WalletWriteAccess(),
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
         try {
@@ -244,6 +314,14 @@ class SwapSupportVMTest {
             subscription.cancel()
             vm.viewModelScope.cancel()
         }
+    }
+
+    private fun reportOwner(id: Byte) = mockk<ZodlAccount> {
+        every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16) { id }))
+    }
+
+    private fun accountSource(selection: MutableStateFlow<out ZodlAccount?>) = mockk<AccountDataSource> {
+        every { selectedAccount } returns selection
     }
 
     private class QuoteSupportFixture(
@@ -261,6 +339,7 @@ class SwapSupportVMTest {
         }
         val getSupport = mockk<GetSupportUseCase> { coEvery { this@mockk() } returns supportInfo }
         val share = SendEmailUseCase(application, getSupport, BlockchainProviderImpl(application))
+        val owner = reportOwner(0)
         val statusFlow = MutableStateFlow(SwapQuoteStatusData())
         val getStatus = mockk<GetSwapStatusUseCase> {
             every { observe(saved.depositAddress) } returns statusFlow
@@ -277,6 +356,8 @@ class SwapSupportVMTest {
             share,
             mockk(),
             AppAccessSession().apply { unlock() },
+            accountSource(MutableStateFlow(owner)),
+            WalletWriteAccess(),
         )
         val subscription = backgroundScope.launch { vm.state.collect {} }
         try {
@@ -284,7 +365,11 @@ class SwapSupportVMTest {
             statusFlow.value = SwapQuoteStatusData(
                 status = status,
                 isLoading = false,
-                savedMetadata = saved.copy(signedQuoteEvidence = NearSignedQuoteEvidence(syntheticSignedQuote)),
+                savedMetadata = saved.copy(
+                    ownerAccount = owner,
+                    walletWriteToken = 0L,
+                    signedQuoteEvidence = NearSignedQuoteEvidence(syntheticSignedQuote),
+                ),
             )
             runCurrent()
             val report = assertNotNull(vm.state.value).reportIssueButton

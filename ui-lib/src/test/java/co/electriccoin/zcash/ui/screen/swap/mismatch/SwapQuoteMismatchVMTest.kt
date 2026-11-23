@@ -2,10 +2,13 @@ package co.electriccoin.zcash.ui.screen.swap.mismatch
 
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.verify
@@ -78,7 +81,7 @@ class SwapQuoteMismatchVMTest {
             .onClick()
 
         verify(exactly = 1) { navigationRouter.back() }
-        coVerify(exactly = 0) { sendEmailUseCase(ofType<SwapQuoteMismatchArgs>()) }
+        coVerify(exactly = 0) { sendEmailUseCase(ofType<SwapQuoteMismatchArgs>(), any()) }
     }
 
     @Test
@@ -91,12 +94,13 @@ class SwapQuoteMismatchVMTest {
     @Test
     fun reportSendsTheTechnicalDetailByEmailAndDismissesTheSheet() =
         runTest {
+            coEvery { sendEmailUseCase(args, any()) } returns true
             vm()
                 .state.value!!
                 .reportButton
                 .onClick()
 
-            coVerify(exactly = 1) { sendEmailUseCase(args) }
+            coVerify(exactly = 1) { sendEmailUseCase(args, any()) }
             verify(exactly = 1) { navigationRouter.back() }
         }
 
@@ -104,6 +108,8 @@ class SwapQuoteMismatchVMTest {
         SwapQuoteMismatchVM(
             args = args,
             navigationRouter = navigationRouter,
-            sendEmailUseCase = sendEmailUseCase
+            sendEmailUseCase = sendEmailUseCase,
+            appAccessSession = AppAccessSession().apply { unlock() },
+            walletWriteAccess = WalletWriteAccess(),
         )
 }

@@ -13,7 +13,7 @@ fun ORSwapConfirmationScreen() {
     val vm = koinViewModel<ORSwapConfirmationVM>()
     val state by vm.state.collectAsStateWithLifecycle()
     val dialogState by vm.dialogState.collectAsStateWithLifecycle()
-    BackHandler { state?.onBack?.invoke() }
+    BackHandler(enabled = state != null) { state?.onBack?.invoke() }
     state?.let { ORSwapConfirmationView(it) }
     dialogState?.let { DialogView(state = it) }
 }

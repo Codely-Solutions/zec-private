@@ -16,8 +16,11 @@ class WalletWriteAccess(private val progressStore: ResetProgressStore? = null) {
 
     fun token(): Long = generation.value
 
+    internal fun permits(token: Long): Boolean =
+        !blocked && progressStore?.isPending?.value != true && generation.value == token
+
     suspend fun <T> write(token: Long, block: suspend () -> T): T? = mutex.withLock {
-        if (blocked || progressStore?.isPending?.value == true || generation.value != token) null else block()
+        if (permits(token)) block() else null
     }
 
     /** Stops admission before draining writes already entered. Remains closed until explicit setup. */
