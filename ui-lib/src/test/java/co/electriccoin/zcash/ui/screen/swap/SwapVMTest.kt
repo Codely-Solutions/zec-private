@@ -715,7 +715,10 @@ class SwapVMTest {
             val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth")
             val btc = SwapAssetTestFixture.asset()
             val contact = contactOnChain("eth")
-            val harness = harness(preselect = eth, recipient = contact)
+            val harness = harness(
+                preselect = eth, recipient = contact,
+                assets = SwapAssetTestFixture.assetsData(data = listOf(eth, btc)),
+            )
             coEvery { harness.navigateToSwapAssetPicker(any()) } returnsMany listOf(btc, eth)
             harness.collectState(this)
             harness.onChangeButtonClick()
