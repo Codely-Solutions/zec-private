@@ -65557,7 +65557,7 @@ index 3027e6cda..e1e136333 100644
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportFailureTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportFailureTest.kt
 new file mode 100644
-index 000000000..187074afe
+index 000000000..f6901e302
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportFailureTest.kt
 @@ -0,0 +1,214 @@
@@ -65734,7 +65734,7 @@ index 000000000..187074afe
 +            RuntimeEnvironment.getApplication().cacheDir.toPath(), "tax-cancel-"
 +        ).toFile()
 +        val prior = File(cache, "tax_exports/prior/history.csv").apply {
-+            parentFile.mkdirs()
++            checkNotNull(parentFile).mkdirs()
 +            writeText("previously authorized CSV")
 +        }
 +        val context = mockk<Context> { every { cacheDir } returns cache }

@@ -3009,7 +3009,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/quote/SwapQuoteVMTest.kt": "fb8e501255e700486754c0f3dfd0747493d0b85245f0aa782fa1a77a071f4b59",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/refundwarning/SwapRefundWarningVMTest.kt": "521ba8cd4a04e59acb95f1a1d2377e072e1592d17057a93cc0b8165e06922e87",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/slippage/SwapSlippageVMTest.kt": "c52b2cbdd33eb387b9d1f4e14d60ceada8fc1ab689659eed36cbaf809a914280",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportFailureTest.kt": "9c75c9b5f581e9e3ff9cef6aa02cf5f07f9c6c50c32d5013bd13a71091cc3fb3",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportFailureTest.kt": "90574aeff531770ed7b9ef4b83b938e8576c77d9b11d40b81a1d9231e73aa3a7",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/taxexport/TaxExportViewModelTest.kt": "ee57872d9a6d7b0154389765b60c697e2aeab9141c9374757782138423720922",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/texunsupported/TEXUnsupportedVMTest.kt": "f41333f9369e28b6cec81465700c73f98c0724d8f8c11aae0cca8ce9cd09c3f5",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/theme/ThemeVMTest.kt": "bcc0267b95695e359ab8c1a25ec8acfd41207d91b5f62e5098d8a71c98e6516e",
