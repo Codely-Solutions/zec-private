@@ -22,21 +22,20 @@ object SwapAssetTestFixture {
         tokenTicker: String = "btc",
         chainTicker: String = "btc",
         usdPrice: BigDecimal? = BigDecimal("100000"),
-        decimals: Int = 8
-    ): SwapAsset =
-        NearSwapAsset(
+        decimals: Int? = null
+    ): SwapAsset {
+        val pinned = SwapCatalogTestFixture.assets.singleOrNull { it.isSame(tokenTicker, chainTicker) }
+        return NearSwapAsset(
             tokenTicker = tokenTicker,
             tokenName = stringRes(tokenTicker.uppercase()),
             tokenIcon = imageRes(0),
             usdPrice = usdPrice,
-            assetId = if (tokenTicker.equals("zec", true) && chainTicker.equals("zec", true)) {
-                "nep141:zec.omft.near"
-            } else {
-                "$tokenTicker-$chainTicker"
-            },
-            decimals = decimals,
-            blockchain = blockchain(chainTicker)
+            assetId = pinned?.assetId ?: "$tokenTicker-$chainTicker",
+            decimals = decimals ?: pinned?.decimals ?: 8,
+            blockchain = blockchain(chainTicker),
+            contractAddress = pinned?.contractAddress,
         )
+    }
 
     fun zecAsset(): SwapAsset =
         NearSwapAsset(

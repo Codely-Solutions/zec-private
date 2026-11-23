@@ -1,6 +1,8 @@
 package co.electriccoin.zcash.ui.common.model
 
 internal object SwapPriceMarkets {
+    private const val NATIVE_ZEC_ID = "nep141:zec.omft.near"
+
     private data class Market(
         val symbol: String,
         val network: String,
@@ -13,7 +15,7 @@ internal object SwapPriceMarkets {
     // provider's current asset ID and contract before release.
     @Suppress("MagicNumber")
     private val markets = mapOf(
-        "nep141:zec.omft.near" to Market("ZEC", "zec", 8, null, "ZECUSD"),
+        NATIVE_ZEC_ID to Market("ZEC", "zec", 8, null, "ZECUSD"),
         "nep141:btc.omft.near" to Market("BTC", "btc", 8, null, "XBTUSD"),
         "nep141:eth.omft.near" to Market("ETH", "eth", 18, null, "ETHUSD"),
         "nep141:arb.omft.near" to Market("ETH", "arb", 18, null, "ETHUSD"),
@@ -72,4 +74,14 @@ internal object SwapPriceMarkets {
             asset.chainTicker.equals(it.network, ignoreCase = true) && asset.decimals == it.decimals &&
             asset.contractAddress == it.contract
     }?.reference
+
+    fun findAsset(assets: List<SwapAsset>?, assetId: String?): SwapAsset? =
+        assets?.singleOrNull { it.assetId == assetId }?.takeIf { reference(it) != null }
+
+    fun findNativeZec(assets: List<SwapAsset>): SwapAsset? = findAsset(assets, NATIVE_ZEC_ID)
+
+    fun selectableAssets(assets: List<SwapAsset>): List<SwapAsset> =
+        assets.groupBy { it.assetId }.values.mapNotNull { matches ->
+            matches.singleOrNull()?.takeIf { reference(it) != null }
+        }
 }

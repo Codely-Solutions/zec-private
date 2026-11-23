@@ -652,7 +652,9 @@ class PayVMTest {
         amountRecompute: NumberTextFieldInnerState = NumberTextFieldInnerState(),
         recipient: EnhancedABContact? = null,
         scanResult: ScanResult? = null,
-        assets: SwapAssetsData = SwapAssetTestFixture.assetsData(),
+        assets: SwapAssetsData = SwapAssetTestFixture.assetsData(
+            data = listOfNotNull(preselect, assetResult).distinctBy { it.assetId },
+        ),
         refundWarningResult: Boolean = true
     ): Harness {
         val navigateToSlippage =

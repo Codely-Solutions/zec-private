@@ -10,6 +10,7 @@ import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.positiveUsdPrice
 import co.electriccoin.zcash.ui.common.model.SwapMode
+import co.electriccoin.zcash.ui.common.model.SwapPriceMarkets
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.canSpend
 import co.electriccoin.zcash.ui.common.repository.DEFAULT_SLIPPAGE
@@ -172,24 +173,20 @@ internal class PayVM(
     init {
         viewModelScope.launch {
             val asset = getPreselectedSwapAsset()
-            val currentAssets = swapRepository.assets.value
-            val resolvedAsset =
-                currentAssets.data?.firstOrNull { it.assetId == asset.assetId }
-                    ?: asset.takeUnless { currentAssets.data != null && !currentAssets.isLoading }
-            internalState.update { if (it.asset == null) it.withAsset(resolvedAsset) else it }
+            internalState.update {
+                if (it.selectedAssetId == null) it.selectAsset(asset) else it
+            }
         }
         viewModelScope.launch {
             swapRepository.assets.collect { assets ->
-                val catalog = assets.data ?: return@collect
                 internalState.update { state ->
-                    val selected = state.asset ?: return@update state
-                    val refreshed = catalog.firstOrNull { it.assetId == selected.assetId }
+                    val selected = state.asset
+                    val refreshed = SwapPriceMarkets.findAsset(assets.data, state.selectedAssetId)
                     when {
                         refreshed == selected -> state
                         refreshed != null && selected.positiveUsdPrice != null -> state.copy(asset = refreshed)
                         refreshed != null -> state.withAsset(refreshed)
-                        !assets.isLoading -> state.withAsset(null)
-                        else -> state
+                        else -> state.withAsset(null)
                     }
                 }
             }
@@ -205,7 +202,11 @@ internal class PayVM(
             val selected = navigateToSelectSwapRecipient(network = internalState.value.asset?.chainTicker)
 
             if (selected != null) {
-                internalState.update { it.copy(selectedABContact = selected, address = "") }
+                internalState.update {
+                    it.clearRequestAmount().copy(
+                        address = "", selectedABContact = selected, hasEditedRequestAmount = false
+                    )
+                }
             }
         }
 
@@ -267,7 +268,9 @@ internal class PayVM(
     }
 
     private fun onTextFieldChange(amount: NumberTextFieldInnerState, fiat: NumberTextFieldInnerState) {
-        internalState.update { it.copy(amount = amount, fiatAmount = fiat, hasEditedRequestAmount = true) }
+        internalState.update {
+            it.copy(amount = amount, fiatAmount = fiat, hasEditedRequestAmount = true, requestAmountAssetId = null)
+        }
     }
 
     /** Gates the quote request behind the refund warning before the CTA starts spinning. */
@@ -291,6 +294,10 @@ internal class PayVM(
                 if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = SwapMode.EXACT_OUTPUT)) {
                     return@launch
                 }
+                val current = internalState.value
+                if (current.asset?.assetId != asset.assetId || current.address != snapshot.address ||
+                    current.selectedABContact != snapshot.selectedABContact || current.amount != snapshot.amount
+                ) return@launch
                 internalState.update { it.copy(isRequestingQuote = true) }
                 requestSwapQuote.requestExactOutput(
                     amount = amount,
@@ -310,28 +317,26 @@ internal class PayVM(
 
     private fun onAddressChange(new: String) =
         internalState.update { state ->
-            val recipient = validateSwapRecipient(
-                new, state.asset?.chainTicker, state.asset?.tokenTicker, tokenContract = state.asset?.contractAddress
-            )
-            val edited = state.copy(
+            val edited = (if (new == state.address) state else state.clearRequestAmount()).copy(
                 selectedABContact = null,
                 address = new,
                 hasEditedRequestAmount = state.hasEditedRequestAmount && new == state.address
             )
-            val requestedAmount = recipient.input?.amount.takeIf { recipient.isValid && !edited.hasEditedRequestAmount }
-            if (requestedAmount == null) edited else edited.copy(
-                amount = NumberTextFieldInnerState.fromAmount(requestedAmount),
-                fiatAmount = NumberTextFieldInnerState()
-            ).withAsset(state.asset)
+            val withRequestAmount = edited.applyRequestAmount()
+            if (withRequestAmount == edited) edited else withRequestAmount.recomputeFiat()
         }
 
     private fun onSwapAssetPickerClick() =
         viewModelScope.launch {
             val asset = navigateToSwapAssetPicker()
             if (asset != null) {
-                internalState.update { it.withAsset(asset) }
+                internalState.update { it.selectAsset(asset) }
             }
         }
+
+    private fun InternalStateImpl.selectAsset(asset: SwapAsset): InternalStateImpl =
+        copy(selectedAssetId = asset.assetId)
+            .withAsset(SwapPriceMarkets.findAsset(swapRepository.assets.value.data, asset.assetId))
 
     /**
      * Sets the selected asset and atomically recomputes the fiat amount inner state in a single
@@ -339,43 +344,59 @@ internal class PayVM(
      * observer feeding back into this same flow.
      */
     private fun InternalStateImpl.withAsset(asset: SwapAsset?): InternalStateImpl {
-        val recipient =
-            if (!hasEditedRequestAmount && asset?.assetId != this.asset?.assetId) {
-                validateSwapRecipient(
-                    selectedABContact?.address ?: address,
-                    asset?.chainTicker,
-                    asset?.tokenTicker,
-                    selectedABContact?.blockchain?.chainTicker,
-                    tokenContract = asset?.contractAddress,
-                )
-            } else {
-                null
-            }
-        val requestedAmount = recipient?.input?.amount.takeIf { recipient?.isValid == true }
-        val amountState = requestedAmount?.let { NumberTextFieldInnerState.fromAmount(it) } ?: amount
-        return if (amountState.amount == null && fiatAmount.amount != null) {
+        val updated = copy(asset = asset)
+        val amounts = if (asset?.assetId == this.asset?.assetId) {
+            updated
+        } else {
+            updated.clearRequestAmount(keepBinding = true).applyRequestAmount()
+        }
+        return amounts.recomputeFiat()
+    }
+
+    private fun InternalStateImpl.applyRequestAmount(): InternalStateImpl {
+        val selected = asset ?: return this
+        if (hasEditedRequestAmount || selectedABContact != null) return this
+        if (requestAmountAssetId != null && (requestAmountAssetId != selected.assetId || amount.amount != null)) {
+            return this
+        }
+        val recipient = validateSwapRecipient(
+            address, selected.chainTicker, selected.tokenTicker, tokenContract = selected.contractAddress
+        )
+        val requested = recipient.input?.amount?.takeIf { recipient.isValid } ?: return this
+        return copy(
+            amount = NumberTextFieldInnerState.fromAmount(requested),
+            fiatAmount = NumberTextFieldInnerState(),
+            requestAmountAssetId = selected.assetId
+        )
+    }
+
+    private fun InternalStateImpl.clearRequestAmount(keepBinding: Boolean = false): InternalStateImpl =
+        if (requestAmountAssetId == null) this else copy(
+            amount = NumberTextFieldInnerState(),
+            fiatAmount = NumberTextFieldInnerState(),
+            requestAmountAssetId = requestAmountAssetId.takeIf { keepBinding }
+        )
+
+    private fun InternalStateImpl.recomputeFiat(): InternalStateImpl =
+        if (amount.amount == null && fiatAmount.amount != null) {
             copy(
-                asset = asset,
                 amount =
                     exactOutputVMMapper.createAmountInnerState(
                         fiatInnerState = fiatAmount,
-                        amountInnerState = amountState,
+                        amountInnerState = amount,
                         asset = asset
                     )
             )
         } else {
             copy(
-                asset = asset,
-                amount = amountState,
                 fiatAmount =
                     exactOutputVMMapper.createFiatAmountInnerState(
-                        amountInnerState = amountState,
+                        amountInnerState = amount,
                         fiatInnerState = fiatAmount,
                         asset = asset
                     )
             )
         }
-    }
 }
 
 internal interface InternalState {
@@ -411,6 +432,8 @@ internal data class InternalStateImpl(
     override val account: WalletAccount?,
     override val swapAssets: SwapAssetsData,
     override val isEphemeralAddressLocked: Boolean,
-    // A pending URI amount may prefill after asset selection until the user edits either amount field.
-    val hasEditedRequestAmount: Boolean = false
+    val selectedAssetId: String? = null,
+    val hasEditedRequestAmount: Boolean = false,
+    // The current address supplied the amount in this denomination.
+    val requestAmountAssetId: String? = null,
 ) : InternalState

@@ -104,11 +104,9 @@ class CommonTransactionDetailMapper {
                             isShielded = swap.destinationAddress is ZcashShieldedSwapAddress
                         ),
                     amount = stringResByNumber(savedOutput ?: swap.amountOutFormatted),
-                    fiatAmount = if (savedOutput == null) {
-                        stringResByDynamicCurrencyNumber(swap.amountOutUsd, FiatCurrency.USD.symbol)
-                    } else {
-                        stringRes("")
-                    },
+                    fiatAmount = swap.amountOutUsd.takeIf { savedOutput == null }?.let {
+                        stringResByDynamicCurrencyNumber(it, FiatCurrency.USD.symbol)
+                    } ?: stringRes(""),
                     token = stringRes(destinationAsset.tokenTicker),
                     chain = destinationAsset.chainName + stringRes(" · ") + stringRes(outputLabel)
                 )

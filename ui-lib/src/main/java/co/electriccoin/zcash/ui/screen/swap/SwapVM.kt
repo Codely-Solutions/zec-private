@@ -12,6 +12,7 @@ import co.electriccoin.zcash.ui.common.model.positiveUsdPrice
 import co.electriccoin.zcash.ui.common.model.SwapDirection
 import co.electriccoin.zcash.ui.common.model.SwapDirection.SWAP_FROM_ZEC
 import co.electriccoin.zcash.ui.common.model.SwapDirection.SWAP_INTO_ZEC
+import co.electriccoin.zcash.ui.common.model.SwapPriceMarkets
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.canSpend
 import co.electriccoin.zcash.ui.common.model.toSwapMode
@@ -164,24 +165,14 @@ internal class SwapVM(
         }
         viewModelScope.launch {
             val asset = getPreselectedSwapAsset()
-            val currentAssets = swapRepository.assets.value
-            val resolvedAsset =
-                currentAssets.data?.firstOrNull { it.assetId == asset.assetId }
-                    ?: asset.takeUnless { currentAssets.data != null && !currentAssets.isLoading }
-            internalState.update { if (it.swapAsset == null) it.copy(swapAsset = resolvedAsset) else it }
+            internalState.update {
+                if (it.selectedAssetId == null) it.selectAsset(asset) else it
+            }
         }
         viewModelScope.launch {
             swapRepository.assets.collect { assets ->
-                val catalog = assets.data ?: return@collect
                 internalState.update { state ->
-                    val selected = state.swapAsset ?: return@update state
-                    val refreshed = catalog.firstOrNull { it.assetId == selected.assetId }
-                    when {
-                        refreshed == selected -> state
-                        refreshed != null -> state.copy(swapAsset = refreshed)
-                        !assets.isLoading -> state.copy(swapAsset = null)
-                        else -> state
-                    }
+                    state.copy(swapAsset = SwapPriceMarkets.findAsset(assets.data, state.selectedAssetId))
                 }
             }
         }
@@ -270,7 +261,7 @@ internal class SwapVM(
                     .data
                     ?.filter { asset -> asset.chainTicker.equals(selectedChainTicker, ignoreCase = true) }
                     .orEmpty()
-            internalState.update { it.copy(swapAsset = matchingAssets.singleOrNull()) }
+            matchingAssets.singleOrNull()?.let { asset -> internalState.update { it.selectAsset(asset) } }
         }
     }
 
@@ -431,9 +422,15 @@ internal class SwapVM(
         viewModelScope.launch {
             val asset = navigateToSwapAssetPicker()
             if (asset != null) {
-                internalState.update { it.copy(swapAsset = asset) }
+                internalState.update { it.selectAsset(asset) }
             }
         }
+
+    private fun InternalStateImpl.selectAsset(asset: SwapAsset): InternalStateImpl =
+        copy(
+            selectedAssetId = asset.assetId,
+            swapAsset = SwapPriceMarkets.findAsset(swapRepository.assets.value.data, asset.assetId)
+        )
 }
 
 /**
@@ -481,4 +478,5 @@ internal data class InternalStateImpl(
     override val selectedContact: EnhancedABContact?,
     override val swapDirection: SwapDirection,
     override val isEphemeralAddressLocked: Boolean,
+    val selectedAssetId: String? = null,
 ) : InternalState

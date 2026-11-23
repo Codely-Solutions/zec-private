@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.model.near.NearSwapAsset
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
 import co.electriccoin.zcash.ui.common.repository.SwapAssetsData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
@@ -124,6 +125,21 @@ class SwapVMTest {
 
             assertEquals("eth", harness.capturedState.swapAsset?.tokenTicker)
         }
+
+    @Test
+    fun selectedAssetIsUnavailableDuringIdentityDriftAndRecoversOnRefresh() = runTest {
+        val asset = SwapAssetTestFixture.asset() as NearSwapAsset
+        val harness = harness(preselect = asset)
+        harness.collectState(this)
+        assertEquals(asset, harness.capturedState.swapAsset)
+
+        harness.assets.value = SwapAssetTestFixture.assetsData(data = listOf(asset.copy(decimals = 9)))
+        assertNull(harness.capturedState.swapAsset)
+
+        val refreshed = asset.copy(usdPrice = BigDecimal("102000"))
+        harness.assets.value = SwapAssetTestFixture.assetsData(data = listOf(refreshed))
+        assertEquals(refreshed, harness.capturedState.swapAsset)
+    }
 
     @Test
     fun changeButtonTogglesMode() =
@@ -550,7 +566,7 @@ class SwapVMTest {
     @Test
     fun computedZecInputUsesOriginPrecisionInsteadOfDestinationPrecision() =
         runTest {
-            val asset = SwapAssetTestFixture.asset(decimals = 6)
+            val asset = SwapAssetTestFixture.asset(tokenTicker = "usdc", chainTicker = "eth")
             val harness = harness(preselect = asset, assets = SwapAssetTestFixture.assetsData(data = listOf(asset)))
             harness.collectState(this)
             harness.onChangeButtonClick()
@@ -813,7 +829,9 @@ class SwapVMTest {
         assetResult: SwapAsset? = null,
         recipient: EnhancedABContact? = null,
         scanResult: ScanResult? = null,
-        assets: SwapAssetsData = SwapAssetTestFixture.assetsData(),
+        assets: SwapAssetsData = SwapAssetTestFixture.assetsData(
+            data = listOfNotNull(preselect, assetResult).distinctBy { it.assetId },
+        ),
         refundWarningResult: Boolean = true,
         account: WalletAccount? = account(isSpendable = true)
     ): Harness {
@@ -846,10 +864,11 @@ class SwapVMTest {
         val cancelSwap = mockk<CancelSwapUseCase>(relaxed = true)
         val navigateToSwapQuoteIfAvailable = mockk<NavigateToSwapQuoteIfAvailableUseCase>(relaxed = true)
         val navigationRouter = mockk<NavigationRouter>(relaxed = true)
+        val catalog = MutableStateFlow(assets)
         val getSwapAssets =
             mockk<GetCuratedSwapAssetsUseCase> {
-                every { observe() } returns MutableStateFlow(assets)
-                every { this@mockk() } returns assets
+                every { observe() } returns catalog
+                every { this@mockk() } answers { catalog.value }
             }
         val selectedAccount = MutableStateFlow(account)
         val getSelectedWalletAccount =
@@ -858,7 +877,7 @@ class SwapVMTest {
             }
         val mapper = SwapVMMapper()
         val swapRepository =
-            mockk<SwapRepository>(relaxed = true) { every { this@mockk.assets } returns MutableStateFlow(assets) }
+            mockk<SwapRepository>(relaxed = true) { every { this@mockk.assets } returns catalog }
 
         val harness =
             Harness(
@@ -871,7 +890,7 @@ class SwapVMTest {
                 navigateToSwapQuoteIfAvailable = navigateToSwapQuoteIfAvailable,
                 navigationRouter = navigationRouter,
                 selectedAccount = selectedAccount,
-                assets = assets
+                assets = catalog
             )
 
         harness.vm =
@@ -905,7 +924,7 @@ class SwapVMTest {
         val navigateToSwapQuoteIfAvailable: NavigateToSwapQuoteIfAvailableUseCase,
         val navigationRouter: NavigationRouter,
         val selectedAccount: MutableStateFlow<WalletAccount?>,
-        val assets: SwapAssetsData,
+        val assets: MutableStateFlow<SwapAssetsData>,
     ) {
         lateinit var vm: SwapVM
 
@@ -922,7 +941,7 @@ class SwapVMTest {
                 .get(vm) as StateFlow<InternalStateImpl>
         }
         val capturedState: InternalState
-            get() = internalState.value.copy(account = selectedAccount.value, swapAssets = assets)
+            get() = internalState.value.copy(account = selectedAccount.value, swapAssets = assets.value)
         val onBack get() = callbacks.onBack
         val onSlippageClick get() = callbacks.onSlippageClick
         val onSwapAssetPickerClick get() = callbacks.onSwapAssetPickerClick

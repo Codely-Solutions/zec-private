@@ -66,8 +66,15 @@ class CrossPayAtomicAmountTest(private val decimals: Int) {
         every { FiatCurrency.USD.symbol } returns "$"
         try {
             val origin = SwapCatalogTestFixture.nativeZec.copy(usdPrice = BigDecimal("30"))
-            val destination = SwapCatalogTestFixture.externalAssets.single { it.assetId == "nep141:btc.omft.near" }
-                .copy(usdPrice = BigDecimal("100000"), decimals = decimals)
+            val (network, recipient) = when (decimals) {
+                6, 18 -> "eth" to "0xde709f2102306220921060314715629080e2fb77"
+                8 -> "btc" to "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu"
+                24 -> "near" to "alice.near"
+                else -> error("No pinned test asset at $decimals decimals")
+            }
+            val destination = SwapCatalogTestFixture.externalAssets.first {
+                it.chainTicker == network && it.decimals == decimals
+            }.copy(usdPrice = BigDecimal("100000"))
             val assets = SwapAssetsData(data = listOf(destination), zecAsset = origin)
             val wireRequest = CompletableDeferred<String>()
             val near = mockk<NearApiProvider> {
@@ -130,12 +137,11 @@ class CrossPayAtomicAmountTest(private val decimals: Int) {
             try {
                 backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
                 runCurrent()
-                val recipient = "1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu"
                 assertNotNull(vm.state.value, "CrossPay entry state").address.onValueChange(recipient)
                 runCurrent()
                 val addressed = assertNotNull(vm.state.value, "CrossPay recipient state")
                 assertEquals(stringRes(recipient), addressed.address.value)
-                assertNull(addressed.address.error, "Bitcoin recipient validation")
+                assertNull(addressed.address.error, "Recipient validation for $network")
 
                 fun enterAmount(value: BigDecimal): PayState {
                     val raw = ZashiNumberTextFieldParser.normalizeInput(value.toPlainString())
@@ -200,6 +206,6 @@ class CrossPayAtomicAmountTest(private val decimals: Int) {
     companion object {
         @JvmStatic
         @Parameterized.Parameters(name = "{0} decimals")
-        fun tokenDecimals() = listOf(0, 6, 8, 18, 24)
+        fun tokenDecimals() = listOf(6, 8, 18, 24)
     }
 }

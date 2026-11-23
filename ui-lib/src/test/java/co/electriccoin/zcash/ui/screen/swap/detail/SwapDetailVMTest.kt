@@ -13,6 +13,8 @@ import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.near.SwapOutputProvenanceFixture
+import co.electriccoin.zcash.ui.common.model.near.SwapType
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
@@ -23,6 +25,7 @@ import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.component.ZashiMessageState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByDateTime
+import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
@@ -275,6 +278,28 @@ class SwapDetailVMTest {
         runCurrent()
         assertEquals(stringRes(R.string.private_provider_output), harness.state().transactionHeader.title)
         assertEquals(stringResByNumber(reported), harness.state().transactionHeader.amount)
+    }
+
+    @Test
+    fun incomingDetailKeepsUsdWithItsQuotedOrExecutedOutput() = runTest {
+        val fixture = SwapOutputProvenanceFixture
+        val origin = SwapCatalogTestFixture.externalAssets.first()
+        val destination = SwapCatalogTestFixture.nativeZec
+        val harness = harness(SwapQuoteStatusData(isLoading = true))
+        for ((hasAmount, hasUsd, expectedUsd) in listOf(
+            Triple(false, true, fixture.quotedUsd),
+            Triple(true, false, null),
+            Triple(true, true, fixture.executedUsd),
+        )) {
+            val status = fixture.status(origin, destination, DEPOSIT, SwapType.FLEX_INPUT, hasAmount, hasUsd)
+            harness.emit(SwapQuoteStatusData(status = status, isLoading = false))
+            runCurrent()
+            val output = assertNotNull(harness.state().quoteHeader.to)
+            val label = if (hasAmount) R.string.private_provider_output else R.string.private_quoted_output
+            val fiat = expectedUsd?.let { stringResByDynamicCurrencyNumber(it, FiatCurrency.USD.symbol) }
+            assertEquals(destination.chainName + stringRes(" · ") + stringRes(label), output.chain)
+            assertEquals(fiat ?: stringRes(""), output.fiatAmount)
+        }
     }
 
     @Test

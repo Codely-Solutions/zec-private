@@ -17,6 +17,8 @@ import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.near.SwapOutputProvenanceFixture
+import co.electriccoin.zcash.ui.common.model.near.SwapType
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
 import co.electriccoin.zcash.ui.common.repository.Transaction
@@ -29,6 +31,7 @@ import co.electriccoin.zcash.ui.common.usecase.ReloadHandle
 import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.design.util.TickerLocation.HIDDEN
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.design.util.stringResByTransactionId
 import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
@@ -252,6 +255,35 @@ class TransactionDetailVMTest {
         assertNotNull(state.primaryButton).onClick()
         verify(exactly = 1) { router.forward(SwapSupportArgs("fixture-deposit")) }
         verify(exactly = 0) { reload.requestReload() }
+    }
+
+    @Test
+    fun outgoingDetailKeepsUsdWithItsQuotedOrExecutedOutput() = runTest(dispatcher) {
+        val fixture = SwapOutputProvenanceFixture
+        val origin = SwapCatalogTestFixture.nativeZec
+        val destination = SwapCatalogTestFixture.externalAssets.first()
+        val saved = swapMetadata(SwapStatus.SUCCESS, SwapCatalogTestFixture.simple(origin))
+        for ((hasAmount, hasUsd, expectedUsd) in listOf(
+            Triple(false, true, fixture.quotedUsd),
+            Triple(true, false, null),
+            Triple(true, true, fixture.executedUsd),
+        )) {
+            val status = fixture.status(
+                origin, destination, saved.depositAddress, SwapType.EXACT_INPUT, hasAmount, hasUsd
+            )
+            val detail = state(data(sent, saved, SwapQuoteStatusData(status = status, isLoading = false)))
+            val output = assertNotNull(assertIs<SendSwapState>(detail.info).quoteHeader.to)
+            val label = if (hasAmount) R.string.private_provider_output else R.string.private_quoted_output
+            val fiat = expectedUsd?.let { stringResByDynamicCurrencyNumber(it, FiatCurrency.USD.symbol) }
+            assertEquals(destination.chainName + stringRes(" · ") + stringRes(label), output.chain)
+            assertEquals(fiat ?: stringRes(""), output.fiatAmount)
+            if (!hasAmount) {
+                val sparse = SwapQuoteStatusData(status = status, isLoading = false, savedMetadata = saved)
+                val legacy = assertIs<SendSwapState>(state(data(sent, saved, sparse)).info).quoteHeader.to
+                assertEquals(stringResByNumber(saved.amountOutFormatted), legacy?.amount)
+                assertEquals(stringRes(""), legacy?.fiatAmount)
+            }
+        }
     }
 
     private fun assertLocalFunding(state: TransactionDetailState, assetId: String) {

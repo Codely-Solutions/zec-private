@@ -14,8 +14,12 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.IsABContactHintVisibleUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapAssetPickerUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
+import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.common.usecase.NavigateToSwapRefundWarningUseCase
+import co.electriccoin.zcash.ui.common.usecase.RequestSwapQuoteUseCase
 import io.mockk.coEvery
+import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
@@ -65,6 +69,7 @@ class PayCatalogRecoveryTest {
         }
         var pickerResult: SwapAsset = bnb
         val account = mockk<WalletAccount> { every { canSpend(any()) } returns true }
+        val quoteRequest = mockk<RequestSwapQuoteUseCase>(relaxed = true)
         val vm = PayVM(
             getCuratedSwapAssetsUseCase = GetCuratedSwapAssetsUseCase(repository, simple),
             getSelectedWalletAccount = mockk<GetSelectedWalletAccountUseCase> {
@@ -73,7 +78,7 @@ class PayCatalogRecoveryTest {
             swapRepository = repository,
             cancelSwap = mockk(),
             navigationRouter = mockk(),
-            requestSwapQuote = mockk(),
+            requestSwapQuote = quoteRequest,
             navigateToSwapQuoteIfAvailable = mockk(),
             exactOutputVMMapper = ExactOutputVMMapper(),
             navigateToScanAddress = mockk(),
@@ -88,7 +93,9 @@ class PayCatalogRecoveryTest {
             navigateToSwapAssetPicker = mockk<NavigateToSwapAssetPickerUseCase> {
                 coEvery { this@mockk.invoke(null) } answers { pickerResult }
             },
-            navigateToSwapRefundWarning = mockk(),
+            navigateToSwapRefundWarning = mockk<NavigateToSwapRefundWarningUseCase> {
+                coEvery { this@mockk.invoke(any(), any()) } returns true
+            },
         )
         try {
             backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
@@ -127,11 +134,26 @@ class PayCatalogRecoveryTest {
             assertEquals(stringRes(co.electriccoin.zcash.ui.design.R.string.send_review), button().text)
             assertTrue(button().isEnabled)
 
+            choose(avax)
+            assertNull(form().address.error)
+            assertNull(form().amount.innerState.amount)
+            assertFalse(button().isEnabled)
+            choose(bnb)
+            assertEquals(0, form().amount.innerState.amount?.compareTo(BigDecimal("2.014")))
+            assertTrue(button().isEnabled)
+
             choose(bscToken)
             assertNotNull(form().address.error)
             assertFalse(button().isEnabled)
+            assertNull(form().amount.innerState.amount)
+            assertNull(form().amountFiat.innerState.amount)
             enter(address)
-            assertTrue(button().isEnabled)
+            assertNull(form().address.error)
+            assertFalse(button().isEnabled)
+            button().onClick()
+            runCurrent()
+            coVerify(exactly = 0) { quoteRequest.requestExactOutput(any(), any(), any(), any(), any(), any()) }
+
             enter("ethereum:$address@56?value=2.014e18")
             choose(avax)
             assertNotNull(form().address.error)
@@ -140,6 +162,30 @@ class PayCatalogRecoveryTest {
             assertNull(form().address.error)
             assertEquals(0, form().amount.innerState.amount?.compareTo(BigDecimal("2.014")))
             assertTrue(button().isEnabled)
+
+            // A fresh compatible payment replaces the prefill. A manual edit owns the value after that.
+            enter("ethereum:$address?value=3e18")
+            assertEquals(0, form().amount.innerState.amount?.compareTo(BigDecimal("3")))
+            val manual = BigDecimal("4")
+            form().amount.onValueChange(NumberTextFieldInnerState.fromAmount(manual))
+            runCurrent()
+            choose(bscToken)
+            enter(address)
+            assertEquals(0, form().amount.innerState.amount?.compareTo(manual))
+            assertTrue(button().isEnabled)
+            button().onClick()
+            runCurrent()
+            coVerify(exactly = 1) {
+                quoteRequest.requestExactOutput(manual, address, bscToken, any(), any(), null)
+            }
+
+            choose(bnb)
+            enter(uri)
+            assertEquals(0, form().amount.innerState.amount?.compareTo(BigDecimal("2.014")))
+            enter(address)
+            assertNull(form().amount.innerState.amount)
+            assertNull(form().amountFiat.innerState.amount)
+            assertFalse(button().isEnabled)
         } finally {
             vm.viewModelScope.cancel()
             unmockkObject(FiatCurrency.USD)

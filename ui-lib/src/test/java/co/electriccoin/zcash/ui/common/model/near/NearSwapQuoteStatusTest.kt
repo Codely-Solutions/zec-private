@@ -1,14 +1,25 @@
 package co.electriccoin.zcash.ui.common.model.near
 
+import cash.z.ecc.android.sdk.model.FiatCurrency
+import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.positiveRefund
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapBlockchain
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.imageRes
+import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
+import co.electriccoin.zcash.ui.design.util.stringResByNumber
+import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
+import io.mockk.every
+import io.mockk.mockkObject
+import io.mockk.unmockkObject
+import kotlinx.serialization.json.Json
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
@@ -91,6 +102,39 @@ class NearSwapQuoteStatusTest {
         assertEquals(BigDecimal("2.300001"), swap.executedAmountOut)
         assertEquals(BigDecimal("2.300001"), swap.amountOutFormatted)
         assertEquals(BigDecimal("2"), swap.quotedAmountOut)
+    }
+
+    @Test
+    fun detailKeepsOutputAmountsAndUsdFromTheSameObservation() {
+        mockkObject(FiatCurrency.USD)
+        every { FiatCurrency.USD.symbol } returns "$"
+        try {
+            val original = nearSwapQuoteStatus(SwapStatus.SUCCESS, Clock.System.now() + 1.hours)
+            val quote = Json.encodeToString(QuoteResponseDto.serializer(), original.response.quoteResponse)
+            for ((details, amount, usd) in listOf(
+                Triple("""{"amountOut":"2300001","amountOutUsd":"11"}""", "2.300001", "11"),
+                Triple("""{"amountOut":"2300001"}""", "2.300001", null),
+                Triple("""{"amountOutUsd":"11"}""", "2", "10"),
+                Triple("{}", "2", "10"),
+            )) {
+                val response = Json.decodeFromString<SwapStatusResponseDto>(
+                    """{"quoteResponse":$quote,"status":"SUCCESS","updatedAt":"2026-11-23T00:00:00Z",
+                        "swapDetails":$details}"""
+                )
+                val status = original.copy(response = response)
+                val output = assertNotNull(
+                    CommonTransactionDetailMapper()
+                        .createTransactionDetailQuoteHeaderState(status, status.originAsset, status.destinationAsset).to
+                )
+                val label = if (amount == "2") R.string.private_quoted_output else R.string.private_provider_output
+                val fiat = usd?.let { stringResByDynamicCurrencyNumber(BigDecimal(it), FiatCurrency.USD.symbol) }
+                assertEquals(stringResByNumber(BigDecimal(amount)), output.amount, details)
+                assertEquals(status.destinationAsset.chainName + stringRes(" · ") + stringRes(label), output.chain)
+                assertEquals(fiat ?: stringRes(""), output.fiatAmount, details)
+            }
+        } finally {
+            unmockkObject(FiatCurrency.USD)
+        }
     }
 
     @Test

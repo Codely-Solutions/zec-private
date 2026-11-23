@@ -26,8 +26,9 @@ class GetCuratedSwapAssetsUseCase(
         return data.copy(
             data =
                 data.data
+                    ?.let(SwapPriceMarkets::selectableAssets)
                     ?.filter { token ->
-                        SwapPriceMarkets.reference(token) != null && inclusionList.any {
+                        inclusionList.any {
                             it.isSame(token.tokenTicker, token.blockchain.chainTicker)
                         }
                     }

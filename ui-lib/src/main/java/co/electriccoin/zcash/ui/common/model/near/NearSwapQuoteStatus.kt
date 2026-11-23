@@ -142,7 +142,8 @@ data class NearSwapQuoteStatus(
 
     override val amountOutFormatted: BigDecimal = executedAmountOut ?: quotedAmountOut
 
-    override val amountOutUsd: BigDecimal = response.swapDetails?.amountOutUsd ?: quote.amountOutUsd
+    override val amountOutUsd: BigDecimal? =
+        if (executedAmountOut != null) response.swapDetails?.amountOutUsd else quote.amountOutUsd
 
     override val depositedAmountFormatted: BigDecimal? = response.swapDetails?.depositedAmountFormatted
         ?: response.swapDetails?.depositedAmount?.movePointLeft(origin.decimals)

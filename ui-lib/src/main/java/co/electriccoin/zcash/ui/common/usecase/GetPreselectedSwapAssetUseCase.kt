@@ -2,6 +2,7 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import co.electriccoin.zcash.ui.common.model.SimpleSwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapAsset
+import co.electriccoin.zcash.ui.common.model.SwapPriceMarkets
 import co.electriccoin.zcash.ui.common.model.ZecSimpleSwapAsset
 import co.electriccoin.zcash.ui.common.model.isSame
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
@@ -26,9 +27,8 @@ class GetPreselectedSwapAssetUseCase(
         val assetToSelect = getAssetFromHistory() ?: getHardCodedAsset()
         return swapRepository.assets
             .mapNotNull { assets ->
-                assets.data?.firstOrNull {
-                    it.tokenTicker.equals(assetToSelect.tokenTicker, ignoreCase = true) &&
-                        it.chainTicker.equals(assetToSelect.chainTicker, ignoreCase = true)
+                assets.data?.let(SwapPriceMarkets::selectableAssets)?.singleOrNull {
+                    it.isSame(assetToSelect.tokenTicker, assetToSelect.chainTicker)
                 }
             }.first()
     }

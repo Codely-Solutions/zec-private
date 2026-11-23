@@ -234,8 +234,6 @@ class SwapRepositoryImpl(
 
     @Suppress("TooGenericExceptionCaught")
     private suspend fun refreshAssetsInternal() {
-        fun findZecSwapAsset(assets: List<SwapAsset>) = assets.singleOrNull { it.isCanonicalNativeZec }
-
         fun filterSwapAssets(assets: List<SwapAsset>) =
             assets
                 .toMutableList()
@@ -250,7 +248,7 @@ class SwapRepositoryImpl(
         try {
             val tokens = swapDataSource.getSupportedTokens()
             val filtered = filterSwapAssets(tokens)
-            val zecAsset = findZecSwapAsset(tokens)
+            val zecAsset = SwapPriceMarkets.findNativeZec(tokens)
             try {
                 // Historical identities must remain resolvable when a price or offer disappears.
                 swapAssetCacheProvider.store(mergeRecoveryAssets(tokens, assets.value.recoveryAssets.orEmpty()))
@@ -289,7 +287,7 @@ class SwapRepositoryImpl(
         assets.update {
             it.copy(
                 data = cachedAssets.filterNot(SwapAsset::isZCashAsset),
-                zecAsset = cachedAssets.singleOrNull { asset -> asset.isCanonicalNativeZec },
+                zecAsset = SwapPriceMarkets.findNativeZec(cachedAssets),
                 error = null,
                 isLoading = true,
                 recoveryAssets = cachedAssets,
@@ -340,13 +338,15 @@ class SwapRepositoryImpl(
         slippage: BigDecimal
     ) {
         launchQuoteRequest { generation ->
-            val destinationAsset = assets.value.zecAsset
+            val catalog = assets.value
+            val destinationAsset = catalog.zecAsset?.takeIf { it.isCanonicalNativeZec }
             if (destinationAsset == null) {
                 publishQuote(generation, SwapQuoteData.Error(FLEX_INPUT, SwapAssetsUnavailableException()))
                 return@launchQuoteRequest
             }
             var receivedQuote: SwapQuote? = null
             try {
+                requireSelectableAsset(catalog.data, originAsset)
                 val result =
                     swapDataSource.requestQuote(
                         swapMode = FLEX_INPUT,
@@ -367,7 +367,7 @@ class SwapRepositoryImpl(
                 requireSupportedSelectedAsset(
                     name = "originAsset",
                     type = SwapQuoteMismatchType.ORIGIN_ASSET,
-                    supportedAssets = assets.value.data,
+                    catalog = assets.value,
                     selectedAsset = originAsset,
                     actual = result.originAsset
                 )
@@ -418,13 +418,15 @@ class SwapRepositoryImpl(
         slippage: BigDecimal
     ) {
         launchQuoteRequest { generation ->
-            val originAsset = assets.value.zecAsset
+            val catalog = assets.value
+            val originAsset = catalog.zecAsset?.takeIf { it.isCanonicalNativeZec }
             if (originAsset == null) {
                 publishQuote(generation, SwapQuoteData.Error(mode, SwapAssetsUnavailableException()))
                 return@launchQuoteRequest
             }
             var receivedQuote: SwapQuote? = null
             try {
+                requireSelectableAsset(catalog.data, destinationAsset)
                 val result =
                     swapDataSource.requestQuote(
                         swapMode = mode,
@@ -464,7 +466,7 @@ class SwapRepositoryImpl(
                 requireSupportedSelectedAsset(
                     name = "destinationAsset",
                     type = SwapQuoteMismatchType.DESTINATION_ASSET,
-                    supportedAssets = assets.value.data,
+                    catalog = assets.value,
                     selectedAsset = destinationAsset,
                     actual = result.destinationAsset
                 )
@@ -649,9 +651,8 @@ private fun requireExpectedAsset(
 }
 
 /**
- * Looks the user-selected asset up in the currently-supported assets by id (requiring it to still be
- * supported) and matches the quote against that canonical record — catching a stale/unknown selection
- * and a selection whose ticker/chain disagrees with the supported record.
+ * Rechecks both sides against the current catalog before accepting the response, then checks the
+ * response's asset against the selected route.
  *
  * A selection missing from the loaded list is a client-side staleness, not a request-vs-response
  * disagreement, so it stays a plain rejection; only the echo comparison reports a typed mismatch.
@@ -659,14 +660,12 @@ private fun requireExpectedAsset(
 private fun requireSupportedSelectedAsset(
     name: String,
     type: SwapQuoteMismatchType,
-    supportedAssets: List<SwapAsset>?,
+    catalog: SwapAssetsData,
     selectedAsset: SwapAsset,
     actual: SwapAsset
 ) {
-    val supported = supportedAssets?.firstOrNull { it.assetId == selectedAsset.assetId }
-    requireNotNull(supported) {
-        "Swap quote asset mismatch: $name=${selectedAsset.assetId} is not a currently-supported swap asset"
-    }
+    require(catalog.zecAsset?.isCanonicalNativeZec == true) { "Swap quote requires native ZEC" }
+    val supported = requireSelectableAsset(catalog.data, selectedAsset)
     requireMatchingAsset(
         name = name,
         type = type,
@@ -674,6 +673,15 @@ private fun requireSupportedSelectedAsset(
         expectedChainTicker = supported.chainTicker,
         actual = actual
     )
+}
+
+private fun requireSelectableAsset(supportedAssets: List<SwapAsset>?, selectedAsset: SwapAsset): SwapAsset {
+    require(SwapPriceMarkets.reference(selectedAsset) != null && !selectedAsset.isZCashAsset) {
+        "Swap quote selection does not match a pinned counter-asset"
+    }
+    return requireNotNull(SwapPriceMarkets.findAsset(supportedAssets, selectedAsset.assetId)) {
+        "Swap quote selection is unavailable in the current catalog"
+    }
 }
 
 private fun requireMatchingAddress(

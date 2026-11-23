@@ -19,7 +19,9 @@ import co.electriccoin.zcash.ui.common.usecase.Zip321BuildUriUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.design.util.StringResource.Companion.NUMBER_FORMAT_LOCALE
 import co.electriccoin.zcash.ui.design.util.imageRes
+import co.electriccoin.zcash.ui.design.util.getString
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.screen.qrcode.ext.fromReceiveAddressType
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
 import co.electriccoin.zcash.ui.screen.request.ext.toBigDecimalLocalized
@@ -173,10 +175,12 @@ class RequestVM(
     ) {
         val amount = request.value.amountState
         val conversion = resolveExchangeRateValue(displayRate(amount, exchangeRateRepository.state.value))
-        if (stage.value != RequestStage.AMOUNT || amount.validZecAmount(conversion) == null) return
+        if (stage.value != RequestStage.AMOUNT) return
+        val represented = amount.validZecAmount(conversion) ?: return
         val zecAmount = when (amount.currency) {
             RequestCurrency.ZEC -> amount.amount
-            RequestCurrency.FIAT -> conversion?.let { amount.toZecStringFloored(it, application) } ?: return
+            RequestCurrency.FIAT ->
+                stringResByNumber(represented, minDecimals = 3, maxDecimals = 8).getString(application)
         }
         when (walletAddress) {
             is WalletAddress.Transparent -> {
