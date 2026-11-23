@@ -1,12 +1,19 @@
 """Host role selection controls; no Android guest, network or wallet setup."""
+from contextlib import contextmanager
+import hashlib
+import json
 from pathlib import Path
+import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+import core_testnet_driver as driver
+from acceptance_policy import validate_core
 from core_testnet_driver import (
     PACKAGE, RUNNER, claim_after_readiness, installed_apk_hash, instrumentation_role, run, select_apk_roles,
     verify_instrumentation_pair, wait_for_preclaim_marker,
 )
+from test_support import patch_environment
 
 
 class CoreInstrumentationPairingTest(unittest.TestCase):
@@ -96,6 +103,100 @@ class CoreInstrumentationPairingTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'direct unfunded path'):
                     run(adb, None, None, None, installed_upgrade=True, **options)
                 adb.assert_not_called()
+
+    def test_candidate_only_rejects_upgrade_and_probe_modes_before_adb(self):
+        for flag in ('use_tor', 'transport_only', 'repeat_cold_start', 'upgrade_probe',
+                     'preclaim_only', 'live_tor_probe', 'installed_upgrade'):
+            with self.subTest(flag=flag):
+                adb = Mock()
+                options = {'use_tor': False, flag: True}
+                with self.assertRaisesRegex(ValueError, 'Candidate-only lifecycle requires direct testnet'):
+                    run(adb, None, None, None, candidate_only=True, **options)
+                adb.assert_not_called()
+        with self.assertRaisesRegex(ValueError, 'cannot be bound to an upgrade baseline'):
+            run(Mock(), None, None, {'baseline_version_code': 1}, candidate_only=True, use_tor=False)
+        with self.assertRaisesRegex(ValueError, 'Exactly four'):
+            run(Mock(), None, [Path('candidate.apk'), Path('candidate-androidTest.apk')], {}, use_tor=False)
+
+    def test_candidate_only_requires_ledger_outside_guard(self):
+        with tempfile.TemporaryDirectory() as temp:
+            guard = Path(temp)
+            root = guard/'guest'
+            pair = [Path('candidate.apk'), Path('candidate-androidTest.apk')]
+            for ledger in ('', str(guard/'claim.json')):
+                with self.subTest(ledger=ledger), patch_environment({
+                        'CORE_FAUCET_LEDGER': ledger, 'CODEX_GUARD_OUTPUT': str(guard)}):
+                    with self.assertRaisesRegex(ValueError, 'durable faucet ledger outside'):
+                        run(Mock(), root, pair, {}, candidate_only=True, use_tor=False)
+
+    def test_candidate_only_checks_readiness_then_funds_and_restores_without_upgrade(self):
+        events = []
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)/'guard'
+            root.mkdir()
+            app, test = root/'candidate.apk', root/'candidate-androidTest.apk'
+            app.write_bytes(b'app')
+            test.write_bytes(b'test')
+            app_hash = hashlib.sha256(app.read_bytes()).hexdigest()
+            manifest = dict(candidate_apk_sha256='a'*64, instrumentation_apk_sha256='b'*64,
+                            build_source_sha='c'*40, candidate_version_code=3234033,
+                            input_fingerprint='d'*64, runtime_input_fingerprint='e'*64,
+                            build_input_fingerprint='f'*64)
+
+            def adb_reply(command, *args, **kwargs):
+                responses = {('id',): b'uid=0', ('run-as', PACKAGE, 'id', '-u'): b'10001',
+                             ('run-as', PACKAGE, 'cat', 'files/core-private.json'): b'{"senderAddress":"isolated"}'}
+                if command == 'install' or args[:2] == ('pm', 'clear'):
+                    events.append((command, args))
+                return SimpleNamespace(stdout=responses.get(args, b''))
+
+            def start_stage(command, **kwargs):
+                stage = command[command.index('stage')+1]
+                events.append(stage)
+                receipt = json.dumps(dict(stage=stage, passed=True, network='zcash-testnet',
+                                          tor_enabled=False, transport='direct'))
+                output = ('INSTRUMENTATION_STATUS: zec_core_receipt='+receipt+'\nOK (1 test)').encode()
+                return SimpleNamespace(returncode=0, communicate=lambda **_: (output, b''))
+
+            @contextmanager
+            def ready(_root):
+                events.append('faucet-readiness')
+
+                def fund(address):
+                    self.assertEqual(address, 'isolated')
+                    events.append('claim')
+                    return dict(txid='a'*64, provider='synthetic', claim_requests=1)
+
+                yield dict(passed=True, claim_requests=0), fund
+
+            adb = Mock(side_effect=adb_reply)
+            adb.command_base, adb.environment = [], {}
+            with patch_environment({'CORE_FAUCET_LEDGER': str(root.parent/'claim.json'),
+                                    'CODEX_GUARD_OUTPUT': str(root)}), \
+                    patch.object(driver, 'faucet_ready_session', ready), \
+                    patch.object(driver, 'installed_apk_hash', return_value=app_hash), \
+                    patch.object(driver, 'verify_instrumentation_pair') as verify, \
+                    patch.object(driver.subprocess, 'Popen', side_effect=start_stage), \
+                    patch.object(driver.subprocess, 'run'):
+                run(adb, root, [test, app], manifest, use_tor=False, candidate_only=True)
+            self.assertEqual([entry for entry in events if isinstance(entry, str)],
+                             ['receiptProbe', 'faucet-readiness', 'recipient', 'restoreProbe', 'sender',
+                              'claim', 'fund', 'send', 'restart', 'restore'])
+            self.assertEqual(sum(entry[0] == 'install' for entry in events if isinstance(entry, tuple)), 2)
+            self.assertEqual(sum(entry[0] == 'shell' for entry in events if isinstance(entry, tuple)), 3)
+            self.assertEqual(verify.call_count, 8)
+            for call in verify.call_args_list:
+                self.assertEqual(call.args[1:], (3234033, hashlib.sha256(test.read_bytes()).hexdigest()))
+            report = json.loads((root/'core-testnet-result.json').read_bytes())
+            self.assertTrue(report['passed'])
+            self.assertEqual(report['evidence_class'], 'candidate-only-testnet-lifecycle')
+            self.assertEqual(report['faucet_claims'], 1)
+            self.assertEqual(report['preclaim_readiness']['role'], 'candidate')
+            self.assertNotIn('baseline_version_code', report)
+            self.assertNotIn('baseline', report['instrumentation_pairing'])
+            self.assertNotIn('upgrade', report['stages'])
+            with self.assertRaisesRegex(ValueError, 'Real testnet app evidence required'):
+                validate_core(report, manifest['input_fingerprint'])
 
 
 if __name__ == '__main__':

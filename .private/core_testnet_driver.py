@@ -6,6 +6,7 @@ summaries, artifact identities and the testnet transaction ID leave the guest.
 import hashlib
 import ipaddress
 import json
+import os
 import re
 import struct
 import sys
@@ -93,8 +94,12 @@ def claim_after_readiness(check_readiness, submit_claim):
 
 
 def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=False, upgrade_probe=None,
-        preclaim_check=False, preclaim_only=False, use_tor=True, live_tor_probe=False, installed_upgrade=False):
+        preclaim_check=False, preclaim_only=False, use_tor=True, live_tor_probe=False, installed_upgrade=False,
+        candidate_only=False):
     started = time.monotonic()
+    if candidate_only and (use_tor or transport_only or repeat_cold_start or upgrade_probe or preclaim_only
+                           or live_tor_probe or installed_upgrade):
+        raise ValueError('Candidate-only lifecycle requires direct testnet with one app/instrumentation pair')
     if installed_upgrade and (use_tor or transport_only or repeat_cold_start or upgrade_probe or preclaim_check
                               or preclaim_only or live_tor_probe):
         raise ValueError('Installed-upgrade verification requires the dedicated direct unfunded path')
@@ -104,30 +109,46 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         raise ValueError('Pre-claim validation requires the unfunded baseline pair')
     if upgrade_probe and (upgrade_probe not in ('restore', 'transport') or not transport_only or repeat_cold_start):
         raise ValueError('The upgrade probe requires its own unfunded advancing APK pair')
-    if transport_only and not upgrade_probe:
+    baseline_fields = ('baseline_source_sha', 'baseline_version_code', 'baseline_apk_sha256',
+                       'baseline_instrumentation_apk_sha256')
+    pairing = dict(stages={})
+    if candidate_only:
+        if any(key in manifest for key in (*baseline_fields, 'upgradeBaselineInstrumentation')):
+            raise ValueError('Candidate-only lifecycle cannot be bound to an upgrade baseline')
+        apps = [path for path in apks if 'androidTest' not in path.name]
+        tests = [path for path in apks if 'androidTest' in path.name]
+        if len(apps) != 1 or len(tests) != 1 or any(path.name.startswith('baseline-') for path in apks):
+            raise ValueError('Candidate-only lifecycle requires exactly one candidate app and test APK')
+        candidate, test = apps[0], tests[0]
+        ledger = Path(os.environ.get('CORE_FAUCET_LEDGER', ''))
+        guard_root = Path(os.environ.get('CODEX_GUARD_OUTPUT') or root).resolve()
+        if not ledger.is_absolute() or ledger.resolve().is_relative_to(guard_root):
+            raise ValueError('Candidate-only lifecycle requires a durable faucet ledger outside the guard output')
+        preclaim_check = True
+    elif transport_only and not upgrade_probe:
         baseline, baseline_test = apks
         candidate, test = baseline, baseline_test
         if manifest['candidate_version_code'] != manifest['baseline_version_code']:
             raise ValueError('Unfunded transport probe requires the same recorded app/test pair')
     else:
         baseline, baseline_test, candidate, test = select_apk_roles(apks)
-    descriptor = manifest['upgradeBaselineInstrumentation']
-    if (descriptor['source_sha'] != manifest['baseline_source_sha'] or
-            descriptor['apk_sha256'] != manifest['baseline_instrumentation_apk_sha256']):
-        raise ValueError('Baseline instrumentation descriptor/source mismatch')
-    pairing = dict(stages={})
-    for role, path, original, source, version_code in (
-            ('baseline', baseline_test, manifest['baseline_instrumentation_apk_sha256'],
-             manifest['baseline_source_sha'], manifest['baseline_version_code']),
-            ('candidate', test, manifest['instrumentation_apk_sha256'],
-             manifest['build_source_sha'], manifest['candidate_version_code'])):
-        pairing[role] = dict(original_sha256=original, executed_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
-                             source_sha=source, app_version_code=version_code)
+    pairing['candidate'] = dict(original_sha256=manifest['instrumentation_apk_sha256'],
+                                executed_sha256=hashlib.sha256(test.read_bytes()).hexdigest(),
+                                source_sha=manifest['build_source_sha'], app_version_code=manifest['candidate_version_code'])
+    if not candidate_only:
+        descriptor = manifest['upgradeBaselineInstrumentation']
+        if (descriptor['source_sha'] != manifest['baseline_source_sha'] or
+                descriptor['apk_sha256'] != manifest['baseline_instrumentation_apk_sha256']):
+            raise ValueError('Baseline instrumentation descriptor/source mismatch')
+        pairing['baseline'] = dict(original_sha256=manifest['baseline_instrumentation_apk_sha256'],
+                                   executed_sha256=hashlib.sha256(baseline_test.read_bytes()).hexdigest(),
+                                   source_sha=manifest['baseline_source_sha'], app_version_code=manifest['baseline_version_code'])
     stages = {}
     application_pids=set()
     report = dict(schema=1, passed=False,
                   evidence_class=('unfunded-installed-upgrade' if installed_upgrade else
-                                  'unfunded-app-transport-probe' if transport_only else 'real-app-testnet'),
+                                  'unfunded-app-transport-probe' if transport_only else
+                                  'candidate-only-testnet-lifecycle' if candidate_only else 'real-app-testnet'),
                   network='zcash-testnet',
                   tor_enabled=use_tor,
                   clearnet_fallback=False, direct_bulk_downloads=True,personal_wallet_access=False, real_funds_used=False,
@@ -135,11 +156,11 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                   runtime_input_fingerprint=manifest['runtime_input_fingerprint'],
                   build_input_fingerprint=manifest['build_input_fingerprint'],
                   build_source_sha=manifest['build_source_sha'],
-                  baseline_source_sha=manifest['baseline_source_sha'],
-                  baseline_version_code=manifest['baseline_version_code'], candidate_version_code=manifest['candidate_version_code'],
-                  **{name: manifest[name] for name in ('candidate_apk_sha256', 'baseline_apk_sha256',
-                     'instrumentation_apk_sha256', 'baseline_instrumentation_apk_sha256')},
+                  candidate_version_code=manifest['candidate_version_code'],
+                  **{name: manifest[name] for name in ('candidate_apk_sha256', 'instrumentation_apk_sha256')},
                   harness_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
+    if not candidate_only:
+        report.update({key: manifest[key] for key in baseline_fields})
     current_stage = 'install'
     active_instrumentation={}
     operation_lock=threading.Lock()
@@ -149,7 +170,9 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         current_stage = 'preclaim_readiness' if readiness_only else name
         if time.monotonic() - started > 1600:
             raise RuntimeError('Core acceptance total deadline exhausted')
-        if installed_upgrade:
+        if candidate_only:
+            role = 'candidate'
+        elif installed_upgrade:
             role = INSTALLED_UPGRADE_STAGES[name]
         else:
             role = 'baseline' if readiness_only or (not use_tor and name == 'restoreProbe') else instrumentation_role(name)
@@ -239,10 +262,10 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
             report['live_tor_probe'] = dict(pairing['stages'].pop(name), passed=True, tor_enabled=True)
         if name in ('fund', 'upgrade', 'send', 'restart', 'restore'):
             stages[name] = rows[0]
-        if installed_upgrade:
+        if installed_upgrade or (candidate_only and name in ('receiptProbe', 'recipient', 'restoreProbe', 'sender')):
             stages[name] = {key: rows[0][key] for key in ('stage', 'passed', 'network', 'tor_enabled', 'transport')}
             if stages[name]['network'] != 'zcash-testnet' or stages[name]['transport'] != 'direct':
-                raise RuntimeError('Unexpected unfunded upgrade stage network or transport')
+                raise RuntimeError('Unexpected stage network or transport')
         if name=='sender':report['sync_preflight']=rows[0]
         (root/'core-testnet-progress.json').write_text(json.dumps(dict(last_completed_stage=name,stages=stages,elapsed_seconds=time.monotonic()-started)))
         print('CORE_STAGE '+name+' passed', flush=True)
@@ -318,7 +341,8 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                 raise RuntimeError('Direct wallet readiness was not established before requesting funds')
             if 'restoreProbe' not in pairing['stages']:
                 raise RuntimeError('Direct seed restore was not established before requesting funds')
-            report['preclaim_readiness'] = dict(passed=True, route='direct', role='baseline', restore_verified=True)
+            report['preclaim_readiness'] = dict(passed=True, route='direct',
+                                               role='candidate' if candidate_only else 'baseline', restore_verified=True)
             return
         marker = 'files/core-sync-ready.json'
         shell('run-as', PACKAGE, 'rm', '-f', marker)
@@ -350,19 +374,25 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
         if not transport_only or upgrade_probe:
             adb('install', '-r', str(candidate), timeout=90)
             adb('install', '-r', '-t', str(test), timeout=90)
+            if candidate_only:
+                candidate_hash = installed_apk_hash(shell, PACKAGE)
+                if candidate_hash != hashlib.sha256(candidate.read_bytes()).hexdigest():
+                    raise RuntimeError('Installed candidate bytes differ from the prepared app APK')
+                report['candidate_installed_sha256'] = candidate_hash
             stage('receiptProbe', 50)
             if live_tor_probe:
                 stage('rpcProbe', 120)
-            adb('uninstall', PACKAGE + '.test', timeout=30)
-            adb('uninstall', PACKAGE, timeout=30)
-            # Probe provenance is useful in progress logs. The release receipt
-            # records only the exact required funded baseline/candidate stages.
-            if not installed_upgrade:
-                pairing['stages'].pop('receiptProbe')
-        adb('install', '-r', str(baseline), timeout=90)
-        adb('install', '-r', '-t', str(baseline_test), timeout=90)
-        if version() != manifest['baseline_version_code']:
-            raise RuntimeError('Wrong baseline version')
+            if not candidate_only:
+                adb('uninstall', PACKAGE + '.test', timeout=30)
+                adb('uninstall', PACKAGE, timeout=30)
+                # Release evidence records the required funded stages.
+                if not installed_upgrade:
+                    pairing['stages'].pop('receiptProbe')
+        if not candidate_only:
+            adb('install', '-r', str(baseline), timeout=90)
+            adb('install', '-r', '-t', str(baseline_test), timeout=90)
+            if version() != manifest['baseline_version_code']:
+                raise RuntimeError('Wrong baseline version')
         app_uid = uid()
         if installed_upgrade:
             baseline_hash = installed_apk_hash(shell, PACKAGE)
@@ -522,16 +552,19 @@ def run(adb, root, apks, manifest, *, transport_only=False, repeat_cold_start=Fa
                                                 lambda: claim_funding(fund_testnet))
             private.update(fundingTxId=report['funding_setup']['txid'],fundingProvider=report['funding_setup']['provider'])
             write_fixture(private)
+            if candidate_only:
+                report['faucet_claims'] = report['funding_setup']['claim_requests']
             # App Tor must reconnect through the enforced relay set; refusal is safe.
             stage('fund',950)
             check_denials('fund')
-            shell('am','force-stop',PACKAGE)
-            adb('install','-r',str(candidate),timeout=90)
-            adb('install','-r','-t',str(test),timeout=90)
-            if uid()!=app_uid or version()!=manifest['candidate_version_code']:
-                raise RuntimeError('Installed update identity/version mismatch')
-            stage('upgrade',240)
-            check_denials('upgrade')
+            if not candidate_only:
+                shell('am','force-stop',PACKAGE)
+                adb('install','-r',str(candidate),timeout=90)
+                adb('install','-r','-t',str(test),timeout=90)
+                if uid()!=app_uid or version()!=manifest['candidate_version_code']:
+                    raise RuntimeError('Installed update identity/version mismatch')
+                stage('upgrade',240)
+                check_denials('upgrade')
         if use_tor:
             # Start the normal wallet resync path, then interrupt its actual native
             # synchronizer before broadcast. Require fresh sync and intact history.
