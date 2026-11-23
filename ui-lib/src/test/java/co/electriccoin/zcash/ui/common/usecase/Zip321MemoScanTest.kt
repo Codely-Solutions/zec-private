@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.Synchronizer
+import cash.z.ecc.android.sdk.exception.TransactionEncoderException
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.type.AddressType
@@ -10,6 +11,7 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
 import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.Zip321ParseUriValidationUseCase.Zip321ParseUriValidation
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -18,6 +20,7 @@ import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorDialog
 import co.electriccoin.zcash.ui.screen.error.ErrorVM
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsArgs
 import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionArgs
 import co.electriccoin.zcash.ui.screen.scan.ScanArgs
 import co.electriccoin.zcash.ui.screen.scan.ScanFlow
@@ -34,8 +37,10 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -47,15 +52,19 @@ class Zip321MemoScanTest {
     private val account = EditAccountFixtures.zodl()
     private val sdkProposal = mockk<Proposal>()
     private val fixture = Zip321MemoFixture
+    private val expectedTextDraft = PrefillSendData.All(Zatoshi(100_000), fixture.RECIPIENT, null, listOf(fixture.TEXT))
     private val synchronizer = mockk<Synchronizer> {
         coEvery { validateAddress(fixture.RECIPIENT) } returns AddressType.Shielded
         coEvery { proposeFulfillingPaymentUri(account.sdkAccount, any()) } returns sdkProposal
     }
-    private val provider = mockk<SynchronizerProvider> { coEvery { getSynchronizer() } returns synchronizer }
+    private val provider = mockk<SynchronizerProvider> {
+        coEvery { getSynchronizer() } returns this@Zip321MemoScanTest.synchronizer
+    }
     private val accounts = mockk<AccountDataSource> { coEvery { getSelectedAccount() } returns account }
+    private val proposalDataSource = ProposalDataSourceImpl(provider, mockk(), mockk())
     private val repository = ZashiProposalRepositoryImpl(
         accountDataSource = accounts,
-        proposalDataSource = ProposalDataSourceImpl(provider, mockk(), mockk()),
+        proposalDataSource = proposalDataSource,
         zashiSpendingKeyDataSource = mockk(),
         processSwapTransaction = mockk(),
     )
@@ -116,10 +125,49 @@ class Zip321MemoScanTest {
             assertNull(repository.transactionProposal.value)
         }
 
-        verify(exactly = 2) { router.navigate(ErrorDialog) }
+        verify(exactly = 2) { router.forward(ErrorDialog) }
         verify(exactly = 0) { router.replace(Send()) }
         verify(exactly = 0) { router.back() }
         assertNoDraft()
+    }
+
+    @Test
+    fun zip321SdkFailureLogsContainOnlyCategoriesForSoftwareAndKeystone() = runBlocking {
+        val request = parse(fixture.binary)
+        val sentinel = "synthetic SDK error echoing ${request.zip321Uri}"
+        val sdkFailure = IllegalStateException(sentinel)
+        ShadowLog.clear()
+
+        coEvery { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, request.zip321Uri) } throws sdkFailure
+        scan(request, ScanArgs(ScanFlow.HOMEPAGE))
+        assertUneditableError()
+        coEvery { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, request.zip321Uri) } throws
+            TransactionEncoderException.InsufficientFundsException(sdkFailure)
+        scan(request, ScanArgs(ScanFlow.HOMEPAGE))
+        verify(exactly = 1) { router.replace(InsufficientFundsArgs) }
+
+        val keystone = EditAccountFixtures.keystone()
+        coEvery { accounts.getSelectedAccount() } returns keystone
+        coEvery { synchronizer.proposeFulfillingPaymentUri(keystone.sdkAccount, request.zip321Uri) } throws sdkFailure
+        val keystoneScan = OnZip321ScannedUseCase(
+            keystoneProposalRepository = KeystoneProposalRepositoryImpl(accounts, proposalDataSource, mockk(), mockk()),
+            ledgerProposalPipeline = mockk(relaxed = true),
+            zashiProposalRepository = repository,
+            accountDataSource = accounts,
+            navigationRouter = router,
+            prefillSend = prefill,
+            navigateToErrorUseCase = error,
+        )
+        keystoneScan(request, ScanArgs(ScanFlow.SEND))
+        assertUneditableError()
+
+        val logs = ShadowLog.getLogs()
+        assertEquals(2, logs.count { "Unable to create ZIP321 proposal" in it.msg })
+        assertEquals(1, logs.count { "Insufficient funds for ZIP321 proposal" in it.msg })
+        for (entry in logs) {
+            assertFalse(request.zip321Uri in entry.msg)
+            assertFalse(sentinel in entry.throwable?.stackTraceToString().orEmpty())
+        }
     }
 
     @Test
@@ -141,7 +189,7 @@ class Zip321MemoScanTest {
 
         val text = parse(fixture.TEXT.encodeToByteArray().copyOf(512))
         val job = prefill.requestFromZip321(text.payment)
-        assertEquals(expectedTextDraft(), withTimeout(5_000) { prefill().first() })
+        assertEquals(expectedTextDraft, withTimeout(5_000) { prefill().first() })
         job.join()
     }
 
@@ -149,9 +197,9 @@ class Zip321MemoScanTest {
     fun textProposalFailureStillPrefillsAnEditableDraft() = runBlocking {
         coEvery { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, any()) } throws IllegalStateException()
         scan(parse(fixture.TEXT.encodeToByteArray()), ScanArgs(ScanFlow.HOMEPAGE))
-        assertEquals(expectedTextDraft(), withTimeout(5_000) { prefill().first() })
+        assertEquals(expectedTextDraft, withTimeout(5_000) { prefill().first() })
         verify(exactly = 1) { router.replace(Send()) }
-        verify(exactly = 0) { router.navigate(ErrorDialog) }
+        verify(exactly = 0) { router.forward(ErrorDialog) }
     }
 
     private suspend fun parse(bytes: ByteArray) = assertIs<Zip321ParseUriValidation.Valid>(
@@ -169,7 +217,4 @@ class Zip321MemoScanTest {
         assertEquals(stringRes(R.string.zip321_non_text_memo_edit_error), state.message)
         assertNull(state.negative)
     }
-
-    private fun expectedTextDraft() =
-        PrefillSendData.All(Zatoshi(100_000), fixture.RECIPIENT, null, listOf(fixture.TEXT))
 }

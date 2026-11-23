@@ -198,7 +198,7 @@ class LedgerProposalRepositoryImpl(
         }
 
     override suspend fun createZip321Proposal(zip321Uri: String): Zip321TransactionProposal =
-        createProposalInternal {
+        createProposalInternal(includeFailureCause = false) {
             proposalDataSource.createZip321Proposal(
                 account = accountDataSource.getSelectedAccount(),
                 zip321Uri = zip321Uri
@@ -613,18 +613,29 @@ class LedgerProposalRepositoryImpl(
     private val isIdle: Boolean
         get() = sessionJob == null && signingState.value == null && !ledgerSigningDataSource.isLinked
 
-    private suspend inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
+    private suspend inline fun <T : TransactionProposal> createProposalInternal(
+        includeFailureCause: Boolean = true,
+        block: () -> T,
+    ): T {
         val proposal =
             try {
                 block()
             } catch (e: TransactionProposalNotCreatedException) {
                 currentCoroutineContext().ensureActive()
-                Twig.error(e) { "Unable to create proposal" }
+                if (includeFailureCause) {
+                    Twig.error(e) { "Unable to create proposal" }
+                } else {
+                    Twig.error { "Unable to create ZIP321 proposal" }
+                }
                 transactionProposal.update { null }
                 throw e
             } catch (e: InsufficientFundsException) {
                 currentCoroutineContext().ensureActive()
-                Twig.error(e) { "Insufficient funds" }
+                if (includeFailureCause) {
+                    Twig.error(e) { "Insufficient funds" }
+                } else {
+                    Twig.error { "Insufficient funds for ZIP321 proposal" }
+                }
                 transactionProposal.update { null }
                 throw e
             }
