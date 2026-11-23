@@ -261,20 +261,22 @@ class SwapDetailVM(
             PENDING -> stringRes(R.string.swapAndPay_status_pendingDeposit)
             INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
             PROCESSING -> stringRes(R.string.swapToZec_swapProcessing)
-            SUCCESS ->
-                stringRes(
-                    when {
-                        swapData.status?.executedAmountOut != null -> R.string.private_provider_output
-                        swapData.savedMetadata?.executedAmountOut != null -> R.string.private_saved_provider_output
-                        swapData.status != null || swapData.savedMetadata?.quotedAmountOut != null ->
-                            R.string.private_estimated_output
-                        else -> R.string.private_swap_saved_output
-                    }
-                )
+            SUCCESS -> createSuccessfulOutputTitle(swapData)
             REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
             FAILED -> stringRes(R.string.swapStatus_swapFailed)
             null -> null
         }
+
+    private fun createSuccessfulOutputTitle(swapData: SwapData): StringResource =
+        stringRes(
+            when {
+                swapData.status?.executedAmountOut != null -> R.string.private_provider_output
+                swapData.savedMetadata?.executedAmountOut != null -> R.string.private_saved_provider_output
+                swapData.status != null || swapData.savedMetadata?.quotedAmountOut != null ->
+                    R.string.private_estimated_output
+                else -> R.string.private_swap_saved_output
+            }
+        )
 
     private fun onBack() = navigationRouter.back()
 

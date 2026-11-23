@@ -666,9 +666,13 @@ private data class SwapInternalState(
     }
 
     fun getZecToDestinationAssetExchangeRate(): BigDecimal? {
-        val zecUsdPrice = swapAssets.zecAsset.positiveUsdPrice ?: return null
-        val assetUsdPrice = swapAsset.positiveUsdPrice ?: return null
-        return zecUsdPrice.divide(assetUsdPrice, MathContext.DECIMAL128)
+        val zecUsdPrice = swapAssets.zecAsset.positiveUsdPrice
+        val assetUsdPrice = swapAsset.positiveUsdPrice
+        return if (zecUsdPrice == null || assetUsdPrice == null) {
+            null
+        } else {
+            zecUsdPrice.divide(assetUsdPrice, MathContext.DECIMAL128)
+        }
     }
 }
 

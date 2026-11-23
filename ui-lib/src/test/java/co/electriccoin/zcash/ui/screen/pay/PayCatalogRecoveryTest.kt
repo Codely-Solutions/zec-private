@@ -46,13 +46,17 @@ class PayCatalogRecoveryTest {
         every { FiatCurrency.USD.symbol } returns "$"
         val fixture = SwapCatalogTestFixture
         val symbols = setOf("BNB", "AVAX", "USDT")
-        val offers = fixture.externalAssets.filter { it.tokenTicker in symbols && it.chainTicker in setOf("bsc", "avax") }
+        val offers = fixture.externalAssets.filter {
+            it.tokenTicker in symbols && it.chainTicker in setOf("bsc", "avax")
+        }
         val bnb = offers.single { it.tokenTicker == "BNB" }
         val avax = offers.single { it.tokenTicker == "AVAX" }
         val bscToken = offers.single { it.tokenTicker == "USDT" }
         val zec = fixture.nativeZec.copy(usdPrice = BigDecimal("30"))
         val source = mockk<SwapDataSource> {
-            coEvery { getSupportedTokens() } returnsMany listOf(offers, offers + zec.copy(usdPrice = BigDecimal.ZERO), offers + zec)
+            coEvery { getSupportedTokens() } returnsMany listOf(
+                offers, offers + zec.copy(usdPrice = BigDecimal.ZERO), offers + zec
+            )
         }
         val repository = SwapRepositoryImpl(source, mockk(relaxed = true)).also { it.scope = backgroundScope }
         val simple = mockk<SimpleSwapAssetProvider> {

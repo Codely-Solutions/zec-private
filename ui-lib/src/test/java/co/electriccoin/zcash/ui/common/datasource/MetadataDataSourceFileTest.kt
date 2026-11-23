@@ -70,9 +70,11 @@ import io.mockk.mockkObject
 import io.mockk.unmockkObject
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.test.resetMain
@@ -432,14 +434,74 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun outgoingTrackingKeepsTheReviewedAccountAcrossSuspendedLookupAndSelectionChange() = runTest {
+        val quote = fundingQuote(SwapType.EXACT_INPUT)
+        val reviewedUuid = AccountUuid.new(ByteArray(16))
+        val otherUuid = AccountUuid.new(ByteArray(16) { 1 })
+        val reviewedAccount = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(reviewedUuid) }
+        val otherAccount = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(otherUuid) }
+        val selected = MutableStateFlow<WalletAccount?>(reviewedAccount)
+        val accounts = mockk<AccountDataSource> {
+            every { selectedAccount } returns selected
+            every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(listOf(reviewedAccount, otherAccount))
+            coEvery { getSelectedAccount() } answers { checkNotNull(selected.value) }
+        }
+        val lookupStarted = CompletableDeferred<Unit>()
+        val finishLookup = CompletableDeferred<Unit>()
+        val otherKey = metadataKey(2, 3)
+        val keys = mockk<MetadataKeyStorageProvider> {
+            coEvery { get(reviewedUuid) } coAnswers {
+                lookupStarted.complete(Unit)
+                finishLookup.await()
+                key
+            }
+            coEvery { get(otherUuid) } returns otherKey
+        }
+        val ownership = WalletWriteAccess()
+        val metadata = MetadataRepositoryImpl(
+            accountDataSource = accounts,
+            metadataDataSource = dataSource(ownership = ownership),
+            metadataKeyStorageProvider = keys,
+            persistableWalletProvider = mockk(),
+            simpleSwapAssetProvider = simpleSwapAssetProvider,
+            walletWriteAccess = ownership,
+        )
+        val deposit = WalletAddress.Unified.new("deposit")
+        val proposal = mockk<SwapTransactionProposal> {
+            every { this@mockk.quote } returns quote
+            every { destination } returns deposit
+            every { fundingAccount } returns reviewedAccount
+            every { totalFees } returns Zatoshi(0)
+            every { totalFeesUsd } returns BigDecimal.ZERO
+        }
+        val reservation = async { ProcessSwapTransactionUseCase(metadata, mockk()).reserveFunding(proposal) {} }
+        lookupStarted.await()
+        assertFalse(reservation.isCompleted)
+        selected.value = otherAccount
+        finishLookup.complete(Unit)
+        reservation.await()
+
+        assertEquals(otherAccount, accounts.getSelectedAccount())
+        val saved = storedSwaps().swapIds.single()
+        assertEquals(quote.reviewedIdentity(), saved.reviewedIdentity)
+        assertEquals(SwapStatus.PENDING, saved.status)
+        assertNull(metadata.getSwapMetadata("deposit", otherAccount))
+        assertFalse(File(metadataDir, otherKey.fileIdentifiers()[0]).exists())
+        val restarted = ProcessSwapTransactionUseCase(metadata, mockk())
+        assertFailsWith<IllegalStateException> { restarted.reserveFunding(proposal) {} }
+    }
+
+    @Test
     fun outgoingReservationStopsOnDirectorySyncFailureAndRetainsReadableTracking() = runTest {
         val sync = TrackingSync()
         val evidence = NearSignedQuoteEvidence(syntheticSignedQuote)
         val quote = fundingQuote(SwapType.EXACT_INPUT, evidence)
         val destinationAddress = WalletAddress.Unified.new("deposit")
+        val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
         val proposal = mockk<SwapTransactionProposal> {
             every { this@mockk.quote } returns quote
             every { destination } returns destinationAddress
+            every { fundingAccount } returns account
             every { totalFees } returns Zatoshi(0)
             every { totalFeesUsd } returns BigDecimal.ZERO
         }
@@ -458,7 +520,7 @@ class MetadataDataSourceFileTest {
         sync.fail = false
         val restarted = ProcessSwapTransactionUseCase(repository(sync.provider), mockk())
         assertFailsWith<IllegalStateException> { restarted.reserveFunding(proposal) {} }
-        assertEquals(1, sync.attempts)
+        assertEquals(2, sync.attempts)
         assertEquals(pending, storedSwaps().swapIds.single())
     }
 

@@ -43,11 +43,13 @@ class ProcessSwapTransactionUseCaseTest {
     @Test
     fun existingTrackingIsPreservedWhenProcessingSubmission() = runTest {
         val fx = Fixtures()
-        coEvery { fx.metadataRepository.getSwapMetadata(any()) } returns mockk<TransactionSwapMetadata>()
+        coEvery { fx.metadataRepository.getSwapMetadata(any(), any()) } returns mockk<TransactionSwapMetadata>()
         val proposal = swapProposal()
         fx.useCase(proposal, SubmitResult.Success(listOf("tx1")))
         coVerify(exactly = 0) {
-            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            fx.metadataRepository.markTxAsSwap(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+            )
         }
         coVerify(exactly = 1) { fx.swapRepository.submitDepositTransaction("tx1", proposal) }
     }
@@ -56,12 +58,16 @@ class ProcessSwapTransactionUseCaseTest {
     fun pendingTrackingMustBeSavedBeforeFunding() = runTest {
         val fx = Fixtures()
         coEvery {
-            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            fx.metadataRepository.markTxAsSwap(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+            )
         } returns false
         val proposal = swapProposal()
         assertFailsWith<IllegalStateException> { fx.useCase.reserveFunding(proposal) {} }
         coEvery {
-            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            fx.metadataRepository.markTxAsSwap(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+            )
         } returns true
         fx.useCase.reserveFunding(proposal) {}
     }
@@ -72,7 +78,9 @@ class ProcessSwapTransactionUseCaseTest {
         val firstWriteStarted = CompletableDeferred<Unit>()
         val finishFirstWrite = CompletableDeferred<Unit>()
         coEvery {
-            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            fx.metadataRepository.markTxAsSwap(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+            )
         } coAnswers {
             firstWriteStarted.complete(Unit)
             finishFirstWrite.await()
@@ -89,19 +97,23 @@ class ProcessSwapTransactionUseCaseTest {
         duplicate.await()
 
         coVerify(exactly = 1) {
-            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            fx.metadataRepository.markTxAsSwap(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+            )
         }
     }
 
     @Test
     fun existingDurableTrackingRejectsAFundingAttemptAfterRestart() = runTest {
         val fx = Fixtures()
-        coEvery { fx.metadataRepository.getSwapMetadata(any()) } returns mockk<TransactionSwapMetadata>()
+        coEvery { fx.metadataRepository.getSwapMetadata(any(), any()) } returns mockk<TransactionSwapMetadata>()
 
         assertFailsWith<IllegalStateException> { fx.useCase.reserveFunding(swapProposal()) {} }
 
         coVerify(exactly = 0) {
-            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            fx.metadataRepository.markTxAsSwap(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+            )
         }
     }
 
@@ -111,7 +123,7 @@ class ProcessSwapTransactionUseCaseTest {
         val lookupStarted = CompletableDeferred<Unit>()
         val finishLookup = CompletableDeferred<Unit>()
         var stillReviewed = true
-        coEvery { fx.metadataRepository.getSwapMetadata(any()) } coAnswers {
+        coEvery { fx.metadataRepository.getSwapMetadata(any(), any()) } coAnswers {
             lookupStarted.complete(Unit)
             finishLookup.await()
             null
@@ -128,7 +140,9 @@ class ProcessSwapTransactionUseCaseTest {
         reservation.await()
 
         coVerify(exactly = 0) {
-            fx.metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            fx.metadataRepository.markTxAsSwap(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+            )
         }
     }
 
@@ -150,7 +164,8 @@ class ProcessSwapTransactionUseCaseTest {
                     totalFeesUsd = BigDecimal("0.5"),
                     amountOutFormatted = BigDecimal("1.23"),
                     mode = SwapMode.EXACT_INPUT,
-                    status = SwapStatus.PENDING
+                    status = SwapStatus.PENDING,
+                    account = proposal.fundingAccount,
                 )
             }
         }
@@ -200,7 +215,8 @@ class ProcessSwapTransactionUseCaseTest {
                     any(),
                     any(),
                     any(),
-                    any()
+                    any(),
+                    account = any(),
                 )
             }
             coVerify(exactly = 0) { fx.swapRepository.submitDepositTransaction(any(), any()) }
@@ -238,6 +254,7 @@ class ProcessSwapTransactionUseCaseTest {
             }
         return mockk {
             every { this@mockk.quote } returns quote
+            every { fundingAccount } returns mockk()
             every { destination } returns walletAddress
             every { totalFees } returns Zatoshi(1000)
             every { totalFeesUsd } returns BigDecimal("0.5")
@@ -250,9 +267,11 @@ class ProcessSwapTransactionUseCaseTest {
         val useCase = ProcessSwapTransactionUseCase(metadataRepository, swapRepository)
 
         init {
-            coEvery { metadataRepository.getSwapMetadata(any()) } returns null
+            coEvery { metadataRepository.getSwapMetadata(any(), any()) } returns null
             coEvery {
-                metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+                metadataRepository.markTxAsSwap(
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+                )
             } returns true
         }
     }

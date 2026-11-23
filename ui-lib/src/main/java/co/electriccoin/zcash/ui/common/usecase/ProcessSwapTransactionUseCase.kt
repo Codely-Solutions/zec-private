@@ -18,7 +18,7 @@ class ProcessSwapTransactionUseCase(
     // private val ephemeralAddressRepository: EphemeralAddressRepository,
 ) {
     private val fundingMutex = Mutex()
-    // The selected-account observation can lag a successful durable write.
+    // Keep successful reservations in memory for the lifetime of the funding pipeline.
     private val reservedReferences = mutableSetOf<String>()
 
     suspend fun reserveFunding(

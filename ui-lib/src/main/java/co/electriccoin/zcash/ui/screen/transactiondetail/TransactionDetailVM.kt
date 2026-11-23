@@ -120,7 +120,8 @@ class TransactionDetailVM(
                                     HapticFeedbackType.ToggleOn
                                 }
                         ).takeIf {
-                            transaction.transaction.accountUuid != null && transaction.metadata.bookmarkWriteToken != null
+                            transaction.transaction.accountUuid != null &&
+                                transaction.metadata.bookmarkWriteToken != null
                         },
                     errorFooter = createErrorFooter(transaction),
                     infoFooter =
@@ -667,11 +668,12 @@ class TransactionDetailVM(
     private fun onBack() = navigationRouter.back()
 
     private fun onBookmarkClick(data: DetailedTransactionData) {
-        if (bookmarkJob?.isActive == true) return
-        val accountUuid = data.transaction.accountUuid ?: return
-        val token = data.metadata.bookmarkWriteToken ?: return
-        bookmarkJob = viewModelScope.launch {
-            setTransactionBookmark(data.transaction.id.txIdString(), !data.metadata.isBookmarked, accountUuid, token)
+        val accountUuid = data.transaction.accountUuid
+        val token = data.metadata.bookmarkWriteToken
+        if (bookmarkJob?.isActive != true && accountUuid != null && token != null) {
+            bookmarkJob = viewModelScope.launch {
+                setTransactionBookmark(data.transaction.id.txIdString(), !data.metadata.isBookmarked, accountUuid, token)
+            }
         }
     }
 }

@@ -59,7 +59,8 @@ class ZashiProposalRepositoryTest {
             override val deadline: Instant get() = currentDeadline
         }
         val reviewed = ExactInputSwapTransactionProposal(
-            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""), mockk<Proposal>(), quote
+            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
+            mockk<Proposal>(), quote, mockk(),
         )
         repository.transactionProposal.value = reviewed
         coEvery { keys.getZashiSpendingKey() } answers {
@@ -92,7 +93,8 @@ class ZashiProposalRepositoryTest {
     @Test
     fun reviewedSwapCannotSubmitAReplacementFromTheRepository() = runBlocking {
         val reviewed = ExactInputSwapTransactionProposal(
-            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""), mockk<Proposal>(), quote()
+            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
+            mockk<Proposal>(), quote(), mockk(),
         )
         repository.transactionProposal.value = RegularTransactionProposal(
             WalletAddress.Unified.new("synthetic-recipient"), Zatoshi(1), Memo(""), mockk<Proposal>()
@@ -111,14 +113,18 @@ class ZashiProposalRepositoryTest {
         val expected = SubmitResult.Success(listOf("synthetic-tx"))
         repository.transactionProposal.value = reviewed
         coEvery { keys.getZashiSpendingKey() } returns key
-        coEvery { metadata.getSwapMetadata(any()) } returns null
-        coEvery { metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any()) } returns true
+        coEvery { metadata.getSwapMetadata(any(), any()) } returns null
+        coEvery {
+            metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any())
+        } returns true
         coEvery { proposals.submitTransaction(reviewed.proposal, key, any()) } returns expected
 
         assertEquals(expected, repository.submit(reviewed))
 
         coVerifyOrder {
-            metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            metadata.markTxAsSwap(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+            )
             proposals.submitTransaction(reviewed.proposal, key, any())
         }
     }
@@ -128,11 +134,13 @@ class ZashiProposalRepositoryTest {
         val reviewed = swapProposal()
         repository.transactionProposal.value = reviewed
         coEvery { keys.getZashiSpendingKey() } returns mockk()
-        coEvery { metadata.getSwapMetadata(any()) } returns null
+        coEvery { metadata.getSwapMetadata(any(), any()) } returns null
         val trackingStarted = CompletableDeferred<Unit>()
         val finishTracking = CompletableDeferred<Unit>()
         coEvery {
-            metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+            metadata.markTxAsSwap(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+            )
         } coAnswers {
             trackingStarted.complete(Unit)
             finishTracking.await()
@@ -158,7 +166,8 @@ class ZashiProposalRepositoryTest {
         Zatoshi(100000000),
         Memo(""),
         mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(1000) },
-        quote()
+        quote(),
+        mockk(),
     )
 
     private fun quote() = FakeSwapQuote(

@@ -479,9 +479,9 @@ private data class ExactOutputInternalState(
     fun getZatoshi(): Zatoshi? = getZec()?.convertZecToZatoshi()
 
     fun getZec(): BigDecimal? {
-        val amount = getOriginFiatAmount() ?: return null
-        val zecPrice = swapAssets.zecAsset.positiveUsdPrice ?: return null
-        return amount.divide(zecPrice, MathContext.DECIMAL128)
+        val amount = getOriginFiatAmount()
+        val zecPrice = swapAssets.zecAsset.positiveUsdPrice
+        return if (amount == null || zecPrice == null) null else amount.divide(zecPrice, MathContext.DECIMAL128)
     }
 }
 

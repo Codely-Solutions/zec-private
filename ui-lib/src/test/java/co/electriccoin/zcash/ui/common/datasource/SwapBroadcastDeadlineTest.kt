@@ -99,7 +99,9 @@ class SwapBroadcastDeadlineTest {
                 coVerify(exactly = 1) { fixture.broadcaster.submit(transaction, any()) }
             }
             coVerify(exactly = 1) {
-                fixture.metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+                fixture.metadata.markTxAsSwap(
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+                )
             }
         }
     }
@@ -138,9 +140,11 @@ class SwapBroadcastDeadlineTest {
         private lateinit var reviewed: ExactInputSwapTransactionProposal
 
         init {
-            coEvery { metadata.getSwapMetadata(any()) } returns null
+            coEvery { metadata.getSwapMetadata(any(), any()) } returns null
             coEvery {
-                metadata.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any())
+                metadata.markTxAsSwap(
+                    any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+                )
             } returns true
             coEvery { broadcaster.createProposedTransactions(any(), any()) } coAnswers {
                 if (!pauseEndpoints) pause()
@@ -168,7 +172,7 @@ class SwapBroadcastDeadlineTest {
             }
             reviewed = ExactInputSwapTransactionProposal(
                 WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
-                mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(1000) }, reviewedQuote
+                mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(1000) }, reviewedQuote, mockk()
             )
             if (hardware) {
                 keystone.transactionProposal.value = reviewed

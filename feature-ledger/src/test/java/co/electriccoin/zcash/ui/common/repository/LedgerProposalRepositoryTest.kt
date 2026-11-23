@@ -74,7 +74,8 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             override val deadline: Instant get() = currentDeadline
         }
         val approved = ExactInputSwapTransactionProposal(
-            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""), mockk<Proposal>(), quote
+            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
+            mockk<Proposal>(), quote, ledgerAccount(),
         )
         givenPczt(ledgerAccount(), proposal = approved)
         repository.startSigning()
@@ -113,7 +114,8 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
             override val deadline: Instant get() = currentDeadline
         }
         val approved = ExactInputSwapTransactionProposal(
-            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""), mockk<Proposal>(), quote
+            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
+            mockk<Proposal>(), quote, ledgerAccount(),
         )
         givenPczt(ledgerAccount(), proofsGate = proofsGate, proposal = approved)
         repository.startSigning()
@@ -325,7 +327,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
     @Test
     fun cancelBeforeDeviceSigningAllowsReapprovalWithoutReservingFunding() = runTest(dispatcher) {
         val reviewed = ExactInputSwapTransactionProposal(
-            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100), Memo(""), mockk(), mockk()
+            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100), Memo(""), mockk(), mockk(), ledgerAccount()
         )
         givenPczt(ledgerAccount(), proposal = reviewed)
         repository.startSigning()

@@ -95,7 +95,10 @@ class KeystoneEnrollmentSavedStateTest {
             assertNull(recreatedProcess.resolve(selection.sessionId))
             restored.returnToKeystoneScanner()
 
-            assertEquals(ScanKeystoneSignInRequest, restored.currentBackStackEntry?.toRoute<ScanKeystoneSignInRequest>())
+            assertEquals(
+                ScanKeystoneSignInRequest,
+                restored.currentBackStackEntry?.toRoute<ScanKeystoneSignInRequest>()
+            )
             assertEquals(HomeArgs, restored.previousBackStackEntry?.toRoute<HomeArgs>())
 
             scanner.close()

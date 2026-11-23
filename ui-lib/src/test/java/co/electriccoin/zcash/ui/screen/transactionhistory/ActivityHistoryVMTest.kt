@@ -168,8 +168,8 @@ class ActivityHistoryVMTest {
         assertFalse(row.isUnread)
         assertFalse(row.isShielded)
         val value = assertIs<StyledStringResource.ByStringResource>(row.value)
-        // The standalone incoming row uses the expected ZEC output, never a wallet debit or its fee.
-        assertEquals(stringResByCurrencyNumber(BigDecimal("1.23456789"), CURRENCY_TICKER), value.resource)
+        val savedAmount = stringResByCurrencyNumber(BigDecimal("1.23456789"), CURRENCY_TICKER)
+        assertEquals(stringRes(R.string.private_activity_saved_amount, savedAmount), value.resource)
         assertEquals(color, value.style.color)
 
         row.onClick()

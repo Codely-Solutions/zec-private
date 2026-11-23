@@ -137,6 +137,7 @@ class SwapQuoteVMMapperTest {
             memo = Memo(""),
             proposal = mockk<Proposal> { every { totalFeeRequired() } returns fee },
             quote = quote,
+            fundingAccount = mockk(),
         )
         var continued = false
         val state = mapper.createState(

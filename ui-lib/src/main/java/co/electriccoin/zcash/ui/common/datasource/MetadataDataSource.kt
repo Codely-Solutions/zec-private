@@ -332,7 +332,9 @@ class MetadataDataSourceImpl(
                         statusUpdatedAt = statusUpdatedAt,
                         exactInput = if (current.reviewedIdentity == null) mode == EXACT_INPUT else current.exactInput,
                         fromAsset = MetadataSimpleSwapAssetV3(token = origin.tokenTicker, chain = origin.chainTicker),
-                        toAsset = MetadataSimpleSwapAssetV3(token = destination.tokenTicker, chain = destination.chainTicker),
+                        toAsset = MetadataSimpleSwapAssetV3(
+                            token = destination.tokenTicker, chain = destination.chainTicker
+                        ),
                     ).withOutput(
                         quoted = current.quotedAmountOut ?: amountOutFormatted,
                         executed = executedAmountOut ?: current.executedAmountOut,
@@ -913,9 +915,14 @@ private fun SwapMetadataV3.mergeStatus(candidate: SwapMetadataV3): SwapMetadataV
     if (reviewedIdentity != candidate.reviewedIdentity || provider != candidate.provider ||
         fromAsset != candidate.fromAsset || toAsset != candidate.toAsset
     ) return this
-    val newer = candidate.status != null && candidate.statusUpdatedAt != null &&
-        (statusUpdatedAt == null || candidate.statusUpdatedAt > statusUpdatedAt) &&
-        acceptsStatus(candidate.status, candidate.statusUpdatedAt, candidate.executedAmountOut)
+    val candidateStatus = candidate.status
+    val candidateUpdatedAt = candidate.statusUpdatedAt
+    val newer = if (candidateStatus == null || candidateUpdatedAt == null) {
+        false
+    } else {
+        (statusUpdatedAt == null || candidateUpdatedAt > statusUpdatedAt) &&
+            acceptsStatus(candidateStatus, candidateUpdatedAt, candidate.executedAmountOut)
+    }
     val preferred = if (newer) candidate else this
     val earlier = if (newer) this else candidate
     return preferred.withOutput(

@@ -183,9 +183,13 @@ class MetadataRepositoryImpl(
     ): Boolean {
         if (token != walletWriteAccess.token()) return false
         val account = accountDataSource.allAccounts.value
-            ?.firstOrNull { it.sdkAccount.accountUuid == accountUuid } ?: return false
-        return updateMetadataAndAwait(account, token) { key ->
-            metadataDataSource.setTxBookmark(txId, isBookmarked, key)
+            ?.firstOrNull { it.sdkAccount.accountUuid == accountUuid }
+        return if (account == null) {
+            false
+        } else {
+            updateMetadataAndAwait(account, token) { key ->
+                metadataDataSource.setTxBookmark(txId, isBookmarked, key)
+            }
         }
     }
 
@@ -238,7 +242,10 @@ class MetadataRepositoryImpl(
         )
     }
 
-    override suspend fun updateSwap(expected: TransactionSwapMetadata, result: SwapQuoteStatus): TransactionSwapMetadata? {
+    override suspend fun updateSwap(
+        expected: TransactionSwapMetadata,
+        result: SwapQuoteStatus,
+    ): TransactionSwapMetadata? {
         val account = expected.ownerAccount
         val token = expected.walletWriteToken
         if (account == null || token == null) return null
