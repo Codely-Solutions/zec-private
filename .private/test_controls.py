@@ -111,8 +111,12 @@ for clear in (False, True):
             for before, after, expected in (
                 ('requestFreshAddress(canNavigateToSwapQuote) ?: return@runRequest',
                  'requestFreshAddress(canNavigateToSwapQuote)!!', 'Fresh shielded recipient/refund derivation changed'),
-                ('requestNextShieldedAddress(requireFresh = true)',
-                 'requestNextShieldedAddress(requireFresh = false)', 'Swap address requests may fall back to an existing address'),
+                ('requestFreshAddress(canNavigateToSwapQuote, owner.account) ?: return@runRequest',
+                 'requestFreshAddress(canNavigateToSwapQuote) ?: return@runRequest',
+                 'Fresh shielded recipient/refund derivation changed'),
+                ('requestNextShieldedAddress(requireFresh = true, account = account)',
+                 'requestNextShieldedAddress(requireFresh = false, account = account)',
+                 'Swap address requests may fall back to an existing address'),
             ):
                 with self.subTest(expected=expected):
                     p.write_text(original.replace(before,after,1))

@@ -205,14 +205,18 @@ def main(message):
         if recovery:
             history = recent_recoveries(history, [revision])
             if number is not None:
-                exact = [match for state, match in blockers.values()
-                         if run_order(revision) >= run_order(state) and matches_recovery(state, revision)]
-                if exact:
+                def covered(state, saved):
+                    return run_order(saved) >= run_order(state) and matches_recovery(state, saved)
+
+                if any(covered(state, revision) for state, _ in blockers.values()):
                     gh('issue', 'comment', str(number), '--repo', repo, '--body',
                        'Verified recovery: '+message+'\nWorkflow evidence: '+evidence)
+                    current = json.loads(gh('issue', 'view', str(number), '--repo', repo, '--json', 'body,state'))
+                    body = current.get('body') or ''
+                    blockers = current_blockers(body)
+                    history = recent_recoveries(history, recovery_history(body))
                 resolved = [match for state, match in blockers.values()
-                            if match in exact or any(run_order(saved) >= run_order(state)
-                                                     and matches_recovery(state, saved) for saved in history)]
+                            if any(covered(state, saved) for saved in [revision, *history])]
                 updated = body
                 for match in sorted(resolved, key=lambda match: match.start(), reverse=True):
                     updated = updated[:match.start()]+updated[match.end():]

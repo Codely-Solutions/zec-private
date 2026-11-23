@@ -152,6 +152,12 @@ class MaintenanceWatchTest(unittest.TestCase):
                 self.assertIn('    branches: [main]', header)
                 self.assertEqual(group, evaluate_expression(settings['group'], {'github.ref': 'refs/tags/example'}))
                 self.assertIn('    needs: '+entry, jobs['submit' if entry == 'resolve' else 'store'])
+                if entry == 'select':
+                    self.assertIn('  schedule:', header)
+                main_values = {'github.ref': main, 'github.repository': 'Codely-Solutions/zec-private'}
+                self.assertTrue(evaluate_expression(admission, main_values))
+                pending[evaluate_expression(settings['group'], main_values)] = 'later-main'
+                self.assertEqual(pending[main_group], 'later-main')
 
     def test_graph_push_filters_and_classifier_cover_retained_lockfiles(self):
         repository = Path(__file__).resolve().parents[1]

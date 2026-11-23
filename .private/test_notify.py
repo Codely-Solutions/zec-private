@@ -146,6 +146,21 @@ class NotifyTest(unittest.TestCase):
                 self.assertNotIn(notify.START, self.closed[0]['body'])
                 self.assertEqual(self.messages, [])
 
+    def test_operator_text_written_during_the_recovery_comment_survives(self):
+        self.run_notice(NTFY_URL='')
+        call = self.gh
+
+        def add_note(*args):
+            result = call(*args)
+            if args[:2] == ('issue', 'comment'):
+                self.issue['body'] += '\n\nNew operator note.'
+            return result
+
+        with patch.object(self, 'gh', side_effect=add_note):
+            self.run_notice('Verified', GITHUB_RUN_ID='21', MAKE_ISSUE='', RECOVERY_VERIFIED='true', NTFY_URL='')
+        self.assertIsNone(self.issue)
+        self.assertIn('New operator note.', self.closed[0]['body'])
+
     def test_first_blocker_creates_one_issue_with_exact_body_file(self):
         self.issue = None
         self.run_notice(message='Blocked\nwith literal `text` and $content')
