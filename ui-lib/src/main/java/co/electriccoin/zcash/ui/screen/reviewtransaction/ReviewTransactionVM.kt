@@ -50,6 +50,18 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+internal fun unavailableReview(onBack: () -> Unit) = ReviewTransactionState(
+    title = stringRes(R.string.send_review),
+    items = listOf(
+        MessageState(
+            title = stringRes(R.string.private_review_unavailable_title),
+            message = stringRes(R.string.private_review_unavailable_message),
+        )
+    ),
+    primaryButton = ButtonState(text = stringRes(R.string.general_back), onClick = onBack),
+    onBack = onBack,
+)
+
 class ReviewTransactionVM(
     getWalletAccounts: GetWalletAccountsUseCase,
     observeContactByAddress: ObserveContactByAddressUseCase,
@@ -125,24 +137,13 @@ class ReviewTransactionVM(
 
     val state =
         combine(baseState, orchardWarningSheet) { base, sheet ->
-            base?.copy(orchardWarningSheet = sheet) ?: unavailableReview()
+            base?.copy(orchardWarningSheet = sheet) ?: unavailableReview(navigationRouter::back)
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
             initialValue = null
         )
 
-    private fun unavailableReview() = ReviewTransactionState(
-        title = stringRes(R.string.send_review),
-        items = listOf(
-            MessageState(
-                title = stringRes(R.string.private_review_unavailable_title),
-                message = stringRes(R.string.private_review_unavailable_message),
-            )
-        ),
-        primaryButton = ButtonState(text = stringRes(R.string.general_back), onClick = navigationRouter::back),
-        onBack = navigationRouter::back,
-    )
 
     private var onConfirmClickJob: Job? = null
 

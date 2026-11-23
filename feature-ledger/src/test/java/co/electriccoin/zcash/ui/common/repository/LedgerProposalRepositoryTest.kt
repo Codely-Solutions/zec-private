@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuote
+import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import io.mockk.clearMocks
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -28,6 +29,8 @@ import io.mockk.slot
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -53,6 +56,22 @@ import java.math.BigDecimal
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+    @Test
+    fun recreatedLedgerRepositoryPublishesMissingProposalToReview() = runTest(dispatcher) {
+        val account = ledgerAccount()
+        every { accountDataSource.selectedAccount } returns flowOf(account)
+        givenPczt(account)
+        val oldReview = ObserveProposalUseCase(mockk(), repository, mockk(), accountDataSource)
+        assertNotNull(oldReview.observeNullable().first())
+
+        val recreated = LedgerProposalRepositoryImpl(
+            accountDataSource, proposalDataSource, ledgerDeviceDataSource, ledgerSigningDataSource,
+            processSwapTransaction,
+        )
+        val restoredReview = ObserveProposalUseCase(mockk(), recreated, mockk(), accountDataSource)
+        assertNull(restoredReview.observeNullable().first())
+    }
+
     @Test
     fun quoteExpiryDuringPcztTransactionCreationReachesTheFinalFundingGuard() = runTest(dispatcher) {
         every { ledgerSigningDataSource.isLinked } returns true

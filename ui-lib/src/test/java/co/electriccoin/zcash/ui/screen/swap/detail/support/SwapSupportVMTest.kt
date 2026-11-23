@@ -15,6 +15,9 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
+import co.electriccoin.zcash.ui.screen.swap.mismatch.SwapQuoteMismatchArgs
+import co.electriccoin.zcash.ui.screen.swap.mismatch.SwapQuoteMismatchVM
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
 import co.electriccoin.zcash.ui.common.model.near.syntheticSignedQuote
@@ -273,6 +276,50 @@ class SwapSupportVMTest {
             verify(exactly = 0) { navigation.back() }
         } finally {
             subscription.cancel()
+            vm.viewModelScope.cancel()
+        }
+    }
+
+    @Test
+    fun mismatchReportUsesTheSameFinalChooserGuard() = runTest {
+        val application = RuntimeEnvironment.getApplication()
+        val resume = CompletableDeferred<Unit>()
+        val diagnostics = mockk<GetSupportUseCase> {
+            coEvery { this@mockk() } coAnswers {
+                resume.await()
+                mockk<SupportInfo> { every { toSupportString(any()) } returns "Synthetic diagnostics" }
+            }
+        }
+        val session = AppAccessSession().apply { unlock() }
+        val navigation = mockk<NavigationRouter>(relaxed = true)
+        val vm = SwapQuoteMismatchVM(
+            SwapQuoteMismatchArgs(
+                provider = "near", mode = SwapMode.FLEX_INPUT,
+                originTokenTicker = "btc", originChainTicker = "btc",
+                destinationTokenTicker = "zec", destinationChainTicker = "zec",
+                mismatchType = SwapQuoteMismatchType.OUTPUT_AMOUNT, depositAddress = saved.depositAddress,
+            ),
+            navigation,
+            SendEmailUseCase(application, diagnostics, BlockchainProviderImpl(application)),
+            session,
+            WalletWriteAccess(),
+        )
+        try {
+            runCurrent()
+            requireNotNull(vm.state.value).reportButton.onClick()
+            runCurrent()
+            session.lock()
+            session.unlock()
+            resume.complete(Unit)
+            runCurrent()
+            assertNull(shadowOf(application).nextStartedActivity)
+            verify(exactly = 0) { navigation.back() }
+
+            requireNotNull(vm.state.value).reportButton.onClick()
+            runCurrent()
+            assertEquals(Intent.ACTION_CHOOSER, shadowOf(application).nextStartedActivity?.action)
+            verify(exactly = 1) { navigation.back() }
+        } finally {
             vm.viewModelScope.cancel()
         }
     }

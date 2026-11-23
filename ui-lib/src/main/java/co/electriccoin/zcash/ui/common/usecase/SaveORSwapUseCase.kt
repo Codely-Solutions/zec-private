@@ -20,11 +20,9 @@ class SaveORSwapUseCase(
     private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) {
     suspend operator fun invoke(expected: SwapQuoteData.Success) {
-        if (swapRepository.quote.value !== expected) return
-        persistBeforeFunding(expected.quote, expected.incomingOwner)
         if (swapRepository.quote.value !== expected || !isWalletCurrent(expected)) return
-        swapRepository.clear()
-        navigationRouter.backToRoot()
+        persistBeforeFunding(expected.quote, expected.incomingOwner)
+        if (isWalletCurrent(expected) && swapRepository.clearIfCurrent(expected)) navigationRouter.backToRoot()
     }
 
     internal fun isWalletCurrent(publication: SwapQuoteData.Success): Boolean =

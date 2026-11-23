@@ -205,7 +205,10 @@ class ORSwapConfirmationVMTest {
             every {
                 FileShareUtil.newShareContentIntent(context, any<File>(), any(), any(), any(), any())
             } returns intent
-            val vm = startedVm(shareQR = share, quotes = quotes, deadline = deadline) { clock.get() }
+            val stagingClock = object : Clock {
+                override fun now() = clock.get()
+            }
+            val vm = startedVm(shareQR = share, quotes = quotes, deadline = deadline, clock = stagingClock)
             requireNotNull(vm.state.value).shareButton.onClick()
 
             val allowed = change == StageChange.NONE

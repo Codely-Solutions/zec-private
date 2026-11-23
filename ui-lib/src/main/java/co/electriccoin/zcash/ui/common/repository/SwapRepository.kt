@@ -95,6 +95,8 @@ interface SwapRepository {
 
     fun clear()
 
+    fun clearIfCurrent(expected: SwapQuoteData.Success): Boolean
+
     fun clearQuote()
 
     /** Admit only the current request after its local funding preparation succeeds. */
@@ -575,6 +577,12 @@ class SwapRepositoryImpl(
             if (it.data == null) SwapAssetsData() else it.copy(isLoading = false, error = null)
         }
         clearQuote()
+    }
+
+    override fun clearIfCurrent(expected: SwapQuoteData.Success): Boolean = synchronized(this) {
+        if (quote.value !== expected) return@synchronized false
+        clear()
+        true
     }
 
     /** Loading is visible before callers collect a result; old jobs cannot publish into a new request. */

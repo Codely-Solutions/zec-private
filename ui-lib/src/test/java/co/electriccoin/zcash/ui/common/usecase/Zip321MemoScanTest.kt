@@ -16,8 +16,10 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.ProposalDataSourceImpl
+import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.GiftCardLinkStoreImpl
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
@@ -42,6 +44,7 @@ import co.electriccoin.zcash.ui.screen.scan.ScanFlow
 import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
 import co.electriccoin.zcash.ui.screen.scan.ScanZashiAddressVM
 import co.electriccoin.zcash.ui.screen.send.Send
+import co.electriccoin.zcash.ui.screen.texunsupported.TEXUnsupportedArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -76,6 +79,9 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+
+@kotlinx.serialization.Serializable
+private data object ScanTestHome
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -205,6 +211,44 @@ class Zip321MemoScanTest {
             assertEquals(ReviewTransactionArgs, restored.currentBackStackEntry?.toRoute<ReviewTransactionArgs>())
             state.primaryButton.onClick()
             assertEquals(Send(), restored.currentBackStackEntry?.toRoute<Send>())
+        } finally {
+            store.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun restoredHomeScanReturnsToHomeForMissingHardwareProposals() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            for (hardware in listOf(EditAccountFixtures.keystone(), EditAccountFixtures.ledger())) {
+                every { accounts.selectedAccount } returns flowOf(hardware)
+                val navigation = sendNavigationController().apply {
+                    graph = createGraph(startDestination = ScanTestHome) {
+                        composable<ScanTestHome> { }
+                        composable<ReviewTransactionArgs> { }
+                    }
+                    navigate(ReviewTransactionArgs)
+                }
+                val recoveryRouter = mockk<NavigationRouter> {
+                    every { back() } answers { check(navigation.popBackStack()) }
+                }
+                val vm = newReviewVM(
+                    repository,
+                    recoveryRouter,
+                    KeystoneProposalRepositoryImpl(accounts, proposalDataSource, mockk(), mockk()),
+                    mockk { every { transactionProposal } returns MutableStateFlow(null) },
+                )
+                store.put("hardware-review", vm)
+                val watcher = backgroundScope.launch { vm.state.collect {} }
+                runCurrent()
+                val state = assertNotNull(vm.state.value)
+                assertIs<MessageState>(state.items.single())
+                state.onBack()
+                assertEquals(ScanTestHome, navigation.currentBackStackEntry?.toRoute<ScanTestHome>())
+                watcher.cancel()
+            }
         } finally {
             store.clear()
             Dispatchers.resetMain()
@@ -343,6 +387,51 @@ class Zip321MemoScanTest {
     }
 
     @Test
+    fun retryAfterHardwareTexOverlayCanEnterReviewWithTheSameScanner() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        val store = ViewModelStore()
+        try {
+            val uri = fixture.uri(fixture.binary)
+            coEvery { synchronizer.validateAddress(uri) } returns AddressType.Invalid("A payment URI")
+            var selected: WalletAccount = EditAccountFixtures.keystone()
+            coEvery { accounts.getSelectedAccount() } answers { selected }
+            val hardwareScan = OnZip321ScannedUseCase(
+                keystoneProposalRepository = mockk {
+                    coEvery { createZip321Proposal(uri) } throws TexUnsupportedOnKSException()
+                    every { clear() } returns Unit
+                },
+                ledgerProposalPipeline = mockk(relaxed = true),
+                zashiProposalRepository = repository,
+                accountDataSource = accounts,
+                navigationRouter = router,
+                prefillSend = prefill,
+                navigateToErrorUseCase = error,
+            )
+            val scanner = ScanZashiAddressVM(
+                ScanArgs(ScanFlow.SEND), provider, Zip321ParseUriValidationUseCase(provider),
+                OnAddressScannedUseCase(router, prefill, mockk()), hardwareScan,
+                navigateToRedeemGiftCard(GiftCardLinkStoreImpl(), router),
+            )
+            store.put("scanner", scanner)
+            scanner.onImageScanned(ImageToQrCodeResult.SingleCode(uri)).join()
+            runCurrent()
+            scanner.onScanned(uri).join()
+            verify(exactly = 1) { router.forward(TEXUnsupportedArgs(isLedger = false)) }
+            verify(exactly = 0) { router.replace(ReviewTransactionArgs) }
+
+            selected = account
+            scanner.onResumed()
+            scanner.onScanned(uri).join()
+            scanner.onScanned(uri).join()
+            verify(exactly = 1) { router.replace(ReviewTransactionArgs) }
+            assertNotNull(repository.transactionProposal.value)
+        } finally {
+            store.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun directPrefillRefusesNonTextAndKeepsStrictPaddedText() = runBlocking {
         for (bytes in listOf(fixture.binary, fixture.invalidUtf8)) {
             val request = parse(bytes)
@@ -387,9 +476,9 @@ class Zip321MemoScanTest {
     private fun newReviewVM(
         repository: ZashiProposalRepositoryImpl,
         reviewRouter: NavigationRouter = router,
+        keystone: KeystoneProposalRepository = mockk(),
+        ledger: LedgerProposalPipeline = mockk(),
     ): ReviewTransactionVM {
-        val keystone = mockk<KeystoneProposalRepository>()
-        val ledger = mockk<LedgerProposalPipeline>()
         val observeProposal = ObserveProposalUseCase(keystone, ledger, repository, accounts)
         return ReviewTransactionVM(
             getWalletAccounts = GetWalletAccountsUseCase(accounts),
