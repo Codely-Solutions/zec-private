@@ -4,6 +4,7 @@ import android.content.Context
 import cash.z.ecc.android.sdk.ext.convertUsdToZec
 import cash.z.ecc.android.sdk.ext.convertZecToZatoshi
 import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
+import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.Memo
 import cash.z.ecc.sdk.extension.floor
 import co.electriccoin.zcash.ui.design.util.TickerLocation
@@ -23,7 +24,8 @@ data class Request(
 data class AmountState(
     val amount: String,
     val currency: RequestCurrency,
-    val isValid: Boolean?
+    val isValid: Boolean?,
+    val fiatCurrency: FiatCurrency? = null,
 ) {
     fun toZecString(conversion: FiatCurrencyConversion, context: Context): String =
         stringResByNumber(

@@ -24,7 +24,12 @@ internal sealed class RequestState {
         val onSwitch: (RequestCurrency) -> Unit,
         override val onBack: () -> Unit,
         val onDone: () -> Unit,
-    ) : Prepared(onBack)
+    ) : Prepared(onBack) {
+        val canContinue: Boolean
+            get() = request.amountState.isValid == true &&
+                (request.amountState.currency == RequestCurrency.ZEC ||
+                    (exchangeRateState as? ExchangeRateState.Data)?.currencyConversion != null)
+    }
 
     data class Memo(
         val icon: ImageResource,

@@ -15,6 +15,7 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.design.util.ImageResource
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
+import co.electriccoin.zcash.ui.screen.request.model.OnAmount
 import co.electriccoin.zcash.ui.screen.request.model.RequestState
 import io.mockk.every
 import io.mockk.mockk
@@ -109,6 +110,7 @@ class RequestVMTest {
             )
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
 
+        assertIs<RequestState.Amount>(vm.state.value).onAmount(OnAmount.Number(1))
         assertIs<RequestState.Amount>(vm.state.value).onDone()
 
         return assertIs<RequestState.Memo>(vm.state.value).icon

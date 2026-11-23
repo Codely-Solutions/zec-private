@@ -5,10 +5,8 @@ import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.LceState
-import co.electriccoin.zcash.ui.common.model.groupLce
 import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.model.stateIn
-import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.common.usecase.ConfirmResyncUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetResyncDataFromHeightUseCase
@@ -23,8 +21,6 @@ import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.resync.date.ResyncDateArgs
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.mapNotNull
 import java.time.YearMonth
 import java.util.UUID
 
@@ -35,30 +31,29 @@ class ResyncConfirmVM(
     private val getResyncDataFromHeight: GetResyncDataFromHeightUseCase,
     private val errorStateMapper: ResyncErrorMapperUseCase,
 ) : ViewModel() {
-    private val initLce = mutableLce<BlockHeight>()
+    private val initLce = mutableLce<Pair<BlockHeight, YearMonth>>()
     private val confirmLce = mutableLce<Unit>()
 
     init {
         initLce.execute {
-            persistableWalletProvider.requirePersistableWallet().birthday ?: error("Wallet birthday is null")
+            val height = persistableWalletProvider.requirePersistableWallet().birthday ?: error("Wallet birthday is null")
+            height to getResyncDataFromHeight(height)
         }
     }
-
-    private val yearMonthFlow =
-        initLce.state
-            .mapNotNull { it.success }
-            .map { getResyncDataFromHeight(it) }
 
     val state: StateFlow<LceState<ResyncConfirmState>> =
         combine(
             initLce.state,
-            yearMonthFlow,
             confirmLce.state,
-        ) { init, yearMonth, confirm ->
-            val height = init.success ?: return@combine null
-            createState(height = height, yearMonth = yearMonth, isLoading = confirm.loading)
-        }.withLce(groupLce(initLce, confirmLce), errorStateMapper::mapToState)
-            .stateIn(this)
+        ) { init, confirm ->
+            LceState(
+                content = init.success?.let { (height, yearMonth) ->
+                    createState(height = height, yearMonth = yearMonth, isLoading = confirm.loading)
+                },
+                isLoading = init.loading || confirm.loading,
+                error = (init.error ?: confirm.error)?.let(errorStateMapper::mapToState),
+            )
+        }.stateIn(this)
 
     private fun createState(
         height: BlockHeight,

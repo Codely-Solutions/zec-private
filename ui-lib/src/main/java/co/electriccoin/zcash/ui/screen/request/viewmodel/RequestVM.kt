@@ -46,7 +46,7 @@ import java.text.DecimalFormatSymbols
 class RequestVM(
     private val addressTypeOrdinal: Int,
     private val application: Application,
-    exchangeRateRepository: ExchangeRateRepository,
+    private val exchangeRateRepository: ExchangeRateRepository,
     getZcashCurrency: GetZcashCurrencyProvider,
     zip321BuildUriUseCase: Zip321BuildUriUseCase,
     observeSelectedWalletAccount: ObserveSelectedWalletAccountUseCase,
@@ -103,12 +103,12 @@ class RequestVM(
                 RequestStage.AMOUNT -> {
                     RequestState.Amount(
                         request = request,
-                        exchangeRateState = exchangeRateUsd,
+                        exchangeRateState = displayRate(request.amountState, exchangeRateUsd),
                         zcashCurrency = getZcashCurrency(),
                         onAmount = { onAmount(resolveExchangeRateValue(exchangeRateUsd), it) },
-                        onSwitch = { onSwitch(resolveExchangeRateValue(exchangeRateUsd), it) },
+                        onSwitch = { onSwitch(resolveExchangeRateValue(exchangeRateRepository.state.value), it) },
                         onBack = { onBack() },
-                    ) { onNextClick(walletAddress, zip321BuildUriUseCase, exchangeRateUsd) }
+                    ) { onNextClick(walletAddress, zip321BuildUriUseCase) }
                 }
 
                 RequestStage.MEMO -> {
@@ -170,19 +170,26 @@ class RequestVM(
     private fun onNextClick(
         walletAddress: WalletAddress,
         zip321BuildUriUseCase: Zip321BuildUriUseCase,
-        exchangeRateUsd: ExchangeRateState
     ) {
+        if (stage.value != RequestStage.AMOUNT) return
+        val amount = request.value.amountState
+        if (amount.isValid != true) return
+        val conversion = resolveExchangeRateValue(displayRate(amount, exchangeRateRepository.state.value))
+        val zecAmount = when (amount.currency) {
+            RequestCurrency.ZEC -> amount.amount
+            RequestCurrency.FIAT -> conversion?.let { amount.toZecStringFloored(it, application) } ?: return
+        }
         when (walletAddress) {
             is WalletAddress.Transparent -> {
                 onAmountAndMemoDone(
                     walletAddress.address,
                     zip321BuildUriUseCase,
-                    resolveExchangeRateValue(exchangeRateUsd)
+                    zecAmount
                 )
             }
 
             is WalletAddress.Unified, is WalletAddress.Sapling -> {
-                onAmountDone(resolveExchangeRateValue(exchangeRateUsd))
+                onAmountDone(zecAmount)
             }
 
             else -> {
@@ -191,23 +198,23 @@ class RequestVM(
         }
     }
 
-    private fun resolveExchangeRateValue(exchangeRateUsd: ExchangeRateState): FiatCurrencyConversion? =
-        when (exchangeRateUsd) {
-            is ExchangeRateState.Data -> {
-                if (exchangeRateUsd.currencyConversion == null) {
-                    Twig.warn { "Currency conversion is currently not available" }
-                    null
-                } else {
-                    exchangeRateUsd.currencyConversion
-                }
-            }
-
-            else -> {
-                // Should not happen as the conversion rate related use cases should not be available
-                Twig.error { "Unexpected screen state" }
-                null
-            }
+    private fun resolveExchangeRateValue(state: ExchangeRateState): FiatCurrencyConversion? =
+        (state as? ExchangeRateState.Data)?.currencyConversion?.takeIf {
+            it.priceOfZec.isFinite() && it.priceOfZec > 0 && it.fiatCurrency == state.expectedCurrency
         }
+
+    private fun displayRate(amount: AmountState, state: ExchangeRateState): ExchangeRateState {
+        val conversion = resolveExchangeRateValue(state)
+        if (amount.currency == RequestCurrency.ZEC) {
+            return (state as? ExchangeRateState.Data)?.copy(currencyConversion = conversion) ?: state
+        }
+        val currency = amount.fiatCurrency ?: return ExchangeRateState.OptedOut
+        val data = state as? ExchangeRateState.Data ?: ExchangeRateState.Data(onRefresh = {})
+        return data.copy(
+            expectedCurrency = currency,
+            currencyConversion = conversion?.takeIf { it.fiatCurrency == currency },
+        )
+    }
 
     private fun onAmount(conversion: FiatCurrencyConversion?, onAmount: OnAmount) {
         request.update {
@@ -232,6 +239,7 @@ class RequestVM(
                             AmountState(
                                 amount = defaultAmount,
                                 currency = it.amountState.currency,
+                                fiatCurrency = it.amountState.fiatCurrency,
                                 isValid = null
                             )
                         } else {
@@ -300,8 +308,10 @@ class RequestVM(
                 )
             }
 
-        // Check for max Zcash supply
-        return newAmount.amount
+        val boundAmount = newAmount.copy(fiatCurrency = request.value.amountState.fiatCurrency)
+        // A missing fiat conversion never changes the unit of the input.
+        if (newAmount.currency == RequestCurrency.FIAT && conversion == null) return boundAmount
+        return boundAmount.amount
             .toBigDecimalLocalized()
             ?.let { currentValue ->
                 val zecValue =
@@ -311,11 +321,11 @@ class RequestVM(
                         currentValue
                     }
                 if (zecValue > MAX_ZCASH_SUPPLY.toBigDecimal()) {
-                    newAmount.copy(amount = request.value.amountState.amount)
+                    boundAmount.copy(amount = request.value.amountState.amount)
                 } else {
-                    newAmount
+                    boundAmount
                 }
-            } ?: newAmount
+            } ?: boundAmount
     }
 
     internal fun onBack() {
@@ -339,29 +349,8 @@ class RequestVM(
 
     private fun onClose() = navigationRouter.back()
 
-    private fun onAmountDone(conversion: FiatCurrencyConversion?) {
-        request.update {
-            val memoAmount =
-                when (it.amountState.currency) {
-                    RequestCurrency.FIAT -> {
-                        if (conversion != null) {
-                            it.amountState.toZecStringFloored(
-                                conversion,
-                                application
-                            )
-                        } else {
-                            Twig.error { "Unexpected screen state" }
-                            it.amountState.amount
-                        }
-                    }
-
-                    RequestCurrency.ZEC -> {
-                        it.amountState.amount
-                    }
-                }
-
-            it.copy(memoState = MemoState.new(DEFAULT_MEMO, memoAmount))
-        }
+    private fun onAmountDone(zecAmount: String) {
+        request.update { it.copy(memoState = MemoState.new(DEFAULT_MEMO, zecAmount)) }
         stage.update { RequestStage.MEMO }
     }
 
@@ -388,27 +377,9 @@ class RequestVM(
     private fun onAmountAndMemoDone(
         address: String,
         zip321BuildUriUseCase: Zip321BuildUriUseCase,
-        conversion: FiatCurrencyConversion?
+        qrCodeAmount: String,
     ) {
         request.update {
-            val qrCodeAmount =
-                when (it.amountState.currency) {
-                    RequestCurrency.FIAT -> {
-                        if (conversion != null) {
-                            it.amountState.toZecStringFloored(
-                                conversion,
-                                application
-                            )
-                        } else {
-                            Twig.error { "Unexpected screen state" }
-                            it.amountState.amount
-                        }
-                    }
-
-                    RequestCurrency.ZEC -> {
-                        it.amountState.amount
-                    }
-                }
             it.copy(
                 qrCodeState =
                     QrCodeState(
@@ -432,7 +403,10 @@ class RequestVM(
         conversion: FiatCurrencyConversion?,
         onSwitchTo: RequestCurrency
     ) = viewModelScope.launch {
-        if (conversion == null) return@launch
+        if (stage.value != RequestStage.AMOUNT || conversion == null) return@launch
+        val amount = request.value.amountState
+        if (onSwitchTo == amount.currency) return@launch
+        if (amount.currency == RequestCurrency.FIAT && amount.fiatCurrency != conversion.fiatCurrency) return@launch
 
         request.update {
             val newAmount =
@@ -455,9 +429,9 @@ class RequestVM(
             it.copy(
                 amountState =
                     if (newAmount.contains(defaultAmountValidationRegex)) {
-                        it.amountState.copy(amount = defaultAmount, currency = onSwitchTo)
+                        it.amountState.copy(amount = defaultAmount, currency = onSwitchTo, fiatCurrency = conversion.fiatCurrency)
                     } else {
-                        it.amountState.copy(amount = newAmount, currency = onSwitchTo)
+                        it.amountState.copy(amount = newAmount, currency = onSwitchTo, fiatCurrency = conversion.fiatCurrency)
                     }
             )
         }

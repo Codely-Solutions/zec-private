@@ -120,11 +120,7 @@ private fun RequestAmountWithMainFiatView(
                 append("\u2009") // Add an extra thin space between the texts
                 withStyle(style = SpanStyle(color = ZashiColors.Text.textPrimary)) {
                     append(
-                        if (state.exchangeRateState.currencyConversion != null) {
-                            state.request.amountState.amount
-                        } else {
-                            stringResource(id = R.string.request_amount_empty)
-                        }
+                        state.request.amountState.amount
                     )
                 }
             }

@@ -171,7 +171,7 @@ private fun RequestBottomBar(
                 ZashiButton(
                     text = stringResource(id = R.string.general_next),
                     onClick = state.onDone,
-                    enabled = state.request.amountState.isValid == true,
+                    enabled = state.canContinue,
                     modifier =
                         Modifier
                             .fillMaxWidth()
