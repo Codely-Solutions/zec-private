@@ -64,7 +64,7 @@ class SwapDetailVM(
                                 swap = swapData.status,
                                 originAsset = swapData.status?.originAsset,
                                 destinationAsset = swapData.status?.destinationAsset,
-                                savedExecution = swapData.savedMetadata?.executedAmountOut,
+                                savedMetadata = swapData.savedMetadata,
                             ),
                     status =
                         TransactionDetailSwapStatusRowState(
@@ -242,6 +242,7 @@ class SwapDetailVM(
             amount =
                 (swapData.status?.executedAmountOut
                     ?: swapData.savedMetadata?.executedAmountOut
+                    ?: swapData.savedMetadata?.legacySuccessfulOutput
                     ?: swapData.status?.amountOutFormatted
                     ?: swapData.savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 })
                     ?.let { stringResByNumber(it) },
@@ -272,6 +273,7 @@ class SwapDetailVM(
             when {
                 swapData.status?.executedAmountOut != null -> R.string.private_provider_output
                 swapData.savedMetadata?.executedAmountOut != null -> R.string.private_saved_provider_output
+                swapData.savedMetadata?.legacySuccessfulOutput != null -> R.string.private_swap_saved_output
                 swapData.status != null || swapData.savedMetadata?.quotedAmountOut != null ->
                     R.string.private_estimated_output
                 else -> R.string.private_swap_saved_output

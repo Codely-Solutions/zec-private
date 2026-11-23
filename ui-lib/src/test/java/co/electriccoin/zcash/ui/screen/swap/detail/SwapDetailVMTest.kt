@@ -255,6 +255,29 @@ class SwapDetailVMTest {
     }
 
     @Test
+    fun sparseLiveQuoteDoesNotReplaceLegacySavedOutput() = runTest {
+        val original = BigDecimal("1.23456789")
+        val saved = saved(SwapStatus.SUCCESS).copy(amountOutFormatted = original)
+        val sparse = status(SwapStatus.SUCCESS)
+        every { sparse.executedAmountOut } returns null
+        val harness = harness(SwapQuoteStatusData(status = sparse, isLoading = false, savedMetadata = saved))
+        val detail = harness.state()
+        val savedOutput = stringRes(R.string.private_swap_saved_output)
+        assertEquals(savedOutput, detail.transactionHeader.title)
+        assertEquals(stringResByNumber(original), detail.transactionHeader.amount)
+        assertEquals(stringResByNumber(original), detail.quoteHeader.to?.amount)
+        assertEquals(stringRes(""), detail.quoteHeader.to?.fiatAmount)
+        assertEquals(sparse.destinationAsset.chainName + stringRes(" · ") + savedOutput, detail.quoteHeader.to?.chain)
+
+        val reported = BigDecimal("2.23456789")
+        val complete = status(SwapStatus.SUCCESS, output = reported)
+        harness.emit(SwapQuoteStatusData(status = complete, isLoading = false, savedMetadata = saved))
+        runCurrent()
+        assertEquals(stringRes(R.string.private_provider_output), harness.state().transactionHeader.title)
+        assertEquals(stringResByNumber(reported), harness.state().transactionHeader.amount)
+    }
+
+    @Test
     fun backRemainsAvailableWhileTheFirstStatusRequestIsLoading() = runTest {
         val harness = harness(SwapQuoteStatusData(isLoading = true))
 

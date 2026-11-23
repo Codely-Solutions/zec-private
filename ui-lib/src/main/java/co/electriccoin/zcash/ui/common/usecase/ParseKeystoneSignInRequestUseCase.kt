@@ -11,6 +11,7 @@ import co.electriccoin.zcash.ui.screen.selectkeystoneaccount.SelectKeystoneAccou
 import com.sparrowwallet.hummingbird.UR
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.UUID
 
 class ParseKeystoneSignInRequestUseCase(
     private val navigationRouter: NavigationRouter,
@@ -18,9 +19,18 @@ class ParseKeystoneSignInRequestUseCase(
     private val session: KeystoneEnrollmentSession,
 ) : BaseKeystoneScanner(keystoneSDKProvider) {
     private var sessionId: String? = null
+    private var presentationId: String? = null
     private var isClosed = false
 
-    override suspend fun onSuccess(ur: UR) {
+    internal fun beginPresentation(): String = UUID.randomUUID().toString().also { presentationId = it }
+
+    internal fun isCurrentPresentation(id: String): Boolean = !isClosed && presentationId == id
+
+    internal fun endPresentation(id: String) {
+        if (presentationId == id) presentationId = null
+    }
+
+    override suspend fun onSuccess(ur: UR, scanSessionId: String?) {
         val accounts =
             try {
                 keystoneSDKProvider.parseZcashAccounts(ur)
@@ -32,7 +42,9 @@ class ParseKeystoneSignInRequestUseCase(
         }
         withContext(Dispatchers.Main.immediate) {
             navigationRouter.custom { entry ->
-                if (isClosed || entry?.destination?.hasRoute<ScanKeystoneSignInRequest>() != true) {
+                if (scanSessionId == null || !isCurrentPresentation(scanSessionId) ||
+                    entry?.destination?.hasRoute<ScanKeystoneSignInRequest>() != true
+                ) {
                     null
                 } else {
                     val id = session.start(accounts)
@@ -45,6 +57,7 @@ class ParseKeystoneSignInRequestUseCase(
 
     internal fun close() {
         isClosed = true
+        presentationId = null
         sessionId?.let(session::clear)
         sessionId = null
     }

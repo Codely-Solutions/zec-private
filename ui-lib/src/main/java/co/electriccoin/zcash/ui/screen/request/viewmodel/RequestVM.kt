@@ -24,6 +24,7 @@ import co.electriccoin.zcash.ui.screen.qrcode.ext.fromReceiveAddressType
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
 import co.electriccoin.zcash.ui.screen.request.ext.toBigDecimalLocalized
 import co.electriccoin.zcash.ui.screen.request.model.AmountState
+import co.electriccoin.zcash.ui.screen.request.model.MAX_ZCASH_SUPPLY
 import co.electriccoin.zcash.ui.screen.request.model.MemoState
 import co.electriccoin.zcash.ui.screen.request.model.OnAmount
 import co.electriccoin.zcash.ui.screen.request.model.QrCodeState
@@ -55,7 +56,6 @@ class RequestVM(
     private val observeAccountIcon: ObserveAccountIconUseCase,
 ) : ViewModel() {
     companion object {
-        private const val MAX_ZCASH_SUPPLY = 21_000_000
         private const val DEFAULT_MEMO = ""
         private const val DEFAULT_URI = ""
     }
@@ -172,8 +172,8 @@ class RequestVM(
         zip321BuildUriUseCase: Zip321BuildUriUseCase,
     ) {
         val amount = request.value.amountState
-        if (stage.value != RequestStage.AMOUNT || amount.isValid != true) return
         val conversion = resolveExchangeRateValue(displayRate(amount, exchangeRateRepository.state.value))
+        if (stage.value != RequestStage.AMOUNT || amount.validZecAmount(conversion) == null) return
         val zecAmount = when (amount.currency) {
             RequestCurrency.ZEC -> amount.amount
             RequestCurrency.FIAT -> conversion?.let { amount.toZecStringFloored(it, application) } ?: return
@@ -313,7 +313,9 @@ class RequestVM(
 
         val boundAmount = newAmount.copy(fiatCurrency = request.value.amountState.fiatCurrency)
         // A missing fiat conversion never changes the unit of the input.
-        if (newAmount.currency == RequestCurrency.FIAT && conversion == null) return boundAmount
+        if (newAmount.currency == RequestCurrency.FIAT &&
+            (conversion == null || conversion.fiatCurrency != boundAmount.fiatCurrency)
+        ) return boundAmount
         return boundAmount.amount
             .toBigDecimalLocalized()
             ?.let { currentValue ->

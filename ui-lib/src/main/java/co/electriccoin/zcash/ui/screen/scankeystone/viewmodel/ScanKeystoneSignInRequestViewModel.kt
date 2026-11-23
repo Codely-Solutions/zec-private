@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneSignInRequestUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
 import co.electriccoin.zcash.ui.screen.scankeystone.model.ScanKeystoneState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -30,13 +31,28 @@ internal class ScanKeystoneSignInRequestViewModel(
         super.onCleared()
     }
 
-    fun onScanned(result: String) =
+    fun beginPresentation(): String {
+        validationState.value = ScanValidationState.NONE
+        state.update { it.copy(progress = null) }
+        return parseKeystoneSignInRequest.beginPresentation()
+    }
+
+    fun endPresentation(id: String) = parseKeystoneSignInRequest.endPresentation(id)
+
+    fun onScanned(result: String, presentationId: String) =
         viewModelScope.launch {
+            if (!parseKeystoneSignInRequest.isCurrentPresentation(presentationId)) return@launch
             try {
-                val scanResult = parseKeystoneSignInRequest(result)
-                state.update { it.copy(progress = scanResult.progress) }
+                val scanResult = parseKeystoneSignInRequest(result, presentationId)
+                if (parseKeystoneSignInRequest.isCurrentPresentation(presentationId)) {
+                    state.update { it.copy(progress = scanResult.progress) }
+                }
+            } catch (e: CancellationException) {
+                throw e
             } catch (_: InvalidKeystoneSignInQRException) {
-                validationState.update { ScanValidationState.INVALID }
+                if (parseKeystoneSignInRequest.isCurrentPresentation(presentationId)) {
+                    validationState.value = ScanValidationState.INVALID
+                }
             } catch (_: Exception) {
                 // do nothing
             }

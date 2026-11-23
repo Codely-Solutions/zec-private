@@ -502,6 +502,14 @@ data class TransactionSwapMetadata(
     val status: SwapStatus
         get() = recordedStatus ?: SwapStatus.SUCCESS
 
+    internal val legacySuccessfulOutput: BigDecimal?
+        get() {
+            if (status != SwapStatus.SUCCESS) return null
+            return amountOutFormatted.takeIf {
+                quotedAmountOut == null && executedAmountOut == null && it.signum() > 0
+            }
+        }
+
     internal fun outgoingStatus(transaction: SendTransaction, liveStatus: SwapStatus? = null): SwapStatus {
         val settlement = liveStatus ?: recordedStatus
         // An explicit settlement can outlive a stale local funding transaction state.

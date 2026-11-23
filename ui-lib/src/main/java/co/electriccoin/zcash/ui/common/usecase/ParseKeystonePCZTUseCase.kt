@@ -16,7 +16,7 @@ class ParseKeystonePCZTUseCase(
     private val keystoneProposalRepository: KeystoneProposalRepository,
     keystoneSDKProvider: KeystoneSDKProvider,
 ) : BaseKeystoneScanner(keystoneSDKProvider) {
-    override suspend fun onSuccess(ur: UR) {
+    override suspend fun onSuccess(ur: UR, scanSessionId: String?) {
         val proposal = keystoneProposalRepository.parsePCZT(ur)
         submitKSProposal(proposal)
     }
@@ -49,7 +49,7 @@ abstract class BaseKeystoneScanner(
                 val new =
                     if (ur != null) {
                         try {
-                            onSuccess(ur)
+                            onSuccess(ur, scanSessionId)
                             ParseKeystoneQrResult(
                                 progress = decodedResult.progress,
                                 isFinished = true
@@ -80,7 +80,7 @@ abstract class BaseKeystoneScanner(
             }
         }
 
-    abstract suspend fun onSuccess(ur: UR)
+    protected abstract suspend fun onSuccess(ur: UR, scanSessionId: String?)
 
     private fun resetDecoderForNewSession(scanSessionId: String?) {
         val requestedSessionId = scanSessionId ?: DEFAULT_SCAN_SESSION_ID

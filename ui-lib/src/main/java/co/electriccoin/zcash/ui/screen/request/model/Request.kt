@@ -27,6 +27,17 @@ data class AmountState(
     val isValid: Boolean?,
     val fiatCurrency: FiatCurrency? = null,
 ) {
+    internal fun validZecAmount(conversion: FiatCurrencyConversion?): BigDecimal? {
+        val entered = amount.toBigDecimalLocalized() ?: return null
+        val zec = when (currency) {
+            RequestCurrency.ZEC -> entered
+            RequestCurrency.FIAT -> conversion?.takeIf {
+                it.fiatCurrency == fiatCurrency && it.priceOfZec.isFinite() && it.priceOfZec > 0
+            }?.let { entered.divide(it.priceOfZec.toBigDecimal(), MathContext.DECIMAL128) }
+        }
+        return zec?.takeIf { isValid == true && it.signum() > 0 && it <= BigDecimal(MAX_ZCASH_SUPPLY) }
+    }
+
     fun toZecString(conversion: FiatCurrencyConversion, context: Context): String =
         stringResByNumber(
             amount.toBigDecimalLocalized().convertUsdToZec(conversion.priceOfZec.toBigDecimal()),
@@ -88,3 +99,5 @@ data class QrCodeState(
     val zecAmount: String,
     val memo: String
 )
+
+internal const val MAX_ZCASH_SUPPLY = 21_000_000

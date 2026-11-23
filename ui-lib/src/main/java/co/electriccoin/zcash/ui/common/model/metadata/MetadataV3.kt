@@ -145,6 +145,14 @@ data class SwapMetadataV3(
     @Transient
     val totalFeesUsd: BigDecimal = checkNotNull(totalFeesUsdInternal ?: totalUSDFeesInternal)
 
+    internal val legacySuccessfulOutput: BigDecimal?
+        get() {
+            if (status != null && status != SwapStatus.SUCCESS) return null
+            return amountOutFormatted?.takeIf {
+                quotedAmountOut == null && executedAmountOut == null && it.signum() > 0
+            }
+        }
+
     internal fun acceptsStatus(status: SwapStatus, updatedAt: kotlin.time.Instant?, executed: BigDecimal?): Boolean {
         // Settlement and a completed refund keep their outcome. FAILED and EXPIRED can precede later recovery.
         val sameStatus = this.status == status

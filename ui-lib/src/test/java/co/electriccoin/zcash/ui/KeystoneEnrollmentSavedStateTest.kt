@@ -17,17 +17,21 @@ import co.electriccoin.zcash.ui.screen.connecthw.estimation.HWEstimationArgs
 import co.electriccoin.zcash.ui.screen.connecthw.height.HWHeightArgs
 import co.electriccoin.zcash.ui.screen.connecthw.neworactive.HWNewOrActiveArgs
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
+import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
+import co.electriccoin.zcash.ui.screen.scankeystone.viewmodel.ScanKeystoneSignInRequestViewModel
 import co.electriccoin.zcash.ui.screen.selectkeystoneaccount.SelectKeystoneAccount
+import com.keystone.module.DecodeResult
 import com.keystone.module.ZcashAccount
 import com.keystone.module.ZcashAccounts
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -58,20 +62,16 @@ class KeystoneEnrollmentSavedStateTest {
             val session = KeystoneEnrollmentSession()
             val account = mockk<ZcashAccount> { every { ufvk } returns SYNTHETIC_UFVK }
             val accounts = mockk<ZcashAccounts> { every { this@mockk.accounts } returns listOf(account) }
-            val scanner = ParseKeystoneSignInRequestUseCase(
-                routing,
-                mockk<KeystoneSDKProvider> { every { parseZcashAccounts(any()) } returns accounts },
-                session,
-            )
-            val activity = mockk<android.app.Activity>()
-            val navigator = NavigatorImpl(
-                activity, first, KeyboardManager(false, null), mockk(), mockk(), mockk()
-            )
-            val route = launch(start = CoroutineStart.UNDISPATCHED) {
-                navigator.executeCommand(routing.observePipeline().first() as CustomNavigationCommand)
+            val sdk = mockk<KeystoneSDKProvider> {
+                every { parseZcashAccounts(any()) } returns accounts
+                every { decodeQR("frame") } returns DecodeResult(100, mockk())
             }
-            scanner.onSuccess(mockk())
-            route.join()
+            val scanner = ParseKeystoneSignInRequestUseCase(routing, sdk, session)
+            val route = async(start = CoroutineStart.UNDISPATCHED) {
+                routing.observePipeline().first() as CustomNavigationCommand
+            }
+            scanner("frame", scanner.beginPresentation())
+            newNavigator(first).executeCommand(route.await())
 
             val selection = assertNotNull(first.currentBackStackEntry).toRoute<SelectKeystoneAccount>()
             assertEquals(selection.sessionId, UUID.fromString(selection.sessionId).toString())
@@ -109,6 +109,57 @@ class KeystoneEnrollmentSavedStateTest {
     }
 
     @Test
+    fun resumingTheScannerRejectsAnInterruptedHandoffAndAcceptsANewScan() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        try {
+            val controller = newController().also { it.installGraph() }
+            controller.navigate(ScanKeystoneSignInRequest)
+            val routing = NavigationRouterImpl()
+            val session = KeystoneEnrollmentSession()
+            val account = mockk<ZcashAccount>()
+            val accounts = mockk<ZcashAccounts> { every { this@mockk.accounts } returns listOf(account) }
+            val sdk = mockk<KeystoneSDKProvider> {
+                every { decodeQR(any()) } returns DecodeResult(100, mockk())
+                every { parseZcashAccounts(any()) } returns accounts
+                every { resetQRDecoder() } returns Unit
+            }
+            val scanner = ScanKeystoneSignInRequestViewModel(ParseKeystoneSignInRequestUseCase(routing, sdk, session))
+            val navigator = newNavigator(controller)
+            val original = scanner.beginPresentation()
+            val staleCommand = async(start = CoroutineStart.UNDISPATCHED) {
+                routing.observePipeline().first() as CustomNavigationCommand
+            }
+            scanner.onScanned("original", original).join()
+            assertEquals(100, scanner.state.value.progress)
+
+            controller.navigate(ThirdPartyScan)
+            scanner.endPresentation(original)
+            controller.popBackStack()
+            val resumed = scanner.beginPresentation()
+            navigator.executeCommand(staleCommand.await())
+            assertEquals(
+                ScanKeystoneSignInRequest,
+                controller.currentBackStackEntry?.toRoute<ScanKeystoneSignInRequest>()
+            )
+            assertNull(scanner.state.value.progress)
+
+            scanner.onScanned("late", original).join()
+            verify(exactly = 0) { sdk.decodeQR("late") }
+            val freshCommand = async(start = CoroutineStart.UNDISPATCHED) {
+                routing.observePipeline().first() as CustomNavigationCommand
+            }
+            scanner.onScanned("fresh", resumed).join()
+            navigator.executeCommand(freshCommand.await())
+            verify(exactly = 1) { sdk.resetQRDecoder() }
+            verify(exactly = 1) { sdk.decodeQR("fresh") }
+            val selection = assertNotNull(controller.currentBackStackEntry).toRoute<SelectKeystoneAccount>()
+            assertSame(accounts, session.resolve(selection.sessionId))
+        } finally {
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
     fun olderActivityStateIsDiscarded() {
         val previous = Bundle().apply {
             putInt("wallet_navigation_state_version", 1)
@@ -138,10 +189,14 @@ class KeystoneEnrollmentSavedStateTest {
         navigatorProvider.addNavigator(ComposeNavigator())
     }
 
+    private fun newNavigator(controller: NavHostController) =
+        NavigatorImpl(mockk(), controller, KeyboardManager(false, null), mockk(), mockk(), mockk())
+
     private fun NavHostController.installGraph() {
         graph = createGraph(startDestination = HomeArgs) {
             composable<HomeArgs> { }
             hardwareEnrollmentScreens()
+            composable<ThirdPartyScan> { }
         }
     }
 

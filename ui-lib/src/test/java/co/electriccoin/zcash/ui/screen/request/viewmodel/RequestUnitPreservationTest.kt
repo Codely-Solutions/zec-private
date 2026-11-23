@@ -136,6 +136,28 @@ class RequestUnitPreservationTest {
         }
     }
 
+    @Test
+    fun rateRecoveryRevalidatesSupplyLimitAndMismatchedRatesDoNotValidateEdits() = runTest {
+        fixture { vm, rate, builder ->
+            enterFiat(vm)
+            val completion = amount(vm).onDone
+            rate.value = ExchangeRateState.Data(currencyConversion = null, onRefresh = {})
+            repeat(8) { amount(vm).onAmount(OnAmount.Number(0)) }
+            assertEquals("2500000000", amount(vm).request.amountState.amount)
+            rate.value = data(100.0)
+            assertFalse(amount(vm).canContinue)
+            completion()
+            assertIs<RequestState.Amount>(vm.state.value)
+            verify(exactly = 0) { builder.invoke(any(), any(), any()) }
+            rate.value = data(0.00001, FiatCurrency("EUR"))
+            amount(vm).onAmount(OnAmount.Number(1))
+            assertEquals("25000000001", amount(vm).request.amountState.amount)
+            assertFalse(amount(vm).canContinue)
+            rate.value = data(10000.0)
+            assertTrue(amount(vm).canContinue)
+        }
+    }
+
     private fun enterFiat(vm: RequestVM) {
         amount(vm).onSwitch(RequestCurrency.FIAT)
         amount(vm).onAmount(OnAmount.Number(2))

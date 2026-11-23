@@ -26,9 +26,9 @@ internal sealed class RequestState {
         val onDone: () -> Unit,
     ) : Prepared(onBack) {
         val canContinue: Boolean
-            get() = request.amountState.isValid == true &&
-                (request.amountState.currency == RequestCurrency.ZEC ||
-                    (exchangeRateState as? ExchangeRateState.Data)?.currencyConversion != null)
+            get() = request.amountState.validZecAmount(
+                (exchangeRateState as? ExchangeRateState.Data)?.currencyConversion
+            ) != null
     }
 
     data class Memo(

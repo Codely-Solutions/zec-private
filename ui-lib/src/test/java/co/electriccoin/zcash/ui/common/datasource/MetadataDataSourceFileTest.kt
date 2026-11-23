@@ -22,6 +22,7 @@ import co.electriccoin.zcash.ui.common.model.metadata.AccountMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.AnnotationMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.BookmarkMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
+import co.electriccoin.zcash.ui.common.model.metadata.SwapMetadataV3
 import co.electriccoin.zcash.ui.common.model.metadata.SwapsMetadataV3
 import co.electriccoin.zcash.ui.common.model.near.NearSwapQuote
 import co.electriccoin.zcash.ui.common.model.near.NearSignedQuoteEvidence
@@ -229,35 +230,12 @@ class MetadataDataSourceFileTest {
         val quote = fundingQuote(SwapType.FLEX_INPUT)
         val initial = repository(metadataProvider)
         SaveORSwapUseCase(mockk(), initial, mockk()).persistBeforeFunding(quote)
-        val quoteJson = Json.encodeToString(QuoteResponseDto.serializer(), quote.response)
-        suspend fun lookup(time: String, output: String = ""): SwapQuoteStatusData {
-            val response = Json.decodeFromString<SwapStatusResponseDto>(
-                """
-                {
-                    "correlationId":"synthetic-status", "quoteResponse":$quoteJson,
-                    "status":"SUCCESS", "updatedAt":"$time",
-                    "swapDetails":{
-                        "intentHashes":[], "nearTxHashes":[],
-                        "originChainTxHashes":[], "destinationChainTxHashes":[]$output
-                    }
-                }
-                """.trimIndent()
-            )
-            val status = NearSwapQuoteStatus(
-                response, quote.originAsset, quote.destinationAsset,
-                quote.depositAddress, quote.destinationAddress, quote.refundAddress,
-            )
-            val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(any()) } returns status }
-            return GetSwapStatusUseCase(repository(metadataProvider), swaps)("deposit")
-        }
+        suspend fun lookup(time: String, output: String = "") = lookupSuccessfulStatus(quote, time, output)
         val firstTime = "2026-11-22T12:01:00Z"
         val laterTime = "2026-11-22T12:02:00Z"
         val quoted = assertNotNull(lookup(firstTime).savedMetadata)
         assertEquals(BigDecimal.ONE, quoted.quotedAmountOut)
         assertNull(quoted.executedAmountOut)
-        fun activityAmount(swap: TransactionSwapMetadata) =
-            (ActivityMapper().createTransactionState(ActivityData.BySwap(swap), Instant.EPOCH, {}, {}, {}).value
-                as StyledStringResource.ByStringResource).resource
         val expectedExecution = BigDecimal("1.23456789")
         val quotedAmount = stringResByCurrencyNumber(BigDecimal.ONE, "ZEC")
         assertEquals(stringRes(R.string.private_activity_quoted_amount, quotedAmount), activityAmount(quoted))
@@ -281,6 +259,83 @@ class MetadataDataSourceFileTest {
         assertNotNull(conflict.error)
         assertEquals(expectedExecution, conflict.savedMetadata?.executedAmountOut)
     }
+
+    @Test
+    fun legacySuccessfulAmountKeepsUnknownProvenanceUntilExecutionArrives() = runTest {
+        val quote = fundingQuote(SwapType.FLEX_INPUT)
+        SaveORSwapUseCase(mockk(), repository(metadataProvider), mockk()).persistBeforeFunding(quote)
+        val tracked = read(canonicalName)
+        val original = BigDecimal("1.23456789")
+        val legacy = tracked.accountMetadata.swaps.swapIds.single().copy(
+            status = SwapStatus.SUCCESS,
+            statusUpdatedAt = kotlin.time.Instant.parse("2026-11-22T12:01:00Z"),
+            amountOutFormatted = original,
+            quotedAmountOut = null,
+        )
+        fun withSwap(swap: SwapMetadataV3) = tracked.copy(
+            accountMetadata = tracked.accountMetadata.copy(
+                swaps = tracked.accountMetadata.swaps.copy(swapIds = listOf(swap)),
+            ),
+        )
+        write(canonicalName, withSwap(legacy))
+        write(
+            legacyName,
+            withSwap(legacy.copy(
+                statusUpdatedAt = kotlin.time.Instant.parse("2026-11-22T12:02:00Z"),
+                quotedAmountOut = BigDecimal.ONE,
+                amountOutFormatted = BigDecimal.ONE,
+            )),
+            metadataKey(1),
+        )
+
+        val time = "2026-11-22T12:03:00Z"
+        val sparse = lookupSuccessfulStatus(quote, time)
+        assertNull(sparse.error)
+        assertEquals(BigDecimal.ONE, sparse.status?.amountOutFormatted)
+        val reopened = assertNotNull(repository(metadataProvider).getSwapMetadata("deposit"))
+        assertEquals(original, reopened.amountOutFormatted)
+        assertNull(reopened.quotedAmountOut)
+        assertNull(reopened.executedAmountOut)
+        assertEquals(
+            stringRes(R.string.private_activity_saved_amount, stringResByCurrencyNumber(original, "ZEC")),
+            activityAmount(reopened),
+        )
+
+        val completed = lookupSuccessfulStatus(quote, time, ", \"amountOut\":\"223456789\"")
+        assertNull(completed.error)
+        assertEquals(BigDecimal("2.23456789"), completed.savedMetadata?.executedAmountOut)
+        assertEquals(BigDecimal.ONE, completed.savedMetadata?.quotedAmountOut)
+    }
+
+    private suspend fun TestScope.lookupSuccessfulStatus(
+        quote: NearSwapQuote,
+        time: String,
+        output: String = "",
+    ): SwapQuoteStatusData {
+        val quoteJson = Json.encodeToString(QuoteResponseDto.serializer(), quote.response)
+        val response = Json.decodeFromString<SwapStatusResponseDto>(
+            """
+            {
+                "correlationId":"synthetic-status", "quoteResponse":$quoteJson,
+                "status":"SUCCESS", "updatedAt":"$time",
+                "swapDetails":{
+                    "intentHashes":[], "nearTxHashes":[],
+                    "originChainTxHashes":[], "destinationChainTxHashes":[]$output
+                }
+            }
+            """.trimIndent()
+        )
+        val status = NearSwapQuoteStatus(
+            response, quote.originAsset, quote.destinationAsset,
+            quote.depositAddress, quote.destinationAddress, quote.refundAddress,
+        )
+        val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(any()) } returns status }
+        return GetSwapStatusUseCase(repository(metadataProvider), swaps)("deposit")
+    }
+
+    private fun activityAmount(swap: TransactionSwapMetadata) =
+        (ActivityMapper().createTransactionState(ActivityData.BySwap(swap), Instant.EPOCH, {}, {}, {}).value
+            as StyledStringResource.ByStringResource).resource
 
     @Test
     fun aRejectedRefreshReloadsOnlyItsOriginalEntryAndWalletGeneration() = runTest {

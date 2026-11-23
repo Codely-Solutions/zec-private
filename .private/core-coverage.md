@@ -57,6 +57,20 @@ Production Detekt retains its rules and existing baseline. Its release-only init
 
 ## Fast screen and provider checks
 
+The maintained regressions for the review after `dd11dfc4` cover these composed boundaries. Execution receipts identify their exact source and distinguish execution, cache restoration and historical evidence.
+
+| Boundary | Maintained checks and scope |
+|---|---|
+| Pending viewing-key lifetime | `KeystoneEnrollmentSavedStateTest`, enrollment/scanner use-case tests: production routes, navigation Parcel restoration, session loss, abandonment and retry; no physical camera or signer. |
+| Durable wallet publication | `WalletSdkInputCommitTest`: Android preference adapter through wallet observers/coordinator input and reopened committed preferences, failed first commit, cancellation and retry; no power-loss/native-startup claim. |
+| Status and bookmark persistence | `MetadataDataSourceFileTest`, status, Activity and both Detail tests: encrypted complete/sparse merges, equal timestamps, legacy provenance, restart, idempotent desired bookmark values after failed directory acknowledgement. |
+| Request and Resync state | `RequestUnitPreservationTest`, `ResyncConfirmVMTest`: currency/rate loss and recovery, stale callbacks, supply bounds, initialization/estimate failure, retry and cancellation. |
+| Prices and native URI selection | `PayCatalogRecoveryTest`, swap mapper and recipient tests: missing/zero-price recovery with existing input and native/wrapped ERC-681 selection across supported EVM networks. |
+| Clipboard ownership | Viewing-key VM/View/Koin tests: explicit Paste, typed/scanned input, replacement content, denied reads and compare-before-clear; platform clipboard I/O is substituted. |
+| Controller concurrency and failures | `test_maintenance_watch`, `test_notify`, `test_dev_session`, `test_packaging`: checked-in workflow conditions/queues, interleaved revisions/recovery, retained-artifact expiry and runner/export double failures; GitHub, push and signing I/O are mocked. |
+| Git fixture portability | Controller suites under LF and Windows child-only Git profiles, real disposable integration fixtures and exact CRLF patch-byte checks. |
+
+
 These cases run on the JVM with MockK and virtual coroutine time. They use real screen-state builders and mock external I/O. The full `ui-lib` release JVM task includes them automatically. Use the development session's filters to run affected cases first and `*VMTest` / `*MapperTest` for a broader pass in the same checkout.
 
 | Surface | Existing fast checks and additions | Evidence boundary |

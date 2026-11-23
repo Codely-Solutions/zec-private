@@ -327,7 +327,17 @@ class MetadataDataSourceImpl(
                     if (!sameEntry || !current.acceptsStatus(status, statusUpdatedAt, executedAmountOut)) {
                         return@updateMetadata null
                     }
-                    val updated = current.copy(
+                    val keepLegacy = status == SwapStatus.SUCCESS &&
+                        current.legacySuccessfulOutput != null && executedAmountOut == null
+                    val mergedOutput = if (keepLegacy) {
+                        current
+                    } else {
+                        current.withOutput(
+                            quoted = current.quotedAmountOut ?: amountOutFormatted,
+                            executed = executedAmountOut ?: current.executedAmountOut,
+                        )
+                    }
+                    val updated = mergedOutput.copy(
                         status = status,
                         statusUpdatedAt = statusUpdatedAt,
                         exactInput = if (current.reviewedIdentity == null) mode == EXACT_INPUT else current.exactInput,
@@ -335,9 +345,6 @@ class MetadataDataSourceImpl(
                         toAsset = MetadataSimpleSwapAssetV3(
                             token = destination.tokenTicker, chain = destination.chainTicker
                         ),
-                    ).withOutput(
-                        quoted = current.quotedAmountOut ?: amountOutFormatted,
-                        executed = executedAmountOut ?: current.executedAmountOut,
                     )
                     savedSwap = updated
                     metadata.copy(
@@ -912,9 +919,9 @@ private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean)
     )
 
 private fun SwapMetadataV3.mergeStatus(candidate: SwapMetadataV3): SwapMetadataV3 {
-    if (reviewedIdentity != candidate.reviewedIdentity || provider != candidate.provider ||
-        fromAsset != candidate.fromAsset || toAsset != candidate.toAsset
-    ) return this
+    val sameRoute = reviewedIdentity == candidate.reviewedIdentity && provider == candidate.provider
+    val sameAssets = fromAsset == candidate.fromAsset && toAsset == candidate.toAsset
+    if (!sameRoute || !sameAssets) return this
     val candidateStatus = candidate.status
     val candidateUpdatedAt = candidate.statusUpdatedAt
     val newer = if (candidateStatus == null || candidateUpdatedAt == null) {
@@ -925,12 +932,18 @@ private fun SwapMetadataV3.mergeStatus(candidate: SwapMetadataV3): SwapMetadataV
     }
     val preferred = if (newer) candidate else this
     val earlier = if (newer) this else candidate
-    return preferred.withOutput(
-        quoted = quotedAmountOut ?: candidate.quotedAmountOut,
-        executed = preferred.executedAmountOut ?: earlier.executedAmountOut.takeIf {
-            preferred.status == earlier.status || newer
-        },
-    )
+    val executed = preferred.executedAmountOut ?: earlier.executedAmountOut.takeIf {
+        preferred.status == earlier.status || newer
+    }
+    val legacy = preferred.legacySuccessfulOutput ?: earlier.legacySuccessfulOutput
+    return if (preferred.status == SwapStatus.SUCCESS && executed == null && legacy != null) {
+        preferred.copy(amountOutFormatted = legacy, quotedAmountOut = null)
+    } else {
+        preferred.withOutput(
+            quoted = quotedAmountOut ?: candidate.quotedAmountOut,
+            executed = executed,
+        )
+    }
 }
 
 /**

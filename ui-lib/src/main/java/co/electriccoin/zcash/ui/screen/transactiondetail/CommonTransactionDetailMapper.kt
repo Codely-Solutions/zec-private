@@ -6,6 +6,7 @@ import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.ZcashShieldedSwapAddress
 import co.electriccoin.zcash.ui.common.model.isZCashAsset
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.usecase.ReloadHandle
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
@@ -21,7 +22,6 @@ import co.electriccoin.zcash.ui.util.isServiceUnavailable
 import io.ktor.client.plugins.ResponseException
 import java.time.Instant
 import java.time.ZoneId
-import java.math.BigDecimal
 
 class CommonTransactionDetailMapper {
     fun createTransactionDetailTimestamp(timestamp: Instant?) =
@@ -73,12 +73,19 @@ class CommonTransactionDetailMapper {
         swap: SwapQuoteStatus?,
         originAsset: SwapAsset?,
         destinationAsset: SwapAsset?,
-        savedExecution: BigDecimal? = null,
+        savedMetadata: TransactionSwapMetadata? = null,
     ): SwapQuoteHeaderState {
         if (swap == null || originAsset == null || destinationAsset == null) {
             return SwapQuoteHeaderState(null, null)
         }
-        val retainedExecution = savedExecution.takeIf { swap.executedAmountOut == null }
+        val savedOutput = (savedMetadata?.executedAmountOut ?: savedMetadata?.legacySuccessfulOutput)
+            .takeIf { swap.executedAmountOut == null }
+        val outputLabel = when {
+            swap.executedAmountOut != null -> R.string.private_provider_output
+            savedMetadata?.executedAmountOut != null -> R.string.private_saved_provider_output
+            savedOutput != null -> R.string.private_swap_saved_output
+            else -> R.string.private_quoted_output
+        }
         return SwapQuoteHeaderState(
             from =
                 SwapTokenAmountState(
@@ -96,22 +103,14 @@ class CommonTransactionDetailMapper {
                         destinationAsset.swapQuoteChainIcon(
                             isShielded = swap.destinationAddress is ZcashShieldedSwapAddress
                         ),
-                    amount = stringResByNumber(retainedExecution ?: swap.amountOutFormatted),
-                    fiatAmount = if (retainedExecution == null) {
+                    amount = stringResByNumber(savedOutput ?: swap.amountOutFormatted),
+                    fiatAmount = if (savedOutput == null) {
                         stringResByDynamicCurrencyNumber(swap.amountOutUsd, FiatCurrency.USD.symbol)
                     } else {
                         stringRes("")
                     },
                     token = stringRes(destinationAsset.tokenTicker),
-                    chain =
-                        destinationAsset.chainName + stringRes(" · ") +
-                            stringRes(
-                                when {
-                                    retainedExecution != null -> R.string.private_saved_provider_output
-                                    swap.executedAmountOut != null -> R.string.private_provider_output
-                                    else -> R.string.private_quoted_output
-                                }
-                            )
+                    chain = destinationAsset.chainName + stringRes(" · ") + stringRes(outputLabel)
                 )
         )
     }

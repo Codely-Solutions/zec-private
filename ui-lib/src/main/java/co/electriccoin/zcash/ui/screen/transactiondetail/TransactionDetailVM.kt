@@ -221,7 +221,7 @@ class TransactionDetailVM(
                                     swap = transaction.swap.status,
                                     originAsset = transaction.swap.originAsset,
                                     destinationAsset = transaction.swap.destinationAsset,
-                                    savedExecution = transaction.swap.savedMetadata?.executedAmountOut,
+                                    savedMetadata = transaction.swap.savedMetadata,
                                 ),
                             depositAddress =
                                 stringResByAddress(
@@ -672,7 +672,9 @@ class TransactionDetailVM(
         val token = data.metadata.bookmarkWriteToken
         if (bookmarkJob?.isActive != true && accountUuid != null && token != null) {
             bookmarkJob = viewModelScope.launch {
-                setTransactionBookmark(data.transaction.id.txIdString(), !data.metadata.isBookmarked, accountUuid, token)
+                setTransactionBookmark(
+                    data.transaction.id.txIdString(), !data.metadata.isBookmarked, accountUuid, token
+                )
             }
         }
     }
