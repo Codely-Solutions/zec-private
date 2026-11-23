@@ -35020,7 +35020,7 @@ index b6549dd8b..e0c52f4c9 100644
 +        val zecPrice = swapAssets.zecAsset.positiveUsdPrice
 +        return if (amount == null || zecPrice == null) null else amount.divide(zecPrice, MathContext.DECIMAL128)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayVM.kt
-index 5cf20b207..14a198041 100644
+index 5cf20b207..b271b0378 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayVM.kt
 @@ -8,0 +9 @@ import co.electriccoin.zcash.ui.R
@@ -35039,12 +35039,13 @@ index 5cf20b207..14a198041 100644
 +                        if (internalState.value == state) onRequestSwapQuoteClick(amount, fiatAmount, address)
 +                    }
 +                )
-@@ -182 +188,0 @@ internal class PayVM(
+@@ -182 +189 @@ internal class PayVM(
 -                        refreshed != null && selected.usdPrice != null -> state.copy(asset = refreshed)
-@@ -198 +204 @@ internal class PayVM(
++                        refreshed != null && selected.positiveUsdPrice != null -> state.copy(asset = refreshed)
+@@ -198 +205 @@ internal class PayVM(
 -            val selected = navigateToSelectSwapRecipient()
 +            val selected = navigateToSelectSwapRecipient(network = internalState.value.asset?.chainTicker)
-@@ -210,12 +216 @@ internal class PayVM(
+@@ -210,12 +217 @@ internal class PayVM(
 -                internalState.update {
 -                    it.copy(
 -                        selectedABContact = null,
@@ -35058,10 +35059,10 @@ index 5cf20b207..14a198041 100644
 -                    )
 -                }
 +                onAddressChange(result.rawInput ?: result.address)
-@@ -274 +269 @@ internal class PayVM(
+@@ -274 +270 @@ internal class PayVM(
 -        internalState.update { it.copy(amount = amount, fiatAmount = fiat) }
 +        internalState.update { it.copy(amount = amount, fiatAmount = fiat, hasEditedRequestAmount = true) }
-@@ -280,3 +275,4 @@ internal class PayVM(
+@@ -280,3 +276,4 @@ internal class PayVM(
 -            val asset = internalState.value.asset ?: return@launch
 -            val slippage = internalState.value.slippage
 -            if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = SwapMode.EXACT_OUTPUT)) {
@@ -35069,7 +35070,7 @@ index 5cf20b207..14a198041 100644
 +            if (snapshot.isRequestingQuote || quoteActionInProgress) return@launch
 +            val asset = snapshot.asset ?: return@launch
 +            if (asset.positiveUsdPrice == null || swapRepository.assets.value.zecAsset.positiveUsdPrice == null) {
-@@ -285,9 +281,25 @@ internal class PayVM(
+@@ -285,9 +282,25 @@ internal class PayVM(
 -            internalState.update { it.copy(isRequestingQuote = true) }
 -            requestSwapQuote.requestExactOutput(
 -                amount = amount,
@@ -35104,7 +35105,7 @@ index 5cf20b207..14a198041 100644
 +                quoteActionInProgress = false
 +                internalState.update { it.copy(isRequestingQuote = false) }
 +            }
-@@ -299 +311,15 @@ internal class PayVM(
+@@ -299 +312,15 @@ internal class PayVM(
 -        internalState.update { it.copy(selectedABContact = null, address = new) }
 +        internalState.update { state ->
 +            val recipient = validateSwapRecipient(
@@ -35121,7 +35122,7 @@ index 5cf20b207..14a198041 100644
 +                fiatAmount = NumberTextFieldInnerState()
 +            ).withAsset(state.asset)
 +        }
-@@ -303,7 +329 @@ internal class PayVM(
+@@ -303,7 +330 @@ internal class PayVM(
 -            val asset =
 -                navigateToSwapAssetPicker(
 -                    onlyChainTicker =
@@ -35130,7 +35131,7 @@ index 5cf20b207..14a198041 100644
 -                            ?.chainTicker
 -                )
 +            val asset = navigateToSwapAssetPicker()
-@@ -320,2 +340,16 @@ internal class PayVM(
+@@ -320,2 +341,16 @@ internal class PayVM(
 -    private fun InternalStateImpl.withAsset(asset: SwapAsset?): InternalStateImpl =
 -        if (amount.amount == null && fiatAmount.amount != null && asset?.usdPrice != null) {
 +    private fun InternalStateImpl.withAsset(asset: SwapAsset?): InternalStateImpl {
@@ -35149,17 +35150,17 @@ index 5cf20b207..14a198041 100644
 +        val requestedAmount = recipient?.input?.amount.takeIf { recipient?.isValid == true }
 +        val amountState = requestedAmount?.let { NumberTextFieldInnerState.fromAmount(it) } ?: amount
 +        return if (amountState.amount == null && fiatAmount.amount != null) {
-@@ -327 +361 @@ internal class PayVM(
+@@ -327 +362 @@ internal class PayVM(
 -                        amountInnerState = amount,
 +                        amountInnerState = amountState,
-@@ -333,0 +368 @@ internal class PayVM(
+@@ -333,0 +369 @@ internal class PayVM(
 +                amount = amountState,
-@@ -336 +371 @@ internal class PayVM(
+@@ -336 +372 @@ internal class PayVM(
 -                        amountInnerState = amount,
 +                        amountInnerState = amountState,
-@@ -341,0 +377 @@ internal class PayVM(
+@@ -341,0 +378 @@ internal class PayVM(
 +    }
-@@ -376 +412,3 @@ internal data class InternalStateImpl(
+@@ -376 +413,3 @@ internal data class InternalStateImpl(
 -    override val isEphemeralAddressLocked: Boolean
 +    override val isEphemeralAddressLocked: Boolean,
 +    // A pending URI amount may prefill after asset selection until the user edits either amount field.
@@ -45606,7 +45607,7 @@ index 000000000..be0fc9dfc
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
-index aa5a81f8c..f9a8cf036 100644
+index aa5a81f8c..af836a652 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
 @@ -3,0 +4,6 @@ import android.content.Context
@@ -45647,7 +45648,7 @@ index aa5a81f8c..f9a8cf036 100644
 +import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 +import co.electriccoin.zcash.ui.common.repository.SwapRepository
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-@@ -18,0 +48,17 @@ import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataSerializer
+@@ -18,0 +48,19 @@ import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataSerializer
 +import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 +import co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase
 +import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
@@ -45661,41 +45662,43 @@ index aa5a81f8c..f9a8cf036 100644
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 +import co.electriccoin.zcash.ui.design.util.StyledStringResource
++import co.electriccoin.zcash.ui.design.util.StringResource
++import co.electriccoin.zcash.ui.design.util.TickerLocation
 +import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailVM
 +import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailArgs
 +import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
 +import co.electriccoin.zcash.ui.R
-@@ -20,0 +67 @@ import com.google.crypto.tink.util.SecretBytes
+@@ -20,0 +69 @@ import com.google.crypto.tink.util.SecretBytes
 +import io.mockk.coEvery
-@@ -22,0 +70,6 @@ import io.mockk.mockk
+@@ -22,0 +72,6 @@ import io.mockk.mockk
 +import io.mockk.mockkObject
 +import io.mockk.unmockkObject
 +import io.mockk.verify
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.CancellationException
-@@ -23,0 +77,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
+@@ -23,0 +79,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.cancel
 +import kotlinx.coroutines.async
 +import kotlinx.coroutines.channels.Channel
 +import kotlinx.coroutines.test.setMain
 +import kotlinx.coroutines.test.resetMain
 +import kotlinx.coroutines.flow.MutableStateFlow
-@@ -27,0 +87 @@ import kotlinx.coroutines.test.StandardTestDispatcher
+@@ -27,0 +89 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 +import kotlinx.coroutines.test.UnconfinedTestDispatcher
-@@ -30,0 +91 @@ import kotlinx.coroutines.test.runTest
+@@ -30,0 +93 @@ import kotlinx.coroutines.test.runTest
 +import kotlinx.serialization.json.Json
-@@ -31,0 +93 @@ import java.io.File
+@@ -31,0 +95 @@ import java.io.File
 +import java.io.IOException
-@@ -37,0 +100 @@ import kotlin.test.assertEquals
+@@ -37,0 +102 @@ import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
-@@ -38,0 +102 @@ import kotlin.test.assertFalse
+@@ -38,0 +104 @@ import kotlin.test.assertFalse
 +import kotlin.test.assertNotNull
-@@ -47,0 +112 @@ import kotlin.test.assertTrue
+@@ -47,0 +114 @@ import kotlin.test.assertTrue
 +@Suppress("LargeClass") // Quote retention uses the same encrypted file, restart, and tracking fixture.
-@@ -55,0 +121 @@ class MetadataDataSourceFileTest {
+@@ -55,0 +123 @@ class MetadataDataSourceFileTest {
 +            directorySync = DirectorySync {},
-@@ -76,0 +143,454 @@ class MetadataDataSourceFileTest {
+@@ -76,0 +145,466 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun anOpenDetailReloadsSettlementAfterAnotherObserverSavedSuccess() = runTest {
 +        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
@@ -45793,7 +45796,7 @@ index aa5a81f8c..f9a8cf036 100644
 +        assertEquals(BigDecimal.ONE, quoted.quotedAmountOut)
 +        assertNull(quoted.executedAmountOut)
 +        val expectedExecution = BigDecimal("1.23456789")
-+        val quotedAmount = stringResByCurrencyNumber(BigDecimal.ONE, "ZEC")
++        val quotedAmount = zecActivityAmount(BigDecimal.ONE)
 +        assertEquals(stringRes(R.string.private_activity_quoted_amount, quotedAmount), activityAmount(quoted))
 +
 +        assertNull(lookup(firstTime, ", \"amountOut\":\"123456789\"").error)
@@ -45808,7 +45811,7 @@ index aa5a81f8c..f9a8cf036 100644
 +        assertEquals(expectedExecution, reread.executedAmountOut)
 +        assertEquals(expectedExecution, storedSwaps().swapIds.single().amountOutFormatted)
 +        assertEquals(
-+            stringResByCurrencyNumber(expectedExecution, "ZEC"),
++            zecActivityAmount(expectedExecution),
 +            activityAmount(reread),
 +        )
 +        val conflict = lookup(laterTime, ", \"amountOutFormatted\":\"3\"")
@@ -45853,7 +45856,7 @@ index aa5a81f8c..f9a8cf036 100644
 +        assertNull(reopened.quotedAmountOut)
 +        assertNull(reopened.executedAmountOut)
 +        assertEquals(
-+            stringRes(R.string.private_activity_saved_amount, stringResByCurrencyNumber(original, "ZEC")),
++            stringRes(R.string.private_activity_saved_amount, zecActivityAmount(original)),
 +            activityAmount(reopened),
 +        )
 +
@@ -45889,9 +45892,20 @@ index aa5a81f8c..f9a8cf036 100644
 +        return GetSwapStatusUseCase(repository(metadataProvider), swaps)("deposit")
 +    }
 +
-+    private fun activityAmount(swap: TransactionSwapMetadata) =
-+        (ActivityMapper().createTransactionState(ActivityData.BySwap(swap), Instant.EPOCH, {}, {}, {}).value
-+            as StyledStringResource.ByStringResource).resource
++    private fun zecActivityAmount(amount: BigDecimal) =
++        stringResByCurrencyNumber(amount, "ZEC", TickerLocation.AFTER)
++
++    private fun activityAmount(swap: TransactionSwapMetadata): StringResource {
++        mockkObject(FiatCurrency.USD)
++        try {
++            every { FiatCurrency.USD.symbol } returns "$"
++            val activity = ActivityData.BySwap(swap)
++            val value = ActivityMapper().createTransactionState(activity, Instant.EPOCH, {}, {}, {}).value
++            return (value as StyledStringResource.ByStringResource).resource
++        } finally {
++            unmockkObject(FiatCurrency.USD)
++        }
++    }
 +
 +    @Test
 +    fun aRejectedRefreshReloadsOnlyItsOriginalEntryAndWalletGeneration() = runTest {
@@ -46097,7 +46111,8 @@ index aa5a81f8c..f9a8cf036 100644
 +        assertEquals(quote.reviewedIdentity(), saved.reviewedIdentity)
 +        assertEquals(SwapStatus.PENDING, saved.status)
 +        assertNull(metadata.getSwapMetadata("deposit", otherAccount))
-+        assertFalse(File(metadataDir, otherKey.fileIdentifiers()[0]).exists())
++        // A lookup may create the account's empty canonical file.
++        assertEquals(0L, File(metadataDir, otherKey.fileIdentifiers()[0]).length())
 +        val restarted = ProcessSwapTransactionUseCase(metadata, mockk())
 +        assertFailsWith<IllegalStateException> { restarted.reserveFunding(proposal) {} }
 +    }
@@ -46150,28 +46165,28 @@ index aa5a81f8c..f9a8cf036 100644
 +        assertEquals(evidence, saved.last().signedQuoteEvidence)
 +    }
 +
-@@ -125 +645 @@ class MetadataDataSourceFileTest {
+@@ -125 +659 @@ class MetadataDataSourceFileTest {
 -    fun deleteWipesEveryFileOfTheKeyAndEmitsNull() =
 +    fun deleteWipesEveryOwnedFileAndEmitsNullToEveryAccount() =
-@@ -129,0 +650,3 @@ class MetadataDataSourceFileTest {
+@@ -129,0 +664,3 @@ class MetadataDataSourceFileTest {
 +            val removedKey = metadataKey(9)
 +            write(removedKey.fileIdentifier(), metadata(lastUpdated = 1), removedKey)
 +            val removedEmissions = collectEmissions(dataSource, removedKey)
-@@ -135 +658 @@ class MetadataDataSourceFileTest {
+@@ -135 +672 @@ class MetadataDataSourceFileTest {
 -            dataSource.delete(key)
 +            dataSource.delete()
-@@ -139,0 +663 @@ class MetadataDataSourceFileTest {
+@@ -139,0 +677 @@ class MetadataDataSourceFileTest {
 +            assertNull(removedEmissions.last())
-@@ -143 +667 @@ class MetadataDataSourceFileTest {
+@@ -143 +681 @@ class MetadataDataSourceFileTest {
 -    fun flippingABookmarkTwiceKeepsAnUnbookmarkedEntry() =
 +    fun removingABookmarkKeepsAnUnbookmarkedEntry() =
-@@ -147 +671 @@ class MetadataDataSourceFileTest {
+@@ -147 +685 @@ class MetadataDataSourceFileTest {
 -            dataSource.flipTxAsBookmarked("tx1", key)
 +            dataSource.setTxBookmark("tx1", true, key)
-@@ -150 +674 @@ class MetadataDataSourceFileTest {
+@@ -150 +688 @@ class MetadataDataSourceFileTest {
 -            dataSource.flipTxAsBookmarked("tx1", key)
 +            dataSource.setTxBookmark("tx1", false, key)
-@@ -154,0 +679,38 @@ class MetadataDataSourceFileTest {
+@@ -154,0 +693,38 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun repeatedBookmarkActionsFinishTheRequestedChangeAfterAnUnacknowledgedRename() = runTest {
 +        val sync = TrackingSync().apply { fail = false }
@@ -46210,11 +46225,11 @@ index aa5a81f8c..f9a8cf036 100644
 +        verify(exactly = 2) { showError(any()) }
 +    }
 +
-@@ -193 +755,2 @@ class MetadataDataSourceFileTest {
+@@ -193 +769,2 @@ class MetadataDataSourceFileTest {
 -                amountOutFormatted = BigDecimal.TEN,
 +                amountOutFormatted = BigDecimal.ONE,
 +                executedAmountOut = BigDecimal.TEN,
-@@ -219,0 +783,45 @@ class MetadataDataSourceFileTest {
+@@ -219,0 +797,45 @@ class MetadataDataSourceFileTest {
 +    @Test
 +    fun restartedStorageKeepsReviewedIdentityAndRejectsStaleStatus() = runTest {
 +        val reviewedIdentity = "synthetic-reviewed-identity"
@@ -46260,21 +46275,20 @@ index aa5a81f8c..f9a8cf036 100644
 +        assertEquals(saved, storedSwaps().swapIds.single())
 +    }
 +
-@@ -259 +867,4 @@ class MetadataDataSourceFileTest {
+@@ -259 +881,4 @@ class MetadataDataSourceFileTest {
 -    private fun TestScope.dataSource() =
 +    private fun TestScope.dataSource(
 +        provider: MetadataProviderImpl = metadataProvider,
 +        ownership: WalletWriteAccess = WalletWriteAccess(),
 +    ) =
-@@ -262 +873 @@ class MetadataDataSourceFileTest {
+@@ -262 +887 @@ class MetadataDataSourceFileTest {
 -            metadataProvider = metadataProvider,
 +            metadataProvider = provider,
-@@ -264 +875,57 @@ class MetadataDataSourceFileTest {
+@@ -264 +889,2 @@ class MetadataDataSourceFileTest {
 -            ioDispatcher = StandardTestDispatcher(testScheduler)
 +            ioDispatcher = StandardTestDispatcher(testScheduler),
 +            walletWriteAccess = ownership
-+        )
-+
+@@ -266,0 +893,68 @@ class MetadataDataSourceFileTest {
 +    private fun TestScope.repository(
 +        provider: MetadataProviderImpl,
 +        ownership: WalletWriteAccess = WalletWriteAccess(),
@@ -46328,7 +46342,7 @@ index aa5a81f8c..f9a8cf036 100644
 +            destinationAddress = DynamicSwapAddress("recipient"),
 +            refundAddress = DynamicSwapAddress("refund"),
 +            expectedSlippageToleranceBps = 100,
-@@ -265,0 +933,13 @@ class MetadataDataSourceFileTest {
++        )
 +    }
 +
 +    private class TrackingSync {
@@ -46342,7 +46356,8 @@ index aa5a81f8c..f9a8cf036 100644
 +            }
 +        )
 +    }
-@@ -280 +960,8 @@ class MetadataDataSourceFileTest {
++
+@@ -280 +974,8 @@ class MetadataDataSourceFileTest {
 -    private suspend fun markSwap(dataSource: MetadataDataSourceImpl, provider: String, mode: SwapMode) =
 +    private suspend fun markSwap(
 +        dataSource: MetadataDataSourceImpl,
@@ -46352,15 +46367,15 @@ index aa5a81f8c..f9a8cf036 100644
 +        signedQuoteEvidence: NearSignedQuoteEvidence? = null,
 +        depositAddress: String = "deposit",
 +    ) =
-@@ -282 +969 @@ class MetadataDataSourceFileTest {
+@@ -282 +983 @@ class MetadataDataSourceFileTest {
 -            depositAddress = "deposit",
 +            depositAddress = depositAddress,
-@@ -291 +978,3 @@ class MetadataDataSourceFileTest {
+@@ -291 +992,3 @@ class MetadataDataSourceFileTest {
 -            key = key
 +            key = key,
 +            reviewedIdentity = reviewedIdentity,
 +            signedQuoteEvidence = signedQuoteEvidence,
-@@ -309,3 +998,5 @@ class MetadataDataSourceFileTest {
+@@ -309,3 +1012,5 @@ class MetadataDataSourceFileTest {
 -            mockk<SimpleSwapAsset> {
 -                every { tokenTicker } returns token
 -                every { chainTicker } returns chain
@@ -53863,17 +53878,19 @@ index 5db80f520..0b203e637 100644
 +        assertFailsWith<IOException> { useCase.persistAutomatic() }
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt
-index 16244cdf4..19fda826b 100644
+index 16244cdf4..9165dcec7 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt
-@@ -13,0 +14 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
+@@ -11,0 +12 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus
++import co.electriccoin.zcash.ui.common.model.WalletAccount
+@@ -13,0 +15 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-@@ -17,0 +19,2 @@ import io.mockk.mockk
+@@ -17,0 +20,2 @@ import io.mockk.mockk
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.async
-@@ -23,0 +27 @@ import kotlin.test.Test
+@@ -23,0 +28 @@ import kotlin.test.Test
 +import kotlin.test.assertFailsWith
-@@ -38,0 +43,106 @@ class ProcessSwapTransactionUseCaseTest {
+@@ -38,0 +44,106 @@ class ProcessSwapTransactionUseCaseTest {
 +    @Test
 +    fun existingTrackingIsPreservedWhenProcessingSubmission() = runTest {
 +        val fx = Fixtures()
@@ -53980,17 +53997,26 @@ index 16244cdf4..19fda826b 100644
 +        }
 +    }
 +
-@@ -57 +167,2 @@ class ProcessSwapTransactionUseCaseTest {
+@@ -43 +154,2 @@ class ProcessSwapTransactionUseCaseTest {
+-            val proposal = swapProposal()
++            val reviewedAccount = mockk<WalletAccount>()
++            val proposal = swapProposal(reviewedAccount)
+@@ -46,0 +159 @@ class ProcessSwapTransactionUseCaseTest {
++            coVerify(exactly = 1) { fx.metadataRepository.getSwapMetadata("deposit-address", reviewedAccount) }
+@@ -57 +170,2 @@ class ProcessSwapTransactionUseCaseTest {
 -                    status = SwapStatus.PENDING
 +                    status = SwapStatus.PENDING,
-+                    account = proposal.fundingAccount,
-@@ -107 +218,2 @@ class ProcessSwapTransactionUseCaseTest {
++                    account = reviewedAccount,
+@@ -107 +221,2 @@ class ProcessSwapTransactionUseCaseTest {
 -                    any()
 +                    any(),
 +                    account = any(),
-@@ -144,0 +257 @@ class ProcessSwapTransactionUseCaseTest {
-+            every { fundingAccount } returns mockk()
-@@ -154,0 +268,9 @@ class ProcessSwapTransactionUseCaseTest {
+@@ -133 +248 @@ class ProcessSwapTransactionUseCaseTest {
+-    private suspend fun swapProposal(): SwapTransactionProposal {
++    private suspend fun swapProposal(reviewedAccount: WalletAccount = mockk()): SwapTransactionProposal {
+@@ -144,0 +260 @@ class ProcessSwapTransactionUseCaseTest {
++            every { fundingAccount } returns reviewedAccount
+@@ -154,0 +271,9 @@ class ProcessSwapTransactionUseCaseTest {
 +
 +        init {
 +            coEvery { metadataRepository.getSwapMetadata(any(), any()) } returns null
@@ -58363,10 +58389,10 @@ index d59e700c3..c246efafa 100644
 +
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayCatalogRecoveryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayCatalogRecoveryTest.kt
 new file mode 100644
-index 000000000..2f4b4458b
+index 000000000..4a0673e6e
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/PayCatalogRecoveryTest.kt
-@@ -0,0 +1,147 @@
+@@ -0,0 +1,149 @@
 +package co.electriccoin.zcash.ui.screen.pay
 +
 +import androidx.lifecycle.viewModelScope
@@ -58374,6 +58400,7 @@ index 000000000..2f4b4458b
 +import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 +import co.electriccoin.zcash.ui.common.model.SwapAsset
 +import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
++import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 +import co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl
 +import co.electriccoin.zcash.ui.common.usecase.GetCuratedSwapAssetsUseCase
@@ -58432,10 +58459,11 @@ index 000000000..2f4b4458b
 +            every { getCuratedSwapAssets() } returns offers.map(fixture::simple)
 +        }
 +        var pickerResult: SwapAsset = bnb
++        val account = mockk<WalletAccount> { every { canSpend(any()) } returns true }
 +        val vm = PayVM(
 +            getCuratedSwapAssetsUseCase = GetCuratedSwapAssetsUseCase(repository, simple),
 +            getSelectedWalletAccount = mockk<GetSelectedWalletAccountUseCase> {
-+                every { observe() } returns flowOf(null)
++                every { observe() } returns flowOf(account)
 +            },
 +            swapRepository = repository,
 +            cancelSwap = mockk(),
@@ -58488,7 +58516,7 @@ index 000000000..2f4b4458b
 +            assertEquals(retry, button().text)
 +            assertTrue(button().isEnabled)
 +
-+            repository.requestRefreshAssetsOnce()
++            button().onClick()
 +            runCurrent()
 +            assertEquals(0, form().amount.innerState.amount?.compareTo(BigDecimal("2.014")))
 +            assertEquals(stringRes(co.electriccoin.zcash.ui.design.R.string.send_review), button().text)
@@ -59234,10 +59262,10 @@ index fcda335bd..a57b60e46 100644
 +                    mockk<ReadClipboardTextUseCase> { every { this@mockk.invoke() } answers { clipboard } },
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/request/viewmodel/RequestUnitPreservationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/request/viewmodel/RequestUnitPreservationTest.kt
 new file mode 100644
-index 000000000..017720abf
+index 000000000..f289439af
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/request/viewmodel/RequestUnitPreservationTest.kt
-@@ -0,0 +1,214 @@
+@@ -0,0 +1,218 @@
 +package co.electriccoin.zcash.ui.screen.request.viewmodel
 +
 +import androidx.lifecycle.ViewModelStore
@@ -59364,7 +59392,11 @@ index 000000000..017720abf
 +        fixture { vm, rate, builder ->
 +            enterFiat(vm)
 +            amount(vm).onDone()
-+            assertEquals("0.25", assertIs<RequestState.Memo>(vm.state.value).request.memoState.zecAmount)
++            assertEquals(
++                0, BigDecimal("0.25").compareTo(
++                    assertIs<RequestState.Memo>(vm.state.value).request.memoState.zecAmount.toBigDecimal()
++                )
++            )
 +            rate.value = data(0.0)
 +            assertIs<RequestState.Memo>(vm.state.value).onBack()
 +            assertFalse(amount(vm).canContinue)
