@@ -146,7 +146,14 @@ class RequestUnitPreservationTest {
     private fun amount(vm: RequestVM) = assertIs<RequestState.Amount>(vm.state.value)
 
     private fun data(price: Double, currency: FiatCurrency = FiatCurrency.USD) = ExchangeRateState.Data(
-        currencyConversion = FiatCurrencyConversion(Clock.System.now(), price, currency),
+        currencyConversion = if (price > 0 && price.isFinite()) {
+            FiatCurrencyConversion(Clock.System.now(), price, currency)
+        } else {
+            mockk {
+                every { priceOfZec } returns price
+                every { fiatCurrency } returns currency
+            }
+        },
         expectedCurrency = currency,
         onRefresh = {},
     )
