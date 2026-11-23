@@ -75,8 +75,9 @@ class ExportTaxUseCase(
             var shared = false
             try {
                 val entries = getCsvEntries()
+                val currentAccount = accountDataSource.getSelectedAccount()
                 check(
-                    accountDataSource.getSelectedAccount().sdkAccount.accountUuid == selectedAccount.sdkAccount.accountUuid
+                    currentAccount.sdkAccount.accountUuid == selectedAccount.sdkAccount.accountUuid
                 )
                 writeCsvToFile(outputFile = outputFile, data = entries)
                 val intent =
