@@ -40,6 +40,7 @@ import co.electriccoin.zcash.ui.screen.balances.BalanceWidgetVM
 import co.electriccoin.zcash.ui.screen.scan.ScanArgs
 import co.electriccoin.zcash.ui.screen.scan.ScanFlow
 import co.electriccoin.zcash.ui.screen.send.ext.Saver
+import co.electriccoin.zcash.ui.screen.send.model.AmountField
 import co.electriccoin.zcash.ui.screen.send.model.AmountState
 import co.electriccoin.zcash.ui.screen.send.model.MemoState
 import co.electriccoin.zcash.ui.screen.send.model.RecipientAddressState
@@ -140,49 +141,39 @@ internal fun WrapSend(
         viewModel.initializeRecipient(sendArguments)
     }
 
-    // Amount computation:
-    val (amountState, setAmountState) =
+    val amountDraftState =
         rememberSaveable(stateSaver = AmountState.getSaver(context)) {
-            // Default amount state
             mutableStateOf(
                 AmountState.newFromZec(
                     value = zecSend?.amount?.toZecString(NUMBER_FORMAT_LOCALE) ?: "",
                     fiatValue = "",
-                    isTransparentOrTextRecipient =
-                        recipientAddressState.type?.let { it == AddressType.Transparent }
-                            ?: false,
+                    isTransparentOrTextRecipient = !recipientAddressState.supportsMemo,
                     exchangeRateState = exchangeRateState,
                 )
             )
         }
-    // New amount state based on the recipient address type (e.g. shielded supports zero funds sending and
-    // transparent not)
-    LaunchedEffect(recipientAddressState, exchangeRateState) {
-        setAmountState(
-            if (amountState.value.getString(context).isNotBlank() ||
-                amountState.fiatValue.getString(context).isBlank()
-            ) {
+    val (amountDraft, setAmountState) = amountDraftState
+    val amountState =
+        remember(amountDraft, recipientAddressState, exchangeRateState, context) {
+            if (amountDraft.lastFieldChangedByUser == AmountField.ZEC) {
                 AmountState.newFromZec(
-                    value = amountState.value.getString(context),
-                    fiatValue = amountState.fiatValue.getString(context),
-                    isTransparentOrTextRecipient =
-                        recipientAddressState.type
-                            ?.let { it == AddressType.Transparent } ?: false,
+                    value = amountDraft.value.getString(context),
+                    fiatValue = amountDraft.fiatValue.getString(context),
+                    isTransparentOrTextRecipient = !recipientAddressState.supportsMemo,
                     exchangeRateState = exchangeRateState,
-                    lastFieldChangedByUser = amountState.lastFieldChangedByUser,
+                    requireFreshRate = true,
                 )
             } else {
                 AmountState.newFromFiat(
-                    value = amountState.value.getString(context),
-                    fiatValue = amountState.fiatValue.getString(context),
-                    isTransparentOrTextRecipient =
-                        recipientAddressState.type
-                            ?.let { it == AddressType.Transparent } ?: false,
+                    value = amountDraft.value.getString(context),
+                    fiatValue = amountDraft.fiatValue.getString(context),
+                    isTransparentOrTextRecipient = !recipientAddressState.supportsMemo,
                     exchangeRateState = exchangeRateState,
+                    fiatCurrency = amountDraft.fiatCurrency,
+                    requireFreshRate = true,
                 )
             }
-        )
-    }
+        }
 
     // Memo computation:
     val (memoState, setMemoState) =
@@ -232,8 +223,8 @@ internal fun WrapSend(
                     setAmountState(
                         AmountState.newFromZec(
                             value = stringRes(value, TickerLocation.HIDDEN).getString(context),
-                            fiatValue = amountState.fiatValue.getString(context),
-                            isTransparentOrTextRecipient = type == AddressType.Transparent,
+                            fiatValue = "",
+                            isTransparentOrTextRecipient = type == AddressType.Transparent || type == AddressType.Tex,
                             exchangeRateState = exchangeRateState,
                         )
                     )
@@ -283,6 +274,9 @@ internal fun WrapSend(
             balanceWidgetState = balanceWidgetState,
             sendStage = sendStage,
             onCreateZecSend = { newZecSend ->
+                if (amountState.lastFieldChangedByUser == AmountField.FIAT && amountDraftState.value != amountDraft) {
+                    return@Send
+                }
                 viewModel.onCreateZecSendClick(
                     newZecSend = newZecSend,
                     amountState = amountState,

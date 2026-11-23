@@ -931,6 +931,10 @@
     <string name="taxExport_download">Download</string>
     <string name="taxExport_error">Could not export transaction history. Try again.</string>
     <string name="request_amount_minimum">Enter at least 0.00000001 ZEC.</string>
+    <string name="request_amount_fiat_minimum">Enter the equivalent of at least 0.00005 ZEC.</string>
+    <string name="request_amount_rate_loading">Refreshing exchange rate…</string>
+    <string name="request_amount_rate_stale">The exchange rate is out of date.</string>
+    <string name="request_amount_rate_unavailable">Exchange rate unavailable.</string>
 
     <!-- ===== tex_unsupported ===== -->
     <string name="texKeystone_title">Unsupported Address Type</string>

@@ -12,6 +12,7 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateError
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.common.wallet.RefreshLock
 import co.electriccoin.zcash.ui.common.wallet.StaleLock
+import co.electriccoin.zcash.ui.common.wallet.WALLET_EXCHANGE_RATE_MAX_AGE
 import io.ktor.client.call.NoTransformationFoundException
 import io.ktor.client.plugins.ResponseException
 import io.ktor.serialization.ContentConvertException
@@ -148,7 +149,7 @@ class ExchangeRateRepositoryImpl(
     private val staleExchangeRateUsdLock =
         StaleLock(
             timestampToObserve = usdExchangeRateTimestamp,
-            lockDuration = USD_EXCHANGE_STALE_LOCK_THRESHOLD,
+            lockDuration = WALLET_EXCHANGE_RATE_MAX_AGE,
             onRefresh = { expiredTimestamp ->
                 // The combined UI state may still hold its previous value when collection resumes.
                 val observed = exchangeRateUsdInternal.value.observed
@@ -267,4 +268,3 @@ private data class ExchangeRateResult(
 )
 
 private val USD_EXCHANGE_REFRESH_LOCK_THRESHOLD = 2.minutes
-private val USD_EXCHANGE_STALE_LOCK_THRESHOLD = 15.minutes

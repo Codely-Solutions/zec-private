@@ -1,9 +1,11 @@
 package co.electriccoin.zcash.ui.screen.request.model
 
 import androidx.annotation.DrawableRes
+import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.sdk.type.ZcashCurrency
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
 import co.electriccoin.zcash.ui.design.component.QrState
 import co.electriccoin.zcash.ui.design.util.ImageResource
 import co.electriccoin.zcash.ui.design.util.QrCodeColors
@@ -25,15 +27,17 @@ internal sealed class RequestState {
         override val onBack: () -> Unit,
         val onDone: () -> Unit,
     ) : Prepared(onBack) {
+        val conversion: FiatCurrencyConversion?
+            get() = (exchangeRateState as? ExchangeRateState.Data)?.eligibleConversion()
+
         val isBelowMinimum: Boolean
-            get() = request.amountState.isBelowMinimum(
-                (exchangeRateState as? ExchangeRateState.Data)?.currencyConversion
-            )
+            get() = request.amountState.isBelowMinimum(conversion)
+
+        val zecAmount
+            get() = request.amountState.validZecAmount(conversion)
 
         val canContinue: Boolean
-            get() = request.amountState.validZecAmount(
-                (exchangeRateState as? ExchangeRateState.Data)?.currencyConversion
-            ) != null
+            get() = zecAmount != null
     }
 
     data class Memo(

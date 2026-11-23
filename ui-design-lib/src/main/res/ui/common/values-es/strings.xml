@@ -565,6 +565,10 @@
     <string name="general_next">Siguiente</string>
     <string name="requestZec_summary_shareQR">Compartir Código QR</string>
     <string name="request_amount_empty">0</string>
+    <string name="request_amount_fiat_minimum">Introduce el equivalente a al menos 0.00005 ZEC.</string>
+    <string name="request_amount_rate_loading">Actualizando la tasa de cambio…</string>
+    <string name="request_amount_rate_stale">La tasa de cambio está desactualizada.</string>
+    <string name="request_amount_rate_unavailable">Tasa de cambio no disponible.</string>
     <string name="request_amount_keyboard_zero">0</string>
     <string name="request_amount_keyboard_one">1</string>
     <string name="request_amount_keyboard_two">2</string>

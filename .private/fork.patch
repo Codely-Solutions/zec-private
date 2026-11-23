@@ -17654,6 +17654,24 @@ index d94c54a63..cc03febb0 100644
 @@ -17,0 +17,2 @@ dependencies {
 +    api(platform(libs.okhttp.bom))
 +    api(libs.okhttp)
+diff --git a/sdk-ext-lib/src/main/java/cash/z/ecc/sdk/extension/ZatoshiExt.kt b/sdk-ext-lib/src/main/java/cash/z/ecc/sdk/extension/ZatoshiExt.kt
+index cff1fe56a..d49777794 100644
+--- a/sdk-ext-lib/src/main/java/cash/z/ecc/sdk/extension/ZatoshiExt.kt
++++ b/sdk-ext-lib/src/main/java/cash/z/ecc/sdk/extension/ZatoshiExt.kt
+@@ -4 +3,0 @@ import cash.z.ecc.android.sdk.model.Zatoshi
+-import kotlin.math.floor
+@@ -9,2 +8,3 @@ val Zatoshi.Companion.ZERO: Zatoshi
+-@Suppress("MagicNumber")
+-fun Zatoshi.floor(): Zatoshi = Zatoshi(floorRoundBy(value.toDouble(), 5000.0).toLong())
++const val FIAT_ZATOSHI_INCREMENT = 5_000L
++
++fun Zatoshi.floor(): Zatoshi = Zatoshi(value - value % FIAT_ZATOSHI_INCREMENT)
+@@ -16,5 +15,0 @@ private const val TYPICAL_FEE = 100000L
+-
+-private fun floorRoundBy(number: Double, multiple: Double): Double {
+-    require(multiple != 0.0) { "Multiple cannot be zero" }
+-    return floor(number / multiple) * multiple
+-}
 diff --git a/settings.gradle.kts b/settings.gradle.kts
 index 5831568a4..0286fa7fa 100644
 --- a/settings.gradle.kts
@@ -22578,7 +22596,7 @@ index 000000000..43d6ffd95
 +<resources xmlns:tools="http://schemas.android.com/tools"
 +    tools:keep="@drawable/ic_token_*,@drawable/ic_chain_*" />
 diff --git a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
-index 7b9af8bf7..72714f4c8 100644
+index 7b9af8bf7..509f3afea 100644
 --- a/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values-es/strings.xml
 @@ -73 +73 @@
@@ -22782,149 +22800,154 @@ index 7b9af8bf7..72714f4c8 100644
 @@ -550 +534 @@
 -    <string name="redeemGift_ready_disclaimer">Los fondos se enviarán a tu billetera <xliff:g id="wallet" example="Zodl">%1$s</xliff:g>. La comisión de red ya está descontada del monto mostrado.</string>
 +    <string name="redeemGift_ready_disclaimer">Los fondos se enviarán a tu billetera <xliff:g id="wallet" example="ZEC Private">%1$s</xliff:g>. La comisión de red ya está descontada del monto mostrado.</string>
-@@ -603 +587 @@
+@@ -583,0 +568,4 @@
++    <string name="request_amount_fiat_minimum">Introduce el equivalente a al menos 0.00005 ZEC.</string>
++    <string name="request_amount_rate_loading">Actualizando la tasa de cambio…</string>
++    <string name="request_amount_rate_stale">La tasa de cambio está desactualizada.</string>
++    <string name="request_amount_rate_unavailable">Tasa de cambio no disponible.</string>
+@@ -603 +591 @@
 -        https://play.google.com/store/apps/details?id=co.electriccoin.zcash</string>
 +        https://github.com/Sammy-Lastre/zec-private/releases</string>
-@@ -607 +591,3 @@
+@@ -607 +595,3 @@
 -    <string name="restoreWallet_info">Por favor, ingresa tu frase secreta de recuperación de 24 palabras en el orden correcto.</string>
 +    <string name="restoreWallet_info">Ingresa tu frase secreta de recuperación de 24 palabras en orden o pega la frase completa.</string>
 +    <string name="restore_seed_paste">Pegar frase de recuperación</string>
 +    <string name="restore_seed_paste_error">Ingresa o pega una frase de recuperación válida de 24 palabras.</string>
-@@ -609 +595 @@
+@@ -609 +599 @@
 -    <string name="restore_dialog_message_1">es un conjunto único de 24 palabras que aparecen en un orden preciso. Puede usarse para obtener control total de tus fondos desde cualquier dispositivo a través de cualquier app de billetera Zcash. Piénsala como la llave maestra de tu billetera. Está guardada en la Configuración Avanzada de Zodl.</string>
 +    <string name="restore_dialog_message_1">es un conjunto único de 24 palabras que aparecen en un orden preciso. Puede usarse para obtener control total de tus fondos desde cualquier dispositivo a través de cualquier app de billetera Zcash. Piénsala como la llave maestra de tu billetera. Está guardada en la Configuración Avanzada de ZEC Private.</string>
-@@ -611 +597 @@
+@@ -611 +601 @@
 -    <string name="restore_dialog_message_2">es la altura de bloque (número de bloque en la cadena de bloques) en la que se creó tu billetera. Si alguna vez pierdes acceso a tu app de Zodl y necesitas recuperar tus fondos, proporcionar esta altura junto con tu frase de recuperación puede acelerar significativamente el proceso.</string>
 +    <string name="restore_dialog_message_2">es la altura de bloque (número de bloque en la cadena de bloques) en la que se creó tu billetera. Si alguna vez pierdes acceso a tu app de ZEC Private y necesitas recuperar tus fondos, proporcionar esta altura junto con tu frase de recuperación puede acelerar significativamente el proceso.</string>
-@@ -613 +599 @@
+@@ -613 +603 @@
 -    <string name="firstWalletTransactionSubtitleRestore">Decide hasta dónde debe escanear Zodl. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
 +    <string name="firstWalletTransactionSubtitleRestore">Decide hasta dónde debe escanear ZEC Private. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
-@@ -618,2 +604,2 @@
+@@ -618,2 +608,2 @@
 -    <string name="firstWalletTransactionSubtitleResync">Decide hasta dónde debe resincronizarse Zodl. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
 -    <string name="resync_bd_estimation_message">Tu billetera se resincronizará desde %1$s (%2$s bloques). Zodl escaneará y recuperará todas las transacciones realizadas después del siguiente número de bloque.</string>
 +    <string name="firstWalletTransactionSubtitleResync">Decide hasta dónde debe resincronizarse ZEC Private. Ingresa una fecha anterior a tu primera transacción recibida. Si no estás seguro/a, elige una fecha anterior.</string>
 +    <string name="resync_bd_estimation_message">Tu billetera se resincronizará desde %1$s (%2$s bloques). ZEC Private escaneará y recuperará todas las transacciones realizadas después del siguiente número de bloque.</string>
-@@ -622 +608 @@
+@@ -622 +612 @@
 -    <string name="resyncWallet_dateInfo">A menos que especifiques lo contrario a continuación, Zodl se resincronizará desde la fecha mostrada.</string>
 +    <string name="resyncWallet_dateInfo">A menos que especifiques lo contrario a continuación, ZEC Private se resincronizará desde la fecha mostrada.</string>
-@@ -635 +621 @@
+@@ -635 +625 @@
 -    <string name="scan_cameraSettings">La cámara no está autorizada. Por favor, ve a la configuración del sistema de Zodl y actívala.</string>
 +    <string name="scan_cameraSettings">La cámara no está autorizada. Por favor, ve a la configuración del sistema de ZEC Private y actívala.</string>
-@@ -645,2 +631,2 @@
+@@ -645,2 +635,2 @@
 -    <string name="deeplinkWarning_desc">Para mayor seguridad y protección, vuelve a escanear el código QR con Zodl.</string>
 -    <string name="deeplinkWarning_cta">Reescanear en Zodl</string>
 +    <string name="deeplinkWarning_desc">Para mayor seguridad y protección, vuelve a escanear el código QR con ZEC Private.</string>
 +    <string name="deeplinkWarning_cta">Reescanear en ZEC Private</string>
-@@ -654 +640 @@
+@@ -654 +644 @@
 -        Zodl y actívala.</string>
 +        ZEC Private y actívala.</string>
-@@ -736 +722 @@
+@@ -736 +726 @@
 -    <string name="send_confirmation_failure_grpc_subtitle">Zodl encontró problemas de conexión al enviar la transacción. Reintentará en los próximos minutos.</string>
 +    <string name="send_confirmation_failure_grpc_subtitle">ZEC Private encontró problemas de conexión al enviar la transacción. Reintentará en los próximos minutos.</string>
-@@ -742 +728 @@
+@@ -742 +732 @@
 -    <string name="send_confirmation_multiple_report_text">Hola, equipo de Zodl.\n\nAl enviar una transacción a una dirección TEX, encontré un error. Me comunico para recibir orientación sobre cómo recuperar mis fondos.\n\nGracias.</string>
 +    <string name="send_confirmation_multiple_report_text">Hola, equipo de ZEC Private.\n\nAl enviar una transacción a una dirección TEX, encontré un error. Me comunico para recibir orientación sobre cómo recuperar mis fondos.\n\nGracias.</string>
-@@ -810 +796 @@
+@@ -810 +800 @@
 -    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de Zodl.</string>
 +    <string name="swapAndPay_slippageDesc">Esta configuración determina la diferencia máxima permitida entre el precio esperado de un swap y el precio real que pagas, lo cual está fuera del control de ZEC Private.</string>
-@@ -816 +802 @@
+@@ -816 +806 @@
 -    <string name="pay_slippage_info">Podrías pagar hasta %s más, además de las comisiones de transacción.</string>
 +    <string name="pay_slippage_info">Podrías pagar hasta %s más si cambia el precio. Las comisiones de red de Zcash son adicionales.</string>
-@@ -846 +832 @@
+@@ -846 +836 @@
 -    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %s menos según el deslizamiento %s que configuraste.</string>
 +    <string name="swapAndPay_swapQuoteSlippageWarn">Podrías recibir hasta %1$s menos según el deslizamiento %2$s que configuraste.</string>
-@@ -853,2 +839,2 @@
+@@ -853,2 +843,2 @@
 -    <string name="swapToZec_info2">%s en %s</string>
 -    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en Zodl</string>
 +    <string name="swapToZec_info2">%1$s en %2$s</string>
 +    <string name="swap_to_zec_share_text">Dirección de depósito para %1$s %2$s en %3$s swap a %4$s en ZEC Private</string>
-@@ -884 +870 @@
+@@ -884 +874 @@
 -    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="Zodl" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
 +    <string name="taxExport_desc">Descarga el historial de transacciones de <xliff:g example="ZEC Private" id="account_name">%s</xliff:g> del año calendario anterior en formato .csv.</string>
-@@ -894,2 +880,2 @@
+@@ -894,2 +884,2 @@
 -    <string name="texKeystone_step1_title">Envía primero a Zodl</string>
 -    <string name="texKeystone_step1_desc">Transfiere ZEC a tu dirección protegida de Zodl</string>
 +    <string name="texKeystone_step1_title">Envía primero a ZEC Private</string>
 +    <string name="texKeystone_step1_desc">Transfiere ZEC a tu dirección protegida de ZEC Private</string>
-@@ -897,2 +883,2 @@
+@@ -897,2 +887,2 @@
 -    <string name="texKeystone_step2_title">Envía desde Zodl a la dirección TEX</string>
 -    <string name="texKeystone_step2_desc">Una vez recibido en Zodl, envía los tokens a tu dirección TEX de destino final</string>
 +    <string name="texKeystone_step2_title">Envía desde ZEC Private a la dirección TEX</string>
 +    <string name="texKeystone_step2_desc">Una vez recibido en ZEC Private, envía los tokens a tu dirección TEX de destino final</string>
-@@ -948 +934 @@
+@@ -948 +938 @@
 -    <string name="swapAndPay_refundInfo">Tu depósito fue detectado pero el swap no pudo completarse. Tus fondos han sido devueltos, descontando las comisiones de transacción. Si aún no los recibiste, contacta al equipo de soporte de Zodl.</string>
 +    <string name="swapAndPay_refundInfo">Se detectó tu depósito, pero el swap no pudo completarse. El proveedor indica un reembolso, menos las comisiones. Si no llegó, conserva los detalles y consulta su estado con el proveedor.</string>
-@@ -951 +937 @@
+@@ -951 +941 @@
 -    <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos y no recibiste tu swap, contacta a soporte para que podamos resolverlo.</string>
 +    <string name="swapAndPay_failedMsg">Este swap no pudo completarse. Si depositaste fondos, conserva los detalles y revisa su estado o reembolso con el proveedor antes de enviar de nuevo.</string>
-@@ -953 +939 @@
+@@ -953 +943 @@
 -    <string name="swapAndPay_expiredMsg">Este swap venció tras su ventana de validez de 24 horas. Si no enviaste fondos, no es necesario hacer nada. Si enviaste fondos, contacta a soporte para que podamos ayudarte.</string>
 +    <string name="swapAndPay_expiredMsg">Este swap caducó. Si no enviaste fondos, no debes hacer nada. Si enviaste, conserva los detalles y revisa su estado o reembolso con el proveedor.</string>
-@@ -957 +943,3 @@
+@@ -957 +947,3 @@
 -    <string name="reportSwap_msg">Al tocar el botón de abajo, se enviarán detalles de este swap (como la dirección de depósito y el activo destino) al equipo de soporte de Zodl para que puedan ayudarte a resolver tu problema. La información de la transacción se incluye automáticamente.</string>
 +    <string name="reportSwap_msg">Exporta detalles de este swap, como la dirección de depósito y el activo destino. Elige el destinatario y revisa el contenido antes de compartirlo. No se envía ningún informe automáticamente.</string>
 +    <string name="reportSwap_shareQuote">Compartir cotización original</string>
 +    <string name="reportSwap_shareQuoteDescription">Comparte la cotización firmada por el proveedor con alguien de confianza. Incluye el importe del swap y las direcciones de destino y de reembolso.</string>
-@@ -962 +950 @@
+@@ -962 +954 @@
 -    <string name="swap_mismatch_msg_2">Te agradeceríamos que nos lo reportaras para que podamos investigarlo con el proveedor de swap.</string>
 +    <string name="swap_mismatch_msg_2">Puedes exportar detalles de diagnóstico para investigar el problema. Revísalos antes de elegir un destinatario.</string>
-@@ -965,2 +953,2 @@
+@@ -965,2 +957,2 @@
 -    <string name="swap_mismatch_support_email_subject">Zodl Swap: discrepancia en la API</string>
 -    <string name="swap_mismatch_support_email_body">Zodl detectó el siguiente error en la respuesta de la API del proveedor de swap. Proporcionar estos detalles nos permite plantearlo con ellos para investigarlo. No compartiremos tus datos personales con el proveedor de swap. Puedes enviarlo tal cual o incluir una nota para nosotros. Gracias de antemano.\n\nProveedor de swap: %1$s\nTipo de swap: %2$s\nTipo de discrepancia: %3$s\nID de cotización: %4$s</string>
 +    <string name="swap_mismatch_support_email_subject">ZEC Private Swap: discrepancia en la API</string>
 +    <string name="swap_mismatch_support_email_body">ZEC Private rechazó una respuesta del proveedor que no coincidía con la solicitud. Revisa estos detalles antes de compartirlos.\n\nProveedor: %1$s\nTipo de swap: %2$s\nDiscrepancia: %3$s\nID de cotización: %4$s</string>
-@@ -1051 +1039 @@
+@@ -1051 +1043 @@
 -    <string name="update_title_available">Zodl aquí.</string>
 +    <string name="update_title_available">ZEC Private aquí.</string>
-@@ -1054 +1042 @@
+@@ -1054 +1046 @@
 -        Hay una actualización requerida para Zodl que realiza importantes mejoras en el rendimiento y/o la seguridad.
 +        Hay una actualización requerida para ZEC Private que realiza importantes mejoras en el rendimiento y/o la seguridad.
-@@ -1057 +1045 @@
+@@ -1057 +1049 @@
 -        Hay una nueva versión de Zodl que realiza actualizaciones menores para mejorar el rendimiento y/o la seguridad.\n\nPor favor, toma un momento para actualizar a la última versión.
 +        Hay una nueva versión de ZEC Private que realiza actualizaciones menores para mejorar el rendimiento y/o la seguridad.\n\nPor favor, toma un momento para actualizar a la última versión.
-@@ -1069 +1057 @@
+@@ -1069 +1061 @@
 -    <string name="notEnoughFreeSpace_messagePre">Zodl requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
 +    <string name="notEnoughFreeSpace_messagePre">ZEC Private requiere <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB de espacio para sincronizar la blockchain de Zcash, pero solo hay</string>
-@@ -1091 +1079 @@
+@@ -1091 +1083 @@
 -    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre Zodl para resolverlo.</string>
 +    <string name="migration_notification_torFailureText">Una transferencia programada no se pudo enviar por Tor. Abre ZEC Private para resolverlo.</string>
-@@ -1093,2 +1081,2 @@
+@@ -1093,2 +1085,2 @@
 -    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre Zodl para revisar los detalles.</string>
 -    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre Zodl para continuar tu migración.</string>
 +    <string name="migration_notification_planInvalidText">El plan de migración necesita actualizarse. Abre ZEC Private para revisar los detalles.</string>
 +    <string name="migration_notification_transferExpiredText">Una transferencia expiró. Abre ZEC Private para continuar tu migración.</string>
-@@ -1106 +1094 @@
+@@ -1106 +1098 @@
 -    <string name="restartMigration_support">Si reiniciar no resuelve el problema, contacta al soporte de Zodl a través de Enviar comentarios.</string>
 +    <string name="restartMigration_support">Si reiniciar no resuelve el problema, conserva tus datos de recuperación y exporta el diagnóstico desde la pantalla de error. Nunca compartas tu frase de recuperación.</string>
-@@ -1179 +1167 @@
+@@ -1179 +1171 @@
 -    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras Zodl. Recibe avisos sobre:</string>
 +    <string name="migrationNotifPermission_subtitle">Si se pierde una transferencia programada o falla un envío en segundo plano, podemos enviarte una notificación local para que abras ZEC Private. Recibe avisos sobre:</string>
-@@ -1186 +1174 @@
+@@ -1186 +1178 @@
 -    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir Zodl para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
 +    <string name="migrationNotifPermission_warningHint">Sin notificaciones, tendrás que abrir ZEC Private para revisar el progreso de la migración y aprobar tú mismo cualquier transferencia manual.</string>
-@@ -1215 +1203 @@
+@@ -1215 +1207 @@
 -    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de Zodl/Keystone.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">El bloqueo existe solo en esta instancia de ZEC Private/Keystone.</string>
-@@ -1248 +1236 @@
+@@ -1248 +1240 @@
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private se encarga del resto, enviando cada transferencia automáticamente en su ventana programada mientras la app se ejecuta en segundo plano.</string>
-@@ -1262 +1250 @@
+@@ -1262 +1254 @@
 -    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, Zodl te avisará la próxima vez que abras la app.</string>
 +    <string name="migrationReview_privacyBody">Tu saldo se divide en %1$d transferencias a lo largo de %2$s. Apruébalo una vez y nosotros nos encargamos del resto: solo mantén la app ejecutándose en segundo plano. Los montos se aleatorizan por privacidad. Si se pierde una ventana de envío, ZEC Private te avisará la próxima vez que abras la app.</string>
-@@ -1277 +1265 @@
+@@ -1277 +1269 @@
 -    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, Zodl necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para Zodl en la configuración de tu dispositivo.</string>
 +    <string name="migrationBattery_body">Para enviar las transferencias de migración en sus horarios programados, ZEC Private necesita seguir ejecutándose en segundo plano. Permite la actividad en segundo plano para ZEC Private en la configuración de tu dispositivo.</string>
-@@ -1279 +1267 @@
+@@ -1279 +1271 @@
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private se activa y envía cada transferencia en el horario programado, sin que tengas que hacer nada.</string>
-@@ -1283,2 +1271,2 @@
+@@ -1283,2 +1275,2 @@
 -    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir Zodl manualmente en cada horario programado para enviar.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Las transferencias se envían en horarios fijos de la red, por lo que no están vinculadas a cuándo abres ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Sin este permiso, tendrás que abrir ZEC Private manualmente en cada horario programado para enviar.</string>
-@@ -1306 +1293,0 @@
+@@ -1306 +1297,0 @@
 -    <string name="coinVote_confirmSubmission_detailExcludedWeight">Excluido de esta votación</string>
-@@ -1312,2 +1299,2 @@
+@@ -1312,2 +1303,2 @@
 -    <string name="migrationTipUnavailable_title">Zodl sigue sincronizando</string>
 -    <string name="migrationTipUnavailable_message">Zodl debe terminar de sincronizar antes de planificar una migración. Inténtalo de nuevo en un momento.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private sigue sincronizando</string>
@@ -22969,7 +22992,7 @@ index 5ece3f5f9..000000000
 -</resources>
 \ No newline at end of file
 diff --git a/ui-design-lib/src/main/res/ui/common/values/strings.xml b/ui-design-lib/src/main/res/ui/common/values/strings.xml
-index f41234151..8221d64c3 100644
+index f41234151..5152f2de2 100644
 --- a/ui-design-lib/src/main/res/ui/common/values/strings.xml
 +++ b/ui-design-lib/src/main/res/ui/common/values/strings.xml
 @@ -17 +17 @@
@@ -23264,51 +23287,55 @@ index f41234151..8221d64c3 100644
 @@ -954 +930 @@
 -    <string name="taxExport_desc">Download your <xliff:g example="Zodl" id="account_name">%s</xliff:g> transaction history from the previous calendar year in a .csv format.</string>
 +    <string name="taxExport_desc">Download your <xliff:g example="ZEC Private" id="account_name">%s</xliff:g> transaction history from the previous calendar year in a .csv format.</string>
-@@ -955,0 +932,2 @@
+@@ -955,0 +932,6 @@
 +    <string name="taxExport_error">Could not export transaction history. Try again.</string>
 +    <string name="request_amount_minimum">Enter at least 0.00000001 ZEC.</string>
-@@ -964,2 +942,2 @@
++    <string name="request_amount_fiat_minimum">Enter the equivalent of at least 0.00005 ZEC.</string>
++    <string name="request_amount_rate_loading">Refreshing exchange rate…</string>
++    <string name="request_amount_rate_stale">The exchange rate is out of date.</string>
++    <string name="request_amount_rate_unavailable">Exchange rate unavailable.</string>
+@@ -964,2 +946,2 @@
 -    <string name="texKeystone_step1_title">Send to Zodl first</string>
 -    <string name="texKeystone_step1_desc">Transfer ZEC to your Zodl shielded address</string>
 +    <string name="texKeystone_step1_title">Send to ZEC Private first</string>
 +    <string name="texKeystone_step1_desc">Transfer ZEC to your ZEC Private shielded address</string>
-@@ -967,2 +945,2 @@
+@@ -967,2 +949,2 @@
 -    <string name="texKeystone_step2_title">Send from Zodl to TEX address</string>
 -    <string name="texKeystone_step2_desc">Once received in Zodl, send the tokens to your final TEX destination address</string>
 +    <string name="texKeystone_step2_title">Send from ZEC Private to TEX address</string>
 +    <string name="texKeystone_step2_desc">Once received in ZEC Private, send the tokens to your final TEX destination address</string>
-@@ -1019 +997 @@
+@@ -1019 +1001 @@
 -    <string name="swapAndPay_refundInfo">Your deposit was detected but the swap could not be completed. Your funds have been returned, minus transaction fees. If you haven\'t received them, contact the Zodl support team.</string>
 +    <string name="swapAndPay_refundInfo">Your deposit was detected but the swap could not be completed. The provider reports a refund, minus transaction fees. If it has not arrived, preserve the swap details and check its status with the provider.</string>
-@@ -1022 +1000 @@
+@@ -1022 +1004 @@
 -    <string name="swapAndPay_failedMsg">This swap could not be completed. If you deposited funds and didn\'t receive your swap, contact support so we can help resolve it.</string>
 +    <string name="swapAndPay_failedMsg">This swap could not be completed. If you deposited funds, preserve the swap details and inspect its status or refund with the provider before sending again.</string>
-@@ -1024 +1002 @@
+@@ -1024 +1006 @@
 -    <string name="swapAndPay_expiredMsg">This swap expired after its 24-hour validity window. If you didn\'t send funds, no action is needed. If you did send funds, contact support so we can help.</string>
 +    <string name="swapAndPay_expiredMsg">This swap expired. If you did not send funds, no action is needed. If you did, preserve the swap details and inspect its status or refund with the provider.</string>
-@@ -1028 +1006,3 @@
+@@ -1028 +1010,3 @@
 -    <string name="reportSwap_msg">Tapping the button below will send details about this swap (like the deposit address and target asset) to the Zodl support team so they can help resolve your issue. The transaction info is included automatically.</string>
 +    <string name="reportSwap_msg">Export details of this swap, including its deposit address and target asset. Choose the recipient yourself and review the contents before sharing. No report is sent automatically.</string>
 +    <string name="reportSwap_shareQuote">Share original quote</string>
 +    <string name="reportSwap_shareQuoteDescription">Share the provider-signed quote with a recipient you trust. It includes the swap amount, recipient address and refund address.</string>
-@@ -1033 +1013 @@
+@@ -1033 +1017 @@
 -    <string name="swap_mismatch_msg_2">We\’d appreciate you reporting this to us so we can investigate it with the swap provider.</string>
 +    <string name="swap_mismatch_msg_2">You can export diagnostic details for investigation. Review them before choosing a recipient.</string>
-@@ -1036,2 +1016,2 @@
+@@ -1036,2 +1020,2 @@
 -    <string name="swap_mismatch_support_email_subject">Zodl Swap: API mismatch</string>
 -    <string name="swap_mismatch_support_email_body">Zodl detected the following error in the API response from the swap provider. Providing these details allows us to raise it with them to investigate. We won\’t relay your personal details to the swap provider. You can send this as-is, or include a note to us. Thanks in advance.\n\nSwap provider: %1$s\nSwap type: %2$s\nMismatch type: %3$s\nQuote ID: %4$s</string>
 +    <string name="swap_mismatch_support_email_subject">ZEC Private Swap: API mismatch</string>
 +    <string name="swap_mismatch_support_email_body">ZEC Private rejected a swap-provider response that did not match the request. Review these diagnostic details before sharing.\n\nSwap provider: %1$s\nSwap type: %2$s\nMismatch type: %3$s\nQuote ID: %4$s</string>
-@@ -1122 +1102 @@
+@@ -1122 +1106 @@
 -    <string name="update_title_available">Zodl here.</string>
 +    <string name="update_title_available">ZEC Private here.</string>
-@@ -1125 +1105 @@
+@@ -1125 +1109 @@
 -        There is a required update\nfor Zodl that makes major improvements to\nperformance and/or security.
 +        There is a required update\nfor ZEC Private that makes major improvements to\nperformance and/or security.
-@@ -1128 +1108 @@
+@@ -1128 +1112 @@
 -        There is a new version of Zodl that makes minor updates to
 +        There is a new version of ZEC Private that makes minor updates to
-@@ -1140,7 +1119,0 @@
+@@ -1140,7 +1123,0 @@
 -    <string name="coinVote_common_continue" tools:ignore="MissingTranslation">Continue</string>
 -    <string name="coinVote_pollsList_chainConfigAccessibility" tools:ignore="MissingTranslation">Voting chain config</string>
 -    <string name="coinVote_configSettings_screenTitle" tools:ignore="MissingTranslation">Select Data Source</string>
@@ -23316,7 +23343,7 @@ index f41234151..8221d64c3 100644
 -    <string name="coinVote_configSettings_sectionSubtitle" tools:ignore="MissingTranslation">Pick a poll source, or add your own.</string>
 -    <string name="coinVote_configSettings_bundledName" tools:ignore="MissingTranslation">Coinholder Poll</string>
 -    <string name="coinVote_configSettings_defaultBadge" tools:ignore="MissingTranslation">Default</string>
-@@ -1149,15 +1121,0 @@
+@@ -1149,15 +1125,0 @@
 -    <string name="coinVote_configSettings_addCustomSource" tools:ignore="MissingTranslation">Add custom source</string>
 -    <string name="coinVote_configSettings_edit" tools:ignore="MissingTranslation">Edit</string>
 -    <string name="coinVote_configSettings_delete" tools:ignore="MissingTranslation">Delete</string>
@@ -23332,13 +23359,13 @@ index f41234151..8221d64c3 100644
 -    <string name="coinVote_configSettings_titleField" tools:ignore="MissingTranslation">Title</string>
 -    <string name="coinVote_configSettings_urlField" tools:ignore="MissingTranslation">URL</string>
 -    <string name="coinVote_configSettings_urlPlaceholder" tools:ignore="MissingTranslation">Enter...</string>
-@@ -1166 +1123,0 @@
+@@ -1166 +1127,0 @@
 -    <string name="coinVote_configSettings_errorTitleTooLong" tools:ignore="MissingTranslation">Title must be 15 characters or less, including spaces.</string>
-@@ -1168 +1124,0 @@
+@@ -1168 +1128,0 @@
 -    <string name="coinVote_configSettings_errorInvalidUrl" tools:ignore="MissingTranslation">Please enter a valid URL (e.g. https://zodl.com/polls)</string>
-@@ -1170 +1125,0 @@
+@@ -1170 +1129,0 @@
 -    <string name="coinVote_configSettings_errorDuplicateUrl" tools:ignore="MissingTranslation">This source URL is already added.</string>
-@@ -1172,24 +1126,0 @@
+@@ -1172,24 +1130,0 @@
 -    <string name="coinVote_howToVote_titleZodl" tools:ignore="MissingTranslation">How to vote with %1$s</string>
 -    <string name="coinVote_howToVote_subtitle" tools:ignore="MissingTranslation">Your ZEC gives you a voice. Shape the future of the Zcash network by voting on active proposals.</string>
 -    <string name="coinVote_howToVote_stepVotingTitle" tools:ignore="MissingTranslation">Voting on Proposals</string>
@@ -23363,11 +23390,11 @@ index f41234151..8221d64c3 100644
 -    <string name="coinVote_common_viewResults" tools:ignore="MissingTranslation">View Results</string>
 -    <string name="coinVote_delegationSigning_signedProgress" tools:ignore="MissingTranslation">%1$d of %2$d voted</string>
 -    <string name="coinVote_pollsList_loadErrorTitle" tools:ignore="MissingTranslation">Couldn\'t load polls</string>
-@@ -1201 +1131,0 @@
+@@ -1201 +1135,0 @@
 -    <string name="coinVote_error_configUnavailableTitle" tools:ignore="MissingTranslation">Voting unavailable</string>
-@@ -1203 +1132,0 @@
+@@ -1203 +1136,0 @@
 -    <string name="coinVote_results_loadErrorTitle" tools:ignore="MissingTranslation">Couldn\'t load results</string>
-@@ -1210,15 +1138,0 @@
+@@ -1210,15 +1142,0 @@
 -    <string name="coinVote_common_goBack" tools:ignore="MissingTranslation">Go Back</string>
 -    <string name="coinVote_confirmSubmission_authorizationFailedTitle" tools:ignore="MissingTranslation">Authorization Failed</string>
 -    <string name="coinVote_confirmSubmission_authorizationFailedMessage" tools:ignore="MissingTranslation">We couldn\'t authorize your vote. Check your connection and try again.</string>
@@ -23383,11 +23410,11 @@ index f41234151..8221d64c3 100644
 -    <string name="coinVote_common_close" tools:ignore="MissingTranslation">Close</string>
 -    <string name="coinVote_confirmSubmission_confirmWithKeystone" tools:ignore="MissingTranslation">Confirm with Keystone</string>
 -    <string name="coinVote_common_confirm" tools:ignore="MissingTranslation">Confirm</string>
-@@ -1228,3 +1141,0 @@ Your vote can no longer be submitted.</string>
+@@ -1228,3 +1145,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_delegationSigning_bundleProgress" tools:ignore="MissingTranslation">Sign bundle %1$d/%2$d</string>
 -    <string name="coinVote_submission_continuedProcessingTitle" tools:ignore="MissingTranslation">Submitting votes</string>
 -    <string name="coinVote_confirmSubmission_progressAuthorizing" tools:ignore="MissingTranslation">Authorizing...</string>
-@@ -1232,14 +1142,0 @@ Your vote can no longer be submitted.</string>
+@@ -1232,14 +1146,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_store_submissionAuthorizingVote" tools:ignore="MissingTranslation">Authorizing vote...</string>
 -    <string name="coinVote_confirmSubmission_progressSubmittingVoteCount" tools:ignore="MissingTranslation">Submitting vote %1$d of %2$d...</string>
 -    <string name="coinVote_confirmSubmission_progressRetrying" tools:ignore="MissingTranslation">Reconnecting...</string>
@@ -23402,29 +23429,29 @@ index f41234151..8221d64c3 100644
 -    <string name="coinVote_confirmSubmission_headerSubtitleSubmitting" tools:ignore="MissingTranslation">Vote submission is in progress, please don\'t leave this screen until it is finished.</string>
 -    <string name="coinVote_confirmSubmission_headerSubtitleCompleted" tools:ignore="MissingTranslation">Your vote was successfully published and cannot be changed.</string>
 -    <string name="coinVote_confirmSubmission_submissionFailedMessage" tools:ignore="MissingTranslation">Your vote couldn\'t be submitted. Check your connection and try again.</string>
-@@ -1252 +1148,0 @@ Your vote can no longer be submitted.</string>
+@@ -1252 +1152,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_delegationSigning_memoMessage" tools:ignore="MissingTranslation">I am authorizing this hotkey managed by my wallet to vote on %1$s with %2$s.</string>
-@@ -1254,5 +1149,0 @@ Your vote can no longer be submitted.</string>
+@@ -1254,5 +1153,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_confirmSubmission_detailPoll" tools:ignore="MissingTranslation">Poll</string>
 -    <string name="coinVote_confirmSubmission_detailVotingPower" tools:ignore="MissingTranslation">Voting power</string>
 -    <string name="coinVote_confirmSubmission_detailExcludedWeight">Excluded from this vote</string>
 -    <string name="coinVote_confirmSubmission_detailVotingHotkey" tools:ignore="MissingTranslation">Voting hotkey</string>
 -    <string name="coinVote_confirmSubmission_detailMemo" tools:ignore="MissingTranslation">Memo</string>
-@@ -1266,2 +1156,0 @@ Your vote can no longer be submitted.</string>
+@@ -1266,2 +1160,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_ineligible_titleNoVote" tools:ignore="MissingTranslation">Not Eligible for This Round</string>
 -    <string name="coinVote_ineligible_noNotesMessage" tools:ignore="MissingTranslation">Your wallet has no shielded notes from before the snapshot block. Only funds that existed at block #%@ are eligible for this voting round.</string>
-@@ -1271,5 +1159,0 @@ Your vote can no longer be submitted.</string>
+@@ -1271,5 +1163,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_proposalDetail_position" tools:ignore="MissingTranslation">%1$d OF %2$d</string>
 -    <string name="coinVote_proposalList_ctaConfirmSubmit" tools:ignore="MissingTranslation">Confirm &amp; Submit</string>
 -    <string name="coinVote_proposalList_ctaStartVoting" tools:ignore="MissingTranslation">Start Voting</string>
 -    <string name="coinVote_proposalList_ctaContinueVoting" tools:ignore="MissingTranslation">Continue Voting</string>
 -    <string name="coinVote_proposalList_reviewTitle" tools:ignore="MissingTranslation">Review and submit vote</string>
-@@ -1277,4 +1160,0 @@ Your vote can no longer be submitted.</string>
+@@ -1277,4 +1164,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_proposalList_headerEndsAt" tools:ignore="MissingTranslation">Ends %1$s</string>
 -    <string name="coinVote_common_votedDate" tools:ignore="MissingTranslation">Voted %1$s</string>
 -    <string name="coinVote_proposalList_votingPower" tools:ignore="MissingTranslation">Voting Power %1$s</string>
 -    <string name="coinVote_tallying_detailEnded" tools:ignore="MissingTranslation">Ended</string>
-@@ -1285,13 +1164,0 @@ Your vote can no longer be submitted.</string>
+@@ -1285,13 +1168,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_common_viewMore" tools:ignore="MissingTranslation">View more</string>
 -    <string name="coinVote_common_viewLess" tools:ignore="MissingTranslation">View less</string>
 -    <string name="coinVote_proposalList_viewForumDiscussions" tools:ignore="MissingTranslation">View Forum Discussions</string>
@@ -23438,13 +23465,13 @@ index f41234151..8221d64c3 100644
 -    <string name="coinVote_proposalDetail_unansweredTitle" tools:ignore="MissingTranslation">Unanswered Questions</string>
 -    <string name="coinVote_proposalDetail_skippedMessageSingle" tools:ignore="MissingTranslation">You have not responded to 1 question. Confirm to skip this question or go back to respond.</string>
 -    <string name="coinVote_proposalDetail_skippedMessageMultiple" tools:ignore="MissingTranslation">You have not responded to %1$d questions. Confirm to skip these questions or go back to respond.</string>
-@@ -1299,5 +1165,0 @@ Your vote can no longer be submitted.</string>
+@@ -1299,5 +1169,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_proposalList_reviewSubtitle" tools:ignore="MissingTranslation">Tap on the question to edit any of your answers. After you review your answers, tap on Confirm &amp; Submit.</string>
 -    <string name="coinVote_proposalList_yourVote" tools:ignore="MissingTranslation">Your vote:</string>
 -    <string name="coinVote_results_title" tools:ignore="MissingTranslation">Results</string>
 -    <string name="coinVote_common_zecValue" tools:ignore="MissingTranslation">%1$.3f ZEC</string>
 -    <string name="coinVote_results_total" tools:ignore="MissingTranslation">Total: %1$.3f ZEC</string>
-@@ -1306,30 +1167,0 @@ Your vote can no longer be submitted.</string>
+@@ -1306,30 +1171,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_common_votingPower" tools:ignore="MissingTranslation">Voting Power %1$.3f ZEC</string>
 -    <string name="coinVote_results_metaLine" tools:ignore="MissingTranslation">%1$s  &#8226;  %2$s</string>
 -    <string name="coinVote_results_votedLine" tools:ignore="MissingTranslation">Voted: %1$s</string>
@@ -23475,64 +23502,64 @@ index f41234151..8221d64c3 100644
 -    <string name="coinVote_store_userError_recoveredVoteMismatch" tools:ignore="MissingTranslation">The network reported an existing vote for this wallet that does not match this submission. If you voted from another device, check that device\'s voting status.</string>
 -    <string name="coinVote_store_userError_recoveredVoteUnverified" tools:ignore="MissingTranslation">An earlier vote transaction may already be on the network, but it could not be verified with the vote servers. Please try again in a moment.</string>
 -    <string name="coinVote_store_userError_roundNotPrepared" tools:ignore="MissingTranslation">This voting round\'s prepared data is missing on this device. Reopen the round to prepare it again.</string>
-@@ -1338 +1169,0 @@ Your vote can no longer be submitted.</string>
+@@ -1338 +1173,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_delegation_insufficientSnapshotBalance" tools:ignore="MissingTranslation">Your shielded balance at the snapshot (%1$s ZEC) is below the minimum required to vote (%2$s ZEC).</string>
-@@ -1343,2 +1173,0 @@ Your vote can no longer be submitted.</string>
+@@ -1343,2 +1177,0 @@ Your vote can no longer be submitted.</string>
 -    <string name="coinVote_walletSyncing_title" tools:ignore="MissingTranslation">Wallet Syncing</string>
 -    <string name="coinVote_walletSyncing_subtitle" tools:ignore="MissingTranslation">Your wallet needs to sync to the snapshot block height before you can participate in voting.</string>
-@@ -1355 +1184 @@ Your vote can no longer be submitted.</string>
+@@ -1355 +1188 @@ Your vote can no longer be submitted.</string>
 -    <string name="notEnoughFreeSpace_messagePre">Zodl requires <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB of space to synchronize the Zcash blockchain but there is only</string>
 +    <string name="notEnoughFreeSpace_messagePre">ZEC Private requires <xliff:g example="1" id="required_gigabytes">%1$d</xliff:g> GB of space to synchronize the Zcash blockchain but there is only</string>
-@@ -1377 +1206 @@ Your vote can no longer be submitted.</string>
+@@ -1377 +1210 @@ Your vote can no longer be submitted.</string>
 -    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open Zodl to resolve.</string>
 +    <string name="migration_notification_torFailureText">A scheduled transfer couldn\'t send over Tor. Open ZEC Private to resolve.</string>
-@@ -1379,2 +1208,2 @@ Your vote can no longer be submitted.</string>
+@@ -1379,2 +1212,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migration_notification_planInvalidText">Migration plan needs update. Open Zodl to review the details.</string>
 -    <string name="migration_notification_transferExpiredText">A transfer expired. Open Zodl to continue your migration.</string>
 +    <string name="migration_notification_planInvalidText">Migration plan needs update. Open ZEC Private to review the details.</string>
 +    <string name="migration_notification_transferExpiredText">A transfer expired. Open ZEC Private to continue your migration.</string>
-@@ -1392 +1221 @@ Your vote can no longer be submitted.</string>
+@@ -1392 +1225 @@ Your vote can no longer be submitted.</string>
 -    <string name="restartMigration_support">If restarting doesn\'t resolve the issue, please reach out to Zodl Support via Send Feedback.</string>
 +    <string name="restartMigration_support">If restarting does not resolve the issue, preserve your recovery information and export diagnostics from the error screen. Never share your recovery phrase.</string>
-@@ -1462,3 +1291,3 @@ Your vote can no longer be submitted.</string>
+@@ -1462,3 +1295,3 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Please contact support.</string>
 -    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Please contact support.</string>
 -    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Please contact support.</string>
 +    <string name="migrationComplete_migrateAnywayFailureRejected">The network rejected this transaction. Preserve the transaction details and export diagnostics.</string>
 +    <string name="migrationComplete_migrateAnywayFailureError">Something went wrong while sending. Preserve the transaction details and export diagnostics.</string>
 +    <string name="migrationComplete_migrateAnywayFailurePartial">Some but not all of this transaction\'s parts were sent. Preserve the transaction details and export diagnostics.</string>
-@@ -1472 +1301 @@ Your vote can no longer be submitted.</string>
+@@ -1472 +1305 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open Zodl. Get notified about:</string>
 +    <string name="migrationNotifPermission_subtitle">If a scheduled transfer is missed or a background submission fails, we can send you a local notification and prompt you to open ZEC Private. Get notified about:</string>
-@@ -1479 +1308 @@ Your vote can no longer be submitted.</string>
+@@ -1479 +1312 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationNotifPermission_warningHint">Without notifications, the migration can\'t continue on its own. You\'ll be responsible for opening Zodl at every step to send each transfer.</string>
 +    <string name="migrationNotifPermission_warningHint">Without notifications, the migration can\'t continue on its own. You\'ll be responsible for opening ZEC Private at every step to send each transfer.</string>
-@@ -1507,2 +1336,2 @@ Your vote can no longer be submitted.</string>
+@@ -1507,2 +1340,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationTipUnavailable_title">Zodl is still syncing</string>
 -    <string name="migrationTipUnavailable_message">Zodl needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
 +    <string name="migrationTipUnavailable_title">ZEC Private is still syncing</string>
 +    <string name="migrationTipUnavailable_message">ZEC Private needs to finish syncing before it can plan a migration. Please try again in a moment.</string>
-@@ -1514 +1343 @@ Your vote can no longer be submitted.</string>
+@@ -1514 +1347 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationLockExplainer_bullet2Bold">The lock lives on this Zodl/Keystone instance only.</string>
 +    <string name="migrationLockExplainer_bullet2Bold">The lock lives on this ZEC Private/Keystone instance only.</string>
-@@ -1547 +1376 @@ Your vote can no longer be submitted.</string>
+@@ -1547 +1380 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationHowItWorks_approveOnceDescription">Zodl handles the rest, sending each transfer automatically in its scheduled window while the app runs in the background.</string>
 +    <string name="migrationHowItWorks_approveOnceDescription">ZEC Private handles the rest, sending each transfer automatically in its scheduled window while the app runs in the background.</string>
-@@ -1561 +1390 @@ Your vote can no longer be submitted.</string>
+@@ -1561 +1394 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationReview_privacyBody">Your balance splits into %1$d transfers over %2$s. Approve once and we\'ll handle the rest — just keep the app running in the background. Amounts are randomized for privacy. If we miss a window, Zodl will prompt you on next open.</string>
 +    <string name="migrationReview_privacyBody">Your balance splits into %1$d transfers over %2$s. Approve once and we\'ll handle the rest — just keep the app running in the background. Amounts are randomized for privacy. If we miss a window, ZEC Private will prompt you on next open.</string>
-@@ -1576 +1405 @@ Your vote can no longer be submitted.</string>
+@@ -1576 +1409 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_body">To send migration transfers at their scheduled times, Zodl needs to keep running in the background. Allow background activity for Zodl in your device settings.</string>
 +    <string name="migrationBattery_body">To send migration transfers at their scheduled times, ZEC Private needs to keep running in the background. Allow background activity for ZEC Private in your device settings.</string>
-@@ -1578 +1407 @@ Your vote can no longer be submitted.</string>
+@@ -1578 +1411 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_scheduledWindowsBody">Zodl wakes up and sends each transfer at its scheduled time — no action needed.</string>
 +    <string name="migrationBattery_scheduledWindowsBody">ZEC Private wakes up and sends each transfer at its scheduled time — no action needed.</string>
-@@ -1582,2 +1411,2 @@ Your vote can no longer be submitted.</string>
+@@ -1582,2 +1415,2 @@ Your vote can no longer be submitted.</string>
 -    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open Zodl.</string>
 -    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open Zodl manually at each scheduled time to send.</string>
 +    <string name="migrationBattery_fixedScheduleBody">Transfers go out at set network-wide times, so they\'re not linked to when you open ZEC Private.</string>
 +    <string name="migrationBattery_withoutPermissionHint">Without this permission, you\'ll need to open ZEC Private manually at each scheduled time to send.</string>
-@@ -1629,0 +1459,5 @@ Your vote can no longer be submitted.</string>
+@@ -1629,0 +1463,5 @@ Your vote can no longer be submitted.</string>
 +    <string name="private_swap_saved_status">Saved status</string>
 +    <string name="private_swap_created_at">Swap created</string>
 +    <string name="private_swap_saved_output">Saved output</string>
@@ -26036,6 +26063,19 @@ index 13e9d0788..d1112a657 100644
 @@ -35 +31 @@ interface SwapDataSource {
 -    @Throws(ResponseException::class, AssetNotFoundException::class)
 +    @Throws(AssetNotFoundException::class)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/extension/ZecSendExt.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/extension/ZecSendExt.kt
+index 472ac6b96..29614ac9e 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/extension/ZecSendExt.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/extension/ZecSendExt.kt
+@@ -4,0 +5,2 @@ import cash.z.ecc.android.sdk.model.ZecSend
++import cash.z.ecc.sdk.extension.floor
++import co.electriccoin.zcash.ui.common.model.zcash.MAX_ZATOSHI_SUPPLY
+@@ -6,0 +9,5 @@ fun ZecSend.totalAmount() = amount + (proposal?.totalFeeRequired() ?: Zatoshi(0)
++
++internal fun Zatoshi.normalizedSendAmount(fiatInput: Boolean): Zatoshi? {
++    if (value !in 0L..MAX_ZATOSHI_SUPPLY) return null
++    return if (fiatInput) floor().takeIf { it.value > 0L } else this
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/ledger/LedgerContracts.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/ledger/LedgerContracts.kt
 index 996645a58..2fcccbd86 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/ledger/LedgerContracts.kt
@@ -27995,6 +28035,16 @@ index 000000000..8d69f7ee2
 +        pool == ProposalOuterClass.ValuePool.Sapling ||
 +            pool == ProposalOuterClass.ValuePool.Orchard || pool == ProposalOuterClass.ValuePool.Ironwood
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/ZcashSupply.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/ZcashSupply.kt
+new file mode 100644
+index 000000000..83d829b95
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/ZcashSupply.kt
+@@ -0,0 +1,4 @@
++package co.electriccoin.zcash.ui.common.model.zcash
++
++internal const val MAX_ZCASH_SUPPLY = 21_000_000
++internal const val MAX_ZATOSHI_SUPPLY = MAX_ZCASH_SUPPLY * 100_000_000L
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/ZcashSwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/zcash/ZcashSwapQuote.kt
 new file mode 100644
 index 000000000..1ebd4391a
@@ -29687,11 +29737,15 @@ index 549fbf800..05d18dfb3 100644
 -
 -    override suspend fun isFlexaAvailable(): Boolean = isFlexaAvailable.filterNotNull().first()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepository.kt
-index c4fa1b5f3..27b4f2dc4 100644
+index c4fa1b5f3..51c117e11 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepository.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/ExchangeRateRepository.kt
-@@ -152 +152,7 @@ class ExchangeRateRepositoryImpl(
+@@ -14,0 +15 @@ import co.electriccoin.zcash.ui.common.wallet.StaleLock
++import co.electriccoin.zcash.ui.common.wallet.WALLET_EXCHANGE_RATE_MAX_AGE
+@@ -151,2 +152,8 @@ class ExchangeRateRepositoryImpl(
+-            lockDuration = USD_EXCHANGE_STALE_LOCK_THRESHOLD,
 -            onRefresh = { refreshExchangeRateUsdInternal().join() }
++            lockDuration = WALLET_EXCHANGE_RATE_MAX_AGE,
 +            onRefresh = { expiredTimestamp ->
 +                // The combined UI state may still hold its previous value when collection resumes.
 +                val observed = exchangeRateUsdInternal.value.observed
@@ -29699,13 +29753,15 @@ index c4fa1b5f3..27b4f2dc4 100644
 +                    refreshPipeline.emit(Unit)
 +                }
 +            }
-@@ -208,4 +213,0 @@ class ExchangeRateRepositoryImpl(
+@@ -208,4 +214,0 @@ class ExchangeRateRepositoryImpl(
 -        refreshExchangeRateUsdInternal()
 -    }
 -
 -    private fun refreshExchangeRateUsdInternal() =
-@@ -217,0 +220 @@ class ExchangeRateRepositoryImpl(
+@@ -217,0 +221 @@ class ExchangeRateRepositoryImpl(
 +    }
+@@ -267 +270,0 @@ private val USD_EXCHANGE_REFRESH_LOCK_THRESHOLD = 2.minutes
+-private val USD_EXCHANGE_STALE_LOCK_THRESHOLD = 15.minutes
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/FlexaRepository.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/repository/FlexaRepository.kt
 deleted file mode 100644
 index a74efab27..000000000
@@ -32273,6 +32329,31 @@ index 27977ac75..2158aade8 100644
 -            navigationRouter.forward(KeystoneConnectedArgs)
 -        }
 +        return imported.birthday
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateProposalUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateProposalUseCase.kt
+index 01bc0c9c1..c51a0f0e5 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateProposalUseCase.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateProposalUseCase.kt
+@@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.usecase
++import cash.z.ecc.android.sdk.model.Memo
++import cash.z.ecc.android.sdk.model.WalletAddress
+@@ -4 +5,0 @@ import cash.z.ecc.android.sdk.model.ZecSend
+-import cash.z.ecc.sdk.extension.floor
+@@ -8,0 +10 @@ import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
++import co.electriccoin.zcash.ui.common.extension.normalizedSendAmount
+@@ -30 +31,0 @@ class CreateProposalUseCase(
+-        val normalized = if (floor) zecSend.copy(amount = zecSend.amount.floor()) else zecSend
+@@ -31,0 +33 @@ class CreateProposalUseCase(
++            val normalized by lazy { zecSend.normalize(floor) }
+@@ -69,0 +72,9 @@ class CreateProposalUseCase(
++
++    private fun ZecSend.normalize(floor: Boolean): ZecSend {
++        val amount = requireNotNull(amount.normalizedSendAmount(floor)) { "Invalid send amount" }
++        val supportsMemo = destination is WalletAddress.Unified || destination is WalletAddress.Sapling
++        require(amount.value > 0L || (supportsMemo && memo.value.isNotEmpty())) {
++            "Zero-ZEC sends require a shielded recipient and a memo"
++        }
++        return copy(amount = amount, memo = if (supportsMemo) memo else Memo(""))
++    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteABContactUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteABContactUseCase.kt
 index b174f50af..f307a8a7e 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/DeleteABContactUseCase.kt
@@ -34047,6 +34128,27 @@ index e348d65c6..615a4ed94 100644
 @@ -58,0 +64,2 @@ interface ViewOnlyAccountImporter {
 +
 +    suspend fun finishImport()
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/wallet/ExchangeRateState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/wallet/ExchangeRateState.kt
+index 1322ad169..9b0cb0139 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/wallet/ExchangeRateState.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/wallet/ExchangeRateState.kt
+@@ -4,0 +5,2 @@ import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
++import kotlin.time.Clock
++import kotlin.time.Duration.Companion.minutes
+@@ -13,0 +16 @@ sealed interface ExchangeRateState {
++        internal val clock: Clock = Clock.System,
+@@ -28,0 +32,11 @@ enum class ExchangeRateError {
++
++internal val WALLET_EXCHANGE_RATE_MAX_AGE = 15.minutes
++
++internal fun ExchangeRateState.Data.isRateExpired(): Boolean =
++    isStale || currencyConversion?.let { clock.now() - it.timestamp >= WALLET_EXCHANGE_RATE_MAX_AGE } == true
++
++internal fun ExchangeRateState.Data.eligibleConversion(currency: FiatCurrency? = expectedCurrency) =
++    currencyConversion?.takeIf {
++        currency == expectedCurrency && it.fiatCurrency == currency &&
++            it.priceOfZec.isFinite() && it.priceOfZec > 0 && !isRateExpired()
++    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/wallet/StaleLock.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/wallet/StaleLock.kt
 index a0886229e..973a1ab81 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/wallet/StaleLock.kt
@@ -37904,26 +38006,38 @@ index e3623fc9a..ed35df44e 100644
 +        pastedClipboardText = null
 +        if (readClipboardText() == pasted) clearClipboard()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/model/Request.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/model/Request.kt
-index 02df13d1e..07ee7ccac 100644
+index 02df13d1e..ee9b739af 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/model/Request.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/model/Request.kt
 @@ -6,0 +7 @@ import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
 +import cash.z.ecc.android.sdk.model.FiatCurrency
-@@ -15,0 +17 @@ import java.math.MathContext
-+import java.math.RoundingMode
-@@ -26 +28,2 @@ data class AmountState(
+@@ -7,0 +9 @@ import cash.z.ecc.android.sdk.model.Memo
++import cash.z.ecc.sdk.extension.FIAT_ZATOSHI_INCREMENT
+@@ -8,0 +11 @@ import cash.z.ecc.sdk.extension.floor
++import co.electriccoin.zcash.ui.common.model.zcash.MAX_ZCASH_SUPPLY
+@@ -26 +29,2 @@ data class AmountState(
 -    val isValid: Boolean?
 +    val isValid: Boolean?,
 +    val fiatCurrency: FiatCurrency? = null,
-@@ -27,0 +31,19 @@ data class AmountState(
+@@ -27,0 +32,29 @@ data class AmountState(
 +    internal fun validZecAmount(conversion: FiatCurrencyConversion?): BigDecimal? {
 +        val zec = convertedZecAmount(conversion) ?: return null
 +        return zec.takeIf { isValid == true && it <= BigDecimal(MAX_ZCASH_SUPPLY) }
-+            ?.setScale(ZEC_DECIMAL_PLACES, RoundingMode.DOWN)?.takeIf { it.signum() > 0 }
++            ?.let(::floorZecAmount)
++            ?.takeIf { it.signum() > 0 }
 +    }
 +
 +    internal fun isBelowMinimum(conversion: FiatCurrencyConversion?): Boolean =
-+        convertedZecAmount(conversion)?.let { it.signum() > 0 && it < MIN_ZEC_REQUEST } == true
++        convertedZecAmount(conversion)?.let { it.signum() > 0 && it < minimumZecAmount } == true
++
++    internal val minimumZecAmount: BigDecimal
++        get() = when (currency) {
++            RequestCurrency.ZEC -> BigDecimal.valueOf(1, ZEC_DECIMAL_PLACES)
++            RequestCurrency.FIAT -> BigDecimal.valueOf(FIAT_ZATOSHI_INCREMENT, ZEC_DECIMAL_PLACES)
++        }
++
++    private fun floorZecAmount(amount: BigDecimal): BigDecimal =
++        amount.divideToIntegralValue(minimumZecAmount).multiply(minimumZecAmount)
 +
 +    private fun convertedZecAmount(conversion: FiatCurrencyConversion?): BigDecimal? {
 +        val entered = amount.toBigDecimalLocalized() ?: return null
@@ -37935,61 +38049,178 @@ index 02df13d1e..07ee7ccac 100644
 +        }
 +    }
 +
-@@ -88,0 +111,4 @@ data class QrCodeState(
+@@ -88,0 +122,5 @@ data class QrCodeState(
 +
-+internal const val MAX_ZCASH_SUPPLY = 21_000_000
 +private const val ZEC_DECIMAL_PLACES = 8
-+private val MIN_ZEC_REQUEST = BigDecimal("0.00000001")
++
++internal fun BigDecimal.formatRequestZec(context: Context): String =
++    stringResByNumber(this, minDecimals = 3, maxDecimals = ZEC_DECIMAL_PLACES).getString(context)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/model/RequestState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/model/RequestState.kt
-index 95367ce69..44707180e 100644
+index 95367ce69..7b2688893 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/model/RequestState.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/model/RequestState.kt
-@@ -27 +27,11 @@ internal sealed class RequestState {
+@@ -3,0 +4 @@ import androidx.annotation.DrawableRes
++import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
+@@ -6,0 +8 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
+@@ -27 +29,13 @@ internal sealed class RequestState {
 -    ) : Prepared(onBack)
 +    ) : Prepared(onBack) {
++        val conversion: FiatCurrencyConversion?
++            get() = (exchangeRateState as? ExchangeRateState.Data)?.eligibleConversion()
++
 +        val isBelowMinimum: Boolean
-+            get() = request.amountState.isBelowMinimum(
-+                (exchangeRateState as? ExchangeRateState.Data)?.currencyConversion
-+            )
++            get() = request.amountState.isBelowMinimum(conversion)
++
++        val zecAmount
++            get() = request.amountState.validZecAmount(conversion)
 +
 +        val canContinue: Boolean
-+            get() = request.amountState.validZecAmount(
-+                (exchangeRateState as? ExchangeRateState.Data)?.currencyConversion
-+            ) != null
++            get() = zecAmount != null
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/view/RequestAmountView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/view/RequestAmountView.kt
-index 3a3ccf0e0..6bb69bfd4 100644
+index 3a3ccf0e0..3f0e5fb88 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/view/RequestAmountView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/view/RequestAmountView.kt
-@@ -13 +13 @@ import androidx.compose.foundation.layout.padding
--import androidx.compose.foundation.layout.requiredHeight
+@@ -11,0 +12 @@ import androidx.compose.foundation.layout.height
 +import androidx.compose.foundation.layout.heightIn
-@@ -63 +63 @@ internal fun RequestAmountView(
+@@ -13 +13,0 @@ import androidx.compose.foundation.layout.padding
+-import androidx.compose.foundation.layout.requiredHeight
+@@ -20,0 +21 @@ import androidx.compose.material3.Text
++import androidx.compose.material3.TextButton
+@@ -45,0 +47 @@ import co.electriccoin.zcash.ui.screen.request.model.RequestState
++import co.electriccoin.zcash.ui.screen.request.model.formatRequestZec
+@@ -63 +65 @@ internal fun RequestAmountView(
 -        InvalidAmountView(state.request.amountState)
 +        InvalidAmountView(state.request.amountState, state.isBelowMinimum)
-@@ -123,5 +123 @@ private fun RequestAmountWithMainFiatView(
+@@ -123,5 +125 @@ private fun RequestAmountWithMainFiatView(
 -                        if (state.exchangeRateState.currencyConversion != null) {
 -                            state.request.amountState.amount
 -                        } else {
 -                            stringResource(id = R.string.request_amount_empty)
 -                        }
 +                        state.request.amountState.amount
-@@ -155 +151 @@ private fun RequestAmountWithMainFiatView(
+@@ -142,20 +140,13 @@ private fun RequestAmountWithMainFiatView(
+-        Row(
+-            verticalAlignment = Alignment.CenterVertically
+-        ) {
+-            val zecText =
+-                buildAnnotatedString {
+-                    withStyle(style = SpanStyle(color = ZashiColors.Text.textPrimary)) {
+-                        append(
+-                            if (state.exchangeRateState.currencyConversion != null) {
+-                                state.request.amountState.toZecString(
+-                                    state.exchangeRateState.currencyConversion,
+-                                    context = context
+-                                )
+-                            } else {
 -                                stringResource(id = R.string.request_amount_empty)
-+                                "\u2014"
-@@ -418,0 +415 @@ private fun InvalidAmountView(
+-                            }
+-                        )
+-                    }
+-                    append(" ") // Add an extra space between the texts
+-                    withStyle(style = SpanStyle(color = ZashiColors.Text.textQuaternary)) {
+-                        append(state.zcashCurrency.localizedName(LocalContext.current))
++        if (state.conversion == null) {
++            RequestRateUnavailable(state.exchangeRateState)
++        } else {
++            Row(verticalAlignment = Alignment.CenterVertically) {
++                val zecText =
++                    buildAnnotatedString {
++                        withStyle(style = SpanStyle(color = ZashiColors.Text.textPrimary)) {
++                            append(state.zecAmount?.formatRequestZec(context) ?: "\u2014")
++                        }
++                        append(" ")
++                        withStyle(style = SpanStyle(color = ZashiColors.Text.textQuaternary)) {
++                            append(state.zcashCurrency.localizedName(context))
++                        }
+@@ -163 +153,0 @@ private fun RequestAmountWithMainFiatView(
+-                }
+@@ -165,6 +155,6 @@ private fun RequestAmountWithMainFiatView(
+-            Text(
+-                text = zecText,
+-                style = ZashiTypography.textLg,
+-                fontWeight = FontWeight.Medium,
+-                maxLines = 1
+-            )
++                Text(
++                    text = zecText,
++                    style = ZashiTypography.textLg,
++                    fontWeight = FontWeight.Medium,
++                    maxLines = 1
++                )
+@@ -172 +162 @@ private fun RequestAmountWithMainFiatView(
+-            Spacer(modifier = Modifier.width(10.dp))
++                Spacer(modifier = Modifier.width(10.dp))
+@@ -174,5 +164,25 @@ private fun RequestAmountWithMainFiatView(
+-            Image(
+-                painter = painterResource(id = R.drawable.ic_switch),
+-                contentDescription = null,
+-                modifier = Modifier.clickable { onFiatPreferenceSwitch() }
+-            )
++                Image(
++                    painter = painterResource(id = R.drawable.ic_switch),
++                    contentDescription = null,
++                    modifier = Modifier.clickable { onFiatPreferenceSwitch() }
++                )
++            }
++        }
++    }
++}
++
++@Composable
++private fun RequestRateUnavailable(rate: ExchangeRateState.Data) {
++    val message = when {
++        rate.isLoading -> R.string.request_amount_rate_loading
++        rate.isStale -> R.string.request_amount_rate_stale
++        else -> R.string.request_amount_rate_unavailable
++    }
++    Text(
++        text = stringResource(message),
++        style = ZashiTypography.textMd,
++        color = ZashiColors.Text.textTertiary
++    )
++    if (rate.isRefreshEnabled && !rate.isLoading) {
++        TextButton(onClick = rate.onRefresh) {
++            Text(stringResource(R.string.currencyConversion_refreshAction))
+@@ -188,0 +199 @@ private fun RequestAmountWithMainZecView(
++    val conversion = state.conversion
+@@ -226 +237 @@ private fun RequestAmountWithMainZecView(
+-                            if (state.exchangeRateState.currencyConversion != null) {
++                            if (conversion != null) {
+@@ -229 +240 @@ private fun RequestAmountWithMainZecView(
+-                                    state.exchangeRateState.currencyConversion
++                                    conversion
+@@ -247,5 +258,7 @@ private fun RequestAmountWithMainZecView(
+-            Image(
+-                painter = painterResource(id = R.drawable.ic_switch),
+-                contentDescription = null,
+-                modifier = Modifier.clickable { onFiatPreferenceSwitch() }
+-            )
++            if (conversion != null) {
++                Image(
++                    painter = painterResource(id = R.drawable.ic_switch),
++                    contentDescription = null,
++                    modifier = Modifier.clickable { onFiatPreferenceSwitch() }
++                )
++            }
+@@ -418,0 +432 @@ private fun InvalidAmountView(
 +    isBelowMinimum: Boolean,
-@@ -426 +423,2 @@ private fun InvalidAmountView(
+@@ -426 +440,2 @@ private fun InvalidAmountView(
 -                .requiredHeight(48.dp)
 +                .padding(horizontal = ZcashTheme.dimens.screenHorizontalSpacingRegular)
 +                .heightIn(min = 48.dp)
-@@ -428 +426 @@ private fun InvalidAmountView(
+@@ -428 +443 @@ private fun InvalidAmountView(
 -        if (amountState.isValid == false) {
 +        if (amountState.isValid == false || isBelowMinimum) {
-@@ -437 +435,3 @@ private fun InvalidAmountView(
+@@ -437 +452,7 @@ private fun InvalidAmountView(
 -                text = stringResource(id = R.string.zecKeyboard_invalid),
 +                text = stringResource(
-+                    id = if (isBelowMinimum) R.string.request_amount_minimum else R.string.zecKeyboard_invalid
++                    id = when {
++                        !isBelowMinimum -> R.string.zecKeyboard_invalid
++                        amountState.currency == RequestCurrency.FIAT -> R.string.request_amount_fiat_minimum
++                        else -> R.string.request_amount_minimum
++                    }
 +                ),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/view/RequestView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/view/RequestView.kt
 index 6b8fdedf6..f72f2b7ec 100644
@@ -37999,48 +38230,105 @@ index 6b8fdedf6..f72f2b7ec 100644
 -                    enabled = state.request.amountState.isValid == true,
 +                    enabled = state.canContinue,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/viewmodel/RequestVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/viewmodel/RequestVM.kt
-index d088550af..cca07fce1 100644
+index d088550af..dd01669c5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/viewmodel/RequestVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/request/viewmodel/RequestVM.kt
-@@ -21,0 +22 @@ import co.electriccoin.zcash.ui.design.util.imageRes
-+import co.electriccoin.zcash.ui.design.util.getString
-@@ -22,0 +24 @@ import co.electriccoin.zcash.ui.design.util.stringRes
-+import co.electriccoin.zcash.ui.design.util.stringResByNumber
-@@ -26,0 +29 @@ import co.electriccoin.zcash.ui.screen.request.model.AmountState
-+import co.electriccoin.zcash.ui.screen.request.model.MAX_ZCASH_SUPPLY
-@@ -49 +52 @@ class RequestVM(
+@@ -12,0 +13 @@ import co.electriccoin.zcash.ui.common.model.ZodlAccount
++import co.electriccoin.zcash.ui.common.model.zcash.MAX_ZCASH_SUPPLY
+@@ -19,0 +21,2 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
++import co.electriccoin.zcash.ui.common.wallet.isRateExpired
+@@ -33,0 +37 @@ import co.electriccoin.zcash.ui.screen.request.model.RequestState
++import co.electriccoin.zcash.ui.screen.request.model.formatRequestZec
+@@ -41,0 +46 @@ import kotlinx.coroutines.launch
++import java.math.BigDecimal
+@@ -49 +54 @@ class RequestVM(
 -    exchangeRateRepository: ExchangeRateRepository,
 +    private val exchangeRateRepository: ExchangeRateRepository,
-@@ -58 +60,0 @@ class RequestVM(
+@@ -58 +62,0 @@ class RequestVM(
 -        private const val MAX_ZCASH_SUPPLY = 21_000_000
-@@ -106 +108 @@ class RequestVM(
+@@ -88 +92,3 @@ class RequestVM(
+-    private val stage = MutableStateFlow(RequestStage.AMOUNT)
++    private class Step(val stage: RequestStage)
++
++    private val step = MutableStateFlow(Step(RequestStage.AMOUNT))
+@@ -93 +99 @@ class RequestVM(
+-            stage,
++            step,
+@@ -97 +103 @@ class RequestVM(
+-        ) { request, currentStage, exchangeRateUsd, account, colors ->
++        ) { draft, currentStep, exchangeRate, account, colors ->
+@@ -102 +108 @@ class RequestVM(
+-            when (currentStage) {
++            when (currentStep.stage) {
+@@ -103,0 +110,3 @@ class RequestVM(
++                    val amount = draft.amountState
++                    val rate = displayRate(amount, exchangeRate)
++                    val zecAmount = amount.validZecAmount(resolveExchangeRateValue(rate))
+@@ -105,2 +114,2 @@ class RequestVM(
+-                        request = request,
 -                        exchangeRateState = exchangeRateUsd,
-+                        exchangeRateState = displayRate(request.amountState, exchangeRateUsd),
-@@ -109 +111 @@ class RequestVM(
++                        request = draft,
++                        exchangeRateState = rate,
+@@ -108,4 +117,14 @@ class RequestVM(
+-                        onAmount = { onAmount(resolveExchangeRateValue(exchangeRateUsd), it) },
 -                        onSwitch = { onSwitch(resolveExchangeRateValue(exchangeRateUsd), it) },
-+                        onSwitch = { onSwitch(resolveExchangeRateValue(exchangeRateRepository.state.value), it) },
-@@ -111 +113 @@ class RequestVM(
+-                        onBack = { onBack() },
 -                    ) { onNextClick(walletAddress, zip321BuildUriUseCase, exchangeRateUsd) }
-+                    ) { onNextClick(walletAddress, zip321BuildUriUseCase) }
-@@ -173 +174,0 @@ class RequestVM(
++                        onAmount = { edit ->
++                            if (step.value === currentStep) onAmount(edit)
++                        },
++                        onSwitch = { currency ->
++                            if (step.value === currentStep && request.value.amountState == amount) {
++                                onSwitch(currentConversion(amount), currency)
++                            }
++                        },
++                        onBack = { if (step.value === currentStep) onBack() },
++                    ) {
++                        if (step.value === currentStep) {
++                            onNextClick(walletAddress, zip321BuildUriUseCase, amount, zecAmount)
++                        }
++                    }
+@@ -123,4 +142,8 @@ class RequestVM(
+-                        request = request,
+-                        onMemo = { onMemo(it) },
+-                        onDone = { onMemoDone(walletAddress.address, zip321BuildUriUseCase) },
+-                        onBack = ::onBack,
++                        request = draft,
++                        onMemo = { if (step.value === currentStep) onMemo(it) },
++                        onDone = {
++                            if (step.value === currentStep) {
++                                onMemoDone(walletAddress.address, zip321BuildUriUseCase)
++                            }
++                        },
++                        onBack = { if (step.value === currentStep) onBack() },
+@@ -140 +163 @@ class RequestVM(
+-                        request = request,
++                        request = draft,
+@@ -158,2 +181,2 @@ class RequestVM(
+-                        onBack = ::onBack,
+-                        onClose = ::onClose,
++                        onBack = { if (step.value === currentStep) onBack() },
++                        onClose = { if (step.value === currentStep) onClose() },
+@@ -173 +196,2 @@ class RequestVM(
 -        exchangeRateUsd: ExchangeRateState
-@@ -174,0 +176,9 @@ class RequestVM(
++        displayedAmount: AmountState,
++        displayedZecAmount: BigDecimal?,
+@@ -174,0 +199,7 @@ class RequestVM(
 +        val amount = request.value.amountState
-+        val conversion = resolveExchangeRateValue(displayRate(amount, exchangeRateRepository.state.value))
-+        if (stage.value != RequestStage.AMOUNT) return
-+        val represented = amount.validZecAmount(conversion) ?: return
++        val represented = displayedZecAmount ?: return
++        if (amount != displayedAmount || represented != amount.validZecAmount(currentConversion(amount))) return
 +        val zecAmount = when (amount.currency) {
 +            RequestCurrency.ZEC -> amount.amount
-+            RequestCurrency.FIAT ->
-+                stringResByNumber(represented, minDecimals = 3, maxDecimals = 8).getString(application)
++            RequestCurrency.FIAT -> represented.formatRequestZec(application)
 +        }
-@@ -180 +190 @@ class RequestVM(
+@@ -180 +211 @@ class RequestVM(
 -                    resolveExchangeRateValue(exchangeRateUsd)
 +                    zecAmount
-@@ -185 +195 @@ class RequestVM(
+@@ -185 +216 @@ class RequestVM(
 -                onAmountDone(resolveExchangeRateValue(exchangeRateUsd))
 +                onAmountDone(zecAmount)
-@@ -194,10 +204,4 @@ class RequestVM(
+@@ -194,10 +225,2 @@ class RequestVM(
 -    private fun resolveExchangeRateValue(exchangeRateUsd: ExchangeRateState): FiatCurrencyConversion? =
 -        when (exchangeRateUsd) {
 -            is ExchangeRateState.Data -> {
@@ -38052,34 +38340,43 @@ index d088550af..cca07fce1 100644
 -                }
 -            }
 +    private fun resolveExchangeRateValue(state: ExchangeRateState): FiatCurrencyConversion? =
-+        (state as? ExchangeRateState.Data)?.currencyConversion?.takeIf {
-+            it.priceOfZec.isFinite() && it.priceOfZec > 0 && it.fiatCurrency == state.expectedCurrency
-+        }
-@@ -205,5 +209,14 @@ class RequestVM(
++        (state as? ExchangeRateState.Data)?.eligibleConversion()
+@@ -205,5 +228,21 @@ class RequestVM(
 -            else -> {
 -                // Should not happen as the conversion rate related use cases should not be available
 -                Twig.error { "Unexpected screen state" }
 -                null
 -            }
++    private fun currentConversion(amount: AmountState): FiatCurrencyConversion? =
++        resolveExchangeRateValue(displayRate(amount, exchangeRateRepository.state.value))
++
 +    private fun displayRate(amount: AmountState, state: ExchangeRateState): ExchangeRateState {
 +        val conversion = resolveExchangeRateValue(state)
 +        if (amount.currency == RequestCurrency.ZEC) {
-+            return (state as? ExchangeRateState.Data)?.copy(currencyConversion = conversion) ?: state
++            return (state as? ExchangeRateState.Data)?.let {
++                it.copy(currencyConversion = conversion, isStale = it.isRateExpired())
++            } ?: state
 +        }
 +        val currency = amount.fiatCurrency
-+        val data = state as? ExchangeRateState.Data ?: ExchangeRateState.Data(onRefresh = {})
++        val data = state as? ExchangeRateState.Data
++            ?: ExchangeRateState.Data(isLoading = false, isRefreshEnabled = false, onRefresh = {})
 +        return if (currency == null) {
 +            ExchangeRateState.OptedOut
 +        } else {
 +            data.copy(
 +                expectedCurrency = currency,
 +                currencyConversion = conversion?.takeIf { it.fiatCurrency == currency },
++                isStale = data.expectedCurrency == currency && data.isRateExpired(),
 +            )
-@@ -210,0 +224 @@ class RequestVM(
+@@ -210,0 +250 @@ class RequestVM(
 +    }
-@@ -234,0 +249 @@ class RequestVM(
+@@ -212 +252,2 @@ class RequestVM(
+-    private fun onAmount(conversion: FiatCurrencyConversion?, onAmount: OnAmount) {
++    private fun onAmount(onAmount: OnAmount) {
++        val conversion = currentConversion(request.value.amountState)
+@@ -234,0 +276 @@ class RequestVM(
 +                                fiatCurrency = it.amountState.fiatCurrency,
-@@ -303,2 +318,6 @@ class RequestVM(
+@@ -303,2 +345,6 @@ class RequestVM(
 -        // Check for max Zcash supply
 -        return newAmount.amount
 +        val boundAmount = newAmount.copy(fiatCurrency = request.value.amountState.fiatCurrency)
@@ -38088,16 +38385,27 @@ index d088550af..cca07fce1 100644
 +            (conversion == null || conversion.fiatCurrency != boundAmount.fiatCurrency)
 +        ) return boundAmount
 +        return boundAmount.amount
-@@ -314 +333 @@ class RequestVM(
+@@ -314 +360 @@ class RequestVM(
 -                    newAmount.copy(amount = request.value.amountState.amount)
 +                    boundAmount.copy(amount = request.value.amountState.amount)
-@@ -316 +335 @@ class RequestVM(
+@@ -316 +362 @@ class RequestVM(
 -                    newAmount
 +                    boundAmount
-@@ -318 +337 @@ class RequestVM(
+@@ -318 +364 @@ class RequestVM(
 -            } ?: newAmount
 +            } ?: boundAmount
-@@ -342,23 +361,2 @@ class RequestVM(
+@@ -322 +368 @@ class RequestVM(
+-        when (stage.value) {
++        when (step.value.stage) {
+@@ -328 +374 @@ class RequestVM(
+-                stage.update { RequestStage.AMOUNT }
++                step.value = Step(RequestStage.AMOUNT)
+@@ -333,2 +379,2 @@ class RequestVM(
+-                    ReceiveAddressType.Transparent -> stage.update { RequestStage.AMOUNT }
+-                    ReceiveAddressType.Unified, ReceiveAddressType.Sapling -> stage.update { RequestStage.MEMO }
++                    ReceiveAddressType.Transparent -> step.value = Step(RequestStage.AMOUNT)
++                    ReceiveAddressType.Unified, ReceiveAddressType.Sapling -> step.value = Step(RequestStage.MEMO)
+@@ -342,24 +388,3 @@ class RequestVM(
 -    private fun onAmountDone(conversion: FiatCurrencyConversion?) {
 -        request.update {
 -            val memoAmount =
@@ -38121,12 +38429,19 @@ index d088550af..cca07fce1 100644
 -
 -            it.copy(memoState = MemoState.new(DEFAULT_MEMO, memoAmount))
 -        }
+-        stage.update { RequestStage.MEMO }
 +    private fun onAmountDone(zecAmount: String) {
 +        request.update { it.copy(memoState = MemoState.new(DEFAULT_MEMO, zecAmount)) }
-@@ -391 +389 @@ class RequestVM(
++        step.value = Step(RequestStage.MEMO)
+@@ -368,0 +394 @@ class RequestVM(
++        if (!request.value.memoState.isValid()) return
+@@ -385 +411 @@ class RequestVM(
+-        stage.update { RequestStage.QR_CODE }
++        step.value = Step(RequestStage.QR_CODE)
+@@ -391 +417 @@ class RequestVM(
 -        conversion: FiatCurrencyConversion?
 +        qrCodeAmount: String,
-@@ -394,18 +391,0 @@ class RequestVM(
+@@ -394,18 +419,0 @@ class RequestVM(
 -            val qrCodeAmount =
 -                when (it.amountState.currency) {
 -                    RequestCurrency.FIAT -> {
@@ -38145,22 +38460,37 @@ index d088550af..cca07fce1 100644
 -                        it.amountState.amount
 -                    }
 -                }
-@@ -435 +415,4 @@ class RequestVM(
+@@ -428 +436 @@ class RequestVM(
+-        stage.update { RequestStage.QR_CODE }
++        step.value = Step(RequestStage.QR_CODE)
+@@ -434,2 +442,3 @@ class RequestVM(
+-    ) = viewModelScope.launch {
 -        if (conversion == null) return@launch
-+        if (stage.value != RequestStage.AMOUNT || conversion == null) return@launch
++    ) {
 +        val amount = request.value.amountState
-+        if (onSwitchTo == amount.currency) return@launch
-+        if (amount.currency == RequestCurrency.FIAT && amount.fiatCurrency != conversion.fiatCurrency) return@launch
-@@ -458 +441,3 @@ class RequestVM(
++        if (conversion == null || onSwitchTo == amount.currency) return
+@@ -448,4 +457,2 @@ class RequestVM(
+-                        it.amountState.toZecString(
+-                            conversion,
+-                            application
+-                        )
++                        it.amountState.validZecAmount(conversion)?.formatRequestZec(application)
++                            ?: defaultAmount
+@@ -458 +465,3 @@ class RequestVM(
 -                        it.amountState.copy(amount = defaultAmount, currency = onSwitchTo)
 +                        it.amountState.copy(
 +                            amount = defaultAmount, currency = onSwitchTo, fiatCurrency = conversion.fiatCurrency
 +                        )
-@@ -460 +445,3 @@ class RequestVM(
+@@ -460 +469,3 @@ class RequestVM(
 -                        it.amountState.copy(amount = newAmount, currency = onSwitchTo)
 +                        it.amountState.copy(
 +                            amount = newAmount, currency = onSwitchTo, fiatCurrency = conversion.fiatCurrency
 +                        )
+@@ -466 +477,3 @@ class RequestVM(
+-    private fun onMemo(memoState: MemoState) = request.update { it.copy(memoState = memoState) }
++    private fun onMemo(memoState: MemoState) = request.update {
++        it.copy(memoState = MemoState.new(memoState.text, it.memoState.zecAmount))
++    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/restore/date/RestoreDateScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/restore/date/RestoreDateScreen.kt
 index 8d15e2f2b..76a8f37cb 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/restore/date/RestoreDateScreen.kt
@@ -38761,10 +39091,12 @@ index ced2a1fd1..aaa5bfc2d 100644
 -        navigationRouter.forward(HWNewOrActiveArgs(HWWalletEnrollment.Keystone(args.ur)))
 +        navigationRouter.forward(HWNewOrActiveArgs(HWWalletEnrollment.Keystone(args.sessionId)))
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/AndroidSend.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/AndroidSend.kt
-index ab537808f..b731e0c7f 100644
+index ab537808f..0a3f808ef 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/AndroidSend.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/AndroidSend.kt
-@@ -139,12 +139,2 @@ internal fun WrapSend(
+@@ -42,0 +43 @@ import co.electriccoin.zcash.ui.screen.send.ext.Saver
++import co.electriccoin.zcash.ui.screen.send.model.AmountField
+@@ -139,12 +140,2 @@ internal fun WrapSend(
 -    if (sendArguments.recipientAddress != null && sendArguments.recipientAddressType != null) {
 -        viewModel.onRecipientAddressChanged(
 -            RecipientAddressState.new(
@@ -38779,34 +39111,101 @@ index ab537808f..b731e0c7f 100644
 -        )
 +    LaunchedEffect(viewModel, sendArguments) {
 +        viewModel.initializeRecipient(sendArguments)
+@@ -153,2 +144 @@ internal fun WrapSend(
+-    // Amount computation:
+-    val (amountState, setAmountState) =
++    val amountDraftState =
+@@ -156 +145,0 @@ internal fun WrapSend(
+-            // Default amount state
+@@ -161,3 +150 @@ internal fun WrapSend(
+-                    isTransparentOrTextRecipient =
+-                        recipientAddressState.type?.let { it == AddressType.Transparent }
+-                            ?: false,
++                    isTransparentOrTextRecipient = !recipientAddressState.supportsMemo,
+@@ -168,7 +155,4 @@ internal fun WrapSend(
+-    // New amount state based on the recipient address type (e.g. shielded supports zero funds sending and
+-    // transparent not)
+-    LaunchedEffect(recipientAddressState, exchangeRateState) {
+-        setAmountState(
+-            if (amountState.value.getString(context).isNotBlank() ||
+-                amountState.fiatValue.getString(context).isBlank()
+-            ) {
++    val (amountDraft, setAmountState) = amountDraftState
++    val amountState =
++        remember(amountDraft, recipientAddressState, exchangeRateState, context) {
++            if (amountDraft.lastFieldChangedByUser == AmountField.ZEC) {
+@@ -176,5 +160,3 @@ internal fun WrapSend(
+-                    value = amountState.value.getString(context),
+-                    fiatValue = amountState.fiatValue.getString(context),
+-                    isTransparentOrTextRecipient =
+-                        recipientAddressState.type
+-                            ?.let { it == AddressType.Transparent } ?: false,
++                    value = amountDraft.value.getString(context),
++                    fiatValue = amountDraft.fiatValue.getString(context),
++                    isTransparentOrTextRecipient = !recipientAddressState.supportsMemo,
+@@ -182 +164 @@ internal fun WrapSend(
+-                    lastFieldChangedByUser = amountState.lastFieldChangedByUser,
++                    requireFreshRate = true,
+@@ -186,5 +168,3 @@ internal fun WrapSend(
+-                    value = amountState.value.getString(context),
+-                    fiatValue = amountState.fiatValue.getString(context),
+-                    isTransparentOrTextRecipient =
+-                        recipientAddressState.type
+-                            ?.let { it == AddressType.Transparent } ?: false,
++                    value = amountDraft.value.getString(context),
++                    fiatValue = amountDraft.fiatValue.getString(context),
++                    isTransparentOrTextRecipient = !recipientAddressState.supportsMemo,
+@@ -191,0 +172,2 @@ internal fun WrapSend(
++                    fiatCurrency = amountDraft.fiatCurrency,
++                    requireFreshRate = true,
+@@ -194,2 +176 @@ internal fun WrapSend(
+-        )
+-    }
++        }
+@@ -245,2 +226,2 @@ internal fun WrapSend(
+-                            fiatValue = amountState.fiatValue.getString(context),
+-                            isTransparentOrTextRecipient = type == AddressType.Transparent,
++                            fiatValue = "",
++                            isTransparentOrTextRecipient = type == AddressType.Transparent || type == AddressType.Tex,
+@@ -295,0 +277,3 @@ internal fun WrapSend(
++                if (amountState.lastFieldChangedByUser == AmountField.FIAT && amountDraftState.value != amountDraft) {
++                    return@Send
++                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt
-index fd16f97b7..4177cec48 100644
+index fd16f97b7..4666e264a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendTag.kt
 @@ -7,0 +8 @@ object SendTag {
 +    const val SEND_MEMO_FIELD = "SEND_MEMO_FIELD"
+@@ -8,0 +10 @@ object SendTag {
++    const val SEND_FIAT_AMOUNT_FIELD = "SEND_FIAT_AMOUNT_FIELD"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendViewModel.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendViewModel.kt
-index fb69233f2..9fba117f8 100644
+index fb69233f2..3e793b969 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendViewModel.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/SendViewModel.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.send
 +import androidx.lifecycle.SavedStateHandle
 @@ -5,0 +7 @@ import cash.z.ecc.android.sdk.model.ZecSend
 +import cash.z.ecc.android.sdk.type.AddressType
-@@ -26,0 +29 @@ import kotlinx.coroutines.flow.WhileSubscribed
+@@ -20,0 +23 @@ import co.electriccoin.zcash.ui.screen.send.model.SendStage
++import kotlinx.coroutines.CancellationException
+@@ -26,0 +30 @@ import kotlinx.coroutines.flow.WhileSubscribed
 +import kotlinx.coroutines.flow.asStateFlow
-@@ -31 +33,0 @@ import kotlinx.coroutines.flow.stateIn
+@@ -31 +34,0 @@ import kotlinx.coroutines.flow.stateIn
 -import kotlinx.coroutines.flow.update
-@@ -42,0 +45 @@ class SendViewModel(
+@@ -36 +39 @@ class SendViewModel(
+-    exchangeRateRepository: ExchangeRateRepository,
++    private val exchangeRateRepository: ExchangeRateRepository,
+@@ -42,0 +46 @@ class SendViewModel(
 +    private val savedStateHandle: SavedStateHandle,
-@@ -44 +47,5 @@ class SendViewModel(
+@@ -44 +48,5 @@ class SendViewModel(
 -    val recipientAddressState = MutableStateFlow(RecipientAddressState.new("", null))
 +    private val recipientState = MutableStateFlow(
 +        savedStateHandle.get<HashMap<String, String>>(RECIPIENT_STATE_KEY)
 +            ?.let(RecipientAddressState::fromSavedState) ?: RecipientAddressState.new("")
 +    )
 +    val recipientAddressState = recipientState.asStateFlow()
-@@ -129,0 +137,13 @@ class SendViewModel(
+@@ -129,0 +138,13 @@ class SendViewModel(
 +    internal fun initializeRecipient(route: Send) {
 +        val address = route.recipientAddress
 +        if (address == null || savedStateHandle.contains(RECIPIENT_STATE_KEY)) return
@@ -38820,22 +39219,152 @@ index fb69233f2..9fba117f8 100644
 +        onRecipientAddressChanged(RecipientAddressState.new(address, type))
 +    }
 +
-@@ -131 +151,2 @@ class SendViewModel(
+@@ -131 +152,2 @@ class SendViewModel(
 -        recipientAddressState.update { state }
 +        savedStateHandle[RECIPIENT_STATE_KEY] = state.toSavedState()
 +        recipientState.value = state
-@@ -150,0 +172,4 @@ class SendViewModel(
+@@ -144 +166,9 @@ class SendViewModel(
+-                    createProposal(newZecSend, amountState.lastFieldChangedByUser == AmountField.FIAT)
++                    val enteredInFiat = amountState.lastFieldChangedByUser == AmountField.FIAT
++                    if (enteredInFiat) {
++                        val current = (amountState as? AmountState.Valid)
++                            ?.normalizedFiatAt(exchangeRateRepository.state.value)
++                        if (current != newZecSend.amount) return@launch
++                    }
++                    createProposal(newZecSend, enteredInFiat)
++                } catch (e: CancellationException) {
++                    throw e
+@@ -150,0 +181,4 @@ class SendViewModel(
 +
 +    private companion object {
 +        const val RECIPIENT_STATE_KEY = "sendRecipient"
 +    }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/model/AmountState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/model/AmountState.kt
+index 8efabf05c..a74336003 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/model/AmountState.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/model/AmountState.kt
+@@ -6,0 +7,2 @@ import cash.z.ecc.android.sdk.ext.convertZecToZatoshi
++import cash.z.ecc.android.sdk.model.FiatCurrency
++import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
+@@ -8,0 +11,2 @@ import cash.z.ecc.android.sdk.model.toZatoshi
++import co.electriccoin.zcash.ui.common.extension.normalizedSendAmount
++import co.electriccoin.zcash.ui.common.model.zcash.MAX_ZCASH_SUPPLY
+@@ -9,0 +14 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
+@@ -22,0 +28 @@ sealed interface AmountState {
++    val fiatCurrency: FiatCurrency?
+@@ -29 +35,12 @@ sealed interface AmountState {
+-    ) : AmountState
++        override val fiatCurrency: FiatCurrency? = null,
++        internal val enteredFiatAmount: BigDecimal? = null,
++    ) : AmountState {
++        internal val normalizedForSend: Zatoshi?
++            get() = zatoshi.normalizedSendAmount(lastFieldChangedByUser == AmountField.FIAT)
++
++        internal fun normalizedFiatAt(rate: ExchangeRateState): Zatoshi? {
++            val entered = enteredFiatAmount ?: return null
++            return (rate as? ExchangeRateState.Data)?.eligibleConversion(fiatCurrency)
++                ?.toZatoshiWithinSupply(entered)?.normalizedSendAmount(fiatInput = true)
++        }
++    }
+@@ -34 +51,2 @@ sealed interface AmountState {
+-        override val lastFieldChangedByUser: AmountField
++        override val lastFieldChangedByUser: AmountField,
++        override val fiatCurrency: FiatCurrency? = null,
+@@ -44 +62,2 @@ sealed interface AmountState {
+-            lastFieldChangedByUser: AmountField = AmountField.ZEC
++            lastFieldChangedByUser: AmountField = AmountField.ZEC,
++            requireFreshRate: Boolean = false,
+@@ -49,0 +69 @@ sealed interface AmountState {
++                    ?.takeIf { it.signum() >= 0 && it <= MAX_ZCASH_SUPPLY.toBigDecimal() }
+@@ -67,8 +87,6 @@ sealed interface AmountState {
+-            val currencyConversion =
+-                if (exchangeRateState !is ExchangeRateState.Data ||
+-                    (!exchangeRateState.isLoading && exchangeRateState.isStale)
+-                ) {
+-                    null
+-                } else {
+-                    exchangeRateState.currencyConversion
+-                }
++            val rate = exchangeRateState as? ExchangeRateState.Data
++            val currencyConversion = if (requireFreshRate) {
++                rate?.eligibleConversion()
++            } else {
++                rate?.currencyConversion?.takeIf { rate.isLoading || !rate.isStale }
++            }
+@@ -78 +96 @@ sealed interface AmountState {
+-                (zatoshi.value == 0L && isTransparentOrTextRecipient) -> {
++                zatoshi.value == 0L && (isTransparentOrTextRecipient || zecAmount.signum() != 0) -> {
+@@ -88 +106 @@ sealed interface AmountState {
+-                                stringRes(fiatValue)
++                                stringRes(if (requireFreshRate) "" else fiatValue)
+@@ -109,0 +128,2 @@ sealed interface AmountState {
++            fiatCurrency: FiatCurrency? = (exchangeRateState as? ExchangeRateState.Data)?.expectedCurrency,
++            requireFreshRate: Boolean = false,
+@@ -118 +138,2 @@ sealed interface AmountState {
+-                        lastFieldChangedByUser = AmountField.FIAT
++                        lastFieldChangedByUser = AmountField.FIAT,
++                        fiatCurrency = fiatCurrency,
+@@ -121,2 +142,3 @@ sealed interface AmountState {
+-            val zatoshi =
+-                (exchangeRateState as? ExchangeRateState.Data)?.currencyConversion?.toZatoshi(amount = fiatAmount)
++            val rate = exchangeRateState as? ExchangeRateState.Data
++            val conversion = if (requireFreshRate) rate?.eligibleConversion(fiatCurrency) else rate?.currencyConversion
++            val zatoshi = conversion?.toZatoshiWithinSupply(fiatAmount)
+@@ -127,3 +149,4 @@ sealed interface AmountState {
+-                        value = stringRes(if (fiatValue.isBlank()) "" else value),
+-                        fiatValue = stringRes(fiatValue),
+-                        lastFieldChangedByUser = AmountField.FIAT
++                        value = stringRes(if (requireFreshRate || fiatValue.isBlank()) "" else value),
++                        fiatValue = stringRes(normalized),
++                        lastFieldChangedByUser = AmountField.FIAT,
++                        fiatCurrency = fiatCurrency,
+@@ -137 +160,2 @@ sealed interface AmountState {
+-                        lastFieldChangedByUser = AmountField.FIAT
++                        lastFieldChangedByUser = AmountField.FIAT,
++                        fiatCurrency = fiatCurrency,
+@@ -146 +170,3 @@ sealed interface AmountState {
+-                        lastFieldChangedByUser = AmountField.FIAT
++                        lastFieldChangedByUser = AmountField.FIAT,
++                        fiatCurrency = fiatCurrency,
++                        enteredFiatAmount = fiatAmount,
+@@ -156,0 +183 @@ sealed interface AmountState {
++        private const val KEY_FIAT_CURRENCY = "fiat_currency" // $NON-NLS
+@@ -170,0 +198,2 @@ sealed interface AmountState {
++                            val fiatCurrency = (it[KEY_FIAT_CURRENCY] as? String)
++                                ?.takeIf { code -> FiatCurrency.isAlpha3Code(code) }?.let { code -> FiatCurrency(code) }
+@@ -179 +208,2 @@ sealed interface AmountState {
+-                                        lastFieldChangedByUser = lastFieldChangedByUser
++                                        lastFieldChangedByUser = lastFieldChangedByUser,
++                                        fiatCurrency = fiatCurrency,
+@@ -187 +217,2 @@ sealed interface AmountState {
+-                                        lastFieldChangedByUser = lastFieldChangedByUser
++                                        lastFieldChangedByUser = lastFieldChangedByUser,
++                                        fiatCurrency = fiatCurrency,
+@@ -213,0 +245 @@ sealed interface AmountState {
++            this.fiatCurrency?.let { saverMap[KEY_FIAT_CURRENCY] = it.code }
+@@ -221,0 +254,7 @@ enum class AmountField { ZEC, FIAT }
++
++private fun FiatCurrencyConversion.toZatoshiWithinSupply(amount: BigDecimal): Zatoshi? {
++    val price = priceOfZec.takeIf { it.isFinite() && it > 0 } ?: return null
++    // Compare before the SDK narrows the converted amount to Long, using the same price representation.
++    val maximumFiat = MAX_ZCASH_SUPPLY.toBigDecimal().multiply(BigDecimal(price))
++    return amount.takeIf { it.signum() >= 0 && it <= maximumFiat }?.let { toZatoshi(it) }
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/model/RecipientAddressState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/model/RecipientAddressState.kt
-index 35a4fc25e..cece96f19 100644
+index 35a4fc25e..6bafb854a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/model/RecipientAddressState.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/model/RecipientAddressState.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.screen.send.model
 -import androidx.compose.runtime.saveable.mapSaver
-@@ -25,44 +24,10 @@ data class RecipientAddressState(
+@@ -9,0 +9,6 @@ data class RecipientAddressState(
++    val supportsMemo: Boolean
++        get() = type == AddressType.Shielded || type == AddressType.Unified
++
++    val canEditMemo: Boolean
++        get() = address.isEmpty() || type is AddressType.Invalid || supportsMemo
++
+@@ -25,44 +30,10 @@ data class RecipientAddressState(
 -        internal val Saver
 -            get() =
 -                run {
@@ -38890,10 +39419,10 @@ index 35a4fc25e..cece96f19 100644
 +                    TYPE_TRANSPARENT -> AddressType.Transparent
 +                    TYPE_TEX -> AddressType.Tex
 +                    else -> null
-@@ -69,0 +35,2 @@ data class RecipientAddressState(
+@@ -69,0 +41,2 @@ data class RecipientAddressState(
 +            )
 +    }
-@@ -71,29 +38,5 @@ data class RecipientAddressState(
+@@ -71,29 +44,5 @@ data class RecipientAddressState(
 -        private fun RecipientAddressState.toSaverMap(): HashMap<String, Any> {
 -            val saverMap = HashMap<String, Any>()
 -
@@ -38928,7 +39457,7 @@ index 35a4fc25e..cece96f19 100644
 +            is AddressType.Invalid -> {
 +                put(KEY_INVALID_REASON, type.reason)
 +                put(KEY_TYPE, TYPE_INVALID)
-@@ -101 +44,6 @@ data class RecipientAddressState(
+@@ -101 +50,6 @@ data class RecipientAddressState(
 -            return saverMap
 +
 +            AddressType.Shielded -> put(KEY_TYPE, TYPE_SHIELDED)
@@ -38950,31 +39479,197 @@ index 402412266..52ee2604b 100644
 -                color = ZashiColors.Text.textLight
 +                color = ZashiColors.HintTooltips.defaultFg
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt
-index 4e17a4f74..3e24df8b9 100644
+index 4e17a4f74..917cc4f9a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/send/view/SendView.kt
 @@ -55,0 +56 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 +import cash.z.ecc.android.sdk.model.Zatoshi
-@@ -305 +306 @@ private fun SendForm(
+@@ -65,0 +67,2 @@ import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
++import co.electriccoin.zcash.ui.common.wallet.isRateExpired
+@@ -82,0 +86 @@ import co.electriccoin.zcash.ui.design.util.StringResource.Companion.NUMBER_FORM
++import co.electriccoin.zcash.ui.design.util.TickerLocation
+@@ -86,0 +91 @@ import co.electriccoin.zcash.ui.design.util.scaffoldPadding
++import co.electriccoin.zcash.ui.design.util.stringRes
+@@ -90,0 +96 @@ import co.electriccoin.zcash.ui.screen.send.SendTag
++import co.electriccoin.zcash.ui.screen.send.model.AmountField
+@@ -282,8 +288 @@ private fun SendForm(
+-        val isMemoFieldAvailable =
+-            recipientAddressState.address.isEmpty() ||
+-                recipientAddressState.type is AddressType.Invalid ||
+-                (
+-                    recipientAddressState.type is AddressType.Valid &&
+-                        recipientAddressState.type !is AddressType.Transparent &&
+-                        recipientAddressState.type !is AddressType.Tex
+-                )
++        val isMemoFieldAvailable = recipientAddressState.canEditMemo
+@@ -294 +293 @@ private fun SendForm(
+-                if (recipientAddressState.type == AddressType.Transparent || !isMemoFieldAvailable) {
++                if (!isMemoFieldAvailable) {
+@@ -299,4 +298 @@ private fun SendForm(
+-            isTransparentOrTextRecipient =
+-                recipientAddressState.type?.let {
+-                    it == AddressType.Transparent || it == AddressType.Tex
+-                } ?: false,
++            isTransparentOrTextRecipient = !recipientAddressState.supportsMemo,
+@@ -305 +301,2 @@ private fun SendForm(
 -            selectedAccount = selectedAccount
-+            spendableShieldedBalance = selectedAccount.spendableShieldedBalance
-@@ -560 +561,2 @@ fun SendFormAmountTextField(
++            spendableShieldedBalance = selectedAccount.spendableShieldedBalance,
++            useSendRounding = true
+@@ -343,0 +341 @@ fun SendButton(
++    val address = recipientAddressState.address
+@@ -345 +343,3 @@ fun SendButton(
+-    // Common conditions continuously checked for validity
++    val amount = (amountState as? AmountState.Valid)?.normalizedForSend
++    val supportsMemo = recipientAddressState.supportsMemo
++    val memo = if (supportsMemo) memoState.text else ""
+@@ -347 +347 @@ fun SendButton(
+-        recipientAddressState.type !is AddressType.Invalid &&
++        recipientAddressState.type is AddressType.Valid &&
+@@ -349 +349 @@ fun SendButton(
+-            amountState is AmountState.Valid &&
++            amount != null &&
+@@ -351,3 +351,3 @@ fun SendButton(
+-            selectedAccount.canSpend(amountState.zatoshi) == true &&
+-            // A valid memo is necessary only for non-transparent recipient
+-            (recipientAddressState.type == AddressType.Transparent || memoState is MemoState.Correct)
++            selectedAccount.canSpend(amount) == true &&
++            (!supportsMemo || memoState is MemoState.Correct) &&
++            (amount.value > 0L || memo.isNotEmpty())
+@@ -356,0 +357 @@ fun SendButton(
++            if (!sendButtonEnabled) return@ZashiButton
+@@ -362 +363 @@ fun SendButton(
+-                        destinationString = recipientAddressState.address,
++                        destinationString = address,
+@@ -364,7 +365 @@ fun SendButton(
+-                        // Take memo for a valid non-transparent receiver only
+-                        memoString =
+-                            if (recipientAddressState.type == AddressType.Transparent) {
+-                                ""
+-                            } else {
+-                                memoState.text
+-                            },
++                        memoString = memo,
+@@ -374,0 +370,6 @@ fun SendButton(
++                        val destination = when (recipientAddressState.type) {
++                            AddressType.Shielded, AddressType.Unified -> WalletAddress.Unified.new(address)
++                            AddressType.Tex -> WalletAddress.Tex.new(address)
++                            AddressType.Transparent -> WalletAddress.Transparent.new(address)
++                            else -> return@launch
++                        }
+@@ -377,26 +378,2 @@ fun SendButton(
+-                                destination =
+-                                    when (recipientAddressState.type) {
+-                                        is AddressType.Invalid -> {
+-                                            WalletAddress.Unified.new(recipientAddressState.address)
+-                                        }
+-
+-                                        AddressType.Shielded -> {
+-                                            WalletAddress.Unified.new(recipientAddressState.address)
+-                                        }
+-
+-                                        AddressType.Tex -> {
+-                                            WalletAddress.Tex.new(recipientAddressState.address)
+-                                        }
+-
+-                                        AddressType.Transparent -> {
+-                                            WalletAddress.Transparent.new(recipientAddressState.address)
+-                                        }
+-
+-                                        AddressType.Unified -> {
+-                                            WalletAddress.Unified.new(recipientAddressState.address)
+-                                        }
+-
+-                                        null -> {
+-                                            WalletAddress.Unified.new(recipientAddressState.address)
+-                                        }
+-                                    }
++                                amount = amount,
++                                destination = destination,
+@@ -551 +528 @@ fun SendFormAddressTextField(
+-@Suppress("LongParameterList", "LongMethod")
++@Suppress("LongParameterList", "LongMethod", "CyclomaticComplexMethod")
+@@ -560 +537,3 @@ fun SendFormAmountTextField(
 -    selectedAccount: WalletAccount,
 +    spendableShieldedBalance: Zatoshi?,
 +    enabled: Boolean = true,
-@@ -579 +580,0 @@ fun SendFormAmountTextField(
++    useSendRounding: Boolean = false,
+@@ -566,0 +546,25 @@ fun SendFormAmountTextField(
++    val validAmount = amountState as? AmountState.Valid
++    val sendAmount = validAmount?.normalizedForSend
++    val roundedAmount = sendAmount?.takeIf { useSendRounding && it != validAmount.zatoshi }
++    val displayedAmount =
++        roundedAmount?.let { stringRes(it, TickerLocation.HIDDEN) } ?: amountState.value
++
++    val rate = exchangeRateState as? ExchangeRateState.Data
++    val fiatCurrency = amountState.fiatCurrency.takeIf { useSendRounding } ?: rate?.expectedCurrency
++    val canEditFiat = rate?.let {
++        if (useSendRounding) it.eligibleConversion(fiatCurrency) != null
++        else !it.isStale && it.currencyConversion != null
++    } == true
++    val hasFiatDraft = amountState.lastFieldChangedByUser == AmountField.FIAT && !amountState.fiatValue.isEmpty()
++    val fiatError = when {
++        !useSendRounding || !hasFiatDraft -> null
++        !canEditFiat -> stringResource(
++            if (rate?.expectedCurrency == fiatCurrency && rate?.isRateExpired() == true) {
++                co.electriccoin.zcash.ui.design.R.string.request_amount_rate_stale
++            } else {
++                co.electriccoin.zcash.ui.design.R.string.request_amount_rate_unavailable
++            }
++        )
++        amountState is AmountState.Invalid -> stringResource(R.string.send_error_invalidAmount)
++        else -> null
++    }
+@@ -579,5 +583,6 @@ fun SendFormAmountTextField(
 -                val spendableShieldedBalance = selectedAccount.spendableShieldedBalance
-@@ -610,0 +612 @@ fun SendFormAmountTextField(
+-                if (spendableShieldedBalance != null && spendableShieldedBalance < amountState.zatoshi) {
+-                    stringResource(id = R.string.sheet_insufficientBalance_title)
+-                } else {
+-                    null
++                val amount = if (useSendRounding) sendAmount else amountState.zatoshi
++                when {
++                    amount == null -> stringResource(id = R.string.send_error_invalidAmount)
++                    spendableShieldedBalance != null && spendableShieldedBalance < amount ->
++                        stringResource(id = R.string.sheet_insufficientBalance_title)
++                    else -> null
+@@ -610,0 +616 @@ fun SendFormAmountTextField(
 +                isEnabled = enabled,
-@@ -675 +677 @@ fun SendFormAmountTextField(
+@@ -612 +618 @@ fun SendFormAmountTextField(
+-                value = amountState.value.getString(context),
++                value = displayedAmount.getString(context),
+@@ -619,0 +626 @@ fun SendFormAmountTextField(
++                            requireFreshRate = useSendRounding,
+@@ -663 +670 @@ fun SendFormAmountTextField(
+-            if (exchangeRateState is ExchangeRateState.Data) {
++            if (fiatCurrency != null) {
+@@ -675 +682 @@ fun SendFormAmountTextField(
 -                    isEnabled = !exchangeRateState.isStale && exchangeRateState.currencyConversion != null,
-+                    isEnabled = enabled && !exchangeRateState.isStale && exchangeRateState.currencyConversion != null,
-@@ -736,0 +739 @@ fun SendFormMemoTextField(
++                    isEnabled = enabled && canEditFiat,
+@@ -676,0 +684 @@ fun SendFormAmountTextField(
++                    error = fiatError,
+@@ -683,0 +692,2 @@ fun SendFormAmountTextField(
++                                fiatCurrency = fiatCurrency,
++                                requireFreshRate = useSendRounding,
+@@ -687,0 +698 @@ fun SendFormAmountTextField(
++                    innerModifier = ZashiTextFieldDefaults.innerModifier.testTag(SendTag.SEND_FIAT_AMOUNT_FIELD),
+@@ -690 +701 @@ fun SendFormAmountTextField(
+-                            text = stringResByFiatDisplayName(exchangeRateState.expectedCurrency).getValue(),
++                            text = stringResByFiatDisplayName(fiatCurrency).getValue(),
+@@ -713 +724 @@ fun SendFormAmountTextField(
+-                            text = exchangeRateState.expectedCurrency.symbol,
++                            text = fiatCurrency.symbol,
+@@ -715 +726 @@ fun SendFormAmountTextField(
+-                                if (!exchangeRateState.isStale) {
++                                if (if (useSendRounding) canEditFiat else rate?.isStale == false) {
+@@ -736,0 +748 @@ fun SendFormMemoTextField(
 +    enabled: Boolean = true,
-@@ -758 +761 @@ fun SendFormMemoTextField(
+@@ -758 +770 @@ fun SendFormMemoTextField(
 -            isEnabled = isMemoFieldAvailable,
 +            isEnabled = isMemoFieldAvailable && enabled,
-@@ -813,0 +817 @@ fun SendFormMemoTextField(
+@@ -765 +777 @@ fun SendFormMemoTextField(
+-            error = if (memoState is MemoState.Correct) null else "",
++            error = if (isMemoFieldAvailable && memoState !is MemoState.Correct) "" else null,
+@@ -813,0 +826 @@ fun SendFormMemoTextField(
 +            innerModifier = ZashiTextFieldDefaults.innerModifier.testTag(SendTag.SEND_MEMO_FIELD),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/signkeystonetransaction/SignKeystoneTransactionVM.kt
 index 285d9d850..e26611c3c 100644
@@ -63199,10 +63894,10 @@ index fcda335bd..a57b60e46 100644
 +                    mockk<ReadClipboardTextUseCase> { every { this@mockk.invoke() } answers { clipboard } },
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/request/viewmodel/RequestUnitPreservationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/request/viewmodel/RequestUnitPreservationTest.kt
 new file mode 100644
-index 000000000..a0f238d7a
+index 000000000..487a638c2
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/request/viewmodel/RequestUnitPreservationTest.kt
-@@ -0,0 +1,263 @@
+@@ -0,0 +1,408 @@
 +package co.electriccoin.zcash.ui.screen.request.viewmodel
 +
 +import androidx.lifecycle.ViewModelStore
@@ -63214,7 +63909,9 @@ index 000000000..a0f238d7a
 +import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
 +import co.electriccoin.zcash.ui.common.usecase.Zip321BuildUriUseCase
 +import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.common.wallet.WALLET_EXCHANGE_RATE_MAX_AGE
 +import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
++import co.electriccoin.zcash.ui.screen.request.model.MemoState
 +import co.electriccoin.zcash.ui.screen.request.model.OnAmount
 +import co.electriccoin.zcash.ui.screen.request.model.RequestCurrency
 +import co.electriccoin.zcash.ui.screen.request.model.RequestState
@@ -63242,6 +63939,7 @@ index 000000000..a0f238d7a
 +import kotlin.test.assertIs
 +import kotlin.test.assertTrue
 +import kotlin.time.Clock
++import kotlin.time.Instant
 +
 +@OptIn(ExperimentalCoroutinesApi::class)
 +@RunWith(RobolectricTestRunner::class)
@@ -63263,33 +63961,160 @@ index 000000000..a0f238d7a
 +                amount(vm).onDone()
 +                assertIs<RequestState.Amount>(vm.state.value)
 +                verify(exactly = 0) { builder.invoke(any(), any(), any()) }
-+                // The same input becomes exactly one zatoshi after a valid rate update.
-+                rate.value = data(1.0)
++                rate.value = data(0.0002)
 +                assertTrue(amount(vm).canContinue)
 +                assertFalse(amount(vm).isBelowMinimum)
 +                oldAction()
++                assertIs<RequestState.Amount>(vm.state.value)
++                amount(vm).onDone()
 +                (vm.state.value as? RequestState.Memo)?.onDone?.invoke()
 +                assertIs<RequestState.QrCode>(vm.state.value)
-+                verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.00000001")) == 0 }, "") }
++                verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.00005")) == 0 }, "") }
 +            }
 +        }
 +    }
 +
 +    @Test
-+    fun finalFiatAmountFloorsFractionalZatoshiWithoutRoundingUp() = runTest {
++    fun fiatPreviewMemoAndRealQrUseTheSameFlooredAmountInEveryMode() = runTest {
 +        ReceiveAddressType.entries.forEach { type ->
-+            fixture(type) { vm, _, builder ->
++            fixture(type, Zip321BuildUriUseCase()) { vm, rate, _ ->
++                rate.value = data(123.0)
 +                amount(vm).onSwitch(RequestCurrency.FIAT)
-+                amount(vm).onAmount(OnAmount.Separator("."))
-+                repeat(5) { amount(vm).onAmount(OnAmount.Number(0)) }
 +                amount(vm).onAmount(OnAmount.Number(1))
-+                amount(vm).onAmount(OnAmount.Number(9))
++                assertZec("0.0081", amount(vm).zecAmount)
 +                assertTrue(amount(vm).canContinue)
 +                amount(vm).onDone()
-+                (vm.state.value as? RequestState.Memo)?.onDone?.invoke()
-+                verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.00000001")) == 0 }, "") }
++                (vm.state.value as? RequestState.Memo)?.let { memo ->
++                    assertZec("0.0081", memo.request.memoState.zecAmount.toBigDecimal())
++                    rate.value = data(234.0).copy(isStale = true)
++                    memo.onMemo(MemoState.new("Payment", "1.0"))
++                    memo.onDone()
++                }
++                assertZec("0.0081", qrAmount(vm))
 +            }
 +        }
++    }
++
++    @Test
++    fun fiatGridBoundariesAndExactOneZatoshiUseTheRealEncoder() = runTest {
++        fixture(ReceiveAddressType.Transparent, Zip321BuildUriUseCase()) { vm, rate, _ ->
++            rate.value = data(20_001.0)
++            amount(vm).onSwitch(RequestCurrency.FIAT)
++            amount(vm).onAmount(OnAmount.Number(1))
++            assertTrue(amount(vm).isBelowMinimum)
++            assertFalse(amount(vm).canContinue)
++            amount(vm).onDone()
++            assertIs<RequestState.Amount>(vm.state.value)
++
++            rate.value = data(20_000.0)
++            assertZec("0.00005", amount(vm).zecAmount)
++            amount(vm).onDone()
++            assertZec("0.00005", qrAmount(vm))
++            assertIs<RequestState.QrCode>(vm.state.value).onBack()
++
++            rate.value = data(19_999.0)
++            assertZec("0.00005", amount(vm).zecAmount)
++            amount(vm).onDone()
++            assertZec("0.00005", qrAmount(vm))
++            assertIs<RequestState.QrCode>(vm.state.value).onBack()
++            amount(vm).onAmount(OnAmount.Delete)
++            amount(vm).onSwitch(RequestCurrency.ZEC)
++            amount(vm).onAmount(OnAmount.Separator("."))
++            repeat(7) { amount(vm).onAmount(OnAmount.Number(0)) }
++            amount(vm).onAmount(OnAmount.Number(1))
++            amount(vm).onDone()
++            assertZec("0.00000001", qrAmount(vm))
++        }
++    }
++
++    @Test
++    fun staleCachedRateHoldsNextThroughRefreshUntilFreshConversionArrives() = runTest {
++        fixture(ReceiveAddressType.Transparent) { vm, rate, builder ->
++            enterFiat(vm)
++            val beforeRefresh = amount(vm)
++            var refreshes = 0
++            rate.value = data(100.0).copy(isLoading = false, isStale = true, onRefresh = { refreshes++ })
++            val blocked = amount(vm)
++            assertFalse(blocked.canContinue)
++            assertFalse(blocked.isBelowMinimum)
++            assertEquals("25", blocked.request.amountState.amount)
++            assertIs<ExchangeRateState.Data>(blocked.exchangeRateState).onRefresh()
++            assertEquals(1, refreshes)
++
++            rate.value = data(100.0).copy(isLoading = true, isStale = true)
++            beforeRefresh.onDone()
++            blocked.onDone()
++            assertFalse(amount(vm).canContinue)
++            verify(exactly = 0) { builder.invoke(any(), any(), any()) }
++
++            rate.value = data(200.0)
++            beforeRefresh.onDone()
++            blocked.onDone()
++            assertEquals("25", amount(vm).request.amountState.amount)
++            amount(vm).onDone()
++            verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.125")) == 0 }, "") }
++        }
++    }
++
++    @Test
++    fun retainedNextRejectsAnExpiredRateBeforeTheRepositoryPublishesStaleness() = runTest {
++        fixture(ReceiveAddressType.Transparent) { vm, rate, builder ->
++            val quotedAt = Clock.System.now()
++            var now = quotedAt
++            val clock = object : Clock {
++                override fun now(): Instant = now
++            }
++            rate.value = data(100.0).copy(
++                currencyConversion = FiatCurrencyConversion(quotedAt, 100.0, FiatCurrency.USD),
++                clock = clock,
++            )
++            enterFiat(vm)
++            val retained = amount(vm)
++            now += WALLET_EXCHANGE_RATE_MAX_AGE
++
++            assertFalse(retained.canContinue)
++            retained.onDone()
++            assertEquals("25", amount(vm).request.amountState.amount)
++            verify(exactly = 0) { builder.invoke(any(), any(), any()) }
++
++            rate.value = data(200.0).copy(
++                currencyConversion = FiatCurrencyConversion(now, 200.0, FiatCurrency.USD),
++                clock = clock,
++            )
++            retained.onDone()
++            amount(vm).onDone()
++            verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.125")) == 0 }, "") }
++        }
++    }
++
++    @Test
++    fun callbacksFromCancelledMemoDoNotChangeOrCompleteAReplacement() = runTest {
++        fixture { vm, rate, builder ->
++            enterFiat(vm)
++            val oldAmount = amount(vm)
++            oldAmount.onDone()
++            val oldMemo = assertIs<RequestState.Memo>(vm.state.value)
++            oldMemo.onBack()
++            rate.value = data(200.0)
++            oldAmount.onDone()
++            assertIs<RequestState.Amount>(vm.state.value)
++            amount(vm).onDone()
++            oldMemo.onMemo(MemoState.new("Old memo", "999"))
++            oldMemo.onDone()
++            oldMemo.onBack()
++            verify(exactly = 0) { builder.invoke(any(), any(), any()) }
++            assertIs<RequestState.Memo>(vm.state.value).onDone()
++            verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.125")) == 0 }, "") }
++        }
++    }
++
++    private fun qrAmount(vm: RequestVM): BigDecimal =
++        assertIs<RequestState.QrCode>(vm.state.value).request.qrCodeState.requestUri
++            .split('?', '&').single { it.startsWith("amount=") }.substringAfter('=').toBigDecimal()
++
++    private fun assertZec(expected: String, amount: BigDecimal?) {
++        if (amount == null) error("Expected a represented ZEC amount")
++        assertEquals(0, BigDecimal(expected).compareTo(amount))
 +    }
 +
 +    @Test
@@ -63308,6 +64133,8 @@ index 000000000..a0f238d7a
 +                rate.value = data(200.0)
 +                assertTrue(amount(vm).canContinue)
 +                originalAction()
++                assertIs<RequestState.Amount>(vm.state.value)
++                amount(vm).onDone()
 +                (vm.state.value as? RequestState.Memo)?.onDone?.invoke()
 +                assertIs<RequestState.QrCode>(vm.state.value)
 +                verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.125")) == 0 }, "") }
@@ -63426,6 +64253,7 @@ index 000000000..a0f238d7a
 +            FiatCurrencyConversion(Clock.System.now(), price, currency)
 +        } else {
 +            mockk {
++                every { timestamp } returns Clock.System.now()
 +                every { priceOfZec } returns price
 +                every { fiatCurrency } returns currency
 +            }
@@ -63436,14 +64264,17 @@ index 000000000..a0f238d7a
 +
 +    private fun TestScope.fixture(
 +        type: ReceiveAddressType = ReceiveAddressType.Unified,
++        uriBuilder: Zip321BuildUriUseCase? = null,
 +        block: (RequestVM, MutableStateFlow<ExchangeRateState>, Zip321BuildUriUseCase) -> Unit,
 +    ) {
 +        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
 +        val store = ViewModelStore()
 +        try {
 +            val rate = MutableStateFlow<ExchangeRateState>(data(100.0))
-+            val builder = mockk<Zip321BuildUriUseCase>()
-+            every { builder.invoke(any(), any(), any()) } returns "synthetic-request-uri"
++            val builder = uriBuilder ?: mockk<Zip321BuildUriUseCase> {
++                every { this@mockk.invoke(any<String>(), any<BigDecimal>(), any<String>()) } returns
++                    "synthetic-request-uri"
++            }
 +            val vm = RequestVM(
 +                addressTypeOrdinal = type.ordinal,
 +                application = RuntimeEnvironment.getApplication(),
@@ -63451,7 +64282,16 @@ index 000000000..a0f238d7a
 +                getZcashCurrency = mockk(relaxed = true),
 +                zip321BuildUriUseCase = builder,
 +                observeSelectedWalletAccount = mockk<ObserveSelectedWalletAccountUseCase> {
-+                    every { require() } returns flowOf(EditAccountFixtures.zodl())
++                    every { require() } returns flowOf(
++                        EditAccountFixtures.zodl().copy(
++                            // Public mainnet fixtures. The shielded addresses use unified test vector row 0.
++                            transparentAddress = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU",
++                            unifiedAddress = "u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c" +
++                                "7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf",
++                            saplingAddress =
++                                "zs1mrhc9y7jdh5r9ece8u5khgvj9kg0zgkxzdduyv0whkg7lkcrkx5xqem3e48avjq9wn2rukydkwn",
++                        )
++                    )
 +                },
 +                navigationRouter = mockk(relaxed = true),
 +                shareQR = mockk(relaxed = true),
@@ -64498,35 +65338,50 @@ index 000000000..107f7dc47
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/ScannedSendRecipientTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/ScannedSendRecipientTest.kt
 new file mode 100644
-index 000000000..ec2a691fd
+index 000000000..223f75840
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/ScannedSendRecipientTest.kt
-@@ -0,0 +1,191 @@
+@@ -0,0 +1,298 @@
 +package co.electriccoin.zcash.ui.screen.send
 +
 +import androidx.compose.runtime.CompositionLocalProvider
++import androidx.compose.runtime.collectAsState
 +import androidx.compose.runtime.getValue
 +import androidx.compose.runtime.mutableStateOf
 +import androidx.compose.runtime.setValue
++import androidx.compose.ui.semantics.SemanticsProperties
 +import androidx.compose.ui.test.ExperimentalTestApi
++import androidx.compose.ui.test.SemanticsNodeInteraction
++import androidx.compose.ui.test.assertIsEnabled
++import androidx.compose.ui.test.assertIsNotEnabled
 +import androidx.compose.ui.test.junit4.StateRestorationTester
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 +import androidx.compose.ui.test.onAllNodesWithText
++import androidx.compose.ui.test.onNodeWithTag
 +import androidx.compose.ui.test.onNodeWithText
++import androidx.compose.ui.test.performClick
 +import androidx.compose.ui.test.performTextReplacement
 +import androidx.lifecycle.SavedStateHandle
 +import androidx.lifecycle.ViewModelStore
 +import androidx.lifecycle.ViewModelStoreOwner
 +import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 +import cash.z.ecc.android.sdk.Synchronizer
++import cash.z.ecc.android.sdk.model.FiatCurrency
++import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
++import cash.z.ecc.android.sdk.model.Zatoshi
 +import cash.z.ecc.android.sdk.type.AddressType
 +import co.electriccoin.zcash.ui.common.appbar.ZashiMainTopAppBarState
 +import co.electriccoin.zcash.ui.common.appbar.ZashiTopAppBarVM
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.model.AddressBookContact
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 +import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 +import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
++import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
++import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
++import co.electriccoin.zcash.ui.common.usecase.CreateProposalUseCase
++import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 +import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
 +import co.electriccoin.zcash.ui.common.usecase.ObserveABContactPickedUseCase
 +import co.electriccoin.zcash.ui.common.usecase.ObserveClearSendUseCase
@@ -64538,6 +65393,7 @@ index 000000000..ec2a691fd
 +import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 +import co.electriccoin.zcash.ui.screen.balances.BalanceWidgetState
 +import io.mockk.coEvery
++import io.mockk.coVerify
 +import io.mockk.every
 +import io.mockk.mockk
 +import kotlinx.coroutines.flow.MutableStateFlow
@@ -64557,6 +65413,7 @@ index 000000000..ec2a691fd
 +import org.robolectric.annotation.GraphicsMode
 +import kotlin.test.assertEquals
 +import kotlin.test.assertNotSame
++import kotlin.time.Clock
 +import kotlin.time.Instant
 +
 +@RunWith(RobolectricTestRunner::class)
@@ -64572,7 +65429,9 @@ index 000000000..ec2a691fd
 +        val original = "synthetic-original-receiver"
 +        val scan = "synthetic-scanned-receiver"
 +        val contact = "synthetic-contact-receiver"
-+        val wallet = "synthetic-wallet-receiver"
++        // Public mainnet address from unified test vector row 0.
++        val wallet = "u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c" +
++            "7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf"
 +        val manual = "synthetic-manual-receiver"
 +        val synchronizer = mockk<Synchronizer> {
 +            coEvery { validateAddress(scan) } returns AddressType.Transparent
@@ -64585,26 +65444,43 @@ index 000000000..ec2a691fd
 +        }
 +        val prefill = PrefillSendUseCase()
 +        val pickedRecipient = ObserveABContactPickedUseCase(synchronizerProvider)
-+        val account = mockk<WalletAccount>(relaxed = true)
++        val account = mockk<WalletAccount>(relaxed = true) {
++            every { canSpend(any()) } returns true
++        }
 +        val accounts = mockk<GetWalletAccountsUseCase> {
 +            every { require() } returns flowOf(listOf(account))
 +        }
 +        val addressBook = mockk<AddressBookRepository> {
 +            every { observeContactByAddress(any()) } returns flowOf(null)
 +        }
++        val proposals = mockk<ZashiProposalRepository>(relaxed = true) {
++            coEvery { createProposal(any()) } returns mockk()
++        }
++        val createProposal = CreateProposalUseCase(
++            keystoneProposalRepository = mockk(relaxed = true),
++            ledgerProposalPipeline = mockk(relaxed = true),
++            zashiProposalRepository = proposals,
++            accountDataSource = mockk<AccountDataSource> {
++                coEvery { getSelectedAccount() } returns EditAccountFixtures.zodl()
++            },
++            navigationRouter = mockk(relaxed = true),
++        )
 +        var handle = SavedStateHandle()
 +        lateinit var send: SendViewModel
 +        var owner by mutableStateOf(EntryOwner())
++        val rates = MutableStateFlow<ExchangeRateState>(ExchangeRateState.OptedOut)
 +        val appBar = mockk<ZashiTopAppBarVM>(relaxed = true) {
 +            every { state } returns MutableStateFlow(ZashiMainTopAppBarState.previewLoading)
 +        }
 +        val testModule = module {
 +            viewModel {
 +                SendViewModel(
-+                    exchangeRateRepository = mockk(relaxed = true),
++                    exchangeRateRepository = mockk<ExchangeRateRepository>(relaxed = true) {
++                        every { state } returns rates
++                    },
 +                    observeContactByAddress = ObserveContactByAddressUseCase(addressBook),
 +                    observeContactPicked = pickedRecipient,
-+                    createProposal = mockk(),
++                    createProposal = createProposal,
 +                    observeWalletAccounts = accounts,
 +                    navigateToSelectRecipient = mockk(),
 +                    navigationRouter = mockk(relaxed = true),
@@ -64628,7 +65504,7 @@ index 000000000..ec2a691fd
 +                        CompositionLocalProvider(LocalViewModelStoreOwner provides owner) {
 +                            WrapSend(
 +                                balanceWidgetState = BalanceWidgetState.loadingPreview,
-+                                exchangeRateState = ExchangeRateState.OptedOut,
++                                exchangeRateState = rates.collectAsState().value,
 +                                goToQrScanner = {},
 +                                goBack = {},
 +                                hasCameraFeature = false,
@@ -64665,8 +65541,63 @@ index 000000000..ec2a691fd
 +            pickedRecipient.onWalletAccountPicked(mockk { every { unifiedAddress } returns wallet })
 +            assertRecipient(wallet, AddressType.Unified)
 +
++            fun rate(price: Double) = ExchangeRateState.Data(
++                isLoading = false,
++                currencyConversion = FiatCurrencyConversion(Clock.System.now(), price, FiatCurrency.USD),
++                onRefresh = {},
++            )
++            compose.runOnIdle { rates.value = rate(1_000.0) }
++            val fiat = compose.onNodeWithTag(SendTag.SEND_FIAT_AMOUNT_FIELD)
++            val token = compose.onNodeWithTag(SendTag.SEND_AMOUNT_FIELD)
++            val review = compose.onNodeWithTag(SendTag.SEND_FORM_BUTTON)
++            fun enteredAmount(input: SemanticsNodeInteraction) =
++                input.fetchSemanticsNode().config[SemanticsProperties.EditableText].text.toBigDecimal()
++                    .stripTrailingZeros().toPlainString()
++
++            fiat.performTextReplacement("0.01")
++            review.assertIsNotEnabled()
++            coVerify(exactly = 0) { proposals.createProposal(any()) }
++            fiat.performTextReplacement("0.05")
++            assertEquals("0.00005", enteredAmount(token))
++            review.assertIsEnabled()
++            fiat.performTextReplacement("0.06")
++            assertEquals("0.00005", enteredAmount(token))
++            review.assertIsEnabled().performClick()
++            compose.waitForIdle()
++            coVerify(exactly = 1) {
++                proposals.createProposal(match { it.amount == Zatoshi(5_000) && it.destination.address == wallet })
++            }
++
++            compose.runOnIdle { rates.value = rate(100.0) }
++            token.performTextReplacement("184467440737.09556616")
++            review.assertIsNotEnabled()
++            token.performTextReplacement("21000000.00000001")
++            review.assertIsNotEnabled()
++            fiat.performTextReplacement("18446744073709.556616")
++            review.assertIsNotEnabled()
++            fiat.performTextReplacement("2100000000.000001")
++            review.assertIsNotEnabled()
++            coVerify(exactly = 1) { proposals.createProposal(any()) }
++
++            token.performTextReplacement("21000000")
++            review.assertIsEnabled().performClick()
++            compose.waitForIdle()
++            fiat.performTextReplacement("2100000000")
++            review.assertIsEnabled().performClick()
++            compose.waitForIdle()
++            coVerify(exactly = 2) {
++                proposals.createProposal(match { it.amount == Zatoshi(2_100_000_000_000_000) })
++            }
++
++            fiat.performTextReplacement("100")
++            assertEquals("1", enteredAmount(token))
++            compose.runOnIdle { rates.value = rate(200.0) }
++            assertEquals("0.5", enteredAmount(token))
++            assertEquals("100", enteredAmount(fiat))
++
 +            compose.onNodeWithText(wallet).performTextReplacement(manual)
 +            assertRecipient(manual, AddressType.Tex)
++            assertEquals("0.5", enteredAmount(token))
 +            compose.onNodeWithText(original).assertDoesNotExist()
 +
 +            val originalViewModel = send
@@ -64679,6 +65610,22 @@ index 000000000..ec2a691fd
 +            assertRecipient(manual, AddressType.Tex)
 +            assertNotSame(originalViewModel, send)
 +            compose.onNodeWithText(original).assertDoesNotExist()
++            compose.runOnIdle {
++                rates.value = rate(400.0).copy(
++                    expectedCurrency = FiatCurrency("EUR"),
++                    currencyConversion = FiatCurrencyConversion(Clock.System.now(), 400.0, FiatCurrency("EUR")),
++                )
++            }
++            review.assertIsNotEnabled()
++            assertEquals("100", enteredAmount(fiat))
++            compose.runOnIdle { rates.value = rate(400.0) }
++            assertEquals("0.25", enteredAmount(token))
++            assertEquals("100", enteredAmount(fiat))
++
++            token.performTextReplacement("0.4")
++            compose.runOnIdle { rates.value = rate(100.0) }
++            assertEquals("0.4", enteredAmount(token))
++            assertEquals("40", enteredAmount(fiat))
 +        } finally {
 +            try {
 +                compose.runOnUiThread { owner.viewModelStore.clear() }
@@ -64692,6 +65639,290 @@ index 000000000..ec2a691fd
 +    private class EntryOwner : ViewModelStoreOwner {
 +        override val viewModelStore = ViewModelStore()
 +    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendAmountReviewTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendAmountReviewTest.kt
+new file mode 100644
+index 000000000..861d6a147
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendAmountReviewTest.kt
+@@ -0,0 +1,130 @@
++package co.electriccoin.zcash.ui.screen.send
++
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.test.assertIsEnabled
++import androidx.compose.ui.test.assertIsNotEnabled
++import androidx.compose.ui.test.junit4.v2.createComposeRule
++import androidx.compose.ui.test.onNodeWithTag
++import androidx.compose.ui.test.onNodeWithText
++import androidx.compose.ui.test.performClick
++import androidx.compose.ui.test.performTextReplacement
++import cash.z.ecc.android.sdk.model.Memo
++import cash.z.ecc.android.sdk.model.WalletAddress
++import cash.z.ecc.android.sdk.model.Zatoshi
++import cash.z.ecc.android.sdk.model.ZecSend
++import cash.z.ecc.android.sdk.type.AddressType
++import co.electriccoin.zcash.ui.common.appbar.ZashiMainTopAppBarState
++import co.electriccoin.zcash.ui.common.model.WalletAccount
++import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.design.theme.ZcashTheme
++import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.screen.balances.BalanceWidgetState
++import co.electriccoin.zcash.ui.screen.send.model.AmountField
++import co.electriccoin.zcash.ui.screen.send.model.AmountState
++import co.electriccoin.zcash.ui.screen.send.model.MemoState
++import co.electriccoin.zcash.ui.screen.send.model.RecipientAddressState
++import co.electriccoin.zcash.ui.screen.send.model.SendAddressBookState
++import co.electriccoin.zcash.ui.screen.send.model.SendStage
++import co.electriccoin.zcash.ui.screen.send.view.Send
++import io.mockk.every
++import io.mockk.mockk
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import org.robolectric.annotation.GraphicsMode
++import kotlin.test.assertEquals
++import kotlin.test.assertIs
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34], qualifiers = "w360dp-h720dp")
++@GraphicsMode(GraphicsMode.Mode.NATIVE)
++class SendAmountReviewTest {
++    @get:Rule
++    val compose = createComposeRule()
++
++    @Test
++    fun texHidesAndOmitsOversizedMemoAndRejectsZero() {
++        val account = mockk<WalletAccount>(relaxed = true) {
++            every { spendableShieldedBalance } returns Zatoshi(1_000_000)
++            every { canSpend(any()) } returns true
++        }
++        var recipient by mutableStateOf(RecipientAddressState.new("fixture-shielded-recipient", AddressType.Unified))
++        var memo by mutableStateOf(MemoState.new(""))
++        var amount by mutableStateOf(zecAmount("0.001", 100_000))
++        val reviewed = mutableListOf<ZecSend>()
++        compose.setContent {
++            ZcashTheme {
++                Send(
++                    balanceWidgetState = BalanceWidgetState.loadingPreview,
++                    sendStage = SendStage.Form,
++                    onCreateZecSend = { reviewed += it },
++                    onBack = {},
++                    onQrScannerOpen = {},
++                    hasCameraFeature = false,
++                    recipientAddressState = recipient,
++                    onRecipientAddressChange = {},
++                    setAmountState = {},
++                    amountState = amount,
++                    setMemoState = { memo = it },
++                    memoState = memo,
++                    selectedAccount = account,
++                    exchangeRateState = ExchangeRateState.OptedOut,
++                    sendAddressBookState = SendAddressBookState(
++                        SendAddressBookState.Mode.PICK_FROM_ADDRESS_BOOK,
++                        false,
++                        {},
++                    ),
++                    zashiMainTopAppBarState = ZashiMainTopAppBarState.previewLoading,
++                )
++            }
++        }
++
++        val reviewButton = compose.onNodeWithTag(SendTag.SEND_FORM_BUTTON)
++        val memoField = compose.onNodeWithTag(SendTag.SEND_MEMO_FIELD)
++        val oversized = "x".repeat(Memo.MAX_MEMO_LENGTH_BYTES + 1)
++        reviewButton.assertIsEnabled()
++        memoField.assertIsEnabled().performTextReplacement(oversized)
++        compose.runOnIdle { assertIs<MemoState.TooLong>(memo) }
++        reviewButton.assertIsNotEnabled()
++
++        compose.runOnIdle { recipient = RecipientAddressState.new(TEX_RECIPIENT, AddressType.Tex) }
++        memoField.assertIsNotEnabled()
++        compose.onNodeWithText(oversized).assertDoesNotExist()
++        reviewButton.assertIsEnabled().performClick()
++        compose.runOnIdle {
++            val send = reviewed.single()
++            assertIs<WalletAddress.Tex>(send.destination)
++            assertEquals(TEX_RECIPIENT, send.destination.address)
++            assertEquals("", send.memo.value)
++            assertEquals(Zatoshi(100_000), send.amount)
++            assertIs<MemoState.TooLong>(memo)
++            amount = zecAmount("0", 0)
++        }
++        reviewButton.assertIsNotEnabled()
++
++        compose.runOnIdle {
++            recipient = RecipientAddressState.new(SAPLING_RECIPIENT, AddressType.Shielded)
++        }
++        reviewButton.assertIsNotEnabled()
++        memoField.assertIsEnabled().performTextReplacement("For the memo")
++        reviewButton.assertIsEnabled().performClick()
++        compose.runOnIdle {
++            assertEquals(Zatoshi(0), reviewed.last().amount)
++            assertEquals("For the memo", reviewed.last().memo.value)
++        }
++    }
++
++    private fun zecAmount(text: String, amount: Long) =
++        AmountState.Valid(stringRes(text), stringRes(""), AmountField.ZEC, Zatoshi(amount))
++
++    private companion object {
++        // https://zips.z.cash/zip-0320#reference-implementation
++        const val TEX_RECIPIENT = "tex1s2rt77ggv6q989lr49rkgzmh5slsksa9khdgte"
++        // Sapling receiver from row 0 of the Zcash unified address test vectors.
++        const val SAPLING_RECIPIENT = "zs1mrhc9y7jdh5r9ece8u5khgvj9kg0zgkxzdduyv0whkg7lkcrkx5xqem3e48avjq9wn2rukydkwn"
++    }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendFiatProposalTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendFiatProposalTest.kt
+new file mode 100644
+index 000000000..bcbc83578
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendFiatProposalTest.kt
+@@ -0,0 +1,142 @@
++package co.electriccoin.zcash.ui.screen.send
++
++import cash.z.ecc.android.sdk.model.Memo
++import cash.z.ecc.android.sdk.model.WalletAddress
++import cash.z.ecc.android.sdk.model.Zatoshi
++import cash.z.ecc.android.sdk.model.ZecSend
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
++import co.electriccoin.zcash.ui.common.model.KeystoneAccount
++import co.electriccoin.zcash.ui.common.model.LedgerAccount
++import co.electriccoin.zcash.ui.common.model.ZodlAccount
++import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
++import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
++import co.electriccoin.zcash.ui.common.usecase.CreateProposalUseCase
++import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
++import io.mockk.coEvery
++import io.mockk.coVerify
++import io.mockk.every
++import io.mockk.mockk
++import kotlinx.coroutines.test.runTest
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++
++class SendFiatProposalTest {
++    @Test
++    fun allSpendingAccountsRejectSubgridFiatBeforeTheirProposalPortsAndCanRetry() = runTest {
++        val accounts = listOf(EditAccountFixtures.zodl(), EditAccountFixtures.keystone(), EditAccountFixtures.ledger())
++        accounts.forEach { account ->
++            val proposals = mockk<ZashiProposalRepository>(relaxed = true)
++            val keystone = mockk<KeystoneProposalRepository>(relaxed = true)
++            val ledger = mockk<LedgerProposalPipeline>(relaxed = true)
++            val createProposal = CreateProposalUseCase(
++                keystoneProposalRepository = keystone,
++                ledgerProposalPipeline = ledger,
++                zashiProposalRepository = proposals,
++                accountDataSource = mockk<AccountDataSource> {
++                    coEvery { getSelectedAccount() } returns account
++                },
++                navigationRouter = mockk(relaxed = true),
++            )
++            val send = ZecSend(
++                destination = WalletAddress.Unified.new("synthetic-recipient"),
++                amount = Zatoshi(4_999),
++                memo = Memo(""),
++                proposal = null,
++            )
++            assertFailsWith<IllegalArgumentException> { createProposal(send, floor = true) }
++            coVerify(exactly = 0) { proposals.createProposal(any()) }
++            coVerify(exactly = 0) { keystone.createProposal(any()) }
++            coVerify(exactly = 0) { ledger.createProposal(any()) }
++
++            val expected = send.copy(amount = Zatoshi(5_000))
++            createProposal(expected, floor = true)
++            createProposal(send.copy(amount = Zatoshi(5_001)), floor = true)
++            when (account) {
++                is ZodlAccount -> coVerify(exactly = 2) { proposals.createProposal(expected) }
++                is KeystoneAccount -> coVerify(exactly = 2) { keystone.createProposal(expected) }
++                is LedgerAccount -> coVerify(exactly = 2) { ledger.createProposal(expected) }
++                else -> error("Unexpected test account")
++            }
++        }
++    }
++
++    @Test
++    fun explicitZeroRequiresZecInputShieldedRecipientAndMemo() = runTest {
++        val proposals = mockk<ZashiProposalRepository>(relaxed = true)
++        val createProposal = softwareProposal(proposals)
++
++        val send = ZecSend(
++            destination = WalletAddress.Unified.new("synthetic-recipient"),
++            amount = Zatoshi(0),
++            memo = Memo("Memo only"),
++            proposal = null,
++        )
++        assertFailsWith<IllegalArgumentException> { createProposal(send, floor = true) }
++        assertFailsWith<IllegalArgumentException> { createProposal(send.copy(memo = Memo("")), floor = false) }
++        assertFailsWith<IllegalArgumentException> {
++            createProposal(send.copy(destination = WalletAddress.Tex.new("synthetic-tex-recipient")), floor = false)
++        }
++        createProposal(send, floor = false)
++        coVerify(exactly = 1) { proposals.createProposal(any()) }
++        coVerify(exactly = 1) { proposals.createProposal(send) }
++        assertEquals(Zatoshi(0), send.amount)
++    }
++
++    @Test
++    fun proposalPayloadIncludesMemoOnlyForShieldedRecipients() = runTest {
++        val proposals = mockk<ZashiProposalRepository>(relaxed = true)
++        val createProposal = softwareProposal(proposals)
++        val memo = Memo("Draft memo")
++        val send = ZecSend(
++            destination = WalletAddress.Unified.new("synthetic-unified-recipient"),
++            amount = Zatoshi(5_000),
++            memo = memo,
++            proposal = null,
++        )
++        val sapling = send.copy(destination = WalletAddress.Sapling.new("synthetic-sapling-recipient"))
++        val transparent = send.copy(destination = WalletAddress.Transparent.new("synthetic-transparent-recipient"))
++        val tex = send.copy(destination = WalletAddress.Tex.new("synthetic-tex-recipient"))
++
++        listOf(send, sapling, transparent, tex).forEach { createProposal(it, floor = false) }
++
++        coVerify(exactly = 4) { proposals.createProposal(any()) }
++        coVerify(exactly = 1) { proposals.createProposal(send) }
++        coVerify(exactly = 1) { proposals.createProposal(sapling) }
++        coVerify(exactly = 1) { proposals.createProposal(transparent.copy(memo = Memo(""))) }
++        coVerify(exactly = 1) { proposals.createProposal(tex.copy(memo = Memo(""))) }
++    }
++
++    @Test
++    fun proposalBoundaryChecksSupplyBeforeApplyingFiatFloor() = runTest {
++        val proposals = mockk<ZashiProposalRepository>(relaxed = true)
++        val createProposal = softwareProposal(proposals)
++        val maxSend = ZecSend(
++            destination = WalletAddress.Unified.new("synthetic-recipient"),
++            amount = Zatoshi(2_100_000_000_000_000),
++            memo = Memo(""),
++            proposal = null,
++        )
++        // The SDK constructor rejects this amount, so use a stand-in to exercise our port guard.
++        val beyondSupply = mockk<Zatoshi> { every { value } returns 2_100_000_000_000_001L }
++        listOf(false, true).forEach { fiat ->
++            assertFailsWith<IllegalArgumentException> {
++                createProposal(maxSend.copy(amount = beyondSupply), floor = fiat)
++            }
++            createProposal(maxSend, floor = fiat)
++        }
++        coVerify(exactly = 2) { proposals.createProposal(any()) }
++        coVerify(exactly = 2) { proposals.createProposal(maxSend) }
++    }
++
++    private fun softwareProposal(proposals: ZashiProposalRepository) = CreateProposalUseCase(
++        keystoneProposalRepository = mockk(relaxed = true),
++        ledgerProposalPipeline = mockk(relaxed = true),
++        zashiProposalRepository = proposals,
++        accountDataSource = mockk<AccountDataSource> {
++            coEvery { getSelectedAccount() } returns EditAccountFixtures.zodl()
++        },
++        navigationRouter = mockk(relaxed = true),
++    )
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendRecipientSelectionTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendRecipientSelectionTest.kt
 new file mode 100644
@@ -64852,12 +66083,100 @@ index 000000000..24736ca48
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendViewModelLedgerTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendViewModelLedgerTest.kt
-index 57fcc6f0e..4a42a1cc7 100644
+index 57fcc6f0e..50cad6217 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendViewModelLedgerTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/send/SendViewModelLedgerTest.kt
-@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.send
+@@ -2,0 +3,4 @@ package co.electriccoin.zcash.ui.screen.send
 +import androidx.lifecycle.SavedStateHandle
-@@ -66,0 +68 @@ class SendViewModelLedgerTest {
++import cash.z.ecc.android.sdk.model.FiatCurrency
++import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
++import cash.z.ecc.android.sdk.model.Zatoshi
+@@ -4,0 +9 @@ import co.electriccoin.zcash.ui.NavigationRouter
++import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
+@@ -5,0 +11,2 @@ import co.electriccoin.zcash.ui.common.usecase.CreateProposalUseCase
++import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
++import co.electriccoin.zcash.ui.common.wallet.WALLET_EXCHANGE_RATE_MAX_AGE
+@@ -8,0 +16,2 @@ import io.mockk.coEvery
++import io.mockk.coVerify
++import io.mockk.every
+@@ -9,0 +19 @@ import io.mockk.mockk
++import kotlinx.coroutines.CancellationException
+@@ -11,0 +22 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.flow.MutableStateFlow
+@@ -20,0 +32,2 @@ import kotlin.test.assertEquals
++import kotlin.time.Clock
++import kotlin.time.Instant
+@@ -55,0 +69,60 @@ class SendViewModelLedgerTest {
++    @Test
++    fun cancelledProposalKeepsTheFormUsableForAnotherReview() = runTest {
++        val createProposal = mockk<CreateProposalUseCase> {
++            coEvery { this@mockk.invoke(any(), any()) } throws CancellationException("cancelled")
++        }
++        val vm = vm(createProposal)
++        val stages = mutableListOf<SendStage>()
++        val payment = mockk<ZecSend>()
++
++        vm.onCreateZecSendClick(payment, amountState()) { stages += it }
++        runCurrent()
++        assertEquals(emptyList(), stages)
++
++        coEvery { createProposal(any(), any()) } returns Unit
++        vm.onCreateZecSendClick(payment, amountState()) { stages += it }
++        runCurrent()
++        coVerify(exactly = 2) { createProposal(payment, any()) }
++        assertEquals(emptyList(), stages)
++    }
++
++    @Test
++    fun retainedFiatReviewNeedsACurrentMatchingRateAndTheDisplayedNormalizedAmount() = runTest {
++        val quotedAt = Clock.System.now()
++        var now = quotedAt
++        val clock = object : Clock {
++            override fun now(): Instant = now
++        }
++        val usd = FiatCurrency.USD
++        fun rate(price: Double) = ExchangeRateState.Data(
++            currencyConversion = FiatCurrencyConversion(now, price, usd),
++            clock = clock,
++            onRefresh = {},
++        )
++        val rates = MutableStateFlow<ExchangeRateState>(rate(100.0))
++        val createProposal = mockk<CreateProposalUseCase>(relaxed = true)
++        val vm = vm(createProposal, mockk<ExchangeRateRepository>(relaxed = true) {
++            every { state } returns rates
++        })
++        val payment = mockk<ZecSend> { every { amount } returns Zatoshi(25_000_000) }
++        val entered = AmountState.newFromFiat("", "25", false, rates.value, requireFreshRate = true)
++        fun review() {
++            vm.onCreateZecSendClick(payment, entered) {}
++            runCurrent()
++        }
++
++        now += WALLET_EXCHANGE_RATE_MAX_AGE
++        review()
++        rates.value = ExchangeRateState.OptedOut
++        review()
++        rates.value = rate(100.0).copy(expectedCurrency = FiatCurrency("EUR"))
++        review()
++        rates.value = rate(200.0)
++        review()
++        coVerify(exactly = 0) { createProposal(any(), any()) }
++
++        rates.value = rate(100.0)
++        review()
++        coVerify(exactly = 1) { createProposal(payment, true) }
++    }
++
+@@ -58 +131,4 @@ class SendViewModelLedgerTest {
+-    private fun vm(createProposal: CreateProposalUseCase) =
++    private fun vm(
++        createProposal: CreateProposalUseCase,
++        rates: ExchangeRateRepository = mockk(relaxed = true),
++    ) =
+@@ -60 +136 @@ class SendViewModelLedgerTest {
+-            exchangeRateRepository = mockk(relaxed = true),
++            exchangeRateRepository = rates,
+@@ -66,0 +143 @@ class SendViewModelLedgerTest {
 +            savedStateHandle = SavedStateHandle(),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/support/model/TimeInfoTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/support/model/TimeInfoTest.kt
 new file mode 100644

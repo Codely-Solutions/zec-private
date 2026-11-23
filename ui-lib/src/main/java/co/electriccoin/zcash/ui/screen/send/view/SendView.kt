@@ -64,6 +64,8 @@ import co.electriccoin.zcash.ui.common.appbar.ZashiMainTopAppBarState
 import co.electriccoin.zcash.ui.common.appbar.ZashiTopAppbar
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
+import co.electriccoin.zcash.ui.common.wallet.isRateExpired
 import co.electriccoin.zcash.ui.design.component.AppAlertDialog
 import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
 import co.electriccoin.zcash.ui.design.component.BlankSurface
@@ -81,14 +83,17 @@ import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
 import co.electriccoin.zcash.ui.design.theme.typography.RobotoMonoFontFamily
 import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 import co.electriccoin.zcash.ui.design.util.StringResource.Companion.NUMBER_FORMAT_LOCALE
+import co.electriccoin.zcash.ui.design.util.TickerLocation
 import co.electriccoin.zcash.ui.design.util.getString
 import co.electriccoin.zcash.ui.design.util.getValue
 import co.electriccoin.zcash.ui.design.util.pressMorph
 import co.electriccoin.zcash.ui.design.util.scaffoldPadding
+import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByFiatDisplayName
 import co.electriccoin.zcash.ui.screen.balances.BalanceWidget
 import co.electriccoin.zcash.ui.screen.balances.BalanceWidgetState
 import co.electriccoin.zcash.ui.screen.send.SendTag
+import co.electriccoin.zcash.ui.screen.send.model.AmountField
 import co.electriccoin.zcash.ui.screen.send.model.AmountState
 import co.electriccoin.zcash.ui.screen.send.model.MemoState
 import co.electriccoin.zcash.ui.screen.send.model.RecipientAddressState
@@ -280,30 +285,21 @@ private fun SendForm(
 
         Spacer(Modifier.size(ZcashTheme.dimens.spacingDefault))
 
-        val isMemoFieldAvailable =
-            recipientAddressState.address.isEmpty() ||
-                recipientAddressState.type is AddressType.Invalid ||
-                (
-                    recipientAddressState.type is AddressType.Valid &&
-                        recipientAddressState.type !is AddressType.Transparent &&
-                        recipientAddressState.type !is AddressType.Tex
-                )
+        val isMemoFieldAvailable = recipientAddressState.canEditMemo
 
         SendFormAmountTextField(
             amountState = amountState,
             imeAction =
-                if (recipientAddressState.type == AddressType.Transparent || !isMemoFieldAvailable) {
+                if (!isMemoFieldAvailable) {
                     ImeAction.Done
                 } else {
                     ImeAction.Next
                 },
-            isTransparentOrTextRecipient =
-                recipientAddressState.type?.let {
-                    it == AddressType.Transparent || it == AddressType.Tex
-                } ?: false,
+            isTransparentOrTextRecipient = !recipientAddressState.supportsMemo,
             exchangeRateState = exchangeRateState,
             setAmountState = setAmountState,
-            spendableShieldedBalance = selectedAccount.spendableShieldedBalance
+            spendableShieldedBalance = selectedAccount.spendableShieldedBalance,
+            useSendRounding = true
         )
 
         Spacer(Modifier.size(ZcashTheme.dimens.spacingDefault))
@@ -342,65 +338,45 @@ fun SendButton(
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val address = recipientAddressState.address
 
-    // Common conditions continuously checked for validity
+    val amount = (amountState as? AmountState.Valid)?.normalizedForSend
+    val supportsMemo = recipientAddressState.supportsMemo
+    val memo = if (supportsMemo) memoState.text else ""
     val sendButtonEnabled =
-        recipientAddressState.type !is AddressType.Invalid &&
+        recipientAddressState.type is AddressType.Valid &&
             recipientAddressState.address.isNotEmpty() &&
-            amountState is AmountState.Valid &&
+            amount != null &&
             amountState.value.getValue().isNotBlank() &&
-            selectedAccount.canSpend(amountState.zatoshi) == true &&
-            // A valid memo is necessary only for non-transparent recipient
-            (recipientAddressState.type == AddressType.Transparent || memoState is MemoState.Correct)
+            selectedAccount.canSpend(amount) == true &&
+            (!supportsMemo || memoState is MemoState.Correct) &&
+            (amount.value > 0L || memo.isNotEmpty())
 
     ZashiButton(
         onClick = {
+            if (!sendButtonEnabled) return@ZashiButton
             scope.launch {
                 // SDK side validations
                 val zecSendValidation =
                     ZecSendExt.new(
                         locale = NUMBER_FORMAT_LOCALE,
-                        destinationString = recipientAddressState.address,
+                        destinationString = address,
                         zecString = amountState.value.getString(context),
-                        // Take memo for a valid non-transparent receiver only
-                        memoString =
-                            if (recipientAddressState.type == AddressType.Transparent) {
-                                ""
-                            } else {
-                                memoState.text
-                            },
+                        memoString = memo,
                     )
 
                 when (zecSendValidation) {
                     is ZecSendExt.ZecSendValidation.Valid -> {
+                        val destination = when (recipientAddressState.type) {
+                            AddressType.Shielded, AddressType.Unified -> WalletAddress.Unified.new(address)
+                            AddressType.Tex -> WalletAddress.Tex.new(address)
+                            AddressType.Transparent -> WalletAddress.Transparent.new(address)
+                            else -> return@launch
+                        }
                         onCreateZecSend(
                             zecSendValidation.zecSend.copy(
-                                destination =
-                                    when (recipientAddressState.type) {
-                                        is AddressType.Invalid -> {
-                                            WalletAddress.Unified.new(recipientAddressState.address)
-                                        }
-
-                                        AddressType.Shielded -> {
-                                            WalletAddress.Unified.new(recipientAddressState.address)
-                                        }
-
-                                        AddressType.Tex -> {
-                                            WalletAddress.Tex.new(recipientAddressState.address)
-                                        }
-
-                                        AddressType.Transparent -> {
-                                            WalletAddress.Transparent.new(recipientAddressState.address)
-                                        }
-
-                                        AddressType.Unified -> {
-                                            WalletAddress.Unified.new(recipientAddressState.address)
-                                        }
-
-                                        null -> {
-                                            WalletAddress.Unified.new(recipientAddressState.address)
-                                        }
-                                    }
+                                amount = amount,
+                                destination = destination,
                             )
                         )
                     }
@@ -549,7 +525,7 @@ fun SendFormAddressTextField(
     }
 }
 
-@Suppress("LongParameterList", "LongMethod")
+@Suppress("LongParameterList", "LongMethod", "CyclomaticComplexMethod")
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SendFormAmountTextField(
@@ -560,12 +536,38 @@ fun SendFormAmountTextField(
     setAmountState: (AmountState) -> Unit,
     spendableShieldedBalance: Zatoshi?,
     enabled: Boolean = true,
+    useSendRounding: Boolean = false,
 ) {
     val focusManager = LocalFocusManager.current
 
     val context = LocalContext.current
 
     val zcashCurrency = ZcashCurrency.getLocalizedName(context)
+    val validAmount = amountState as? AmountState.Valid
+    val sendAmount = validAmount?.normalizedForSend
+    val roundedAmount = sendAmount?.takeIf { useSendRounding && it != validAmount.zatoshi }
+    val displayedAmount =
+        roundedAmount?.let { stringRes(it, TickerLocation.HIDDEN) } ?: amountState.value
+
+    val rate = exchangeRateState as? ExchangeRateState.Data
+    val fiatCurrency = amountState.fiatCurrency.takeIf { useSendRounding } ?: rate?.expectedCurrency
+    val canEditFiat = rate?.let {
+        if (useSendRounding) it.eligibleConversion(fiatCurrency) != null
+        else !it.isStale && it.currencyConversion != null
+    } == true
+    val hasFiatDraft = amountState.lastFieldChangedByUser == AmountField.FIAT && !amountState.fiatValue.isEmpty()
+    val fiatError = when {
+        !useSendRounding || !hasFiatDraft -> null
+        !canEditFiat -> stringResource(
+            if (rate?.expectedCurrency == fiatCurrency && rate?.isRateExpired() == true) {
+                co.electriccoin.zcash.ui.design.R.string.request_amount_rate_stale
+            } else {
+                co.electriccoin.zcash.ui.design.R.string.request_amount_rate_unavailable
+            }
+        )
+        amountState is AmountState.Invalid -> stringResource(R.string.send_error_invalidAmount)
+        else -> null
+    }
 
     val amountError =
         when (amountState) {
@@ -578,10 +580,12 @@ fun SendFormAmountTextField(
             }
 
             is AmountState.Valid -> {
-                if (spendableShieldedBalance != null && spendableShieldedBalance < amountState.zatoshi) {
-                    stringResource(id = R.string.sheet_insufficientBalance_title)
-                } else {
-                    null
+                val amount = if (useSendRounding) sendAmount else amountState.zatoshi
+                when {
+                    amount == null -> stringResource(id = R.string.send_error_invalidAmount)
+                    spendableShieldedBalance != null && spendableShieldedBalance < amount ->
+                        stringResource(id = R.string.sheet_insufficientBalance_title)
+                    else -> null
                 }
             }
         }
@@ -611,7 +615,7 @@ fun SendFormAmountTextField(
                 singleLine = true,
                 isEnabled = enabled,
                 maxLines = 1,
-                value = amountState.value.getString(context),
+                value = displayedAmount.getString(context),
                 onValueChange = { newValue ->
                     setAmountState(
                         AmountState.newFromZec(
@@ -619,6 +623,7 @@ fun SendFormAmountTextField(
                             fiatValue = amountState.fiatValue.getString(context),
                             isTransparentOrTextRecipient = isTransparentOrTextRecipient,
                             exchangeRateState = exchangeRateState,
+                            requireFreshRate = useSendRounding,
                         )
                     )
                 },
@@ -662,7 +667,7 @@ fun SendFormAmountTextField(
                 }
             )
 
-            if (exchangeRateState is ExchangeRateState.Data) {
+            if (fiatCurrency != null) {
                 Spacer(modifier = Modifier.width(12.dp))
                 Image(
                     modifier = Modifier.padding(top = 12.dp),
@@ -674,8 +679,9 @@ fun SendFormAmountTextField(
                 ZashiTextField(
                     singleLine = true,
                     maxLines = 1,
-                    isEnabled = enabled && !exchangeRateState.isStale && exchangeRateState.currencyConversion != null,
+                    isEnabled = enabled && canEditFiat,
                     value = amountState.fiatValue.getString(context),
+                    error = fiatError,
                     onValueChange = { newValue ->
                         setAmountState(
                             AmountState.newFromFiat(
@@ -683,13 +689,16 @@ fun SendFormAmountTextField(
                                 fiatValue = newValue,
                                 isTransparentOrTextRecipient = isTransparentOrTextRecipient,
                                 exchangeRateState = exchangeRateState,
+                                fiatCurrency = fiatCurrency,
+                                requireFreshRate = useSendRounding,
                             )
                         )
                     },
                     modifier = Modifier.weight(1f),
+                    innerModifier = ZashiTextFieldDefaults.innerModifier.testTag(SendTag.SEND_FIAT_AMOUNT_FIELD),
                     placeholder = {
                         ZashiAutoSizeText(
-                            text = stringResByFiatDisplayName(exchangeRateState.expectedCurrency).getValue(),
+                            text = stringResByFiatDisplayName(fiatCurrency).getValue(),
                             style = ZashiTypography.textMd,
                             color = LocalContentColor.current,
                             maxLines = 1,
@@ -712,9 +721,9 @@ fun SendFormAmountTextField(
                         ),
                     prefix = {
                         Text(
-                            text = exchangeRateState.expectedCurrency.symbol,
+                            text = fiatCurrency.symbol,
                             color =
-                                if (!exchangeRateState.isStale) {
+                                if (if (useSendRounding) canEditFiat else rate?.isStale == false) {
                                     ZashiColors.Inputs.Default.text
                                 } else {
                                     ZashiColors.Inputs.Disabled.text
@@ -765,7 +774,7 @@ fun SendFormMemoTextField(
                 } else {
                     ""
                 },
-            error = if (memoState is MemoState.Correct) null else "",
+            error = if (isMemoFieldAvailable && memoState !is MemoState.Correct) "" else null,
             onValueChange = {
                 setMemoState(MemoState.new(it))
             },

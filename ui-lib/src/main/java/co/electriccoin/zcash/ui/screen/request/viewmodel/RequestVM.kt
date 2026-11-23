@@ -10,6 +10,7 @@ import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.model.zcash.MAX_ZCASH_SUPPLY
 import co.electriccoin.zcash.ui.common.provider.GetZcashCurrencyProvider
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.usecase.ObserveAccountIconUseCase
@@ -17,16 +18,15 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCa
 import co.electriccoin.zcash.ui.common.usecase.ShareQRUseCase
 import co.electriccoin.zcash.ui.common.usecase.Zip321BuildUriUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+import co.electriccoin.zcash.ui.common.wallet.eligibleConversion
+import co.electriccoin.zcash.ui.common.wallet.isRateExpired
 import co.electriccoin.zcash.ui.design.util.StringResource.Companion.NUMBER_FORMAT_LOCALE
 import co.electriccoin.zcash.ui.design.util.imageRes
-import co.electriccoin.zcash.ui.design.util.getString
 import co.electriccoin.zcash.ui.design.util.stringRes
-import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.screen.qrcode.ext.fromReceiveAddressType
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
 import co.electriccoin.zcash.ui.screen.request.ext.toBigDecimalLocalized
 import co.electriccoin.zcash.ui.screen.request.model.AmountState
-import co.electriccoin.zcash.ui.screen.request.model.MAX_ZCASH_SUPPLY
 import co.electriccoin.zcash.ui.screen.request.model.MemoState
 import co.electriccoin.zcash.ui.screen.request.model.OnAmount
 import co.electriccoin.zcash.ui.screen.request.model.QrCodeState
@@ -34,6 +34,7 @@ import co.electriccoin.zcash.ui.screen.request.model.Request
 import co.electriccoin.zcash.ui.screen.request.model.RequestCurrency
 import co.electriccoin.zcash.ui.screen.request.model.RequestStage
 import co.electriccoin.zcash.ui.screen.request.model.RequestState
+import co.electriccoin.zcash.ui.screen.request.model.formatRequestZec
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -42,6 +43,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.math.BigDecimal
 import java.math.MathContext
 import java.text.DecimalFormatSymbols
 
@@ -87,30 +89,45 @@ class RequestVM(
             )
         )
 
-    private val stage = MutableStateFlow(RequestStage.AMOUNT)
+    private class Step(val stage: RequestStage)
+
+    private val step = MutableStateFlow(Step(RequestStage.AMOUNT))
 
     internal val state =
         combine(
             request,
-            stage,
+            step,
             exchangeRateRepository.state,
             observeSelectedWalletAccount.require(),
             observeAccountIcon.observeAll()
-        ) { request, currentStage, exchangeRateUsd, account, colors ->
+        ) { draft, currentStep, exchangeRate, account, colors ->
             val walletAddress =
                 account.fromReceiveAddressType(ReceiveAddressType.fromOrdinal(addressTypeOrdinal))
                     ?: return@combine RequestState.Loading
 
-            when (currentStage) {
+            when (currentStep.stage) {
                 RequestStage.AMOUNT -> {
+                    val amount = draft.amountState
+                    val rate = displayRate(amount, exchangeRate)
+                    val zecAmount = amount.validZecAmount(resolveExchangeRateValue(rate))
                     RequestState.Amount(
-                        request = request,
-                        exchangeRateState = displayRate(request.amountState, exchangeRateUsd),
+                        request = draft,
+                        exchangeRateState = rate,
                         zcashCurrency = getZcashCurrency(),
-                        onAmount = { onAmount(resolveExchangeRateValue(exchangeRateUsd), it) },
-                        onSwitch = { onSwitch(resolveExchangeRateValue(exchangeRateRepository.state.value), it) },
-                        onBack = { onBack() },
-                    ) { onNextClick(walletAddress, zip321BuildUriUseCase) }
+                        onAmount = { edit ->
+                            if (step.value === currentStep) onAmount(edit)
+                        },
+                        onSwitch = { currency ->
+                            if (step.value === currentStep && request.value.amountState == amount) {
+                                onSwitch(currentConversion(amount), currency)
+                            }
+                        },
+                        onBack = { if (step.value === currentStep) onBack() },
+                    ) {
+                        if (step.value === currentStep) {
+                            onNextClick(walletAddress, zip321BuildUriUseCase, amount, zecAmount)
+                        }
+                    }
                 }
 
                 RequestStage.MEMO -> {
@@ -122,10 +139,14 @@ class RequestVM(
                                 observeAccountIcon.iconOf(colors, account)
                             },
                         walletAddress = walletAddress,
-                        request = request,
-                        onMemo = { onMemo(it) },
-                        onDone = { onMemoDone(walletAddress.address, zip321BuildUriUseCase) },
-                        onBack = ::onBack,
+                        request = draft,
+                        onMemo = { if (step.value === currentStep) onMemo(it) },
+                        onDone = {
+                            if (step.value === currentStep) {
+                                onMemoDone(walletAddress.address, zip321BuildUriUseCase)
+                            }
+                        },
+                        onBack = { if (step.value === currentStep) onBack() },
                         zcashCurrency = getZcashCurrency(),
                     )
                 }
@@ -139,7 +160,7 @@ class RequestVM(
                                 R.drawable.ic_zec_qr_shielded
                             },
                         walletAddress = walletAddress,
-                        request = request,
+                        request = draft,
                         onQrCodeShare = { _, _, uri ->
                             viewModelScope.launch {
                                 shareQR(
@@ -157,8 +178,8 @@ class RequestVM(
                                 )
                             }
                         },
-                        onBack = ::onBack,
-                        onClose = ::onClose,
+                        onBack = { if (step.value === currentStep) onBack() },
+                        onClose = { if (step.value === currentStep) onClose() },
                         zcashCurrency = getZcashCurrency(),
                     )
                 }
@@ -172,15 +193,15 @@ class RequestVM(
     private fun onNextClick(
         walletAddress: WalletAddress,
         zip321BuildUriUseCase: Zip321BuildUriUseCase,
+        displayedAmount: AmountState,
+        displayedZecAmount: BigDecimal?,
     ) {
         val amount = request.value.amountState
-        val conversion = resolveExchangeRateValue(displayRate(amount, exchangeRateRepository.state.value))
-        if (stage.value != RequestStage.AMOUNT) return
-        val represented = amount.validZecAmount(conversion) ?: return
+        val represented = displayedZecAmount ?: return
+        if (amount != displayedAmount || represented != amount.validZecAmount(currentConversion(amount))) return
         val zecAmount = when (amount.currency) {
             RequestCurrency.ZEC -> amount.amount
-            RequestCurrency.FIAT ->
-                stringResByNumber(represented, minDecimals = 3, maxDecimals = 8).getString(application)
+            RequestCurrency.FIAT -> represented.formatRequestZec(application)
         }
         when (walletAddress) {
             is WalletAddress.Transparent -> {
@@ -202,28 +223,34 @@ class RequestVM(
     }
 
     private fun resolveExchangeRateValue(state: ExchangeRateState): FiatCurrencyConversion? =
-        (state as? ExchangeRateState.Data)?.currencyConversion?.takeIf {
-            it.priceOfZec.isFinite() && it.priceOfZec > 0 && it.fiatCurrency == state.expectedCurrency
-        }
+        (state as? ExchangeRateState.Data)?.eligibleConversion()
+
+    private fun currentConversion(amount: AmountState): FiatCurrencyConversion? =
+        resolveExchangeRateValue(displayRate(amount, exchangeRateRepository.state.value))
 
     private fun displayRate(amount: AmountState, state: ExchangeRateState): ExchangeRateState {
         val conversion = resolveExchangeRateValue(state)
         if (amount.currency == RequestCurrency.ZEC) {
-            return (state as? ExchangeRateState.Data)?.copy(currencyConversion = conversion) ?: state
+            return (state as? ExchangeRateState.Data)?.let {
+                it.copy(currencyConversion = conversion, isStale = it.isRateExpired())
+            } ?: state
         }
         val currency = amount.fiatCurrency
-        val data = state as? ExchangeRateState.Data ?: ExchangeRateState.Data(onRefresh = {})
+        val data = state as? ExchangeRateState.Data
+            ?: ExchangeRateState.Data(isLoading = false, isRefreshEnabled = false, onRefresh = {})
         return if (currency == null) {
             ExchangeRateState.OptedOut
         } else {
             data.copy(
                 expectedCurrency = currency,
                 currencyConversion = conversion?.takeIf { it.fiatCurrency == currency },
+                isStale = data.expectedCurrency == currency && data.isRateExpired(),
             )
         }
     }
 
-    private fun onAmount(conversion: FiatCurrencyConversion?, onAmount: OnAmount) {
+    private fun onAmount(onAmount: OnAmount) {
+        val conversion = currentConversion(request.value.amountState)
         request.update {
             val newState =
                 when (onAmount) {
@@ -338,19 +365,19 @@ class RequestVM(
     }
 
     internal fun onBack() {
-        when (stage.value) {
+        when (step.value.stage) {
             RequestStage.AMOUNT -> {
                 navigationRouter.back()
             }
 
             RequestStage.MEMO -> {
-                stage.update { RequestStage.AMOUNT }
+                step.value = Step(RequestStage.AMOUNT)
             }
 
             RequestStage.QR_CODE -> {
                 when (ReceiveAddressType.fromOrdinal(addressTypeOrdinal)) {
-                    ReceiveAddressType.Transparent -> stage.update { RequestStage.AMOUNT }
-                    ReceiveAddressType.Unified, ReceiveAddressType.Sapling -> stage.update { RequestStage.MEMO }
+                    ReceiveAddressType.Transparent -> step.value = Step(RequestStage.AMOUNT)
+                    ReceiveAddressType.Unified, ReceiveAddressType.Sapling -> step.value = Step(RequestStage.MEMO)
                 }
             }
         }
@@ -360,10 +387,11 @@ class RequestVM(
 
     private fun onAmountDone(zecAmount: String) {
         request.update { it.copy(memoState = MemoState.new(DEFAULT_MEMO, zecAmount)) }
-        stage.update { RequestStage.MEMO }
+        step.value = Step(RequestStage.MEMO)
     }
 
     private fun onMemoDone(address: String, zip321BuildUriUseCase: Zip321BuildUriUseCase) {
+        if (!request.value.memoState.isValid()) return
         request.update {
             it.copy(
                 qrCodeState =
@@ -380,7 +408,7 @@ class RequestVM(
                     )
             )
         }
-        stage.update { RequestStage.QR_CODE }
+        step.value = Step(RequestStage.QR_CODE)
     }
 
     private fun onAmountAndMemoDone(
@@ -405,17 +433,15 @@ class RequestVM(
             )
         }
 
-        stage.update { RequestStage.QR_CODE }
+        step.value = Step(RequestStage.QR_CODE)
     }
 
     private fun onSwitch(
         conversion: FiatCurrencyConversion?,
         onSwitchTo: RequestCurrency
-    ) = viewModelScope.launch {
-        if (stage.value != RequestStage.AMOUNT || conversion == null) return@launch
+    ) {
         val amount = request.value.amountState
-        if (onSwitchTo == amount.currency) return@launch
-        if (amount.currency == RequestCurrency.FIAT && amount.fiatCurrency != conversion.fiatCurrency) return@launch
+        if (conversion == null || onSwitchTo == amount.currency) return
 
         request.update {
             val newAmount =
@@ -428,10 +454,8 @@ class RequestVM(
                     }
 
                     RequestCurrency.ZEC -> {
-                        it.amountState.toZecString(
-                            conversion,
-                            application
-                        )
+                        it.amountState.validZecAmount(conversion)?.formatRequestZec(application)
+                            ?: defaultAmount
                     }
                 }
 
@@ -450,7 +474,9 @@ class RequestVM(
         }
     }
 
-    private fun onMemo(memoState: MemoState) = request.update { it.copy(memoState = memoState) }
+    private fun onMemo(memoState: MemoState) = request.update {
+        it.copy(memoState = MemoState.new(memoState.text, it.memoState.zecAmount))
+    }
 
     private fun createZip321Uri(
         address: String,

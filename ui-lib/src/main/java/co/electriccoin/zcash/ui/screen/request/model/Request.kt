@@ -6,7 +6,9 @@ import cash.z.ecc.android.sdk.ext.convertZecToZatoshi
 import cash.z.ecc.android.sdk.model.FiatCurrencyConversion
 import cash.z.ecc.android.sdk.model.FiatCurrency
 import cash.z.ecc.android.sdk.model.Memo
+import cash.z.ecc.sdk.extension.FIAT_ZATOSHI_INCREMENT
 import cash.z.ecc.sdk.extension.floor
+import co.electriccoin.zcash.ui.common.model.zcash.MAX_ZCASH_SUPPLY
 import co.electriccoin.zcash.ui.design.util.TickerLocation
 import co.electriccoin.zcash.ui.design.util.getString
 import co.electriccoin.zcash.ui.design.util.stringRes
@@ -14,7 +16,6 @@ import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.screen.request.ext.toBigDecimalLocalized
 import java.math.BigDecimal
 import java.math.MathContext
-import java.math.RoundingMode
 
 data class Request(
     val amountState: AmountState,
@@ -31,11 +32,21 @@ data class AmountState(
     internal fun validZecAmount(conversion: FiatCurrencyConversion?): BigDecimal? {
         val zec = convertedZecAmount(conversion) ?: return null
         return zec.takeIf { isValid == true && it <= BigDecimal(MAX_ZCASH_SUPPLY) }
-            ?.setScale(ZEC_DECIMAL_PLACES, RoundingMode.DOWN)?.takeIf { it.signum() > 0 }
+            ?.let(::floorZecAmount)
+            ?.takeIf { it.signum() > 0 }
     }
 
     internal fun isBelowMinimum(conversion: FiatCurrencyConversion?): Boolean =
-        convertedZecAmount(conversion)?.let { it.signum() > 0 && it < MIN_ZEC_REQUEST } == true
+        convertedZecAmount(conversion)?.let { it.signum() > 0 && it < minimumZecAmount } == true
+
+    internal val minimumZecAmount: BigDecimal
+        get() = when (currency) {
+            RequestCurrency.ZEC -> BigDecimal.valueOf(1, ZEC_DECIMAL_PLACES)
+            RequestCurrency.FIAT -> BigDecimal.valueOf(FIAT_ZATOSHI_INCREMENT, ZEC_DECIMAL_PLACES)
+        }
+
+    private fun floorZecAmount(amount: BigDecimal): BigDecimal =
+        amount.divideToIntegralValue(minimumZecAmount).multiply(minimumZecAmount)
 
     private fun convertedZecAmount(conversion: FiatCurrencyConversion?): BigDecimal? {
         val entered = amount.toBigDecimalLocalized() ?: return null
@@ -109,6 +120,7 @@ data class QrCodeState(
     val memo: String
 )
 
-internal const val MAX_ZCASH_SUPPLY = 21_000_000
 private const val ZEC_DECIMAL_PLACES = 8
-private val MIN_ZEC_REQUEST = BigDecimal("0.00000001")
+
+internal fun BigDecimal.formatRequestZec(context: Context): String =
+    stringResByNumber(this, minDecimals = 3, maxDecimals = ZEC_DECIMAL_PLACES).getString(context)

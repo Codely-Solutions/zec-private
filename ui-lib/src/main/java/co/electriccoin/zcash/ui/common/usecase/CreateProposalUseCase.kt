@@ -1,11 +1,13 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.model.Memo
+import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.ZecSend
-import cash.z.ecc.sdk.extension.floor
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.InsufficientFundsException
 import co.electriccoin.zcash.ui.common.datasource.TexUnsupportedOnKSException
+import co.electriccoin.zcash.ui.common.extension.normalizedSendAmount
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
@@ -27,8 +29,8 @@ class CreateProposalUseCase(
 ) {
     @Suppress("TooGenericExceptionCaught")
     suspend operator fun invoke(zecSend: ZecSend, floor: Boolean) {
-        val normalized = if (floor) zecSend.copy(amount = zecSend.amount.floor()) else zecSend
         try {
+            val normalized by lazy { zecSend.normalize(floor) }
             when (accountDataSource.getSelectedAccount()) {
                 is KeystoneAccount -> {
                     keystoneProposalRepository.createProposal(normalized)
@@ -66,5 +68,14 @@ class CreateProposalUseCase(
             zashiProposalRepository.clear()
             throw e
         }
+    }
+
+    private fun ZecSend.normalize(floor: Boolean): ZecSend {
+        val amount = requireNotNull(amount.normalizedSendAmount(floor)) { "Invalid send amount" }
+        val supportsMemo = destination is WalletAddress.Unified || destination is WalletAddress.Sapling
+        require(amount.value > 0L || (supportsMemo && memo.value.isNotEmpty())) {
+            "Zero-ZEC sends require a shielded recipient and a memo"
+        }
+        return copy(amount = amount, memo = if (supportsMemo) memo else Memo(""))
     }
 }

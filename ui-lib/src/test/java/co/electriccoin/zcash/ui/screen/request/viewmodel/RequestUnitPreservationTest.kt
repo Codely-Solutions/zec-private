@@ -9,7 +9,9 @@ import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.Zip321BuildUriUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+import co.electriccoin.zcash.ui.common.wallet.WALLET_EXCHANGE_RATE_MAX_AGE
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
+import co.electriccoin.zcash.ui.screen.request.model.MemoState
 import co.electriccoin.zcash.ui.screen.request.model.OnAmount
 import co.electriccoin.zcash.ui.screen.request.model.RequestCurrency
 import co.electriccoin.zcash.ui.screen.request.model.RequestState
@@ -37,6 +39,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -58,33 +61,160 @@ class RequestUnitPreservationTest {
                 amount(vm).onDone()
                 assertIs<RequestState.Amount>(vm.state.value)
                 verify(exactly = 0) { builder.invoke(any(), any(), any()) }
-                // The same input becomes exactly one zatoshi after a valid rate update.
-                rate.value = data(1.0)
+                rate.value = data(0.0002)
                 assertTrue(amount(vm).canContinue)
                 assertFalse(amount(vm).isBelowMinimum)
                 oldAction()
+                assertIs<RequestState.Amount>(vm.state.value)
+                amount(vm).onDone()
                 (vm.state.value as? RequestState.Memo)?.onDone?.invoke()
                 assertIs<RequestState.QrCode>(vm.state.value)
-                verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.00000001")) == 0 }, "") }
+                verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.00005")) == 0 }, "") }
             }
         }
     }
 
     @Test
-    fun finalFiatAmountFloorsFractionalZatoshiWithoutRoundingUp() = runTest {
+    fun fiatPreviewMemoAndRealQrUseTheSameFlooredAmountInEveryMode() = runTest {
         ReceiveAddressType.entries.forEach { type ->
-            fixture(type) { vm, _, builder ->
+            fixture(type, Zip321BuildUriUseCase()) { vm, rate, _ ->
+                rate.value = data(123.0)
                 amount(vm).onSwitch(RequestCurrency.FIAT)
-                amount(vm).onAmount(OnAmount.Separator("."))
-                repeat(5) { amount(vm).onAmount(OnAmount.Number(0)) }
                 amount(vm).onAmount(OnAmount.Number(1))
-                amount(vm).onAmount(OnAmount.Number(9))
+                assertZec("0.0081", amount(vm).zecAmount)
                 assertTrue(amount(vm).canContinue)
                 amount(vm).onDone()
-                (vm.state.value as? RequestState.Memo)?.onDone?.invoke()
-                verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.00000001")) == 0 }, "") }
+                (vm.state.value as? RequestState.Memo)?.let { memo ->
+                    assertZec("0.0081", memo.request.memoState.zecAmount.toBigDecimal())
+                    rate.value = data(234.0).copy(isStale = true)
+                    memo.onMemo(MemoState.new("Payment", "1.0"))
+                    memo.onDone()
+                }
+                assertZec("0.0081", qrAmount(vm))
             }
         }
+    }
+
+    @Test
+    fun fiatGridBoundariesAndExactOneZatoshiUseTheRealEncoder() = runTest {
+        fixture(ReceiveAddressType.Transparent, Zip321BuildUriUseCase()) { vm, rate, _ ->
+            rate.value = data(20_001.0)
+            amount(vm).onSwitch(RequestCurrency.FIAT)
+            amount(vm).onAmount(OnAmount.Number(1))
+            assertTrue(amount(vm).isBelowMinimum)
+            assertFalse(amount(vm).canContinue)
+            amount(vm).onDone()
+            assertIs<RequestState.Amount>(vm.state.value)
+
+            rate.value = data(20_000.0)
+            assertZec("0.00005", amount(vm).zecAmount)
+            amount(vm).onDone()
+            assertZec("0.00005", qrAmount(vm))
+            assertIs<RequestState.QrCode>(vm.state.value).onBack()
+
+            rate.value = data(19_999.0)
+            assertZec("0.00005", amount(vm).zecAmount)
+            amount(vm).onDone()
+            assertZec("0.00005", qrAmount(vm))
+            assertIs<RequestState.QrCode>(vm.state.value).onBack()
+            amount(vm).onAmount(OnAmount.Delete)
+            amount(vm).onSwitch(RequestCurrency.ZEC)
+            amount(vm).onAmount(OnAmount.Separator("."))
+            repeat(7) { amount(vm).onAmount(OnAmount.Number(0)) }
+            amount(vm).onAmount(OnAmount.Number(1))
+            amount(vm).onDone()
+            assertZec("0.00000001", qrAmount(vm))
+        }
+    }
+
+    @Test
+    fun staleCachedRateHoldsNextThroughRefreshUntilFreshConversionArrives() = runTest {
+        fixture(ReceiveAddressType.Transparent) { vm, rate, builder ->
+            enterFiat(vm)
+            val beforeRefresh = amount(vm)
+            var refreshes = 0
+            rate.value = data(100.0).copy(isLoading = false, isStale = true, onRefresh = { refreshes++ })
+            val blocked = amount(vm)
+            assertFalse(blocked.canContinue)
+            assertFalse(blocked.isBelowMinimum)
+            assertEquals("25", blocked.request.amountState.amount)
+            assertIs<ExchangeRateState.Data>(blocked.exchangeRateState).onRefresh()
+            assertEquals(1, refreshes)
+
+            rate.value = data(100.0).copy(isLoading = true, isStale = true)
+            beforeRefresh.onDone()
+            blocked.onDone()
+            assertFalse(amount(vm).canContinue)
+            verify(exactly = 0) { builder.invoke(any(), any(), any()) }
+
+            rate.value = data(200.0)
+            beforeRefresh.onDone()
+            blocked.onDone()
+            assertEquals("25", amount(vm).request.amountState.amount)
+            amount(vm).onDone()
+            verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.125")) == 0 }, "") }
+        }
+    }
+
+    @Test
+    fun retainedNextRejectsAnExpiredRateBeforeTheRepositoryPublishesStaleness() = runTest {
+        fixture(ReceiveAddressType.Transparent) { vm, rate, builder ->
+            val quotedAt = Clock.System.now()
+            var now = quotedAt
+            val clock = object : Clock {
+                override fun now(): Instant = now
+            }
+            rate.value = data(100.0).copy(
+                currencyConversion = FiatCurrencyConversion(quotedAt, 100.0, FiatCurrency.USD),
+                clock = clock,
+            )
+            enterFiat(vm)
+            val retained = amount(vm)
+            now += WALLET_EXCHANGE_RATE_MAX_AGE
+
+            assertFalse(retained.canContinue)
+            retained.onDone()
+            assertEquals("25", amount(vm).request.amountState.amount)
+            verify(exactly = 0) { builder.invoke(any(), any(), any()) }
+
+            rate.value = data(200.0).copy(
+                currencyConversion = FiatCurrencyConversion(now, 200.0, FiatCurrency.USD),
+                clock = clock,
+            )
+            retained.onDone()
+            amount(vm).onDone()
+            verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.125")) == 0 }, "") }
+        }
+    }
+
+    @Test
+    fun callbacksFromCancelledMemoDoNotChangeOrCompleteAReplacement() = runTest {
+        fixture { vm, rate, builder ->
+            enterFiat(vm)
+            val oldAmount = amount(vm)
+            oldAmount.onDone()
+            val oldMemo = assertIs<RequestState.Memo>(vm.state.value)
+            oldMemo.onBack()
+            rate.value = data(200.0)
+            oldAmount.onDone()
+            assertIs<RequestState.Amount>(vm.state.value)
+            amount(vm).onDone()
+            oldMemo.onMemo(MemoState.new("Old memo", "999"))
+            oldMemo.onDone()
+            oldMemo.onBack()
+            verify(exactly = 0) { builder.invoke(any(), any(), any()) }
+            assertIs<RequestState.Memo>(vm.state.value).onDone()
+            verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.125")) == 0 }, "") }
+        }
+    }
+
+    private fun qrAmount(vm: RequestVM): BigDecimal =
+        assertIs<RequestState.QrCode>(vm.state.value).request.qrCodeState.requestUri
+            .split('?', '&').single { it.startsWith("amount=") }.substringAfter('=').toBigDecimal()
+
+    private fun assertZec(expected: String, amount: BigDecimal?) {
+        if (amount == null) error("Expected a represented ZEC amount")
+        assertEquals(0, BigDecimal(expected).compareTo(amount))
     }
 
     @Test
@@ -103,6 +233,8 @@ class RequestUnitPreservationTest {
                 rate.value = data(200.0)
                 assertTrue(amount(vm).canContinue)
                 originalAction()
+                assertIs<RequestState.Amount>(vm.state.value)
+                amount(vm).onDone()
                 (vm.state.value as? RequestState.Memo)?.onDone?.invoke()
                 assertIs<RequestState.QrCode>(vm.state.value)
                 verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.125")) == 0 }, "") }
@@ -221,6 +353,7 @@ class RequestUnitPreservationTest {
             FiatCurrencyConversion(Clock.System.now(), price, currency)
         } else {
             mockk {
+                every { timestamp } returns Clock.System.now()
                 every { priceOfZec } returns price
                 every { fiatCurrency } returns currency
             }
@@ -231,14 +364,17 @@ class RequestUnitPreservationTest {
 
     private fun TestScope.fixture(
         type: ReceiveAddressType = ReceiveAddressType.Unified,
+        uriBuilder: Zip321BuildUriUseCase? = null,
         block: (RequestVM, MutableStateFlow<ExchangeRateState>, Zip321BuildUriUseCase) -> Unit,
     ) {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
             val rate = MutableStateFlow<ExchangeRateState>(data(100.0))
-            val builder = mockk<Zip321BuildUriUseCase>()
-            every { builder.invoke(any(), any(), any()) } returns "synthetic-request-uri"
+            val builder = uriBuilder ?: mockk<Zip321BuildUriUseCase> {
+                every { this@mockk.invoke(any<String>(), any<BigDecimal>(), any<String>()) } returns
+                    "synthetic-request-uri"
+            }
             val vm = RequestVM(
                 addressTypeOrdinal = type.ordinal,
                 application = RuntimeEnvironment.getApplication(),
@@ -246,7 +382,16 @@ class RequestUnitPreservationTest {
                 getZcashCurrency = mockk(relaxed = true),
                 zip321BuildUriUseCase = builder,
                 observeSelectedWalletAccount = mockk<ObserveSelectedWalletAccountUseCase> {
-                    every { require() } returns flowOf(EditAccountFixtures.zodl())
+                    every { require() } returns flowOf(
+                        EditAccountFixtures.zodl().copy(
+                            // Public mainnet fixtures. The shielded addresses use unified test vector row 0.
+                            transparentAddress = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU",
+                            unifiedAddress = "u1l8xunezsvhq8fgzfl7404m450nwnd76zshscn6nfys7vyz2ywyh4cc5daaq0c" +
+                                "7q2su5lqfh23sp7fkf3kt27ve5948mzpfdvckzaect2jtte308mkwlycj2u0eac077wu70vqcetkxf",
+                            saplingAddress =
+                                "zs1mrhc9y7jdh5r9ece8u5khgvj9kg0zgkxzdduyv0whkg7lkcrkx5xqem3e48avjq9wn2rukydkwn",
+                        )
+                    )
                 },
                 navigationRouter = mockk(relaxed = true),
                 shareQR = mockk(relaxed = true),

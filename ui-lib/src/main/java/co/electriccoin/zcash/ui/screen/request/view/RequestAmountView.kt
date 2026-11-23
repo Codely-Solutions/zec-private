@@ -9,8 +9,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,6 +44,7 @@ import co.electriccoin.zcash.ui.screen.request.model.AmountState
 import co.electriccoin.zcash.ui.screen.request.model.OnAmount
 import co.electriccoin.zcash.ui.screen.request.model.RequestCurrency
 import co.electriccoin.zcash.ui.screen.request.model.RequestState
+import co.electriccoin.zcash.ui.screen.request.model.formatRequestZec
 import java.text.DecimalFormatSymbols
 
 @Composable
@@ -135,43 +137,55 @@ private fun RequestAmountWithMainFiatView(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val zecText =
-                buildAnnotatedString {
-                    withStyle(style = SpanStyle(color = ZashiColors.Text.textPrimary)) {
-                        append(
-                            if (state.exchangeRateState.currencyConversion != null) {
-                                state.request.amountState.toZecString(
-                                    state.exchangeRateState.currencyConversion,
-                                    context = context
-                                )
-                            } else {
-                                "\u2014"
-                            }
-                        )
+        if (state.conversion == null) {
+            RequestRateUnavailable(state.exchangeRateState)
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                val zecText =
+                    buildAnnotatedString {
+                        withStyle(style = SpanStyle(color = ZashiColors.Text.textPrimary)) {
+                            append(state.zecAmount?.formatRequestZec(context) ?: "\u2014")
+                        }
+                        append(" ")
+                        withStyle(style = SpanStyle(color = ZashiColors.Text.textQuaternary)) {
+                            append(state.zcashCurrency.localizedName(context))
+                        }
                     }
-                    append(" ") // Add an extra space between the texts
-                    withStyle(style = SpanStyle(color = ZashiColors.Text.textQuaternary)) {
-                        append(state.zcashCurrency.localizedName(LocalContext.current))
-                    }
-                }
 
-            Text(
-                text = zecText,
-                style = ZashiTypography.textLg,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1
-            )
+                Text(
+                    text = zecText,
+                    style = ZashiTypography.textLg,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 1
+                )
 
-            Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
-            Image(
-                painter = painterResource(id = R.drawable.ic_switch),
-                contentDescription = null,
-                modifier = Modifier.clickable { onFiatPreferenceSwitch() }
-            )
+                Image(
+                    painter = painterResource(id = R.drawable.ic_switch),
+                    contentDescription = null,
+                    modifier = Modifier.clickable { onFiatPreferenceSwitch() }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RequestRateUnavailable(rate: ExchangeRateState.Data) {
+    val message = when {
+        rate.isLoading -> R.string.request_amount_rate_loading
+        rate.isStale -> R.string.request_amount_rate_stale
+        else -> R.string.request_amount_rate_unavailable
+    }
+    Text(
+        text = stringResource(message),
+        style = ZashiTypography.textMd,
+        color = ZashiColors.Text.textTertiary
+    )
+    if (rate.isRefreshEnabled && !rate.isLoading) {
+        TextButton(onClick = rate.onRefresh) {
+            Text(stringResource(R.string.currencyConversion_refreshAction))
         }
     }
 }
@@ -182,6 +196,7 @@ private fun RequestAmountWithMainZecView(
     onFiatPreferenceSwitch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val conversion = state.conversion
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
@@ -219,10 +234,10 @@ private fun RequestAmountWithMainZecView(
                     append(" ") // Add an extra space between the texts
                     withStyle(style = SpanStyle(color = ZashiColors.Text.textPrimary)) {
                         append(
-                            if (state.exchangeRateState.currencyConversion != null) {
+                            if (conversion != null) {
                                 state.request.amountState.toFiatString(
                                     LocalContext.current,
-                                    state.exchangeRateState.currencyConversion
+                                    conversion
                                 )
                             } else {
                                 stringResource(id = R.string.request_amount_empty)
@@ -240,11 +255,13 @@ private fun RequestAmountWithMainZecView(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            Image(
-                painter = painterResource(id = R.drawable.ic_switch),
-                contentDescription = null,
-                modifier = Modifier.clickable { onFiatPreferenceSwitch() }
-            )
+            if (conversion != null) {
+                Image(
+                    painter = painterResource(id = R.drawable.ic_switch),
+                    contentDescription = null,
+                    modifier = Modifier.clickable { onFiatPreferenceSwitch() }
+                )
+            }
         }
     }
 }
@@ -433,7 +450,11 @@ private fun InvalidAmountView(
 
             Text(
                 text = stringResource(
-                    id = if (isBelowMinimum) R.string.request_amount_minimum else R.string.zecKeyboard_invalid
+                    id = when {
+                        !isBelowMinimum -> R.string.zecKeyboard_invalid
+                        amountState.currency == RequestCurrency.FIAT -> R.string.request_amount_fiat_minimum
+                        else -> R.string.request_amount_minimum
+                    }
                 ),
                 color = ZashiColors.Utility.WarningYellow.utilityOrange700,
                 style = ZashiTypography.textSm,

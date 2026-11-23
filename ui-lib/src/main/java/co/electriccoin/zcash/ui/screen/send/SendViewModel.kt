@@ -20,6 +20,7 @@ import co.electriccoin.zcash.ui.screen.send.model.AmountState
 import co.electriccoin.zcash.ui.screen.send.model.RecipientAddressState
 import co.electriccoin.zcash.ui.screen.send.model.SendAddressBookState
 import co.electriccoin.zcash.ui.screen.send.model.SendStage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -35,7 +36,7 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
 
 class SendViewModel(
-    exchangeRateRepository: ExchangeRateRepository,
+    private val exchangeRateRepository: ExchangeRateRepository,
     private val observeContactByAddress: ObserveContactByAddressUseCase,
     private val observeContactPicked: ObserveABContactPickedUseCase,
     private val createProposal: CreateProposalUseCase,
@@ -162,7 +163,15 @@ class SendViewModel(
         onCreateZecSendClickJob =
             viewModelScope.launch {
                 try {
-                    createProposal(newZecSend, amountState.lastFieldChangedByUser == AmountField.FIAT)
+                    val enteredInFiat = amountState.lastFieldChangedByUser == AmountField.FIAT
+                    if (enteredInFiat) {
+                        val current = (amountState as? AmountState.Valid)
+                            ?.normalizedFiatAt(exchangeRateRepository.state.value)
+                        if (current != newZecSend.amount) return@launch
+                    }
+                    createProposal(newZecSend, enteredInFiat)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: Exception) {
                     setSendStage(SendStage.SendFailure(e.cause?.message ?: e.message ?: ""))
                     Twig.error(e) { "Error creating proposal" }

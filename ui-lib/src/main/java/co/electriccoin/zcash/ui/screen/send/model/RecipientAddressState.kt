@@ -6,6 +6,12 @@ data class RecipientAddressState(
     val address: String,
     val type: AddressType?
 ) {
+    val supportsMemo: Boolean
+        get() = type == AddressType.Shielded || type == AddressType.Unified
+
+    val canEditMemo: Boolean
+        get() = address.isEmpty() || type is AddressType.Invalid || supportsMemo
+
     companion object {
         private const val KEY_ADDRESS = "address" // $NON-NLS
         private const val KEY_TYPE = "type" // $NON-NLS
