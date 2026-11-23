@@ -148,7 +148,7 @@ private fun RequestAmountWithMainFiatView(
                                     context = context
                                 )
                             } else {
-                                stringResource(id = R.string.request_amount_empty)
+                                "\u2014"
                             }
                         )
                     }

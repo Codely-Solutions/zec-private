@@ -142,9 +142,8 @@ class RequestUnitPreservationTest {
         val store = ViewModelStore()
         try {
             val rate = MutableStateFlow<ExchangeRateState>(data(100.0))
-            val builder = mockk<Zip321BuildUriUseCase> {
-                every { invoke(any(), any(), any()) } returns "synthetic-request-uri"
-            }
+            val builder = mockk<Zip321BuildUriUseCase>()
+            every { builder.invoke(any(), any(), any()) } returns "synthetic-request-uri"
             val vm = RequestVM(
                 addressTypeOrdinal = type.ordinal,
                 application = RuntimeEnvironment.getApplication(),
