@@ -9,19 +9,58 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 COMMON = ROOT / 'ui-lib/src/main/java/co/electriccoin/zcash/ui/common'
 CATALOG = 'https://1click.chaindefuser.com/v0/tokens'
-MARKET = re.compile(
-    r'"([^"]+)" to\s*Market\(\s*"([^"]+)",\s*"([^"]+)",\s*(\d+),\s*(null|"[^"]+"),\s*"([^"]+)"'
+PLAIN_STRING = r'"[^"\\$\r\n]+"'
+IDENTIFIER = r'[A-Za-z_][A-Za-z0-9_]*'
+STRING_CONSTANT = re.compile(
+    rf'^[ \t]*(?:(?:private|internal|public)[ \t]+)?const[ \t]+val[ \t]+'
+    rf'({IDENTIFIER})(?:[ \t]*:[ \t]*String)?[ \t]*=[ \t]*({PLAIN_STRING})[ \t]*$',
+    re.MULTILINE,
 )
+MARKET_MAP = re.compile(r'^[ \t]*private val markets = mapOf\([ \t]*\n(.*?)^[ \t]*\)[ \t]*$',
+                        re.MULTILINE | re.DOTALL)
+MARKET = re.compile(
+    rf'\s*({PLAIN_STRING}|{IDENTIFIER})\s+to\s+Market\(\s*'
+    rf'({PLAIN_STRING})\s*,\s*({PLAIN_STRING})\s*,\s*(\d+)\s*,\s*(null|{PLAIN_STRING})\s*,\s*{PLAIN_STRING}'
+    r'\s*,?\s*\)\s*(?:,|(?=\Z))'
+)
+
+
+def parse_markets(text):
+    constants = {}
+    for name, value in STRING_CONSTANT.findall(text):
+        if name in constants:
+            raise ValueError(f'Duplicate Kotlin string constant: {name}')
+        constants[name] = value[1:-1]
+
+    match = MARKET_MAP.search(text)
+    if match is None:
+        raise ValueError('Could not find the Kotlin market map')
+    body = match.group(1).strip()
+    mapped = {}
+    offset = 0
+    while offset < len(body):
+        row = MARKET.match(body, offset)
+        if row is None:
+            line = body[offset:].lstrip().splitlines()[0]
+            raise ValueError(f'Unsupported Kotlin market mapping: {line}')
+        key, token, chain, decimals, contract = row.groups()
+        asset = key[1:-1] if key.startswith('"') else constants.get(key)
+        if asset is None:
+            raise ValueError(f'Unresolved Kotlin market key: {key}')
+        if asset in mapped:
+            raise ValueError(f'Duplicate market asset ID: {asset}')
+        mapped[asset] = (token[1:-1].casefold(), chain[1:-1], int(decimals),
+                         None if contract == 'null' else contract[1:-1])
+        offset = row.end()
+    return mapped
 
 
 def entries():
     allowed_text = (COMMON / 'provider/SimpleSwapAssetProvider.kt').read_text(encoding='utf-8')
     market_text = (COMMON / 'model/SwapPriceMarkets.kt').read_text(encoding='utf-8')
     allowed = {(token.casefold(), chain) for token, chain in re.findall(r'"([^"]+)" to "([^"]+)"', allowed_text)}
-    rows = MARKET.findall(market_text)
-    mapped = {asset: (token.casefold(), chain, int(decimals), None if contract == 'null' else contract.strip('"'))
-              for asset, token, chain, decimals, contract, _ in rows}
-    if len(mapped) != len(rows) or {(token, chain) for token, chain, _, _ in mapped.values()} != allowed:
+    mapped = parse_markets(market_text)
+    if len(mapped) != len(allowed) or {(token, chain) for token, chain, _, _ in mapped.values()} != allowed:
         raise ValueError('Market mappings do not cover the curated asset/network set')
     return allowed, mapped
 
