@@ -105,7 +105,7 @@ Refresh `fork.patch` and normalized `source-state.json` together and validate an
 
 The NEAR provider is excluded from patch hunks to avoid retaining the upstream credential. Preparation verifies the exact upstream provider, then installs the credential-free fork provider bound by `source-state.json`. Keep that reviewed implementation authoritative; credential stripping alone would lose its Tor and quote fixes. An upstream provider change requires review before replacement.
 
-After reviewing and staging source changes, run `python3 -B .private/refresh_source.py`. It generates the patch from canonical indexed bytes and refuses unstaged source edits. Preserve embedded line endings in `fork.patch`; Git text normalization would corrupt Windows-wrapper hunks. Stage the regenerated metadata, then run offline preflight and candidate validation.
+After reviewing and staging source changes, run `python3 -B .private/refresh_source.py`. It generates the patch from canonical indexed bytes and refuses unstaged source edits. Preserve the embedded line endings in `fork.patch` so Windows-wrapper hunks remain valid. Commit the reviewed changes and regenerated metadata. From a clean disposable checkout at the resulting commit, run `python3 -B .private/preflight.py --base <reviewed-comparison-commit>` and the maintained `test_sync` suite with `PYTHONPATH=.private`. The suite reapplies the actual fork patch to local upstream fixtures, checks excluded trees and verifies the resulting integration candidate without remote writes. Retain the controller and disposable candidate identities with the validation evidence. [Release controller checks](DEVELOPMENT.md#release-controller-checks)
 
 ## Signing and publication
 

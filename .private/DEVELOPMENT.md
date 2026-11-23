@@ -129,6 +129,8 @@ Include `test_dev_session`, `test_notify` and `test_maintenance_watch` for contr
 
 Use `patch_environment` from [test_support.py](test_support.py) for test environment changes. It restores empty Windows variables for subprocesses, including Git configuration overrides with empty values.
 
+For local proof-of-work coverage, use the [testnet funding procedure](MAINTENANCE.md#testnet-funding-and-failed-boundaries). Reuse controller results only where the exact tested inputs still match. When the fork patch or source inventory changes, rerun preflight and [disposable integration](MAINTENANCE.md#upstream-integration) at the new commit. Keep the earlier controller receipt bound to its original source.
+
 Set the validation workflow's optional `verify_existing_release` input to the current published tag when changing public verification or producer resolution. On a review branch this reads the public APK and exact original unsigned archive, checks their metadata, certificate and payload, and records the original producer job. It receives read-only access and performs no signing or publication. The original archive must still be retained; offline recovery fixtures cover expired or rejected identities.
 
 ## Kotlin plugin resolution
