@@ -1,7 +1,6 @@
 package co.electriccoin.zcash.ui.screen.taxexport
 
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
 import androidx.lifecycle.ViewModelStore
@@ -42,7 +41,6 @@ import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 import kotlin.test.assertFalse
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -54,7 +52,9 @@ class TaxExportFailureTest {
     @Test
     fun blockedCacheWriteStaysOnScreenAndCanRetryTheRealExport() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
-        val cache = Files.createTempDirectory(RuntimeEnvironment.getApplication().cacheDir.toPath(), "tax-test-").toFile()
+        val cache = Files.createTempDirectory(
+            RuntimeEnvironment.getApplication().cacheDir.toPath(), "tax-test-"
+        ).toFile()
         val directory = File(cache, "tax_exports").apply { writeText("blocks the directory") }
         val context = mockk<Context> {
             every { cacheDir } returns cache

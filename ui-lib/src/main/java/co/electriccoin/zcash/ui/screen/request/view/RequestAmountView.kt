@@ -432,7 +432,9 @@ private fun InvalidAmountView(
             Spacer(modifier = Modifier.width(8.dp))
 
             Text(
-                text = stringResource(id = if (isBelowMinimum) R.string.request_amount_minimum else R.string.zecKeyboard_invalid),
+                text = stringResource(
+                    id = if (isBelowMinimum) R.string.request_amount_minimum else R.string.zecKeyboard_invalid
+                ),
                 color = ZashiColors.Utility.WarningYellow.utilityOrange700,
                 style = ZashiTypography.textSm,
                 fontWeight = FontWeight.Medium,

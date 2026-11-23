@@ -72,9 +72,12 @@ class ExportTaxUseCase(
                     }
                 )
 
+            var shared = false
             try {
                 val entries = getCsvEntries()
-                check(accountDataSource.getSelectedAccount().sdkAccount.accountUuid == selectedAccount.sdkAccount.accountUuid)
+                check(
+                    accountDataSource.getSelectedAccount().sdkAccount.accountUuid == selectedAccount.sdkAccount.accountUuid
+                )
                 writeCsvToFile(outputFile = outputFile, data = entries)
                 val intent =
                     FileShareUtil.newShareContentIntent(
@@ -88,9 +91,9 @@ class ExportTaxUseCase(
 
                 currentCoroutineContext().ensureActive()
                 context.startActivity(intent)
-            } catch (failure: Exception) {
-                outputFile.delete()
-                throw failure
+                shared = true
+            } finally {
+                if (!shared) outputFile.delete()
             }
 
             currentCoroutineContext().ensureActive()
