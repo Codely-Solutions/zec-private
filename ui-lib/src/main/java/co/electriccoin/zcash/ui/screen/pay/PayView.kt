@@ -3,8 +3,6 @@ package co.electriccoin.zcash.ui.screen.pay
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -23,15 +21,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment.Companion.BottomEnd
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.input.key.NativeKeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.platform.testTag
@@ -41,7 +36,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import cash.z.ecc.android.sdk.model.FiatCurrency
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.appbar.ZashiMainTopAppBarState
 import co.electriccoin.zcash.ui.common.appbar.ZashiTopAppBarTags
@@ -61,8 +55,6 @@ import co.electriccoin.zcash.ui.design.component.ZashiChipButton
 import co.electriccoin.zcash.ui.design.component.ZashiIconButton
 import co.electriccoin.zcash.ui.design.component.ZashiImageButton
 import co.electriccoin.zcash.ui.design.component.ZashiInfoText
-import co.electriccoin.zcash.ui.design.component.ZashiNumberTextField
-import co.electriccoin.zcash.ui.design.component.ZashiNumberTextFieldDefaults
 import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
 import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarBackNavigation
 import co.electriccoin.zcash.ui.design.component.rememberZashiFrostState
@@ -75,7 +67,6 @@ import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
 import co.electriccoin.zcash.ui.design.util.getValue
 import co.electriccoin.zcash.ui.design.util.scaffoldPadding
 import co.electriccoin.zcash.ui.design.util.stringRes
-import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.fixture.ZashiMainTopAppBarStateFixture
@@ -150,7 +141,11 @@ internal fun PayView(
                     color = ZashiColors.Text.textPrimary
                 )
                 Spacer(10.dp)
-                AmountTextFields(state)
+                PayAmountTextFields(
+                    token = state.amount,
+                    fiat = state.amountFiat,
+                    ticker = (state.asset as? AssetCardState.Data)?.token,
+                )
                 if (state.amountError != null && state.amountError.getValue().isNotEmpty()) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
@@ -221,88 +216,6 @@ private fun ZecAmountText(state: PayState) {
             text = state.zecAmount.getValue(),
             style = ZashiTypography.textSm,
             fontWeight = FontWeight.Medium,
-        )
-    }
-}
-
-@Composable
-private fun AmountTextFields(state: PayState) {
-    Row(
-        verticalAlignment = CenterVertically
-    ) {
-        val amountInteractionSource = remember { MutableInteractionSource() }
-        val isAmountFocused by amountInteractionSource.collectIsFocusedAsState()
-
-        ZashiNumberTextField(
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .testTag(PayTag.PAY_AMOUNT_TOKEN_FIELD),
-            state = state.amount,
-            interactionSource = amountInteractionSource,
-            placeholder =
-                if (!isAmountFocused) {
-                    {
-                        val assetTicker = (state.asset as? AssetCardState.Data)?.token
-                        val placeholderText = assetTicker ?: stringResByDynamicNumber(0)
-                        ZashiNumberTextFieldDefaults.Placeholder(
-                            modifier = Modifier.fillMaxWidth(),
-                            style =
-                                ZashiTypography.textMd.copy(
-                                    color = ZashiColors.Inputs.Default.text
-                                ),
-                            fontWeight = FontWeight.Normal,
-                            text = placeholderText.getValue()
-                        )
-                    }
-                } else {
-                    null
-                },
-        )
-
-        Spacer(12.dp)
-        Image(
-            painter = painterResource(R.drawable.ic_send_convert),
-            contentDescription = null,
-            colorFilter = ColorFilter.tint(color = ZcashTheme.colors.secondaryColor),
-        )
-        Spacer(12.dp)
-
-        ZashiNumberTextField(
-            modifier =
-                Modifier
-                    .weight(1f)
-                    .testTag(PayTag.PAY_AMOUNT_FIAT_FIELD),
-            state = state.amountFiat,
-            placeholder = {
-                ZashiNumberTextFieldDefaults.Placeholder(
-                    modifier = Modifier.fillMaxWidth(),
-                    style =
-                        ZashiTypography.textMd.copy(
-                            color = ZashiColors.Inputs.Default.text
-                        ),
-                    fontWeight = FontWeight.Normal,
-                    text = FiatCurrency.USD.code
-                )
-            },
-            prefix = {
-                Image(
-                    painter = painterResource(R.drawable.ic_send_usd),
-                    contentDescription = null,
-                    colorFilter =
-                        ColorFilter.tint(
-                            if (
-                                state.amountFiat.innerState.innerTextFieldState.value
-                                    .getValue()
-                                    .isNotEmpty()
-                            ) {
-                                ZashiColors.Inputs.Filled.text
-                            } else {
-                                ZashiColors.Inputs.Filled.iconMain
-                            }
-                        )
-                )
-            }
         )
     }
 }
