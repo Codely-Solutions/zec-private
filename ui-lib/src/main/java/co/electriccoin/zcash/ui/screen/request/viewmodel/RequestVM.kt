@@ -171,9 +171,8 @@ class RequestVM(
         walletAddress: WalletAddress,
         zip321BuildUriUseCase: Zip321BuildUriUseCase,
     ) {
-        if (stage.value != RequestStage.AMOUNT) return
         val amount = request.value.amountState
-        if (amount.isValid != true) return
+        if (stage.value != RequestStage.AMOUNT || amount.isValid != true) return
         val conversion = resolveExchangeRateValue(displayRate(amount, exchangeRateRepository.state.value))
         val zecAmount = when (amount.currency) {
             RequestCurrency.ZEC -> amount.amount
@@ -208,12 +207,16 @@ class RequestVM(
         if (amount.currency == RequestCurrency.ZEC) {
             return (state as? ExchangeRateState.Data)?.copy(currencyConversion = conversion) ?: state
         }
-        val currency = amount.fiatCurrency ?: return ExchangeRateState.OptedOut
+        val currency = amount.fiatCurrency
         val data = state as? ExchangeRateState.Data ?: ExchangeRateState.Data(onRefresh = {})
-        return data.copy(
-            expectedCurrency = currency,
-            currencyConversion = conversion?.takeIf { it.fiatCurrency == currency },
-        )
+        return if (currency == null) {
+            ExchangeRateState.OptedOut
+        } else {
+            data.copy(
+                expectedCurrency = currency,
+                currencyConversion = conversion?.takeIf { it.fiatCurrency == currency },
+            )
+        }
     }
 
     private fun onAmount(conversion: FiatCurrencyConversion?, onAmount: OnAmount) {
@@ -429,9 +432,13 @@ class RequestVM(
             it.copy(
                 amountState =
                     if (newAmount.contains(defaultAmountValidationRegex)) {
-                        it.amountState.copy(amount = defaultAmount, currency = onSwitchTo, fiatCurrency = conversion.fiatCurrency)
+                        it.amountState.copy(
+                            amount = defaultAmount, currency = onSwitchTo, fiatCurrency = conversion.fiatCurrency
+                        )
                     } else {
-                        it.amountState.copy(amount = newAmount, currency = onSwitchTo, fiatCurrency = conversion.fiatCurrency)
+                        it.amountState.copy(
+                            amount = newAmount, currency = onSwitchTo, fiatCurrency = conversion.fiatCurrency
+                        )
                     }
             )
         }

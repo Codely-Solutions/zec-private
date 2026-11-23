@@ -18,6 +18,7 @@ import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiView
 @Composable
 internal fun ProjectReviewScene(screen: String): Boolean {
     when (screen) {
+        "request-fiat-unavailable", "request-fiat-recovered" -> RequestFiatScene(screen == "request-fiat-recovered")
         "gift-reviewed-account", "gift-unknown-account" -> co.electriccoin.zcash.ui.screen.redeemgift.RedeemGiftView(
             co.electriccoin.zcash.ui.screen.redeemgift.RedeemGiftState.ready(
                 redeemable = cash.z.ecc.android.sdk.model.Zatoshi(10_000_000),
@@ -98,4 +99,30 @@ internal fun ProjectReviewScene(screen: String): Boolean {
         else -> return false
     }
     return true
+}
+
+/** Retained fiat input with unavailable/recovered conversion; no URI or payment callbacks. */
+@Composable
+private fun RequestFiatScene(recovered: Boolean) {
+    val currency = cash.z.ecc.android.sdk.model.FiatCurrency.USD
+    val conversion = if (recovered) cash.z.ecc.android.sdk.model.FiatCurrencyConversion(
+        kotlin.time.Clock.System.now(), 100.0, currency,
+    ) else null
+    co.electriccoin.zcash.ui.screen.request.view.RequestView(
+        state = co.electriccoin.zcash.ui.screen.request.model.RequestState.Amount(
+            request = co.electriccoin.zcash.ui.screen.request.model.Request(
+                amountState = co.electriccoin.zcash.ui.screen.request.model.AmountState(
+                    "25", co.electriccoin.zcash.ui.screen.request.model.RequestCurrency.FIAT, true, currency,
+                ),
+                memoState = co.electriccoin.zcash.ui.screen.request.model.MemoState.Valid("", 0, "0.25"),
+                qrCodeState = co.electriccoin.zcash.ui.screen.request.model.QrCodeState("", "0.25", ""),
+            ),
+            exchangeRateState = co.electriccoin.zcash.ui.common.wallet.ExchangeRateState.Data(
+                currencyConversion = conversion, expectedCurrency = currency, onRefresh = {},
+            ),
+            zcashCurrency = cash.z.ecc.sdk.type.ZcashCurrency.ZEC,
+            onAmount = {}, onSwitch = {}, onBack = {}, onDone = {},
+        ),
+        snackbarHostState = androidx.compose.material3.SnackbarHostState(),
+    )
 }

@@ -129,7 +129,9 @@ class ResyncConfirmVMTest {
                 navigationRouter = router,
                 confirmResync = confirm,
                 getResyncDataFromHeight = estimate,
-                errorStateMapper = ResyncErrorMapperUseCase(ErrorMapperUseCase(mockk(relaxed = true), mockk(relaxed = true))),
+                errorStateMapper = ResyncErrorMapperUseCase(
+                    ErrorMapperUseCase(mockk(relaxed = true), mockk(relaxed = true))
+                ),
             )
             store.put("resync", vm)
             backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }

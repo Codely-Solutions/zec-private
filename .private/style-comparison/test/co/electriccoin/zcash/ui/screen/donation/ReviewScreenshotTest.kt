@@ -105,6 +105,33 @@ class ReviewScreenshotTest {
         captureScrolledReviewControls(listOf("dark"), 2f)
     }
 
+    @Test
+    fun captureRequestRateTransitions() {
+        captureRequestRates(listOf("light", "dark", "oled"), 1f)
+    }
+
+    @Test
+    fun captureLargeRequestRateTransitions() {
+        captureRequestRates(listOf("dark"), 2f)
+    }
+
+    private fun captureRequestRates(themes: List<String>, scale: Float) {
+        compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
+        val scene = mutableStateOf(Scene("request-fiat-unavailable", themes.first(), scale))
+        show(scene)
+        val next = text(R.string.general_next)
+        for (theme in themes) {
+            for (screen in listOf("request-fiat-unavailable", "request-fiat-recovered")) {
+                val current = Scene(screen, theme, scale)
+                compose.runOnIdle { scene.value = current }
+                val button = compose.onNodeWithText(next).assertIsDisplayed()
+                if (screen == "request-fiat-unavailable") button.assertIsNotEnabled() else button.assertIsEnabled()
+                compose.onNodeWithText("$\u200925").assertIsDisplayed()
+                capture(current, "screen", next)
+            }
+        }
+    }
+
     private fun captureScrolledReviewControls(themes: List<String>, scale: Float) {
         compose.runOnUiThread {
             RuntimeEnvironment.setFontScale(scale)

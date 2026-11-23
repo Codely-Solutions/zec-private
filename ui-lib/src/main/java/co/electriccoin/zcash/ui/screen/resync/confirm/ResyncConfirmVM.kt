@@ -36,7 +36,8 @@ class ResyncConfirmVM(
 
     init {
         initLce.execute {
-            val height = persistableWalletProvider.requirePersistableWallet().birthday ?: error("Wallet birthday is null")
+            val height = persistableWalletProvider.requirePersistableWallet().birthday
+                ?: error("Wallet birthday is null")
             height to getResyncDataFromHeight(height)
         }
     }
