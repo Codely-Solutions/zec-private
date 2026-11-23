@@ -11,6 +11,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
@@ -76,7 +79,8 @@ class CrossPayRefreshCaptureTest {
     }
 
     private fun assertField(tag: String, expected: String) {
-        val node = compose.onNodeWithTag(tag).performScrollTo().assertIsDisplayed().fetchSemanticsNode()
+        val field = compose.onNode(hasAnyAncestor(hasTestTag(tag)) and hasSetTextAction(), useUnmergedTree = true)
+        val node = field.performScrollTo().assertIsDisplayed().fetchSemanticsNode()
         val displayed = assertNotNull(node.config.getOrNull(SemanticsProperties.EditableText)).text
         assertEquals(0, BigDecimal(displayed).compareTo(BigDecimal(expected)))
     }
