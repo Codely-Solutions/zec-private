@@ -58113,7 +58113,7 @@ index 000000000..4d8a0b33b
 +        )
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
-index 0bc7a1124..bc4b65ab1 100644
+index 0bc7a1124..0d0ca40b4 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt
 @@ -3,0 +4,3 @@ import android.app.Application
@@ -58204,7 +58204,7 @@ index 0bc7a1124..bc4b65ab1 100644
 +            assertEquals(SecretState.LOADING, repository.secretState.value)
 +            loaded.complete(fixtureWallet())
 +            assertEquals(SecretState.INCOMPLETE, repository.secretState.first { it != SecretState.LOADING })
-@@ -131,0 +183,658 @@ class WalletRepositoryImplTest {
+@@ -131,0 +183,666 @@ class WalletRepositoryImplTest {
 +    @Test
 +    fun repeatedCreateTriggersKeepTheFirstAcceptedWallet() =
 +        runTest {
@@ -58648,11 +58648,19 @@ index 0bc7a1124..bc4b65ab1 100644
 +        assertEquals(OnboardingState.CLEARING_STALE_DATA.toNumber().toString(), harness.fakePrefs.committedString(key))
 +
 +        check(residual.delete())
-+        harness.fakePrefs.beforeStringCommit = { _, _ -> throw IOException("Cannot commit recovery completion") }
++        val completionCommit = CompletableDeferred<Pair<PreferenceKey, String?>>()
++        val failCompletion = CompletableDeferred<Unit>()
++        harness.fakePrefs.beforeStringCommit = { preference, value ->
++            completionCommit.complete(preference to value)
++            failCompletion.await()
++            throw IOException("Cannot commit recovery completion")
++        }
 +        repository.retryWalletInitialization()
-+        advanceUntilIdle()
++        assertEquals(key to OnboardingState.NONE.toNumber().toString(), completionCommit.await())
++        repository.walletInitialization.first { it == WalletInitializationState.RUNNING }
++        failCompletion.complete(Unit)
++        repository.walletInitialization.first { it == WalletInitializationState.FAILED }
 +        assertEquals(OnboardingState.CLEARING_STALE_DATA.toNumber().toString(), harness.fakePrefs.committedString(key))
-+        assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
 +
 +        harness.fakePrefs.beforeStringCommit = { _, _ -> }
 +        repository.retryWalletInitialization()
@@ -58863,26 +58871,26 @@ index 0bc7a1124..bc4b65ab1 100644
 +            enableTor = enableTor
 +        )
 +
-@@ -141 +850,4 @@ class WalletRepositoryImplTest {
+@@ -141 +858,4 @@ class WalletRepositoryImplTest {
 -            assertEquals(listOf("onboarding=0", "sdkRepair", "erase"), harness.events)
 +            assertEquals(
 +                listOf("onboarding=4", "sdkRepair", "eraseSlipstream", "erase", "onboarding=0"),
 +                harness.events
 +            )
-@@ -186 +898 @@ class WalletRepositoryImplTest {
+@@ -186 +906 @@ class WalletRepositoryImplTest {
 -            assertEquals(listOf("onboarding=0", "sdkRepair"), harness.events)
 +            assertEquals(listOf("onboarding=4", "sdkRepair", "onboarding=0"), harness.events)
-@@ -202,0 +915 @@ class WalletRepositoryImplTest {
+@@ -202,0 +923 @@ class WalletRepositoryImplTest {
 +                    every { writeVersion } returns 0L
-@@ -223,4 +935,0 @@ class WalletRepositoryImplTest {
+@@ -223,4 +943,0 @@ class WalletRepositoryImplTest {
 -    /**
 -     * "The erase failed and we carried on anyway" is the half-reset state MOB-1836 was reported
 -     * for, so it has to reach crash reporting rather than only a log line on the user's device.
 -     */
-@@ -228 +937 @@ class WalletRepositoryImplTest {
+@@ -228 +945 @@ class WalletRepositoryImplTest {
 -    fun initReportsAFailedEraseToCrashReporting() =
 +    fun uncheckedRestoreDisablesTorAfterInterruptedSetup() =
-@@ -230,2 +939,60 @@ class WalletRepositoryImplTest {
+@@ -230,2 +947,60 @@ class WalletRepositoryImplTest {
 -            mockkObject(GlobalCrashReporter)
 -            every { GlobalCrashReporter.reportCaughtException(any()) } returns Unit
 +            val torPreferences = RecordingPreferenceProvider(mutableListOf())
@@ -58945,7 +58953,7 @@ index 0bc7a1124..bc4b65ab1 100644
 +            assertFailsWith<WalletInitializationConflictException> {
 +                repository.restoreFixture(enableTor = false).await()
 +            }
-@@ -232,0 +1000,10 @@ class WalletRepositoryImplTest {
+@@ -232,0 +1008,10 @@ class WalletRepositoryImplTest {
 +            torPreferences.beforeStringCommit = { _, _ -> }
 +            repository.restoreFixture(enableTor = true).await()
 +            repository.secretState.first { it == SecretState.READY }
@@ -58956,7 +58964,7 @@ index 0bc7a1124..bc4b65ab1 100644
 +    @Test
 +    fun initReportsAFailedEraseWithoutExposingSdkErrorDetails() =
 +        runTest {
-@@ -241,2 +1018,6 @@ class WalletRepositoryImplTest {
+@@ -241,2 +1026,6 @@ class WalletRepositoryImplTest {
 -            assertEquals(listOf("onboarding=0", "sdkRepair"), harness.events)
 -            verify(exactly = 1) { GlobalCrashReporter.reportCaughtException(eraseFailure) }
 +            assertEquals(listOf("onboarding=4", "sdkRepair", "eraseSlipstream"), harness.events)
@@ -58965,43 +58973,43 @@ index 0bc7a1124..bc4b65ab1 100644
 +                    it.message == "Wallet data recovery failed" && it.cause == null
 +                })
 +            }
-@@ -256,0 +1038 @@ class WalletRepositoryImplTest {
+@@ -256,0 +1046 @@ class WalletRepositoryImplTest {
 +        torPreference: IsTorEnabledStorageProvider = mockk(relaxed = true),
-@@ -259,0 +1042,4 @@ class WalletRepositoryImplTest {
+@@ -259,0 +1050,4 @@ class WalletRepositoryImplTest {
 +        coEvery { SlipstreamSynchronizer.erase(any(), any(), any()) } coAnswers {
 +            events += "eraseSlipstream"
 +            true
 +        }
-@@ -270 +1056,5 @@ class WalletRepositoryImplTest {
+@@ -270 +1064,5 @@ class WalletRepositoryImplTest {
 -        val application = mockk<Application>(relaxed = true)
 +        val application = mockk<Application>(relaxed = true) {
 +            every { noBackupFilesDir } returns directory.root
 +            every { getDatabasePath(any()) } answers { File(directory.root, firstArg<String>()) }
 +            every { resources.getBoolean(any()) } returns true
 +        }
-@@ -286,0 +1077 @@ class WalletRepositoryImplTest {
+@@ -286,0 +1085 @@ class WalletRepositoryImplTest {
 +        fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())
-@@ -303 +1094,2 @@ class WalletRepositoryImplTest {
+@@ -303 +1102,2 @@ class WalletRepositoryImplTest {
 -        val sdkEncryptedPreferenceRecoveryProvider = FakeSdkEncryptedPreferenceRecoveryProvider(events)
 +        val sdkEncryptedPreferenceRecoveryProvider = mockk<SdkEncryptedPreferenceRecoveryProvider>()
 +        coEvery { sdkEncryptedPreferenceRecoveryProvider.ensureReadable() } coAnswers { events += "sdkRepair" }
-@@ -317,0 +1110 @@ class WalletRepositoryImplTest {
+@@ -317,0 +1118 @@ class WalletRepositoryImplTest {
 +                isTorEnabledStorageProvider = torPreference,
-@@ -320,2 +1112,0 @@ class WalletRepositoryImplTest {
+@@ -320,2 +1120,0 @@ class WalletRepositoryImplTest {
 -        fakePrefs.seed(StandardPreferenceKeys.ONBOARDING_STATE.key, onboardingState.toNumber().toString())
 -
-@@ -325 +1116,4 @@ class WalletRepositoryImplTest {
+@@ -325 +1124,4 @@ class WalletRepositoryImplTest {
 -        return repository to TestHarness(events, fakePrefs)
 +        return repository to TestHarness(
 +            events, fakePrefs, persistableWalletProvider, walletRestoringStateProvider,
 +            sdkEncryptedPreferenceRecoveryProvider, walletBackupFlagStorageProvider
 +        )
-@@ -330,0 +1125,4 @@ class WalletRepositoryImplTest {
+@@ -330,0 +1133,4 @@ class WalletRepositoryImplTest {
 +        val walletProvider: PersistableWalletProvider,
 +        val restoringProvider: WalletRestoringStateProvider,
 +        val recoveryProvider: SdkEncryptedPreferenceRecoveryProvider,
 +        val backupProvider: WalletBackupFlagStorageProvider,
-@@ -334,12 +1131,0 @@ class WalletRepositoryImplTest {
+@@ -334,12 +1139,0 @@ class WalletRepositoryImplTest {
 -/**
 - * Records `"sdkRepair"` into the shared events list, so tests can assert where the SDK secret
 - * store repair lands relative to the onboarding-flag write and the SDK data erase.
@@ -59014,11 +59022,11 @@ index 0bc7a1124..bc4b65ab1 100644
 -    }
 -}
 -
-@@ -356,0 +1143,3 @@ private class FakePersistableWalletProvider(
+@@ -356,0 +1151,3 @@ private class FakePersistableWalletProvider(
 +    private val writeAccess = WalletWriteAccess()
 +    var failWrites = false
 +    var failWritesBeforePublishing = false
-@@ -359,5 +1148,18 @@ private class FakePersistableWalletProvider(
+@@ -359,5 +1156,18 @@ private class FakePersistableWalletProvider(
 -
 -    override suspend fun store(persistableWallet: PersistableWallet) {
 -        walletFlow.value = persistableWallet
@@ -59042,7 +59050,7 @@ index 0bc7a1124..bc4b65ab1 100644
 +            true
 +        }
 +    } ?: false
-@@ -367,0 +1170,8 @@ private class FakePersistableWalletProvider(
+@@ -367,0 +1178,8 @@ private class FakePersistableWalletProvider(
 +
 +    private fun write(wallet: PersistableWallet) {
 +        if (failWritesBeforePublishing) throw IOException("Cannot persist wallet")
@@ -59051,19 +59059,19 @@ index 0bc7a1124..bc4b65ab1 100644
 +        if (failWrites) throw IOException("Synthetic persistence failure")
 +        events += "wallet"
 +    }
-@@ -385,0 +1196,6 @@ private class WalletStoredAfterFirstReadProvider(
+@@ -385,0 +1204,6 @@ private class WalletStoredAfterFirstReadProvider(
 +    override suspend fun storeIfCurrent(
 +        expected: PersistableWallet,
 +        replacement: PersistableWallet,
 +        version: Long,
 +    ): Boolean = error("This wallet setup fixture does not run seed-mismatch recovery")
 +
-@@ -402,0 +1219,2 @@ private class RecordingPreferenceProvider(
+@@ -402,0 +1227,2 @@ private class RecordingPreferenceProvider(
 +    private val committedValues = mutableMapOf<String, String?>()
 +    var beforeStringCommit: suspend (PreferenceKey, String?) -> Unit = { _, _ -> }
-@@ -416,0 +1235 @@ private class RecordingPreferenceProvider(
+@@ -416,0 +1243 @@ private class RecordingPreferenceProvider(
 +        committedValues[key.key] = value
-@@ -418,0 +1238,7 @@ private class RecordingPreferenceProvider(
+@@ -418,0 +1246,7 @@ private class RecordingPreferenceProvider(
 +    fun committedString(key: PreferenceKey): String? = committedValues[key.key]
 +
 +    fun reopen(): RecordingPreferenceProvider =
@@ -59071,12 +59079,12 @@ index 0bc7a1124..bc4b65ab1 100644
 +            committedValues.forEach { (key, value) -> reopened.seed(PreferenceKey(key), value) }
 +        }
 +
-@@ -429,0 +1256,2 @@ private class RecordingPreferenceProvider(
+@@ -429,0 +1264,2 @@ private class RecordingPreferenceProvider(
 +        beforeStringCommit(key, value)
 +        committedValues[key.key] = value
-@@ -451,0 +1280 @@ private class RecordingPreferenceProvider(
+@@ -451,0 +1288 @@ private class RecordingPreferenceProvider(
 +        committedValues.remove(key.key)
-@@ -455,0 +1285 @@ private class RecordingPreferenceProvider(
+@@ -455,0 +1293 @@ private class RecordingPreferenceProvider(
 +        committedValues.clear()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 new file mode 100644

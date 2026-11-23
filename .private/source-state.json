@@ -2859,7 +2859,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionRepositorySelectDisplayRecipientTest.kt": "3f1363d2ca956ae6493b47d286360ea4799514b3837c64f650bad8c21db77c3d",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionRepositorySentTransactionAmountTest.kt": "92530c0a879eb0c77504747c9ecef1fb4ee10ccf3a556695ab63660b3f6fb08c",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/TransactionStateNormalizationTest.kt": "7e7c09c2b6af85d6a6c41a0854f91bc8f433228a1c79f151d5e59892c1d27015",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt": "9d2ddc38e4d155c6911c9c7079c34d7408c4c2d6eacda3a00ddd171e4c8fdac2",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/WalletRepositoryImplTest.kt": "0d5ac7490cf406173da5427f29c5fd4baa6b9c69079b0eda1cc22cf5f7925946",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt": "b4e6be99903572febb529da3b96aa372b5450fbc0d1a1893595b61483852e987",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/serialization/ColorSerializerTest.kt": "f6ecbfea3c01ddd5de54d92ddf7978d55b338b4fa5e20da50b0b4d26cf950175",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/serialization/metadata/MetadataAppearanceSerializationTest.kt": "c6aad57f1250263d36f2f217215fd8310b7993357105d7222eaa2ae2855a521e",

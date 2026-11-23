@@ -623,11 +623,19 @@ class WalletRepositoryImplTest {
         assertEquals(OnboardingState.CLEARING_STALE_DATA.toNumber().toString(), harness.fakePrefs.committedString(key))
 
         check(residual.delete())
-        harness.fakePrefs.beforeStringCommit = { _, _ -> throw IOException("Cannot commit recovery completion") }
+        val completionCommit = CompletableDeferred<Pair<PreferenceKey, String?>>()
+        val failCompletion = CompletableDeferred<Unit>()
+        harness.fakePrefs.beforeStringCommit = { preference, value ->
+            completionCommit.complete(preference to value)
+            failCompletion.await()
+            throw IOException("Cannot commit recovery completion")
+        }
         repository.retryWalletInitialization()
-        advanceUntilIdle()
+        assertEquals(key to OnboardingState.NONE.toNumber().toString(), completionCommit.await())
+        repository.walletInitialization.first { it == WalletInitializationState.RUNNING }
+        failCompletion.complete(Unit)
+        repository.walletInitialization.first { it == WalletInitializationState.FAILED }
         assertEquals(OnboardingState.CLEARING_STALE_DATA.toNumber().toString(), harness.fakePrefs.committedString(key))
-        assertEquals(WalletInitializationState.FAILED, repository.walletInitialization.value)
 
         harness.fakePrefs.beforeStringCommit = { _, _ -> }
         repository.retryWalletInitialization()
