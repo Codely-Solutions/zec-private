@@ -106,8 +106,11 @@ internal fun ComparisonScreens(requested: String) {
             settingsButton = IconButtonState(R.drawable.ic_home_more, onClick = {}),
         )
     }
-    var amount by remember { mutableStateOf(AmountState.newFromZec(if (requested == "send-error") "0.01234567" else "0.01", "", false, exchangeRate)) }
-    var memo by remember { mutableStateOf(MemoState.new("")) }
+    var amount by remember { mutableStateOf(
+        if (requested == "send-fiat-minimum") AmountState.newFromFiat("", "0.00001", false, exchangeRate)
+        else AmountState.newFromZec(if (requested == "send-error") "0.01234567" else "0.01", "", false, exchangeRate)
+    ) }
+    var memo by remember { mutableStateOf(MemoState.new(if (requested == "send-tex") "x".repeat(600) else "")) }
     var recipient by remember {
         mutableStateOf(
             when (requested) {
@@ -116,6 +119,8 @@ internal fun ComparisonScreens(requested: String) {
                     AddressType.Invalid("Synthetic address is invalid. Check the complete recipient address."),
                 )
                 "send-replacement" -> RecipientAddressState.new("synthetic-replacement-receiver", AddressType.Unified)
+                "send-fiat-minimum" -> RecipientAddressState.new("synthetic-shielded-receiver", AddressType.Unified)
+                "send-tex" -> RecipientAddressState.new("synthetic-tex-receiver", AddressType.Tex)
                 else -> RecipientAddressState.new("")
             }
         )
@@ -128,7 +133,7 @@ internal fun ComparisonScreens(requested: String) {
     if (RecipientReviewScene(screen, appBar, account, balanceState)) return
     if (AdditionalReviewScene(screen, { screen = "home" }, appBar)) return
     when (screen) {
-        "send", "send-error", "send-replacement" -> Send(
+        "send", "send-error", "send-replacement", "send-fiat-minimum", "send-tex" -> Send(
             balanceWidgetState = balanceState,
             sendStage = SendStage.Form,
             onCreateZecSend = {},

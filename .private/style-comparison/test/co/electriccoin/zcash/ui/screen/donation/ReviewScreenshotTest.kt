@@ -21,9 +21,12 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.platform.app.InstrumentationRegistry
 import co.electriccoin.zcash.ui.R
@@ -63,6 +66,83 @@ class ReviewScreenshotTest {
         val reference = compose.onNodeWithText(knownText).assertIsDisplayed().captureToImage()
         assertTrue(reference.width > 0 && reference.height > 0)
         capture(scene, "reference", knownText)
+    }
+
+    @Test
+    fun captureFinalizationAndSigningStates() = captureFinalizationAndSigning(listOf("light", "dark", "oled"), 1f)
+
+    @Test
+    fun captureLargeFinalizationAndSigningStates() = captureFinalizationAndSigning(listOf("dark"), 2f)
+
+    @Test
+    fun captureSigningCorrectionStates() = captureFinalizationAndSigning(listOf("light", "dark", "oled"), 1f, true)
+
+    @Test
+    fun captureLargeSigningCorrectionStates() = captureFinalizationAndSigning(listOf("dark"), 2f, true)
+
+    @Test
+    fun captureLargeRequestKeypad() {
+        compose.runOnUiThread { RuntimeEnvironment.setFontScale(2f) }
+        val scene = Scene("request-fiat-stale", "dark", 2f)
+        show(mutableStateOf(scene))
+        val zero = compose.onNodeWithText("0").performScrollTo()
+        compose.onRoot().performTouchInput { swipeUp(startY = height * 0.6f, endY = height * 0.25f) }
+        zero.assertIsDisplayed()
+        val next = compose.onNodeWithText(text(R.string.general_next)).fetchSemanticsNode()
+        capture(scene, "keypad", "0")
+        assertTrue(
+            zero.fetchSemanticsNode().boundsInRoot.bottom <= next.boundsInRoot.top,
+            "Zero ${zero.fetchSemanticsNode().boundsInRoot} must remain above Next ${next.boundsInRoot}"
+        )
+    }
+
+    private fun captureFinalizationAndSigning(themes: List<String>, scale: Float, signingOnly: Boolean = false) {
+        compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
+        val scene = mutableStateOf(Scene("enrollment-committed-tip", themes.first(), scale))
+        show(scene)
+        for (theme in themes) {
+            for ((screen, expected) in listOf(
+                "enrollment-committed-tip" to text(R.string.enrollment_committed_tip),
+                "enrollment-committed-height" to text(R.string.enrollment_committed_height, "3,000,000"),
+                "keystone-qr-error" to text(R.string.private_keystone_qr_error),
+                "keystone-qr-loading" to text(R.string.keystone_signWith_title),
+                "keystone-qr-ready" to text(R.string.keystone_signWith_title),
+                "request-fiat-stale" to text(R.string.request_amount_rate_stale),
+                "request-fiat-minimum" to text(R.string.request_amount_fiat_minimum),
+                "note-loading" to text(R.string.transaction_note_loading),
+                "note-load-failed" to text(R.string.transaction_note_load_failed),
+                "incoming-input-without-usd" to "Bitcoin",
+                "send-tex" to text(DesignR.string.send_review),
+                "send-fiat-minimum" to text(DesignR.string.send_review),
+            )) {
+                if (signingOnly && !screen.startsWith("keystone-qr")) continue
+                val current = Scene(screen, theme, scale)
+                compose.runOnIdle { scene.value = current }
+                if (screen.startsWith("keystone-qr")) {
+                    val layouts = mutableListOf<TextLayoutResult>()
+                    compose.onNodeWithText("Keystone").performSemanticsAction(SemanticsActions.GetTextLayoutResult) {
+                        assertTrue(it(layouts))
+                    }
+                    assertEquals(1, layouts.single().lineCount, "The account name has room at this scale")
+                }
+                val expectedNode = compose.onNodeWithText(expected).performScrollTo().assertIsDisplayed()
+                if (screen.startsWith("keystone-qr")) {
+                    val signature = compose.onNodeWithText(text(R.string.keystone_signWith_getSignature))
+                    if (screen.endsWith("ready")) signature.assertIsEnabled() else signature.assertIsNotEnabled()
+                }
+                if (screen.startsWith("send-")) {
+                    if (screen == "send-tex") expectedNode.assertIsEnabled() else expectedNode.assertIsNotEnabled()
+                }
+                capture(current, "screen", expected)
+                if (screen == "keystone-qr-error") {
+                    val retry = text(DesignR.string.disconnectHWWallet_tryAgain)
+                    val button = compose.onNodeWithText(retry).performScrollTo().assertIsDisplayed().assertIsEnabled()
+                    val reject = compose.onNodeWithText(text(R.string.keystone_signWith_reject)).fetchSemanticsNode()
+                    assertTrue(button.fetchSemanticsNode().boundsInRoot.bottom <= reject.boundsInRoot.top)
+                    capture(current, "retry", retry)
+                }
+            }
+        }
     }
 
     @Test
@@ -141,7 +221,7 @@ class ReviewScreenshotTest {
         show(scene)
         for (theme in themes) {
             for ((screen, expectedId) in listOf(
-                "request-fiat-minimum" to R.string.request_amount_minimum,
+                "request-fiat-minimum" to R.string.request_amount_fiat_minimum,
                 "tax-export-error" to R.string.taxExport_error,
                 "tax-export-loading" to R.string.taxExport_taxFile,
             )) {

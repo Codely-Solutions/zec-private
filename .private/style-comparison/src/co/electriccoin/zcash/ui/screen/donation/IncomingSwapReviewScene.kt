@@ -6,6 +6,7 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.component.SwapQuoteHeaderState
+import co.electriccoin.zcash.ui.design.component.SwapTokenAmountState
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
@@ -25,10 +26,11 @@ internal fun IncomingSwapReviewScene(screen: String): Boolean {
         "incoming-saved-completed" -> R.string.private_swap_saved_output
         "incoming-success-quoted" -> R.string.private_estimated_output
         "incoming-success-retained-execution" -> R.string.private_saved_provider_output
+        "incoming-input-without-usd" -> R.string.private_provider_output
         else -> return false
     }
     val completed = screen != "incoming-saved-pending"
-    val live = screen.startsWith("incoming-success-")
+    val live = screen.startsWith("incoming-success-") || screen == "incoming-input-without-usd"
     val amount = if (screen == "incoming-success-quoted") BigDecimal("0.075") else BigDecimal("0.07799797")
     val empty = TransactionDetailInfoRowState(stringRes(""), message = null)
     SwapDetailView(
@@ -42,7 +44,20 @@ internal fun IncomingSwapReviewScene(screen: String): Boolean {
                     imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_zec),
                 ),
             ),
-            quoteHeader = SwapQuoteHeaderState(null, null),
+            quoteHeader = if (screen == "incoming-input-without-usd") SwapQuoteHeaderState(
+                from = SwapTokenAmountState(
+                    bigIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc),
+                    smallIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc),
+                    amount = stringResByNumber(BigDecimal("0.8")), fiatAmount = stringRes(""),
+                    token = stringRes("BTC"), chain = stringRes("Bitcoin"),
+                ),
+                to = SwapTokenAmountState(
+                    bigIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_zec),
+                    smallIcon = imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_zec_shielded),
+                    amount = stringResByNumber(amount), fiatAmount = stringRes(""),
+                    token = stringRes("ZEC"), chain = stringRes("Zcash"),
+                ),
+            ) else SwapQuoteHeaderState(null, null),
             status = TransactionDetailSwapStatusRowState(
                 title = stringRes(if (live) R.string.swapAndPay_status else R.string.private_swap_saved_status),
                 status = if (completed) SwapStatus.SUCCESS else SwapStatus.PENDING,

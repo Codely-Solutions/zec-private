@@ -57,6 +57,23 @@ Production Detekt retains its rules and existing baseline. Its release-only init
 
 ## Fast screen and provider checks
 
+### Corrections after e8813f3c
+
+The following maintained tests cover the review's eight interaction gaps. Execution receipts must identify the tested source and configuration; this inventory describes test scope.
+
+| Area | Production boundary and regression |
+|---|---|
+| 1 — Final Send and recipient capability | `ScannedSendRecipientTest`, `SendAmountReviewTest`, `SendFiatProposalTest`, `SendViewModelLedgerTest`: WrapSend and actual Review through VM/proposal normalization, below/exact/above fiat increment, pre-conversion supply and overflow limits, explicit zero-ZEC memo, TEX payload, last-edited unit across refresh/restoration, cancellation and retry. |
+| 2 — Request encoding and freshness | `RequestUnitPreservationTest`: real ZIP-321 encoder for all three receive modes, fiat floor, exact ZEC, minimum/supply boundaries, stale/missing rates, refresh and fixed Memo amount with held callbacks. |
+| 3 — Status input/output provenance | `NearSwapQuoteStatusTest`, both Detail VM suites and `SwapSupportMapperTest`: decoded raw/formatted/USD fields across supported modes, saved output versus live input, and quoted incomplete-deposit requirement. `SwapRecoveryBoundaryTest` and `SwapQuoteLifecycleTest` cover raw duplicate catalog rows, both orders, recovery and in-flight refresh. |
+| 4 — Enrollment and repair | Shared `HWEnrollmentVMTest`, Name/import use-case suites and Ledger creation/pairing suites: committed birthday and finalization-only UI, earlier-height/tip changes, Back, selection/restart failure, cancellation, Android cache publication, failed commit, retry and superseding repair targets. |
+| 5 — Notes and account ownership | `TransactionNoteViewModelTest`, `TransactionMetadataEditUseCaseTest`, metadata/reset suites: pending/failed reads, retry, stale editor callbacks, save/delete, original account files and wallet generation through selection and reset. |
+| 6 — Hardware signing preparation | `SignKeystoneTransactionVMTest`: loading/error/ready, encoder failure/interruption/retry, replaced account/proposal, held QR/navigation/retry/reject callbacks and disposal. The encoder/device port is substituted; preparation use case and VM run. |
+| 7 — Recovery after retirement | `test_notify`, `test_maintenance_watch`: full/partial closure, old failure delivery, reserved discovery history, bounded eviction/deduplication, run-only/exact reconciliation and unrelated scopes. |
+| 8 — Original publication execution | `test_publish`, `test_release_preparation`, `test_packaging`: successful signing/upload proof and archive window, failed/interrupted signing versus post-upload interruption, copied attempts, wrong jobs and preserved original unsigned provenance. |
+
+The debug host supplies committed-birthday, note-load/retry, Request stale/minimum, Send TEX/minimum and Keystone QR preparation scenes. Rendered inspection establishes their named presentation states. Physical signing/camera/biometrics, SDK power loss, production ARM execution and funded settlement/refund behavior require their own evidence. Saved metadata currently retains output execution; it does not retain an input execution observation.
+
 The maintained regressions for the review after `dd11dfc4` cover these composed boundaries. Execution receipts identify their exact source and distinguish execution, cache restoration and historical evidence.
 
 | Boundary | Maintained checks and scope |
