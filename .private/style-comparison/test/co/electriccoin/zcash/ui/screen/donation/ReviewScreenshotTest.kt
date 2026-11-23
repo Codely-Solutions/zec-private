@@ -115,6 +115,34 @@ class ReviewScreenshotTest {
         captureRequestRates(listOf("dark"), 2f)
     }
 
+    @Test
+    fun captureSettlementProvenance() {
+        captureSettlementProvenance(listOf("light", "dark", "oled"), 1f)
+    }
+
+    @Test
+    fun captureLargeSettlementProvenance() {
+        captureSettlementProvenance(listOf("dark"), 2f)
+    }
+
+    private fun captureSettlementProvenance(themes: List<String>, scale: Float) {
+        compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
+        val scene = mutableStateOf(Scene("incoming-success-quoted", themes.first(), scale))
+        show(scene)
+        for (theme in themes) {
+            for ((screen, label) in listOf(
+                "incoming-success-quoted" to R.string.private_estimated_output,
+                "incoming-success-retained-execution" to R.string.private_saved_provider_output,
+            )) {
+                val current = Scene(screen, theme, scale)
+                compose.runOnIdle { scene.value = current }
+                val expected = text(label)
+                compose.onNodeWithText(expected).assertIsDisplayed()
+                capture(current, "screen", expected)
+            }
+        }
+    }
+
     private fun captureRequestRates(themes: List<String>, scale: Float) {
         compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
         val scene = mutableStateOf(Scene("request-fiat-unavailable", themes.first(), scale))

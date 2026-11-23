@@ -8,24 +8,34 @@ import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.component.SwapQuoteHeaderState
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailState
 import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailView
 import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailHeaderState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRowState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
+import java.math.BigDecimal
 
 /** Synthetic saved state with inert actions; production state transitions have JVM coverage. */
 @Composable
 internal fun IncomingSwapReviewScene(screen: String): Boolean {
-    if (screen !in setOf("incoming-saved-pending", "incoming-saved-completed")) return false
-    val completed = screen == "incoming-saved-completed"
+    val title = when (screen) {
+        "incoming-saved-pending" -> R.string.swapAndPay_status_pendingDeposit
+        "incoming-saved-completed" -> R.string.private_swap_saved_output
+        "incoming-success-quoted" -> R.string.private_estimated_output
+        "incoming-success-retained-execution" -> R.string.private_saved_provider_output
+        else -> return false
+    }
+    val completed = screen != "incoming-saved-pending"
+    val live = screen.startsWith("incoming-success-")
+    val amount = if (screen == "incoming-success-quoted") BigDecimal("0.075") else BigDecimal("0.07799797")
     val empty = TransactionDetailInfoRowState(stringRes(""), message = null)
     SwapDetailView(
         state = SwapDetailState(
             transactionHeader = TransactionDetailHeaderState(
-                title = stringRes(if (completed) R.string.private_swap_saved_output else R.string.swapAndPay_status_pendingDeposit),
-                amount = stringRes("0.07799797"),
+                title = stringRes(title),
+                amount = stringResByNumber(amount),
                 icons = listOf(
                     imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_btc),
                     imageRes(R.drawable.ic_transaction_received),
@@ -34,7 +44,7 @@ internal fun IncomingSwapReviewScene(screen: String): Boolean {
             ),
             quoteHeader = SwapQuoteHeaderState(null, null),
             status = TransactionDetailSwapStatusRowState(
-                title = stringRes(R.string.private_swap_saved_status),
+                title = stringRes(if (live) R.string.swapAndPay_status else R.string.private_swap_saved_status),
                 status = if (completed) SwapStatus.SUCCESS else SwapStatus.PENDING,
                 mode = TransactionDetailSwapStatusRowState.Mode.SWAP_INTO_ZEC,
             ),
@@ -42,20 +52,25 @@ internal fun IncomingSwapReviewScene(screen: String): Boolean {
                 stringRes(R.string.private_swap_deposit_reference), stringRes("Sample deposit").withStyle()
             ),
             recipient = empty,
-            totalFees = empty,
+            totalFees = if (live) {
+                TransactionDetailInfoRowState(stringRes(R.string.private_quoted_output), stringRes("0.075 ZEC").withStyle())
+            } else {
+                empty
+            },
             maxSlippage = empty,
             timestamp = TransactionDetailInfoRowState(
-                stringRes(R.string.private_swap_created_at), stringRes("20 November 2026, 12:00").withStyle()
+                stringRes(if (live) R.string.transactionHistory_timestamp else R.string.private_swap_created_at),
+                stringRes("20 November 2026, 12:00").withStyle()
             ),
             message = null,
             errorFooter = null,
-            infoFooter = stringRes(R.string.private_swap_refresh_unavailable),
-            primaryButton = ButtonState(
+            infoFooter = if (live) null else stringRes(R.string.private_swap_refresh_unavailable),
+            primaryButton = if (live) null else ButtonState(
                 text = stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
                 onClick = {}, style = ButtonStyle.SECONDARY,
             ),
             onBack = {},
-            showLiveDetails = false,
+            showLiveDetails = live,
         ),
         appBarState = null,
     )

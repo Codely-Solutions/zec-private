@@ -1,13 +1,16 @@
 """Packaging boundary regressions use tiny archives, never wallet state."""
 import json
+import runpy
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from apk_architecture import check_apk
 from compare_runtime import compare
 from signing_wiring import environment_wiring
+from test_maintenance_watch import job_activates, workflow_job
+from test_support import patch_environment
 
 
 class PackagingTests(unittest.TestCase):
@@ -81,7 +84,7 @@ class PackagingTests(unittest.TestCase):
             for secret in ('RELEASE_KEYSTORE_BASE64', 'RELEASE_STORE_PASSWORD', 'RELEASE_KEY_PASSWORD',
                            'MAINTENANCE_APP_PRIVATE_KEY'):
                 self.assertIn(secret + ': ${{ secrets.' + secret + ' }}', caller_workflow)
-        self.assertIn("needs.emulator.result == 'failure'", workflow.split('  failed:\n', 1)[1])
+        self.assertTrue(job_activates(workflow_job('build-release.yml', 'failed'), {'emulator': 'failure'}))
         release = (root / '.private/release_checks.sh').read_text()
         debug = (root / '.private/emulator_checks.sh').read_text()
         self.assertNotIn('FossDebug', release)
@@ -103,6 +106,32 @@ class PackagingTests(unittest.TestCase):
             self.assertIn('-I .private/task-timing.gradle', script)
         self.assertIn('artifact/task-timing.jsonl', production)
         self.assertIn('artifact/task-timing.jsonl', emulator)
+
+    def test_promotion_rechecks_retained_unsigned_artifact_at_admission(self):
+        source, controller = 'a'*40, 'b'*40
+        run = dict(id=42, path='.github/workflows/build-release.yml', head_branch='main',
+                   head_sha=source, event='workflow_dispatch', status='completed', conclusion='success',
+                   run_attempt=1)
+        job = dict(id=9, name='unsigned', status='completed', conclusion='success', run_id=42, head_sha=source)
+        artifact = dict(id=58, name='validated-unsigned-apk', size_in_bytes=128, digest='sha256:'+'f'*64,
+                        workflow_run=dict(id=42, head_sha=source))
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp)/'output'
+            environment = dict(CANDIDATE_RUN='42', GITHUB_REPOSITORY='example/wallet', GITHUB_SHA=controller,
+                               GITHUB_OUTPUT=str(output))
+            with patch_environment(environment), patch('acceptance_policy.verify_promotion_revision') as verify:
+                for expired in (True, False):
+                    pages = [run, run, [{'jobs': [job]}], [{'artifacts': [dict(artifact, expired=expired)]}]]
+                    with self.subTest(expired=expired), patch('release_metadata.Metadata.api', side_effect=pages):
+                        if expired:
+                            with self.assertRaisesRegex(ValueError, 'Artifact digest/run/source binding missing'):
+                                runpy.run_module('promotion')
+                            verify.assert_not_called()
+                            self.assertFalse(output.exists())
+                        else:
+                            runpy.run_module('promotion')
+                            verify.assert_called_once_with(source, controller)
+                            self.assertEqual(output.read_text(), f'source_sha={source}\n')
 
     def test_early_bridge_has_no_release_authority_and_quotes_receive_explicit_ids(self):
         root = Path(__file__).resolve().parents[1]

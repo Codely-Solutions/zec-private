@@ -7,6 +7,8 @@ allprojects { p ->
             p.android.sourceSets.maybeCreate('testDebug').kotlin.directories.add(
                 new File(p.rootProject.projectDir, '.private/style-comparison/test').path
             )
+        }
+        if (p.path in [':ui-lib', ':feature-viewing-key']) {
             def captureDirectory = p.findProperty('privateReviewCaptureDir')
             if (captureDirectory != null) {
                 p.tasks.withType(org.gradle.api.tasks.testing.Test).configureEach {
