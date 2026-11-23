@@ -58,6 +58,8 @@ import co.electriccoin.zcash.ui.common.usecase.ActivityData
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
+import co.electriccoin.zcash.ui.design.util.StringResource
+import co.electriccoin.zcash.ui.design.util.TickerLocation
 import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailVM
 import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailArgs
 import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
@@ -237,7 +239,7 @@ class MetadataDataSourceFileTest {
         assertEquals(BigDecimal.ONE, quoted.quotedAmountOut)
         assertNull(quoted.executedAmountOut)
         val expectedExecution = BigDecimal("1.23456789")
-        val quotedAmount = stringResByCurrencyNumber(BigDecimal.ONE, "ZEC")
+        val quotedAmount = zecActivityAmount(BigDecimal.ONE)
         assertEquals(stringRes(R.string.private_activity_quoted_amount, quotedAmount), activityAmount(quoted))
 
         assertNull(lookup(firstTime, ", \"amountOut\":\"123456789\"").error)
@@ -252,7 +254,7 @@ class MetadataDataSourceFileTest {
         assertEquals(expectedExecution, reread.executedAmountOut)
         assertEquals(expectedExecution, storedSwaps().swapIds.single().amountOutFormatted)
         assertEquals(
-            stringResByCurrencyNumber(expectedExecution, "ZEC"),
+            zecActivityAmount(expectedExecution),
             activityAmount(reread),
         )
         val conflict = lookup(laterTime, ", \"amountOutFormatted\":\"3\"")
@@ -297,7 +299,7 @@ class MetadataDataSourceFileTest {
         assertNull(reopened.quotedAmountOut)
         assertNull(reopened.executedAmountOut)
         assertEquals(
-            stringRes(R.string.private_activity_saved_amount, stringResByCurrencyNumber(original, "ZEC")),
+            stringRes(R.string.private_activity_saved_amount, zecActivityAmount(original)),
             activityAmount(reopened),
         )
 
@@ -333,9 +335,20 @@ class MetadataDataSourceFileTest {
         return GetSwapStatusUseCase(repository(metadataProvider), swaps)("deposit")
     }
 
-    private fun activityAmount(swap: TransactionSwapMetadata) =
-        (ActivityMapper().createTransactionState(ActivityData.BySwap(swap), Instant.EPOCH, {}, {}, {}).value
-            as StyledStringResource.ByStringResource).resource
+    private fun zecActivityAmount(amount: BigDecimal) =
+        stringResByCurrencyNumber(amount, "ZEC", TickerLocation.AFTER)
+
+    private fun activityAmount(swap: TransactionSwapMetadata): StringResource {
+        mockkObject(FiatCurrency.USD)
+        try {
+            every { FiatCurrency.USD.symbol } returns "$"
+            val activity = ActivityData.BySwap(swap)
+            val value = ActivityMapper().createTransactionState(activity, Instant.EPOCH, {}, {}, {}).value
+            return (value as StyledStringResource.ByStringResource).resource
+        } finally {
+            unmockkObject(FiatCurrency.USD)
+        }
+    }
 
     @Test
     fun aRejectedRefreshReloadsOnlyItsOriginalEntryAndWalletGeneration() = runTest {
@@ -541,7 +554,8 @@ class MetadataDataSourceFileTest {
         assertEquals(quote.reviewedIdentity(), saved.reviewedIdentity)
         assertEquals(SwapStatus.PENDING, saved.status)
         assertNull(metadata.getSwapMetadata("deposit", otherAccount))
-        assertFalse(File(metadataDir, otherKey.fileIdentifiers()[0]).exists())
+        // A lookup may create the account's empty canonical file.
+        assertEquals(0L, File(metadataDir, otherKey.fileIdentifiers()[0]).length())
         val restarted = ProcessSwapTransactionUseCase(metadata, mockk())
         assertFailsWith<IllegalStateException> { restarted.reserveFunding(proposal) {} }
     }

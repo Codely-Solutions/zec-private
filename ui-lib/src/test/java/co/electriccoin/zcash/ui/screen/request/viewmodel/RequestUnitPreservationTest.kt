@@ -124,7 +124,11 @@ class RequestUnitPreservationTest {
         fixture { vm, rate, builder ->
             enterFiat(vm)
             amount(vm).onDone()
-            assertEquals("0.25", assertIs<RequestState.Memo>(vm.state.value).request.memoState.zecAmount)
+            assertEquals(
+                0, BigDecimal("0.25").compareTo(
+                    assertIs<RequestState.Memo>(vm.state.value).request.memoState.zecAmount.toBigDecimal()
+                )
+            )
             rate.value = data(0.0)
             assertIs<RequestState.Memo>(vm.state.value).onBack()
             assertFalse(amount(vm).canContinue)

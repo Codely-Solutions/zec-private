@@ -5,6 +5,7 @@ import cash.z.ecc.android.sdk.model.FiatCurrency
 import co.electriccoin.zcash.ui.common.datasource.SwapDataSource
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 import co.electriccoin.zcash.ui.common.repository.SwapRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.GetCuratedSwapAssetsUseCase
@@ -63,10 +64,11 @@ class PayCatalogRecoveryTest {
             every { getCuratedSwapAssets() } returns offers.map(fixture::simple)
         }
         var pickerResult: SwapAsset = bnb
+        val account = mockk<WalletAccount> { every { canSpend(any()) } returns true }
         val vm = PayVM(
             getCuratedSwapAssetsUseCase = GetCuratedSwapAssetsUseCase(repository, simple),
             getSelectedWalletAccount = mockk<GetSelectedWalletAccountUseCase> {
-                every { observe() } returns flowOf(null)
+                every { observe() } returns flowOf(account)
             },
             swapRepository = repository,
             cancelSwap = mockk(),
@@ -119,7 +121,7 @@ class PayCatalogRecoveryTest {
             assertEquals(retry, button().text)
             assertTrue(button().isEnabled)
 
-            repository.requestRefreshAssetsOnce()
+            button().onClick()
             runCurrent()
             assertEquals(0, form().amount.innerState.amount?.compareTo(BigDecimal("2.014")))
             assertEquals(stringRes(co.electriccoin.zcash.ui.design.R.string.send_review), button().text)

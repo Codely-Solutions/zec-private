@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
@@ -150,10 +151,12 @@ class ProcessSwapTransactionUseCaseTest {
     fun savesSwapMetadataFromProposalAndQuote() =
         runTest {
             val fx = Fixtures()
-            val proposal = swapProposal()
+            val reviewedAccount = mockk<WalletAccount>()
+            val proposal = swapProposal(reviewedAccount)
 
             fx.useCase(proposal, SubmitResult.Success(listOf("tx1")))
 
+            coVerify(exactly = 1) { fx.metadataRepository.getSwapMetadata("deposit-address", reviewedAccount) }
             coVerify(exactly = 1) {
                 fx.metadataRepository.markTxAsSwap(
                     depositAddress = "deposit-address",
@@ -165,7 +168,7 @@ class ProcessSwapTransactionUseCaseTest {
                     amountOutFormatted = BigDecimal("1.23"),
                     mode = SwapMode.EXACT_INPUT,
                     status = SwapStatus.PENDING,
-                    account = proposal.fundingAccount,
+                    account = reviewedAccount,
                 )
             }
         }
@@ -242,7 +245,7 @@ class ProcessSwapTransactionUseCaseTest {
             }
         }
 
-    private suspend fun swapProposal(): SwapTransactionProposal {
+    private suspend fun swapProposal(reviewedAccount: WalletAccount = mockk()): SwapTransactionProposal {
         val walletAddress = WalletAddress.Unified.new("deposit-address")
         val quote =
             mockk<SwapQuote> {
@@ -254,7 +257,7 @@ class ProcessSwapTransactionUseCaseTest {
             }
         return mockk {
             every { this@mockk.quote } returns quote
-            every { fundingAccount } returns mockk()
+            every { fundingAccount } returns reviewedAccount
             every { destination } returns walletAddress
             every { totalFees } returns Zatoshi(1000)
             every { totalFeesUsd } returns BigDecimal("0.5")
