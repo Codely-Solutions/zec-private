@@ -2,11 +2,9 @@ package co.electriccoin.zcash.ui.screen.connecthw.height
 
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.lifecycle.ViewModel
-import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.LceState
-import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.model.guardLoading
 import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.model.stateIn
@@ -19,6 +17,7 @@ import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldState
 import co.electriccoin.zcash.ui.screen.common.BlockHeightState
+import co.electriccoin.zcash.ui.screen.common.birthdayHeightOrNull
 import co.electriccoin.zcash.ui.screen.connecthw.brandingOf
 import co.electriccoin.zcash.ui.screen.connecthw.observeEnrollmentFinalization
 import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
@@ -46,12 +45,6 @@ class HWHeightVM(
 
     val state: StateFlow<LceState<BlockHeightState>> =
         combine(blockHeightText, createAccountLce.state) { text, lce ->
-            val isHigherThanSaplingActivationHeight =
-                text.amount
-                    ?.let { it.toLong() >= VersionInfo.NETWORK.saplingActivationHeight.value }
-                    ?: false
-            val isValid = !text.innerTextFieldState.value.isEmpty() && isHigherThanSaplingActivationHeight
-
             BlockHeightState(
                 title = null,
                 logo = branding.logo,
@@ -64,8 +57,8 @@ class HWHeightVM(
                 primaryButton =
                     ButtonState(
                         text = branding.connect,
-                        onClick = { text.amount?.toLong()?.let { onConfirmClick(it) } },
-                        isEnabled = isValid && !lce.loading,
+                        onClick = ::onConfirmClick,
+                        isEnabled = text.birthdayHeightOrNull() != null && !lce.loading,
                         isLoading = lce.loading,
                         hapticFeedbackType = HapticFeedbackType.Confirm,
                     ),
@@ -87,11 +80,12 @@ class HWHeightVM(
      * A second tap while the import runs is ignored: restarting would cancel the running import
      * inside the SDK call, after the account exists but before it is selected.
      */
-    private fun onConfirmClick(height: Long) =
+    private fun onConfirmClick() =
         createAccountLce.guardLoading {
             if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return@guardLoading
+            val height = blockHeightText.value.birthdayHeightOrNull() ?: return@guardLoading
             createAccountLce.execute {
-                createHWWalletAccount(args.enrollment, BlockHeight.new(height))
+                createHWWalletAccount(args.enrollment, height)
             }
         }
 

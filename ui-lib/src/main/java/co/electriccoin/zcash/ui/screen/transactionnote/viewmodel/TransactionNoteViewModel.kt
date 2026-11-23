@@ -167,13 +167,12 @@ internal class TransactionNoteViewModel(
         }
     }
 
-    private fun runSave(save: NoteSave, block: suspend () -> Unit) {
+    private fun runSave(save: NoteSave, block: suspend () -> Boolean) {
         if (dismissed || runningSave.value != null) return
         runningSave.value = save
         viewModelScope.launch {
             try {
-                block()
-                dismissed = true
+                dismissed = block()
             } finally {
                 runningSave.value = null
             }

@@ -110,9 +110,11 @@ class TransactionNoteViewModelTest {
         }
 
     @Test
-    fun aFailedSaveClearsLoadingAndRetiresTheEditorAsItCloses() =
+    fun aFailedSaveRetainsTheDraftAndRetryClosesOnlyAfterAcknowledgement() =
         runTest(dispatcher) {
             val vm = startedVm()
+            vm.state().note.onValueChange("Retryable draft")
+            advanceUntilIdle()
 
             val save = requireNotNull(vm.state().secondaryButton)
             save.onClick()
@@ -124,12 +126,58 @@ class TransactionNoteViewModelTest {
 
             val completed = requireNotNull(vm.state().secondaryButton)
             assertFalse(completed.isLoading)
-            assertFalse(completed.isEnabled)
+            assertTrue(completed.isEnabled)
+            assertEquals(stringRes("Retryable draft"), vm.state().note.value)
+            verify(exactly = 0) { navigationRouter.back() }
+            coEvery { metadataRepository.createOrUpdateTxNote(TX_ID, "Retryable draft", owner, 0) } returns true
             save.onClick()
             advanceUntilIdle()
-            coVerify(exactly = 1) { metadataRepository.createOrUpdateTxNote(TX_ID, NOTE, owner, 0) }
+            coVerify(exactly = 2) { metadataRepository.createOrUpdateTxNote(TX_ID, "Retryable draft", owner, 0) }
             verify(exactly = 1) { navigationRouter.back() }
+            assertFalse(requireNotNull(vm.state().secondaryButton).isEnabled)
         }
+
+    @Test
+    fun failedAndThrownDeletionRetainsTheDraftForRetry() = runTest(dispatcher) {
+        val vm = startedVm()
+        vm.state().note.onValueChange("Unsaved draft")
+        advanceUntilIdle()
+        val delete = assertNotNull(vm.state().negative)
+        coEvery { metadataRepository.deleteTxNote(TX_ID, owner, 0) } throws IOException()
+        delete.onClick()
+        advanceUntilIdle()
+        assertEquals(stringRes("Unsaved draft"), vm.state().note.value)
+        assertTrue(assertNotNull(vm.state().negative).isEnabled)
+        coEvery { metadataRepository.deleteTxNote(TX_ID, owner, 0) } returns false
+        delete.onClick()
+        advanceUntilIdle()
+        verify(exactly = 0) { navigationRouter.back() }
+        assertEquals(stringRes("Unsaved draft"), vm.state().note.value)
+        coEvery { metadataRepository.deleteTxNote(TX_ID, owner, 0) } returns true
+        delete.onClick()
+        advanceUntilIdle()
+        verify(exactly = 1) { navigationRouter.back() }
+        coVerify(exactly = 3) { metadataRepository.deleteTxNote(TX_ID, owner, 0) }
+    }
+
+    @Test
+    fun thrownSaveRetainsTheDraftAndHeldCallbackCannotWriteAfterBack() = runTest(dispatcher) {
+        val vm = startedVm()
+        vm.state().note.onValueChange("Unsaved draft")
+        advanceUntilIdle()
+        val save = assertNotNull(vm.state().secondaryButton)
+        coEvery { metadataRepository.createOrUpdateTxNote(any(), any(), owner, 0) } throws IOException()
+        save.onClick()
+        advanceUntilIdle()
+        assertTrue(vm.state().note.isEnabled)
+        assertEquals(stringRes("Unsaved draft"), vm.state().note.value)
+        verify(exactly = 0) { navigationRouter.back() }
+        vm.state().onBack()
+        save.onClick()
+        advanceUntilIdle()
+        coVerify(exactly = 1) { metadataRepository.createOrUpdateTxNote(TX_ID, "Unsaved draft", owner, 0) }
+        verify(exactly = 1) { navigationRouter.back() }
+    }
 
     @Test
     fun thePressedButtonShowsLoadingUntilTheSaveReturns() =

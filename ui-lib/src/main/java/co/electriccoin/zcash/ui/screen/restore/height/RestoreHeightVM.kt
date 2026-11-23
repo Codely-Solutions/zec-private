@@ -6,13 +6,13 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
-import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.BlockHeightState
+import co.electriccoin.zcash.ui.screen.common.birthdayHeightOrNull
 import co.electriccoin.zcash.ui.screen.restore.date.RestoreDateArgs
 import co.electriccoin.zcash.ui.screen.restore.info.SeedInfo
 import co.electriccoin.zcash.ui.screen.restore.tor.RestoreTorArgs
@@ -40,17 +40,8 @@ class RestoreHeightVM(
                 initialValue = createState(blockHeightText.value)
             )
 
-    private fun createState(blockHeight: NumberTextFieldInnerState): BlockHeightState {
-        val isHigherThanSaplingActivationHeight =
-            blockHeight
-                .amount
-                ?.let {
-                    it.toLong() >= VersionInfo.NETWORK.saplingActivationHeight.value
-                }
-                ?: false
-        val isValid = !blockHeight.innerTextFieldState.value.isEmpty() && isHigherThanSaplingActivationHeight
-
-        return BlockHeightState(
+    private fun createState(blockHeight: NumberTextFieldInnerState) =
+        BlockHeightState(
             title = stringRes(R.string.root_existingWallet_restore),
             logo = null,
             onBack = ::onBack,
@@ -63,7 +54,7 @@ class RestoreHeightVM(
                 ButtonState(
                     stringRes(R.string.root_existingWallet_restore),
                     onClick = ::onRestoreClick,
-                    isEnabled = isValid,
+                    isEnabled = blockHeight.birthdayHeightOrNull() != null,
                     hapticFeedbackType = HapticFeedbackType.Confirm
                 ),
             primaryButtonTestTag = RestoreHeightTags.RESTORE_BTN,
@@ -75,7 +66,6 @@ class RestoreHeightVM(
                 ),
             blockHeight = NumberTextFieldState(innerState = blockHeight, onValueChange = ::onValueChanged)
         )
-    }
 
     private fun onEstimateClick() = navigationRouter.forward(RestoreDateArgs(sessionId = restoreHeight.sessionId))
 
@@ -83,7 +73,7 @@ class RestoreHeightVM(
         navigationRouter.forward(
             RestoreTorArgs(
                 sessionId = restoreHeight.sessionId,
-                blockHeight = blockHeightText.value.amount?.toLong() ?: return
+                blockHeight = blockHeightText.value.birthdayHeightOrNull()?.value ?: return
             )
         )
     }
