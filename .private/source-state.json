@@ -1380,7 +1380,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/FiatCurrencyDataSource.kt": "c1f8e75938becaa3aa069ff6066218ce2c9fd0e8b850d7b9a79f8c4e930ce152",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/GiftCardDataSource.kt": "273c9ca0c5f714f880279b0b245ae2b9a86ca69b44f4636e953b2a89374d3238",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MessageAvailabilityDataSource.kt": "37fa8a33d48fc4dc7cc9b5d2c92f957d5dd010cfde255202c1ac10433bfab4cd",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt": "6c8ed12b3caddb2d23f8d136f4a0ec0352de168de589f0511beda78845d5e75c",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt": "a19d49c8325a585dd0527cfed55bc153f38c5bd86efcbbc069e8e2c4609a6498",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitter.kt": "c109e836493fb76b1992c19bb5c9fc00ceda16e9b0f4190151e69854d64f566e",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt": "8dc100f5a0203a1cb79d7c19cb934e4b01f816b623fb112dcea4c493fd027576",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt": "ef02308b7bfb71576bcb404499403d06111e87c604af37f1257bb5bd595a3d96",

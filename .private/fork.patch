@@ -23802,7 +23802,7 @@ index cd30d81f4..21d69fa61 100644
 +private val CARD_WALLET_ERASE_CHECK_INTERVAL = 100.milliseconds
 +private val CARD_WALLET_CLOSE_TIMEOUT = 30.seconds
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
-index abf14322d..25cabc1d9 100644
+index abf14322d..e64acc75d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSource.kt
 @@ -0,0 +1,2 @@
@@ -23997,19 +23997,12 @@ index abf14322d..25cabc1d9 100644
 +            lastUpdatedOf = { it.lastUpdated },
 +            mergeOnTie = SwapMetadataV3::mergeStatus,
 +        ).withBoundedQuoteEvidence(),
-@@ -847,0 +921,28 @@ private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean)
+@@ -847,0 +921,29 @@ private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean)
 +private fun SwapMetadataV3.mergeStatus(candidate: SwapMetadataV3): SwapMetadataV3 {
 +    val sameRoute = reviewedIdentity == candidate.reviewedIdentity && provider == candidate.provider
 +    val sameAssets = fromAsset == candidate.fromAsset && toAsset == candidate.toAsset
 +    if (!sameRoute || !sameAssets) return this
-+    val candidateStatus = candidate.status
-+    val candidateUpdatedAt = candidate.statusUpdatedAt
-+    val newer = if (candidateStatus == null || candidateUpdatedAt == null) {
-+        false
-+    } else {
-+        (statusUpdatedAt == null || candidateUpdatedAt > statusUpdatedAt) &&
-+            acceptsStatus(candidateStatus, candidateUpdatedAt, candidate.executedAmountOut)
-+    }
++    val newer = hasNewerStatus(candidate)
 +    val preferred = if (newer) candidate else this
 +    val earlier = if (newer) this else candidate
 +    val executed = preferred.executedAmountOut ?: earlier.executedAmountOut.takeIf {
@@ -24026,26 +24019,34 @@ index abf14322d..25cabc1d9 100644
 +    }
 +}
 +
-@@ -850,2 +951,2 @@ private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean)
++private fun SwapMetadataV3.hasNewerStatus(candidate: SwapMetadataV3): Boolean {
++    val candidateStatus = candidate.status
++    val timestamp = candidate.statusUpdatedAt
++    if (candidateStatus == null || timestamp == null) return false
++    return (statusUpdatedAt == null || timestamp > statusUpdatedAt) &&
++        acceptsStatus(candidateStatus, timestamp, candidate.executedAmountOut)
++}
++
+@@ -850,2 +952,2 @@ private fun SwapsMetadataV3.merge(other: SwapsMetadataV3, otherIsNewer: Boolean)
 - * the same id appears twice, within one list or across both. A tie keeps the earlier entry, so
 - * this list wins over [other].
 + * the same id appears twice, within one list or across both. A tie keeps the earlier entry
 + * unless [mergeOnTie] combines them.
-@@ -856 +957,2 @@ private fun <T> List<T>.mergeById(
+@@ -856 +958,2 @@ private fun <T> List<T>.mergeById(
 -    lastUpdatedOf: (T) -> Instant
 +    lastUpdatedOf: (T) -> Instant,
 +    mergeOnTie: (T, T) -> T = { current, _ -> current },
-@@ -862 +964 @@ private fun <T> List<T>.mergeById(
+@@ -862 +965 @@ private fun <T> List<T>.mergeById(
 -        if (current == null || lastUpdatedOf(candidate) > lastUpdatedOf(current)) {
 +        if (current == null) {
-@@ -863,0 +966,6 @@ private fun <T> List<T>.mergeById(
+@@ -863,0 +967,6 @@ private fun <T> List<T>.mergeById(
 +            return@forEach
 +        }
 +        val recency = lastUpdatedOf(candidate).compareTo(lastUpdatedOf(current))
 +        when {
 +            recency > 0 -> merged[id] = candidate
 +            recency == 0 -> merged[id] = mergeOnTie(current, candidate)
-@@ -869,0 +978,16 @@ private const val MAX_SWAP_ASSETS_IN_HISTORY = 10
+@@ -869,0 +979,16 @@ private const val MAX_SWAP_ASSETS_IN_HISTORY = 10
 +private const val MAX_RETAINED_SIGNED_QUOTES = 64
 +
 +private fun List<SwapMetadataV3>.withBoundedQuoteEvidence(): List<SwapMetadataV3> {
