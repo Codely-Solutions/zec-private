@@ -19,6 +19,7 @@ fun validateSwapRecipient(
     token: String? = null,
     contactNetwork: String? = null,
     allowPaymentAmount: Boolean = true,
+    tokenContract: String? = null,
 ): SwapRecipientValidation {
     if (GiftCardSecretDetector.mayContainGiftCardSecret(value)) {
         return SwapRecipientValidation(error = SwapRecipientError.GIFT_LINK)
@@ -29,7 +30,7 @@ fun validateSwapRecipient(
         return SwapRecipientValidation(error = SwapRecipientError.URI)
     }
     val input = parsed.input
-    return validateParsedRecipient(input, network, token, contactNetwork, allowPaymentAmount)
+    return validateParsedRecipient(input, network, token, contactNetwork, allowPaymentAmount, tokenContract)
 }
 
 @Suppress("ReturnCount") // Independent validation failures retain their own error classification.
@@ -39,6 +40,7 @@ private fun validateParsedRecipient(
     token: String?,
     contactNetwork: String?,
     allowPaymentAmount: Boolean,
+    tokenContract: String?,
 ): SwapRecipientValidation {
     if (!allowPaymentAmount && input.amount != null) {
         return SwapRecipientValidation(error = SwapRecipientError.PAYMENT_AMOUNT)
@@ -46,7 +48,15 @@ private fun validateParsedRecipient(
     if (!contactNetwork.matchesNetwork(network) || !input.network.matchesNetwork(network)) {
         return SwapRecipientValidation(error = SwapRecipientError.NETWORK)
     }
-    if (token != null && input.asset != null && !input.asset.equals(token, ignoreCase = true)) {
+    val bound = if (input.nativeEvmPayment) {
+        val nativeAsset = RecipientAddressPolicy.evmNativeAsset(network)
+            ?: return SwapRecipientValidation(error = SwapRecipientError.NETWORK)
+        if (tokenContract != null) return SwapRecipientValidation(error = SwapRecipientError.ASSET)
+        input.copy(network = input.network ?: network.lowercase(), asset = nativeAsset)
+    } else {
+        input
+    }
+    if (token != null && bound.asset != null && !bound.asset.equals(token, ignoreCase = true)) {
         return SwapRecipientValidation(error = SwapRecipientError.ASSET)
     }
     val syntax = RecipientAddressPolicy.validate(input.address, network.lowercase())
@@ -54,7 +64,7 @@ private fun validateParsedRecipient(
         return SwapRecipientValidation(error = SwapRecipientError.ADDRESS)
     }
     return SwapRecipientValidation(
-        input = input.copy(address = RecipientAddressPolicy.normalize(input.address, network.lowercase()))
+        input = bound.copy(address = RecipientAddressPolicy.normalize(input.address, network.lowercase()))
     )
 }
 

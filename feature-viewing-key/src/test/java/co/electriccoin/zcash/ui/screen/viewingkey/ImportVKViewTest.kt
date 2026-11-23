@@ -7,6 +7,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -59,6 +60,16 @@ class ImportVKViewTest {
         assertEquals(1, scans)
     }
 
+    @Test
+    fun thePasteButtonIsVisibleAndFillsTheField() {
+        show()
+
+        composeTestRule.onNodeWithTag(ImportVKTag.PASTE_BUTTON).assertIsDisplayed().performClick()
+
+        assertEquals(KEY, text)
+        composeTestRule.onNodeWithTag(ImportVKTag.CONTINUE_BUTTON).assertIsEnabled()
+    }
+
     private fun show() {
         composeTestRule.setContent {
             ZcashTheme {
@@ -67,6 +78,7 @@ class ImportVKViewTest {
                         text = text,
                         isSubmitting = false,
                         onValueChange = { text = it },
+                        onPasteClick = { text = KEY },
                         onScanClick = { scans++ },
                         onContinueClick = {},
                         onBack = {},

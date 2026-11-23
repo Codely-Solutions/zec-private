@@ -232,6 +232,29 @@ class SwapDetailVMTest {
     }
 
     @Test
+    fun savedExecutionRemainsVisibleWithSparseStatusAndDuringAnOutage() = runTest {
+        val execution = BigDecimal("1.23456789")
+        val saved = saved(SwapStatus.SUCCESS).copy(
+            amountOutFormatted = execution,
+            quotedAmountOut = OUTPUT,
+            executedAmountOut = execution,
+        )
+        val sparse = status(SwapStatus.SUCCESS)
+        every { sparse.executedAmountOut } returns null
+        val harness = harness(SwapQuoteStatusData(status = sparse, isLoading = false, savedMetadata = saved))
+        val detail = harness.state()
+        assertEquals(stringRes(R.string.private_saved_provider_output), detail.transactionHeader.title)
+        assertEquals(stringResByNumber(execution), detail.transactionHeader.amount)
+        assertEquals(stringResByNumber(execution), detail.quoteHeader.to?.amount)
+        assertEquals(stringRes(""), detail.quoteHeader.to?.fiatAmount)
+
+        harness.emit(SwapQuoteStatusData(isLoading = false, savedMetadata = saved, error = unavailable()))
+        runCurrent()
+        assertEquals(detail.transactionHeader.amount, harness.state().transactionHeader.amount)
+        assertEquals(detail.transactionHeader.title, harness.state().transactionHeader.title)
+    }
+
+    @Test
     fun backRemainsAvailableWhileTheFirstStatusRequestIsLoading() = runTest {
         val harness = harness(SwapQuoteStatusData(isLoading = true))
 

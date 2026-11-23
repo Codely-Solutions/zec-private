@@ -26,6 +26,7 @@ internal data class ImportVKState(
     val field: TextFieldState,
     val placeholder: StringResource,
     val scanButton: IconButtonState,
+    val pasteButton: ButtonState,
     val disclaimerIcon: ImageResource.ByDrawable,
     val disclaimer: StringResource,
     val continueButton: ButtonState,
@@ -48,6 +49,7 @@ internal data class ImportVKState(
             text: String,
             isSubmitting: Boolean,
             onValueChange: (String) -> Unit,
+            onPasteClick: () -> Unit,
             onScanClick: () -> Unit,
             onContinueClick: () -> Unit,
             onBack: () -> Unit,
@@ -78,6 +80,13 @@ internal data class ImportVKState(
                     isEnabled = !isSubmitting,
                     onClick = onScanClick,
                 ),
+            pasteButton =
+                ButtonState(
+                    text = stringRes(R.string.view_only_paste_button),
+                    style = ButtonStyle.SECONDARY,
+                    isEnabled = !isSubmitting,
+                    onClick = onPasteClick,
+                ),
             disclaimerIcon = ImageResource.ByDrawable(R.drawable.view_only_ic_info),
             disclaimer = stringRes(R.string.view_only_paste_disclaimer),
             continueButton =
@@ -98,6 +107,7 @@ internal data class ImportVKState(
             text = text,
             isSubmitting = isSubmitting,
             onValueChange = {},
+            onPasteClick = {},
             onScanClick = {},
             onContinueClick = {},
             onBack = {},
@@ -108,5 +118,6 @@ internal data class ImportVKState(
 internal object ImportVKTag {
     const val FIELD = "view_only_paste_field"
     const val SCAN_BUTTON = "view_only_paste_scan_button"
+    const val PASTE_BUTTON = "view_only_paste_button"
     const val CONTINUE_BUTTON = "view_only_paste_continue_button"
 }

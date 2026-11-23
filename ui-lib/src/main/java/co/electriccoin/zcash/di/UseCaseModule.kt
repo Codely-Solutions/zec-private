@@ -28,7 +28,6 @@ import co.electriccoin.zcash.ui.common.usecase.FilterSwapAssetsUseCase
 import co.electriccoin.zcash.ui.common.usecase.FilterSwapBlockchainsUseCase
 import co.electriccoin.zcash.ui.common.usecase.FixEnhancementUseCase
 import co.electriccoin.zcash.ui.common.usecase.FixEphemeralAddressUseCase
-import co.electriccoin.zcash.ui.common.usecase.FlipTransactionBookmarkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetABContactByIdUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetABContactsUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetABSwapContactsUseCase
@@ -111,7 +110,6 @@ import co.electriccoin.zcash.ui.common.usecase.OptInExchangeRateAndTorUseCase
 import co.electriccoin.zcash.ui.common.usecase.OptInExchangeRateUseCase
 import co.electriccoin.zcash.ui.common.usecase.ParseKeystonePCZTUseCase
 import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneSignInRequestUseCase
-import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneUrToZashiAccountsUseCase
 import co.electriccoin.zcash.ui.common.usecase.PersistServerSelectionUseCase
 import co.electriccoin.zcash.ui.common.usecase.PrefillSendUseCase
 import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
@@ -133,6 +131,7 @@ import co.electriccoin.zcash.ui.common.usecase.SelectWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendTransactionAgainUseCase
 import co.electriccoin.zcash.ui.common.usecase.SetAppearanceModeUseCase
+import co.electriccoin.zcash.ui.common.usecase.SetTransactionBookmarkUseCase
 import co.electriccoin.zcash.ui.common.usecase.ShareImageUseCase
 import co.electriccoin.zcash.ui.common.usecase.SharePCZTUseCase
 import co.electriccoin.zcash.ui.common.usecase.ShareQRUseCase
@@ -208,7 +207,6 @@ val useCaseModule =
         factoryOf(::CreateHWWalletAccountUseCase)
         factoryOf(::CreateKeystoneAccountUseCase)
         factoryOf(::DeriveKeystoneAccountUnifiedAddressUseCase)
-        factoryOf(::ParseKeystoneUrToZashiAccountsUseCase)
         factoryOf(::GetExchangeRateUseCase)
         factoryOf(::GetSelectedWalletAccountUseCase)
         singleOf(::ObserveClearSendUseCase)
@@ -242,7 +240,7 @@ val useCaseModule =
         factoryOf(::GetABSwapContactsUseCase)
         factoryOf(::NavigateToSelectRecipientUseCase)
         factoryOf(::GetTransactionMetadataUseCase)
-        factoryOf(::FlipTransactionBookmarkUseCase)
+        factoryOf(::SetTransactionBookmarkUseCase)
         factoryOf(::DeleteTransactionNoteUseCase)
         factoryOf(::DisconnectUseCase)
         factoryOf(::CreateOrUpdateTransactionNoteUseCase)

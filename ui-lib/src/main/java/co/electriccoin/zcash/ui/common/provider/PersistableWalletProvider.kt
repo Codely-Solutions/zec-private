@@ -151,10 +151,6 @@ private class PersistableWalletPreferenceDefault(
         val value = newValue?.let { record ->
             record.wallet.toJson().apply { put(SERVER_SELECTION_AUTOMATIC, record.isAutomatic) }.toString()
         }
-        if (newValue?.isAutomatic != null) {
-            preferenceProvider.putStringWithRollback(key, value)
-        } else {
-            preferenceProvider.putString(key, value)
-        }
+        preferenceProvider.putStringWithRollback(key, value)
     }
 }

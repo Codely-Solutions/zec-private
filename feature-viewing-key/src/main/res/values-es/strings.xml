@@ -26,6 +26,7 @@
     <string name="view_only_paste_label">Clave de visualización</string>
     <string name="view_only_paste_placeholder">Pega la clave de visualización...</string>
     <string name="view_only_paste_scan">Escanear código QR</string>
+    <string name="view_only_paste_button">Pegar</string>
     <string name="view_only_paste_disclaimer">Esta cuenta solo podrá ver y recibir. Podrás seguir su saldo y su actividad, pero no podrás usarla para gastar fondos.</string>
 
     <string name="view_only_invalid_key_title">Esta clave no parece correcta</string>

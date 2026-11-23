@@ -7,19 +7,21 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.usecase.DeriveKeystoneAccountUnifiedAddressUseCase
-import co.electriccoin.zcash.ui.common.usecase.ParseKeystoneUrToZashiAccountsUseCase
 import co.electriccoin.zcash.ui.design.R
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.listitem.checkbox.ZashiExpandedCheckboxListItemState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByAddress
 import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
+import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 import co.electriccoin.zcash.ui.screen.connecthw.neworactive.HWNewOrActiveArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
 import co.electriccoin.zcash.ui.screen.selectkeystoneaccount.SelectKeystoneAccount
 import co.electriccoin.zcash.ui.screen.selectkeystoneaccount.model.SelectKeystoneAccountState
 import com.keystone.module.ZcashAccount
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
@@ -30,13 +32,12 @@ import kotlinx.coroutines.launch
 
 class SelectKeystoneAccountViewModel(
     private val args: SelectKeystoneAccount,
-    parseKeystoneUrToZashiAccounts: ParseKeystoneUrToZashiAccountsUseCase,
+    private val session: KeystoneEnrollmentSession,
     private val deriveKeystoneAccountUnifiedAddress: DeriveKeystoneAccountUnifiedAddressUseCase,
     private val navigateToError: NavigateToErrorUseCase,
     private val navigationRouter: NavigationRouter,
 ) : ViewModel() {
-    private val accounts = parseKeystoneUrToZashiAccounts(args.ur)
-    private val account = accounts.accounts.firstOrNull()
+    private val account = session.resolve(args.sessionId)?.accounts?.firstOrNull()
 
     private val selectedAccount = MutableStateFlow(account)
     private val derivedAddress = MutableStateFlow<String?>(null)
@@ -50,12 +51,17 @@ class SelectKeystoneAccountViewModel(
         viewModelScope.launch {
             try {
                 derivedAddress.value = deriveKeystoneAccountUnifiedAddress(account)
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 // Deriving the unified address fails when the scanned UFVK doesn't belong to this
                 // app's network (e.g. a mainnet Keystone account scanned into a testnet build) —
                 // surface the dedicated error sheet instead of letting the exception kill the app.
-                Twig.warn(e) { "Scanned Keystone account can't be used by this app" }
-                navigateToError(ErrorArgs.KeystoneAccountUnsupported(e)) { replace(it) }
+                Twig.warn { "Scanned Keystone account can't be used by this app" }
+                session.clear(args.sessionId)
+                navigateToError(ErrorArgs.KeystoneAccountUnsupported(e)) {
+                    replaceFrom(ScanKeystoneSignInRequest::class, it)
+                }
             }
         }
 
@@ -86,8 +92,8 @@ class SelectKeystoneAccountViewModel(
             positiveButtonState =
                 ButtonState(
                     text = stringRes(co.electriccoin.zcash.ui.R.string.select_keystone_account_positive),
-                    onClick = { if (selection != null) onConfirmClick() },
-                    isEnabled = selection != null,
+                    onClick = { if (selection != null && address != null) onConfirmClick() },
+                    isEnabled = selection != null && address != null,
                     hapticFeedbackType = HapticFeedbackType.Confirm
                 )
         )
@@ -119,8 +125,11 @@ class SelectKeystoneAccountViewModel(
         }
     }
 
-    private fun onBackClick() = navigationRouter.backToRoot()
+    private fun onBackClick() {
+        session.clear(args.sessionId)
+        navigationRouter.backToRoot()
+    }
 
     private fun onConfirmClick() =
-        navigationRouter.forward(HWNewOrActiveArgs(HWWalletEnrollment.Keystone(args.ur)))
+        navigationRouter.forward(HWNewOrActiveArgs(HWWalletEnrollment.Keystone(args.sessionId)))
 }

@@ -73,8 +73,14 @@ class ActivityMapper {
             }
         }
 
-    private fun getSwapValue(data: ActivityData.BySwap): StyledStringResource =
-        stringResByCurrencyNumber(data.swap.amountOutFormatted, CURRENCY_TICKER).withStyle(
+    private fun getSwapValue(data: ActivityData.BySwap): StyledStringResource {
+        val amount = stringResByCurrencyNumber(data.swap.amountOutFormatted, CURRENCY_TICKER)
+        val label = when {
+            data.swap.executedAmountOut != null -> null
+            data.swap.quotedAmountOut != null -> R.string.private_activity_quoted_amount
+            else -> R.string.private_activity_saved_amount
+        }
+        return (label?.let { stringRes(it, amount) } ?: amount).withStyle(
             StyledStringStyle(
                 color =
                     when (data.swap.status) {
@@ -83,6 +89,7 @@ class ActivityMapper {
                     }
             )
         )
+    }
 
     private fun getSwapTitle(data: ActivityData.BySwap): StringResource =
         stringRes(

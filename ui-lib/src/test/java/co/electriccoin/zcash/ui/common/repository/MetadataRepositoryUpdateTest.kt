@@ -1,5 +1,7 @@
 package co.electriccoin.zcash.ui.common.repository
 
+import cash.z.ecc.android.sdk.model.Account
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.MetadataDataSource
@@ -26,6 +28,8 @@ import kotlin.test.assertTrue
  * swallowing a failed edit.
  */
 class MetadataRepositoryUpdateTest {
+    private val owner = AccountUuid.new(ByteArray(16))
+    private val ownedAccount = mockk<WalletAccount> { every { sdkAccount } returns Account.new(owner) }
     private val key = mockk<MetadataKey>()
     private val metadataDataSource = mockk<MetadataDataSource>()
     private val repository =
@@ -33,7 +37,7 @@ class MetadataRepositoryUpdateTest {
             accountDataSource =
                 mockk<AccountDataSource> {
                     every { selectedAccount } returns flowOf(null)
-                    every { allAccounts } returns MutableStateFlow(null)
+                    every { allAccounts } returns MutableStateFlow<List<WalletAccount>?>(listOf(ownedAccount))
                     coEvery { getSelectedAccount() } returns mockk<WalletAccount>(relaxed = true)
                 },
             metadataDataSource = metadataDataSource,
@@ -48,11 +52,11 @@ class MetadataRepositoryUpdateTest {
     @Test
     fun aSavedEditReportsTrue() =
         runTest {
-            coEvery { metadataDataSource.flipTxAsBookmarked("tx1", key) } returns true
+            coEvery { metadataDataSource.setTxBookmark("tx1", true, key) } returns true
             coEvery { metadataDataSource.createOrUpdateTxNote("tx1", "note", key) } returns true
             coEvery { metadataDataSource.deleteTxNote("tx1", key) } returns true
 
-            assertTrue(repository.flipTxBookmark("tx1"))
+            assertTrue(repository.setTxBookmark("tx1", true, owner, 0))
             assertTrue(repository.createOrUpdateTxNote("tx1", "note"))
             assertTrue(repository.deleteTxNote("tx1"))
         }
@@ -60,14 +64,14 @@ class MetadataRepositoryUpdateTest {
     @Test
     fun anUnsavedEditReportsFalse() =
         runTest {
-            coEvery { metadataDataSource.flipTxAsBookmarked("tx1", key) } returns false
+            coEvery { metadataDataSource.setTxBookmark("tx1", false, key) } returns false
             coEvery { metadataDataSource.createOrUpdateTxNote("tx1", "note", key) } returns false
             coEvery { metadataDataSource.deleteTxNote("tx1", key) } returns false
             coEvery {
                 metadataDataSource.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any(), key)
             } returns false
 
-            assertFalse(repository.flipTxBookmark("tx1"))
+            assertFalse(repository.setTxBookmark("tx1", false, owner, 0))
             assertFalse(repository.createOrUpdateTxNote("tx1", "note"))
             assertFalse(repository.deleteTxNote("tx1"))
             assertFalse(markSwap())

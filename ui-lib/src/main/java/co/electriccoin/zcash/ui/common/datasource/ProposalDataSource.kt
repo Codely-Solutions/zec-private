@@ -206,6 +206,7 @@ class ProposalDataSourceImpl(
                     memo = send.memo,
                     proposal = synchronizer.proposeSend(account.sdkAccount, send),
                     quote = quote,
+                    fundingAccount = account,
                 )
             }
         }
@@ -224,6 +225,7 @@ class ProposalDataSourceImpl(
                     memo = send.memo,
                     proposal = synchronizer.proposeSend(account.sdkAccount, send),
                     quote = quote,
+                    fundingAccount = account,
                 )
             }
         }
@@ -505,6 +507,7 @@ sealed interface SendTransactionProposal : TransactionProposal {
 
 sealed interface SwapTransactionProposal : SendTransactionProposal {
     val quote: SwapQuote
+    val fundingAccount: WalletAccount
 
     val totalFees: Zatoshi
         get() = quote.getTotalFeesZatoshi(proposal)
@@ -538,6 +541,7 @@ data class ExactInputSwapTransactionProposal(
     override val memo: Memo,
     override val proposal: Proposal,
     override val quote: SwapQuote,
+    override val fundingAccount: WalletAccount,
 ) : SwapTransactionProposal
 
 data class ExactOutputSwapTransactionProposal(
@@ -546,6 +550,7 @@ data class ExactOutputSwapTransactionProposal(
     override val memo: Memo,
     override val proposal: Proposal,
     override val quote: SwapQuote,
+    override val fundingAccount: WalletAccount,
 ) : SwapTransactionProposal
 
 /**

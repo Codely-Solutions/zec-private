@@ -84,10 +84,7 @@ class MainActivity : FragmentActivity() {
     private val handleExternalLink: HandleExternalLinkUseCase by inject()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Older navigation state can contain the plaintext restore phrase and obsolete destination IDs.
-        val restorableState =
-            savedInstanceState?.takeIf { it.getInt(NAVIGATION_STATE_VERSION_KEY) == NAVIGATION_STATE_VERSION }
-        super.onCreate(restorableState)
+        super.onCreate(restorableNavigationState(savedInstanceState))
         Twig.debug { "Activity state: Create" }
 
         setAllowedScreenOrientation()
@@ -344,7 +341,11 @@ class MainActivity : FragmentActivity() {
 
     companion object {
         private const val NAVIGATION_STATE_VERSION_KEY = "wallet_navigation_state_version"
-        private const val NAVIGATION_STATE_VERSION = 1
+        private const val NAVIGATION_STATE_VERSION = 2
+
+        // Older navigation state can contain a plaintext restore phrase or Keystone export.
+        internal fun restorableNavigationState(state: Bundle?): Bundle? =
+            state?.takeIf { it.getInt(NAVIGATION_STATE_VERSION_KEY) == NAVIGATION_STATE_VERSION }
 
         @VisibleForTesting
         internal val SPLASH_SCREEN_DELAY = 0.seconds

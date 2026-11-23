@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.model.SwapAsset
+import co.electriccoin.zcash.ui.common.model.positiveUsdPrice
 import co.electriccoin.zcash.ui.common.model.SwapDirection
 import co.electriccoin.zcash.ui.common.model.SwapDirection.SWAP_FROM_ZEC
 import co.electriccoin.zcash.ui.common.model.SwapDirection.SWAP_INTO_ZEC
@@ -374,12 +375,16 @@ internal class SwapVM(
             val snapshot = internalState.value
             if (snapshot.isRequestingQuote || quoteActionInProgress) return@launch
             val asset = snapshot.swapAsset ?: return@launch
+            if (asset.positiveUsdPrice == null || swapRepository.assets.value.zecAsset.positiveUsdPrice == null) {
+                return@launch
+            }
             val slippage = snapshot.slippage
             val direction = snapshot.swapDirection.coerceFor(isSelectedAccountSpendable.value)
             val contactNetwork = snapshot.selectedContact?.blockchain?.chainTicker
             val currentAddress = snapshot.selectedContact?.address ?: snapshot.addressText
             if (currentAddress != address || !validateSwapRecipient(
-                    address, asset.chainTicker, asset.tokenTicker, contactNetwork, allowPaymentAmount = false
+                    address, asset.chainTicker, asset.tokenTicker, contactNetwork,
+                    allowPaymentAmount = false, tokenContract = asset.contractAddress
                 ).isValid
             ) return@launch
             quoteActionInProgress = true

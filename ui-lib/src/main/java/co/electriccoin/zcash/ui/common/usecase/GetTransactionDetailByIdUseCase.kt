@@ -60,7 +60,7 @@ class GetTransactionDetailByIdUseCase(
 
             val metadataFlow =
                 transactionFlow
-                    .distinctUntilChangedBy { it.id to it.recipient }
+                    .distinctUntilChangedBy { Triple(it.id, it.recipient, it.accountUuid) }
                     .flatMapLatest {
                         metadataRepository.observeTransactionMetadata(it)
                     }.distinctUntilChanged()

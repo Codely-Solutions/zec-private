@@ -56,13 +56,14 @@ class GetSwapStatusUseCase(
 
                 while (true) {
                     try {
-                        val result = refresh(depositAddress, expectedMetadata)
+                        val (result, saved) = refresh(depositAddress, expectedMetadata)
                         if (result.status == SwapStatus.SUCCESS) {
                             donationPreferences?.recordSuccessfulTransaction()
                         }
                         data.update {
                             it.copy(
                                 status = result,
+                                savedMetadata = saved,
                                 isLoading = false,
                                 error = null
                             )
@@ -79,8 +80,8 @@ class GetSwapStatusUseCase(
                                 isLoading = false,
                                 error = e,
                                 savedMetadata = latest ?: it.savedMetadata,
-                                status = it.status?.takeIf { live ->
-                                    latest == null || live.matchesSavedStatus(latest)
+                                status = it.status?.takeIf {
+                                    latest == null || it.savedMetadata?.matchesSavedStatus(latest) == true
                                 },
                             )
                         }
@@ -92,20 +93,24 @@ class GetSwapStatusUseCase(
             awaitClose()
         }
 
-    private fun SwapQuoteStatus.matchesSavedStatus(saved: TransactionSwapMetadata): Boolean =
-        status == saved.status && amountOutFormatted.compareTo(saved.amountOutFormatted) == 0
+    private fun TransactionSwapMetadata.matchesSavedStatus(saved: TransactionSwapMetadata): Boolean =
+        status == saved.status &&
+            (executedAmountOut == null) == (saved.executedAmountOut == null) &&
+            amountOutFormatted.compareTo(saved.amountOutFormatted) == 0
 
-    private suspend fun refresh(depositAddress: String, expected: TransactionSwapMetadata): SwapQuoteStatus {
+    private suspend fun refresh(
+        depositAddress: String,
+        expected: TransactionSwapMetadata,
+    ): Pair<SwapQuoteStatus, TransactionSwapMetadata> {
         val refresh = synchronized(refreshes) {
             refreshes.getOrPut(depositAddress, ::RefreshLock).also { it.users++ }
         }
         try {
             return refresh.mutex.withLock {
                 val result = swapRepository.checkSwapStatus(expected)
-                if (!metadataRepository.updateSwap(expected, result)) {
-                    throw SwapRefreshNotSavedException(metadataRepository.reloadSwapMetadata(expected))
-                }
-                result
+                val saved = metadataRepository.updateSwap(expected, result)
+                    ?: throw SwapRefreshNotSavedException(metadataRepository.reloadSwapMetadata(expected))
+                result to saved
             }
         } finally {
             synchronized(refreshes) {

@@ -57,14 +57,14 @@ import kotlin.test.assertTrue
 class HWEnrollmentVMTest {
     private val enrollments =
         listOf(
-            HWWalletEnrollment.Keystone(ur = "ur:zcash-accounts/fixture"),
+            HWWalletEnrollment.Keystone(sessionId = "fixture-session"),
             HWWalletEnrollment.Ledger,
             HWWalletEnrollment.ViewOnly,
         )
 
     private val hardwareEnrollments =
         listOf(
-            HWWalletEnrollment.Keystone(ur = "ur:zcash-accounts/fixture"),
+            HWWalletEnrollment.Keystone(sessionId = "fixture-session"),
             HWWalletEnrollment.Ledger,
         )
 
@@ -96,7 +96,7 @@ class HWEnrollmentVMTest {
 
     @Test
     fun theVendorNeutralEnrollmentTextsAreOneStringForBothVendors() {
-        val keystone = brandingOf(HWWalletEnrollment.Keystone(ur = "ur"), viewOnlyContent)
+        val keystone = brandingOf(HWWalletEnrollment.Keystone(sessionId = "fixture-session"), viewOnlyContent)
         val ledger = brandingOf(HWWalletEnrollment.Ledger, viewOnlyContent)
         val keystoneNewOrActive = assertNotNull(keystone.newOrActive)
         val ledgerNewOrActive = assertNotNull(ledger.newOrActive)
@@ -121,7 +121,7 @@ class HWEnrollmentVMTest {
 
     @Test
     fun theLogoAndTestTagsAreWhatActuallyDifferPerVendor() {
-        val keystone = brandingOf(HWWalletEnrollment.Keystone(ur = "ur"), viewOnlyContent)
+        val keystone = brandingOf(HWWalletEnrollment.Keystone(sessionId = "fixture-session"), viewOnlyContent)
         val ledger = brandingOf(HWWalletEnrollment.Ledger, viewOnlyContent)
 
         assertEquals(HWWalletEnrollmentTag.KEYSTONE_NEW_DEVICE, keystone.newOrActive?.newDeviceTestTag)

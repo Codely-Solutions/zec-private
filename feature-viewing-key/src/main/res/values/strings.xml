@@ -26,6 +26,7 @@
     <string name="view_only_paste_label">Viewing Key</string>
     <string name="view_only_paste_placeholder">Paste viewing key...</string>
     <string name="view_only_paste_scan">Scan QR code</string>
+    <string name="view_only_paste_button">Paste</string>
     <string name="view_only_paste_disclaimer">This Account will be view and receive only. You can track its balance and activity, but can\'t use it to spend funds.</string>
 
     <string name="view_only_invalid_key_title">This key doesn’t look right</string>

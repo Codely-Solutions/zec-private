@@ -1,6 +1,5 @@
 package co.electriccoin.zcash.ui.common.usecase
 
-import cash.z.ecc.android.sdk.exception.InitializeException
 import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.ledger.LedgerAccountImporter
@@ -8,6 +7,10 @@ import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
 import co.electriccoin.zcash.ui.common.model.ViewOnlyPendingImportMissingException
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyAccountImporter
 import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
+import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
+import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
+import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
+import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
 import com.keystone.module.ZcashAccount
 import com.keystone.module.ZcashAccounts
 import io.mockk.coEvery
@@ -17,12 +20,11 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
-import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * The single vendor branch of the shared enrollment flow: a Keystone enrollment parses its UR and
+ * The single vendor branch of the shared enrollment flow: a Keystone enrollment resolves its session and
  * goes through the Keystone import, a Ledger enrollment goes straight to the Ledger one and returns
  * to the root when its pairing went missing, a view-only enrollment hands its birthday to the
  * view-only importer, which goes on to name the account, and returns to the root when its pending
@@ -37,19 +39,27 @@ class CreateHWWalletAccountUseCaseTest {
         runTest {
             val account = mockk<ZcashAccount>()
             val accounts = mockk<ZcashAccounts> { every { this@mockk.accounts } returns listOf(account) }
+            val session = KeystoneEnrollmentSession()
+            val enrollment = HWWalletEnrollment.Keystone(session.start(accounts))
             val createKeystoneAccount = mockk<CreateKeystoneAccountUseCase>(relaxed = true)
             val ledgerAccountImporter = mockk<LedgerAccountImporter>(relaxed = true)
+            val navigationRouter = mockk<NavigationRouter>(relaxed = true)
             val useCase =
                 useCase(
-                    accountsForUr = accounts,
+                    keystoneSession = session,
                     createKeystoneAccount = createKeystoneAccount,
                     ledgerAccountImporter = ledgerAccountImporter,
+                    navigationRouter = navigationRouter,
                 )
 
-            useCase(HWWalletEnrollment.Keystone(UR), birthday)
+            useCase(enrollment, birthday)
 
             coVerify(exactly = 1) { createKeystoneAccount.invoke(accounts, account, birthday) }
             coVerify(exactly = 0) { ledgerAccountImporter.importAccount(any()) }
+            assertFalse(useCase.isReady(enrollment))
+            verify(exactly = 1) {
+                navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, KeepOpenArgs(KeepOpenFlow.KEYSTONE))
+            }
         }
 
     @Test
@@ -134,13 +144,18 @@ class CreateHWWalletAccountUseCaseTest {
         }
 
     @Test
-    fun aKeystoneUrWithNoAccountsFailsInsteadOfImportingNothing() =
+    fun aLostKeystoneSessionRestartsScanningWithoutImporting() =
         runTest {
-            val accounts = mockk<ZcashAccounts> { every { this@mockk.accounts } returns emptyList() }
-            val useCase = useCase(accountsForUr = accounts)
+            val createKeystoneAccount = mockk<CreateKeystoneAccountUseCase>(relaxed = true)
+            val navigationRouter = mockk<NavigationRouter>(relaxed = true)
+            val useCase =
+                useCase(createKeystoneAccount = createKeystoneAccount, navigationRouter = navigationRouter)
 
-            assertFailsWith<InitializeException.NoAccountLoaded> {
-                useCase(HWWalletEnrollment.Keystone(UR), birthday = null)
+            useCase(HWWalletEnrollment.Keystone("expired"), birthday = null)
+
+            coVerify(exactly = 0) { createKeystoneAccount.invoke(any(), any(), any()) }
+            verify(exactly = 1) {
+                navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, ScanKeystoneSignInRequest)
             }
         }
 
@@ -148,12 +163,12 @@ class CreateHWWalletAccountUseCaseTest {
     fun readinessFollowsWhatEachVendorNeeds() {
         val withAccounts = mockk<ZcashAccounts> { every { accounts } returns listOf(mockk()) }
         val withoutAccounts = mockk<ZcashAccounts> { every { accounts } returns emptyList() }
+        val session = KeystoneEnrollmentSession()
+        val useCase = useCase(keystoneSession = session)
 
-        assertTrue(useCase(accountsForUr = withAccounts).isReady(HWWalletEnrollment.Keystone(UR)))
-        assertFalse(useCase(accountsForUr = withoutAccounts).isReady(HWWalletEnrollment.Keystone(UR)))
-        assertFalse(
-            useCase(parseThrows = true).isReady(HWWalletEnrollment.Keystone(UR))
-        )
+        assertTrue(useCase.isReady(HWWalletEnrollment.Keystone(session.start(withAccounts))))
+        assertFalse(useCase.isReady(HWWalletEnrollment.Keystone(session.start(withoutAccounts))))
+        assertFalse(useCase.isReady(HWWalletEnrollment.Keystone("expired")))
 
         assertTrue(useCase(hasPendingPairing = true).isReady(HWWalletEnrollment.Ledger))
         assertFalse(useCase(hasPendingPairing = false).isReady(HWWalletEnrollment.Ledger))
@@ -163,8 +178,7 @@ class CreateHWWalletAccountUseCaseTest {
     }
 
     private fun useCase(
-        accountsForUr: ZcashAccounts = mockk { every { accounts } returns listOf(mockk()) },
-        parseThrows: Boolean = false,
+        keystoneSession: KeystoneEnrollmentSession = KeystoneEnrollmentSession(),
         hasPendingPairing: Boolean = true,
         hasPendingViewOnlyImport: Boolean = true,
         createKeystoneAccount: CreateKeystoneAccountUseCase = mockk(relaxed = true),
@@ -172,15 +186,7 @@ class CreateHWWalletAccountUseCaseTest {
         viewOnlyAccountImporter: ViewOnlyAccountImporter = mockk(relaxed = true),
         navigationRouter: NavigationRouter = mockk(relaxed = true),
     ) = CreateHWWalletAccountUseCase(
-        parseKeystoneUrToZashiAccounts =
-            mockk {
-                if (parseThrows) {
-                    every { this@mockk.invoke(any()) } throws
-                        InvalidKeystoneSignInQRException(RuntimeException("bad ur"))
-                } else {
-                    every { this@mockk.invoke(any()) } returns accountsForUr
-                }
-            },
+        keystoneSession = keystoneSession,
         createKeystoneAccount = createKeystoneAccount,
         ledgerAccountImporter =
             ledgerAccountImporter.also {
@@ -193,5 +199,3 @@ class CreateHWWalletAccountUseCaseTest {
         navigationRouter = navigationRouter,
     )
 }
-
-private const val UR = "ur:zcash-accounts/fixture"

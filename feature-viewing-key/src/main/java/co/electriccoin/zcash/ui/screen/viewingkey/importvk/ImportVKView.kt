@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -80,6 +81,11 @@ private fun KeyField(state: ImportVKState) {
                             .testTag(ImportVKTag.SCAN_BUTTON),
                 )
             },
+        )
+        Spacer(Modifier.height(6.dp))
+        ZashiButton(
+            state = state.pasteButton,
+            modifier = Modifier.align(Alignment.End).testTag(ImportVKTag.PASTE_BUTTON),
         )
     }
 }

@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.repository.PendingViewOnlyImport
 import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
+import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitViewOnlyKeyResult
 import co.electriccoin.zcash.ui.common.usecase.SubmitViewOnlyKeyUseCase
 import co.electriccoin.zcash.ui.common.usecase.UfvkDescriber
@@ -21,6 +22,7 @@ import co.electriccoin.zcash.ui.screen.viewingkey.importvk.ImportVKVM
 import co.electriccoin.zcash.ui.screen.viewingkey.scan.ScanVKArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
+import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.CompletableDeferred
@@ -48,14 +50,19 @@ import kotlin.test.assertTrue
  * The paste screen enables Continue for any text, submits it once, and routes by the outcome: an
  * importable key to the birthday date, a key the wallet holds to the "already imported" sheet, anything else
  * to the invalid-key sheet. A key the SDK fails to read opens the general error screen instead, and
- * Continue can be tried again. A pasted key is wiped from the clipboard on Continue and on back, and
- * the key never shows up in the state's text.
+ * Continue can be tried again. An explicitly pasted item is cleared if it still matches the
+ * clipboard on Back or accepted Continue. The key is redacted from the state's string form.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ImportVKVMTest {
     private val navigationRouter = mockk<NavigationRouter>(relaxed = true)
 
     private val clearClipboard = mockk<ClearClipboardUseCase>(relaxed = true)
+
+    private var clipboardText: String? = null
+    private val readClipboardText = mockk<ReadClipboardTextUseCase> {
+        every { this@mockk.invoke() } answers { clipboardText }
+    }
 
     private val repository = ViewOnlyPendingImportRepositoryImpl()
 
@@ -251,7 +258,7 @@ class ImportVKVMTest {
         runTest {
             val vm = vm()
             collect(vm)
-            type(vm, TYPED)
+            paste(vm)
 
             vm.state.value.continueButton
                 .onClick()
@@ -265,7 +272,7 @@ class ImportVKVMTest {
         runTest {
             val vm = vm()
             collect(vm)
-            type(vm, TYPED)
+            paste(vm)
 
             vm.state.value.onBack()
 
@@ -273,11 +280,65 @@ class ImportVKVMTest {
         }
 
     @Test
-    fun aTypedKeyLeavesTheClipboardAlone() =
+    fun aPastedKeyIsWipedWhenItWasAlreadyImported() =
+        runTest {
+            result = SubmitViewOnlyKeyResult.AlreadyImported
+            val vm = vm()
+            collect(vm)
+            paste(vm)
+
+            vm.state.value.continueButton.onClick()
+            runCurrent()
+
+            verify(exactly = 1) { clearClipboard.invoke() }
+            verify(exactly = 1) { navigationRouter.forward(AlreadyImportedVKArgs) }
+        }
+
+    @Test
+    fun replacementClipboardItemsSurviveBackAndContinue() =
+        runTest {
+            val first = vm()
+            collect(first)
+            paste(first)
+            clipboardText = "unrelated clipboard text"
+            first.state.value.onBack()
+
+            val second = vm()
+            collect(second)
+            paste(second)
+            clipboardText = "another replacement"
+            second.state.value.continueButton.onClick()
+            runCurrent()
+
+            verify(exactly = 0) { clearClipboard.invoke() }
+            verify(exactly = 1) { navigationRouter.forward(HWDateArgs(HWWalletEnrollment.ViewOnly)) }
+        }
+
+    @Test
+    fun anUnavailableClipboardReadKeepsTheFieldAndSkipsCleanup() =
         runTest {
             val vm = vm()
             collect(vm)
-            TYPED.forEachIndexed { index, _ -> type(vm, TYPED.substring(0, index + 1)) }
+            vm.state.value.pasteButton.onClick()
+            runCurrent()
+            assertFalse(vm.state.value.continueButton.isEnabled)
+
+            paste(vm)
+            clipboardText = null
+            vm.state.value.continueButton.onClick()
+            runCurrent()
+
+            verify(exactly = 0) { clearClipboard.invoke() }
+            verify(exactly = 1) { navigationRouter.forward(HWDateArgs(HWWalletEnrollment.ViewOnly)) }
+        }
+
+    @Test
+    fun oneLongFieldEditLeavesTheClipboardAlone() =
+        runTest {
+            val vm = vm()
+            collect(vm)
+            clipboardText = TYPED
+            type(vm, TYPED)
 
             vm.state.value.continueButton
                 .onClick()
@@ -285,6 +346,7 @@ class ImportVKVMTest {
             vm.state.value.onBack()
 
             verify(exactly = 0) { clearClipboard.invoke() }
+            verify(exactly = 0) { readClipboardText.invoke() }
         }
 
     @Test
@@ -333,9 +395,16 @@ class ImportVKVMTest {
         runCurrent()
     }
 
+    private fun TestScope.paste(vm: ImportVKVM) {
+        clipboardText = TYPED
+        vm.state.value.pasteButton.onClick()
+        runCurrent()
+    }
+
     private fun vm(submitViewOnlyKey: SubmitViewOnlyKeyUseCase = submit) =
         ImportVKVM(
             submitViewOnlyKey = submitViewOnlyKey,
+            readClipboardText = readClipboardText,
             clearClipboard = clearClipboard,
             pendingImportRepository = repository,
             navigationRouter = navigationRouter,

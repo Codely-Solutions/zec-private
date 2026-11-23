@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import io.mockk.coEvery
@@ -52,16 +53,17 @@ class TransactionMetadataEditUseCaseTest {
         }
 
     @Test
-    fun flippingABookmarkReturnsTheRepositoryResult() =
+    fun settingABookmarkReturnsTheRepositoryResult() =
         runTest {
-            val useCase = FlipTransactionBookmarkUseCase(metadataRepository, showError)
-            coEvery { metadataRepository.flipTxBookmark("tx1") } returns false
+            val account = AccountUuid.new(ByteArray(16))
+            val useCase = SetTransactionBookmarkUseCase(metadataRepository, showError)
+            coEvery { metadataRepository.setTxBookmark("tx1", true, account, 0) } returns false
 
-            assertFalse(useCase("tx1"))
+            assertFalse(useCase("tx1", true, account, 0))
             verify(exactly = 1) { showError(any()) }
 
-            coEvery { metadataRepository.flipTxBookmark("tx1") } returns true
-            assertTrue(useCase("tx1"))
+            coEvery { metadataRepository.setTxBookmark("tx1", true, account, 0) } returns true
+            assertTrue(useCase("tx1", true, account, 0))
             verify(exactly = 1) { showError(any()) }
         }
 }

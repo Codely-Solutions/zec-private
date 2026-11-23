@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.model.SwapAsset
+import co.electriccoin.zcash.ui.common.model.positiveUsdPrice
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.canSpend
@@ -185,7 +186,6 @@ internal class PayVM(
                     val refreshed = catalog.firstOrNull { it.assetId == selected.assetId }
                     when {
                         refreshed == selected -> state
-                        refreshed != null && selected.usdPrice != null -> state.copy(asset = refreshed)
                         refreshed != null -> state.withAsset(refreshed)
                         !assets.isLoading -> state.withAsset(null)
                         else -> state
@@ -275,11 +275,14 @@ internal class PayVM(
             val snapshot = internalState.value
             if (snapshot.isRequestingQuote || quoteActionInProgress) return@launch
             val asset = snapshot.asset ?: return@launch
+            if (asset.positiveUsdPrice == null || swapRepository.assets.value.zecAsset.positiveUsdPrice == null) {
+                return@launch
+            }
             val slippage = snapshot.slippage
             val contactNetwork = snapshot.selectedABContact?.blockchain?.chainTicker
             val currentAddress = snapshot.selectedABContact?.address ?: snapshot.address
             if (currentAddress != address || !validateSwapRecipient(
-                    address, asset.chainTicker, asset.tokenTicker, contactNetwork
+                    address, asset.chainTicker, asset.tokenTicker, contactNetwork, tokenContract = asset.contractAddress
                 ).isValid
             ) return@launch
             quoteActionInProgress = true
@@ -306,7 +309,9 @@ internal class PayVM(
 
     private fun onAddressChange(new: String) =
         internalState.update { state ->
-            val recipient = validateSwapRecipient(new, state.asset?.chainTicker, state.asset?.tokenTicker)
+            val recipient = validateSwapRecipient(
+                new, state.asset?.chainTicker, state.asset?.tokenTicker, tokenContract = state.asset?.contractAddress
+            )
             val edited = state.copy(
                 selectedABContact = null,
                 address = new,
@@ -339,14 +344,15 @@ internal class PayVM(
                     selectedABContact?.address ?: address,
                     asset?.chainTicker,
                     asset?.tokenTicker,
-                    selectedABContact?.blockchain?.chainTicker
+                    selectedABContact?.blockchain?.chainTicker,
+                    tokenContract = asset?.contractAddress,
                 )
             } else {
                 null
             }
         val requestedAmount = recipient?.input?.amount.takeIf { recipient?.isValid == true }
         val amountState = requestedAmount?.let { NumberTextFieldInnerState.fromAmount(it) } ?: amount
-        return if (amountState.amount == null && fiatAmount.amount != null && asset?.usdPrice != null) {
+        return if (amountState.amount == null && fiatAmount.amount != null) {
             copy(
                 asset = asset,
                 amount =

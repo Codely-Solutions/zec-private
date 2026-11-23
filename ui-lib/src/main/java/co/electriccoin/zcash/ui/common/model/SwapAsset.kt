@@ -24,6 +24,9 @@ interface SwapAsset {
         get() = blockchain.chainIcon
 }
 
+internal val SwapAsset?.positiveUsdPrice: BigDecimal?
+    get() = this?.usdPrice?.takeIf { it.signum() > 0 }
+
 fun SwapAsset.isSame(
     token: String,
     chain: String

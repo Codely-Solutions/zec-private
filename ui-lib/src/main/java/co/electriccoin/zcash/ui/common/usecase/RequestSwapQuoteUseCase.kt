@@ -165,7 +165,8 @@ class RequestSwapQuoteUseCase(
         allowPaymentAmount: Boolean = true
     ): String? {
         val validation = validateSwapRecipient(
-            value, selectedAsset.chainTicker, selectedAsset.tokenTicker, contactNetwork, allowPaymentAmount
+            value, selectedAsset.chainTicker, selectedAsset.tokenTicker, contactNetwork, allowPaymentAmount,
+            tokenContract = selectedAsset.contractAddress,
         )
         val address = validation.input?.address
         val syntax = address?.let { RecipientAddressPolicy.validate(it, selectedAsset.chainTicker.lowercase()) }

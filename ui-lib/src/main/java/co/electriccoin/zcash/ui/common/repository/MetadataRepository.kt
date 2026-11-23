@@ -66,15 +66,15 @@ interface MetadataRepository {
      * Returns whether the change was saved. The write finishes in the repository's own scope even
      * when the caller is cancelled, and a false result has already been logged.
      */
-    suspend fun flipTxBookmark(txId: String): Boolean
+    suspend fun setTxBookmark(txId: String, isBookmarked: Boolean, accountUuid: AccountUuid, token: Long): Boolean
 
     /**
-     * Returns whether the note was saved; see [flipTxBookmark].
+     * Returns whether the note was saved; see [setTxBookmark].
      */
     suspend fun createOrUpdateTxNote(txId: String, note: String): Boolean
 
     /**
-     * Returns whether the note was deleted; see [flipTxBookmark].
+     * Returns whether the note was deleted; see [setTxBookmark].
      */
     suspend fun deleteTxNote(txId: String): Boolean
 
@@ -84,7 +84,7 @@ interface MetadataRepository {
     fun markTxMemoAsRead(txId: String)
 
     /**
-     * Returns whether the swap was saved; see [flipTxBookmark].
+     * Returns whether the swap was saved; see [setTxBookmark].
      */
     suspend fun markTxAsSwap(
         depositAddress: String,
@@ -98,23 +98,24 @@ interface MetadataRepository {
         status: SwapStatus,
         reviewedIdentity: String? = null,
         signedQuoteEvidence: NearSignedQuoteEvidence? = null,
+        account: WalletAccount? = null,
     ): Boolean
 
     /** Persists a refresh for the same account and saved entry that owned the request. */
-    suspend fun updateSwap(expected: TransactionSwapMetadata, result: SwapQuoteStatus): Boolean
+    suspend fun updateSwap(expected: TransactionSwapMetadata, result: SwapQuoteStatus): TransactionSwapMetadata?
 
     // fun deleteSwap(depositAddress: String)
 
     /**
      * A background write: a failure is only logged.
      */
-    fun addSwapAssetToHistory(tokenTicker: String, chainTicker: String)
+    fun addSwapAssetToHistory(tokenTicker: String, chainTicker: String, account: WalletAccount? = null)
 
     fun observeTransactionMetadata(transaction: Transaction): Flow<TransactionMetadata>
 
     fun observeSwapMetadata(): Flow<List<TransactionSwapMetadata>?>
 
-    suspend fun getSwapMetadata(depositAddress: String): TransactionSwapMetadata?
+    suspend fun getSwapMetadata(depositAddress: String, account: WalletAccount? = null): TransactionSwapMetadata?
 
     /** Reloads only the original wallet generation, account and saved route that owned a refresh. */
     suspend fun reloadSwapMetadata(expected: TransactionSwapMetadata): TransactionSwapMetadata?
@@ -124,7 +125,7 @@ interface MetadataRepository {
     /** [accountUuid]'s icon colour from [metadata], null while unread or when it has none. */
     fun observeColor(accountUuid: AccountUuid): Flow<Color?>
 
-    /** Stores [color] as [account]'s icon colour and returns whether it was saved; see [flipTxBookmark]. */
+    /** Stores [color] as [account]'s icon colour and returns whether it was saved; see [setTxBookmark]. */
     suspend fun setAccountColor(account: WalletAccount, color: Color): Boolean
 
     suspend fun delete()
@@ -174,10 +175,19 @@ class MetadataRepositoryImpl(
             metadata
         ) { uuid, all -> uuid?.let { all[it] } }.distinctUntilChanged()
 
-    override suspend fun flipTxBookmark(txId: String) =
-        updateMetadataAndAwait {
-            metadataDataSource.flipTxAsBookmarked(txId = txId, key = it)
+    override suspend fun setTxBookmark(
+        txId: String,
+        isBookmarked: Boolean,
+        accountUuid: AccountUuid,
+        token: Long,
+    ): Boolean {
+        if (token != walletWriteAccess.token()) return false
+        val account = accountDataSource.allAccounts.value
+            ?.firstOrNull { it.sdkAccount.accountUuid == accountUuid } ?: return false
+        return updateMetadataAndAwait(account, token) { key ->
+            metadataDataSource.setTxBookmark(txId, isBookmarked, key)
         }
+    }
 
     override suspend fun createOrUpdateTxNote(txId: String, note: String) =
         updateMetadataAndAwait {
@@ -206,7 +216,8 @@ class MetadataRepositoryImpl(
         status: SwapStatus,
         reviewedIdentity: String?,
         signedQuoteEvidence: NearSignedQuoteEvidence?,
-    ) = updateMetadataAndAwait {
+        account: WalletAccount?,
+    ) = updateMetadataAndAwait(account) {
         metadataDataSource.markTxAsSwap(
             depositAddress = depositAddress,
             provider = provider,
@@ -227,17 +238,19 @@ class MetadataRepositoryImpl(
         )
     }
 
-    override suspend fun updateSwap(expected: TransactionSwapMetadata, result: SwapQuoteStatus): Boolean {
+    override suspend fun updateSwap(expected: TransactionSwapMetadata, result: SwapQuoteStatus): TransactionSwapMetadata? {
         val account = expected.ownerAccount
         val token = expected.walletWriteToken
-        if (account == null || token == null) return false
-        val updatedAt = (result as? NearSwapQuoteStatus)?.response?.updatedAt?.let { kotlin.time.Instant.parse(it) }
+        if (account == null || token == null) return null
+        val nearResult = result as? NearSwapQuoteStatus
+        val updatedAt = nearResult?.response?.updatedAt?.let { kotlin.time.Instant.parse(it) }
         val key = getMetadataKey(account, token)
         return mutex.withLock {
             walletWriteAccess.write(token) {
                 metadataDataSource.updateSwap(
                     depositAddress = expected.depositAddress,
-                    amountOutFormatted = result.amountOutFormatted,
+                    amountOutFormatted = result.quotedAmountOut,
+                    executedAmountOut = result.executedAmountOut,
                     status = result.status,
                     mode = result.mode,
                     origin = expected.origin,
@@ -246,8 +259,8 @@ class MetadataRepositoryImpl(
                     statusUpdatedAt = updatedAt,
                     expectedCreatedAt = expected.lastUpdated,
                     expectedReviewedIdentity = expected.reviewedIdentity,
-                )
-            } ?: false
+                )?.toBusinessObject(simpleSwapAssetProvider)?.copy(ownerAccount = account, walletWriteToken = token)
+            }
         }
     }
 
@@ -256,8 +269,8 @@ class MetadataRepositoryImpl(
     //         metadataDataSource.deleteSwap(depositAddress = depositAddress, key = it)
     //     }
 
-    override fun addSwapAssetToHistory(tokenTicker: String, chainTicker: String) =
-        updateMetadata {
+    override fun addSwapAssetToHistory(tokenTicker: String, chainTicker: String, account: WalletAccount?) =
+        updateMetadata(account) {
             metadataDataSource.addSwapAssetToHistory(tokenTicker = tokenTicker, chainTicker = chainTicker, key = it)
         }
 
@@ -265,7 +278,11 @@ class MetadataRepositoryImpl(
         val txId = transaction.id.txIdString()
         val depositAddress = transaction.recipient
 
-        return selectedMetadata
+        val accountUuid = transaction.accountUuid
+        val generation = walletWriteAccess.token()
+        val accountMetadataFlow =
+            if (accountUuid == null) selectedMetadata else metadata.map { it[accountUuid] }
+        return accountMetadataFlow
             .filterNotNull()
             .map { metadata ->
                 val accountMetadata = metadata.accountMetadata
@@ -279,7 +296,8 @@ class MetadataRepositoryImpl(
                     isBookmarked = accountMetadata.bookmarked.find { it.txId == txId }?.isBookmarked == true,
                     isRead = accountMetadata.read.any { it == txId },
                     note = accountMetadata.annotations.find { it.txId == txId }?.content,
-                    swapMetadata = swapMetadata?.toBusinessObject(simpleSwapAssetProvider)
+                    swapMetadata = swapMetadata?.toBusinessObject(simpleSwapAssetProvider),
+                    bookmarkWriteToken = generation
                 )
             }.distinctUntilChanged()
     }
@@ -294,13 +312,19 @@ class MetadataRepositoryImpl(
                     ?.map { it.toBusinessObject(simpleSwapAssetProvider) }
             }.distinctUntilChanged()
 
-    override suspend fun getSwapMetadata(depositAddress: String): TransactionSwapMetadata? {
+    override suspend fun getSwapMetadata(depositAddress: String, account: WalletAccount?): TransactionSwapMetadata? {
         val token = walletWriteAccess.token()
-        val (owner, content) = combine(accountDataSource.selectedAccount, metadata) { account, all ->
-            account?.let { owner -> all[owner.sdkAccount.accountUuid]?.let { owner to it } }
-        }.filterNotNull().first()
-        return content.accountMetadata.swaps.swapIds
-            .firstOrNull { it.depositAddress == depositAddress }
+        val (owner, content) = if (account != null) {
+            val key = getMetadataKey(account, token)
+            val saved = mutex.withLock { walletWriteAccess.write(token) { metadataDataSource.read(key) } }
+            account to saved
+        } else {
+            combine(accountDataSource.selectedAccount, metadata) { selected, all ->
+                selected?.let { all[it.sdkAccount.accountUuid]?.let { data -> selected to data } }
+            }.filterNotNull().first()
+        }
+        return content?.accountMetadata?.swaps?.swapIds
+            ?.firstOrNull { it.depositAddress == depositAddress }
             ?.toBusinessObject(simpleSwapAssetProvider)
             ?.copy(ownerAccount = owner, walletWriteToken = token)
     }
@@ -365,16 +389,16 @@ class MetadataRepositoryImpl(
         }
     }
 
-    private fun updateMetadata(block: suspend (MetadataKey) -> Boolean) {
+    private fun updateMetadata(account: WalletAccount? = null, block: suspend (MetadataKey) -> Boolean) {
         val token = walletWriteAccess.token()
-        scope.launch { updateMetadataLocked(block = block, token = token) }
+        scope.launch { updateMetadataLocked(account = account, block = block, token = token) }
     }
 
     private suspend fun updateMetadataAndAwait(
         account: WalletAccount? = null,
+        token: Long = walletWriteAccess.token(),
         block: suspend (MetadataKey) -> Boolean
     ): Boolean {
-        val token = walletWriteAccess.token()
         return scope.async { updateMetadataLocked(account, block, token) }.await()
     }
 
@@ -446,7 +470,8 @@ data class TransactionMetadata(
     val isBookmarked: Boolean,
     val isRead: Boolean,
     val note: String?,
-    val swapMetadata: TransactionSwapMetadata?
+    val swapMetadata: TransactionSwapMetadata?,
+    internal val bookmarkWriteToken: Long? = null,
 )
 
 data class TransactionSwapMetadata(
@@ -464,6 +489,8 @@ data class TransactionSwapMetadata(
     internal val ownerAccount: WalletAccount? = null,
     internal val walletWriteToken: Long? = null,
     internal val signedQuoteEvidence: NearSignedQuoteEvidence? = null,
+    val quotedAmountOut: BigDecimal? = null,
+    val executedAmountOut: BigDecimal? = null,
 ) {
     val status: SwapStatus
         get() = recordedStatus ?: SwapStatus.SUCCESS
@@ -502,7 +529,9 @@ internal fun SwapMetadataV3.toBusinessObject(
                 SwapMode.FLEX_INPUT
             },
         recordedStatus = status,
-        amountOutFormatted = amountOutFormatted ?: BigDecimal(0),
+        amountOutFormatted = executedAmountOut ?: quotedAmountOut ?: amountOutFormatted ?: BigDecimal.ZERO,
+        quotedAmountOut = quotedAmountOut,
+        executedAmountOut = executedAmountOut,
         provider = provider,
         totalFees = totalFees,
         totalFeesUsd = totalFeesUsd,

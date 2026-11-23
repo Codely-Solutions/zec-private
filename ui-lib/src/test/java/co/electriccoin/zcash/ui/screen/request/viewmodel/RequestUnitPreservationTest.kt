@@ -119,6 +119,23 @@ class RequestUnitPreservationTest {
         }
     }
 
+    @Test
+    fun memoRetainsItsZecAmountAcrossRateLossAndBackRevalidatesFiat() = runTest {
+        fixture { vm, rate, builder ->
+            enterFiat(vm)
+            amount(vm).onDone()
+            assertEquals("0.25", assertIs<RequestState.Memo>(vm.state.value).request.memoState.zecAmount)
+            rate.value = data(0.0)
+            assertIs<RequestState.Memo>(vm.state.value).onBack()
+            assertFalse(amount(vm).canContinue)
+            rate.value = data(100.0)
+            amount(vm).onDone()
+            rate.value = ExchangeRateState.OptedOut
+            assertIs<RequestState.Memo>(vm.state.value).onDone()
+            verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.25")) == 0 }, "") }
+        }
+    }
+
     private fun enterFiat(vm: RequestVM) {
         amount(vm).onSwitch(RequestCurrency.FIAT)
         amount(vm).onAmount(OnAmount.Number(2))

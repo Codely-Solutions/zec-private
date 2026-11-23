@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.FiatCurrency
+import cash.z.ecc.android.sdk.model.TransactionId
 import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.android.sdk.model.Zatoshi
 import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
@@ -37,7 +38,9 @@ import co.electriccoin.zcash.ui.common.provider.MetadataStorageProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SimpleSwapAssetProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.MetadataRepositoryImpl
+import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataEncryptorImpl
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataKey
 import co.electriccoin.zcash.ui.common.serialization.metadata.MetadataSerializer
@@ -46,8 +49,14 @@ import co.electriccoin.zcash.ui.common.usecase.GetSwapStatusUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetReloadableSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.common.usecase.SaveORSwapUseCase
+import co.electriccoin.zcash.ui.common.usecase.SetTransactionBookmarkUseCase
+import co.electriccoin.zcash.ui.common.usecase.ShowErrorUseCase
 import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
+import co.electriccoin.zcash.ui.common.mapper.ActivityMapper
+import co.electriccoin.zcash.ui.common.usecase.ActivityData
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
+import co.electriccoin.zcash.ui.design.util.StyledStringResource
 import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailVM
 import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailArgs
 import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
@@ -59,10 +68,12 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkObject
 import io.mockk.unmockkObject
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,6 +96,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -211,6 +223,64 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun successfulUpdatesKeepQuoteAndExecutionAcrossSparseResponsesAndRestart() = runTest {
+        val quote = fundingQuote(SwapType.FLEX_INPUT)
+        val initial = repository(metadataProvider)
+        SaveORSwapUseCase(mockk(), initial, mockk()).persistBeforeFunding(quote)
+        val quoteJson = Json.encodeToString(QuoteResponseDto.serializer(), quote.response)
+        suspend fun lookup(time: String, output: String = ""): SwapQuoteStatusData {
+            val response = Json.decodeFromString<SwapStatusResponseDto>(
+                """
+                {
+                    "correlationId":"synthetic-status", "quoteResponse":$quoteJson,
+                    "status":"SUCCESS", "updatedAt":"$time",
+                    "swapDetails":{
+                        "intentHashes":[], "nearTxHashes":[],
+                        "originChainTxHashes":[], "destinationChainTxHashes":[]$output
+                    }
+                }
+                """.trimIndent()
+            )
+            val status = NearSwapQuoteStatus(
+                response, quote.originAsset, quote.destinationAsset,
+                quote.depositAddress, quote.destinationAddress, quote.refundAddress,
+            )
+            val swaps = mockk<SwapRepository> { coEvery { checkSwapStatus(any()) } returns status }
+            return GetSwapStatusUseCase(repository(metadataProvider), swaps)("deposit")
+        }
+        val firstTime = "2026-11-22T12:01:00Z"
+        val laterTime = "2026-11-22T12:02:00Z"
+        val quoted = assertNotNull(lookup(firstTime).savedMetadata)
+        assertEquals(BigDecimal.ONE, quoted.quotedAmountOut)
+        assertNull(quoted.executedAmountOut)
+        fun activityAmount(swap: TransactionSwapMetadata) =
+            (ActivityMapper().createTransactionState(ActivityData.BySwap(swap), Instant.EPOCH, {}, {}, {}).value
+                as StyledStringResource.ByStringResource).resource
+        val expectedExecution = BigDecimal("1.23456789")
+        val quotedAmount = stringResByCurrencyNumber(BigDecimal.ONE, "ZEC")
+        assertEquals(stringRes(R.string.private_activity_quoted_amount, quotedAmount), activityAmount(quoted))
+
+        assertNull(lookup(firstTime, ", \"amountOut\":\"123456789\"").error)
+        assertNull(lookup(firstTime).error)
+        val sparse = lookup(laterTime)
+        assertNull(sparse.error)
+        assertNull(sparse.status?.executedAmountOut)
+        assertEquals(expectedExecution, sparse.savedMetadata?.executedAmountOut)
+        assertEquals(expectedExecution, sparse.savedMetadata?.amountOutFormatted)
+        val reread = assertNotNull(repository(metadataProvider).getSwapMetadata("deposit"))
+        assertEquals(BigDecimal.ONE, reread.quotedAmountOut)
+        assertEquals(expectedExecution, reread.executedAmountOut)
+        assertEquals(expectedExecution, storedSwaps().swapIds.single().amountOutFormatted)
+        assertEquals(
+            stringResByCurrencyNumber(expectedExecution, "ZEC"),
+            activityAmount(reread),
+        )
+        val conflict = lookup(laterTime, ", \"amountOutFormatted\":\"3\"")
+        assertNotNull(conflict.error)
+        assertEquals(expectedExecution, conflict.savedMetadata?.executedAmountOut)
+    }
+
+    @Test
     fun aRejectedRefreshReloadsOnlyItsOriginalEntryAndWalletGeneration() = runTest {
         val ownership = WalletWriteAccess()
         val metadata = repository(metadataProvider, ownership)
@@ -244,12 +314,13 @@ class MetadataDataSourceFileTest {
         SaveORSwapUseCase(mockk(), metadata, mockk()).persistBeforeFunding(fundingQuote(SwapType.FLEX_INPUT))
         val expected = checkNotNull(metadata.getSwapMetadata("deposit"))
         val settled = mockk<SwapQuoteStatus> {
-            every { amountOutFormatted } returns BigDecimal.ONE
+            every { quotedAmountOut } returns BigDecimal.ONE
+            every { executedAmountOut } returns BigDecimal.ONE
             every { status } returns SwapStatus.SUCCESS
             every { mode } returns SwapMode.FLEX_INPUT
         }
         sync.fail = true
-        assertFalse(metadata.updateSwap(expected, settled))
+        assertNull(metadata.updateSwap(expected, settled))
         assertEquals(SwapStatus.SUCCESS, storedSwaps().swapIds.single().status)
         assertFailsWith<IOException> { metadata.reloadSwapMetadata(expected) }
         sync.fail = false
@@ -269,11 +340,12 @@ class MetadataDataSourceFileTest {
         val expected = checkNotNull(metadata.getSwapMetadata("deposit"))
         assertEquals(SwapMode.EXACT_INPUT, expected.mode)
         val settled = mockk<SwapQuoteStatus> {
-            every { amountOutFormatted } returns BigDecimal.ONE
+            every { quotedAmountOut } returns BigDecimal.ONE
+            every { executedAmountOut } returns BigDecimal.ONE
             every { status } returns SwapStatus.SUCCESS
             every { mode } returns SwapMode.EXACT_OUTPUT
         }
-        assertTrue(metadata.updateSwap(expected, settled))
+        assertNotNull(metadata.updateSwap(expected, settled))
         val reloaded = checkNotNull(metadata.reloadSwapMetadata(expected))
         assertEquals(SwapStatus.SUCCESS, reloaded.status)
         assertEquals(SwapMode.EXACT_OUTPUT, reloaded.mode)
@@ -345,9 +417,10 @@ class MetadataDataSourceFileTest {
         val success = mockk<SwapQuoteStatus> {
             every { status } returns SwapStatus.SUCCESS
             every { mode } returns SwapMode.FLEX_INPUT
-            every { amountOutFormatted } returns BigDecimal.TEN
+            every { quotedAmountOut } returns BigDecimal.ONE
+            every { executedAmountOut } returns BigDecimal.TEN
         }
-        assertTrue(restarted.updateSwap(expected, success))
+        assertNotNull(restarted.updateSwap(expected, success))
         val settled = storedSwaps().swapIds.single()
         assertEquals(SwapStatus.SUCCESS, settled.status)
         assertEquals(evidence, settled.signedQuoteEvidence)
@@ -474,17 +547,55 @@ class MetadataDataSourceFileTest {
         }
 
     @Test
-    fun flippingABookmarkTwiceKeepsAnUnbookmarkedEntry() =
+    fun removingABookmarkKeepsAnUnbookmarkedEntry() =
         runTest {
             val dataSource = dataSource()
 
-            dataSource.flipTxAsBookmarked("tx1", key)
+            dataSource.setTxBookmark("tx1", true, key)
             assertEquals(listOf(true), read(canonicalName).accountMetadata.bookmarked.map { it.isBookmarked })
 
-            dataSource.flipTxAsBookmarked("tx1", key)
+            dataSource.setTxBookmark("tx1", false, key)
             val bookmarks = read(canonicalName).accountMetadata.bookmarked
             assertEquals(listOf("tx1" to false), bookmarks.map { it.txId to it.isBookmarked })
         }
+
+    @Test
+    fun repeatedBookmarkActionsFinishTheRequestedChangeAfterAnUnacknowledgedRename() = runTest {
+        val sync = TrackingSync().apply { fail = false }
+        val repository = repository(sync.provider)
+        val account = AccountUuid.new(ByteArray(16))
+        val transaction = ReceiveTransaction.Success(
+            id = TransactionId.new(ByteArray(32) { 1 }),
+            amount = Zatoshi(1),
+            timestamp = Instant.EPOCH,
+            memoCount = 0,
+            transactionOutputs = emptyList(),
+            overview = mockk(),
+            recipient = null,
+            accountUuid = account,
+        )
+        val showError = mockk<ShowErrorUseCase>(relaxed = true)
+        val changeBookmark = SetTransactionBookmarkUseCase(repository, showError)
+        val observed = Channel<Boolean>(Channel.UNLIMITED)
+        val txId = transaction.id.txIdString()
+        backgroundScope.launch {
+            repository.observeTransactionMetadata(transaction).collect { observed.send(it.isBookmarked) }
+        }
+        assertFalse(observed.receive())
+
+        for (target in listOf(true, false)) {
+            sync.fail = true
+            assertFalse(changeBookmark(txId, target, account, 0))
+            assertTrue(observed.tryReceive().isFailure)
+            assertEquals(target, read(canonicalName).accountMetadata.bookmarked.single().isBookmarked)
+
+            sync.fail = false
+            assertTrue(changeBookmark(txId, target, account, 0))
+            assertEquals(target, observed.receive())
+            assertEquals(target, read(canonicalName).accountMetadata.bookmarked.single().isBookmarked)
+        }
+        verify(exactly = 2) { showError(any()) }
+    }
 
     @Test
     fun aNoteIsCreatedUpdatedAndDeletedInPlace() =
@@ -524,7 +635,8 @@ class MetadataDataSourceFileTest {
             val markedAt = storedSwaps().swapIds.single().lastUpdated
             dataSource.updateSwap(
                 depositAddress = "deposit",
-                amountOutFormatted = BigDecimal.TEN,
+                amountOutFormatted = BigDecimal.ONE,
+                executedAmountOut = BigDecimal.TEN,
                 status = SwapStatus.SUCCESS,
                 mode = SwapMode.EXACT_OUTPUT,
                 origin = swapAsset("zec", "zec"),
@@ -565,7 +677,8 @@ class MetadataDataSourceFileTest {
             amount: BigDecimal,
         ) = source.updateSwap(
             depositAddress = "deposit",
-            amountOutFormatted = amount,
+            amountOutFormatted = BigDecimal.ONE,
+            executedAmountOut = amount,
             status = status,
             mode = SwapMode.EXACT_OUTPUT,
             origin = swapAsset("zec", "zec"),
@@ -576,13 +689,13 @@ class MetadataDataSourceFileTest {
             expectedReviewedIdentity = reviewedIdentity,
         )
 
-        assertTrue(refresh(initial, SwapStatus.FAILED, "2026-11-22T00:00:00.0001Z", BigDecimal.ONE))
-        assertTrue(refresh(initial, SwapStatus.PROCESSING, "2026-11-22T00:00:00.0002Z", BigDecimal.ONE))
+        assertNotNull(refresh(initial, SwapStatus.FAILED, "2026-11-22T00:00:00.0001Z", BigDecimal.ONE))
+        assertNotNull(refresh(initial, SwapStatus.PROCESSING, "2026-11-22T00:00:00.0002Z", BigDecimal.ONE))
         val restarted = dataSource()
-        assertFalse(refresh(restarted, SwapStatus.FAILED, "2026-11-22T00:00:00.0001Z", BigDecimal.ONE))
-        assertTrue(refresh(restarted, SwapStatus.SUCCESS, "2026-11-22T00:00:00.0003Z", BigDecimal.TEN))
-        assertFalse(refresh(restarted, SwapStatus.SUCCESS, "2026-11-22T00:00:00.0002Z", BigDecimal.ONE))
-        assertFalse(refresh(restarted, SwapStatus.PROCESSING, "2026-11-22T00:00:01Z", BigDecimal.ONE))
+        assertNull(refresh(restarted, SwapStatus.FAILED, "2026-11-22T00:00:00.0001Z", BigDecimal.ONE))
+        assertNotNull(refresh(restarted, SwapStatus.SUCCESS, "2026-11-22T00:00:00.0003Z", BigDecimal.TEN))
+        assertNull(refresh(restarted, SwapStatus.SUCCESS, "2026-11-22T00:00:00.0002Z", BigDecimal.ONE))
+        assertNull(refresh(restarted, SwapStatus.PROCESSING, "2026-11-22T00:00:01Z", BigDecimal.ONE))
         val saved = storedSwaps().swapIds.single()
         assertEquals(SwapStatus.SUCCESS, saved.status)
         assertEquals(BigDecimal.TEN, saved.amountOutFormatted)

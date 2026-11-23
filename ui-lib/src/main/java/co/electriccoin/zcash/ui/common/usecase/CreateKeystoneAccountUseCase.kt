@@ -2,19 +2,14 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.exception.InitializeException
 import cash.z.ecc.android.sdk.model.BlockHeight
-import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
-import co.electriccoin.zcash.ui.screen.connectkeystone.connected.KeystoneConnectedArgs
-import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
-import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
 import com.keystone.module.ZcashAccount
 import com.keystone.module.ZcashAccounts
 
 class CreateKeystoneAccountUseCase(
     private val accountDataSource: AccountDataSource,
     private val synchronizerProvider: SynchronizerProvider,
-    private val navigationRouter: NavigationRouter,
 ) {
     /**
      * @throws InitializeException.ImportAccountCollisionException if the wallet already holds an
@@ -39,10 +34,5 @@ class CreateKeystoneAccountUseCase(
             )
         accountDataSource.selectAccount(createdAccount)
         synchronizerProvider.resetSynchronizer()
-        if (birthday != null) {
-            navigationRouter.forward(KeepOpenArgs(KeepOpenFlow.KEYSTONE))
-        } else {
-            navigationRouter.forward(KeystoneConnectedArgs)
-        }
     }
 }

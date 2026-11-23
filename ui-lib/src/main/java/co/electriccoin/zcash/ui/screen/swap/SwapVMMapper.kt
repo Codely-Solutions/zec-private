@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.errorText
 import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.model.SwapAsset
+import co.electriccoin.zcash.ui.common.model.positiveUsdPrice
 import co.electriccoin.zcash.ui.common.model.SwapDirection
 import co.electriccoin.zcash.ui.common.model.SwapDirection.SWAP_FROM_ZEC
 import co.electriccoin.zcash.ui.common.model.SwapDirection.SWAP_INTO_ZEC
@@ -447,9 +448,10 @@ internal class SwapVMMapper {
         }
 
         val amount = textField.textField.innerState.amount
+        val shouldRetryPrices = state.swapAssets.shouldRetryPrices(state.swapAsset)
         val isWaitingForPrices =
             state.swapAssets.isLoading &&
-                (state.swapAsset?.usdPrice == null || state.swapAssets.zecAsset?.usdPrice == null)
+                (state.swapAsset.positiveUsdPrice == null || state.swapAssets.zecAsset.positiveUsdPrice == null)
         return ButtonState(
             text =
                 when {
@@ -457,7 +459,7 @@ internal class SwapVMMapper {
                         stringRes(co.electriccoin.zcash.ui.design.R.string.swapAndPay_status_processing)
                     }
 
-                    state.swapAssets.error != null -> {
+                    shouldRetryPrices -> {
                         stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain)
                     }
 
@@ -469,9 +471,9 @@ internal class SwapVMMapper {
                         stringRes(R.string.swapAndPay_getQuote)
                     }
                 },
-            style = if (state.swapAssets.error != null) ButtonStyle.DESTRUCTIVE1 else null,
+            style = if (shouldRetryPrices) ButtonStyle.DESTRUCTIVE1 else null,
             onClick = {
-                if (state.swapAssets.error != null) {
+                if (shouldRetryPrices) {
                     onTryAgainClick()
                 } else {
                     val address = state.selectedContact?.address ?: state.addressText
@@ -486,15 +488,15 @@ internal class SwapVMMapper {
                         false
                     }
 
-                    state.swapAssets.error != null -> {
+                    shouldRetryPrices -> {
                         !state.swapAssets.isLoading || state.swapAssets.data != null
                     }
 
                     else -> {
                         state.swapAssets.data != null &&
                             state.swapAsset != null &&
-                            state.swapAsset.usdPrice != null &&
-                            state.swapAssets.zecAsset?.usdPrice != null &&
+                            state.swapAsset.positiveUsdPrice != null &&
+                            state.swapAssets.zecAsset.positiveUsdPrice != null &&
                             !textField.isError &&
                             amount != null &&
                             amount > BigDecimal(0) &&
@@ -504,7 +506,8 @@ internal class SwapVMMapper {
                                 state.swapAsset.chainTicker,
                                 state.swapAsset.tokenTicker,
                                 state.selectedContact?.blockchain?.chainTicker,
-                                allowPaymentAmount = false
+                                allowPaymentAmount = false,
+                                tokenContract = state.swapAsset.contractAddress,
                             ).isValid &&
                             !state.isRequestingQuote
                     }
@@ -526,7 +529,8 @@ internal class SwapVMMapper {
                     state.swapAsset?.chainTicker,
                     state.swapAsset?.tokenTicker,
                     state.selectedContact?.blockchain?.chainTicker,
-                    allowPaymentAmount = false
+                    allowPaymentAmount = false,
+                    tokenContract = state.swapAsset?.contractAddress,
                 ).errorText(state.swapAsset?.chainTicker),
             value = stringRes(text),
             onValueChange = onAddressChange,
@@ -607,17 +611,17 @@ private data class SwapInternalState(
                     MathContext.DECIMAL128
                 ).setScale(scale, ZEC_FORMATTER.roundingMode)
 
-        if (swapAssets.zecAsset?.usdPrice == null) return BigDecimal(0)
+        val zecPrice = swapAssets.zecAsset.positiveUsdPrice ?: return BigDecimal.ZERO
         return spendableShieldedBalance.value
             .convertZatoshiToZecBigDecimal()
-            .multiply(swapAssets.zecAsset.usdPrice, MathContext.DECIMAL128)
+            .multiply(zecPrice, MathContext.DECIMAL128)
     }
 
     fun getOriginFiatAmount(): BigDecimal? =
         when (currencyType) {
             TOKEN -> {
                 val tokenAmount = amountTextState.amount
-                val usdPrice = originAsset?.usdPrice
+                val usdPrice = originAsset.positiveUsdPrice
                 if (tokenAmount == null || usdPrice == null) {
                     null
                 } else {
@@ -638,7 +642,7 @@ private data class SwapInternalState(
             }
 
             FIAT -> {
-                val usdPrice = originAsset?.usdPrice
+                val usdPrice = originAsset.positiveUsdPrice
                 if (fiatAmount == null || usdPrice == null) {
                     null
                 } else {
@@ -650,8 +654,8 @@ private data class SwapInternalState(
 
     fun getDestinationAssetAmount(): BigDecimal? {
         val amountToken = getOriginTokenAmount()
-        val originUsdPrice = originAsset?.usdPrice
-        val destinationUsdPrice = destinationAsset?.usdPrice
+        val originUsdPrice = originAsset.positiveUsdPrice
+        val destinationUsdPrice = destinationAsset.positiveUsdPrice
         return if (amountToken == null || originUsdPrice == null || destinationUsdPrice == null) {
             null
         } else {
@@ -662,29 +666,9 @@ private data class SwapInternalState(
     }
 
     fun getZecToDestinationAssetExchangeRate(): BigDecimal? {
-        if (originAsset == null || destinationAsset == null) return null
-
-        return when (swapDirection) {
-            SWAP_FROM_ZEC -> {
-                val zecUsdPrice = originAsset.usdPrice
-                val assetUsdPrice = destinationAsset.usdPrice
-                if (zecUsdPrice == null || assetUsdPrice == null) {
-                    null
-                } else {
-                    zecUsdPrice.divide(assetUsdPrice, MathContext.DECIMAL128)
-                }
-            }
-
-            SWAP_INTO_ZEC -> {
-                val zecUsdPrice = destinationAsset.usdPrice
-                val assetUsdPrice = originAsset.usdPrice
-                if (zecUsdPrice == null || assetUsdPrice == null) {
-                    null
-                } else {
-                    zecUsdPrice.divide(assetUsdPrice, MathContext.DECIMAL128)
-                }
-            }
-        }
+        val zecUsdPrice = swapAssets.zecAsset.positiveUsdPrice ?: return null
+        val assetUsdPrice = swapAsset.positiveUsdPrice ?: return null
+        return zecUsdPrice.divide(assetUsdPrice, MathContext.DECIMAL128)
     }
 }
 

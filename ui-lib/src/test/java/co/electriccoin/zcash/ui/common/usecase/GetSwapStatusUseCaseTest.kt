@@ -47,11 +47,12 @@ class GetSwapStatusUseCaseTest {
         val expected = mockk<TransactionSwapMetadata>()
         val accepted = mockk<TransactionSwapMetadata> {
             every { status } returns SwapStatus.PROCESSING
+            every { executedAmountOut } returns null
             every { amountOutFormatted } returns BigDecimal("1.23")
         }
         val metadata = mockk<MetadataRepository> {
             coEvery { getSwapMetadata("deposit") } returns expected
-            coEvery { updateSwap(expected, any()) } returnsMany listOf(true, false)
+            coEvery { updateSwap(expected, any()) } returnsMany listOf(accepted, null)
             coEvery { reloadSwapMetadata(expected) } returns accepted
         }
         val processing = swapStatusResult(swapStatus = SwapStatus.PROCESSING)
@@ -75,7 +76,7 @@ class GetSwapStatusUseCaseTest {
             val metadataRepository =
                 mockk<MetadataRepository>(relaxed = true) {
                     coEvery { getSwapMetadata("deposit") } returns mockk<TransactionSwapMetadata>()
-                    coEvery { updateSwap(any(), any()) } returns true
+                    coEvery { updateSwap(any(), any()) } coAnswers { firstArg() }
                 }
             val status = swapStatusResult()
             val swapRepository =
@@ -180,7 +181,7 @@ class GetSwapStatusUseCaseTest {
             val metadataRepository =
                 mockk<MetadataRepository>(relaxed = true) {
                     coEvery { getSwapMetadata("deposit") } returns saved
-                    coEvery { updateSwap(saved, any()) } returns true
+                    coEvery { updateSwap(saved, any()) } returns saved
                 }
             val pending = swapStatusResult(swapStatus = SwapStatus.PENDING)
             val processing = swapStatusResult(swapStatus = SwapStatus.PROCESSING)
@@ -221,7 +222,7 @@ class GetSwapStatusUseCaseTest {
         val saved = mockk<TransactionSwapMetadata>()
         val metadata = mockk<MetadataRepository>(relaxed = true) {
             coEvery { getSwapMetadata("deposit") } returns saved
-            coEvery { updateSwap(saved, any()) } returns true
+            coEvery { updateSwap(saved, any()) } returns saved
         }
         val pending = swapStatusResult(swapStatus = SwapStatus.PENDING)
         val success = swapStatusResult(swapStatus = SwapStatus.SUCCESS)

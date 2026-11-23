@@ -5,6 +5,7 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.errorText
 import co.electriccoin.zcash.ui.common.model.validateSwapRecipient
 import co.electriccoin.zcash.ui.common.model.SwapAsset
+import co.electriccoin.zcash.ui.common.model.positiveUsdPrice
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.near.toExactNearQuoteAmountOrNull
 import co.electriccoin.zcash.ui.common.repository.EnhancedABContact
@@ -121,11 +122,7 @@ internal class ExactOutputVMMapper {
     ): NumberTextFieldInnerState {
         val amount = amountInnerState.amount
         val fiat =
-            if (amount == null || asset?.usdPrice == null) {
-                null
-            } else {
-                amount.multiply(asset.usdPrice, MathContext.DECIMAL128)
-            }
+            asset.positiveUsdPrice?.let { amount?.multiply(it, MathContext.DECIMAL128) }
         return fiatInnerState.copy(
             innerTextFieldState =
                 fiatInnerState.innerTextFieldState.copy(
@@ -145,10 +142,9 @@ internal class ExactOutputVMMapper {
     ): NumberTextFieldInnerState {
         val fiat = fiatInnerState.amount
         val amount =
-            if (fiat == null || asset?.usdPrice == null) {
-                null
-            } else {
-                fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
+            asset?.let { selected ->
+                selected.positiveUsdPrice?.let { fiat?.divide(it, MathContext.DECIMAL128) }
+                    ?.setScale(selected.decimals, RoundingMode.DOWN)
             }
         return amountInnerState.copy(
             innerTextFieldState =
@@ -183,11 +179,7 @@ internal class ExactOutputVMMapper {
                 val amount = amountInnerState.amount
                 val asset = state.asset
                 val fiat =
-                    if (amount == null || asset?.usdPrice == null) {
-                        null
-                    } else {
-                        amount.multiply(asset.usdPrice, MathContext.DECIMAL128)
-                    }
+                    asset.positiveUsdPrice?.let { amount?.multiply(it, MathContext.DECIMAL128) }
                 onTextFieldChange(
                     amountInnerState,
                     state.fiatAmount.copy(
@@ -226,10 +218,9 @@ internal class ExactOutputVMMapper {
                 val fiat = fiatInnerState.amount
                 val asset = state.asset
                 val amount =
-                    if (fiat == null || asset?.usdPrice == null) {
-                        null
-                    } else {
-                        fiat.divide(asset.usdPrice, MathContext.DECIMAL128).setScale(asset.decimals, RoundingMode.DOWN)
+                    asset?.let { selected ->
+                        selected.positiveUsdPrice?.let { fiat?.divide(it, MathContext.DECIMAL128) }
+                            ?.setScale(selected.decimals, RoundingMode.DOWN)
                     }
                 onTextFieldChange(
                     state.amount.copy(
@@ -343,9 +334,10 @@ internal class ExactOutputVMMapper {
         }
 
         val amount = textField.innerState.amount
+        val shouldRetryPrices = state.swapAssets.shouldRetryPrices(state.asset)
         val isWaitingForPrices =
             state.swapAssets.isLoading &&
-                (state.asset?.usdPrice == null || state.swapAssets.zecAsset?.usdPrice == null)
+                (state.asset.positiveUsdPrice == null || state.swapAssets.zecAsset.positiveUsdPrice == null)
         return ButtonState(
             text =
                 when {
@@ -353,7 +345,7 @@ internal class ExactOutputVMMapper {
                         stringRes(co.electriccoin.zcash.ui.design.R.string.swapAndPay_status_processing)
                     }
 
-                    state.swapAssets.error != null -> {
+                    shouldRetryPrices -> {
                         stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain)
                     }
 
@@ -365,9 +357,9 @@ internal class ExactOutputVMMapper {
                         stringRes(co.electriccoin.zcash.ui.design.R.string.send_review)
                     }
                 },
-            style = if (state.swapAssets.error != null) ButtonStyle.DESTRUCTIVE1 else null,
+            style = if (shouldRetryPrices) ButtonStyle.DESTRUCTIVE1 else null,
             onClick = {
-                if (state.swapAssets.error != null) {
+                if (shouldRetryPrices) {
                     onTryAgainClick()
                 } else {
                     val address = state.selectedABContact?.address ?: state.address
@@ -382,15 +374,15 @@ internal class ExactOutputVMMapper {
                         false
                     }
 
-                    state.swapAssets.error != null -> {
+                    shouldRetryPrices -> {
                         !state.swapAssets.isLoading || state.swapAssets.data != null
                     }
 
                     else -> {
                         state.swapAssets.data != null &&
                             state.asset != null &&
-                            state.asset.usdPrice != null &&
-                            state.swapAssets.zecAsset?.usdPrice != null &&
+                            state.asset.positiveUsdPrice != null &&
+                            state.swapAssets.zecAsset.positiveUsdPrice != null &&
                             !textField.isError &&
                             amount != null &&
                             amount > BigDecimal(0) &&
@@ -399,7 +391,8 @@ internal class ExactOutputVMMapper {
                                 state.selectedABContact?.address ?: state.address,
                                 state.asset.chainTicker,
                                 state.asset.tokenTicker,
-                                state.selectedABContact?.blockchain?.chainTicker
+                                state.selectedABContact?.blockchain?.chainTicker,
+                                tokenContract = state.asset.contractAddress,
                             ).isValid &&
                             !state.isRequestingQuote
                     }
@@ -422,7 +415,8 @@ internal class ExactOutputVMMapper {
                     state.selectedABContact?.address ?: text,
                     state.asset?.chainTicker,
                     state.asset?.tokenTicker,
-                    state.selectedABContact?.blockchain?.chainTicker
+                    state.selectedABContact?.blockchain?.chainTicker,
+                    tokenContract = state.asset?.contractAddress,
                 ).errorText(state.asset?.chainTicker),
             value = stringRes(text),
             onValueChange = onAddressChange,
@@ -472,7 +466,7 @@ private data class ExactOutputInternalState(
 
     fun getOriginFiatAmount(): BigDecimal? {
         val tokenAmount = amount.amount
-        val usdPrice = asset?.usdPrice
+        val usdPrice = asset.positiveUsdPrice
         return if (tokenAmount == null || usdPrice == null) {
             null
         } else {
@@ -482,27 +476,12 @@ private data class ExactOutputInternalState(
 
     fun getOriginTokenAmount(): BigDecimal? = amount.amount
 
-    fun getZatoshi(): Zatoshi? {
-        val amountToken = getOriginTokenAmount()
-        return if (swapAssets.zecAsset?.usdPrice == null || asset?.usdPrice == null || amountToken == null) {
-            null
-        } else {
-            amountToken
-                .multiply(asset.usdPrice, MathContext.DECIMAL128)
-                .divide(swapAssets.zecAsset.usdPrice, MathContext.DECIMAL128)
-                .convertZecToZatoshi()
-        }
-    }
+    fun getZatoshi(): Zatoshi? = getZec()?.convertZecToZatoshi()
 
     fun getZec(): BigDecimal? {
-        val amountToken = getOriginTokenAmount()
-        return if (swapAssets.zecAsset?.usdPrice == null || asset?.usdPrice == null || amountToken == null) {
-            null
-        } else {
-            amountToken
-                .multiply(asset.usdPrice, MathContext.DECIMAL128)
-                .divide(swapAssets.zecAsset.usdPrice, MathContext.DECIMAL128)
-        }
+        val amount = getOriginFiatAmount() ?: return null
+        val zecPrice = swapAssets.zecAsset.positiveUsdPrice ?: return null
+        return amount.divide(zecPrice, MathContext.DECIMAL128)
     }
 }
 

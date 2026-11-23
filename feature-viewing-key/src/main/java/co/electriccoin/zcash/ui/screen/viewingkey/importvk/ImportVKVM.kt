@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.model.stateIn
 import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepository
 import co.electriccoin.zcash.ui.common.usecase.ClearClipboardUseCase
+import co.electriccoin.zcash.ui.common.usecase.ReadClipboardTextUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitViewOnlyKeyResult
 import co.electriccoin.zcash.ui.common.usecase.SubmitViewOnlyKeyUseCase
 import co.electriccoin.zcash.ui.common.usecase.ValidateUfvkUseCase
@@ -33,16 +34,15 @@ import kotlin.time.Duration.Companion.milliseconds
  * when the account first transacted, before it is named. The key stays in this view model's memory
  * and in the pending import only: it never goes into a route, the saved instance state or a log.
  *
- * The keyboard pastes into the field directly, so a paste is recognised by a single edit that adds
- * a long run of text. When one happened, the clipboard is cleared on Continue and on back, so the
- * key does not stay there. The clipboard is never read: on recent Android versions every read
- * shows a system notice.
+ * The Paste action remembers the clipboard text it read. On Continue or Back, it clears the
+ * clipboard only if the text still matches the pasted item.
  *
  * When the SDK fails to read the key, the general error screen opens instead of the invalid-key
  * sheet, since nothing is known about the key then, and Continue can be tried again.
  */
 internal class ImportVKVM(
     private val submitViewOnlyKey: SubmitViewOnlyKeyUseCase,
+    private val readClipboardText: ReadClipboardTextUseCase,
     private val clearClipboard: ClearClipboardUseCase,
     private val pendingImportRepository: ViewOnlyPendingImportRepository,
     private val navigationRouter: NavigationRouter,
@@ -54,7 +54,7 @@ internal class ImportVKVM(
 
     private val isInvalidKeySheetVisible = MutableStateFlow(false)
 
-    private var hasPasted = false
+    private var pastedClipboardText: String? = null
 
     private var submitJob: Job? = null
 
@@ -81,6 +81,7 @@ internal class ImportVKVM(
      * flow has left the back stack. The pending key goes with it, whichever way the flow ended.
      */
     override fun onCleared() {
+        pastedClipboardText = null
         pendingImportRepository.clear()
         super.onCleared()
     }
@@ -92,14 +93,21 @@ internal class ImportVKVM(
         text = text,
         isSubmitting = isSubmitting,
         onValueChange = ::onValueChange,
+        onPasteClick = ::onPasteClick,
         onScanClick = ::onScanClick,
         onContinueClick = ::onContinueClick,
         onBack = ::onBack,
     )
 
     private fun onValueChange(value: String) {
-        if (value.length - text.value.length >= PASTED_LENGTH) hasPasted = true
         text.update { value }
+    }
+
+    private fun onPasteClick() {
+        if (isSubmitting.value) return
+        val pasted = readClipboardText() ?: return
+        pastedClipboardText = pasted
+        text.value = pasted
     }
 
     private fun onScanClick() = navigationRouter.forward(ScanVKArgs)
@@ -160,13 +168,8 @@ internal class ImportVKVM(
     }
 
     private fun clearPasted() {
-        if (!hasPasted) return
-        hasPasted = false
-        clearClipboard()
-    }
-
-    private companion object {
-        /** An edit that adds at least this many characters at once is taken for a paste. */
-        const val PASTED_LENGTH = 20
+        val pasted = pastedClipboardText ?: return
+        pastedClipboardText = null
+        if (readClipboardText() == pasted) clearClipboard()
     }
 }

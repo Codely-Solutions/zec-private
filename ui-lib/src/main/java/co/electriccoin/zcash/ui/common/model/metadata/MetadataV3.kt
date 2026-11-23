@@ -137,11 +137,15 @@ data class SwapMetadataV3(
     val statusUpdatedAt: kotlin.time.Instant? = null,
     @SerialName("signedQuoteEvidence")
     internal val signedQuoteEvidence: NearSignedQuoteEvidence? = null,
+    @Serializable(BigDecimalSerializer::class)
+    val quotedAmountOut: BigDecimal? = null,
+    @Serializable(BigDecimalSerializer::class)
+    val executedAmountOut: BigDecimal? = null,
 ) {
     @Transient
     val totalFeesUsd: BigDecimal = checkNotNull(totalFeesUsdInternal ?: totalUSDFeesInternal)
 
-    internal fun acceptsStatus(status: SwapStatus, updatedAt: kotlin.time.Instant?, amount: BigDecimal?): Boolean {
+    internal fun acceptsStatus(status: SwapStatus, updatedAt: kotlin.time.Instant?, executed: BigDecimal?): Boolean {
         // Settlement and a completed refund keep their outcome. FAILED and EXPIRED can precede later recovery.
         val sameStatus = this.status == status
         if ((this.status == SwapStatus.SUCCESS || this.status == SwapStatus.REFUNDED) && !sameStatus) {
@@ -150,10 +154,20 @@ data class SwapMetadataV3(
         val previous = statusUpdatedAt
         return when {
             previous == null -> true
-            updatedAt == previous -> sameStatus && amount != null && amountOutFormatted?.compareTo(amount) == 0
+            updatedAt == previous -> sameStatus && (
+                executed == null || executedAmountOut == null || executedAmountOut.compareTo(executed) == 0
+            )
             else -> updatedAt != null && updatedAt > previous
         }
     }
+
+    internal fun withOutput(quoted: BigDecimal?, executed: BigDecimal?): SwapMetadataV3 =
+        copy(
+            // Keep the historical field readable by older versions. Provenance lives in the new fields.
+            amountOutFormatted = executed ?: quoted ?: amountOutFormatted,
+            quotedAmountOut = quoted,
+            executedAmountOut = executed,
+        )
 }
 
 data class MetadataSimpleSwapAssetV3(

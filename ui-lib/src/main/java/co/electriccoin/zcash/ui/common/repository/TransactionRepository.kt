@@ -186,7 +186,7 @@ class TransactionRepositoryImpl(
                                                     freshDetails[key]
                                                         ?: enhancedTxCache[key]
                                                         ?: TxDetails(outputs = emptyList(), recipient = null)
-                                                createTransaction(transaction, details).also { mapped ->
+                                                createTransaction(transaction, details, uuid).also { mapped ->
                                                     val recipient = mapped.recipient
                                                     if (mapped is SendTransaction.Success && recipient != null) {
                                                         if (recipient == DonationPolicy.recipient()) {
@@ -228,7 +228,11 @@ class TransactionRepositoryImpl(
                 initialValue = null
             )
 
-    private fun createTransaction(transaction: TransactionOverview, details: TxDetails): Transaction =
+    private fun createTransaction(
+        transaction: TransactionOverview,
+        details: TxDetails,
+        accountUuid: AccountUuid,
+    ): Transaction =
         when (transaction.transactionState) {
             Expired -> {
                 when {
@@ -241,6 +245,7 @@ class TransactionRepositoryImpl(
                             memoCount = transaction.memoCount,
                             fee = transaction.netValue,
                             overview = transaction,
+                            accountUuid = accountUuid,
                             recipient = null
                         )
                     }
@@ -254,6 +259,7 @@ class TransactionRepositoryImpl(
                             memoCount = transaction.memoCount,
                             fee = transaction.feePaid,
                             overview = transaction,
+                            accountUuid = accountUuid,
                             recipient = details.recipient
                         )
                     }
@@ -266,6 +272,7 @@ class TransactionRepositoryImpl(
                             id = transaction.txId,
                             memoCount = transaction.memoCount,
                             overview = transaction,
+                            accountUuid = accountUuid,
                             recipient = null
                         )
                     }
@@ -283,6 +290,7 @@ class TransactionRepositoryImpl(
                             memoCount = transaction.memoCount,
                             fee = transaction.netValue,
                             overview = transaction,
+                            accountUuid = accountUuid,
                             recipient = null
                         )
                     }
@@ -296,6 +304,7 @@ class TransactionRepositoryImpl(
                             memoCount = transaction.memoCount,
                             fee = transaction.feePaid,
                             overview = transaction,
+                            accountUuid = accountUuid,
                             recipient = details.recipient
                         )
                     }
@@ -308,6 +317,7 @@ class TransactionRepositoryImpl(
                             id = transaction.txId,
                             memoCount = transaction.memoCount,
                             overview = transaction,
+                            accountUuid = accountUuid,
                             recipient = null
                         )
                     }
@@ -325,6 +335,7 @@ class TransactionRepositoryImpl(
                             memoCount = transaction.memoCount,
                             fee = transaction.netValue,
                             overview = transaction,
+                            accountUuid = accountUuid,
                             recipient = null
                         )
                     }
@@ -338,6 +349,7 @@ class TransactionRepositoryImpl(
                             memoCount = transaction.memoCount,
                             fee = transaction.feePaid,
                             overview = transaction,
+                            accountUuid = accountUuid,
                             recipient = details.recipient
                         )
                     }
@@ -350,6 +362,7 @@ class TransactionRepositoryImpl(
                             id = transaction.txId,
                             memoCount = transaction.memoCount,
                             overview = transaction,
+                            accountUuid = accountUuid,
                             recipient = null
                         )
                     }
@@ -436,6 +449,7 @@ class TransactionRepositoryImpl(
 
 sealed interface Transaction {
     val id: TransactionId
+    val accountUuid: AccountUuid?
     val amount: Zatoshi
     val memoCount: Int
     val timestamp: Instant?
@@ -455,6 +469,7 @@ sealed interface SendTransaction : Transaction {
         override val transactionOutputs: List<TransactionOutput>,
         override val overview: TransactionOverview,
         override val recipient: String?,
+        override val accountUuid: AccountUuid? = null,
     ) : SendTransaction
 
     data class Pending(
@@ -466,6 +481,7 @@ sealed interface SendTransaction : Transaction {
         override val transactionOutputs: List<TransactionOutput>,
         override val overview: TransactionOverview,
         override val recipient: String?,
+        override val accountUuid: AccountUuid? = null,
     ) : SendTransaction
 
     data class Failed(
@@ -477,6 +493,7 @@ sealed interface SendTransaction : Transaction {
         override val transactionOutputs: List<TransactionOutput>,
         override val overview: TransactionOverview,
         override val recipient: String?,
+        override val accountUuid: AccountUuid? = null,
     ) : SendTransaction
 }
 
@@ -492,6 +509,7 @@ sealed interface ReceiveTransaction : Transaction {
         override val transactionOutputs: List<TransactionOutput>,
         override val overview: TransactionOverview,
         override val recipient: String?,
+        override val accountUuid: AccountUuid? = null,
     ) : ReceiveTransaction
 
     data class Pending(
@@ -502,6 +520,7 @@ sealed interface ReceiveTransaction : Transaction {
         override val transactionOutputs: List<TransactionOutput>,
         override val overview: TransactionOverview,
         override val recipient: String?,
+        override val accountUuid: AccountUuid? = null,
     ) : ReceiveTransaction
 
     data class Failed(
@@ -512,6 +531,7 @@ sealed interface ReceiveTransaction : Transaction {
         override val transactionOutputs: List<TransactionOutput>,
         override val overview: TransactionOverview,
         override val recipient: String?,
+        override val accountUuid: AccountUuid? = null,
     ) : ReceiveTransaction
 }
 
@@ -525,6 +545,7 @@ sealed interface ShieldTransaction : Transaction {
         override val transactionOutputs: List<TransactionOutput>,
         override val overview: TransactionOverview,
         override val recipient: String?,
+        override val accountUuid: AccountUuid? = null,
     ) : ShieldTransaction
 
     data class Pending(
@@ -536,6 +557,7 @@ sealed interface ShieldTransaction : Transaction {
         override val transactionOutputs: List<TransactionOutput>,
         override val overview: TransactionOverview,
         override val recipient: String?,
+        override val accountUuid: AccountUuid? = null,
     ) : ShieldTransaction
 
     data class Failed(
@@ -547,6 +569,7 @@ sealed interface ShieldTransaction : Transaction {
         override val fee: Zatoshi?,
         override val overview: TransactionOverview,
         override val recipient: String?,
+        override val accountUuid: AccountUuid? = null,
     ) : ShieldTransaction
 }
 

@@ -327,7 +327,7 @@ class TransactionDetailVMTest {
             copyToClipboard = clipboard,
             navigationRouter = router,
             sendTransactionAgain = mockk(relaxed = true),
-            flipTransactionBookmark = mockk(relaxed = true),
+            setTransactionBookmark = mockk(relaxed = true),
             mapper = CommonTransactionDetailMapper(),
             getSwapMessage = SwapSupportMapper()
         )

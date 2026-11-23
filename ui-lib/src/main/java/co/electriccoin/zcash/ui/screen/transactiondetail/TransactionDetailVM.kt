@@ -27,10 +27,10 @@ import co.electriccoin.zcash.ui.common.repository.SendTransaction
 import co.electriccoin.zcash.ui.common.repository.ShieldTransaction
 import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.DetailedTransactionData
-import co.electriccoin.zcash.ui.common.usecase.FlipTransactionBookmarkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetTransactionDetailByIdUseCase
 import co.electriccoin.zcash.ui.common.usecase.MarkTxMemoAsReadUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendTransactionAgainUseCase
+import co.electriccoin.zcash.ui.common.usecase.SetTransactionBookmarkUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.IconButtonState
 import co.electriccoin.zcash.ui.design.util.StringResource
@@ -58,6 +58,7 @@ import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 import co.electriccoin.zcash.ui.util.loggableNot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.filterNotNull
@@ -75,11 +76,12 @@ class TransactionDetailVM(
     private val copyToClipboard: CopyToClipboardUseCase,
     private val navigationRouter: NavigationRouter,
     private val sendTransactionAgain: SendTransactionAgainUseCase,
-    private val flipTransactionBookmark: FlipTransactionBookmarkUseCase,
+    private val setTransactionBookmark: SetTransactionBookmarkUseCase,
     private val mapper: CommonTransactionDetailMapper,
     private val getSwapMessage: SwapSupportMapper,
 ) : ViewModel() {
     val log = loggableNot("TransactionDetailVM")
+    private var bookmarkJob: Job? = null
     private val transaction =
         getTransactionDetailById
             .observe(transactionDetailArgs.transactionId)
@@ -110,14 +112,16 @@ class TransactionDetailVM(
                                 } else {
                                     R.drawable.ic_transaction_detail_no_bookmark
                                 },
-                            onClick = ::onBookmarkClick,
+                            onClick = { onBookmarkClick(transaction) },
                             hapticFeedbackType =
                                 if (transaction.metadata.isBookmarked) {
                                     HapticFeedbackType.ToggleOff
                                 } else {
                                     HapticFeedbackType.ToggleOn
                                 }
-                        ),
+                        ).takeIf {
+                            transaction.transaction.accountUuid != null && transaction.metadata.bookmarkWriteToken != null
+                        },
                     errorFooter = createErrorFooter(transaction),
                     infoFooter =
                         stringRes(R.string.deposits_info)
@@ -215,7 +219,8 @@ class TransactionDetailVM(
                                 mapper.createTransactionDetailQuoteHeaderState(
                                     swap = transaction.swap.status,
                                     originAsset = transaction.swap.originAsset,
-                                    destinationAsset = transaction.swap.destinationAsset
+                                    destinationAsset = transaction.swap.destinationAsset,
+                                    savedExecution = transaction.swap.savedMetadata?.executedAmountOut,
                                 ),
                             depositAddress =
                                 stringResByAddress(
@@ -661,10 +666,14 @@ class TransactionDetailVM(
 
     private fun onBack() = navigationRouter.back()
 
-    private fun onBookmarkClick() =
-        viewModelScope.launch {
-            flipTransactionBookmark(transactionDetailArgs.transactionId)
+    private fun onBookmarkClick(data: DetailedTransactionData) {
+        if (bookmarkJob?.isActive == true) return
+        val accountUuid = data.transaction.accountUuid ?: return
+        val token = data.metadata.bookmarkWriteToken ?: return
+        bookmarkJob = viewModelScope.launch {
+            setTransactionBookmark(data.transaction.id.txIdString(), !data.metadata.isBookmarked, accountUuid, token)
         }
+    }
 }
 
 private const val ZEC_DECIMAL_PLACES = 8

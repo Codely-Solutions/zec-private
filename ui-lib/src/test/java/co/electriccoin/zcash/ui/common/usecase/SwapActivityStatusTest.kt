@@ -68,8 +68,9 @@ class SwapActivityStatusTest {
             every { observeTransactionMetadata(failed) } returns metadata
             coEvery { updateSwap(storedSwap, any()) } answers {
                 val status = secondArg<SwapQuoteStatus>()
-                metadata.value = metadata.value.copy(swapMetadata = storedSwap.copy(recordedStatus = status.status))
-                true
+                val saved = storedSwap.copy(recordedStatus = status.status)
+                metadata.value = metadata.value.copy(swapMetadata = saved)
+                saved
             }
         }
         val transactions = mockk<TransactionRepository> {

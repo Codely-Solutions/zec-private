@@ -11,12 +11,16 @@ class ReadClipboardTextUseCase(
     private val context: Context
 ) {
     operator fun invoke(): String? =
-        context
-            .getSystemService<ClipboardManager>()
-            .primaryClip
-            ?.takeIf { it.itemCount > 0 }
-            ?.getItemAt(0)
-            ?.coerceToText(context)
-            ?.toString()
-            ?.takeIf { it.isNotBlank() }
+        try {
+            context
+                .getSystemService<ClipboardManager>()
+                .primaryClip
+                ?.takeIf { it.itemCount > 0 }
+                ?.getItemAt(0)
+                ?.coerceToText(context)
+                ?.toString()
+                ?.takeIf { it.isNotBlank() }
+        } catch (_: SecurityException) {
+            null
+        }
 }

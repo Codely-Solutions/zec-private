@@ -21,6 +21,7 @@ import co.electriccoin.zcash.ui.util.isServiceUnavailable
 import io.ktor.client.plugins.ResponseException
 import java.time.Instant
 import java.time.ZoneId
+import java.math.BigDecimal
 
 class CommonTransactionDetailMapper {
     fun createTransactionDetailTimestamp(timestamp: Instant?) =
@@ -71,11 +72,13 @@ class CommonTransactionDetailMapper {
     fun createTransactionDetailQuoteHeaderState(
         swap: SwapQuoteStatus?,
         originAsset: SwapAsset?,
-        destinationAsset: SwapAsset?
+        destinationAsset: SwapAsset?,
+        savedExecution: BigDecimal? = null,
     ): SwapQuoteHeaderState {
         if (swap == null || originAsset == null || destinationAsset == null) {
             return SwapQuoteHeaderState(null, null)
         }
+        val retainedExecution = savedExecution.takeIf { swap.executedAmountOut == null }
         return SwapQuoteHeaderState(
             from =
                 SwapTokenAmountState(
@@ -93,16 +96,20 @@ class CommonTransactionDetailMapper {
                         destinationAsset.swapQuoteChainIcon(
                             isShielded = swap.destinationAddress is ZcashShieldedSwapAddress
                         ),
-                    amount = stringResByNumber(swap.amountOutFormatted),
-                    fiatAmount = stringResByDynamicCurrencyNumber(swap.amountOutUsd, FiatCurrency.USD.symbol),
+                    amount = stringResByNumber(retainedExecution ?: swap.amountOutFormatted),
+                    fiatAmount = if (retainedExecution == null) {
+                        stringResByDynamicCurrencyNumber(swap.amountOutUsd, FiatCurrency.USD.symbol)
+                    } else {
+                        stringRes("")
+                    },
                     token = stringRes(destinationAsset.tokenTicker),
                     chain =
                         destinationAsset.chainName + stringRes(" · ") +
                             stringRes(
-                                if (swap.executedAmountOut != null) {
-                                    R.string.private_provider_output
-                                } else {
-                                    R.string.private_quoted_output
+                                when {
+                                    retainedExecution != null -> R.string.private_saved_provider_output
+                                    swap.executedAmountOut != null -> R.string.private_provider_output
+                                    else -> R.string.private_quoted_output
                                 }
                             )
                 )

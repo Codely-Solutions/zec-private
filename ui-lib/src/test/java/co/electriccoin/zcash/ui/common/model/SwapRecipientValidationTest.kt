@@ -38,6 +38,33 @@ class SwapRecipientValidationTest {
     }
 
     @Test
+    fun chainlessEvmPaymentUsesSelectedNativeAssetAndBindsExplicitChains() {
+        val nativeAssets = listOf(
+            Triple("eth", "ETH", 1), Triple("bsc", "BNB", 56), Triple("avax", "AVAX", 43114),
+            Triple("arb", "ETH", 42161), Triple("base", "ETH", 8453), Triple("pol", "POL", 137),
+        )
+        for ((chain, native, chainId) in nativeAssets) {
+            for (suffix in listOf("", "@$chainId")) {
+                val uri = "ethereum:$evm$suffix?value=2.014e18"
+                val result = validateSwapRecipient(uri, chain, native)
+                assertTrue(result.isValid, uri)
+                assertEquals(chain, result.input?.network)
+                assertEquals(0, result.input?.amount?.compareTo(BigDecimal("2.014")))
+                assertEquals(SwapRecipientError.ASSET, validateSwapRecipient(uri, chain, "W$native").error)
+                assertEquals(
+                    SwapRecipientError.ASSET,
+                    validateSwapRecipient(uri, chain, native, tokenContract = evm).error,
+                )
+            }
+            assertTrue(validateSwapRecipient(evm, chain, "W$native", tokenContract = evm).isValid)
+        }
+        assertEquals(SwapRecipientError.NETWORK, validateSwapRecipient("ethereum:$evm@1?value=1", "bsc", "BNB").error)
+        for (invalid in listOf("@", "@0", "@99999", "@x")) {
+            assertEquals(SwapRecipientError.URI, validateSwapRecipient("ethereum:$evm$invalid", "eth", "ETH").error)
+        }
+    }
+
+    @Test
     fun unsupportedRequiredFieldsAndRoutingDisableQuote() {
         for (query in listOf("req-extra=1", "dt=4", "amount.1=2")) {
             val result = validateSwapRecipient("bitcoin:$btc?$query", "btc", "btc")

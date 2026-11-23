@@ -602,7 +602,8 @@ class MetadataDataSourceTest {
         )
         fun response(currentStatus: SwapStatus, output: BigDecimal) = mockk<SwapQuoteStatus> {
             every { status } returns currentStatus
-            every { amountOutFormatted } returns output
+            every { quotedAmountOut } returns BigDecimal.ONE
+            every { executedAmountOut } returns output
             every { mode } returns SwapMode.EXACT_INPUT
             every { originAsset } returns SwapCatalogTestFixture.nativeZec
             every { destinationAsset } returns SwapCatalogTestFixture.nativeZec
@@ -655,7 +656,7 @@ class MetadataDataSourceTest {
         ownership.beginReset()
         ownership.finishReset()
         ownership.replaceWallet {}
-        assertFalse(metadata.updateSwap(beforeReset, response(SwapStatus.SUCCESS, BigDecimal.ONE)))
+        assertNull(metadata.updateSwap(beforeReset, response(SwapStatus.SUCCESS, BigDecimal.ONE)))
         assertEquals(BigDecimal.TEN, saved.get().accountMetadata.swaps.swapIds.single().amountOutFormatted)
     }
 
@@ -876,18 +877,18 @@ class MetadataDataSourceTest {
             every { metadataProvider.readMetadataFromFile(canonicalFile, key) } returns metadata(lastUpdated = 1)
             val dataSource = dataSource()
 
-            assertTrue(dataSource.flipTxAsBookmarked("tx1", key))
+            assertTrue(dataSource.setTxBookmark("tx1", true, key))
             assertTrue(dataSource.createOrUpdateTxNote("tx1", "note", key))
             assertTrue(dataSource.deleteTxNote("tx1", key))
             assertTrue(dataSource.markTxMemoAsRead("tx1", key))
 
             every { metadataProvider.writeMetadataToFile(any(), any(), any()) } throws IOException("disk full")
 
-            assertFalse(dataSource.flipTxAsBookmarked("tx1", key))
+            assertFalse(dataSource.setTxBookmark("tx1", false, key))
             assertFalse(dataSource.createOrUpdateTxNote("tx1", "note", key))
             assertFalse(dataSource.deleteTxNote("tx1", key))
             assertFalse(dataSource.markTxMemoAsRead("tx1", key))
-            assertFalse(
+            assertNull(
                 dataSource.updateSwap(
                     depositAddress = "s1",
                     amountOutFormatted = BigDecimal.ONE,
@@ -937,11 +938,11 @@ class MetadataDataSourceTest {
         }
 
     @Test
-    fun aBookmarkFlipKeepsTheStoredAppearance() =
+    fun aBookmarkChangeKeepsTheStoredAppearance() =
         runTest {
             val written = storedWithAppearance()
 
-            assertTrue(dataSource().flipTxAsBookmarked("tx1", key))
+            assertTrue(dataSource().setTxBookmark("tx1", true, key))
 
             assertEquals(STORED_APPEARANCE, written.captured.accountMetadata.appearance)
             assertEquals(

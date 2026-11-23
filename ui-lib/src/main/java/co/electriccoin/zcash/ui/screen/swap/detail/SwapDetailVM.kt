@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 import java.time.ZoneId
 
 class SwapDetailVM(
@@ -62,7 +63,8 @@ class SwapDetailVM(
                             .createTransactionDetailQuoteHeaderState(
                                 swap = swapData.status,
                                 originAsset = swapData.status?.originAsset,
-                                destinationAsset = swapData.status?.destinationAsset
+                                destinationAsset = swapData.status?.destinationAsset,
+                                savedExecution = swapData.savedMetadata?.executedAmountOut,
                             ),
                     status =
                         TransactionDetailSwapStatusRowState(
@@ -162,12 +164,9 @@ class SwapDetailVM(
         TransactionDetailInfoRowState(
             title = stringRes(R.string.private_quoted_output),
             message =
-                swapData.status?.let {
-                    stringResByCurrencyNumber(
-                        amount = it.quotedAmountOut,
-                        ticker = it.destinationAsset.tokenTicker
-                    )
-                }?.withStyle()
+                (swapData.savedMetadata?.quotedAmountOut ?: swapData.status?.quotedAmountOut)?.let {
+                    stringResByCurrencyNumber(amount = it, ticker = CURRENCY_TICKER).withStyle()
+                }
         )
 
     private fun createRecipientState(swapData: SwapData): TransactionDetailInfoRowState {
@@ -241,7 +240,9 @@ class SwapDetailVM(
         TransactionDetailHeaderState(
             title = createHeaderTitle(swapData),
             amount =
-                (swapData.status?.amountOutFormatted
+                (swapData.status?.executedAmountOut
+                    ?: swapData.savedMetadata?.executedAmountOut
+                    ?: swapData.status?.amountOutFormatted
                     ?: swapData.savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 })
                     ?.let { stringResByNumber(it) },
             icons =
@@ -262,12 +263,12 @@ class SwapDetailVM(
             PROCESSING -> stringRes(R.string.swapToZec_swapProcessing)
             SUCCESS ->
                 stringRes(
-                    if (swapData.status == null) {
-                        R.string.private_swap_saved_output
-                    } else if (swapData.status.executedAmountOut != null) {
-                        R.string.private_provider_output
-                    } else {
-                        R.string.private_estimated_output
+                    when {
+                        swapData.status?.executedAmountOut != null -> R.string.private_provider_output
+                        swapData.savedMetadata?.executedAmountOut != null -> R.string.private_saved_provider_output
+                        swapData.status != null || swapData.savedMetadata?.quotedAmountOut != null ->
+                            R.string.private_estimated_output
+                        else -> R.string.private_swap_saved_output
                     }
                 )
             REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)

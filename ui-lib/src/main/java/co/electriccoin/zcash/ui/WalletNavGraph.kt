@@ -44,15 +44,6 @@ import co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerArgs
 import co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerScreen
 import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerArgs
 import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerScreen
-import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollmentNavType
-import co.electriccoin.zcash.ui.screen.connecthw.date.HWDateArgs
-import co.electriccoin.zcash.ui.screen.connecthw.date.HWFirstTransactionScreen
-import co.electriccoin.zcash.ui.screen.connecthw.estimation.HWEstimationArgs
-import co.electriccoin.zcash.ui.screen.connecthw.estimation.HWFirstTransactionEstimationScreen
-import co.electriccoin.zcash.ui.screen.connecthw.height.HWHeightArgs
-import co.electriccoin.zcash.ui.screen.connecthw.height.HWWBHScreen
-import co.electriccoin.zcash.ui.screen.connecthw.neworactive.HWNewOrActiveArgs
-import co.electriccoin.zcash.ui.screen.connecthw.neworactive.HWNewOrActiveScreen
 import co.electriccoin.zcash.ui.screen.connectkeystone.connect.ConnectKeystoneArgs
 import co.electriccoin.zcash.ui.screen.connectkeystone.connect.ConnectKeystoneScreen
 import co.electriccoin.zcash.ui.screen.connectkeystone.connected.KeystoneConnectedArgs
@@ -168,11 +159,7 @@ import co.electriccoin.zcash.ui.screen.scan.ScanZashiAddressScreen
 import co.electriccoin.zcash.ui.screen.scan.thirdparty.AndroidThirdPartyScan
 import co.electriccoin.zcash.ui.screen.scan.thirdparty.ThirdPartyScan
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
-import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
 import co.electriccoin.zcash.ui.screen.scankeystone.WrapScanKeystonePCZTRequest
-import co.electriccoin.zcash.ui.screen.scankeystone.WrapScanKeystoneSignInRequest
-import co.electriccoin.zcash.ui.screen.selectkeystoneaccount.AndroidSelectKeystoneAccount
-import co.electriccoin.zcash.ui.screen.selectkeystoneaccount.SelectKeystoneAccount
 import co.electriccoin.zcash.ui.screen.send.Send
 import co.electriccoin.zcash.ui.screen.send.WrapSend
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
@@ -271,7 +258,6 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<IntegrationsArgs> { IntegrationsScreen() }
         composable<ExchangeRateSettingsArgs> { ExchangeRateSettingsScreen() }
         composable(NavigationTargets.CRASH_REPORTING_OPT_IN) { AndroidCrashReportingOptIn() }
-        composable<ScanKeystoneSignInRequest> { WrapScanKeystoneSignInRequest() }
         composable<ScanKeystonePCZTRequest> { WrapScanKeystonePCZTRequest() }
         composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
         composable<AccountListArgs> { AccountListScreen() }
@@ -303,22 +289,10 @@ fun NavGraphBuilder.walletNavGraph(
         composable<ConnectKeystoneArgs> { ConnectKeystoneScreen() }
         composable<ChooseHWWalletArgs> { ChooseHWWalletScreen() }
         dialogComposable<KeystoneExplainerScreenArgs> { KeystoneExplainerScreen() }
-        composable<HWNewOrActiveArgs>(typeMap = HWWalletEnrollmentNavType.typeMap) {
-            HWNewOrActiveScreen(it.toRoute())
-        }
-        composable<HWDateArgs>(typeMap = HWWalletEnrollmentNavType.typeMap) {
-            HWFirstTransactionScreen(it.toRoute())
-        }
-        composable<HWEstimationArgs>(typeMap = HWWalletEnrollmentNavType.typeMap) {
-            HWFirstTransactionEstimationScreen(it.toRoute())
-        }
-        composable<HWHeightArgs>(typeMap = HWWalletEnrollmentNavType.typeMap) {
-            HWWBHScreen(it.toRoute())
-        }
+        hardwareEnrollmentScreens()
         composable<KeystoneConnectedArgs> { KeystoneConnectedScreen() }
         composable<KeepOpenArgs> { KeepOpenScreen(it.toRoute()) }
         dialogComposable<HeightInfoArgs> { HeightInfoScreen() }
-        composable<SelectKeystoneAccount> { AndroidSelectKeystoneAccount(it.toRoute()) }
         composable<ReviewTransactionArgs> { AndroidReviewTransaction() }
         composable<TransactionProgressArgs> { TransactionProgressScreen(it.toRoute()) }
         composable<ActivityHistoryArgs> { ActivityHistoryScreen() }

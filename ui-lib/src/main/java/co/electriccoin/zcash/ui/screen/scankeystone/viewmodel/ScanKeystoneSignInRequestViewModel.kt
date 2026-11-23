@@ -25,6 +25,11 @@ internal class ScanKeystoneSignInRequestViewModel(
             )
         )
 
+    override fun onCleared() {
+        parseKeystoneSignInRequest.close()
+        super.onCleared()
+    }
+
     fun onScanned(result: String) =
         viewModelScope.launch {
             try {

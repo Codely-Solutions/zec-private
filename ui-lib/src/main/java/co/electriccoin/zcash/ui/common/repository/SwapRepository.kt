@@ -131,6 +131,10 @@ data class SwapAssetsData(
         get() =
             data?.any { asset -> asset.usdPrice?.let { it > BigDecimal.ZERO } == true } == true &&
                 zecAsset?.usdPrice?.let { it > BigDecimal.ZERO } == true
+
+    internal fun shouldRetryPrices(selectedAsset: SwapAsset?): Boolean =
+        error != null || !isLoading && data != null &&
+            (!hasUsableLivePrices || selectedAsset != null && selectedAsset.usdPrice?.signum() != 1)
 }
 
 /** Thrown by [SwapRepository.checkSwapStatus] when the supported-asset list could not be loaded. */

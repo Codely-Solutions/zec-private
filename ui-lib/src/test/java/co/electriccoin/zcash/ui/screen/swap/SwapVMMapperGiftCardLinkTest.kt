@@ -79,6 +79,40 @@ class SwapVMMapperGiftCardLinkTest {
     }
 
     @Test
+    fun unusablePricesLeaveTokenAndFiatInputsReadyForRefresh() {
+        val base = internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu")
+        var refreshes = 0
+        var requests = 0
+        val handlers = callbacks.copy(
+            onTryAgainClick = { refreshes++ },
+            onRequestSwapQuoteClick = { _, _, _ -> requests++ },
+        )
+        val retry = stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain)
+        for (direction in SwapDirection.entries) {
+            for (currency in CurrencyType.entries) {
+                val entered = base.copy(swapDirection = direction, currencyType = currency)
+                for (price in listOf(null, BigDecimal.ZERO, BigDecimal.ONE.negate())) {
+                    val unavailable = SwapAssetTestFixture.asset("zec", "zec", usdPrice = price)
+                    val form = mapper.createState(
+                        entered.copy(swapAssets = entered.swapAssets.copy(zecAsset = unavailable)), handlers
+                    )
+                    val button = assertNotNull(form.primaryButton)
+                    assertEquals(retry, button.text)
+                    assertTrue(button.isEnabled)
+                    button.onClick()
+                    assertEquals(BigDecimal.ONE, form.amountTextField.textField.innerState.amount)
+                }
+                val ready = assertNotNull(mapper.createState(entered, handlers).primaryButton)
+                assertEquals(stringRes(R.string.swapAndPay_getQuote), ready.text)
+                assertTrue(ready.isEnabled)
+                ready.onClick()
+            }
+        }
+        assertEquals(12, refreshes)
+        assertEquals(4, requests)
+    }
+
+    @Test
     fun wrongNetworkShowsInlineErrorAndDisablesQuoteInBothDirections() {
         SwapDirection.entries.forEach { direction ->
             val state = mapper.createState(

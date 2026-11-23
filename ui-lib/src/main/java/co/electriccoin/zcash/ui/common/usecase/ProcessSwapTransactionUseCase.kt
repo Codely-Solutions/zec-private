@@ -27,7 +27,10 @@ class ProcessSwapTransactionUseCase(
     ) = fundingMutex.withLock {
         validateFunding()
         val reference = transactionProposal.destination.address
-        check(reference !in reservedReferences && metadataRepository.getSwapMetadata(reference) == null) {
+        check(
+            reference !in reservedReferences &&
+                metadataRepository.getSwapMetadata(reference, transactionProposal.fundingAccount) == null
+        ) {
             "This swap is already tracked. Check its status before funding."
         }
         validateFunding()
@@ -36,14 +39,17 @@ class ProcessSwapTransactionUseCase(
         val selectedSwapAsset = transactionProposal.quote.destinationAsset
         metadataRepository.addSwapAssetToHistory(
             tokenTicker = selectedSwapAsset.tokenTicker,
-            chainTicker = selectedSwapAsset.chainTicker
+            chainTicker = selectedSwapAsset.chainTicker,
+            account = transactionProposal.fundingAccount,
         )
     }
 
     suspend operator fun invoke(transactionProposal: SwapTransactionProposal, result: SubmitResult) {
         fundingMutex.withLock {
             val reference = transactionProposal.destination.address
-            if (reference !in reservedReferences && metadataRepository.getSwapMetadata(reference) == null) {
+            if (reference !in reservedReferences &&
+                metadataRepository.getSwapMetadata(reference, transactionProposal.fundingAccount) == null
+            ) {
                 writePendingTracking(transactionProposal)
             }
         }
@@ -76,6 +82,7 @@ class ProcessSwapTransactionUseCase(
             status = SwapStatus.PENDING,
             reviewedIdentity = transactionProposal.quote.reviewedIdentity(),
             signedQuoteEvidence = (transactionProposal.quote as? NearSwapQuote)?.response?.signedEvidence,
+            account = transactionProposal.fundingAccount,
         )) { "Unable to save swap tracking before funding" }
     }
 

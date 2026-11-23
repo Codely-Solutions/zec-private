@@ -38,7 +38,8 @@ object RecipientAddressPolicy {
         val asset: String? = null,
         /** Decimal native-asset units, never base units. */
         val amount: BigDecimal? = null,
-        val routing: Map<String, String> = emptyMap()
+        val routing: Map<String, String> = emptyMap(),
+        val nativeEvmPayment: Boolean = false,
     )
 
     sealed interface ParseResult {
@@ -46,7 +47,9 @@ object RecipientAddressPolicy {
         data class Invalid(val reason: Reason) : ParseResult
     }
 
-    private val evmNetworks = setOf("arb", "avax", "base", "bsc", "eth", "pol")
+    private val evmNativeAssets = mapOf(
+        "arb" to "eth", "avax" to "avax", "base" to "eth", "bsc" to "bnb", "eth" to "eth", "pol" to "pol"
+    )
     private val chainIds = mapOf("1" to "eth", "56" to "bsc", "137" to "pol",
         "8453" to "base", "42161" to "arb", "43114" to "avax")
     private val uriNetworks = mapOf(
@@ -63,6 +66,8 @@ object RecipientAddressPolicy {
     private const val XRP58 = "rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz"
     private const val BECH32 = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 
+    internal fun evmNativeAsset(network: String): String? = evmNativeAssets[network.lowercase(Locale.ROOT)]
+
     // Prefixes and payload lengths follow each network address wire format.
     @Suppress("MagicNumber", "ReturnCount", "CyclomaticComplexMethod")
     fun validate(address: String, network: String): Validation {
@@ -73,7 +78,7 @@ object RecipientAddressPolicy {
             return Validation.Invalid(Reason.INVALID_ADDRESS)
         }
         val valid = when (network) {
-            in evmNetworks -> evm(address)
+            in evmNativeAssets -> evm(address)
             "btc" -> checked58(address, listOf(byteArrayOf(0), byteArrayOf(5)), 20) || witness(address, "bc")
             // M-prefixed P2SH is unambiguous. Legacy 3-prefixed Litecoin/BTC P2SH is shared.
             "ltc" -> checked58(address, listOf(byteArrayOf(48), byteArrayOf(50), byteArrayOf(5)), 20) ||
@@ -146,10 +151,9 @@ object RecipientAddressPolicy {
         if (params.keys.any { it != "value" } || target.contains('/')) return unsupported()
         val destination = target.removePrefix("pay-")
         if (destination.count { it == '@' } > 1) return unsupported()
-        val explicitChain = destination.substringAfter('@', "")
+        val explicitChain = destination.substringAfter('@', "").takeIf { '@' in destination }
         // ERC681 defaults to the current chain when absent; retain this ambiguity for the selected network.
-        val network = if (explicitChain.isEmpty()) null else chainIds[explicitChain] ?: return unsupported()
-        if (network != null && network !in evmNetworks) return unsupported()
+        val network = explicitChain?.let { chainIds[it] ?: return unsupported() }
         val address = destination.substringBefore('@')
         if (!evm(address)) return ParseResult.Invalid(Reason.INVALID_ADDRESS)
         val amount = params["value"]?.let {
@@ -164,9 +168,8 @@ object RecipientAddressPolicy {
             ) return unsupported()
             baseUnits.movePointLeft(EVM_DECIMAL_PLACES)
         }
-        // Polygon's native asset differs; all other curated EVM chains use ETH/BNB/AVAX.
-        val asset = when (network) { "pol" -> "pol"; "bsc" -> "bnb"; "avax" -> "avax"; else -> "eth" }
-        return ParseResult.Parsed(RecipientInput(address, network, asset, amount))
+        val asset = network?.let(::evmNativeAsset)
+        return ParseResult.Parsed(RecipientInput(address, network, asset, amount, nativeEvmPayment = true))
     }
 
     // Keep native URI rejection gates beside the field each validates.
