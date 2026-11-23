@@ -56690,10 +56690,10 @@ index 000000000..31bc97d7e
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt
 new file mode 100644
-index 000000000..8434f272b
+index 000000000..e025eb920
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt
-@@ -0,0 +1,446 @@
+@@ -0,0 +1,451 @@
 +package co.electriccoin.zcash.ui.screen.deletewallet
 +
 +import android.content.Context
@@ -57053,6 +57053,11 @@ index 000000000..8434f272b
 +            override suspend fun putString(key: PreferenceKey, value: String?) {
 +                beforePreferenceWrite()
 +                androidPreferences.putString(key, value)
++            }
++
++            override suspend fun putStringWithRollback(key: PreferenceKey, value: String?) {
++                beforePreferenceWrite()
++                androidPreferences.putStringWithRollback(key, value)
 +            }
 +        }
 +        private val encryptedProvider = mockk<EncryptedPreferenceProvider> {

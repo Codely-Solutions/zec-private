@@ -2935,7 +2935,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/connecthw/HWEnrollmentVMTest.kt": "d14686913ee5a6e13e761eb85f62992a06bbb1c6618bf34daf42b7a6af26de96",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/contact/ContactGiftCardLinkRefusalTest.kt": "9a2af56f942446c6e516bb8ab886335fdabebac3223a7aec16e5ff085dc0d274",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletReviewProbesTest.kt": "1d8c1ac25729f74cb341fbf335bf1d1be37581ae0155c742bfb0970453c67ec7",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt": "6452f9da78a83f65121b0630d751524197a11d9bbbfbb2c70b52ff13e8e105a0",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetWalletWriteOwnershipTest.kt": "c08a74c1623a53f6c9f4418a81da605367a2138ca8d35da0f31c2ac3c99b55c6",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/ResetZashiVMTest.kt": "272a832ed3aa426b0bcb405753288e9d305a51a52141492843f6543880c303e7",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletCoordinatorResetGateTest.kt": "7026662e89cc15528c2ab584e15f5f6d5d2e7590baec975fe64cdda12f2caedf",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/deletewallet/WalletSdkInputCommitTest.kt": "9af53394cfaec086548c997d6a36db3951e14b3b255bd8b7dadcab48619d7dc5",
