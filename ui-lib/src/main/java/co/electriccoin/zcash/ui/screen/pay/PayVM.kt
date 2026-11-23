@@ -36,6 +36,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.pay.info.PayInfoArgs
 import co.electriccoin.zcash.ui.screen.swap.SwapCancelState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -46,6 +47,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import kotlin.time.Duration.Companion.milliseconds
@@ -89,6 +91,8 @@ internal class PayVM(
 
     private val isCancelStateVisible = MutableStateFlow(false)
     private var quoteActionInProgress = false
+    private var quoteRequestJob: Job? = null
+    private var isCancellingQuote = false
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val isABHintVisible =
@@ -138,7 +142,8 @@ internal class PayVM(
             onRequestSwapQuoteClick = ::onRequestSwapQuoteClick,
             onTryAgainClick = ::onTryAgainClick,
             onAddressChange = ::onAddressChange,
-            onTextFieldChange = ::onTextFieldChange,
+            onTokenAmountChange = ::onTokenAmountChange,
+            onFiatAmountChange = ::onFiatAmountChange,
             onQrCodeScannerClick = ::onQrCodeScannerClick,
             onAddressBookClick = ::onAddressBookClick,
             onDeleteSelectedContactClick = ::onDeleteSelectedContactClick
@@ -182,12 +187,7 @@ internal class PayVM(
                 internalState.update { state ->
                     val selected = state.asset
                     val refreshed = SwapPriceMarkets.findAsset(assets.data, state.selectedAssetId)
-                    when {
-                        refreshed == selected -> state
-                        refreshed != null && selected.positiveUsdPrice != null -> state.copy(asset = refreshed)
-                        refreshed != null -> state.withAsset(refreshed)
-                        else -> state.withAsset(null)
-                    }
+                    if (refreshed == selected) state else state.withAsset(refreshed)
                 }
             }
         }
@@ -234,29 +234,29 @@ internal class PayVM(
 
     private fun onBack() =
         viewModelScope.launch {
+            if (isCancellingQuote) return@launch
             if (internalState.value.isRequestingQuote) {
                 isCancelStateVisible.update { true }
             } else if (isCancelStateVisible.value) {
                 isCancelStateVisible.update { false }
                 navigateToSwapQuoteIfAvailable { hideCancelBottomSheet() }
             } else {
-                if (isCancelStateVisible.value) {
-                    hideCancelBottomSheet()
-                }
+                isCancellingQuote = true
                 cancelSwap()
             }
         }
 
     private fun onCancelSwapClick() =
         viewModelScope.launch {
-            if (isCancelStateVisible.value) {
-                hideCancelBottomSheet()
-            }
-            cancelSwap()
+            if (isCancellingQuote || !isCancelStateVisible.value) return@launch
+            isCancellingQuote = true
+            quoteRequestJob?.cancel()
+            cancelSwap.afterDismissal { hideCancelBottomSheet() }
         }
 
     private fun onDismissCancelClick() =
         viewModelScope.launch {
+            if (isCancellingQuote || !isCancelStateVisible.value) return@launch
             isCancelStateVisible.update { false }
             navigateToSwapQuoteIfAvailable { hideCancelBottomSheet() }
         }
@@ -267,17 +267,26 @@ internal class PayVM(
         delay(350.milliseconds)
     }
 
-    private fun onTextFieldChange(amount: NumberTextFieldInnerState, fiat: NumberTextFieldInnerState) {
-        internalState.update {
-            it.copy(amount = amount, fiatAmount = fiat, hasEditedRequestAmount = true, requestAmountAssetId = null)
+    private fun onTokenAmountChange(amount: NumberTextFieldInnerState) {
+        internalState.update { state ->
+            state.copy(amount = amount, isFiatEdited = false).withEditedAmount()
         }
     }
+
+    private fun onFiatAmountChange(amount: NumberTextFieldInnerState) {
+        internalState.update { state ->
+            state.copy(fiatAmount = amount, isFiatEdited = true).withEditedAmount()
+        }
+    }
+
+    private fun InternalStateImpl.withEditedAmount() =
+        copy(hasEditedRequestAmount = true, requestAmountAssetId = null).recomputeLinkedAmount()
 
     /** Gates the quote request behind the refund warning before the CTA starts spinning. */
     private fun onRequestSwapQuoteClick(amount: BigDecimal, fiatAmount: BigDecimal?, address: String) =
         viewModelScope.launch {
             val snapshot = internalState.value
-            if (snapshot.isRequestingQuote || quoteActionInProgress) return@launch
+            if (snapshot.isRequestingQuote || quoteActionInProgress || isCancellingQuote) return@launch
             val asset = snapshot.asset ?: return@launch
             if (asset.positiveUsdPrice == null || swapRepository.assets.value.zecAsset.positiveUsdPrice == null) {
                 return@launch
@@ -294,22 +303,25 @@ internal class PayVM(
                 if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = SwapMode.EXACT_OUTPUT)) {
                     return@launch
                 }
+                if (isCancellingQuote) return@launch
                 val current = internalState.value
                 val sameRecipient =
                     current.address == snapshot.address && current.selectedABContact == snapshot.selectedABContact
                 if (!sameRecipient || current.asset?.assetId != asset.assetId || current.amount != snapshot.amount) {
                     return@launch
                 }
+                quoteRequestJob = coroutineContext.job
                 internalState.update { it.copy(isRequestingQuote = true) }
                 requestSwapQuote.requestExactOutput(
                     amount = amount,
                     address = address,
                     selectedAsset = asset,
                     slippage = slippage,
-                    canNavigateToSwapQuote = { !isCancelStateVisible.value },
+                    canNavigateToSwapQuote = { !isCancellingQuote && !isCancelStateVisible.value },
                     contactNetwork = contactNetwork
                 )
             } finally {
+                quoteRequestJob = null
                 quoteActionInProgress = false
                 internalState.update { it.copy(isRequestingQuote = false) }
             }
@@ -325,7 +337,7 @@ internal class PayVM(
                 hasEditedRequestAmount = state.hasEditedRequestAmount && new == state.address
             )
             val withRequestAmount = edited.applyRequestAmount()
-            if (withRequestAmount == edited) edited else withRequestAmount.recomputeFiat()
+            if (withRequestAmount == edited) edited else withRequestAmount.recomputeLinkedAmount()
         }
 
     private fun onSwapAssetPickerClick() =
@@ -340,11 +352,7 @@ internal class PayVM(
         copy(selectedAssetId = asset.assetId)
             .withAsset(SwapPriceMarkets.findAsset(swapRepository.assets.value.data, asset.assetId))
 
-    /**
-     * Sets the selected asset and atomically recomputes the fiat amount inner state in a single
-     * update so the displayed fiat value always reflects the current asset's USD price — without an
-     * observer feeding back into this same flow.
-     */
+    /** Keeps the last edited denomination while updating the derived field at the current price. */
     private fun InternalStateImpl.withAsset(asset: SwapAsset?): InternalStateImpl {
         val updated = copy(asset = asset)
         val amounts = if (asset?.assetId == this.asset?.assetId) {
@@ -352,7 +360,7 @@ internal class PayVM(
         } else {
             updated.clearRequestAmount(keepBinding = true).applyRequestAmount()
         }
-        return amounts.recomputeFiat()
+        return amounts.recomputeLinkedAmount()
     }
 
     private fun InternalStateImpl.applyRequestAmount(): InternalStateImpl {
@@ -369,6 +377,7 @@ internal class PayVM(
             copy(
                 amount = NumberTextFieldInnerState.fromAmount(requested),
                 fiatAmount = NumberTextFieldInnerState(),
+                isFiatEdited = false,
                 requestAmountAssetId = selected.assetId
             )
         } ?: this
@@ -381,8 +390,8 @@ internal class PayVM(
             requestAmountAssetId = requestAmountAssetId.takeIf { keepBinding }
         )
 
-    private fun InternalStateImpl.recomputeFiat(): InternalStateImpl =
-        if (amount.amount == null && fiatAmount.amount != null) {
+    private fun InternalStateImpl.recomputeLinkedAmount(): InternalStateImpl =
+        if (isFiatEdited) {
             copy(
                 amount =
                     exactOutputVMMapper.createAmountInnerState(
@@ -437,6 +446,7 @@ internal data class InternalStateImpl(
     override val swapAssets: SwapAssetsData,
     override val isEphemeralAddressLocked: Boolean,
     val selectedAssetId: String? = null,
+    val isFiatEdited: Boolean = false,
     val hasEditedRequestAmount: Boolean = false,
     // The current address supplied the amount in this denomination.
     val requestAmountAssetId: String? = null,

@@ -1,5 +1,6 @@
 """Check the app's exact independent market mappings against the public swap catalog."""
 import argparse
+from collections import Counter
 import json
 from decimal import Decimal
 from pathlib import Path
@@ -65,23 +66,28 @@ def entries():
     return allowed, mapped
 
 
-def live_catalog(allowed, response):
+def live_catalog(allowed, mapped, response):
     live = {}
-    seen = set()
+    counts = Counter(row['assetId'] for row in response)
+    mapped_display = {identity[:3] for asset, identity in mapped.items() if counts[asset] == 1}
     for row in response:
-        symbol, chain, decimals = (row[key] for key in ('symbol', 'blockchain', 'decimals'))
-        key = symbol, chain, decimals
-        if key in seen:
+        asset = row['assetId']
+        if counts[asset] != 1:
             continue
-        seen.add(key)
-        if (symbol.casefold(), chain) in allowed and Decimal(str(row.get('price') or '0')) > 0:
-            live[row['assetId']] = (symbol.casefold(), chain, decimals, row.get('contractAddress'))
+        symbol, chain, decimals = (row[key] for key in ('symbol', 'blockchain', 'decimals'))
+        display = (symbol.casefold(), chain, decimals)
+        # Distinct alias IDs can coexist with the exact ID used by the wallet.
+        if asset not in mapped and display in mapped_display:
+            continue
+        price = Decimal(str(row.get('price') or '0'))
+        if (asset in mapped or display[:2] in allowed) and price.is_finite() and price > 0:
+            live[asset] = (*display, row.get('contractAddress'))
     return live
 
 
 def check(response):
     allowed, mapped = entries()
-    live = live_catalog(allowed, response)
+    live = live_catalog(allowed, mapped, response)
     missing = live.keys() - mapped.keys()
     extra = mapped.keys() - live.keys()
     changed = {key for key in live.keys() & mapped.keys() if live[key] != mapped[key]}

@@ -41,6 +41,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.screen.swap.info.SwapRefundAddressInfoArgs
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -50,6 +51,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -96,6 +98,8 @@ internal class SwapVM(
 
     private val isCancelStateVisible = MutableStateFlow(false)
     private var quoteActionInProgress = false
+    private var quoteRequestJob: Job? = null
+    private var isCancellingQuote = false
 
     /**
      * Whether the selected account holds spend authority, null until it has loaded; tracked so the
@@ -294,29 +298,29 @@ internal class SwapVM(
 
     private fun onBack() =
         viewModelScope.launch {
+            if (isCancellingQuote) return@launch
             if (internalState.value.isRequestingQuote) {
                 isCancelStateVisible.update { true }
             } else if (isCancelStateVisible.value) {
                 isCancelStateVisible.update { false }
                 navigateToSwapQuoteIfAvailable { hideCancelBottomSheet() }
             } else {
-                if (isCancelStateVisible.value) {
-                    hideCancelBottomSheet()
-                }
+                isCancellingQuote = true
                 cancelSwap()
             }
         }
 
     private fun onCancelSwapClick() =
         viewModelScope.launch {
-            if (isCancelStateVisible.value) {
-                hideCancelBottomSheet()
-            }
-            cancelSwap()
+            if (isCancellingQuote || !isCancelStateVisible.value) return@launch
+            isCancellingQuote = true
+            quoteRequestJob?.cancel()
+            cancelSwap.afterDismissal { hideCancelBottomSheet() }
         }
 
     private fun onDismissCancelClick() =
         viewModelScope.launch {
+            if (isCancellingQuote || !isCancelStateVisible.value) return@launch
             isCancelStateVisible.update { false }
             navigateToSwapQuoteIfAvailable { hideCancelBottomSheet() }
         }
@@ -364,7 +368,7 @@ internal class SwapVM(
     private fun onRequestSwapQuoteClick(amount: BigDecimal, fiatAmount: BigDecimal?, address: String) =
         viewModelScope.launch {
             val snapshot = internalState.value
-            if (snapshot.isRequestingQuote || quoteActionInProgress) return@launch
+            if (snapshot.isRequestingQuote || quoteActionInProgress || isCancellingQuote) return@launch
             val asset = snapshot.swapAsset ?: return@launch
             if (asset.positiveUsdPrice == null || swapRepository.assets.value.zecAsset.positiveUsdPrice == null) {
                 return@launch
@@ -383,6 +387,8 @@ internal class SwapVM(
                 if (!navigateToSwapRefundWarning(fiatAmount = fiatAmount, mode = direction.toSwapMode())) {
                     return@launch
                 }
+                if (isCancellingQuote) return@launch
+                quoteRequestJob = coroutineContext.job
                 internalState.update { it.copy(isRequestingQuote = true) }
                 when (direction) {
                     SWAP_FROM_ZEC -> {
@@ -391,7 +397,7 @@ internal class SwapVM(
                             address = address,
                             selectedAsset = asset,
                             slippage = slippage,
-                            canNavigateToSwapQuote = { !isCancelStateVisible.value },
+                            canNavigateToSwapQuote = { !isCancellingQuote && !isCancelStateVisible.value },
                             contactNetwork = contactNetwork
                         )
                     }
@@ -402,12 +408,13 @@ internal class SwapVM(
                             refundAddress = address,
                             selectedAsset = asset,
                             slippage = slippage,
-                            canNavigateToSwapQuote = { !isCancelStateVisible.value },
+                            canNavigateToSwapQuote = { !isCancellingQuote && !isCancelStateVisible.value },
                             contactNetwork = contactNetwork
                         )
                     }
                 }
             } finally {
+                quoteRequestJob = null
                 quoteActionInProgress = false
                 internalState.update { it.copy(isRequestingQuote = false) }
             }

@@ -42,10 +42,16 @@ import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteArgs
 import co.electriccoin.zcash.ui.screen.texunsupported.TEXUnsupportedArgs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import java.math.BigDecimal
+import java.util.concurrent.atomic.AtomicReference
 
 class RequestSwapQuoteUseCase(
     private val navigationRouter: NavigationRouter,
@@ -58,6 +64,18 @@ class RequestSwapQuoteUseCase(
     private val synchronizerProvider: SynchronizerProvider,
     private val diagnostics: QuoteRequestDiagnostics = QuoteRequestDiagnostics(),
 ) {
+    private val activeRequest = AtomicReference<Job?>()
+
+    private suspend fun runRequest(block: suspend () -> Unit) = coroutineScope {
+        val owner = coroutineContext.job
+        activeRequest.getAndSet(owner)?.cancel()
+        try {
+            block()
+        } finally {
+            activeRequest.compareAndSet(owner, null)
+        }
+    }
+
     suspend fun requestExactInput(
         amount: BigDecimal,
         address: String,
@@ -65,11 +83,11 @@ class RequestSwapQuoteUseCase(
         slippage: BigDecimal,
         canNavigateToSwapQuote: () -> Boolean,
         contactNetwork: String? = null
-    ) {
+    ) = runRequest {
         val recipient = validatedRecipient(
             address, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
-        ) ?: return
-        val newAddress = requestFreshAddress() ?: return
+        ) ?: return@runRequest
+        val newAddress = requestFreshAddress(canNavigateToSwapQuote) ?: return@runRequest
         requestQuote(
             requestQuote = {
                 swapRepository.requestExactInputQuote(
@@ -92,7 +110,7 @@ class RequestSwapQuoteUseCase(
         slippage: BigDecimal,
         canNavigateToSwapQuote: () -> Boolean,
         contactNetwork: String? = null
-    ) {
+    ) = runRequest {
         val recipient =
             if (amount.toExactNearQuoteAmountOrNull(selectedAsset.decimals) != null) {
                 validatedRecipient(address, selectedAsset, contactNetwork, canNavigateToSwapQuote)
@@ -102,8 +120,8 @@ class RequestSwapQuoteUseCase(
                     navigateToErrorUseCase(ErrorArgs.General(error))
                 }
                 null
-            } ?: return
-        val newAddress = requestFreshAddress() ?: return
+            } ?: return@runRequest
+        val newAddress = requestFreshAddress(canNavigateToSwapQuote) ?: return@runRequest
         requestQuote(
             requestQuote = {
                 swapRepository.requestExactOutputQuote(
@@ -126,11 +144,11 @@ class RequestSwapQuoteUseCase(
         slippage: BigDecimal,
         canNavigateToSwapQuote: () -> Boolean,
         contactNetwork: String? = null
-    ) {
+    ) = runRequest {
         val refund = validatedRecipient(
             refundAddress, selectedAsset, contactNetwork, canNavigateToSwapQuote, allowPaymentAmount = false
-        ) ?: return
-        val newAddress = requestFreshAddress() ?: return
+        ) ?: return@runRequest
+        val newAddress = requestFreshAddress(canNavigateToSwapQuote) ?: return@runRequest
         requestQuote(
             requestQuote = {
                 swapRepository
@@ -147,13 +165,14 @@ class RequestSwapQuoteUseCase(
         )
     }
 
-    private suspend fun requestFreshAddress(): String? =
+    private suspend fun requestFreshAddress(canNavigate: () -> Boolean): String? =
         try {
             diagnostics.trace(QuoteRequestStage.FRESH_ADDRESS) {
                 accountDataSource.requestNextShieldedAddress(requireFresh = true)
             }
         } catch (e: FreshShieldedAddressUnavailableException) {
-            navigateToErrorUseCase(ErrorArgs.General(e))
+            currentCoroutineContext().ensureActive()
+            if (canNavigate()) navigateToErrorUseCase(ErrorArgs.General(e))
             null
         }
 
@@ -174,6 +193,7 @@ class RequestSwapQuoteUseCase(
         val sdkValid = !needsSdk || withContext(Dispatchers.Default) {
             synchronizerProvider.getSynchronizer().validateAddress(address) !is AddressType.Invalid
         }
+        currentCoroutineContext().ensureActive()
         if (validation.isValid && sdkValid) return address
         if (canNavigate()) {
             navigateToErrorUseCase(
@@ -185,16 +205,13 @@ class RequestSwapQuoteUseCase(
 
     private suspend fun rejectUnsupportedFunding(
         funding: FundingCapability,
+        result: SwapQuoteData,
         canNavigate: () -> Boolean
     ): Boolean {
         if (funding != FundingCapability.LOCAL_TRANSACTION || accountDataSource.getSelectedAccount().isSpendable) {
             return false
         }
-        if (canNavigate()) {
-            swapRepository.clearQuote()
-            zashiProposalRepository.clear()
-            keystoneProposalRepository.clear()
-            ledgerProposalPipeline.clear()
+        onPreparationFailure(result, canNavigate) {
             navigateToErrorUseCase(ErrorArgs.General(AccountOperationUnsupportedException.viewOnly()))
         }
         return true
@@ -205,10 +222,12 @@ class RequestSwapQuoteUseCase(
         requestQuote: suspend () -> Unit,
         funding: FundingCapability,
         canNavigateToSwapQuote: () -> Boolean
-    ) = withContext(Dispatchers.Default) {
+    ) {
+        currentCoroutineContext().ensureActive()
         requestQuote()
 
         val result = swapRepository.quote.filterNotNull().first { it != SwapQuoteData.Loading }
+        currentCoroutineContext().ensureActive()
 
         val mismatchArgs = (result as? SwapQuoteData.Error)?.toMismatchArgs()
         if (mismatchArgs != null) {
@@ -216,11 +235,13 @@ class RequestSwapQuoteUseCase(
                 swapRepository.clearQuote()
                 navigationRouter.forward(mismatchArgs)
             }
-            return@withContext
+            return
         }
 
         if (result is SwapQuoteData.Success) {
-            if (rejectUnsupportedFunding(funding, canNavigateToSwapQuote)) return@withContext
+            if (rejectUnsupportedFunding(funding, result, canNavigateToSwapQuote)) return
+            currentCoroutineContext().ensureActive()
+            if (swapRepository.quote.value !== result) return
             try {
                 ZecSwapComposition.validate(result.quote)
             } catch (e: IllegalArgumentException) {
@@ -228,7 +249,7 @@ class RequestSwapQuoteUseCase(
                     swapRepository.clearQuote()
                     navigateToErrorUseCase(ErrorArgs.General(e))
                 }
-                return@withContext
+                return
             }
         }
 
@@ -238,31 +259,40 @@ class RequestSwapQuoteUseCase(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: TexUnsupportedOnKSException) {
-                swapRepository.clearQuote()
-                zashiProposalRepository.clear()
-                keystoneProposalRepository.clear()
-                ledgerProposalPipeline.clear()
                 val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
-                navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
-                return@withContext
+                onPreparationFailure(result, canNavigateToSwapQuote) {
+                    navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
+                }
+                return
             } catch (_: InsufficientFundsException) {
-                swapRepository.clearQuote()
-                zashiProposalRepository.clear()
-                keystoneProposalRepository.clear()
-                ledgerProposalPipeline.clear()
-                navigationRouter.forward(InsufficientFundsArgs)
-                return@withContext
+                onPreparationFailure(result, canNavigateToSwapQuote) {
+                    navigationRouter.forward(InsufficientFundsArgs)
+                }
+                return
             } catch (e: Exception) {
-                swapRepository.clearQuote()
-                zashiProposalRepository.clear()
-                keystoneProposalRepository.clear()
-                ledgerProposalPipeline.clear()
-                navigateToErrorUseCase(ErrorArgs.General(e))
-                return@withContext
+                onPreparationFailure(result, canNavigateToSwapQuote) {
+                    navigateToErrorUseCase(ErrorArgs.General(e))
+                }
+                return
             }
         }
 
+        currentCoroutineContext().ensureActive()
         navigateToPreparedReview(result, canNavigateToSwapQuote)
+    }
+
+    private suspend fun onPreparationFailure(
+        result: SwapQuoteData,
+        canNavigate: () -> Boolean,
+        navigate: () -> Unit,
+    ) {
+        currentCoroutineContext().ensureActive()
+        if (swapRepository.quote.value !== result) return
+        swapRepository.clearQuote()
+        zashiProposalRepository.clear()
+        keystoneProposalRepository.clear()
+        ledgerProposalPipeline.clear()
+        if (canNavigate()) navigate()
     }
 
     private fun navigateToPreparedReview(result: SwapQuoteData, canNavigateToSwapQuote: () -> Boolean) {

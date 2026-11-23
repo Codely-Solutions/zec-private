@@ -467,7 +467,41 @@ class MaintenanceWatchTest(unittest.TestCase):
                     pending_recovery('repos/fork/wallet', directory,
                                      lambda *_args, **_kwargs: {'release_tag': 'v3.19.0-private.20'})
             (directory/(tag+'.json')).write_text(json.dumps({'apk_sha256': digest}))
-            with patch('maintenance_watch.api', return_value=latest):
+            with patch('maintenance_watch.api', side_effect=[latest, [[]]]) as api:
+                self.assertIsNone(pending_recovery('repos/fork/wallet', directory))
+                self.assertIn('issues?state=open', api.call_args.args[0])
+
+    def test_recorded_publication_is_reconciled_only_for_an_open_matching_blocker_and_exact_attestation(self):
+        import notify
+
+        tag = 'v3.19.0-private.31'
+        digest = 'a' * 64
+        latest = dict(tag_name=tag, assets=[dict(name='zec-private-latest.apk', digest='sha256:' + digest)])
+        proof = dict(release_tag=tag, apk_sha256=digest, source_sha='b' * 40, controller_sha='c' * 40,
+                     publisher={'run': '4', 'attempt': '2'}, production_job_id=12)
+        target = dict(release_tag=tag, attestation_attempt=2, attestation_id=42)
+        archived = {'artifacts': [dict(id=41, name='release-attestation-1', expired=False, workflow_run={'id': 4}),
+                                  dict(id=42, name='release-attestation-2', expired=False, workflow_run={'id': 4})]}
+        state = dict(operation='release', candidate=proof['source_sha'], attestation='42')
+        issue = dict(title=notify.TITLE, state='open',
+                     body=notify.with_current('', None, state, 'Integration failed', '', 'run'))
+        unrelated = dict(issue, body=notify.with_current('', None,
+                                                         dict(operation='discovery', candidate='main'),
+                                                         'Discovery failed', '', 'run'))
+        with tempfile.TemporaryDirectory() as temp, patch_environment({'GITHUB_REPOSITORY': 'example/zec-private'}):
+            directory = Path(temp)
+            (directory / (tag + '.json')).write_bytes((json.dumps(proof, indent=2) + '\n').encode())
+            with patch('maintenance_watch.api', side_effect=[latest, [[unrelated]]]), \
+                    patch('reconcile_release.lookup') as lookup:
+                self.assertIsNone(pending_recovery('repos/fork/wallet', directory))
+                lookup.assert_not_called()
+            with patch('maintenance_watch.api', side_effect=[latest, [[issue]], archived]), \
+                    patch('reconcile_release.lookup', return_value=(target, proof, latest)) as lookup:
+                self.assertEqual(pending_recovery('repos/fork/wallet', directory),
+                                 dict(reconciliation_run='4', reconciliation_attempt='2', reconciliation_artifact='42'))
+                lookup.assert_called_once_with('4', '2', '42', target=latest)
+            with patch('maintenance_watch.api', side_effect=[latest, [[issue]], archived]), \
+                    patch('reconcile_release.lookup', return_value=(target, dict(proof, production_job_id=99), latest)):
                 self.assertIsNone(pending_recovery('repos/fork/wallet', directory))
 
 

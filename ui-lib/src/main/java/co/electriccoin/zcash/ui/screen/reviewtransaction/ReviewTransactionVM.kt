@@ -264,10 +264,12 @@ class ReviewTransactionVM(
                             onClick = { onAddContactClick(transactionProposal.destination.address) }
                         ).takeIf { addressBookContact == null }
                 ),
-                transactionProposal.memo.takeIf { it.value.isNotEmpty() }?.let {
+                transactionProposal.memo.takeIf { it.value.isNotEmpty() || transactionProposal.binaryMemoByteCount != null }?.let {
                     MessageState(
                         title = stringRes(R.string.send_requestPayment_for),
-                        message = stringRes(it.value)
+                        message = transactionProposal.binaryMemoByteCount?.let { count ->
+                            stringRes(R.string.zip321_binary_memo, count)
+                        } ?: stringRes(it.value)
                     )
                 },
                 FinancialInfoState(

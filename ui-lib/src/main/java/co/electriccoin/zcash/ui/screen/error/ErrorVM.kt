@@ -7,6 +7,7 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AccountOperationUnsupportedException
 import co.electriccoin.zcash.ui.common.model.KeystoneFirmwareVersion
 import co.electriccoin.zcash.ui.common.model.SubmitResult
+import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 import co.electriccoin.zcash.ui.common.model.errorCopy
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.viewmodel.STACKTRACE_LIMIT
@@ -159,6 +160,7 @@ class ErrorVM(
      * copy of its kind instead of the generic title plus a stack trace.
      */
     private fun createGeneralErrorState(args: ErrorArgs.General): ErrorState {
+        if (args.exception is UneditableZip321MemoException) return createUneditableZip321MemoState()
         val unsupported =
             (args.exception as? AccountOperationUnsupportedException)?.kind?.errorCopy(viewOnlyContent)
         return ErrorState(
@@ -182,6 +184,18 @@ class ErrorVM(
             onBack = ::onBack,
         )
     }
+
+    private fun createUneditableZip321MemoState() =
+        ErrorState(
+            title = stringRes(R.string.zip321_non_text_memo_title),
+            message = stringRes(R.string.zip321_non_text_memo_edit_error),
+            positive = ButtonState(
+                text = stringRes(co.electriccoin.zcash.ui.design.R.string.general_ok),
+                onClick = ::onBack,
+            ),
+            negative = null,
+            onBack = ::onBack,
+        )
 
     private fun createGeneralShieldingErrorState(args: ErrorArgs.ShieldingGeneralError) =
         ErrorState(

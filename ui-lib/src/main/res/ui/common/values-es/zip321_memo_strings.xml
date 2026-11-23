@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="zip321_binary_memo">Nota no textual (%1$d bytes). El pago incluirá la nota original.</string>
+    <string name="zip321_non_text_memo_title">Nota de pago no textual</string>
+    <string name="zip321_non_text_memo_edit_error">Esta solicitud de pago no se puede editar desde Enviar. Escanéala de nuevo o pide al destinatario una solicitud de pago con una nota de texto.</string>
+</resources>

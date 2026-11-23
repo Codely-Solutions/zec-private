@@ -9,6 +9,7 @@ import subprocess
 from urllib.request import urlopen
 
 from maintenance_cadence import window
+from notify import PUBLICATION_OPERATIONS, blocker_issues, current_blockers, matches_recovery
 
 
 REPOSITORY = 'Codely-Solutions/zec-private'
@@ -91,8 +92,8 @@ def wrapper_source(prefix, sha):
     return data.decode('ascii')
 
 
-def api(path):
-    return json.loads(subprocess.check_output(['gh', 'api', path], text=True, timeout=30))
+def api(path, *options):
+    return json.loads(subprocess.check_output(['gh', 'api', path, *options], text=True, timeout=30))
 
 
 def verified_wrapper(prefix, number, base, head, repository_id):
@@ -118,13 +119,29 @@ def pending_recovery(prefix, evidence_dir=RELEASE_EVIDENCE, resolve=None):
     tag = latest['tag_name']
     if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+-private\.[1-9][0-9]*', tag):
         raise ValueError('Unexpected latest wallet release identity')
-    record = evidence_dir / (tag + '.json')
-    if record.is_file():
-        digest = json.loads(record.read_text())['apk_sha256']
+    evidence = evidence_dir / (tag + '.json')
+    recorded, blockers = None, []
+    if evidence.is_file():
+        recorded = evidence.read_bytes()
+        proof = json.loads(recorded)
         apks = [asset for asset in latest['assets'] if asset['name'] == 'zec-private-latest.apk']
-        if len(apks) != 1 or apks[0]['digest'] != 'sha256:' + digest:
+        if len(apks) != 1 or apks[0]['digest'] != 'sha256:' + proof['apk_sha256']:
             raise ValueError('Public APK differs from its trusted integration record')
-        return None
+        opened = blocker_issues(api(f'{prefix}/issues?state=open&per_page=100', '--paginate', '--slurp'))
+        if len(opened) > 1:
+            raise ValueError('Multiple open blocker issues require operator review')
+        if opened:
+            blockers = [state for state, _ in current_blockers(opened[0].get('body') or '').values()
+                        if state['operation'] in PUBLICATION_OPERATIONS]
+        if not blockers:
+            return None
+        from reconcile_release import lookup
+
+        def resolve(run, attempt, artifact, *, target):
+            result, attestation, _ = lookup(run, attempt, artifact, target=target)
+            if (json.dumps(attestation, indent=2) + '\n').encode() != recorded:
+                return None
+            return result
     if resolve is None:
         from reconcile_release import resolve
     # Attestations survive later attempts of the same workflow run.
@@ -137,16 +154,25 @@ def pending_recovery(prefix, evidence_dir=RELEASE_EVIDENCE, resolve=None):
                 continue
             run_id = str(artifact['workflow_run']['id'])
             attempt, artifact_id = match[1], str(artifact['id'])
+            if recorded is not None:
+                recovery = dict(operation='reconciliation', candidate=f'publisher:{run_id}:{attempt}:{artifact_id}',
+                                attestation=artifact_id)
+                if not any(matches_recovery(state, recovery) for state in blockers):
+                    continue
             try:
                 proof = resolve(run_id, attempt, artifact_id, target=latest)
             except (ValueError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
                 continue
-            if proof['release_tag'] == tag:
+            if proof is not None and proof['release_tag'] == tag:
                 matches.add((run_id, attempt, artifact_id))
         if len(artifacts) < 100:
             break
     else:
+        if recorded is not None and not matches:
+            return None
         raise ValueError('Publication proof search reached 1000 artifacts; recover the exact publisher run manually')
+    if recorded is not None and not matches:
+        return None
     if len(matches) != 1:
         raise ValueError('Unrecorded public release requires one live matching publication attestation')
     run, attempt, artifact = matches.pop()
@@ -171,7 +197,7 @@ def main():
         with Path(os.environ['GITHUB_OUTPUT']).open('a', encoding='utf-8') as stream:
             stream.writelines(f'{key}={value}\n' for key, value in recovery.items())
         with Path(os.environ['GITHUB_STEP_SUMMARY']).open('a', encoding='utf-8') as stream:
-            stream.write(f"Existing public release is awaiting reconciliation from run {recovery['reconciliation_run']}.\n")
+            stream.write(f"Reconcile the public release using publisher run {recovery['reconciliation_run']}.\n")
         return
     proposals = api(f'{prefix}/pulls?state=open&base=main&per_page=30')
     if len(proposals) == 30:

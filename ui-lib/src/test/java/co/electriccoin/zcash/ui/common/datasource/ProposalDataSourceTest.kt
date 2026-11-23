@@ -10,6 +10,7 @@ import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.ZecSend
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.fixture.Zip321MemoFixture
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -67,6 +68,37 @@ class ProposalDataSourceTest {
             assertSame(sdkException, thrown.cause)
             coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(sdkAccount, uri) }
         }
+
+    @Test
+    fun zip321ProposalsPreserveTheOriginalMemoBytesAndExposeOnlyStrictTextForReview() = runBlocking {
+        val fixture = Zip321MemoFixture
+        val sdkProposal = mockk<Proposal>()
+        val synchronizer = mockk<Synchronizer> {
+            coEvery { validateAddress(fixture.RECIPIENT) } returns AddressType.Shielded
+            coEvery { proposeFulfillingPaymentUri(account.sdkAccount, any()) } returns sdkProposal
+        }
+        val dataSource = dataSource(synchronizer)
+        val cases = listOf(
+            MemoCase(null, ""),
+            MemoCase(byteArrayOf(), ""),
+            MemoCase(fixture.TEXT.encodeToByteArray(), fixture.TEXT),
+            MemoCase(fixture.TEXT.encodeToByteArray().copyOf(512), fixture.TEXT),
+            MemoCase(byteArrayOf(0xf6.toByte()).copyOf(512), ""),
+            MemoCase(fixture.binary, null),
+            MemoCase(fixture.invalidUtf8, null),
+            MemoCase(byteArrayOf(0xf5.toByte(), 1), null),
+            MemoCase(byteArrayOf(0xf7.toByte()), null),
+            MemoCase(byteArrayOf(0xf6.toByte(), 1), null),
+        )
+        for (case in cases) {
+            val uri = fixture.uri(case.bytes)
+            val proposal = dataSource.createZip321Proposal(account, uri)
+            assertSame(sdkProposal, proposal.proposal)
+            assertEquals(case.text.orEmpty(), proposal.memo.value)
+            assertEquals(case.bytes?.size?.takeIf { case.text == null }, proposal.binaryMemoByteCount)
+            coVerify(exactly = 1) { synchronizer.proposeFulfillingPaymentUri(account.sdkAccount, uri) }
+        }
+    }
 
     @Test
     fun sdkInsufficientFundsBecomesTheAppInsufficientFundsException() =
@@ -168,6 +200,8 @@ class ProposalDataSourceTest {
      * instance that was thrown, so identity is asserted against the whole cause chain.
      */
     private fun Throwable.causeChain(): Sequence<Throwable> = generateSequence(this) { it.cause }
+
+    private data class MemoCase(val bytes: ByteArray?, val text: String?)
 
     private fun dataSource(synchronizer: Synchronizer): ProposalDataSource =
         ProposalDataSourceImpl(

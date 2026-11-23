@@ -27,10 +27,14 @@ class NotifyTest(unittest.TestCase):
             return json.dumps(dict(self.issue, state='OPEN') if self.issue else {'state': 'CLOSED'})
         if args[:2] in (('issue', 'edit'), ('issue', 'create')):
             body = Path(args[args.index('--body-file')+1]).read_text(encoding='utf-8')
-            if self.issue is None:
-                self.issue = dict(number=41 + len(self.closed), title=notify.TITLE, state='open')
-            self.issue['body'] = body
-            return f'https://github.com/example/wallet/issues/{self.issue["number"]}'
+            if args[1] == 'create':
+                self.assertIsNone(self.issue)
+                self.issue = dict(number=41 + len(self.closed), title=args[args.index('--title') + 1], state='open')
+                issue = self.issue
+            else:
+                issue = next(row for row in [self.issue, *self.closed] if row and row['number'] == int(args[2]))
+            issue['body'] = body
+            return f'https://github.com/example/wallet/issues/{issue["number"]}'
         if args[:2] == ('issue', 'close'):
             self.closed.append(dict(self.issue, state='closed'))
             self.issue = None
@@ -153,6 +157,65 @@ class NotifyTest(unittest.TestCase):
         self.assertEqual(set(self.blockers()), {scope})
         self.assertEqual(len(self.messages), 3)
 
+    def test_success_first_blocks_older_reruns_with_or_without_an_open_issue(self):
+        discovery = dict(BLOCKER_OPERATION='discovery', BLOCKER_CANDIDATE='a' * 40)
+        verified = dict(MAKE_ISSUE='', RECOVERY_VERIFIED='true', NTFY_URL='')
+        for existing in (False, True):
+            with self.subTest(existing=existing):
+                self.setUp()
+                self.issue = None
+                if existing:
+                    self.run_notice('Unrelated release failure', GITHUB_RUN_ID='19', NTFY_URL='')
+                for run, attempt in (('22', '1'), ('24', '2'), ('23', '9')):
+                    self.run_notice('Discovery passed', **discovery, **verified,
+                                    GITHUB_RUN_ID=run, GITHUB_RUN_ATTEMPT=attempt)
+                if existing:
+                    self.assertEqual(set(self.blockers()), {('release', 'candidate-a', '')})
+                else:
+                    self.assertIsNone(self.issue)
+                    self.assertEqual(len(self.closed), 1)
+                    self.assertEqual(self.closed[0]['title'], notify.HISTORY_TITLE)
+                carrier = self.issue if existing else self.closed[0]
+                self.assertEqual([notify.run_order(state) for state in notify.recovery_history(carrier['body'])],
+                                 [(24, 2)])
+                for run, attempt in (('20', '9'), ('23', '9'), ('24', '1'), ('24', '2')):
+                    self.run_notice('Discovery failed', **discovery, GITHUB_RUN_ID=run, GITHUB_RUN_ATTEMPT=attempt)
+                self.assertEqual(self.messages, [])
+                self.run_notice('Discovery failed', **discovery, GITHUB_RUN_ID='24', GITHUB_RUN_ATTEMPT='3')
+                self.assertEqual(self.blockers()['discovery', 'a' * 40, '']['attempt'], 3)
+                self.assertEqual(len(self.messages), 1)
+
+    def test_closed_blocker_records_later_verification(self):
+        verified = dict(MAKE_ISSUE='', RECOVERY_VERIFIED='true', NTFY_URL='')
+        self.run_notice(NTFY_URL='')
+        self.run_notice('Release passed', GITHUB_RUN_ID='22', **verified)
+        self.assertIsNone(self.issue)
+        self.run_notice('Release still verified', GITHUB_RUN_ID='24', **verified)
+        self.run_notice('Delayed failure', GITHUB_RUN_ID='23', GITHUB_RUN_ATTEMPT='9')
+        self.assertIsNone(self.issue)
+        self.assertEqual(self.messages, [])
+        self.assertEqual([notify.run_order(state) for state in notify.recovery_history(self.closed[0]['body'])],
+                         [(24, 1)])
+
+    def test_clean_history_is_bounded_and_evicted_success_does_not_cover_late_failure(self):
+        verified = dict(MAKE_ISSUE='', RECOVERY_VERIFIED='true', NTFY_URL='')
+        self.issue = None
+        with patch.object(notify, 'DISCOVERY_RECOVERY_LIMIT', 1), patch.object(notify, 'RECOVERY_LIMIT', 1):
+            for run, candidate, operation in (('21', 'older-controller', 'discovery'),
+                                              ('22', 'older-candidate', 'release'),
+                                              ('23', 'retained-controller', 'discovery'),
+                                              ('24', 'retained-candidate', 'release')):
+                self.run_notice('Verified', **verified, GITHUB_RUN_ID=run, BLOCKER_CANDIDATE=candidate,
+                                BLOCKER_OPERATION=operation)
+            for candidate, operation in (('retained-controller', 'discovery'), ('retained-candidate', 'release')):
+                self.run_notice('Late failure', BLOCKER_CANDIDATE=candidate, BLOCKER_OPERATION=operation)
+            self.assertIsNone(self.issue)
+            self.run_notice('Late failure', BLOCKER_CANDIDATE='older-controller', BLOCKER_OPERATION='discovery')
+            self.run_notice('Late failure', BLOCKER_CANDIDATE='older-candidate')
+        self.assertEqual(set(self.blockers()), {('discovery', 'older-controller', ''),
+                                                ('release', 'older-candidate', '')})
+        self.assertEqual(len(self.messages), 2)
+
     def test_recovery_history_bounds_distinct_scopes_and_reserves_discovery(self):
         self.run_notice('Keep the issue open', BLOCKER_CANDIDATE='unresolved', NTFY_URL='')
 
@@ -206,6 +269,16 @@ class NotifyTest(unittest.TestCase):
                         BLOCKER_ATTESTATION='73', GITHUB_RUN_ATTEMPT='2')
         self.assertEqual(set(self.blockers()), expected)
         self.assertEqual(len(self.messages), 4)
+
+    def test_success_first_keeps_distinct_attestation_for_the_same_candidate(self):
+        self.issue = None
+        self.run_notice('First archive verified', MAKE_ISSUE='', NTFY_URL='', RECOVERY_VERIFIED='true',
+                        GITHUB_RUN_ID='22', BLOCKER_ATTESTATION='73')
+        self.run_notice('Delayed first archive failure', BLOCKER_ATTESTATION='73', GITHUB_RUN_ATTEMPT='2')
+        self.assertIsNone(self.issue)
+        self.run_notice('Another archive failed', BLOCKER_ATTESTATION='74', GITHUB_RUN_ATTEMPT='2')
+        self.assertEqual(self.blockers()['release', 'candidate-a', '']['attestation'], '74')
+        self.assertEqual(len(self.messages), 1)
 
     def test_older_recovery_preserves_later_failure(self):
         self.run_notice(GITHUB_RUN_ID='30', GITHUB_RUN_ATTEMPT='2')

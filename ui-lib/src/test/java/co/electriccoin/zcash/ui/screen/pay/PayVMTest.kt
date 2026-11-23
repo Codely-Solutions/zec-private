@@ -90,7 +90,7 @@ class PayVMTest {
             val recomputedAmount = NumberTextFieldInnerState.fromAmount(BigDecimal("0.5"))
             val harness = harness(assetResult = asset, amountRecompute = recomputedAmount)
             harness.collectState(this)
-            harness.onTextFieldChange(NumberTextFieldInnerState(), typedFiat)
+            harness.onFiatAmountChange(typedFiat)
 
             harness.onSwapAssetPickerClick()
 
@@ -121,7 +121,7 @@ class PayVMTest {
                     amountRecompute = recomputedAmount
                 )
             harness.collectState(this)
-            harness.onTextFieldChange(NumberTextFieldInnerState(), typedFiat)
+            harness.onFiatAmountChange(typedFiat)
 
             harness.repositoryAssets.value = SwapAssetsData(data = listOf(liveAsset), isLoading = false)
 
@@ -134,7 +134,7 @@ class PayVMTest {
         }
 
     @Test
-    fun periodicPriceUpdatePreservesTypedValues() =
+    fun periodicPriceUpdatePreservesEditedTokenAndUpdatesFiat() =
         runTest {
             val selectedAsset =
                 SwapAssetTestFixture.asset(
@@ -149,20 +149,19 @@ class PayVMTest {
                     usdPrice = BigDecimal("3")
                 )
             val typedAmount = NumberTextFieldInnerState.fromAmount(BigDecimal("25"))
-            val typedFiat = NumberTextFieldInnerState.fromAmount(BigDecimal("50"))
             val harness =
                 harness(
                     preselect = selectedAsset,
                     assets = SwapAssetsData(data = listOf(selectedAsset))
                 )
             harness.collectState(this)
-            harness.onTextFieldChange(typedAmount, typedFiat)
+            harness.onTokenAmountChange(typedAmount)
 
             harness.repositoryAssets.value =
                 SwapAssetsData(data = listOf(refreshedAsset), isLoading = false)
 
             assertEquals(typedAmount, harness.capturedState.amount)
-            assertEquals(typedFiat, harness.capturedState.fiatAmount)
+            verify(exactly = 1) { harness.mapper.createFiatAmountInnerState(typedAmount, any(), refreshedAsset) }
             assertEquals(refreshedAsset, harness.capturedState.asset)
         }
 
@@ -176,7 +175,7 @@ class PayVMTest {
             val request = "bitcoin:$BTC_ADDRESS?amount=0.5"
             harness.onAddressChange(request)
             val edited = NumberTextFieldInnerState.fromAmount(BigDecimal("0.75"))
-            harness.onTextFieldChange(edited, NumberTextFieldInnerState())
+            harness.onTokenAmountChange(edited)
 
             harness.onSwapAssetPickerClick()
 
@@ -196,7 +195,7 @@ class PayVMTest {
             val request = "bitcoin:$BTC_ADDRESS?amount=0.5"
             harness.onAddressChange(request)
             val edited = NumberTextFieldInnerState.fromAmount(BigDecimal("0.75"))
-            harness.onTextFieldChange(edited, NumberTextFieldInnerState())
+            harness.onTokenAmountChange(edited)
 
             harness.onAddressChange(request)
             assertEquals(edited, harness.capturedState.amount)
@@ -214,10 +213,7 @@ class PayVMTest {
             val eth = SwapAssetTestFixture.asset(tokenTicker = "eth", chainTicker = "eth", decimals = 18)
             val harness = harness(assetResult = eth)
             harness.collectState(this)
-            harness.onTextFieldChange(
-                NumberTextFieldInnerState.fromAmount(BigDecimal("0.5")),
-                NumberTextFieldInnerState()
-            )
+            harness.onTokenAmountChange(NumberTextFieldInnerState.fromAmount(BigDecimal("0.5")))
             harness.onAddressChange("ethereum:$ETH_ADDRESS@1?value=1e18")
             assertEquals(BigDecimal("0.5"), harness.capturedState.amount.amount)
 
@@ -234,14 +230,10 @@ class PayVMTest {
             val harness = harness()
             harness.collectState(this)
             harness.onAddressChange(BTC_ADDRESS)
-            harness.onTextFieldChange(
-                NumberTextFieldInnerState.fromAmount(BigDecimal.ONE), NumberTextFieldInnerState()
-            )
+            harness.onTokenAmountChange(NumberTextFieldInnerState.fromAmount(BigDecimal.ONE))
             val staleCallback = harness.onRequestSwapQuoteClick
 
-            harness.onTextFieldChange(
-                NumberTextFieldInnerState.fromAmount(BigDecimal("2")), NumberTextFieldInnerState()
-            )
+            harness.onTokenAmountChange(NumberTextFieldInnerState.fromAmount(BigDecimal("2")))
             staleCallback(BigDecimal.ONE, null, BTC_ADDRESS)
             coVerify(exactly = 0) {
                 harness.requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
@@ -287,7 +279,7 @@ class PayVMTest {
             harness.collectState(this)
             harness.onAddressChange("ethereum:$ETH_ADDRESS@1?value=1e18")
             val editedAmount = NumberTextFieldInnerState.fromAmount(BigDecimal("2"))
-            harness.onTextFieldChange(editedAmount, NumberTextFieldInnerState())
+            harness.onTokenAmountChange(editedAmount)
             val refreshedEth = SwapAssetTestFixture.asset(
                 tokenTicker = "eth",
                 chainTicker = "eth",
@@ -468,6 +460,7 @@ class PayVMTest {
     fun cancelConfirmationNegativeButtonCancelsSwap() =
         runTest {
             val harness = harness()
+            coEvery { harness.cancelSwap.afterDismissal(any()) } coAnswers { firstArg<suspend () -> Unit>()() }
             harness.collectState(this)
             harness.makeQuoteHang()
             harness.onAddressChange(BTC_ADDRESS)
@@ -481,7 +474,7 @@ class PayVMTest {
             mainDispatcher.scheduler.advanceUntilIdle() // let the 350ms dismiss delay elapse
 
             assertNull(harness.vm.cancelState.value)
-            coVerify(exactly = 1) { harness.cancelSwap() }
+            coVerify(exactly = 1) { harness.cancelSwap.afterDismissal(any()) }
         }
 
     @Test
@@ -755,7 +748,8 @@ class PayVMTest {
                 harness.onSlippageClick = callbacks.onSlippageClick
                 harness.onRequestSwapQuoteClick = callbacks.onRequestSwapQuoteClick
                 harness.onAddressChange = callbacks.onAddressChange
-                harness.onTextFieldChange = callbacks.onTextFieldChange
+                harness.onTokenAmountChange = callbacks.onTokenAmountChange
+                harness.onFiatAmountChange = callbacks.onFiatAmountChange
                 harness.onQrCodeScannerClick = callbacks.onQrCodeScannerClick
                 harness.onAddressBookClick = callbacks.onAddressBookClick
                 renderedState
@@ -802,7 +796,8 @@ class PayVMTest {
         var onSwapAssetPickerClick: () -> Unit = {}
         var onAddressBookClick: () -> Unit = {}
         var onAddressChange: (String) -> Unit = {}
-        var onTextFieldChange: (NumberTextFieldInnerState, NumberTextFieldInnerState) -> Unit = { _, _ -> }
+        var onTokenAmountChange: (NumberTextFieldInnerState) -> Unit = {}
+        var onFiatAmountChange: (NumberTextFieldInnerState) -> Unit = {}
         var onQrCodeScannerClick: () -> Unit = {}
         var onRequestSwapQuoteClick: (BigDecimal, BigDecimal?, String) -> Unit = { _, _, _ -> }
 

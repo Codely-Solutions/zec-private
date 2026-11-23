@@ -32,6 +32,8 @@ import com.sparrowwallet.hummingbird.UR
 import com.sparrowwallet.hummingbird.UREncoder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
@@ -212,6 +214,7 @@ class KeystoneProposalRepositoryImpl(
             } catch (e: PcztException.MultiStepProposalUnsupportedException) {
                 if (transactionProposal.paysTexAddress()) throw TexUnsupportedOnKSException() else throw e
             }
+        currentCoroutineContext().ensureActive()
         check(this.transactionProposal.value === transactionProposal) { "The transaction changed during preparation." }
         val prepared = hardwareProposal.prepare(transactionProposal, result)
         pcztWithProofsJob?.cancel()
@@ -324,19 +327,22 @@ class KeystoneProposalRepositoryImpl(
         hardwareProposal.clear()
     }
 
-    private inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
+    private suspend inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
         val proposal =
             try {
                 block()
             } catch (e: TransactionProposalNotCreatedException) {
+                currentCoroutineContext().ensureActive()
                 Twig.error(e) { "Unable to create proposal" }
                 transactionProposal.update { null }
                 throw e
             } catch (e: InsufficientFundsException) {
+                currentCoroutineContext().ensureActive()
                 Twig.error(e) { "Insufficient funds" }
                 transactionProposal.update { null }
                 throw e
             }
+        currentCoroutineContext().ensureActive()
         transactionProposal.update { proposal }
         return proposal
     }

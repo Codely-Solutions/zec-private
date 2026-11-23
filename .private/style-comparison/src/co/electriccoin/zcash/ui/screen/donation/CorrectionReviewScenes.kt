@@ -22,6 +22,16 @@ import co.electriccoin.zcash.ui.screen.signkeystonetransaction.ZashiAccountInfoL
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 internal fun CorrectionReviewScene(screen: String): Boolean {
     when (screen) {
+        "note-save-retry" -> co.electriccoin.zcash.ui.screen.transactionnote.view.TransactionNoteView(
+            state = co.electriccoin.zcash.ui.screen.transactionnote.model.TransactionNoteState(
+                onBack = {}, title = stringRes(R.string.annotation_edit),
+                note = TextFieldState(value = stringRes("Draft retained after failed save"), onValueChange = {}),
+                noteCharacters = stringRes(R.string.transaction_note_max_length, "32").withStyle(),
+                primaryButton = null,
+                secondaryButton = ButtonState(stringRes(R.string.annotation_save), onClick = {}),
+                negative = ButtonState(stringRes(R.string.annotation_delete), onClick = {}),
+            ),
+        )
         "note-loading", "note-load-failed" -> co.electriccoin.zcash.ui.screen.transactionnote.view.TransactionNoteView(
             state = co.electriccoin.zcash.ui.screen.transactionnote.model.TransactionNoteState(
                 onBack = {}, title = stringRes(R.string.annotation_addArticle),

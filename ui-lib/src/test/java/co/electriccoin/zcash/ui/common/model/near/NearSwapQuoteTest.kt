@@ -6,6 +6,8 @@ import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapBlockchain
 import co.electriccoin.zcash.ui.common.model.SwapMode
+import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchException
+import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
 import co.electriccoin.zcash.ui.common.model.zcash.getTotal
 import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
 import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
@@ -14,6 +16,7 @@ import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.imageRes
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.serialization.json.Json
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,6 +38,39 @@ class NearSwapQuoteTest {
         assertEquals(null, nearSwapQuote(quoteResponse(minAmountIn = minimum)).minimumAmountIn)
         val invalid = nearSwapQuote(quoteResponse(swapType = SwapType.FLEX_INPUT, minAmountIn = BigDecimal("0.5")))
         assertEquals(null, invalid.minimumAmountIn)
+    }
+
+    @Test
+    fun fundingQuoteChecksBothFlexibleInputSlippageFloorsAndPreservesHistoricalReading() {
+        val response = quoteResponse(
+            swapType = SwapType.FLEX_INPUT,
+            slippageBps = 137,
+            amountIn = BigDecimal("10001"),
+            amountInFormatted = BigDecimal("0.00010001"),
+            amountOut = BigDecimal("720247"),
+            amountOutFormatted = BigDecimal("0.720247"),
+            minAmountIn = BigDecimal("9863"),
+            minAmountOut = BigDecimal("710379"),
+        )
+        fun decode(value: QuoteResponseDto): QuoteResponseDto =
+            Json.decodeFromString(QuoteResponseDto.serializer(), Json.encodeToString(QuoteResponseDto.serializer(), value))
+
+        val boundary = nearSwapQuote(decode(response), expectedSlippageToleranceBps = 137)
+        assertEquals(BigDecimal("0.00009863"), boundary.minimumAmountIn)
+
+        for (details in listOf(
+            response.quote.copy(minAmountIn = BigDecimal("9862")),
+            response.quote.copy(minAmountOut = BigDecimal("710378")),
+            response.quote.copy(minAmountIn = BigDecimal("5000")),
+        )) {
+            val decoded = decode(response.copy(quote = details))
+            val rejected = assertFailsWith<SwapQuoteMismatchException.Rejected> {
+                nearSwapQuote(decoded, expectedSlippageToleranceBps = 137)
+            }
+            assertEquals(SwapQuoteMismatchType.SLIPPAGE_EXCEEDED, rejected.type)
+        }
+        val legacy = decode(response.copy(quote = response.quote.copy(minAmountIn = BigDecimal("5000"))))
+        assertEquals(SwapMode.FLEX_INPUT, nearSwapQuote(legacy).mode)
     }
 
     @Test

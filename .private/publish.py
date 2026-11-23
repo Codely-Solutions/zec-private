@@ -15,11 +15,14 @@ def run(*args):
     return subprocess.check_output(args, text=True, timeout=120).strip()
 
 
+def current_main():
+    return run('gh', 'api', f'repos/{REPO}/git/ref/heads/main', '--jq', '.object.sha')
+
+
 def require_current_controller(controller):
     if os.environ.get('GITHUB_REF') != 'refs/heads/main' or run('git', 'rev-parse', 'HEAD') != controller:
         raise RuntimeError('Signing requires the checked-out main controller')
-    remote = run('gh', 'api', f'repos/{REPO}/git/ref/heads/main', '--jq', '.object.sha')
-    if remote != controller:
+    if current_main() != controller:
         raise RuntimeError('Main changed since validation began; resolve a new promotion')
 
 
@@ -29,6 +32,13 @@ def read_attestation(path, expected_digest):
     if len(data) > ARCHIVE_LIMITS['release-attestation'][1] or hashlib.sha256(data).hexdigest() != expected_digest:
         raise RuntimeError('Publication attestation digest or size mismatch')
     return json.loads(data)
+
+
+def verify_attestation_publisher(proof, run, attempt):
+    if 'publisher' in proof:
+        require(proof['publisher'] == {'run': str(run), 'attempt': str(attempt)},
+                'Publication attestation belongs to a different publisher run or attempt')
+
 
 def verify_release_identity(proof, source):
     properties = run('git', 'show', f'{source}:gradle.properties')
@@ -306,6 +316,7 @@ def main():
         return
     attestation = dict(release_tag=tag, versionCode=proof['versionCode'], versionName=proof['versionName'],
                        upstream=proof['upstream'], source_sha=expected, controller_sha=controller,
+                       publisher={'run': os.environ['GITHUB_RUN_ID'], 'attempt': os.environ['GITHUB_RUN_ATTEMPT']},
                        artifact_run_id=proof['workflow_run_id'], apk_sha256=digest, core=core,
                        production_quotes=quote, production_arm_executed=False, real_funds_used=False)
     attestation.update(origin, **archive_binding)

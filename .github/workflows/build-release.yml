@@ -709,9 +709,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ATTESTATION_DIGEST: ${{ needs.publish.outputs.attestation_digest || needs.reconcile.outputs.attestation_digest }}
           ATTESTATION_CONTROLLER: ${{ needs.reconcile.outputs.controller_sha || github.sha }}
+          ATTESTATION_RUN: ${{ inputs.reconciliation_run || github.run_id }}
+          ATTESTATION_ATTEMPT: ${{ needs.reconcile.outputs.attestation_attempt || github.run_attempt }}
         run: python3 -B .private/integrate_release.py
       - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: integrator
+        if: steps.integration.outputs.already_integrated != 'true'
         with:
           client-id: Iv23lik3K6p93iDL148Q
           private-key: ${{ secrets.MAINTENANCE_APP_PRIVATE_KEY }}
@@ -719,13 +722,13 @@ jobs:
           repositories: zec-private
           permission-contents: write
       - name: Fast-forward protected main as the maintenance App
+        if: steps.integration.outputs.already_integrated != 'true'
         env:
           GH_TOKEN: ${{ steps.integrator.outputs.token }}
           INTEGRATION_COMMIT: ${{ steps.integration.outputs.commit }}
         run: |
-          [[ "$INTEGRATION_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           gh auth setup-git
-          git push origin "$INTEGRATION_COMMIT:refs/heads/main"
+          python3 -B .private/integrate_release.py --push
   notify:
     if: ${{ always() && !cancelled() && needs.record_integration.result == 'success' }}
     needs: [publish, reconcile, record_integration]

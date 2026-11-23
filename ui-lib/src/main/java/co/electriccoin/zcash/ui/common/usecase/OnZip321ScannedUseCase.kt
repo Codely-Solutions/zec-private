@@ -12,6 +12,8 @@ import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
+import co.electriccoin.zcash.ui.common.model.zip321MemoTextOrNull
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.ZashiProposalRepository
 import co.electriccoin.zcash.ui.common.usecase.Zip321ParseUriValidationUseCase.Zip321ParseUriValidation
@@ -95,7 +97,7 @@ class OnZip321ScannedUseCase(
                     }
                 }
 
-            prefillSend.request(
+            if (proposal.binaryMemoByteCount == null) prefillSend.request(
                 PrefillSendData.All(
                     amount = proposal.amount,
                     address = proposal.destination.address,
@@ -106,7 +108,11 @@ class OnZip321ScannedUseCase(
                             ?.let { listOf(it) }
                 )
             )
-            navigationRouter.replace(Send(), ReviewTransactionArgs)
+            if (proposal.binaryMemoByteCount == null) {
+                navigationRouter.replace(Send(), ReviewTransactionArgs)
+            } else {
+                navigationRouter.replace(ReviewTransactionArgs)
+            }
         } catch (_: TexUnsupportedOnKSException) {
             val isLedger = accountDataSource.getSelectedAccount() is LedgerAccount
             navigationRouter.forward(TEXUnsupportedArgs(isLedger = isLedger))
@@ -119,8 +125,10 @@ class OnZip321ScannedUseCase(
             ledgerProposalPipeline.clear()
             navigationRouter.replace(InsufficientFundsArgs)
         } catch (_: TransactionProposalNotCreatedException) {
-            prefillSend.requestFromZip321(zip321.payment)
-            navigationRouter.replace(Send())
+            if (canEdit(zip321)) {
+                prefillSend.requestFromZip321(zip321.payment)
+                navigationRouter.replace(Send())
+            }
             zashiProposalRepository.clear()
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()
@@ -158,7 +166,7 @@ class OnZip321ScannedUseCase(
                     }
                 }
 
-            prefillSend.request(
+            if (proposal.binaryMemoByteCount == null) prefillSend.request(
                 PrefillSendData.All(
                     amount = proposal.amount,
                     address = proposal.destination.address,
@@ -185,8 +193,10 @@ class OnZip321ScannedUseCase(
             zashiProposalRepository.clear()
             keystoneProposalRepository.clear()
             ledgerProposalPipeline.clear()
-            prefillSend.requestFromZip321(zip321.payment)
-            navigationRouter.back()
+            if (canEdit(zip321)) {
+                prefillSend.requestFromZip321(zip321.payment)
+                navigationRouter.back()
+            }
         } catch (e: Exception) {
             zashiProposalRepository.clear()
             keystoneProposalRepository.clear()
@@ -196,6 +206,7 @@ class OnZip321ScannedUseCase(
     }
 
     private fun sendFlowWithDisabledZip321(zip321: Zip321ParseUriValidation.Valid) {
+        if (!canEdit(zip321)) return
         prefillSend.request(
             PrefillSendData.FromAddressScan(
                 address =
@@ -204,5 +215,13 @@ class OnZip321ScannedUseCase(
             )
         )
         navigationRouter.back()
+    }
+
+    private fun canEdit(zip321: Zip321ParseUriValidation.Valid): Boolean {
+        if (zip321.payment.payments.single().memo?.data?.zip321MemoTextOrNull() != null ||
+            zip321.payment.payments.single().memo == null
+        ) return true
+        navigateToErrorUseCase(ErrorArgs.General(UneditableZip321MemoException()))
+        return false
     }
 }

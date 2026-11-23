@@ -44,7 +44,7 @@ internal class ExactOutputVMMapper {
         callbacks: ExactOutputStateCallbacks,
     ): PayState {
         val state = ExactOutputInternalState(internalState)
-        val amountState = createAmountState(state, callbacks.onTextFieldChange)
+        val amountState = createAmountState(state, callbacks.onTokenAmountChange)
         return PayState(
             info =
                 IconButtonState(
@@ -69,7 +69,7 @@ internal class ExactOutputVMMapper {
                     isEnabled = !state.isRequestingQuote
                 ),
             amount = amountState,
-            amountFiat = createFiatAmountState(state, callbacks.onTextFieldChange),
+            amountFiat = createFiatAmountState(state, callbacks.onFiatAmountChange),
             amountError = createAmountErrorState(state),
             zecAmount = createZecAmount(state),
             slippage = createSlippageState(state, callbacks.onSlippageClick),
@@ -126,7 +126,7 @@ internal class ExactOutputVMMapper {
         return fiatInnerState.copy(
             innerTextFieldState =
                 fiatInnerState.innerTextFieldState.copy(
-                    value = fiat?.let { stringResByDynamicNumber(it) } ?: stringRes(""),
+                    value = fiat?.let { stringResByDynamicNumber(it, includeGroupingSeparator = false) } ?: stringRes(""),
                     selection = TextSelection.End
                 ),
             amount = fiat,
@@ -134,7 +134,7 @@ internal class ExactOutputVMMapper {
         )
     }
 
-    /** Recomputes the token amount from user-entered fiat when a cached asset gains a live price. */
+    /** Converts fiat into whole base units at the current token price. */
     fun createAmountInnerState(
         fiatInnerState: NumberTextFieldInnerState,
         amountInnerState: NumberTextFieldInnerState,
@@ -171,34 +171,11 @@ internal class ExactOutputVMMapper {
 
     private fun createAmountState(
         state: ExactOutputInternalState,
-        onTextFieldChange: (amount: NumberTextFieldInnerState, fiat: NumberTextFieldInnerState) -> Unit,
+        onTextFieldChange: (NumberTextFieldInnerState) -> Unit,
     ): NumberTextFieldState =
         NumberTextFieldState(
             innerState = state.amount,
-            onValueChange = { amountInnerState ->
-                val amount = amountInnerState.amount
-                val asset = state.asset
-                val fiat =
-                    asset.positiveUsdPrice?.let { amount?.multiply(it, MathContext.DECIMAL128) }
-                onTextFieldChange(
-                    amountInnerState,
-                    state.fiatAmount.copy(
-                        innerTextFieldState =
-                            state.fiatAmount.innerTextFieldState.copy(
-                                value =
-                                    fiat?.let {
-                                        stringResByDynamicNumber(
-                                            number = it,
-                                            includeGroupingSeparator = false
-                                        )
-                                    } ?: stringRes(""),
-                                selection = TextSelection.End
-                            ),
-                        amount = fiat,
-                        lastValidAmount = fiat ?: state.fiatAmount.lastValidAmount
-                    )
-                )
-            },
+            onValueChange = onTextFieldChange,
             isEnabled = !state.isRequestingQuote,
             explicitError =
                 if (state.hasUnrepresentableTokenAmount || state.isInsufficientFunds) {
@@ -210,34 +187,11 @@ internal class ExactOutputVMMapper {
 
     private fun createFiatAmountState(
         state: ExactOutputInternalState,
-        onTextFieldChange: (amount: NumberTextFieldInnerState, fiat: NumberTextFieldInnerState) -> Unit,
+        onTextFieldChange: (NumberTextFieldInnerState) -> Unit,
     ): NumberTextFieldState =
         NumberTextFieldState(
             innerState = state.fiatAmount,
-            onValueChange = { fiatInnerState ->
-                val fiat = fiatInnerState.amount
-                val asset = state.asset
-                val amount =
-                    asset?.let { selected ->
-                        selected.positiveUsdPrice?.let { fiat?.divide(it, MathContext.DECIMAL128) }
-                            ?.setScale(selected.decimals, RoundingMode.DOWN)
-                    }
-                onTextFieldChange(
-                    state.amount.copy(
-                        innerTextFieldState =
-                            state.amount.innerTextFieldState.copy(
-                                value =
-                                    amount?.let {
-                                        stringResByNumber(it, minDecimals = 0, includeGroupingSeparator = false)
-                                    } ?: stringRes(""),
-                                selection = TextSelection.End
-                            ),
-                        amount = amount,
-                        lastValidAmount = amount ?: state.amount.lastValidAmount
-                    ),
-                    fiatInnerState
-                )
-            },
+            onValueChange = onTextFieldChange,
             isEnabled = !state.isRequestingQuote,
             explicitError =
                 if (state.isInsufficientFunds) {
@@ -498,7 +452,8 @@ internal data class ExactOutputStateCallbacks(
     val onRequestSwapQuoteClick: (amount: BigDecimal, fiatAmount: BigDecimal?, address: String) -> Unit,
     val onTryAgainClick: () -> Unit,
     val onAddressChange: (String) -> Unit,
-    val onTextFieldChange: (amount: NumberTextFieldInnerState, fiat: NumberTextFieldInnerState) -> Unit,
+    val onTokenAmountChange: (NumberTextFieldInnerState) -> Unit,
+    val onFiatAmountChange: (NumberTextFieldInnerState) -> Unit,
     val onQrCodeScannerClick: () -> Unit,
     val onAddressBookClick: () -> Unit,
     val onDeleteSelectedContactClick: () -> Unit,

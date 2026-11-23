@@ -78,12 +78,14 @@ fun BottomSheetContent(
             style = ZashiTypography.textMd
         )
         Spacer(36.dp)
-        ZashiButton(
-            modifier = Modifier.fillMaxWidth(),
-            state = state.negative,
-            defaultPrimaryColors = ZashiButtonDefaults.secondaryColors()
-        )
-        Spacer(8.dp)
+        state.negative?.let {
+            ZashiButton(
+                modifier = Modifier.fillMaxWidth(),
+                state = it,
+                defaultPrimaryColors = ZashiButtonDefaults.secondaryColors()
+            )
+            Spacer(8.dp)
+        }
         ZashiButton(
             modifier = Modifier.fillMaxWidth(),
             state = state.positive

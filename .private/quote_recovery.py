@@ -46,7 +46,7 @@ PUBLICATION_PATHS = {
     '.private/integrate_release.py', '.private/maintenance_watch.py', '.private/test_maintenance_watch.py',
     '.private/test_publish.py', '.private/test_packaging.py', '.private/test_quote_recovery.py',
     '.private/test_custom_release.py', '.private/test_hosted_release.py',
-    '.private/RELEASE-WORKFLOW.md', '.private/MAINTENANCE.md',
+    '.private/RELEASE-WORKFLOW.md', '.private/MAINTENANCE.md', '.private/notify.py', '.private/test_notify.py',
 }
 
 ARTIFACTS = {

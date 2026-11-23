@@ -17,6 +17,7 @@ class NavigateToSwapQuoteIfAvailableUseCase(
         val isQuoteAvailable = value is SwapQuoteData.Success || value is SwapQuoteData.Error
         if (isQuoteAvailable) {
             hideBottomSheet()
+            if (swapRepository.quote.value !== value) return
             if (mismatchArgs == null) {
                 navigationRouter.forward(SwapQuoteArgs)
             } else {

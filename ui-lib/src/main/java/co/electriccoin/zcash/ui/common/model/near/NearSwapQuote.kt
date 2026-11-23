@@ -74,6 +74,14 @@ data class NearSwapQuote(
         }
         if (expectedSlippageToleranceBps != null) {
             response.quote.requireFundingAmounts(expectedSlippageToleranceBps)
+            if (response.quoteRequest.swapType == SwapType.FLEX_INPUT) {
+                requireSlippageFloor(
+                    field = "minAmountIn",
+                    amount = response.quote.amountIn,
+                    minimum = response.quote.minAmountIn,
+                    toleranceBps = expectedSlippageToleranceBps
+                )
+            }
         }
         requireWithinSlippage(
             swapType = response.quoteRequest.swapType,
@@ -200,13 +208,8 @@ internal fun requireMatchingAsset(
 }
 
 /**
- * Fail-closed slippage check on the server-determined (floating) side of the quote. The user-fixed side
- * is already pinned by requireQuoteMatchesUserAmount in the use case; this asserts the server's own
- * minimum output or included input allowance respects the slippage the user requested.
- *
- * Both bounds are required fields of the 1Click quote response (see QuoteDetails), so the check is always
- * enforced: a server that omits them fails deserialization rather than reaching this point with a null
- * bound that would silently skip the assertion.
+ * Checks the slippage guarantees also required when reconstructing saved quotes. Fresh FLEX_INPUT
+ * funding admission checks the input floor separately so older observations remain readable.
  */
 internal fun requireWithinSlippage(
     swapType: SwapType?,
@@ -216,52 +219,28 @@ internal fun requireWithinSlippage(
     minAmountOut: BigDecimal,
     slippageToleranceBps: Int
 ) {
-    // Both bounds are computed in integer base units to match the server's integer arithmetic.
-    // Using full-precision (DECIMAL128) arithmetic here would leave a fractional remainder that
-    // gets compared against the server's already-truncated integer guarantee, rejecting valid
-    // quotes by a single base unit (e.g. amountOut=9897372, bps=3000 → real floor=6928160.4,
-    // server returns 6928160 — would throw if we didn't round).
-    val bps = BigDecimal(slippageToleranceBps)
-    val basisPointsDenominator = BigDecimal("10000")
     when (swapType) {
-        // Output floats: the guaranteed minimum out must not be worse than amountOut * (1 - slippage).
-        // Round DOWN — the server's worst-case minAmountOut is truncated DOWN for its own safety, so the
-        // wallet's floor must do the same to accept the boundary case.
         SwapType.EXACT_INPUT, SwapType.FLEX_INPUT -> {
-            val floor =
-                amountOut
-                    .multiply(basisPointsDenominator.subtract(bps))
-                    .divide(basisPointsDenominator, 0, RoundingMode.DOWN)
-            if (minAmountOut < floor) {
-                throw SwapQuoteMismatchException.Rejected(
-                    type = SwapQuoteMismatchType.SLIPPAGE_EXCEEDED,
-                    message =
-                        "Swap slippage exceeded: server-guaranteed minAmountOut=$minAmountOut is below the " +
-                            "slippage floor=$floor (amountOut=$amountOut, slippageBps=$slippageToleranceBps)"
-                )
-            }
+            requireSlippageFloor("minAmountOut", amountOut, minAmountOut, slippageToleranceBps)
         }
-
-        // EXACT_OUTPUT amountIn includes the allowance; minAmountIn is the minimum needed.
-        // https://docs.near-intents.org/integration/distribution-channels/1click-api/swap-types
-        // Preserve the provider's integer floor; a stronger minimum (smaller allowance) is acceptable.
         SwapType.EXACT_OUTPUT -> {
             requireExactOutputAmounts(amountIn, minAmountIn, slippageToleranceBps)
-            val floor =
-                amountIn
-                    .multiply(basisPointsDenominator.subtract(bps))
-                    .divide(basisPointsDenominator, 0, RoundingMode.DOWN)
-            if (minAmountIn < floor) {
-                throw SwapQuoteMismatchException.Rejected(
-                    type = SwapQuoteMismatchType.SLIPPAGE_EXCEEDED,
-                    message =
-                        "Swap input allowance exceeded: minAmountIn=$minAmountIn is below the " +
-                            "slippage floor=$floor (amountIn=$amountIn, slippageBps=$slippageToleranceBps)"
-                )
-            }
+            requireSlippageFloor("minAmountIn", amountIn, minAmountIn, slippageToleranceBps)
         }
-
         null -> {}
+    }
+}
+
+private fun requireSlippageFloor(field: String, amount: BigDecimal, minimum: BigDecimal, toleranceBps: Int) {
+    // 1Click rounds its guarantees down to whole base units on both sides of FLEX_INPUT.
+    val denominator = BigDecimal("10000")
+    val floor = amount.multiply(denominator - BigDecimal(toleranceBps)).divide(denominator, 0, RoundingMode.DOWN)
+    if (minimum < floor) {
+        throw SwapQuoteMismatchException.Rejected(
+            type = SwapQuoteMismatchType.SLIPPAGE_EXCEEDED,
+            message = "Swap slippage exceeded: $field=$minimum is below $floor " +
+                "(amount=$amount, slippageBps=$toleranceBps)"
+        )
     }
 }
 

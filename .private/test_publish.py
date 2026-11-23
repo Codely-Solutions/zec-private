@@ -1,4 +1,5 @@
 """Release display metadata checks; no signing, build or publication."""
+from contextlib import chdir
 import importlib.util
 import io
 import hashlib
@@ -60,10 +61,93 @@ class PublishMetadataTest(unittest.TestCase):
             self.assertEqual(git('show', f'{result}:.private/verify_public_release.py'), '# verifier repair')
             self.assertIn('ZCASH_VERSION_CODE=3234034', git('show', f'{result}:gradle.properties'))
             self.assertEqual(git('rev-parse', 'HEAD'), controller)
+            proof = dict(release_tag='v3.19.0-private.31', source_sha=candidate, controller_sha=original,
+                         versionCode=3234034, versionName='3.19.0',
+                         upstream={'tag': '3.19.0-3234', 'versionCode': 3234034, 'sha': upstream},
+                         maintenance={'kind': 'custom'}, publisher={'run': '7', 'attempt': '1'},
+                         artifact_run_id='11', production_artifact={'id': 12},
+                         production_job_id=13, apk_sha256='a' * 64)
+            with tempfile.TemporaryDirectory() as temp:
+                runner = Path(temp)
+                publication = runner / 'publication'
+                publication.mkdir()
+                output = runner / 'output'
+
+                def integrate(head, attestation=proof, attempt='1', remote=None):
+                    git('checkout', '-q', '--detach', head)
+                    data = integrate_release.evidence_bytes(attestation)
+                    (publication / 'release-attestation.json').write_bytes(data)
+                    output.unlink(missing_ok=True)
+                    env = dict(GITHUB_REF='refs/heads/main', GITHUB_SHA=head, GITHUB_OUTPUT=str(output),
+                               RUNNER_TEMP=str(runner), ATTESTATION_DIGEST=hashlib.sha256(data).hexdigest(),
+                               ATTESTATION_CONTROLLER=original, ATTESTATION_RUN='7', ATTESTATION_ATTEMPT=attempt)
+                    with chdir(root), patch_environment(env), \
+                            patch('publish.current_main', return_value=remote or head):
+                        integrate_release.main(root)
+                    return dict(line.split('=', 1) for line in output.read_text().splitlines())
+
+                first = integrate(controller)
+                self.assertEqual(first['already_integrated'], 'false')
+                integrated = first['commit']
+                self.assertEqual(git('rev-parse', integrated + '^^1'), controller)
+                self.assertEqual(git('rev-parse', integrated + '^^2'), candidate)
+                self.assertEqual(git('rev-parse', integrated + '^1^{tree}'), git('rev-parse', result + '^{tree}'))
+                self.assertEqual(integrate(integrated), dict(commit=integrated, already_integrated='true'))
+                with self.assertRaisesRegex(ValueError, 'different publisher run or attempt'):
+                    integrate(integrated, attempt='2')
+                with self.assertRaisesRegex(RuntimeError, 'Main changed since validation began'):
+                    integrate(integrated, remote=controller)
+                for changed in (dict(production_job_id=14), dict(production_artifact={'id': 99}),
+                                dict(artifact_run_id='15'), dict(core={'passed': False})):
+                    with self.subTest(changed=changed), self.assertRaisesRegex(RuntimeError, 'evidence conflicts'):
+                        integrate(integrated, dict(proof, **changed))
+                    self.assertFalse(output.exists())
+                # A later update can retain the exact approved attestation and both ancestors.
+                git('checkout', '-q', '--detach', integrated)
+                (root / 'later.txt').write_text('Later protected change')
+                later = commit('later protected main')
+                self.assertEqual(integrate(later), dict(commit=later, already_integrated='true'))
+                # An identical blob on a branch missing the attested source cannot acknowledge integration.
+                with tempfile.TemporaryDirectory() as index:
+                    incomplete = state_commit(controller, proof, Path(index), root)
+                with self.assertRaises(subprocess.CalledProcessError):
+                    integrate(incomplete)
+                self.assertFalse(output.exists())
+                legacy = {key: value for key, value in proof.items() if key != 'publisher'}
+                with tempfile.TemporaryDirectory() as index:
+                    legacy_head = state_commit(result, legacy, Path(index), root)
+                self.assertEqual(integrate(legacy_head, legacy),
+                                 dict(commit=legacy_head, already_integrated='true'))
+                git('checkout', '-q', '--detach', controller)
             properties.write_bytes(properties.read_bytes() + b'UNREVIEWED_SETTING=true\n')
             advanced = commit('unrelated main update')
             with self.assertRaisesRegex(RuntimeError, 'outside publication recovery controls'):
                 integrate_release.integration_base(candidate, advanced, original, root)
+
+    def test_push_readback_requires_the_exact_prepared_commit(self):
+        commit = 'a' * 40
+        command = ['git', 'push', 'origin', f'{commit}:refs/heads/main']
+        for error in (None, subprocess.CalledProcessError(1, command), subprocess.TimeoutExpired(command, 90)):
+            with self.subTest(error=error), patch.object(integrate_release.subprocess, 'run', side_effect=error) as push, \
+                    patch.object(integrate_release, 'current_main', return_value=commit) as read:
+                integrate_release.push_integration(commit)
+                push.assert_called_once_with(command, check=True, timeout=90)
+                if error is None:
+                    read.assert_not_called()
+                else:
+                    read.assert_called_once_with()
+        with patch.object(integrate_release.subprocess, 'run',
+                          side_effect=subprocess.CalledProcessError(1, command)) as push:
+            with patch.object(integrate_release, 'current_main', return_value='b' * 40), \
+                    self.assertRaises(subprocess.CalledProcessError):
+                integrate_release.push_integration(commit)
+            with patch.object(integrate_release, 'current_main', side_effect=subprocess.TimeoutExpired('gh', 120)), \
+                    self.assertRaises(subprocess.TimeoutExpired):
+                integrate_release.push_integration(commit)
+            push.reset_mock()
+            with self.assertRaises(ValueError):
+                integrate_release.push_integration('main')
+            push.assert_not_called()
 
     def test_attestation_requires_exact_bytes(self):
         with tempfile.TemporaryDirectory() as scratch:
@@ -185,7 +269,7 @@ class PublishMetadataTest(unittest.TestCase):
         tag = 'v3.19.0-private.31'
         apk_digest = 'c' * 64
         proof = dict(release_tag=tag, source_sha=source, versionCode=3234034, apk_sha256=apk_digest,
-                     controller_sha=controller, maintenance={'kind': 'routine'})
+                     controller_sha=controller, maintenance={'kind': 'routine'}, publisher={'run': '7', 'attempt': '1'})
         buffer = io.BytesIO()
         proof_bytes = json.dumps(proof).encode()
         with zipfile.ZipFile(buffer, 'w') as archive:

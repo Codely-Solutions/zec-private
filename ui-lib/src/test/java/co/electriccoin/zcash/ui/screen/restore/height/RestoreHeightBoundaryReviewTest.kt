@@ -104,7 +104,9 @@ class RestoreHeightBoundaryReviewTest {
 
     @Test
     fun resyncRejectsInvalidCurrentInputBeforeRewindingTheWallet() = runTest {
-        val synchronizer = mockk<Synchronizer>(relaxed = true)
+        val synchronizer = mockk<Synchronizer> {
+            coEvery { rewindToNearestHeight(any()) } coAnswers { firstArg() }
+        }
         val provider = mockk<SynchronizerProvider>(relaxed = true) {
             coEvery { getSynchronizer() } returns synchronizer
         }
@@ -115,6 +117,7 @@ class RestoreHeightBoundaryReviewTest {
         )
         observe(vm, vm.state) {
             rejectInvalidDrafts { assertNotNull(vm.state.value.content) }
+            assertNull(vm.state.value.error)
             coVerify(exactly = 0) { provider.getSynchronizer() }
             for ((input, expected) in valid) {
                 submitHeight(input) { assertNotNull(vm.state.value.content) }
@@ -131,6 +134,7 @@ class RestoreHeightBoundaryReviewTest {
                 val vm = HWHeightVM(HWHeightArgs(enrollment), io.createAccount, router, errorMapper, viewOnlyContent())
                 observe(vm, vm.state) {
                     rejectInvalidDrafts { assertNotNull(vm.state.value.content) }
+                    assertNull(vm.state.value.error)
                     io.verifyCalls(enrollment, BlockHeight.new(expected), count = 0)
                     submitHeight(input) { assertNotNull(vm.state.value.content) }
                     io.verifyCalls(enrollment, BlockHeight.new(expected), count = 1)

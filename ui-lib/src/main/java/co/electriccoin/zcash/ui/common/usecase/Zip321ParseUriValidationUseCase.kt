@@ -40,7 +40,7 @@ class Zip321ParseUriValidationUseCase(
                 }
             }
 
-        Twig.info { "Payment Request Zip321 validation result: $paymentRequest." }
+        Twig.info { "ZIP321 parsing completed" }
 
         return when (paymentRequest) {
             is ZIP321.ParserResult.Request -> {
@@ -74,7 +74,7 @@ class Zip321ParseUriValidationUseCase(
             synchronizer.validateAddress(address).let { validation ->
                 when (validation) {
                     is AddressType.Invalid -> {
-                        Twig.error { "Address from Zip321 validation failed: ${validation.reason}" }
+                        Twig.error { "ZIP321 recipient validation failed" }
                         false
                     }
 

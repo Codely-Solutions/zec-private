@@ -69,6 +69,21 @@ class ReviewScreenshotTest {
     }
 
     @Test
+    fun captureNoteRetryStates() {
+        val scene = mutableStateOf(Scene("note-save-retry", "light"))
+        show(scene)
+        for ((theme, scale) in listOf("light" to 1f, "dark" to 1f, "oled" to 1f, "dark" to 2f)) {
+            compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
+            val current = Scene("note-save-retry", theme, scale)
+            compose.runOnIdle { scene.value = current }
+            compose.onNodeWithText("Draft retained after failed save").assertIsDisplayed()
+            compose.onNodeWithText(text(R.string.annotation_save)).assertIsEnabled()
+            compose.onNodeWithText(text(R.string.annotation_delete)).assertIsEnabled()
+            capture(current, "retry", "Draft retained after failed save")
+        }
+    }
+
+    @Test
     fun captureFinalizationAndSigningStates() = captureFinalizationAndSigning(listOf("light", "dark", "oled"), 1f)
 
     @Test

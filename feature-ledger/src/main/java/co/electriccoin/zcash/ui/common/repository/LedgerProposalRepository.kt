@@ -40,6 +40,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
@@ -222,9 +224,10 @@ class LedgerProposalRepositoryImpl(
             } catch (e: PcztException.MultiStepProposalUnsupportedException) {
                 if (transactionProposal.paysTexAddress()) throw TexUnsupportedOnKSException() else throw e
             }
+        currentCoroutineContext().ensureActive()
+        check(this.transactionProposal.value === transactionProposal) { "The transaction changed during preparation." }
         cancelSigning()
         submitState.update { null }
-        check(this.transactionProposal.value === transactionProposal) { "The transaction changed during preparation." }
         val prepared = hardwareProposal.prepare(transactionProposal, result)
         pcztWithProofsJob?.cancel()
         pcztWithProofsJob = prepared.startProofs(scope, proposalDataSource::addProofsToPczt)
@@ -610,19 +613,22 @@ class LedgerProposalRepositoryImpl(
     private val isIdle: Boolean
         get() = sessionJob == null && signingState.value == null && !ledgerSigningDataSource.isLinked
 
-    private inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
+    private suspend inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
         val proposal =
             try {
                 block()
             } catch (e: TransactionProposalNotCreatedException) {
+                currentCoroutineContext().ensureActive()
                 Twig.error(e) { "Unable to create proposal" }
                 transactionProposal.update { null }
                 throw e
             } catch (e: InsufficientFundsException) {
+                currentCoroutineContext().ensureActive()
                 Twig.error(e) { "Insufficient funds" }
                 transactionProposal.update { null }
                 throw e
             }
+        currentCoroutineContext().ensureActive()
         transactionProposal.update { proposal }
         return proposal
     }

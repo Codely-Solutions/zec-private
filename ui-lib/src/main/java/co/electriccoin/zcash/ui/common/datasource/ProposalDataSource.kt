@@ -24,6 +24,7 @@ import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.zip321MemoTextOrNull
 import co.electriccoin.zcash.ui.common.model.requireSpendable
 import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesUsd
 import co.electriccoin.zcash.ui.common.model.zcash.getTotalFeesZatoshi
@@ -180,8 +181,9 @@ class ProposalDataSourceImpl(
                             ?.toZecValueString()
                             ?.toBigDecimal()
                             .convertZecToZatoshi(),
-                    memo = Memo(payment.memo?.data?.decodeToString() ?: ""),
+                    memo = Memo(payment.memo?.data?.zip321MemoTextOrNull().orEmpty()),
                     proposal = synchronizer.proposeFulfillingPaymentUri(account = account.sdkAccount, uri = zip321Uri),
+                    binaryMemoByteCount = payment.memo?.data?.takeIf { it.zip321MemoTextOrNull() == null }?.size,
                 ).also { reviewed ->
                     if (reviewed.destination.address == DonationPolicy.recipient()) {
                         DonationPolicy.requireShielded(
@@ -532,7 +534,8 @@ data class Zip321TransactionProposal(
     override val destination: WalletAddress,
     override val amount: Zatoshi,
     override val memo: Memo,
-    override val proposal: Proposal
+    override val proposal: Proposal,
+    val binaryMemoByteCount: Int? = null,
 ) : SendTransactionProposal
 
 data class ExactInputSwapTransactionProposal(

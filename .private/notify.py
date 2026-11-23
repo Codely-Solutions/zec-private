@@ -10,6 +10,7 @@ import tempfile
 import urllib.request
 
 TITLE = 'ZEC Private update blocked: review required'
+HISTORY_TITLE = 'ZEC Private verified recovery history'
 START = '<!-- zec-private-blocker-current -->'
 END = '<!-- /zec-private-blocker-current -->'
 SECTION = re.compile(re.escape(START)+r'\r?\n<!-- state: ([^\r\n]+) -->\r?\n'
@@ -26,10 +27,17 @@ def gh(*args):
     return subprocess.check_output(['gh', *args], text=True, timeout=45).strip()
 
 
-def issue_body(repo, number, body):
+def blocker_issues(pages, title=TITLE):
+    return [issue for page in pages for issue in page if issue['title'] == title and 'pull_request' not in issue]
+
+
+def issue_body(repo, number, body, *, title=TITLE):
     with tempfile.TemporaryDirectory(prefix='zec-notify-') as temp:
         path = Path(temp)/'body.txt'
         path.write_text(body, encoding='utf-8', newline='')
+        if number is None:
+            created = gh('issue', 'create', '--repo', repo, '--title', title, '--body-file', str(path))
+            return int(created.rstrip('/').rsplit('/', 1)[1])
         return gh('issue', 'edit', str(number), '--repo', repo, '--body-file', str(path))
 
 
@@ -89,6 +97,8 @@ def matches_recovery(state, revision):
     previous_operation, previous_candidate, previous_emulator = blocker_scope(state)
     same_scope = (bool(candidate) and (operation, candidate) == (previous_operation, previous_candidate)
                   and (emulator == previous_emulator or (operation == 'validation' and emulator == 'true')))
+    if operation in PUBLICATION_OPERATIONS and state.get('attestation') and revision['attestation']:
+        same_scope = same_scope and state['attestation'] == revision['attestation']
     same_attestation = (revision['operation'] in PUBLICATION_OPERATIONS
                         and state['operation'] in PUBLICATION_OPERATIONS
                         and bool(revision['attestation']) and state.get('attestation') == revision['attestation'])
@@ -170,34 +180,48 @@ def main(message):
                 raise ValueError('Invalid validation emulator scope')
             revision['validation_emulator'] = emulator
         pages = json.loads(gh('api', f'repos/{repo}/issues?state=all&per_page=100', '--paginate', '--slurp'))
-        issues = [issue for page in pages for issue in page if issue['title'] == TITLE and 'pull_request' not in issue]
+        issues = blocker_issues(pages)
         opened = [issue for issue in issues if issue['state'] == 'open']
         if len(opened) > 1:
             raise RuntimeError('Multiple open blocker issues require operator review')
         if opened:
             number = opened[0]['number']
             body = opened[0].get('body') or ''
-        closed = max((issue for issue in issues if issue['state'] == 'closed'),
-                     key=lambda issue: issue['number'], default={})
-        history = recent_recoveries(recovery_history(body), recovery_history(closed.get('body') or ''))
+        carriers = [issue for issue in issues if issue['state'] == 'closed'] + blocker_issues(pages, HISTORY_TITLE)
+        carrier = max(carriers, key=lambda issue: issue['number'], default={})
+        carrier_body = carrier.get('body') or ''
+        history = recent_recoveries(recovery_history(body), recovery_history(carrier_body))
         blockers = current_blockers(body)
         if recovery:
+            history = recent_recoveries(history, [revision])
             if number is not None:
                 resolved = [match for state, match in blockers.values()
                             if run_order(revision) >= run_order(state) and matches_recovery(state, revision)]
                 if resolved:
-                    history = recent_recoveries(history, [revision])
                     gh('issue', 'comment', str(number), '--repo', repo, '--body',
                        'Verified recovery: '+message+'\nWorkflow evidence: '+evidence)
-                    if len(resolved) == body.count(START):
-                        issue_body(repo, number, with_recoveries(body, history))
-                        gh('issue', 'close', str(number), '--repo', repo, '--reason', 'completed')
-                    else:
+                    close = len(resolved) == body.count(START)
+                    if not close:
                         for match in reversed(resolved):
                             body = body[:match.start()]+body[match.end():]
-                        issue_body(repo, number, with_recoveries(body, history))
+                    issue_body(repo, number, with_recoveries(body, history))
+                    if close:
+                        gh('issue', 'close', str(number), '--repo', repo, '--reason', 'completed')
                 else:
+                    updated = with_recoveries(body, history)
+                    if updated != body:
+                        issue_body(repo, number, updated)
                     print('Preserved the open blocker because its operation or revision is unresolved.')
+            elif carrier:
+                updated = with_recoveries(carrier_body, history)
+                if updated != carrier_body:
+                    issue_body(repo, carrier['number'], updated)
+            else:
+                carrier_number = issue_body(repo, None, with_recoveries('', history), title=HISTORY_TITLE)
+                carrier = dict(number=carrier_number, state='open')
+            # The initial history issue can still be open after an interrupted close.
+            if carrier.get('state') == 'open':
+                gh('issue', 'close', str(carrier['number']), '--repo', repo, '--reason', 'completed')
         else:
             if any(run_order(revision) <= run_order(saved) and matches_recovery(revision, saved) for saved in history):
                 print('Preserved verified recovery from a later workflow run or attempt.')
@@ -212,11 +236,7 @@ def main(message):
             revision.update(fingerprint=fingerprint, delivery='accepted' if delivered else 'pending')
             updated = with_recoveries(with_current(body, match, revision, message, diagnosis, evidence), history)
             if number is None:
-                with tempfile.TemporaryDirectory(prefix='zec-notify-') as temp:
-                    path = Path(temp)/'body.txt'
-                    path.write_text(updated, encoding='utf-8', newline='')
-                    created = gh('issue', 'create', '--repo', repo, '--title', TITLE, '--body-file', str(path))
-                number = int(created.rstrip('/').rsplit('/', 1)[1])
+                number = issue_body(repo, None, updated)
             elif updated != body:
                 issue_body(repo, number, updated)
             link = f'https://github.com/{repo}/issues/{number}'

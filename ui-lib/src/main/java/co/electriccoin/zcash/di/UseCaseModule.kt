@@ -278,7 +278,7 @@ val useCaseModule =
         factoryOf(::GetTotalSpendableBalanceUseCase)
         factoryOf(::GetBalancePoolsUseCase)
         factoryOf(::IsABContactHintVisibleUseCase)
-        factoryOf(::RequestSwapQuoteUseCase)
+        singleOf(::RequestSwapQuoteUseCase)
         factoryOf(::CancelSwapQuoteUseCase)
         factoryOf(::NavigateToSwapQuoteIfAvailableUseCase)
         singleOf(::NavigateToScanGenericAddressUseCase)

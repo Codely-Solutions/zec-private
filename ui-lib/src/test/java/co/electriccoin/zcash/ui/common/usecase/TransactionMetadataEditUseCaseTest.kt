@@ -63,7 +63,8 @@ class TransactionMetadataEditUseCaseTest {
     fun thrownSaveAndDeleteFailuresRetainTheEditor() = runTest {
         coEvery { metadataRepository.createOrUpdateTxNote(any(), any(), any(), any()) } throws IOException()
         coEvery { metadataRepository.deleteTxNote(any(), any(), any()) } throws IOException()
-        assertFalse(CreateOrUpdateTransactionNoteUseCase(metadataRepository, navigationRouter, showError)("tx1", "note", owner, 0))
+        val save = CreateOrUpdateTransactionNoteUseCase(metadataRepository, navigationRouter, showError)
+        assertFalse(save("tx1", "note", owner, 0))
         assertFalse(DeleteTransactionNoteUseCase(metadataRepository, navigationRouter, showError)("tx1", owner, 0))
         verify(exactly = 0) { navigationRouter.back() }
         verify(exactly = 2) { showError(any()) }
@@ -77,7 +78,8 @@ class TransactionMetadataEditUseCaseTest {
             withContext(NonCancellable) { result.await() }
         }
         val save = launch {
-            CreateOrUpdateTransactionNoteUseCase(metadataRepository, navigationRouter, showError)("tx1", "note", owner, 0)
+            val useCase = CreateOrUpdateTransactionNoteUseCase(metadataRepository, navigationRouter, showError)
+            useCase("tx1", "note", owner, 0)
         }
         runCurrent()
         save.cancel()

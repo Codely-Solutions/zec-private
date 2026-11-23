@@ -89,7 +89,7 @@ internal fun RecipientReviewScene(
             ExactOutputVMMapper().createState(state, ExactOutputStateCallbacks(
                 onBack = {}, onSwapInfoClick = {}, onSwapAssetPickerClick = {}, onSlippageClick = {},
                 onRequestSwapQuoteClick = { _, _, _ -> }, onTryAgainClick = {}, onAddressChange = {},
-                onTextFieldChange = { _, _ -> }, onQrCodeScannerClick = {}, onAddressBookClick = {},
+                onTokenAmountChange = {}, onFiatAmountChange = {}, onQrCodeScannerClick = {}, onAddressBookClick = {},
                 onDeleteSelectedContactClick = {},
             )),
             balanceState = balance, appBarState = appBar,

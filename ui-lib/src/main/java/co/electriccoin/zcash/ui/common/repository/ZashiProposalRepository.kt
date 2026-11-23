@@ -23,6 +23,8 @@ import co.electriccoin.zcash.ui.common.model.ZecSwapComposition
 import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -213,19 +215,22 @@ class ZashiProposalRepositoryImpl(
         submitState.update { null }
     }
 
-    private inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
+    private suspend inline fun <T : TransactionProposal> createProposalInternal(block: () -> T): T {
         val proposal =
             try {
                 block()
             } catch (e: TransactionProposalNotCreatedException) {
+                currentCoroutineContext().ensureActive()
                 Twig.error(e) { "Unable to create proposal" }
                 transactionProposal.update { null }
                 throw e
             } catch (e: InsufficientFundsException) {
+                currentCoroutineContext().ensureActive()
                 Twig.error(e) { "Insufficient funds" }
                 transactionProposal.update { null }
                 throw e
             }
+        currentCoroutineContext().ensureActive()
         transactionProposal.update { proposal }
         return proposal
     }

@@ -130,7 +130,7 @@ class ExactOutputVMMapperGiftCardLinkTest {
         var updated: NumberTextFieldInnerState? = null
         val state = mapper.createState(
             internalState("1BpEi6DfDAUFd7GtittLSdBeYJvcoaVggu").copy(asset = asset),
-            callbacks.copy(onTextFieldChange = { amount, _ -> updated = amount })
+            callbacks.copy(onTokenAmountChange = { updated = it })
         )
         state.amountFiat.onValueChange(NumberTextFieldInnerState.fromAmount(BigDecimal("0.122839499")))
         val expected = BigDecimal("0.122839")
@@ -167,7 +167,8 @@ class ExactOutputVMMapperGiftCardLinkTest {
             onRequestSwapQuoteClick = { _, _, _ -> },
             onTryAgainClick = {},
             onAddressChange = {},
-            onTextFieldChange = { _, _ -> },
+            onTokenAmountChange = {},
+            onFiatAmountChange = {},
             onQrCodeScannerClick = {},
             onAddressBookClick = {},
             onDeleteSelectedContactClick = {},

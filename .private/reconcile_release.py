@@ -7,7 +7,8 @@ import subprocess
 import tempfile
 
 from custom_release import OPERATOR_ID, REPOSITORY, WORKFLOW as CUSTOM_WORKFLOW
-from publish import APK, NOTES, exact_assets, expose_release, release_for_tag, release_title, verify_tag
+from publish import (APK, NOTES, exact_assets, expose_release, release_for_tag, release_title,
+                     verify_attestation_publisher, verify_tag)
 from release_metadata import ARCHIVE_LIMITS, artifact_producer_job, job_timestamp
 from verify_public_release import API, bounded_zip, digest, gh, require, unsigned_proof
 
@@ -107,6 +108,7 @@ def verify_attempt(run_id, artifact, artifacts, *, allow_draft, target):
         require(archive.namelist() == ['release-attestation.json'], 'Unexpected publisher archive entries')
         data = archive.read('release-attestation.json')
     attestation = json.loads(data)
+    verify_attestation_publisher(attestation, run_id, attempt)
     if run['path'] == CUSTOM_WORKFLOW:
         maintenance = attestation.get('maintenance', {}).get('kind')
         require(maintenance == 'custom' or

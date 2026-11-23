@@ -2,6 +2,8 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.ext.convertZecToZatoshi
 import cash.z.ecc.android.sdk.model.Zatoshi
+import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
+import co.electriccoin.zcash.ui.common.model.zip321MemoTextOrNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -35,8 +37,11 @@ class PrefillSendUseCase {
             )
         }
 
-    fun requestFromZip321(value: PaymentRequest) =
-        scope.launch {
+    fun requestFromZip321(value: PaymentRequest): kotlinx.coroutines.Job {
+        val memo = value.payments.firstOrNull()?.memo?.data?.let {
+            it.zip321MemoTextOrNull() ?: throw UneditableZip321MemoException()
+        }
+        return scope.launch {
             val request = value.payments.firstOrNull()
             bus.send(
                 PrefillSendData.All(
@@ -48,16 +53,11 @@ class PrefillSendUseCase {
                             ?.convertZecToZatoshi() ?: Zatoshi(0),
                     address = request?.recipientAddress?.value,
                     fee = null,
-                    memos =
-                        value.payments
-                            .firstOrNull()
-                            ?.memo
-                            ?.data
-                            ?.decodeToString()
-                            ?.let { listOf(it) }
+                    memos = memo?.let { listOf(it) }
                 )
             )
         }
+    }
 
     fun request(value: PrefillSendData) = scope.launch { bus.send(value) }
 }

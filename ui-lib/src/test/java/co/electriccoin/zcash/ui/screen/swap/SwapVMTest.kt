@@ -488,6 +488,7 @@ class SwapVMTest {
     fun cancelConfirmationNegativeButtonCancelsSwap() =
         runTest {
             val harness = harness()
+            coEvery { harness.cancelSwap.afterDismissal(any()) } coAnswers { firstArg<suspend () -> Unit>()() }
             harness.collectState(this)
             harness.makeQuoteHang()
             harness.onAddressChange(BTC_ADDRESS)
@@ -501,7 +502,7 @@ class SwapVMTest {
             mainDispatcher.scheduler.advanceUntilIdle() // let the 350ms dismiss delay elapse
 
             assertNull(harness.vm.cancelState.value)
-            coVerify(exactly = 1) { harness.cancelSwap() }
+            coVerify(exactly = 1) { harness.cancelSwap.afterDismissal(any()) }
         }
 
     @Test

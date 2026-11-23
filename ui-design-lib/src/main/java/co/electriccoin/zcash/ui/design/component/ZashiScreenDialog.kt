@@ -48,7 +48,7 @@ fun ZashiScreenDialog(
 @Composable
 private fun Dialog(
     positive: ButtonState,
-    negative: ButtonState,
+    negative: ButtonState?,
     title: StringResource,
     message: StringResource,
     onDismissRequest: (() -> Unit),
@@ -71,16 +71,18 @@ private fun Dialog(
                     }
             )
         },
-        dismissButton = {
-            ZashiButton(
-                state = negative,
-                modifier =
-                    Modifier.semantics {
-                        testTagsAsResourceId = true
-                        testTag = ZashiScreenDialogTag.DISMISS
-                    },
-                defaultPrimaryColors = ZashiButtonDefaults.secondaryColors()
-            )
+        dismissButton = negative?.let {
+            {
+                ZashiButton(
+                    state = it,
+                    modifier =
+                        Modifier.semantics {
+                            testTagsAsResourceId = true
+                            testTag = ZashiScreenDialogTag.DISMISS
+                        },
+                    defaultPrimaryColors = ZashiButtonDefaults.secondaryColors()
+                )
+            }
         },
         title = {
             Text(
@@ -108,7 +110,7 @@ private fun Dialog(
 
 data class DialogState(
     val positive: ButtonState,
-    val negative: ButtonState,
+    val negative: ButtonState?,
     val onDismissRequest: (() -> Unit),
     val title: StringResource,
     val message: StringResource,
