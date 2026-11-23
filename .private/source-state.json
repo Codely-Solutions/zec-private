@@ -2530,7 +2530,7 @@
   "ui-lib/src/main/res/ui/non_translatable/values/private_price_check_strings.xml": "020c7311cc00fc1eb4f72b6a60c5749eb44f20479d569875aa136dd98ed159ad",
   "ui-lib/src/main/res/ui/non_translatable/values/private_quote_strings.xml": "6118f4da7910e9e3bd7e0d2baea93520c45912edb23ef82b0692cc1bda8647e2",
   "ui-lib/src/main/res/ui/non_translatable/values/private_recovery_strings.xml": "ad7c3239c077132b5d06c42adca4f94453c2d4eea9ca90eaf1a2b462675df293",
-  "ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml": "40dc577bd57c6aa1422f38ccf71e4d96f8ee574ca66e93aa0391b6d3ab0fb7b9",
+  "ui-lib/src/main/res/ui/non_translatable/values/private_strings.xml": "96d127afbd58feaf9f67549b8721693358623d93b2effc541ec9beec0e7e77fa",
   "ui-lib/src/main/res/ui/non_translatable/values/strings.xml": "41cc120a1f0385527ba554fa9a8f25e4e9184fd037e59725b96ada05735486c2",
   "ui-lib/src/main/res/ui/payment_request/drawable/ic_user_plus.xml": "c3357ebfc6a2f9630194873859c17e16bb652d0ad67487ee7c6c28e88d22e22d",
   "ui-lib/src/main/res/ui/qr_code/drawable-night/ic_qr_copy.xml": "e277330fa83938759b41d88a41d8a28f324be342321802b982b4c8309a5c0266",
