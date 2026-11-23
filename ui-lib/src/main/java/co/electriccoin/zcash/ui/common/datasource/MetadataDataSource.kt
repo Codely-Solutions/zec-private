@@ -922,14 +922,7 @@ private fun SwapMetadataV3.mergeStatus(candidate: SwapMetadataV3): SwapMetadataV
     val sameRoute = reviewedIdentity == candidate.reviewedIdentity && provider == candidate.provider
     val sameAssets = fromAsset == candidate.fromAsset && toAsset == candidate.toAsset
     if (!sameRoute || !sameAssets) return this
-    val candidateStatus = candidate.status
-    val candidateUpdatedAt = candidate.statusUpdatedAt
-    val newer = if (candidateStatus == null || candidateUpdatedAt == null) {
-        false
-    } else {
-        (statusUpdatedAt == null || candidateUpdatedAt > statusUpdatedAt) &&
-            acceptsStatus(candidateStatus, candidateUpdatedAt, candidate.executedAmountOut)
-    }
+    val newer = hasNewerStatus(candidate)
     val preferred = if (newer) candidate else this
     val earlier = if (newer) this else candidate
     val executed = preferred.executedAmountOut ?: earlier.executedAmountOut.takeIf {
@@ -944,6 +937,14 @@ private fun SwapMetadataV3.mergeStatus(candidate: SwapMetadataV3): SwapMetadataV
             executed = executed,
         )
     }
+}
+
+private fun SwapMetadataV3.hasNewerStatus(candidate: SwapMetadataV3): Boolean {
+    val candidateStatus = candidate.status
+    val timestamp = candidate.statusUpdatedAt
+    if (candidateStatus == null || timestamp == null) return false
+    return (statusUpdatedAt == null || timestamp > statusUpdatedAt) &&
+        acceptsStatus(candidateStatus, timestamp, candidate.executedAmountOut)
 }
 
 /**
