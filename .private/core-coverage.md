@@ -70,6 +70,8 @@ The maintained regressions for the review after `dd11dfc4` cover these composed 
 | Controller concurrency and failures | `test_maintenance_watch`, `test_notify`, `test_dev_session`, `test_packaging`: checked-in workflow conditions/queues, interleaved revisions/recovery, retained-artifact expiry and runner/export double failures; GitHub, push and signing I/O are mocked. |
 | Git fixture portability | Controller suites under LF and Windows child-only Git profiles, real disposable integration fixtures and exact CRLF patch-byte checks. |
 
+The optional component captures cover Request rate loss/recovery, quoted/retained/legacy settlement amounts and view-only Paste/Continue. Inspect actual Android frames for platform rendering and scrolled controls; semantic assertions alone do not prove a complete frame. The [UI procedure](UI-REVIEW.md) describes the debug-only hosts and their synthetic-state limits. Native SDK erasure, Android durability and credential probes retain their separate production-boundary checks.
+
 
 These cases run on the JVM with MockK and virtual coroutine time. They use real screen-state builders and mock external I/O. The full `ui-lib` release JVM task includes them automatically. Use the development session's filters to run affected cases first and `*VMTest` / `*MapperTest` for a broader pass in the same checkout.
 

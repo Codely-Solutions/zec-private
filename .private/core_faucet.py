@@ -91,12 +91,25 @@ def node_executable():
     return node
 
 
-def solve_work(challenge):
+def solve_work(challenge, budget_seconds=180):
+    if type(budget_seconds) is not int or not 1 <= budget_seconds <= 600:
+        raise ValueError('Faucet work budget outside 1–600 seconds')
+    difficulty=challenge['difficulty']
+    if type(difficulty) is not int or not 0 <= difficulty <= 14:
+        raise ValueError('Faucet work exceeds reviewed difficulty')
+    context=f'difficulty={difficulty}, budget_seconds={budget_seconds}'
     node=node_executable()
-    result=subprocess.run([node,str(Path(__file__).with_name('faucet_pow.cjs'))],
-        input=json.dumps({k:challenge[k] for k in ('seed','difficulty')}).encode(),capture_output=True,timeout=200,
-        creationflags=0x08000000 if os.name=='nt' else 0)
-    if result.returncode:raise RuntimeError('Bounded faucet work did not complete; no claim')
+    try:
+        result=subprocess.run([node,str(Path(__file__).with_name('faucet_pow.cjs'))],
+            input=json.dumps(dict(seed=challenge['seed'],difficulty=difficulty,budgetSeconds=budget_seconds)).encode(),
+            capture_output=True,timeout=budget_seconds+20,creationflags=0x08000000 if os.name=='nt' else 0)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f'Bounded faucet work did not complete (worker process timeout, {context}); no claim') from None
+    if result.returncode:
+        reason={b'PoW deadline':'worker deadline', b'PoW exhausted':'workers exhausted',
+                b'PoW bounds':'worker input rejected', b'Proof verification failed':'proof verification failed'}
+        safe=reason.get(result.stderr.strip(),'worker failure')
+        raise RuntimeError(f'Bounded faucet work did not complete ({safe}, {context}); no claim')
     proof=json.loads(result.stdout)
     if not re.fullmatch(r'\d{1,15}',str(proof.get('nonce',''))):raise ValueError('Invalid nonce')
     return proof
@@ -226,16 +239,23 @@ def claim(address,root,port,negative):
             raise ValueError('Faucet work exceeds reviewed bounds')
         if not re.fullmatch('[0-9a-f]{32}',str(challenge.get('seed',''))) or not re.fullmatch('[0-9a-f]{64}',str(challenge.get('sig',''))):
             raise ValueError('Invalid signed challenge')
-        if not time.time()+200<=challenge.get('exp',0)<=time.time()+905:raise ValueError('Challenge expiry')
+        expires=challenge.get('exp',0)
+        now=time.time()
+        if type(expires) not in (int,float) or not now+200<=expires<=now+905:
+            raise ValueError('Challenge expiry')
         # This faucet binds its signature to the address, not IP or TLS session.
         # Close the challenge connection during CPU work; claim/poll share new TLS.
         client.close()
-        proof=solve_work(challenge)
+        budget_seconds=min(600,int(expires-time.time())-30)
+        if budget_seconds<=0:raise ValueError('Challenge expiry leaves no work budget')
+        proof=solve_work(challenge,budget_seconds=budget_seconds)
         nonce=proof.get('nonce','')
         if not re.fullmatch(r'\d{1,15}',nonce):raise ValueError('Invalid nonce')
         client=TorHTTPS(FAUCET,port);client.connect();pinned=client.sock
         if pinned is None:raise RuntimeError('Missing claim TLS connection; no claim')
-        state=dict(provider='argon-testnet',status='request-starting',created_at=time.time(),claim_requests=1,
+        now=time.time()
+        if now>=expires:raise ValueError('Challenge expired before claim')
+        state=dict(provider='argon-testnet',status='request-starting',created_at=now,claim_requests=1,
                    address_sha256=hashlib.sha256(address.encode()).hexdigest())
         with ledger.open('x') as stream:
             json.dump(state,stream);stream.flush();os.fsync(stream.fileno())
@@ -268,7 +288,8 @@ def claim(address,root,port,negative):
                 route_evidence='Pinned owned Tor; unavailable-proxy negative; validated TLS; sole claim and status polling share TLS',
                 source_blob='25e617b8f3f3010e1e5b2b17bc81b9661afadf16',
                 source_url='https://github.com/anukulpandey/zcash-faucet/blob/main/server/server.js',
-                proof_seconds=proof['seconds'],proof_workers=proof['workers'],seconds=time.monotonic()-began)
+                proof_seconds=proof['seconds'],proof_workers=proof['workers'],proof_budget_seconds=budget_seconds,
+                seconds=time.monotonic()-began)
         raise TimeoutError('Claim pending; preserve ledger and never resubmit')
     except BaseException:
         if owns_ledger and state['status'] in ('request-starting','pending'):

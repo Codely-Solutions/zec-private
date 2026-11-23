@@ -7,6 +7,8 @@ import tempfile
 import json
 import os
 from pathlib import Path
+import subprocess
+from types import SimpleNamespace
 from unittest.mock import MagicMock, Mock, patch
 from test_support import patch_environment
 from core_faucet import TorHTTPS,FAUCET,verify_unavailable_proxy,bundle_archive
@@ -119,7 +121,7 @@ class ClaimTest(unittest.TestCase):
                 (202,dict(ok=True,pending=True,id='c'*16)),
                 (200,dict(ok=True,txid='d'*64,amountZat=10000000))]
 
-    def run_claim(self,root,replies):
+    def run_claim(self,root,replies,*,clock=None,work=None):
         self.calls=[]
         def request(client,method,path,body=None):
             self.calls.append((method,path,body))
@@ -128,7 +130,8 @@ class ClaimTest(unittest.TestCase):
             value=replies.pop(0)
             if isinstance(value,Exception):raise value
             return value[0],json.dumps(value[1]).encode()
-        with patch_environment({},clear=True),patch('core_faucet.TorHTTPS') as client,patch('core_faucet.request',side_effect=request),patch('core_faucet.solve_work',return_value=dict(nonce='0',seconds=.1,workers=2)),patch('core_faucet.time.time',return_value=100):
+        with patch_environment({},clear=True),patch('core_faucet.TorHTTPS') as client,patch('core_faucet.request',side_effect=request),patch('core_faucet.solve_work',side_effect=work,return_value=dict(nonce='0',seconds=.1,workers=2)) as solve,patch('core_faucet.time.time',side_effect=clock,return_value=100):
+            self.solve=solve
             client.return_value.sock=object()
             return core_faucet.claim(self.address,root,12345,True)
 
@@ -136,6 +139,7 @@ class ClaimTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as root:
             result=self.run_claim(root,self.replies())
             self.assertEqual(result['txid'],'d'*64)
+            self.assertEqual(result['proof_budget_seconds'],600)
             self.assertEqual([method for method,_,_ in self.calls],['GET','GET','POST','GET'])
             ledger=Path(root)/'funding-claim-ledger.json'
             self.assertEqual(json.loads(ledger.read_text())['status'],'broadcast')
@@ -173,6 +177,44 @@ class ClaimTest(unittest.TestCase):
             self.assertEqual(ledger.read_text(),'other attempt')
             self.assertFalse(any(method=='POST' for method,_,_ in self.calls))
 
+    def test_claim_work_budget_uses_integer_remaining_time_and_upper_cap(self):
+        for expiry, budget in ((300,170),(530.9,400),(1005,600)):
+            with self.subTest(expiry=expiry),tempfile.TemporaryDirectory() as root:
+                replies=self.replies()
+                challenge=replies[1][1]
+                challenge['exp']=expiry
+                receipt=self.run_claim(root,replies)
+                self.solve.assert_called_once_with(challenge,budget_seconds=budget)
+                self.assertEqual(receipt['proof_budget_seconds'],budget)
+
+    def test_claim_rejects_invalid_expiry_before_work(self):
+        for expiry in (299.9,1005.1,'1000',None):
+            with self.subTest(expiry=expiry),tempfile.TemporaryDirectory() as root:
+                replies=self.replies()
+                replies[1][1]['exp']=expiry
+                with self.assertRaisesRegex(ValueError,'Challenge expiry'):
+                    self.run_claim(root,replies)
+                self.solve.assert_not_called()
+                self.assertEqual([method for method,_,_ in self.calls],['GET','GET'])
+                self.assertFalse((Path(root)/'funding-claim-ledger.json').exists())
+
+    def test_challenge_can_expire_before_work_or_before_post(self):
+        for clock, error, work_runs in (((100,971),'no work budget',False),
+                                        ((100,100,1000),'expired before claim',True)):
+            with tempfile.TemporaryDirectory() as root,self.subTest(error=error):
+                with self.assertRaisesRegex(ValueError,error):
+                    self.run_claim(root,self.replies(),clock=iter(clock))
+                self.assertEqual(self.solve.called,work_runs)
+                self.assertEqual([method for method,_,_ in self.calls],['GET','GET'])
+                self.assertFalse((Path(root)/'funding-claim-ledger.json').exists())
+
+    def test_failed_work_does_not_create_ledger_or_post(self):
+        with tempfile.TemporaryDirectory() as root:
+            with self.assertRaisesRegex(RuntimeError,'worker deadline'):
+                self.run_claim(root,self.replies(),work=RuntimeError('worker deadline'))
+            self.assertEqual([method for method,_,_ in self.calls],['GET','GET'])
+            self.assertFalse((Path(root)/'funding-claim-ledger.json').exists())
+
     def test_server_error_scrubs_address_and_hex(self):
         value=core_faucet.sanitized_error(dict(code='REFUSED',message=self.address+' '+('f'*64)+' '+('x'*500),body='private'))
         self.assertLessEqual(len(value),400)
@@ -186,6 +228,51 @@ class ClaimTest(unittest.TestCase):
         proof=core_faucet.solve_work(dict(seed='0'*32,difficulty=0))
         self.assertEqual(proof['workers'],2)
         self.assertRegex(proof['nonce'],r'^\d{1,15}$')
+        node=core_faucet.node_executable()
+        script=Path(core_faucet.__file__).with_name('faucet_pow.cjs')
+        for budget in (0,601,1.5,True,None):
+            with self.subTest(budget=budget):
+                result=subprocess.run([node,str(script)],
+                    input=json.dumps(dict(seed='0'*32,difficulty=0,budgetSeconds=budget)).encode(),
+                    capture_output=True,timeout=10)
+                self.assertEqual(result.returncode,1)
+                self.assertEqual(result.stderr.strip(),b'PoW bounds')
+
+
+class WorkTest(unittest.TestCase):
+    challenge=dict(seed='a'*32,difficulty=14,sig='b'*64)
+
+    def test_worker_uses_default_and_explicit_budget_with_process_margin(self):
+        success=SimpleNamespace(returncode=0,stdout=b'{"nonce":"1"}')
+        with patch('core_faucet.node_executable',return_value='node'),patch('core_faucet.subprocess.run',return_value=success) as run:
+            for arguments,budget in (({},180),({'budget_seconds':1},1),({'budget_seconds':600},600)):
+                with self.subTest(budget=budget):
+                    core_faucet.solve_work(self.challenge,**arguments)
+                    self.assertEqual(run.call_args.kwargs['timeout'],budget+20)
+                    self.assertEqual(json.loads(run.call_args.kwargs['input']),
+                                     dict(seed=self.challenge['seed'],difficulty=14,budgetSeconds=budget))
+
+    def test_explicit_worker_bounds_reject_invalid_values_before_start(self):
+        with patch('core_faucet.node_executable') as node:
+            for budget in (0,601,-1,180.0,True,None,'180'):
+                with self.subTest(budget=budget),self.assertRaisesRegex(ValueError,'work budget'):
+                    core_faucet.solve_work(self.challenge,budget_seconds=budget)
+            for difficulty in (-1,15,True,'14'):
+                with self.subTest(difficulty=difficulty),self.assertRaisesRegex(ValueError,'reviewed difficulty'):
+                    core_faucet.solve_work(dict(self.challenge,difficulty=difficulty))
+            node.assert_not_called()
+
+    def test_worker_failures_report_only_safe_reason_and_bounds(self):
+        for result,reason in ((SimpleNamespace(returncode=1,stderr=b'PoW deadline\n'),'worker deadline'),
+                              (SimpleNamespace(returncode=1,stderr=b'PoW exhausted'),'workers exhausted'),
+                              (SimpleNamespace(returncode=1,stderr=b'a'*32+b' utest1'+b'b'*64),'worker failure'),
+                              (subprocess.TimeoutExpired('node',620,stderr=b'a'*32),'worker process timeout')):
+            with self.subTest(reason=reason),patch('core_faucet.node_executable',return_value='node'), \
+                    patch('core_faucet.subprocess.run',side_effect=[result]):
+                with self.assertRaises(RuntimeError) as error:
+                    core_faucet.solve_work(self.challenge,budget_seconds=600)
+                self.assertEqual(str(error.exception),
+                                 f'Bounded faucet work did not complete ({reason}, difficulty=14, budget_seconds=600); no claim')
 
 class TransportTest(unittest.TestCase):
     def test_real_unavailable_proxy(self):
