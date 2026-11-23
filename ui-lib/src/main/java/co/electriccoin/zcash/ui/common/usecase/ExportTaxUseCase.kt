@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.common.usecase
 import android.content.Context
 import cash.z.ecc.android.sdk.ext.convertZatoshiToZec
 import cash.z.ecc.android.sdk.model.Zatoshi
+import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -25,6 +26,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.io.BufferedWriter
 import java.io.File
+import java.nio.file.Files
 import java.time.Year
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -50,9 +52,11 @@ class ExportTaxUseCase(
                     }
 
             val selectedAccount = accountDataSource.getSelectedAccount()
+            val directory = File(context.cacheDir, "tax_exports").apply { mkdirs() }
+            val staging = Files.createTempDirectory(directory.toPath(), "tax-").toFile()
             val outputFile =
                 File(
-                    File(context.cacheDir, "tax_exports").apply { mkdirs() },
+                    staging,
                     when (selectedAccount) {
                         is KeystoneAccount -> {
                             "Keystone_Transaction_History_$previousYear.csv"
@@ -74,7 +78,7 @@ class ExportTaxUseCase(
 
             var shared = false
             try {
-                val entries = getCsvEntries()
+                val entries = getCsvEntries(selectedAccount.sdkAccount.accountUuid)
                 val currentAccount = accountDataSource.getSelectedAccount()
                 check(
                     currentAccount.sdkAccount.accountUuid == selectedAccount.sdkAccount.accountUuid
@@ -94,7 +98,10 @@ class ExportTaxUseCase(
                 context.startActivity(intent)
                 shared = true
             } finally {
-                if (!shared) outputFile.delete()
+                if (!shared) {
+                    outputFile.delete()
+                    staging.delete()
+                }
             }
 
             currentCoroutineContext().ensureActive()
@@ -136,9 +143,9 @@ class ExportTaxUseCase(
         }
     }
 
-    private suspend fun getCsvEntries() =
+    private suspend fun getCsvEntries(accountUuid: AccountUuid) =
         transactionRepository
-            .getTransactions()
+            .getTransactions(accountUuid)
             .mapNotNull { transaction ->
                 val previousYear = Year.now().minusYears(1)
 

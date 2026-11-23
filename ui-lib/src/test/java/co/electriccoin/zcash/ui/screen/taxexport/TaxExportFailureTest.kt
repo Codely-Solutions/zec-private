@@ -69,7 +69,7 @@ class TaxExportFailureTest {
             every { isDebuggable } returns true
         }
         val export = ExportTaxUseCase(
-            mockk<TransactionRepository> { coEvery { getTransactions() } returns emptyList() },
+            mockk<TransactionRepository> { coEvery { getTransactions(any()) } returns emptyList() },
             accounts, mockk { every { this@mockk() } returns version }, context, navigation, mockk(),
         )
         val store = ViewModelStore()
@@ -138,6 +138,48 @@ class TaxExportFailureTest {
         } finally {
             observer.cancel()
             store.clear()
+            Dispatchers.resetMain()
+        }
+    }
+
+    @Test
+    fun backCancelsTheRealExportAndPreservesAPreviouslySharedFile() = runTest {
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
+        val cache = Files.createTempDirectory(
+            RuntimeEnvironment.getApplication().cacheDir.toPath(), "tax-cancel-"
+        ).toFile()
+        val prior = File(cache, "tax_exports/prior/history.csv").apply {
+            parentFile.mkdirs()
+            writeText("previously authorized CSV")
+        }
+        val context = mockk<Context> { every { cacheDir } returns cache }
+        val entered = CompletableDeferred<Unit>()
+        val transactions = mockk<TransactionRepository> {
+            coEvery { getTransactions(any()) } coAnswers { entered.complete(Unit); awaitCancellation() }
+        }
+        val accounts = accounts()
+        val navigation = mockk<NavigationRouter>(relaxed = true)
+        val export = ExportTaxUseCase(transactions, accounts, mockk(), context, navigation, mockk())
+        val vm = TaxExportViewModel(GetSelectedWalletAccountUseCase(accounts), export, navigation)
+        val store = ViewModelStore().apply { put("tax", vm) }
+        val observer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
+        try {
+            val staleClick = vm.state.value.exportButton.onClick
+            staleClick()
+            entered.await()
+            vm.state.value.onBack()
+            vm.state.first { !it.exportButton.isLoading }
+            staleClick()
+            coVerify(exactly = 1) { transactions.getTransactions(any()) }
+            assertTrue(prior.readText() == "previously authorized CSV")
+            assertTrue(File(cache, "tax_exports").listFiles().orEmpty().single().name == "prior")
+            assertNull(vm.state.value.error)
+            verify(exactly = 1) { navigation.back() }
+            verify(exactly = 0) { context.startActivity(any()) }
+        } finally {
+            observer.cancel()
+            store.clear()
+            cache.deleteRecursively()
             Dispatchers.resetMain()
         }
     }

@@ -75,7 +75,7 @@ class TaxExportViewModelTest {
         val authority = FileShareUtil.ZASHI_INTERNAL_DATA_FOSS_AUTHORITY_DEBUG
         val year = Year.now().minusYears(1).value
         val name = "Keystone_Transaction_History_$year.csv"
-        val output = File(application.cacheDir, "tax_exports/$name")
+        lateinit var output: File
         val uri = Uri.parse("content://$authority/tax_exports/$name")
         val transaction = mockk<ReceiveTransaction.Success> {
             every { timestamp } returns Instant.parse("$year-06-15T12:00:00Z")
@@ -87,7 +87,7 @@ class TaxExportViewModelTest {
             coEvery { getSelectedAccount() } coAnswers { requireNotNull(selection.value) }
         }
         val repository = mockk<TransactionRepository> {
-            coEvery { getTransactions() } returns listOf(transaction)
+            coEvery { getTransactions(any()) } returns listOf(transaction)
         }
         val version = mockk<VersionInfo> {
             every { network } returns ZcashNetwork.Mainnet
@@ -113,7 +113,10 @@ class TaxExportViewModelTest {
         // FileProvider matches Android paths using '/', while Robolectric uses the host file system.
         mockkStatic(FileProvider::class)
         try {
-            every { FileProvider.getUriForFile(application, authority, output) } returns uri
+            every { FileProvider.getUriForFile(application, authority, any()) } answers {
+                output = thirdArg()
+                uri
+            }
             runCurrent()
             assertEquals(stringRes(R.string.taxExport_desc, stringRes(R.string.accounts_zashi)), vm.state.value.text)
             selection.value = EditAccountFixtures.keystone(isSelected = true)
@@ -140,6 +143,7 @@ class TaxExportViewModelTest {
             assertEquals(uri, shared.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java))
             assertEquals(uri, shared.clipData?.getItemAt(0)?.uri)
             assertContains(output.readLines(), "06/15/$year 12:00:00,1.25,ZEC,,,,,")
+            assertEquals(name, output.name)
             verify(exactly = 1) { FileProvider.getUriForFile(application, authority, output) }
             verify(exactly = 1) { navigation.back() }
         } finally {

@@ -61,6 +61,8 @@ interface TransactionRepository {
 
     suspend fun getTransactions(): List<Transaction>
 
+    suspend fun getTransactions(accountUuid: AccountUuid): List<Transaction>
+
     suspend fun resolveWalletAddress(address: String): WalletAddress?
 }
 
@@ -82,13 +84,29 @@ class TransactionRepositoryImpl(
 
     private val ownAddressCache = ConcurrentHashMap<AccountUuid, String>()
 
+    override val transactions: Flow<List<Transaction>?> =
+        observeTransactions(
+            accountDataSource.selectedAccount.map { it?.sdkAccount?.accountUuid }.distinctUntilChanged()
+        )
+            .retryWhen { cause, attempt ->
+                if (cause is CancellationException) {
+                    false
+                } else {
+                    Twig.error(cause) { "Transactions flow failed; retrying" }
+                    emit(null)
+                    delay(attempt.coerceAtMost(TRANSACTIONS_RETRY_DELAY_CAP).seconds)
+                    true
+                }
+            }.stateIn(
+                scope = scope,
+                started = SharingStarted.Lazily,
+                initialValue = null
+            )
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Suppress("TooGenericExceptionCaught")
-    override val transactions: Flow<List<Transaction>?> =
-        accountDataSource
-            .selectedAccount
-            .map { it?.sdkAccount?.accountUuid }
-            .distinctUntilChanged()
+    private fun observeTransactions(accountUuids: Flow<AccountUuid?>): Flow<List<Transaction>?> =
+        accountUuids
             .flatMapLatest { uuid ->
                 if (uuid == null) {
                     flowOf(null)
@@ -213,20 +231,7 @@ class TransactionRepositoryImpl(
                             }
                         }.onStart { emit(null) }
                 }
-            }.retryWhen { cause, attempt ->
-                if (cause is CancellationException) {
-                    false
-                } else {
-                    Twig.error(cause) { "Transactions flow failed; retrying" }
-                    emit(null)
-                    delay(attempt.coerceAtMost(TRANSACTIONS_RETRY_DELAY_CAP).seconds)
-                    true
-                }
-            }.stateIn(
-                scope = scope,
-                started = SharingStarted.Lazily,
-                initialValue = null
-            )
+            }
 
     private fun createTransaction(
         transaction: TransactionOverview,
@@ -412,6 +417,9 @@ class TransactionRepositoryImpl(
             }.distinctUntilChanged()
 
     override suspend fun getTransactions(): List<Transaction> = transactions.filterNotNull().first()
+
+    override suspend fun getTransactions(accountUuid: AccountUuid): List<Transaction> =
+        observeTransactions(flowOf(accountUuid)).filterNotNull().first()
 
     override suspend fun resolveWalletAddress(address: String): WalletAddress? =
         when (synchronizerProvider.getSynchronizer().validateAddress(address)) {
