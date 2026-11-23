@@ -114,6 +114,22 @@ class MaintenanceWatchTest(unittest.TestCase):
             diagnostic = concurrency_settings(workflow_blocks(workflow)[0])
             self.assertNotEqual(production, diagnostic.get('group'))
 
+    def test_discovery_dispatch_routes_non_main_away_from_the_main_pending_slot(self):
+        header, _ = workflow_blocks('sync-upstream.yml')
+        settings = concurrency_settings(header)
+        self.assertEqual(settings.get('queue', 'single'), 'single')
+        self.assertEqual(settings['cancel-in-progress'], 'false')
+        self.assertIn('  schedule:\n', header)
+        self.assertIn('    branches: [main]', header)
+        self.assertIn('  workflow_dispatch:\n', header)
+        routes = [evaluate_expression(settings['group'], {'github.ref': ref, 'github.event_name': event})
+                  for ref, event in [('refs/heads/main', 'schedule'), ('refs/heads/main', 'push'),
+                                     ('refs/heads/main', 'workflow_dispatch'),
+                                     ('refs/heads/review/test', 'workflow_dispatch'),
+                                     ('refs/tags/example', 'workflow_dispatch')]]
+        self.assertEqual(routes[:3], ['zec-private-sync'] * 3)
+        self.assertEqual(routes[3:], ['zec-private-sync-diagnostic'] * 2)
+
     def test_all_protected_signing_jobs_share_one_non_replacing_queue(self):
         jobs = {}
         for workflow in ('build-release.yml', 'upgrade-acceptance.yml', 'verify-signing-environment.yml'):
@@ -130,7 +146,8 @@ class MaintenanceWatchTest(unittest.TestCase):
 
     def test_issue_writers_share_one_non_replacing_queue(self):
         for workflow, name in (('build-release.yml', 'failed'), ('build-release.yml', 'notify'),
-                               ('sync-upstream.yml', 'blocked')):
+                               ('build-release.yml', 'validation_recovered'), ('sync-upstream.yml', 'blocked'),
+                               ('sync-upstream.yml', 'discovery_recovered')):
             block = workflow_job(workflow, name)['block']
             self.assertEqual(concurrency_settings(block, indent=4), {'group': 'zec-private-blocker', 'queue': 'max'})
             self.assertIn('BLOCKER_OPERATION:', block)
@@ -179,6 +196,40 @@ class MaintenanceWatchTest(unittest.TestCase):
         self.assertTrue(job_activates(notification, dict(record_integration='success')))
         self.assertFalse(job_activates(notification, dict(record_integration='success'), workflow_cancelled=True))
         self.assertIn("RECOVERY_VERIFIED: 'true'", notification['block'])
+
+    def test_discovery_recovery_requires_watcher_and_preparation_success(self):
+        recovery = workflow_job('sync-upstream.yml', 'discovery_recovered')
+        passed = dict(maintenance='success', prepare='success')
+        self.assertTrue(job_activates(recovery, passed))
+        self.assertFalse(job_activates(recovery, passed, workflow_cancelled=True))
+        self.assertFalse(job_activates(recovery, passed, **{'github.ref': 'refs/heads/review/test'}))
+        for job in recovery['needs']:
+            for result in ('failure', 'cancelled', 'skipped'):
+                self.assertFalse(job_activates(recovery, dict(passed, **{job: result})))
+        self.assertIn("RECOVERY_VERIFIED: 'true'", recovery['block'])
+        self.assertIn('BLOCKER_OPERATION: discovery', recovery['block'])
+        self.assertIn('BLOCKER_CANDIDATE: ${{ github.sha }}', recovery['block'])
+        self.assertNotIn('NTFY_URL', recovery['block'])
+
+    def test_validation_recovery_requires_the_unsigned_and_requested_emulator_jobs(self):
+        recovery = workflow_job('build-release.yml', 'validation_recovered')
+        validation = {'inputs.validation_only': True}
+        both = dict(unsigned='success', emulator='success')
+        unsigned = dict(unsigned='success', emulator='skipped')
+        self.assertTrue(job_activates(recovery, both, **validation, **{'inputs.build_emulator': True}))
+        self.assertTrue(job_activates(recovery, unsigned, **validation))
+        self.assertFalse(job_activates(recovery, unsigned, **validation, **{'inputs.build_emulator': True}))
+        self.assertFalse(job_activates(recovery, both, **validation, **{'inputs.preflight_only': True}))
+        self.assertFalse(job_activates(recovery, both, **validation, **{'github.ref': 'refs/heads/review/test'}))
+        self.assertFalse(job_activates(recovery, both, **validation, workflow_cancelled=True))
+        self.assertFalse(job_activates(recovery, both))
+        for result in ('failure', 'cancelled'):
+            self.assertFalse(job_activates(recovery, dict(both, emulator=result), **validation))
+            self.assertFalse(job_activates(recovery, dict(both, unsigned=result), **validation))
+        self.assertIn("RECOVERY_VERIFIED: 'true'", recovery['block'])
+        self.assertIn('BLOCKER_OPERATION: validation', recovery['block'])
+        self.assertIn('BLOCKER_VALIDATION_EMULATOR: ${{ inputs.build_emulator }}', recovery['block'])
+        self.assertNotIn('NTFY_URL', recovery['block'])
 
     def test_delayed_timer_is_quiet_without_blocking_live_discovery(self):
         with tempfile.TemporaryDirectory() as temp:

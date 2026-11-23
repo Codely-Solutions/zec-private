@@ -12,7 +12,10 @@ import urllib.request
 TITLE = 'ZEC Private update blocked: review required'
 START = '<!-- zec-private-blocker-current -->'
 END = '<!-- /zec-private-blocker-current -->'
-STATE = re.compile(re.escape(START)+r'\r?\n<!-- state: ([^\r\n]+) -->\r?\n')
+SECTION = re.compile(re.escape(START)+r'\r?\n<!-- state: ([^\r\n]+) -->\r?\n'
+                     r'(?:(?!'+re.escape(START)+r').)*?'+re.escape(END), re.S)
+PUBLICATION_OPERATIONS = {'release', 'reconciliation'}
+BLOCKER_OPERATIONS = PUBLICATION_OPERATIONS | {'discovery', 'validation'}
 
 
 def gh(*args):
@@ -22,33 +25,46 @@ def gh(*args):
 def issue_body(repo, number, body):
     with tempfile.TemporaryDirectory(prefix='zec-notify-') as temp:
         path = Path(temp)/'body.txt'
-        path.write_text(body, encoding='utf-8')
+        path.write_text(body, encoding='utf-8', newline='')
         return gh('issue', 'edit', str(number), '--repo', repo, '--body-file', str(path))
 
 
-def current_state(body):
-    match = STATE.search(body)
-    if match:
+def blocker_scope(state):
+    return state.get('operation'), state.get('candidate'), state.get('validation_emulator', '')
+
+
+def current_blockers(body):
+    blockers = {}
+    for match in SECTION.finditer(body):
         try:
             value = json.loads(match[1])
-            return value if isinstance(value, dict) else {}
         except (ValueError, TypeError):
-            pass
-    return {}
+            continue
+        if not isinstance(value, dict):
+            continue
+        scope = blocker_scope(value)
+        operation, candidate, emulator = scope
+        if (not isinstance(operation, str) or operation not in BLOCKER_OPERATIONS
+                or not isinstance(candidate, str) or not candidate or emulator not in ('', 'false', 'true')
+                or (operation != 'validation' and emulator)):
+            continue
+        if scope in blockers:
+            raise RuntimeError('Duplicate blocker scope requires operator review')
+        blockers[scope] = value, match
+    return blockers
 
 
 def state_json(state):
     return json.dumps(state, sort_keys=True).replace('<', r'\u003c').replace('>', r'\u003e')
 
 
-def with_current(body, state, message, diagnosis, run):
+def with_current(body, match, state, message, diagnosis, run):
     section = (START+'\n<!-- state: '+state_json(state)+' -->\n'
                'Current blocker: '+message+'\n\n'+('Diagnosis: '+diagnosis+'\n\n' if diagnosis else '')+
                'Workflow evidence: '+run+'\n\nPublication and recovery status: see the linked workflow.\n'+END)
-    pattern = re.escape(START)+r'.*?'+re.escape(END)
-    if re.search(pattern, body, re.S):
-        return re.sub(pattern, lambda _: section, body, count=1, flags=re.S)
-    return body.rstrip()+('\n\n' if body.strip() else '')+section
+    if match is not None:
+        return body[:match.start()]+section+body[match.end():]
+    return body+('\n\n' if body else '')+section
 
 
 def run_order(state):
@@ -61,20 +77,25 @@ def run_order(state):
 
 
 def matches_recovery(state, revision):
-    same_scope = (revision['operation'] in ('release', 'reconciliation')
-                  and state.get('operation') == revision['operation']
-                  and bool(revision['candidate']) and state.get('candidate') == revision['candidate'])
-    same_attestation = (bool(revision['attestation']) and state.get('attestation') == revision['attestation'])
+    operation, candidate, emulator = blocker_scope(revision)
+    previous_operation, previous_candidate, previous_emulator = blocker_scope(state)
+    same_scope = (bool(candidate) and (operation, candidate) == (previous_operation, previous_candidate)
+                  and (emulator == previous_emulator or (operation == 'validation' and emulator == 'true')))
+    same_attestation = (revision['operation'] in PUBLICATION_OPERATIONS
+                        and state['operation'] in PUBLICATION_OPERATIONS
+                        and bool(revision['attestation']) and state.get('attestation') == revision['attestation'])
     return same_scope or same_attestation
 
 
 def acknowledge(repo, number, revision):
     issue = json.loads(gh('issue', 'view', str(number), '--repo', repo, '--json', 'body,state'))
     body = issue.get('body') or ''
-    if issue['state'] == 'OPEN' and current_state(body) == revision:
+    if issue['state'] != 'OPEN':
+        return
+    state, match = current_blockers(body).get(blocker_scope(revision), ({}, None))
+    if state == revision:
         # Preserve surrounding notes and text in the freshly fetched section.
         accepted = dict(revision, delivery='accepted')
-        match = STATE.search(body)
         issue_body(repo, number, body[:match.start(1)]+state_json(accepted)+body[match.end(1):])
 
 
@@ -87,13 +108,19 @@ def main(message):
     url = os.environ.get('NTFY_URL', '').strip()
     blocker = os.environ.get('MAKE_ISSUE') == 'true'
     recovery = os.environ.get('RECOVERY_VERIFIED') == 'true' and not blocker
-    number, body, state = None, '', {}
+    number, body = None, ''
     link = ''
     print('Workflow evidence: '+evidence, flush=True)
     if blocker or recovery:
         revision = dict(run=run, attempt=attempt, operation=os.environ['BLOCKER_OPERATION'],
                         candidate=os.environ['BLOCKER_CANDIDATE'],
                         attestation=os.environ.get('BLOCKER_ATTESTATION', ''))
+        if revision['operation'] not in BLOCKER_OPERATIONS or not revision['candidate']:
+            raise ValueError('Invalid blocker scope')
+        if revision['operation'] == 'validation' and (emulator := os.environ.get('BLOCKER_VALIDATION_EMULATOR')):
+            if emulator not in ('true', 'false'):
+                raise ValueError('Invalid validation emulator scope')
+            revision['validation_emulator'] = emulator
         pages = json.loads(gh('api', f'repos/{repo}/issues?state=open&per_page=100', '--paginate', '--slurp'))
         issues = [issue for page in pages for issue in page if issue['title'] == TITLE and 'pull_request' not in issue]
         if len(issues) > 1:
@@ -101,29 +128,36 @@ def main(message):
         if issues:
             number = issues[0]['number']
             body = issues[0].get('body') or ''
-            state = current_state(body)
+        blockers = current_blockers(body)
         if recovery:
             if number is not None:
-                if run_order(revision) >= run_order(state) and matches_recovery(state, revision):
+                resolved = [match for state, match in blockers.values()
+                            if run_order(revision) >= run_order(state) and matches_recovery(state, revision)]
+                if resolved:
                     gh('issue', 'comment', str(number), '--repo', repo, '--body',
                        'Verified recovery: '+message+'\nWorkflow evidence: '+evidence)
-                    gh('issue', 'close', str(number), '--repo', repo, '--reason', 'completed')
+                    if len(resolved) == body.count(START):
+                        gh('issue', 'close', str(number), '--repo', repo, '--reason', 'completed')
+                    else:
+                        for match in reversed(resolved):
+                            body = body[:match.start()]+body[match.end():]
+                        issue_body(repo, number, body)
                 else:
                     print('Preserved the open blocker because its operation or revision is unresolved.')
         else:
+            state, match = blockers.get(blocker_scope(revision), ({}, None))
             if run_order(revision) < run_order(state):
                 print('Preserved a blocker from a later workflow run or attempt.')
                 return
             fingerprint = hashlib.sha256((message+'\n'+diagnosis).encode()).hexdigest()
-            delivered = (state.get('operation') == revision['operation']
-                         and state.get('candidate') == revision['candidate']
+            delivered = (state.get('attestation', '') == revision['attestation']
                          and state.get('fingerprint') == fingerprint and state.get('delivery') == 'accepted')
             revision.update(fingerprint=fingerprint, delivery='accepted' if delivered else 'pending')
-            updated = with_current(body, revision, message, diagnosis, evidence)
+            updated = with_current(body, match, revision, message, diagnosis, evidence)
             if number is None:
                 with tempfile.TemporaryDirectory(prefix='zec-notify-') as temp:
                     path = Path(temp)/'body.txt'
-                    path.write_text(updated, encoding='utf-8')
+                    path.write_text(updated, encoding='utf-8', newline='')
                     created = gh('issue', 'create', '--repo', repo, '--title', TITLE, '--body-file', str(path))
                 number = int(created.rstrip('/').rsplit('/', 1)[1])
             elif updated != body:

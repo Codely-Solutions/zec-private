@@ -109,22 +109,28 @@ class PackagingTests(unittest.TestCase):
 
     def test_promotion_rechecks_retained_unsigned_artifact_at_admission(self):
         source, controller = 'a'*40, 'b'*40
-        run = dict(id=42, path='.github/workflows/build-release.yml', head_branch='main',
-                   head_sha=source, event='workflow_dispatch', status='completed', conclusion='success',
-                   run_attempt=1)
-        job = dict(id=9, name='unsigned', status='completed', conclusion='success', run_id=42, head_sha=source)
+        first = dict(id=42, path='.github/workflows/build-release.yml', head_branch='main',
+                     head_sha=source, event='workflow_dispatch', status='completed', conclusion='success',
+                     run_attempt=1, run_started_at='2026-11-23T08:00:00Z')
+        run = dict(first, run_attempt=2, run_started_at='2026-11-23T09:00:00Z')
+        job = dict(id=9, name='unsigned', status='completed', conclusion='success', run_id=42, head_sha=source,
+                   run_attempt=1, runner_id=17, steps=[{'name': 'upload'}],
+                   started_at='2026-11-23T08:05:00Z', completed_at='2026-11-23T08:10:00Z')
+        copy = dict(job, id=10, run_attempt=2)
         artifact = dict(id=58, name='validated-unsigned-apk', size_in_bytes=128, digest='sha256:'+'f'*64,
-                        workflow_run=dict(id=42, head_sha=source))
+                        workflow_run=dict(id=42, head_sha=source), created_at='2026-11-23T08:08:00Z')
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp)/'output'
             environment = dict(CANDIDATE_RUN='42', GITHUB_REPOSITORY='example/wallet', GITHUB_SHA=controller,
                                GITHUB_OUTPUT=str(output))
             with patch_environment(environment), patch('acceptance_policy.verify_promotion_revision') as verify:
-                for expired in (True, False):
-                    pages = [run, run, [{'jobs': [job]}], [{'artifacts': [dict(artifact, expired=expired)]}]]
-                    with self.subTest(expired=expired), patch('release_metadata.Metadata.api', side_effect=pages):
-                        if expired:
-                            with self.assertRaisesRegex(ValueError, 'Artifact digest/run/source binding missing'):
+                for expired, jobs, error in ((True, [job, copy], 'Artifact digest/run/source binding missing'),
+                                             (False, [copy], 'Expected one successful unsigned producer'),
+                                             (False, [job, copy], None)):
+                    pages = [run, run, [{'artifacts': [dict(artifact, expired=expired)]}], [{'jobs': jobs}], first]
+                    with self.subTest(expired=expired, jobs=jobs), patch('release_metadata.Metadata.api', side_effect=pages):
+                        if error:
+                            with self.assertRaisesRegex(ValueError, error):
                                 runpy.run_module('promotion')
                             verify.assert_not_called()
                             self.assertFalse(output.exists())

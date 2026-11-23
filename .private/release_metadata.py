@@ -135,12 +135,6 @@ class Metadata:
         complete = run['status'] == 'completed' and run['conclusion'] == 'success'
         pending = allow_pending and run['status'] != 'completed' and run['conclusion'] is None
         require(complete or pending, 'Producer run must pass; only visual may precede production completion')
-        jobs = self.pages('/actions/runs/' + str(run_id) + '/jobs?filter=latest', 'jobs')
-        matching = [job for job in jobs if job['name'] == job_name]
-        require(len(matching) == 1 and matching[0]['status'] == 'completed'
-            and matching[0]['conclusion'] == 'success'
-            and matching[0]['run_id'] == run_id
-            and matching[0]['head_sha'] == source_sha, 'Exact artifact producer job must have succeeded')
         artifacts = self.pages('/actions/runs/' + str(run_id) + '/artifacts', 'artifacts')
         matching_artifacts = [item for item in artifacts if item['name'] == artifact_name]
         require(len(matching_artifacts) == 1, 'Artifact name must be unambiguous')
@@ -149,10 +143,23 @@ class Metadata:
             and re.fullmatch(r'sha256:[0-9a-f]{64}', artifact.get('digest') or '')
             and artifact['workflow_run']['id'] == run_id
             and artifact['workflow_run']['head_sha'] == source_sha, 'Artifact digest/run/source binding missing')
+        jobs = self.pages('/actions/runs/' + str(run_id) + '/jobs?filter=all', 'jobs')
+        matching = [job for job in jobs if job['name'] == job_name]
+        require(all(job['run_id'] == run_id and job['head_sha'] == source_sha for job in matching),
+                'Exact artifact producer job identity required')
+
+        def attempt(number):
+            value = self.api(f'/actions/runs/{run_id}/attempts/{number}')
+            require(value['id'] == run_id and value['run_attempt'] == number and value['head_sha'] == source_sha,
+                    'Artifact producer attempt identity mismatch')
+            return value
+
+        job = artifact_producer_job(run, matching, artifact, attempt, role=job_name, strict_timestamps=True)
+        # The run's current conclusion controls admission. The proof binds the execution that uploaded these bytes.
         proof = dict(workflow=workflow, event=run['event'], head_branch=run['head_branch'],
-            head_sha=source_sha, run_id=run_id, run_attempt=run['run_attempt'], status=run['status'],
-            conclusion=run['conclusion'], producer_job_id=matching[0]['id'], producer_job_name=job_name,
-            producer_job_conclusion='success', artifact_name=artifact_name)
+            head_sha=source_sha, run_id=run_id, run_attempt=job['run_attempt'], status=job['status'],
+            conclusion=job['conclusion'], producer_job_id=job['id'], producer_job_name=job_name,
+            producer_job_conclusion=job['conclusion'], artifact_name=artifact_name)
         return run, {key: artifact[key] for key in ('id', 'digest', 'size_in_bytes')}, proof
 
     def verify_asset(self, binding):

@@ -107,7 +107,7 @@ def read_verification_metadata(metadata):
 
 def metadata_identity(path):
     stat = path.stat()
-    return stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
+    return (stat.st_dev, stat.st_ino) if stat.st_ino else None
 
 
 def export_verification_metadata(src, evidence, name, original, *, before=None):
@@ -116,8 +116,10 @@ def export_verification_metadata(src, evidence, name, original, *, before=None):
         if not metadata.is_file():
             return None
         data = read_verification_metadata(metadata)
-        if data == original and metadata_identity(metadata) == before:
-            return None
+        if data == original:
+            after = metadata_identity(metadata)
+            if before is None or after is None or after == before:
+                return None
         target = evidence/name/'verification-metadata.xml'
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open('xb') as stream:

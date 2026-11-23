@@ -1,5 +1,6 @@
 import json
 import hashlib
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -262,6 +263,24 @@ class SessionTest(unittest.TestCase):
         metadata = receipt['verification_metadata']
         self.assertEqual(metadata['outcome'], 'regenerated-identical')
         self.assertEqual(metadata['original_sha256'], metadata['sha256'])
+
+    def test_generation_does_not_export_timestamp_only_change(self):
+        operation = self.verification_operation()
+
+        def runner(command, cwd, *args, **kwargs):
+            metadata = cwd/'gradle/verification-metadata.xml'
+            stat = metadata.stat()
+            os.utime(metadata, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+            self.assertNotEqual(metadata.stat().st_mtime_ns, stat.st_mtime_ns)
+            return dict(exitCode=0)
+
+        with self.assertRaisesRegex(ValueError, 'did not generate'):
+            self.run_session([operation], runner)
+        receipt = json.loads((self.evidence/'0001.json').read_bytes())
+        self.assertFalse(receipt['accepted'])
+        self.assertIsNone(receipt['verification_metadata'])
+        self.assertEqual((self.root/'src/gradle/verification-metadata.xml').read_bytes(), b'original')
+        self.assertFalse((self.evidence/'0001/verification-metadata.xml').exists())
 
     def test_command_interrupt_stays_primary_when_metadata_export_fails(self):
         operation = self.verification_operation()

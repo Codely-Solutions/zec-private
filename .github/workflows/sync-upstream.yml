@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 permissions: {}
 concurrency:
-  group: zec-private-sync
+  group: ${{ github.ref == 'refs/heads/main' && 'zec-private-sync' || 'zec-private-sync-diagnostic' }}
   cancel-in-progress: false
 jobs:
   maintenance:
@@ -96,3 +96,26 @@ jobs:
           else
             python3 .private/notify.py "ZEC Private update blocked: upstream patch or security review required. Last working release remains available."
           fi
+  discovery_recovered:
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' && needs.maintenance.result == 'success' && needs.prepare.result == 'success' }}
+    needs: [maintenance, prepare]
+    concurrency:
+      group: zec-private-blocker
+      queue: max
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Retire matching discovery blocker
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECOVERY_VERIFIED: 'true'
+          BLOCKER_OPERATION: discovery
+          BLOCKER_CANDIDATE: ${{ github.sha }}
+        run: python3 -B .private/notify.py 'ZEC Private discovery and candidate preparation passed.'

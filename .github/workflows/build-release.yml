@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       validation_only:
-        description: Build and validate a candidate without signing or publishing
+        description: Build and validate without signing an APK or publishing. Trusted signing changes on main still require a key-access smoke check.
         type: boolean
         default: false
       build_emulator:
@@ -750,6 +750,30 @@ jobs:
           BLOCKER_CANDIDATE: ${{ inputs.reconciliation_run && format('publisher:{0}:{1}:{2}', inputs.reconciliation_run, inputs.reconciliation_attempt, inputs.reconciliation_artifact) || inputs.source_sha || inputs.candidate_run && format('validation:{0}', inputs.candidate_run) || github.sha }}
           BLOCKER_ATTESTATION: ${{ needs.publish.outputs.attestation_id || needs.reconcile.outputs.attestation_id }}
         run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
+  validation_recovered:
+    if: ${{ !cancelled() && inputs.validation_only && !inputs.preflight_only && github.ref == 'refs/heads/main' && needs.unsigned.result == 'success' && ((!inputs.build_emulator && needs.emulator.result == 'skipped') || needs.emulator.result == 'success') }}
+    needs: [unsigned, emulator]
+    concurrency:
+      group: zec-private-blocker
+      queue: max
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Retire matching validation blocker
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RECOVERY_VERIFIED: 'true'
+          BLOCKER_OPERATION: validation
+          BLOCKER_CANDIDATE: ${{ inputs.source_sha || github.sha }}
+          BLOCKER_VALIDATION_EMULATOR: ${{ inputs.build_emulator }}
+        run: python3 -B .private/notify.py 'ZEC Private candidate validation passed.'
   failed:
     if: ${{ always() && !cancelled() && !inputs.preflight_only && github.ref == 'refs/heads/main' && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')) }}
     needs: [admit_hosted, preflight, quote_bridge, signing_smoke, unsigned, emulator, testnet_apk, hosted_core, reserve_quote_retry, hosted_quotes, recovery_quotes, promotion, publish, resume_draft, reconcile, verify_publication, record_integration]
@@ -771,6 +795,7 @@ jobs:
           MAKE_ISSUE: 'true'
           BLOCKER_OPERATION: ${{ inputs.reconciliation_run && 'reconciliation' || inputs.validation_only && 'validation' || 'release' }}
           BLOCKER_CANDIDATE: ${{ inputs.reconciliation_run && format('publisher:{0}:{1}:{2}', inputs.reconciliation_run, inputs.reconciliation_attempt, inputs.reconciliation_artifact) || inputs.source_sha || inputs.candidate_run && format('validation:{0}', inputs.candidate_run) || github.sha }}
+          BLOCKER_VALIDATION_EMULATOR: ${{ inputs.build_emulator }}
           BLOCKER_ATTESTATION: ${{ needs.publish.outputs.attestation_id || needs.reconcile.outputs.attestation_id }}
           PUBLICATION: ${{ needs.publish.result }}
           RECONCILIATION: ${{ needs.reconcile.result }}

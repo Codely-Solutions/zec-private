@@ -40,6 +40,9 @@ class NotifyTest(unittest.TestCase):
         self.messages.append(request.data.decode())
         return self.response
 
+    def blockers(self):
+        return {scope: state for scope, (state, _) in notify.current_blockers(self.issue['body']).items()}
+
     def run_notice(self, message='Blocked at build', **environment):
         values = dict(GITHUB_REPOSITORY='example/wallet', GITHUB_RUN_ID='20', MAKE_ISSUE='true',
                       NTFY_URL='https://secret.invalid/topic', RECOVERY_VERIFIED='', BLOCKER_DIAGNOSIS='build=failure',
@@ -62,7 +65,7 @@ class NotifyTest(unittest.TestCase):
         self.assertIn('Original diagnosis and operator notes.', self.issue['body'])
         self.assertIn('/actions/runs/20', self.messages[0])
         self.assertIn('/issues/41', self.messages[0])
-        self.assertEqual(notify.current_state(self.issue['body'])['delivery'], 'accepted')
+        self.assertEqual(self.blockers()['release', 'candidate-a', '']['delivery'], 'accepted')
 
     def test_same_blocker_updates_run_quietly_and_changed_stage_notifies(self):
         self.run_notice()
@@ -78,7 +81,7 @@ class NotifyTest(unittest.TestCase):
         self.run_notice(NTFY_URL='')
         self.assertEqual(self.messages, [])
         self.assertIn('/actions/runs/20', self.issue['body'])
-        self.assertEqual(notify.current_state(self.issue['body'])['delivery'], 'pending')
+        self.assertEqual(self.blockers()['release', 'candidate-a', '']['delivery'], 'pending')
         self.run_notice(GITHUB_RUN_ID='21')
         self.assertEqual(len(self.messages), 1)
 
@@ -87,11 +90,11 @@ class NotifyTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, '^ntfy notification failed: RuntimeError$'):
             self.run_notice()
         self.assertIn('/actions/runs/20', self.issue['body'])
-        self.assertEqual(notify.current_state(self.issue['body'])['delivery'], 'pending')
+        self.assertEqual(self.blockers()['release', 'candidate-a', '']['delivery'], 'pending')
         self.response.status = 200
         self.run_notice(GITHUB_RUN_ID='21')
         self.assertEqual(len(self.messages), 2)
-        self.assertEqual(notify.current_state(self.issue['body'])['delivery'], 'accepted')
+        self.assertEqual(self.blockers()['release', 'candidate-a', '']['delivery'], 'accepted')
 
     def test_issue_failure_does_not_deliver_unrecorded_blocker(self):
         def failing(*args):
@@ -151,7 +154,7 @@ class NotifyTest(unittest.TestCase):
             self.run_notice(GITHUB_RUN_ID='40')
         self.assertIn('Later core failure', self.issue['body'])
         self.assertIn('/actions/runs/41/', self.issue['body'])
-        self.assertEqual(notify.current_state(self.issue['body'])['delivery'], 'pending')
+        self.assertEqual(self.blockers()['release', 'candidate-a', '']['delivery'], 'pending')
 
     def test_inflight_acknowledgement_preserves_operator_edit(self):
         original_post = self.post
@@ -163,7 +166,55 @@ class NotifyTest(unittest.TestCase):
         with patch.object(self, 'post', side_effect=interleaved_post):
             self.run_notice()
         self.assertIn('New operator notes.', self.issue['body'])
-        self.assertEqual(notify.current_state(self.issue['body'])['delivery'], 'accepted')
+        self.assertEqual(self.blockers()['release', 'candidate-a', '']['delivery'], 'accepted')
+
+    def test_legacy_release_and_new_diagnostics_keep_independent_evidence_and_recovery(self):
+        self.issue['body'] += ('\n\n'+notify.START+'\n<!-- state: '
+            +json.dumps(dict(operation='release', candidate='candidate-a', attestation='73',
+                             run='https://github.com/example/wallet/actions/runs/20', attempt=1))
+            +' -->\nCurrent blocker: Release failed after publication\n'+notify.END)
+        self.run_notice('Validation failed', BLOCKER_OPERATION='validation', GITHUB_RUN_ID='21')
+        self.issue['body'] += '\n\nRetain these operator notes between diagnoses.'
+        self.run_notice('Discovery failed', BLOCKER_OPERATION='discovery', GITHUB_RUN_ID='22')
+        self.assertIn('Release failed after publication', self.issue['body'])
+        self.assertEqual(self.blockers()['release', 'candidate-a', '']['attestation'], '73')
+        self.run_notice('Validation passed', BLOCKER_OPERATION='validation', GITHUB_RUN_ID='23',
+                        MAKE_ISSUE='', RECOVERY_VERIFIED='true', NTFY_URL='')
+        self.assertNotIn(('validation', 'candidate-a', ''), self.blockers())
+        self.assertIn('Retain these operator notes between diagnoses.', self.issue['body'])
+        self.run_notice('Discovery passed', BLOCKER_OPERATION='discovery', GITHUB_RUN_ID='24',
+                        MAKE_ISSUE='', RECOVERY_VERIFIED='true', NTFY_URL='')
+        self.assertEqual(set(self.blockers()), {('release', 'candidate-a', '')})
+        self.assertEqual(len(self.messages), 2)
+        self.run_notice('Original release verified', BLOCKER_OPERATION='reconciliation', BLOCKER_ATTESTATION='73',
+                        BLOCKER_CANDIDATE='publisher:20:1:73', GITHUB_RUN_ID='25', MAKE_ISSUE='',
+                        RECOVERY_VERIFIED='true')
+        self.assertIsNone(self.issue)
+
+    def test_validation_recovery_requires_matching_candidate_and_requested_emulator(self):
+        validation = dict(BLOCKER_OPERATION='validation', NTFY_URL='')
+        self.run_notice('Emulator failed', **validation, BLOCKER_VALIDATION_EMULATOR='true')
+        self.run_notice('Unsigned failed', **validation, BLOCKER_VALIDATION_EMULATOR='false', GITHUB_RUN_ID='21')
+        recovered = dict(validation, MAKE_ISSUE='', RECOVERY_VERIFIED='true', GITHUB_RUN_ID='22')
+        self.run_notice('Unsigned passed', **recovered, BLOCKER_VALIDATION_EMULATOR='false')
+        self.assertEqual(set(self.blockers()), {('validation', 'candidate-a', 'true')})
+        self.run_notice('Different candidate passed', **recovered, BLOCKER_VALIDATION_EMULATOR='true',
+                        BLOCKER_CANDIDATE='candidate-b')
+        self.assertIsNotNone(self.issue)
+        self.run_notice('Emulator passed', **recovered, BLOCKER_VALIDATION_EMULATOR='true')
+        self.assertIsNone(self.issue)
+
+    def test_inflight_acknowledgement_updates_only_its_scope(self):
+        original_post = self.post
+
+        def interleaved_post(request, **kwargs):
+            self.run_notice('Discovery failed', BLOCKER_OPERATION='discovery', GITHUB_RUN_ID='21', NTFY_URL='')
+            return original_post(request, **kwargs)
+
+        with patch.object(self, 'post', side_effect=interleaved_post):
+            self.run_notice()
+        self.assertEqual(self.blockers()['release', 'candidate-a', '']['delivery'], 'accepted')
+        self.assertEqual(self.blockers()['discovery', 'candidate-a', '']['delivery'], 'pending')
 
     def test_later_unrelated_publication_preserves_blocker(self):
         for scope in (dict(BLOCKER_CANDIDATE='candidate-b'), dict(BLOCKER_OPERATION='discovery')):
@@ -183,11 +234,22 @@ class NotifyTest(unittest.TestCase):
                         BLOCKER_ATTESTATION='123')
         self.assertIsNone(self.issue)
 
-    def test_malformed_saved_state_is_treated_as_undelivered(self):
-        for state in ('null', '[]', 'invalid'):
-            self.issue['body'] = notify.START+'\n<!-- state: '+state+' -->\nold\n'+notify.END
-            self.run_notice()
-        self.assertEqual(len(self.messages), 3)
+    def test_unrecognized_saved_sections_survive_new_blockers_and_verified_recovery(self):
+        for state, end in (('null', notify.END), ('[]', notify.END), ('invalid', notify.END),
+                           ('{"operation":"release"}', notify.END),
+                           ('{"operation":"unknown","candidate":"candidate-a"}', notify.END),
+                           ('{"operation":"release","candidate":"candidate-a"}', '')):
+            with self.subTest(state=state, end=end):
+                original = notify.START+'\n<!-- state: '+state+' -->\nOriginal diagnosis\n'+end
+                self.issue['body'] = original
+                self.run_notice()
+                self.assertIn(original, self.issue['body'])
+                self.assertEqual(self.blockers()['release', 'candidate-a', '']['delivery'], 'accepted')
+                self.run_notice('Current release verified', MAKE_ISSUE='', RECOVERY_VERIFIED='true',
+                                GITHUB_RUN_ID='21', NTFY_URL='')
+                self.assertIn(original, self.issue['body'])
+                self.assertEqual(self.blockers(), {})
+        self.assertEqual(len(self.messages), 6)
 
     def test_publication_reconciliation_does_not_claim_the_apk_is_unchanged(self):
         self.run_notice('Publication needs reconciliation: recording failed', BLOCKER_DIAGNOSIS='integration=failure')

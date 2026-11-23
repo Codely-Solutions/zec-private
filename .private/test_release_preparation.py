@@ -230,25 +230,54 @@ class ReleaseTests(unittest.TestCase):
 class MetadataTests(unittest.TestCase):
     def fixtures(self):
         run=dict(id=1,path='.github/workflows/build-release.yml',head_branch='main',event='workflow_dispatch',
-                 head_sha=SHA,status='completed',conclusion='success',run_attempt=1)
-        job=dict(id=3,name='unsigned',status='completed',conclusion='success',run_id=1,head_sha=SHA)
-        artifact=dict(ARTIFACT,name='validated-unsigned-apk',expired=False,workflow_run=dict(id=1,head_sha=SHA))
+                 head_sha=SHA,status='completed',conclusion='success',run_attempt=1,
+                 run_started_at='2026-11-23T08:00:00Z')
+        job=dict(id=3,name='unsigned',status='completed',conclusion='success',run_id=1,head_sha=SHA,
+                 run_attempt=1, runner_id=17, steps=[{'name': 'upload'}],
+                 started_at='2026-11-23T08:05:00Z', completed_at='2026-11-23T08:10:00Z')
+        artifact=dict(ARTIFACT,name='validated-unsigned-apk',expired=False,workflow_run=dict(id=1,head_sha=SHA),
+                      created_at='2026-11-23T08:08:00Z')
         return run,job,artifact
 
-    def producer(self, run,job,artifact):
+    def producer(self, run, jobs, artifact, original=None):
         metadata=Metadata()
-        with patch.object(metadata,'api',return_value=run), patch.object(metadata,'pages',side_effect=[[job],[artifact]]):
+        responses = {
+            '/actions/runs/1': run,
+            '/actions/runs/1/artifacts?per_page=100': [{'artifacts': [artifact]}],
+            '/actions/runs/1/jobs?filter=all&per_page=100': [{'jobs': jobs}],
+            '/actions/runs/1/attempts/1': original,
+        }
+        with patch.object(metadata, 'api', side_effect=lambda path, paginated=False: responses[path]):
             return metadata.producer(1,SHA,'build-release.yml','unsigned','validated-unsigned-apk')
 
     def test_exact_producer_and_rejections(self):
         run,job,artifact=self.fixtures()
-        self.assertEqual(self.producer(run,job,artifact)[1],ARTIFACT)
+        self.assertEqual(self.producer(run,[job],artifact)[1],ARTIFACT)
         for target,key,value in ((run,'head_sha','c'*40),(run,'conclusion','failure'),(job,'run_id',2),
                                  (artifact,'digest','sha256:invalid'),(artifact,'expired',True)):
             with self.subTest(key=key):
                 original=target[key]; target[key]=value
-                with self.assertRaises(ValueError): self.producer(run,job,artifact)
+                with self.assertRaises(ValueError): self.producer(run,[job],artifact)
                 target[key]=original
+
+    def test_retained_artifact_proof_stays_bound_to_original_job_after_successful_rerun(self):
+        first, job, artifact = self.fixtures()
+        later = dict(first, run_attempt=2, run_started_at='2026-11-23T09:00:00Z')
+        copied = dict(job, id=4, run_attempt=2)
+        _, original_artifact, initial_proof = self.producer(first, [job], artifact)
+        completed, retained_artifact, retained_proof = self.producer(later, [copied, job], artifact, first)
+        self.assertEqual(completed['run_attempt'], 2)
+        self.assertEqual(retained_artifact, original_artifact)
+        self.assertEqual(retained_proof, initial_proof)
+        self.assertEqual((retained_proof['run_attempt'], retained_proof['producer_job_id']), (1, 3))
+        with self.assertRaisesRegex(ValueError, 'Copied unsigned producer does not match'):
+            self.producer(later, [dict(copied, runner_id=18), job], artifact, first)
+        with self.assertRaisesRegex(ValueError, 'Expected one successful unsigned producer'):
+            self.producer(later, [copied], artifact, first)
+        with self.assertRaisesRegex(ValueError, 'Artifact producer attempt identity mismatch'):
+            self.producer(later, [copied, job], artifact, dict(first, head_sha='c'*40))
+        with self.assertRaisesRegex(ValueError, 'Producer run must pass'):
+            self.producer(dict(later, conclusion='failure'), [copied, job], artifact, first)
 
     def test_live_baseline_binding_rejected(self):
         metadata=Metadata()
