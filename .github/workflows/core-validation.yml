@@ -41,7 +41,7 @@ jobs:
           baseline=$(python3 -c 'import json; print(json.load(open(".private/upgrade-baseline.json"))["source_sha"])')
           python3 -B .private/preflight.py --base "$baseline"
       - if: ${{ !inputs.preflight_only }}
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880
         with:
           distribution: temurin
           java-version: '25.0.5+8'
@@ -89,7 +89,7 @@ jobs:
         with:
           ref: ${{ steps.selected-baseline.outputs.source_sha }}
           persist-credentials: false
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880
         with:
           distribution: temurin
           java-version: '21.0.13+9'
