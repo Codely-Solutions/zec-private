@@ -8,7 +8,7 @@ import tempfile
 
 from custom_release import OPERATOR_ID, REPOSITORY, WORKFLOW as CUSTOM_WORKFLOW
 from publish import APK, NOTES, exact_assets, expose_release, release_for_tag, release_title, verify_tag
-from release_metadata import ARCHIVE_LIMITS
+from release_metadata import ARCHIVE_LIMITS, artifact_producer_job, job_timestamp
 from verify_public_release import API, bounded_zip, digest, gh, require, unsigned_proof
 
 
@@ -17,6 +17,7 @@ PUBLISHERS = {
     '.github/workflows/sync-upstream.yml': ({'workflow_dispatch', 'schedule', 'push'}, 'build / publish'),
     CUSTOM_WORKFLOW: ({'workflow_dispatch'}, 'build / publish'),
 }
+PUBLISHER_CONCLUSIONS = ('success', 'failure', 'cancelled')
 
 
 def publisher_job(run, jobs, run_id, repository, *, attempt=None):
@@ -31,10 +32,26 @@ def publisher_job(run, jobs, run_id, repository, *, attempt=None):
     publishers = [job for job in jobs if job['name'] == definition[1]]
     require(len(publishers) == 1 and publishers[0]['status'] == 'completed'
             and publishers[0]['run_id'] == run_id and publishers[0]['head_sha'] == run['head_sha']
-            and (attempt is None or publishers[0].get('run_attempt', attempt) == attempt)
-            and publishers[0]['conclusion'] in ('success', 'failure', 'cancelled'),
+            and (attempt is None or publishers[0].get('run_attempt') == attempt)
+            and publishers[0]['conclusion'] in PUBLISHER_CONCLUSIONS,
             'Expected the exact original publisher job')
     return publishers[0]
+
+
+def verify_attestation_upload(job, artifact):
+    def successful_step(pattern):
+        matches = [step for step in job.get('steps', []) if re.fullmatch(pattern, step['name'])]
+        require(len(matches) == 1 and matches[0]['status'] == 'completed'
+                and matches[0]['conclusion'] == 'success', 'Expected successful publisher signing and attestation upload')
+        return matches[0]
+
+    signing = successful_step('Sign and verify the validated APK')
+    upload = successful_step(r'Run actions/upload-artifact@\S+')
+    require(job_timestamp(job['started_at']) <= job_timestamp(signing.get('started_at'))
+            <= job_timestamp(signing.get('completed_at')) <= job_timestamp(upload.get('started_at'))
+            <= job_timestamp(artifact.get('created_at')) <= job_timestamp(upload.get('completed_at'))
+            <= job_timestamp(job['completed_at']) and signing['number'] < upload['number'],
+            'Attestation was not created during the original publisher upload step')
 
 
 def archive_bytes(artifact, run, role):
@@ -79,8 +96,12 @@ def verify_attempt(run_id, artifact, artifacts, *, allow_draft, target):
             'Ambiguous attestation for the original publisher attempt')
     run = gh(f'actions/runs/{run_id}/attempts/{attempt}')
     pages = gh(f'actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100', '--paginate', '--slurp')
-    publisher_job(run, [job for page in pages for job in page['jobs']], int(run_id),
-                  os.environ['GITHUB_REPOSITORY'], attempt=attempt)
+    job = publisher_job(run, [job for page in pages for job in page['jobs']], int(run_id),
+                        os.environ['GITHUB_REPOSITORY'], attempt=attempt)
+    producer = artifact_producer_job(run, [job], artifact,
+                                     lambda number: gh(f'actions/runs/{run_id}/attempts/{number}'),
+                                     role='attestation', conclusions=PUBLISHER_CONCLUSIONS)
+    verify_attestation_upload(producer, artifact)
     raw = archive_bytes(artifact, run, 'release-attestation')
     with bounded_zip(raw, ARCHIVE_LIMITS['release-attestation'][1]) as archive:
         require(archive.namelist() == ['release-attestation.json'], 'Unexpected publisher archive entries')

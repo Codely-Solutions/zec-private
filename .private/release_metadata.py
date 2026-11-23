@@ -39,7 +39,7 @@ def copied_job_matches(original, copy):
             and all(copy.get(field) == original.get(field) for field in fields))
 
 
-def artifact_producer_job(run, jobs, asset, attempt, *, role, strict_timestamps=False):
+def artifact_producer_job(run, jobs, asset, attempt, *, role, strict_timestamps=False, conclusions=('success',)):
     created = job_timestamp(asset.get('created_at'))
     matches = []
     for job in jobs:
@@ -69,9 +69,10 @@ def artifact_producer_job(run, jobs, asset, attempt, *, role, strict_timestamps=
                     f'{role.capitalize()} producer overlaps the start of its reported attempt')
             copies.append(job)
 
+    producer_state = 'successful' if conclusions == ('success',) else 'completed'
     require(len(producers) == 1 and producers[0]['status'] == 'completed'
-            and producers[0]['conclusion'] == 'success' and producers[0].get('completed_at'),
-            f'Expected one successful {role} producer job when the selected artifact was uploaded')
+            and producers[0]['conclusion'] in conclusions and producers[0].get('completed_at'),
+            f'Expected one {producer_state} {role} producer job when the selected artifact was uploaded')
     job = producers[0]
     if copies:
         # GitHub reruns can copy a successful job into a later attempt under

@@ -655,12 +655,13 @@ jobs:
       release_tag: ${{ steps.resolve.outputs.release_tag }}
       attestation_id: ${{ steps.resolve.outputs.attestation_id }}
       attestation_digest: ${{ steps.resolve.outputs.attestation_digest }}
+      attestation_attempt: ${{ steps.resolve.outputs.attestation_attempt }}
       controller_sha: ${{ steps.resolve.outputs.controller_sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Resolve the original successful publisher and attestation
+      - name: Verify the original publisher's attestation upload
         id: resolve
         env:
           GH_TOKEN: ${{ github.token }}
@@ -747,7 +748,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RECOVERY_VERIFIED: 'true'
           BLOCKER_OPERATION: ${{ inputs.reconciliation_run && 'reconciliation' || 'release' }}
-          BLOCKER_CANDIDATE: ${{ inputs.reconciliation_run && format('publisher:{0}:{1}:{2}', inputs.reconciliation_run, inputs.reconciliation_attempt, inputs.reconciliation_artifact) || inputs.source_sha || inputs.candidate_run && format('validation:{0}', inputs.candidate_run) || github.sha }}
+          BLOCKER_CANDIDATE: ${{ inputs.reconciliation_run && format('publisher:{0}:{1}:{2}', inputs.reconciliation_run, needs.reconcile.outputs.attestation_attempt, needs.reconcile.outputs.attestation_id) || inputs.source_sha || inputs.candidate_run && format('validation:{0}', inputs.candidate_run) || github.sha }}
           BLOCKER_ATTESTATION: ${{ needs.publish.outputs.attestation_id || needs.reconcile.outputs.attestation_id }}
         run: python3 .private/notify.py "ZEC Private $RELEASE_TAG is ready. Public download and signing verified. https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"
   validation_recovered:
@@ -794,7 +795,7 @@ jobs:
           NTFY_URL: ${{ secrets.NTFY_URL }}
           MAKE_ISSUE: 'true'
           BLOCKER_OPERATION: ${{ inputs.reconciliation_run && 'reconciliation' || inputs.validation_only && 'validation' || 'release' }}
-          BLOCKER_CANDIDATE: ${{ inputs.reconciliation_run && format('publisher:{0}:{1}:{2}', inputs.reconciliation_run, inputs.reconciliation_attempt, inputs.reconciliation_artifact) || inputs.source_sha || inputs.candidate_run && format('validation:{0}', inputs.candidate_run) || github.sha }}
+          BLOCKER_CANDIDATE: ${{ inputs.reconciliation_run && format('publisher:{0}:{1}:{2}', inputs.reconciliation_run, needs.reconcile.outputs.attestation_attempt || inputs.reconciliation_attempt, needs.reconcile.outputs.attestation_id || inputs.reconciliation_artifact) || inputs.source_sha || inputs.candidate_run && format('validation:{0}', inputs.candidate_run) || github.sha }}
           BLOCKER_VALIDATION_EMULATOR: ${{ inputs.build_emulator }}
           BLOCKER_ATTESTATION: ${{ needs.publish.outputs.attestation_id || needs.reconcile.outputs.attestation_id }}
           PUBLICATION: ${{ needs.publish.result }}

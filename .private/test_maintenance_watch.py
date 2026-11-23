@@ -42,7 +42,8 @@ def evaluate_expression(expression, values):
                         lambda match: repr(values.get(match[0], 'skipped')), expression)
     expression = expression.replace('&&', ' and ').replace('||', ' or ')
     expression = re.sub(r'!(?!=)', ' not ', expression)
-    return eval(expression.strip(), {'__builtins__': {}, 'contains': lambda items, value: value in items}, {})
+    return eval(expression.strip(),
+                {'__builtins__': {}, 'contains': lambda items, value: value in items, 'format': str.format}, {})
 
 
 def job_activates(job, results, **overrides):
@@ -196,6 +197,28 @@ class MaintenanceWatchTest(unittest.TestCase):
         self.assertTrue(job_activates(notification, dict(record_integration='success')))
         self.assertFalse(job_activates(notification, dict(record_integration='success'), workflow_cancelled=True))
         self.assertIn("RECOVERY_VERIFIED: 'true'", notification['block'])
+
+    def test_reconciliation_notification_uses_resolved_selector_after_either_dispatch_form(self):
+        workflow = 'build-release.yml'
+        notification = workflow_job(workflow, 'notify')['block']
+        failure = workflow_job(workflow, 'failed')['block']
+        reconcile = workflow_blocks(workflow)[1]['reconcile']
+        self.assertIn('attestation_attempt: ${{ steps.resolve.outputs.attestation_attempt }}', reconcile)
+
+        def selector(block, **values):
+            expression = re.search(r'^\s+BLOCKER_CANDIDATE: (.+)$', block, re.M)[1]
+            return evaluate_expression(expression, values)
+
+        for attempt, artifact in (('', ''), ('1', '73')):
+            with self.subTest(attempt=attempt, artifact=artifact):
+                inputs = {'inputs.reconciliation_run': '7', 'inputs.reconciliation_attempt': attempt,
+                          'inputs.reconciliation_artifact': artifact, 'needs.reconcile.outputs.attestation_attempt': '',
+                          'needs.reconcile.outputs.attestation_id': ''}
+                verified = dict(inputs, **{'needs.reconcile.outputs.attestation_attempt': '1',
+                                           'needs.reconcile.outputs.attestation_id': '73'})
+                self.assertEqual(selector(failure, **inputs), f'publisher:7:{attempt}:{artifact}')
+                self.assertEqual(selector(failure, **verified), 'publisher:7:1:73')
+                self.assertEqual(selector(notification, **verified), 'publisher:7:1:73')
 
     def test_discovery_recovery_requires_watcher_and_preparation_success(self):
         recovery = workflow_job('sync-upstream.yml', 'discovery_recovered')

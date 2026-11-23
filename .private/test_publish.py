@@ -193,11 +193,22 @@ class PublishMetadataTest(unittest.TestCase):
         raw = buffer.getvalue()
         artifact = dict(id=53, name='release-attestation-1', expired=False,
                         workflow_run=dict(id=7, head_sha=controller), size_in_bytes=len(raw),
-                        digest='sha256:' + hashlib.sha256(raw).hexdigest())
+                        digest='sha256:' + hashlib.sha256(raw).hexdigest(), created_at='2026-11-23T08:06:12Z')
         run = dict(id=7, run_attempt=1, path='.github/workflows/sync-upstream.yml', event='schedule',
                    head_branch='main', head_repository={'full_name': 'example/zec-private'},
-                   status='completed', head_sha=controller)
-        job = dict(name='build / publish', conclusion='success', status='completed', run_id=7, head_sha=controller)
+                   status='completed', head_sha=controller, run_started_at='2026-11-23T08:00:00Z')
+        steps = [
+            dict(name='Sign and verify the validated APK', number=5, status='completed', conclusion='success',
+                 started_at='2026-11-23T08:05:00Z', completed_at='2026-11-23T08:06:00Z'),
+            dict(name='Run actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9',
+                 number=6, status='completed', conclusion='success',
+                 started_at='2026-11-23T08:06:10Z', completed_at='2026-11-23T08:06:15Z'),
+            dict(name='Publish the signed APK and checksum', number=7, status='completed', conclusion='success',
+                 started_at='2026-11-23T08:06:15Z', completed_at='2026-11-23T08:06:29Z'),
+        ]
+        job = dict(id=75, name='build / publish', conclusion='success', status='completed', run_id=7,
+                   run_attempt=1, head_sha=controller, started_at='2026-11-23T08:03:00Z',
+                   completed_at='2026-11-23T08:06:30Z', steps=steps, runner_id=85)
         live = self.draft(proof)
         live['draft'] = False
         live['assets'] = self.assets(proof)
@@ -211,11 +222,56 @@ class PublishMetadataTest(unittest.TestCase):
         }
         with patch_environment(GITHUB_REPOSITORY='example/zec-private'), \
                 patch.object(reconcile, 'gh', side_effect=lambda path, *_: routes[path]) as api, \
-                patch.object(reconcile.subprocess, 'check_output', return_value=raw):
+                patch.object(reconcile.subprocess, 'check_output', return_value=raw) as download:
             result = reconcile.resolve('7', '1', '53')
             self.assertEqual((result['attestation_attempt'], result['attestation_id']), (1, 53))
             self.assertEqual(reconcile.resolve('7'), result)
             self.assertNotIn('actions/runs/7', [call.args[0] for call in api.call_args_list])
+
+            for interruption in ('failure', 'cancelled'):
+                with self.subTest(interruption=interruption):
+                    job.update(conclusion=interruption, steps=[*steps[:2], dict(steps[2], conclusion=interruption)])
+                    self.assertEqual(reconcile.resolve('7', '1', '53'), result)
+            draft = self.draft(proof)
+            with patch.object(reconcile, 'release_for_tag', return_value=draft):
+                self.assertEqual(reconcile.lookup('7', '1', '53', allow_draft=True), (result, proof, draft))
+
+            for failing_step in (0, 1):
+                with self.subTest(failing_step=failing_step):
+                    failed = [step.copy() for step in steps]
+                    failed[failing_step]['conclusion'] = 'failure'
+                    job.update(conclusion='failure', steps=failed)
+                    download.reset_mock()
+                    with self.assertRaisesRegex(ValueError, 'successful publisher signing and attestation upload'):
+                        reconcile.resolve('7', '1', '53')
+                    download.assert_not_called()
+            job.update(conclusion='success', steps=steps)
+
+            # A copied job can retain the original step timestamps and status under a new attempt.
+            copy = dict(job, id=76, run_attempt=2)
+            second = dict(run, run_attempt=2, run_started_at='2026-11-23T08:20:00Z')
+            copied_artifact = dict(artifact, id=54, name='release-attestation-2')
+            routes['actions/runs/7/attempts/2'] = second
+            routes['actions/runs/7/attempts/2/jobs?per_page=100'] = [{'jobs': [copy]}]
+            routes['actions/runs/7/artifacts?per_page=100'][0]['artifacts'].append(copied_artifact)
+            download.reset_mock()
+            with self.assertRaisesRegex(ValueError, 'Expected one completed attestation producer'):
+                reconcile.resolve('7', '2', '54')
+            download.assert_not_called()
+            self.assertEqual(reconcile.resolve('7'), result)
+
+            # Another job can upload into the same run during the publisher's job window.
+            publisher_archive_time = artifact['created_at']
+            artifact['created_at'] = '2026-11-23T08:06:20Z'
+            other_step = dict(steps[1], started_at='2026-11-23T08:06:18Z', completed_at='2026-11-23T08:06:23Z')
+            other_job = dict(job, id=77, name='build / unrelated', steps=[other_step])
+            routes['actions/runs/7/attempts/1/jobs?per_page=100'][0]['jobs'].append(other_job)
+            download.reset_mock()
+            with self.assertRaisesRegex(ValueError, 'original publisher upload step'):
+                reconcile.resolve('7', '1', '53')
+            download.assert_not_called()
+            artifact['created_at'] = publisher_archive_time
+
             for attempt, artifact_id in (('2', '53'), ('1', '54'), ('', '53')):
                 with self.subTest(attempt=attempt, artifact_id=artifact_id), self.assertRaises(ValueError):
                     reconcile.resolve('7', attempt, artifact_id)
