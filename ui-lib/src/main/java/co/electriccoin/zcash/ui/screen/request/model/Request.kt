@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.screen.request.ext.toBigDecimalLocalized
 import java.math.BigDecimal
 import java.math.MathContext
+import java.math.RoundingMode
 
 data class Request(
     val amountState: AmountState,
@@ -28,14 +29,22 @@ data class AmountState(
     val fiatCurrency: FiatCurrency? = null,
 ) {
     internal fun validZecAmount(conversion: FiatCurrencyConversion?): BigDecimal? {
+        val zec = convertedZecAmount(conversion) ?: return null
+        return zec.takeIf { isValid == true && it <= BigDecimal(MAX_ZCASH_SUPPLY) }
+            ?.setScale(ZEC_DECIMAL_PLACES, RoundingMode.DOWN)?.takeIf { it.signum() > 0 }
+    }
+
+    internal fun isBelowMinimum(conversion: FiatCurrencyConversion?): Boolean =
+        convertedZecAmount(conversion)?.let { it.signum() > 0 && it < MIN_ZEC_REQUEST } == true
+
+    private fun convertedZecAmount(conversion: FiatCurrencyConversion?): BigDecimal? {
         val entered = amount.toBigDecimalLocalized() ?: return null
-        val zec = when (currency) {
+        return when (currency) {
             RequestCurrency.ZEC -> entered
             RequestCurrency.FIAT -> conversion?.takeIf {
                 it.fiatCurrency == fiatCurrency && it.priceOfZec.isFinite() && it.priceOfZec > 0
             }?.let { entered.divide(it.priceOfZec.toBigDecimal(), MathContext.DECIMAL128) }
         }
-        return zec?.takeIf { isValid == true && it.signum() > 0 && it <= BigDecimal(MAX_ZCASH_SUPPLY) }
     }
 
     fun toZecString(conversion: FiatCurrencyConversion, context: Context): String =
@@ -101,3 +110,5 @@ data class QrCodeState(
 )
 
 internal const val MAX_ZCASH_SUPPLY = 21_000_000
+private const val ZEC_DECIMAL_PLACES = 8
+private val MIN_ZEC_REQUEST = BigDecimal("0.00000001")

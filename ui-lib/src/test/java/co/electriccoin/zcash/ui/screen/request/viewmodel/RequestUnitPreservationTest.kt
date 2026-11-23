@@ -43,6 +43,51 @@ import kotlin.time.Clock
 @Config(sdk = [34])
 class RequestUnitPreservationTest {
     @Test
+    fun subatomicFiatBlocksAllAddressModesAndOldCallbacksUntilRepresentable() = runTest {
+        ReceiveAddressType.entries.forEach { type ->
+            fixture(type) { vm, rate, builder ->
+                amount(vm).onSwitch(RequestCurrency.FIAT)
+                val oldAction = amount(vm).onDone
+                amount(vm).onAmount(OnAmount.Separator("."))
+                repeat(7) { amount(vm).onAmount(OnAmount.Number(0)) }
+                amount(vm).onAmount(OnAmount.Number(1))
+                assertEquals("0.00000001", amount(vm).request.amountState.amount)
+                assertFalse(amount(vm).canContinue)
+                assertTrue(amount(vm).isBelowMinimum)
+                oldAction()
+                amount(vm).onDone()
+                assertIs<RequestState.Amount>(vm.state.value)
+                verify(exactly = 0) { builder.invoke(any(), any(), any()) }
+                // The same input becomes exactly one zatoshi after a valid rate update.
+                rate.value = data(1.0)
+                assertTrue(amount(vm).canContinue)
+                assertFalse(amount(vm).isBelowMinimum)
+                oldAction()
+                (vm.state.value as? RequestState.Memo)?.onDone?.invoke()
+                assertIs<RequestState.QrCode>(vm.state.value)
+                verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.00000001")) == 0 }, "") }
+            }
+        }
+    }
+
+    @Test
+    fun finalFiatAmountFloorsFractionalZatoshiWithoutRoundingUp() = runTest {
+        ReceiveAddressType.entries.forEach { type ->
+            fixture(type) { vm, _, builder ->
+                amount(vm).onSwitch(RequestCurrency.FIAT)
+                amount(vm).onAmount(OnAmount.Separator("."))
+                repeat(5) { amount(vm).onAmount(OnAmount.Number(0)) }
+                amount(vm).onAmount(OnAmount.Number(1))
+                amount(vm).onAmount(OnAmount.Number(9))
+                assertTrue(amount(vm).canContinue)
+                amount(vm).onDone()
+                (vm.state.value as? RequestState.Memo)?.onDone?.invoke()
+                verify(exactly = 1) { builder.invoke(any(), match { it.compareTo(BigDecimal("0.00000001")) == 0 }, "") }
+            }
+        }
+    }
+
+    @Test
     fun fiatRateLossBlocksBothAddressTypesAndStaleCallbacksUntilRecovery() = runTest {
         ReceiveAddressType.entries.forEach { type ->
             fixture(type) { vm, rate, builder ->

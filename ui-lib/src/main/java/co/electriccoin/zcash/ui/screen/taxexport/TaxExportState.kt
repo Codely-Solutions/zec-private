@@ -7,4 +7,5 @@ data class TaxExportState(
     val text: StringResource,
     val exportButton: ButtonState,
     val onBack: () -> Unit,
+    val error: StringResource? = null,
 )

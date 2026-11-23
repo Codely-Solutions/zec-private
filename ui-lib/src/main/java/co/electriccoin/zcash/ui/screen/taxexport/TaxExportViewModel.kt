@@ -17,7 +17,9 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -26,26 +28,29 @@ class TaxExportViewModel(
     private val exportTax: ExportTaxUseCase,
     private val navigationRouter: NavigationRouter,
 ) : ViewModel() {
+    private val exporting = MutableStateFlow(false)
+    private val failed = MutableStateFlow(false)
     val state: StateFlow<TaxExportState> =
-        getSelectedWalletAccount
-            .observe()
-            .map {
-                createState(it)
+        combine(getSelectedWalletAccount.observe(), exporting, failed) { account, loading, error ->
+                createState(account, loading, error)
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
                 initialValue = createState(null)
             )
 
-    private fun createState(selectedAccount: WalletAccount?) =
+    private fun createState(selectedAccount: WalletAccount?, loading: Boolean = false, error: Boolean = false) =
         TaxExportState(
             exportButton =
                 ButtonState(
                     text = stringRes(R.string.taxExport_download),
                     hapticFeedbackType = HapticFeedbackType.Confirm,
+                    isEnabled = !loading,
+                    isLoading = loading,
                     onClick = ::onExportClick
                 ),
             onBack = ::onBack,
+            error = stringRes(R.string.taxExport_error).takeIf { error },
             text =
                 stringRes(
                     R.string.taxExport_desc,
@@ -58,10 +63,21 @@ class TaxExportViewModel(
                 )
         )
 
-    private fun onExportClick() =
+    private fun onExportClick() {
+        if (!exporting.compareAndSet(expect = false, update = true)) return
+        failed.value = false
         viewModelScope.launch {
-            exportTax()
+            try {
+                exportTax()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                failed.value = true
+            } finally {
+                exporting.value = false
+            }
         }
+    }
 
     private fun onBack() {
         navigationRouter.back()

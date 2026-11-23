@@ -125,6 +125,41 @@ class ReviewScreenshotTest {
         captureSettlementProvenance(listOf("dark"), 2f)
     }
 
+    @Test
+    fun captureRequestMinimumAndTaxExportStates() {
+        captureRequestAndTax(listOf("light", "dark", "oled"), 1f)
+    }
+
+    @Test
+    fun captureLargeRequestMinimumAndTaxExportStates() {
+        captureRequestAndTax(listOf("dark"), 2f)
+    }
+
+    private fun captureRequestAndTax(themes: List<String>, scale: Float) {
+        compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
+        val scene = mutableStateOf(Scene("request-fiat-minimum", themes.first(), scale))
+        show(scene)
+        for (theme in themes) {
+            for ((screen, expectedId) in listOf(
+                "request-fiat-minimum" to R.string.request_amount_minimum,
+                "tax-export-error" to R.string.taxExport_error,
+                "tax-export-loading" to R.string.taxExport_taxFile,
+            )) {
+                val current = Scene(screen, theme, scale)
+                compose.runOnIdle { scene.value = current }
+                val expected = text(expectedId)
+                compose.onNodeWithText(expected).assertIsDisplayed()
+                val action = compose.onNodeWithText(text(
+                    if (screen == "request-fiat-minimum") R.string.general_next else R.string.taxExport_download
+                ))
+                if (screen != "tax-export-loading") action.performScrollTo().assertIsDisplayed()
+                if (screen == "request-fiat-minimum") action.assertIsNotEnabled()
+                if (screen == "tax-export-error") action.assertIsEnabled()
+                capture(current, "screen", expected)
+            }
+        }
+    }
+
     private fun captureSettlementProvenance(themes: List<String>, scale: Float) {
         compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
         val scene = mutableStateOf(Scene("incoming-success-quoted", themes.first(), scale))

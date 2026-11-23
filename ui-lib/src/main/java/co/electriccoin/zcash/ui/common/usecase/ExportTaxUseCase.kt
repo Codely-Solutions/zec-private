@@ -21,6 +21,8 @@ import co.electriccoin.zcash.ui.util.FileShareUtil
 import co.electriccoin.zcash.ui.util.FileShareUtil.ZASHI_INTERNAL_DATA_MIME_TYPE
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import java.io.BufferedWriter
 import java.io.File
 import java.time.Year
@@ -47,10 +49,11 @@ class ExportTaxUseCase(
                         it.format(formatter)
                     }
 
+            val selectedAccount = accountDataSource.getSelectedAccount()
             val outputFile =
                 File(
                     File(context.cacheDir, "tax_exports").apply { mkdirs() },
-                    when (accountDataSource.getSelectedAccount()) {
+                    when (selectedAccount) {
                         is KeystoneAccount -> {
                             "Keystone_Transaction_History_$previousYear.csv"
                         }
@@ -69,12 +72,10 @@ class ExportTaxUseCase(
                     }
                 )
 
-            writeCsvToFile(
-                outputFile = outputFile,
-                data = getCsvEntries()
-            )
-
-            runCatching {
+            try {
+                val entries = getCsvEntries()
+                check(accountDataSource.getSelectedAccount().sdkAccount.accountUuid == selectedAccount.sdkAccount.accountUuid)
+                writeCsvToFile(outputFile = outputFile, data = entries)
                 val intent =
                     FileShareUtil.newShareContentIntent(
                         context = context,
@@ -85,9 +86,14 @@ class ExportTaxUseCase(
                         fileType = ZASHI_INTERNAL_DATA_MIME_TYPE
                     )
 
+                currentCoroutineContext().ensureActive()
                 context.startActivity(intent)
+            } catch (failure: Exception) {
+                outputFile.delete()
+                throw failure
             }
 
+            currentCoroutineContext().ensureActive()
             navigationRouter.back()
         }
 

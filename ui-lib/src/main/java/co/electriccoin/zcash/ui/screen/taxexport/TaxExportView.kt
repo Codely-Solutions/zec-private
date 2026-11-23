@@ -105,6 +105,15 @@ private fun Content(
 
         Spacer(Modifier.weight(1f))
 
+        state.error?.let {
+            Text(
+                text = it.getValue(),
+                style = ZashiTypography.textSm,
+                color = ZashiColors.Text.textError,
+            )
+            Spacer(Modifier.height(12.dp))
+        }
+
         ZashiButton(
             state = state.exportButton,
             modifier = Modifier.fillMaxWidth()

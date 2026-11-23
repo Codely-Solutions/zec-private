@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
@@ -60,7 +60,7 @@ internal fun RequestAmountView(
     ) {
         Spacer(Modifier.height(ZcashTheme.dimens.spacingDefault))
 
-        InvalidAmountView(state.request.amountState)
+        InvalidAmountView(state.request.amountState, state.isBelowMinimum)
 
         Spacer(modifier = Modifier.height(ZcashTheme.dimens.spacingDefault))
 
@@ -412,6 +412,7 @@ private fun RequestAmountKeyboardIconButton(
 @Composable
 private fun InvalidAmountView(
     amountState: AmountState,
+    isBelowMinimum: Boolean,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -419,9 +420,10 @@ private fun InvalidAmountView(
         modifier =
             modifier
                 .fillMaxWidth()
-                .requiredHeight(48.dp)
+                .padding(horizontal = ZcashTheme.dimens.screenHorizontalSpacingRegular)
+                .heightIn(min = 48.dp)
     ) {
-        if (amountState.isValid == false) {
+        if (amountState.isValid == false || isBelowMinimum) {
             Image(
                 painter = painterResource(id = R.drawable.ic_alert_outline),
                 contentDescription = null
@@ -430,7 +432,7 @@ private fun InvalidAmountView(
             Spacer(modifier = Modifier.width(8.dp))
 
             Text(
-                text = stringResource(id = R.string.zecKeyboard_invalid),
+                text = stringResource(id = if (isBelowMinimum) R.string.request_amount_minimum else R.string.zecKeyboard_invalid),
                 color = ZashiColors.Utility.WarningYellow.utilityOrange700,
                 style = ZashiTypography.textSm,
                 fontWeight = FontWeight.Medium,

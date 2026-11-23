@@ -25,6 +25,11 @@ internal sealed class RequestState {
         override val onBack: () -> Unit,
         val onDone: () -> Unit,
     ) : Prepared(onBack) {
+        val isBelowMinimum: Boolean
+            get() = request.amountState.isBelowMinimum(
+                (exchangeRateState as? ExchangeRateState.Data)?.currencyConversion
+            )
+
         val canContinue: Boolean
             get() = request.amountState.validZecAmount(
                 (exchangeRateState as? ExchangeRateState.Data)?.currencyConversion

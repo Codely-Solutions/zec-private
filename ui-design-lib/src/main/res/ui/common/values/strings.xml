@@ -929,6 +929,8 @@
     <string name="taxExport_title">Data Export</string>
     <string name="taxExport_desc">Download your <xliff:g example="ZEC Private" id="account_name">%s</xliff:g> transaction history from the previous calendar year in a .csv format.</string>
     <string name="taxExport_download">Download</string>
+    <string name="taxExport_error">Could not export transaction history. Try again.</string>
+    <string name="request_amount_minimum">Enter at least 0.00000001 ZEC.</string>
 
     <!-- ===== tex_unsupported ===== -->
     <string name="texKeystone_title">Unsupported Address Type</string>

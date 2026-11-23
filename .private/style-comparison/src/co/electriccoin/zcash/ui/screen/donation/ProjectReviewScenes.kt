@@ -18,7 +18,21 @@ import co.electriccoin.zcash.ui.screen.deletewallet.ResetZashiView
 @Composable
 internal fun ProjectReviewScene(screen: String): Boolean {
     when (screen) {
-        "request-fiat-unavailable", "request-fiat-recovered" -> RequestFiatScene(screen == "request-fiat-recovered")
+        "request-fiat-unavailable", "request-fiat-recovered", "request-fiat-minimum" ->
+            RequestFiatScene(screen != "request-fiat-unavailable", screen == "request-fiat-minimum")
+        "tax-export-error", "tax-export-loading" -> co.electriccoin.zcash.ui.screen.taxexport.TaxExportView(
+            co.electriccoin.zcash.ui.screen.taxexport.TaxExportState(
+                text = stringRes(R.string.taxExport_desc, stringRes(R.string.accounts_zashi)),
+                exportButton = ButtonState(
+                    stringRes(R.string.taxExport_download),
+                    isEnabled = screen != "tax-export-loading",
+                    isLoading = screen == "tax-export-loading",
+                    onClick = {},
+                ),
+                onBack = {},
+                error = stringRes(R.string.taxExport_error).takeIf { screen == "tax-export-error" },
+            )
+        )
         "gift-reviewed-account", "gift-unknown-account" -> co.electriccoin.zcash.ui.screen.redeemgift.RedeemGiftView(
             co.electriccoin.zcash.ui.screen.redeemgift.RedeemGiftState.ready(
                 redeemable = cash.z.ecc.android.sdk.model.Zatoshi(10_000_000),
@@ -103,7 +117,7 @@ internal fun ProjectReviewScene(screen: String): Boolean {
 
 /** Retained fiat input with unavailable/recovered conversion; no URI or payment callbacks. */
 @Composable
-private fun RequestFiatScene(recovered: Boolean) {
+private fun RequestFiatScene(recovered: Boolean, belowMinimum: Boolean = false) {
     val currency = cash.z.ecc.android.sdk.model.FiatCurrency.USD
     val conversion = if (recovered) cash.z.ecc.android.sdk.model.FiatCurrencyConversion(
         kotlin.time.Clock.System.now(), 100.0, currency,
@@ -112,7 +126,8 @@ private fun RequestFiatScene(recovered: Boolean) {
         state = co.electriccoin.zcash.ui.screen.request.model.RequestState.Amount(
             request = co.electriccoin.zcash.ui.screen.request.model.Request(
                 amountState = co.electriccoin.zcash.ui.screen.request.model.AmountState(
-                    "25", co.electriccoin.zcash.ui.screen.request.model.RequestCurrency.FIAT, true, currency,
+                    if (belowMinimum) "0.00000001" else "25",
+                    co.electriccoin.zcash.ui.screen.request.model.RequestCurrency.FIAT, true, currency,
                 ),
                 memoState = co.electriccoin.zcash.ui.screen.request.model.MemoState.Valid("", 0, "0.25"),
                 qrCodeState = co.electriccoin.zcash.ui.screen.request.model.QrCodeState("", "0.25", ""),
