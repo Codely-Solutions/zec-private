@@ -15,8 +15,10 @@ with the disclosure text. [ZIP 321](https://zips.z.cash/zip-0321) · [ZIP 302](h
 
 An editable Send draft accepts only text. A non-text request goes directly to Review without creating a text-prefilled
 Send screen behind it; a proposal failure or disabled-URI fallback displays a specific explanation and preserves the
-existing draft. The SDK remains responsible for proposal validity. A non-text disclosure reports unrenderable bytes;
+existing draft. Dismissing an explanation or the hardware TEX sheet resumes the same scanner. Delivery to a destination retires the scanner's pending frames. The SDK remains responsible for proposal validity. A non-text disclosure reports unrenderable bytes;
 it does not assert that invalid UTF-8 is valid ZIP 302 text.
+
+Review observes the process-local proposal after its destination is restored. When the selected repository publishes an empty proposal, Review offers Back to the saved destination beneath it. From there, prepare and review a new proposal to approve payment. The navigation state carries no proposal data.
 
 The pinned SDK `6.0.0` passes the URI to `TransactionRequest::from_uri` in its Rust proposal implementation. Source
 inspection establishes that adapter contract; JVM regressions establish the app's exact URI handoff with SDK I/O

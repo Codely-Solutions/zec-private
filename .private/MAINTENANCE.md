@@ -147,7 +147,7 @@ Add concise user-facing changes to `release-notes.json`, keyed by the exact priv
 
 ## Dependency update policy
 
-`dependency-graph.yml` resolves the Gradle graph with a read-only token and submits the snapshot in a separate job without checking out build code. Main-branch changes to Gradle inputs trigger it. When integration uses `GITHUB_TOKEN`, invoke graph refresh from the trusted controller because its pushes do not trigger another workflow. Snapshot coverage complements advisory review for embedded native SDK code.
+`dependency-graph.yml` resolves the Gradle graph with a read-only token and submits the snapshot in a separate job without checking out build code. Main-branch changes to Gradle inputs trigger it, including project and buildscript lockfiles. The dependency graph and hosted fixture workflows give non-main dispatches a separate queue so main runs retain their pending slot. When integration uses `GITHUB_TOKEN`, invoke graph refresh from the trusted controller because its pushes do not trigger another workflow. Snapshot coverage complements advisory review for embedded native SDK code.
 
 `maintenance-watch.yml` checks upstream schedule freshness and classifies collaborator-only Dependabot proposals without running their code. Workflow and policy edits require review. This shadow check reports candidates for validation and grants no merge or signing authority.
 

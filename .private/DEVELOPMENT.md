@@ -55,6 +55,8 @@ On Windows, the session gives child JVMs a deliberately absent owned `jdk.net.un
 
 ## Review boundary regressions
 
+Start the [22efbb9a checks](core-coverage.md#corrections-after-22efbb9a) with release JVM tests and release-scoped Detekt. Hold the QR image and report diagnostics handoffs using synthetic data and virtual time. Cover restored Review in the NavController and component host before choosing an emulator. Run `test_notify`, `test_maintenance_watch` and the disposable `test_sync` integration for controller changes. Record the source of each result and compare build/runtime fingerprints before reusing older acceptance.
+
 For the five findings after `16c74516`, use the eight-area matrix in [core coverage](core-coverage.md#review-transition-regressions).
 Run `SwapRequestCancellationTest` through the real Pay/Swap mapper, VM, repository and request/cancel use cases, holding
 external proposal preparation and advancing dismissal with virtual time. Include fresh-address and replaced-request ownership;

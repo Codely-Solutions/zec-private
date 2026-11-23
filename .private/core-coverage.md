@@ -74,6 +74,21 @@ UI JVM regressions run in `release_checks.sh`; Python controller/catalog regress
 `automation-test.yml` suite. Optional layout captures follow [UI review](UI-REVIEW.md). These checks substitute external
 storage, provider, navigation or SDK I/O at the stated ports; they establish no funded settlement or native power-loss behavior.
 
+### Corrections after 22efbb9a
+
+| Area | Automatic regression |
+|---|---|
+| Incoming deposit QR | `ORSwapConfirmationVMTest` composes the confirmation and actual image staging. It changes the published quote or reaches the deadline during staging and checks chooser admission and attempt-file cleanup. |
+| Swap issue reports | `SwapSupportVMTest` drives live, saved and mismatch reports through the chooser adapter. It suspends diagnostics across relock, account change and reset and checks that a refused handoff leaves the screen open. |
+| Scanner retry | `Zip321MemoScanTest` uses the real scanner, URI parser and scan handlers for rejected non-text requests and the hardware TEX overlay. Camera and image inputs can retry after dismissal, and duplicate frames cannot repeat a completed route. |
+| Restored Review | `Zip321MemoScanTest` restores saved navigation with an empty software repository and exercises Home recovery for hardware. `LedgerProposalRepositoryTest` uses a recreated Ledger repository. `RestoredReviewLayoutTest` renders the recovery state at 200% text and invokes its Back action. |
+| Interrupted issue close | `test_notify` injects failures at comment, edit and close, including lost acknowledgements. Later recovery retires the open section and preserves operator notes and independent blockers. |
+| Lock-only dependency refresh | `test_maintenance_watch` reads the retained lockfile paths and the historical root buildscript lock delta. It checks the workflow filters and the maintenance classifier. |
+| Workflow queue admission | `test_maintenance_watch` evaluates the checked-in graph and fixture queue expressions and admission guards with main and diagnostic dispatches. Queue replacement follows GitHub's documented behavior. |
+| Incoming tracking and provider contract | `MetadataDataSourceFileTest` crosses account selection during recipient reservation, then verifies both encrypted account files and invalidation across reset. `SwapRecoveryBoundaryTest` and `NearSwapQuoteStatusTest` exercise malformed deposit text and fractional raw execution with production decoding. |
+
+These checks establish app and controller behavior with mocked external I/O. Real Android process termination, external recipient copies, full address grammars, funded settlement and live scheduler overlap have separate evidence requirements.
+
 ### Corrections after e8813f3c
 
 The following maintained tests cover the review's eight interaction gaps. Execution receipts must identify the tested source and configuration; this inventory describes test scope.
