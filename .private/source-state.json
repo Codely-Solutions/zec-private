@@ -821,7 +821,7 @@
   "preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/PreferenceProviderCacheTest.kt": "1ed36c4b02ba3df397cecaa9c2d99bc061098cbaff9c161e9aa41a7a04d0a8b3",
   "preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/androidsecurity/KeyStoreException.kt": "d901cab9df19b9b0c6d9ce0dc4eb355fbb2a54b366fc8c1d224564608f15edf1",
   "preference-impl-android-lib/src/test/java/co/electriccoin/zcash/preference/androidsecurity/legacy/KeyStoreException.kt": "d479b1ec60a10d459c6c90331b214b01c31b2990fd2fd34a8032ba18b04039ba",
-  "scripts/check-swap-price-catalog.py": "a79d3bc39fc55906a20facb33d5f4ec766c4e34fd3d416549f52e4b04170e146",
+  "scripts/check-swap-price-catalog.py": "e1995d757c9053380012c107af7e1f55833775cd5df7e361763d4200e685b37b",
   "scripts/prepare-foss-build.sh": "7df303408faf5db47b86d2cbeb808bf057e83abe685690c4c19d2400b3343b31",
   "sdk-ext-lib/build.gradle.kts": "856077f38440d771802b28302a36d112d83513f49c51f4dd59b1b09e7a4267e3",
   "sdk-ext-lib/proguard-consumer.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
