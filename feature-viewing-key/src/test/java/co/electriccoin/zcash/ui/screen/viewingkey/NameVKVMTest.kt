@@ -17,6 +17,7 @@ import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.PendingViewOnlyImport
 import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepositoryImpl
+import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.ImportViewOnlyAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
@@ -25,11 +26,14 @@ import co.electriccoin.zcash.ui.design.R
 import co.electriccoin.zcash.ui.design.util.ImageResource
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerArgs
+import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
+import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
 import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
 import co.electriccoin.zcash.ui.screen.viewingkey.alreadyimported.AlreadyImportedVKArgs
 import co.electriccoin.zcash.ui.screen.viewingkey.name.NameVKState
 import co.electriccoin.zcash.ui.screen.viewingkey.name.NameVKVM
+import co.electriccoin.zcash.viewingkey.ViewOnlyAccountImporterImpl
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.coVerifyOrder
@@ -59,66 +63,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/**
- * The name is capped at twelve characters as it is typed, the counter follows it, and Continue needs
- * a name that is not blank. Naming is the last step: Continue stores the trimmed name and the picked
- * colour with the pending key and birthday and imports, showing its progress, once however often it
- * is tapped; without a pending key or birthday it returns to the root, and a failed import shows the
- * error, from which it is tried again. While it imports, the name field is disabled with its counter
- * still shown, and back, the name and the colour are ignored;
- * otherwise back returns to the birthday screen and keeps the pending key and birthday. The avatar's
- * pencil badge opens the colour picker; the avatar follows the picks live and keeps the last one
- * however the picker closes. A name another account shows, in any case, disables Continue and says
- * so under the field, never next to another name, and Continue checks the name again when tapped.
- * The keyboard's Done key continues only while Continue is enabled.
- */
 @OptIn(ExperimentalCoroutinesApi::class)
-class NameVKVMTest {
-    private val navigationRouter = mockk<NavigationRouter>(relaxed = true)
-
-    private val pickerRequests = mutableListOf<ColorPickerArgs>()
-
-    private val navigateToColorPicker =
-        NavigateToColorPickerUseCase(
-            mockk(relaxed = true) {
-                every { forward(*anyVararg()) } answers {
-                    (args[0] as Array<*>).filterIsInstance<ColorPickerArgs>().forEach { pickerRequests.add(it) }
-                }
-            }
-        )
-
-    private val accounts =
-        MutableStateFlow<List<WalletAccount>?>(
-            listOf(ViewOnlyAccountFixtures.zodl(), ViewOnlyAccountFixtures.viewOnly(customName = "Keystone"))
-        )
-
-    private val isAccountNameTaken = ViewOnlyAccountFixtures.isAccountNameTaken(accounts)
-
-    private val repository = ViewOnlyPendingImportRepositoryImpl().apply { set(pending()) }
-
-    private var importAnswer: suspend () -> Unit = {}
-
-    private val importViewOnlyAccount =
-        mockk<ImportViewOnlyAccountUseCase> {
-            coEvery { this@mockk.invoke() } coAnswers { importAnswer() }
-        }
-
-    private val errorStateMapper =
-        ErrorMapperUseCase(
-            sendEmail = mockk(relaxed = true),
-            viewOnlyContent = mockk(relaxed = true),
-        )
-
-    @BeforeTest
-    fun setUp() {
-        Dispatchers.setMain(StandardTestDispatcher())
-    }
-
-    @AfterTest
-    fun tearDown() {
-        Dispatchers.resetMain()
-    }
-
+internal class NameVKVMTest : NameVKVMFixture() {
     @Test
     fun aLongerNameIsCutToTwelveCharacters() =
         runTest {
@@ -335,6 +281,108 @@ class NameVKVMTest {
         }
 
     @Test
+    fun withoutAPendingKeyTheFlowReturnsToTheRoot() =
+        runTest {
+            repository.clear()
+
+            vm()
+
+            verify(exactly = 1) { navigationRouter.backToRoot() }
+        }
+
+    @Test
+    fun aPickedColorShowsOnTheAvatarAndContinueKeepsItWithThePendingImport() =
+        runTest {
+            val vm = vm()
+            collect(vm)
+            assertNull(vm.content().avatarColor())
+
+            openPicker(vm)
+            val request = pickerRequests.single()
+            assertNull(request.initialArgb)
+            navigateToColorPicker.onPicked(Color(PICKED), request)
+            navigateToColorPicker.onClosed(request)
+            runCurrent()
+
+            assertEquals(Color(PICKED), vm.content().avatarColor())
+            assertEquals(pending(), repository.get())
+
+            type(vm, "Savings")
+            vm
+                .content()
+                .continueButton
+                .onClick()
+            runCurrent()
+
+            assertEquals(pending(name = "Savings", color = Color(PICKED)), repository.get())
+        }
+
+    @Test
+    fun theColorOfThePendingImportShowsWhenTheScreenOpensAgain() =
+        runTest {
+            repository.set(pending(name = "Savings", color = Color(PICKED)))
+            val vm = vm()
+            collect(vm)
+
+            assertEquals(Color(PICKED), vm.content().avatarColor())
+        }
+
+    @Test
+    fun aPickerClosedWithoutAPickKeepsTheColorAndReopensWithIt() =
+        runTest {
+            val vm = vm()
+            collect(vm)
+            openPicker(vm)
+            navigateToColorPicker.onPicked(Color(PICKED), pickerRequests.last())
+            navigateToColorPicker.onClosed(pickerRequests.last())
+            runCurrent()
+
+            openPicker(vm)
+            val second = pickerRequests.last()
+            assertEquals(Color(PICKED), Color(assertNotNull(second.initialArgb)))
+            navigateToColorPicker.onClosed(second)
+            runCurrent()
+
+            assertEquals(Color(PICKED), vm.content().avatarColor())
+        }
+
+    @Test
+    fun theAvatarFollowsLivePicksAndKeepsTheLastOneWhenThePickerCloses() =
+        runTest {
+            val vm = vm()
+            collect(vm)
+            openPicker(vm)
+            val request = pickerRequests.single()
+
+            navigateToColorPicker.onPicked(Color(OTHER), request)
+            runCurrent()
+            assertEquals(Color(OTHER), vm.content().avatarColor())
+
+            navigateToColorPicker.onPicked(Color(PICKED), request)
+            navigateToColorPicker.onClosed(request)
+            runCurrent()
+            assertEquals(Color(PICKED), vm.content().avatarColor())
+
+            openPicker(vm)
+            assertEquals(2, pickerRequests.size)
+        }
+
+    @Test
+    fun aSecondTapWhileThePickerIsOpenOpensNothing() =
+        runTest {
+            val vm = vm()
+            collect(vm)
+
+            openPicker(vm)
+            openPicker(vm)
+
+            assertEquals(1, pickerRequests.size)
+        }
+}
+
+@OptIn(ExperimentalCoroutinesApi::class)
+internal class NameVKImportVMTest : NameVKVMFixture() {
+    @Test
     fun continueImportsWithTheTrimmedNameTheColorAndTheBirthdayAndShowsItsProgress() =
         runTest {
             val importing = CompletableDeferred<Unit>()
@@ -477,7 +525,7 @@ class NameVKVMTest {
         }
 
     @Test
-    fun sameNameContinuesAfterTheImportedAccountAppearsAndItsSelectionCommitFailed() = runTest {
+    fun backFromNameCanFinishTheCommittedImportAfterSelectionCommitFailed() = runTest {
         val previous = ViewOnlyAccountFixtures.zodlUuid
         val previousEncoding = Base64.getEncoder().encodeToString(previous.value)
         val storage = SelectionStorage(previousEncoding)
@@ -515,7 +563,24 @@ class NameVKVMTest {
         verify(exactly = 0) { synchronizer.resetSynchronizer() }
         verify(exactly = 0) { navigationRouter.forward(*anyVararg()) }
 
-        vm.content().continueButton.onClick()
+        val committed = checkNotNull(repository.get()?.committedBirthday)
+        assertEquals(committed.message(), vm.content().form.header.message)
+        val oldFinish = vm.content().continueButton
+        vm.content().onBack()
+        oldFinish.onClick()
+        runCurrent()
+        verify(exactly = 1) { navigationRouter.back() }
+        coVerify(exactly = 1) { accountDataSource.selectAccount(created) }
+
+        val shared = CreateHWWalletAccountUseCase(
+            keystoneSession = KeystoneEnrollmentSession(),
+            createKeystoneAccount = mockk(),
+            ledgerAccountImporter = mockk(),
+            viewOnlyAccountImporter = ViewOnlyAccountImporterImpl(repository, navigationRouter, importer),
+            navigationRouter = navigationRouter,
+        )
+        assertEquals(committed, shared.committedBirthday(HWWalletEnrollment.ViewOnly))
+        shared.finish(HWWalletEnrollment.ViewOnly, committed)
         runCurrent()
 
         assertEquals(created.accountUuid, selected.getUUID())
@@ -621,110 +686,59 @@ class NameVKVMTest {
             verify(exactly = 0) { navigationRouter.backToRoot() }
             coVerify(exactly = 0) { importViewOnlyAccount.invoke() }
         }
+}
 
-    @Test
-    fun withoutAPendingKeyTheFlowReturnsToTheRoot() =
-        runTest {
-            repository.clear()
+@OptIn(ExperimentalCoroutinesApi::class)
+internal abstract class NameVKVMFixture {
+    protected val navigationRouter = mockk<NavigationRouter>(relaxed = true)
 
-            vm()
+    protected val pickerRequests = mutableListOf<ColorPickerArgs>()
 
-            verify(exactly = 1) { navigationRouter.backToRoot() }
+    protected val navigateToColorPicker =
+        NavigateToColorPickerUseCase(
+            mockk(relaxed = true) {
+                every { forward(*anyVararg()) } answers {
+                    (args[0] as Array<*>).filterIsInstance<ColorPickerArgs>().forEach { pickerRequests.add(it) }
+                }
+            }
+        )
+
+    protected val accounts =
+        MutableStateFlow<List<WalletAccount>?>(
+            listOf(ViewOnlyAccountFixtures.zodl(), ViewOnlyAccountFixtures.viewOnly(customName = "Keystone"))
+        )
+
+    private val isAccountNameTaken = ViewOnlyAccountFixtures.isAccountNameTaken(accounts)
+
+    protected val repository = ViewOnlyPendingImportRepositoryImpl().apply { set(pending()) }
+
+    protected var importAnswer: suspend () -> Unit = {}
+
+    protected val importViewOnlyAccount =
+        mockk<ImportViewOnlyAccountUseCase> {
+            coEvery { this@mockk.invoke() } coAnswers { importAnswer() }
         }
 
-    @Test
-    fun aPickedColorShowsOnTheAvatarAndContinueKeepsItWithThePendingImport() =
-        runTest {
-            val vm = vm()
-            collect(vm)
-            assertNull(vm.content().avatarColor())
+    private val errorStateMapper =
+        ErrorMapperUseCase(
+            sendEmail = mockk(relaxed = true),
+            viewOnlyContent = mockk(relaxed = true),
+        )
 
-            openPicker(vm)
-            val request = pickerRequests.single()
-            assertNull(request.initialArgb)
-            navigateToColorPicker.onPicked(Color(PICKED), request)
-            navigateToColorPicker.onClosed(request)
-            runCurrent()
+    @BeforeTest
+    fun setUp() {
+        Dispatchers.setMain(StandardTestDispatcher())
+    }
 
-            assertEquals(Color(PICKED), vm.content().avatarColor())
-            assertEquals(pending(), repository.get())
+    @AfterTest
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
 
-            type(vm, "Savings")
-            vm
-                .content()
-                .continueButton
-                .onClick()
-            runCurrent()
-
-            assertEquals(pending(name = "Savings", color = Color(PICKED)), repository.get())
-        }
-
-    @Test
-    fun theColorOfThePendingImportShowsWhenTheScreenOpensAgain() =
-        runTest {
-            repository.set(pending(name = "Savings", color = Color(PICKED)))
-            val vm = vm()
-            collect(vm)
-
-            assertEquals(Color(PICKED), vm.content().avatarColor())
-        }
-
-    @Test
-    fun aPickerClosedWithoutAPickKeepsTheColorAndReopensWithIt() =
-        runTest {
-            val vm = vm()
-            collect(vm)
-            openPicker(vm)
-            navigateToColorPicker.onPicked(Color(PICKED), pickerRequests.last())
-            navigateToColorPicker.onClosed(pickerRequests.last())
-            runCurrent()
-
-            openPicker(vm)
-            val second = pickerRequests.last()
-            assertEquals(Color(PICKED), Color(assertNotNull(second.initialArgb)))
-            navigateToColorPicker.onClosed(second)
-            runCurrent()
-
-            assertEquals(Color(PICKED), vm.content().avatarColor())
-        }
-
-    @Test
-    fun theAvatarFollowsLivePicksAndKeepsTheLastOneWhenThePickerCloses() =
-        runTest {
-            val vm = vm()
-            collect(vm)
-            openPicker(vm)
-            val request = pickerRequests.single()
-
-            navigateToColorPicker.onPicked(Color(OTHER), request)
-            runCurrent()
-            assertEquals(Color(OTHER), vm.content().avatarColor())
-
-            navigateToColorPicker.onPicked(Color(PICKED), request)
-            navigateToColorPicker.onClosed(request)
-            runCurrent()
-            assertEquals(Color(PICKED), vm.content().avatarColor())
-
-            openPicker(vm)
-            assertEquals(2, pickerRequests.size)
-        }
-
-    @Test
-    fun aSecondTapWhileThePickerIsOpenOpensNothing() =
-        runTest {
-            val vm = vm()
-            collect(vm)
-
-            openPicker(vm)
-            openPicker(vm)
-
-            assertEquals(1, pickerRequests.size)
-        }
-
-    private fun NameVKState.avatarColor() =
+    protected fun NameVKState.avatarColor() =
         (form.header.avatar.image as ImageResource.Layered).background.takeIf { it.isSpecified }
 
-    private fun TestScope.openPicker(vm: NameVKVM) {
+    protected fun TestScope.openPicker(vm: NameVKVM) {
         assertNotNull(
             vm
                 .content()
@@ -733,7 +747,7 @@ class NameVKVMTest {
         runCurrent()
     }
 
-    private fun TestScope.pickColor(
+    protected fun TestScope.pickColor(
         vm: NameVKVM,
         color: Color,
     ) {
@@ -744,14 +758,14 @@ class NameVKVMTest {
         runCurrent()
     }
 
-    private fun NameVKVM.content() = assertNotNull(state.value.content)
+    protected fun NameVKVM.content() = assertNotNull(state.value.content)
 
-    private fun pending(
+    protected fun pending(
         name: String = "",
         color: Color? = null,
     ) = PendingViewOnlyImport(ufvk = UFVK, name = name, color = color, birthday = BIRTHDAY)
 
-    private fun TestScope.type(
+    protected fun TestScope.type(
         vm: NameVKVM,
         text: String,
     ) {
@@ -762,7 +776,7 @@ class NameVKVMTest {
         runCurrent()
     }
 
-    private fun vm(importer: ImportViewOnlyAccountUseCase = importViewOnlyAccount) =
+    protected fun vm(importer: ImportViewOnlyAccountUseCase = importViewOnlyAccount) =
         NameVKVM(
             pendingImportRepository = repository,
             navigationRouter = navigationRouter,
@@ -772,52 +786,50 @@ class NameVKVMTest {
             errorStateMapper = errorStateMapper,
         )
 
-    private fun TestScope.collect(vm: NameVKVM) {
+    protected fun TestScope.collect(vm: NameVKVM) {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
         runCurrent()
     }
 
-    private fun StringResource.text() = (this as StringResource.ByString).value
+    protected fun StringResource.text() = (this as StringResource.ByString).value
 
-    private fun StringResource.args() = (this as StringResource.ByResource).args.toList()
+    protected fun StringResource.args() = (this as StringResource.ByResource).args.toList()
+}
 
-    private class SelectionStorage(initial: String) {
-        var durable: String? = initial
-            private set
-        private var cached: String? = initial
-        private var staged: String? = initial
-        private var failed = false
+private const val UFVK = "uview1namefixture"
+private const val PICKED = 0x80BE38F3
+private const val OTHER = 0xFF0088FF
+private val BIRTHDAY = BlockHeight.new(2_500_000L)
 
-        val preferences = mockk<SharedPreferences> {
-            every { getString("selected_account_uuid", null) } answers { cached }
-        }
+private class SelectionStorage(initial: String) {
+    var durable: String? = initial
+        private set
+    private var cached: String? = initial
+    private var staged: String? = initial
+    private var failed = false
 
-        init {
-            val editor = mockk<SharedPreferences.Editor> {
-                every { putString("selected_account_uuid", any()) } answers {
-                    staged = secondArg()
-                    this@mockk
-                }
-                every { commit() } answers {
-                    cached = staged
-                    if (failed) {
-                        durable = staged
-                        true
-                    } else {
-                        failed = true
-                        false
-                    }
-                }
-            }
-            every { preferences.edit() } returns editor
-        }
+    val preferences = mockk<SharedPreferences> {
+        every { getString("selected_account_uuid", null) } answers { cached }
     }
 
-    private companion object {
-        const val UFVK = "uview1namefixture"
-        const val PICKED = 0x80BE38F3
-        const val OTHER = 0xFF0088FF
-        val BIRTHDAY = BlockHeight.new(2_500_000L)
+    init {
+        val editor = mockk<SharedPreferences.Editor> {
+            every { putString("selected_account_uuid", any()) } answers {
+                staged = secondArg()
+                this@mockk
+            }
+            every { commit() } answers {
+                cached = staged
+                if (failed) {
+                    durable = staged
+                    true
+                } else {
+                    failed = true
+                    false
+                }
+            }
+        }
+        every { preferences.edit() } returns editor
     }
 }
 

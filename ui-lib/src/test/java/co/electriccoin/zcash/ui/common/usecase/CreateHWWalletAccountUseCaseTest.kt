@@ -82,6 +82,10 @@ class CreateHWWalletAccountUseCaseTest {
         verify(exactly = 0) { fixture.router.replaceFrom(any(), any()) }
 
         fixture.useCase(fixture.enrollment, birthday = null)
+        fixture.useCase(fixture.enrollment, BlockHeight.new(2_000_000L))
+        coVerify(exactly = 1) { fixture.accountDataSource.selectAccount(fixture.created) }
+
+        fixture.useCase(fixture.enrollment, birthday)
 
         coVerify(exactly = 1) { fixture.accountDataSource.importKeystoneAccount(any(), any(), any(), birthday) }
         coVerify(exactly = 2) { fixture.accountDataSource.selectAccount(fixture.created) }
@@ -237,10 +241,12 @@ class CreateHWWalletAccountUseCaseTest {
         ledgerAccountImporter =
             ledgerAccountImporter.also {
                 every { it.hasPendingPairing() } returns hasPendingPairing
+                every { it.committedBirthday() } returns null
             },
         viewOnlyAccountImporter =
             viewOnlyAccountImporter.also {
                 every { it.hasPendingImport() } returns hasPendingViewOnlyImport
+                every { it.committedBirthday() } returns null
             },
         navigationRouter = navigationRouter,
     )

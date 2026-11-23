@@ -142,6 +142,26 @@ class ImportViewOnlyAccountUseCaseTest {
         }
 
     @Test
+    fun aFailedViewOnlyFinalizationRejectsAnEarlierBirthdayAndRetriesTheCommittedHeight() = runTest {
+        val importedHeight = BlockHeight.new(2_500_000L)
+        val correctedHeight = BlockHeight.new(2_000_000L)
+        repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", birthday = importedHeight))
+        coEvery { accountDataSource.selectAccount(created) } throws IOException() andThen Unit
+        assertFailsWith<IOException> { useCase() }
+
+        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
+        importer.continueWithBirthday(correctedHeight)
+
+        verify(exactly = 0) { navigationRouter.forward(NameVKArgs) }
+        assertEquals(importedHeight, importer.committedBirthday()?.height)
+        assertEquals(importedHeight, repository.get()?.birthday)
+        importer.finishImport()
+        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", importedHeight) }
+        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", correctedHeight) }
+        verify(exactly = 1) { navigationRouter.forward(KeepOpenArgs(KeepOpenFlow.VIEW_ONLY)) }
+    }
+
+    @Test
     fun anAccountWithHistoryGoesThroughTheKeepOpenScreen() =
         runTest {
             val birthday = BlockHeight.new(2_000_000L)
@@ -287,7 +307,7 @@ class ImportViewOnlyAccountUseCaseTest {
 
     @Test
     fun theImporterReportsThePendingKey() {
-        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter)
+        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
         assertFalse(importer.hasPendingImport())
 
         repository.set(PendingViewOnlyImport(ufvk = UFVK, name = ""))
@@ -297,7 +317,7 @@ class ImportViewOnlyAccountUseCaseTest {
 
     @Test
     fun theImporterStoresTheBirthdayAndOpensTheNamingStepWithoutImporting() {
-        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter)
+        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
         repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", color = Color(PICKED)))
         val birthday = BlockHeight.new(2_000_000L)
 
@@ -313,7 +333,7 @@ class ImportViewOnlyAccountUseCaseTest {
 
     @Test
     fun theImporterFailsWhenNothingIsPending() {
-        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter)
+        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
 
         assertFailsWith<ViewOnlyPendingImportMissingException> { importer.continueWithBirthday(null) }
 

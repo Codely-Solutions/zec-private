@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.connecthw
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.BlockHeight
 import com.keystone.module.ZcashAccounts
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
 import java.util.UUID
 
@@ -23,7 +24,7 @@ class KeystoneEnrollmentSession {
     }
 
     internal class Pending(val id: String, val accounts: ZcashAccounts) {
-        var imported: Imported? = null
+        val imported = MutableStateFlow<Imported?>(null)
     }
 
     internal data class Imported(val account: Account, val birthday: BlockHeight?)

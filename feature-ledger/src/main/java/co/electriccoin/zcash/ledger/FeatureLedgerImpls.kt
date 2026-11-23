@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.common.usecase.CreateLedgerAccountUseCase
 import co.electriccoin.zcash.ui.dialogComposable
 import co.electriccoin.zcash.ui.screen.connectledger.connect.LedgerConnectArgs
 import co.electriccoin.zcash.ui.screen.connectledger.connect.LedgerConnectScreen
+import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
 import co.electriccoin.zcash.ui.screen.connectledger.connected.LedgerConnectedArgs
 import co.electriccoin.zcash.ui.screen.connectledger.connected.LedgerConnectedScreen
 import co.electriccoin.zcash.ui.screen.connectledger.handshake.LedgerHandshakeArgs
@@ -26,11 +27,20 @@ import co.electriccoin.zcash.ui.screen.connectledger.turnon.LedgerTurnOnArgs
 import co.electriccoin.zcash.ui.screen.connectledger.turnon.LedgerTurnOnScreen
 import co.electriccoin.zcash.ui.screen.signledgertransaction.LedgerSignArgs
 import co.electriccoin.zcash.ui.screen.signledgertransaction.LedgerSignScreen
+import kotlinx.coroutines.flow.map
 
 class LedgerAccountImporterImpl(
     private val ledgerPairingRepository: LedgerPairingRepository,
     private val createLedgerAccount: CreateLedgerAccountUseCase,
 ) : LedgerAccountImporter {
+    override val committedBirthdays = ledgerPairingRepository.imported.map {
+        it?.let { account -> CommittedEnrollmentBirthday(account.birthday, account.account) }
+    }
+
+    override fun committedBirthday() = ledgerPairingRepository.get()
+        ?.let(ledgerPairingRepository::importedAccount)
+        ?.let { CommittedEnrollmentBirthday(it.birthday, it.account) }
+
     override fun hasPendingPairing(): Boolean = ledgerPairingRepository.get() != null
 
     override suspend fun importAccount(birthday: BlockHeight?) = createLedgerAccount(birthday)

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="enrollment_finish_setup">Finish setup</string>
+    <string name="enrollment_committed_height">The account was imported with block height %1$s. Finish setup to use it.</string>
+    <string name="enrollment_committed_tip">The account was imported from the chain tip. Finish setup to use it.</string>
+</resources>

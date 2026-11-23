@@ -7,12 +7,14 @@ import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.ViewOnlyPendingImportMissingException
 import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepository
+import co.electriccoin.zcash.ui.common.usecase.ImportViewOnlyAccountUseCase
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyAccountImporter
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyNavContributor
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyNavigator
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.dialogComposable
+import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
 import co.electriccoin.zcash.ui.screen.connecthw.HWWalletBranding
 import co.electriccoin.zcash.ui.screen.viewingkey.addaccount.AddVKAccountArgs
 import co.electriccoin.zcash.ui.screen.viewingkey.addaccount.AddVKAccountScreen
@@ -28,6 +30,7 @@ import co.electriccoin.zcash.ui.screen.viewingkey.remove.RemoveVKAccountArgs
 import co.electriccoin.zcash.ui.screen.viewingkey.remove.RemoveVKAccountScreen
 import co.electriccoin.zcash.ui.screen.viewingkey.scan.ScanVKArgs
 import co.electriccoin.zcash.ui.screen.viewingkey.scan.ScanVKScreen
+import kotlinx.coroutines.flow.map
 
 /**
  * The module's own copy and images for everything ui-lib shows about a view-only account.
@@ -96,17 +99,27 @@ private object VKEnrollmentTag {
 internal class ViewOnlyAccountImporterImpl(
     private val pendingImportRepository: ViewOnlyPendingImportRepository,
     private val navigationRouter: NavigationRouter,
+    private val importViewOnlyAccount: ImportViewOnlyAccountUseCase,
 ) : ViewOnlyAccountImporter {
+    override val committedBirthdays = pendingImportRepository.pendingImport.map {
+        it?.committedBirthday
+    }
+
+    override fun committedBirthday() = pendingImportRepository.get()?.committedBirthday
+
     override fun hasPendingImport(): Boolean = pendingImportRepository.get() != null
 
     override fun continueWithBirthday(birthday: BlockHeight?) {
         val pending = pendingImportRepository.get() ?: throw ViewOnlyPendingImportMissingException()
-        if (pending.importedAccount == null) {
-            if (!pendingImportRepository.replace(pending, pending.copy(birthday = birthday))) {
-                throw ViewOnlyPendingImportMissingException()
-            }
+        if (pending.importedAccount != null) return
+        if (!pendingImportRepository.replace(pending, pending.copy(birthday = birthday))) {
+            throw ViewOnlyPendingImportMissingException()
         }
         navigationRouter.forward(NameVKArgs)
+    }
+
+    override suspend fun finishImport() {
+        if (pendingImportRepository.get()?.importedAccount != null) importViewOnlyAccount()
     }
 }
 

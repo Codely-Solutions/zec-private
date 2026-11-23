@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.asStateFlow
 interface LedgerPairingRepository {
     val pairing: StateFlow<LedgerAccountPairing?>
 
+    val imported: StateFlow<ImportedLedgerAccount?>
+
     fun set(pairing: LedgerAccountPairing)
 
     fun get(): LedgerAccountPairing?
@@ -32,13 +34,14 @@ data class ImportedLedgerAccount(val account: Account, val birthday: BlockHeight
 
 class LedgerPairingRepositoryImpl : LedgerPairingRepository {
     private val mutablePairing = MutableStateFlow<LedgerAccountPairing?>(null)
-    private var importedAccount: ImportedLedgerAccount? = null
+    private val mutableImported = MutableStateFlow<ImportedLedgerAccount?>(null)
+    override val imported = mutableImported.asStateFlow()
 
     override val pairing: StateFlow<LedgerAccountPairing?> = mutablePairing.asStateFlow()
 
     @Synchronized
     override fun set(pairing: LedgerAccountPairing) {
-        importedAccount = null
+        mutableImported.value = null
         mutablePairing.value = pairing
     }
 
@@ -46,18 +49,18 @@ class LedgerPairingRepositoryImpl : LedgerPairingRepository {
 
     @Synchronized
     override fun clear() {
-        importedAccount = null
+        mutableImported.value = null
         mutablePairing.value = null
     }
 
     @Synchronized
     override fun importedAccount(pairing: LedgerAccountPairing) =
-        importedAccount.takeIf { mutablePairing.value === pairing }
+        mutableImported.value.takeIf { mutablePairing.value === pairing }
 
     @Synchronized
     override fun recordImport(pairing: LedgerAccountPairing, account: ImportedLedgerAccount): Boolean {
         if (mutablePairing.value !== pairing) return false
-        importedAccount = account
+        mutableImported.value = account
         return true
     }
 

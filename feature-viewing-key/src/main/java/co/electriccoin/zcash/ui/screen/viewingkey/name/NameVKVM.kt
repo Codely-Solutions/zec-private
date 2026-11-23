@@ -16,6 +16,7 @@ import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.ImportViewOnlyAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.IsAccountNameTakenUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
+import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,6 +54,8 @@ internal class NameVKVM(
 
     private var continueJob: Job? = null
 
+    private var leaving = false
+
     /**
      * The typed name with whether another account already shows it, which the new name must not
      * repeat; until the accounts load, the name shows without the error.
@@ -67,7 +70,7 @@ internal class NameVKVM(
                 if (approved != null) approved.color else color,
                 isDuplicate = approved == null && check.isTaken,
                 isImporting = lce.loading,
-                isFinalizing = approved != null,
+                committedBirthday = approved?.committedBirthday,
             )
         }.withLce(importLce, errorStateMapper::mapToState)
             .stateIn(
@@ -76,7 +79,7 @@ internal class NameVKVM(
                     LceState(
                         content = createState(
                             name.value, color.value, isDuplicate = false, isImporting = false,
-                            isFinalizing = pendingImportRepository.get()?.importedAccount != null,
+                            committedBirthday = pendingImportRepository.get()?.committedBirthday,
                         )
                     )
             )
@@ -92,22 +95,22 @@ internal class NameVKVM(
         color: Color?,
         isDuplicate: Boolean,
         isImporting: Boolean,
-        isFinalizing: Boolean,
+        committedBirthday: CommittedEnrollmentBirthday?,
     ) = NameVKState.create(
         name = name,
         color = color,
         isDuplicate = isDuplicate,
         isImporting = isImporting,
-        isFinalizing = isFinalizing,
+        committedBirthday = committedBirthday,
         onAvatarEditClick = ::onAvatarEditClick,
         onValueChange = ::onValueChange,
-        onContinueClick = ::onContinueClick,
+        onContinueClick = { onContinueClick(committedBirthday) },
         onBack = ::onBack,
     )
 
     private fun onAvatarEditClick() =
         importLce.guardLoading {
-            if (pendingImportRepository.get()?.importedAccount != null) return@guardLoading
+            if (leaving || pendingImportRepository.get()?.importedAccount != null) return@guardLoading
             if (colorPickerJob?.isActive == true) return@guardLoading
             colorPickerJob =
                 viewModelScope.launch {
@@ -117,7 +120,7 @@ internal class NameVKVM(
 
     private fun onValueChange(value: String) =
         importLce.guardLoading {
-            if (pendingImportRepository.get()?.importedAccount == null) {
+            if (!leaving && pendingImportRepository.get()?.importedAccount == null) {
                 name.update { AccountNameLimit.cap(value) }
             }
         }
@@ -126,14 +129,16 @@ internal class NameVKVM(
      * A second tap while the import runs is ignored: restarting would cancel the running import
      * inside the SDK call, after the account exists but before it is selected.
      */
-    private fun onContinueClick() =
+    private fun onContinueClick(committedBirthday: CommittedEnrollmentBirthday?) =
         importLce.guardLoading {
-            if (continueJob?.isActive == true) return@guardLoading
+            if (leaving || continueJob?.isActive == true) return@guardLoading
+            val pending = pendingImportRepository.get()
+            if (pending?.committedBirthday != committedBirthday) return@guardLoading
             val normalized = AccountNameLimit.normalize(name.value)
             if (normalized.isEmpty()) return@guardLoading
             continueJob =
                 viewModelScope.launch {
-                    val pending = pendingImportRepository.get()
+                    if (pendingImportRepository.get() !== pending) return@launch
                     if (pending?.birthday == null) {
                         navigationRouter.backToRoot()
                         return@launch
@@ -153,13 +158,11 @@ internal class NameVKVM(
                 }
         }
 
-    /**
-     * Returns to the birthday screen underneath, which still needs the pending key and birthday, so
-     * both are kept; the name and the colour are dropped, since they are only stored on Continue.
-     * Ignored while the import runs.
-     */
+    /** Returns to the birthday screen, retaining any import the SDK has already completed. */
     private fun onBack() =
         importLce.guardLoading {
+            if (leaving) return@guardLoading
+            leaving = true
             colorPickerJob?.cancel()
             continueJob?.cancel()
             navigationRouter.back()

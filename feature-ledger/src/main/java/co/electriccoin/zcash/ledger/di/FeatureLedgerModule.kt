@@ -73,7 +73,7 @@ val featureLedgerModule =
 
         singleOf(::CreateLedgerAccountUseCase)
         factoryOf(::ObserveLedgerDevicesUseCase)
-        factoryOf(::PairLedgerDeviceUseCase)
+        singleOf(::PairLedgerDeviceUseCase)
         factoryOf(::ConnectLedgerDeviceUseCase)
         factoryOf(::OpenLedgerZcashAppUseCase)
         singleOf(::SubmitLedgerProposalUseCase)

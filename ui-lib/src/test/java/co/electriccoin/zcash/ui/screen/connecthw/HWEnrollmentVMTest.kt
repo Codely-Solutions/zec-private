@@ -1,9 +1,14 @@
 package co.electriccoin.zcash.ui.screen.connecthw
 
+import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.LceError
+import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
+import co.electriccoin.zcash.ui.common.usecase.CreateKeystoneAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
@@ -18,7 +23,10 @@ import co.electriccoin.zcash.ui.screen.connecthw.height.HWHeightArgs
 import co.electriccoin.zcash.ui.screen.connecthw.height.HWHeightVM
 import co.electriccoin.zcash.ui.screen.connecthw.neworactive.HWNewOrActiveArgs
 import co.electriccoin.zcash.ui.screen.connecthw.neworactive.HWNewOrActiveVM
+import co.electriccoin.zcash.ui.screen.connectkeystone.connected.KeystoneConnectedArgs
 import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
+import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
+import com.keystone.module.ZcashAccounts
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -28,6 +36,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -36,6 +45,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.serialization.json.Json
+import java.io.IOException
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -198,6 +208,7 @@ class HWEnrollmentVMTest {
                 val createAccount =
                     mockk<CreateHWWalletAccountUseCase>(relaxed = true) {
                         every { isReady(any()) } returns false
+                        every { observeCommittedBirthday(any()) } returns flowOf(null)
                     }
                 val navigationRouter = mockk<NavigationRouter>(relaxed = true)
 
@@ -209,6 +220,7 @@ class HWEnrollmentVMTest {
                 val createAccount =
                     mockk<CreateHWWalletAccountUseCase>(relaxed = true) {
                         every { isReady(any()) } returns false
+                        every { observeCommittedBirthday(any()) } returns flowOf(null)
                     }
                 val routers = List(3) { mockk<NavigationRouter>(relaxed = true) }
 
@@ -405,9 +417,72 @@ class HWEnrollmentVMTest {
             }
         }
 
+    @Test
+    fun retryingKeystoneFromTheTipKeepsTheCommittedBirthdayAcrossBackAndOlderCallbacks() =
+        runTest {
+            val created = mockk<Account>()
+            val accountsDataSource = mockk<AccountDataSource> {
+                coEvery { importKeystoneAccount(any(), any(), any(), null) } returns created
+                coEvery { selectAccount(created) } throws IOException() andThen Unit
+            }
+            val synchronizer = mockk<SynchronizerProvider>(relaxed = true)
+            val router = mockk<NavigationRouter>(relaxed = true)
+            val session = KeystoneEnrollmentSession()
+            val accounts = mockk<ZcashAccounts>(relaxed = true) {
+                every { accounts } returns listOf(mockk(relaxed = true))
+            }
+            val enrollment = HWWalletEnrollment.Keystone(session.start(accounts))
+            val createAccount = CreateHWWalletAccountUseCase(
+                keystoneSession = session,
+                createKeystoneAccount = CreateKeystoneAccountUseCase(accountsDataSource, synchronizer),
+                ledgerAccountImporter = mockk(relaxed = true),
+                viewOnlyAccountImporter = mockk(relaxed = true),
+                navigationRouter = router,
+            )
+            val question = newOrActiveVM(enrollment, createAccount, router)
+            val height = heightVM(enrollment, createAccount, router)
+            collect { question.state.collect { } }
+            collect { question.finalization.collect { } }
+            collect { height.state.collect { } }
+            collect { height.finalization.collect { } }
+            val originalQuestion = assertNotNull(question.state.value.content)
+            assertNotNull(height.state.value.content).blockHeight.onValueChange(heightText(VALID_HEIGHT))
+            runCurrent()
+            val originalHeight = assertNotNull(height.state.value.content)
+            assertTrue(originalHeight.primaryButton.isEnabled)
+
+            originalQuestion.newDevice.onClick()
+            runCurrent()
+            val failure = question.state.value.error as LceError.BottomSheet
+            failure.state.onBack()
+            runCurrent()
+            assertTrue(createAccount.isReady(enrollment))
+
+            originalQuestion.activeDevice.onClick()
+            originalHeight.primaryButton.onClick()
+            runCurrent()
+            verify(exactly = 0) { router.forward(HWDateArgs(enrollment)) }
+            coVerify(exactly = 1) { accountsDataSource.selectAccount(created) }
+
+            assertNull(assertNotNull(height.finalization.value).birthday.height)
+            originalHeight.onBack()
+            verify(exactly = 1) { router.back() }
+            val finalization = assertNotNull(question.finalization.value)
+            assertNull(finalization.birthday.height)
+            finalization.finish.onClick()
+            runCurrent()
+
+            coVerify(exactly = 1) { accountsDataSource.importKeystoneAccount(any(), any(), any(), any()) }
+            coVerify(exactly = 1) { accountsDataSource.importKeystoneAccount(any(), any(), any(), null) }
+            coVerify(exactly = 2) { accountsDataSource.selectAccount(created) }
+            verify(exactly = 1) { router.replaceFrom(ScanKeystoneSignInRequest::class, KeystoneConnectedArgs) }
+        }
+
     private fun suspendedUseCase(importing: CompletableDeferred<Unit>) =
         mockk<CreateHWWalletAccountUseCase>(relaxed = true) {
             every { isReady(any()) } returns true
+            every { committedBirthday(any()) } returns null
+            every { observeCommittedBirthday(any()) } returns flowOf(null)
             coEvery { this@mockk.invoke(any(), any()) } coAnswers { importing.await() }
         }
 
@@ -417,6 +492,8 @@ class HWEnrollmentVMTest {
     private fun readyUseCase() =
         mockk<CreateHWWalletAccountUseCase>(relaxed = true) {
             every { isReady(any()) } returns true
+            every { committedBirthday(any()) } returns null
+            every { observeCommittedBirthday(any()) } returns flowOf(null)
             coEvery { this@mockk.invoke(any(), any()) } returns Unit
         }
 

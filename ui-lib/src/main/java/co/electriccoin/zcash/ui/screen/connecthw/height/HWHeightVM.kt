@@ -20,6 +20,7 @@ import co.electriccoin.zcash.ui.design.component.NumberTextFieldInnerState
 import co.electriccoin.zcash.ui.design.component.NumberTextFieldState
 import co.electriccoin.zcash.ui.screen.common.BlockHeightState
 import co.electriccoin.zcash.ui.screen.connecthw.brandingOf
+import co.electriccoin.zcash.ui.screen.connecthw.observeEnrollmentFinalization
 import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -40,6 +41,8 @@ class HWHeightVM(
     private val branding = brandingOf(args.enrollment, viewOnlyContent)
     private val blockHeightText = MutableStateFlow(NumberTextFieldInnerState())
     private val createAccountLce = mutableLce<Unit>()
+
+    internal val finalization = observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, createAccountLce)
 
     val state: StateFlow<LceState<BlockHeightState>> =
         combine(blockHeightText, createAccountLce.state) { text, lce ->
@@ -86,14 +89,19 @@ class HWHeightVM(
      */
     private fun onConfirmClick(height: Long) =
         createAccountLce.guardLoading {
+            if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return@guardLoading
             createAccountLce.execute {
                 createHWWalletAccount(args.enrollment, BlockHeight.new(height))
             }
         }
 
-    private fun onInfoClick() = navigationRouter.forward(HeightInfoArgs)
+    private fun onInfoClick() {
+        if (createHWWalletAccount.committedBirthday(args.enrollment) == null) navigationRouter.forward(HeightInfoArgs)
+    }
 
     private fun onBack() = createAccountLce.guardLoading { navigationRouter.back() }
 
-    private fun onValueChanged(state: NumberTextFieldInnerState) = blockHeightText.update { state }
+    private fun onValueChanged(state: NumberTextFieldInnerState) {
+        if (createHWWalletAccount.committedBirthday(args.enrollment) == null) blockHeightText.update { state }
+    }
 }

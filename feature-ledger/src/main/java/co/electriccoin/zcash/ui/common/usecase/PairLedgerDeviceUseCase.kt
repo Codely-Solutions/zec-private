@@ -2,7 +2,6 @@ package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.ledger.LedgerAccountPairing
 import cash.z.ecc.android.sdk.ledger.LedgerBluetoothDevice
-import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.LedgerDeviceDataSource
@@ -10,7 +9,15 @@ import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
 import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepository
+import co.electriccoin.zcash.ui.common.repository.LedgerRepairTarget
 import co.electriccoin.zcash.ui.common.repository.LedgerRepairTargetRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 /**
  * Pairs the ZIP 32 account the user chose on the device and stashes the result for the birthday
@@ -32,15 +39,36 @@ class PairLedgerDeviceUseCase(
     private val accountDataSource: AccountDataSource,
     private val ledgerAccountBindingProvider: LedgerAccountBindingProvider,
 ) {
+    private val bindingMutex = Mutex()
+
+    @Suppress("TooGenericExceptionCaught")
     suspend operator fun invoke(
         device: LedgerBluetoothDevice,
         zip32AccountIndex: Zip32AccountIndex,
     ): PairLedgerDeviceResult {
+        val target = ledgerRepairTargetRepository.current()
+        return try {
+            pairForTarget(device, zip32AccountIndex, target)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            currentCoroutineContext().ensureActive()
+            if (ledgerRepairTargetRepository.current() === target) throw e
+            PairLedgerDeviceResult.Superseded
+        }
+    }
+
+    private suspend fun pairForTarget(
+        device: LedgerBluetoothDevice,
+        zip32AccountIndex: Zip32AccountIndex,
+        target: LedgerRepairTarget?,
+    ): PairLedgerDeviceResult {
         val pairing = ledgerDeviceDataSource.pair(device, zip32AccountIndex)
         val ledgerAccounts = accountDataSource.getAllAccounts().filterIsInstance<LedgerAccount>()
         val existing = ledgerAccounts.firstOrNull { account -> account.sdkAccount.ufvk == pairing.ufvk.encoding }
-        val target = ledgerRepairTargetRepository.get()
         return when {
+            ledgerRepairTargetRepository.current() !== target -> PairLedgerDeviceResult.Superseded
+
             target != null -> {
                 repair(target, existing, pairing)
             }
@@ -67,13 +95,12 @@ class PairLedgerDeviceUseCase(
     }
 
     private suspend fun repair(
-        target: AccountUuid,
+        target: LedgerRepairTarget,
         existing: LedgerAccount?,
         pairing: LedgerAccountPairing,
     ): PairLedgerDeviceResult =
-        if (existing != null && existing.sdkAccount.accountUuid == target) {
-            ledgerRepairTargetRepository.clear()
-            rebind(existing, pairing)
+        if (existing != null && existing.sdkAccount.accountUuid == target.accountUuid) {
+            rebind(existing, pairing, target)
         } else {
             ledgerPairingRepository.clear()
             PairLedgerDeviceResult.WrongLedger
@@ -82,19 +109,30 @@ class PairLedgerDeviceUseCase(
     private suspend fun rebind(
         existing: LedgerAccount,
         pairing: LedgerAccountPairing,
-    ): PairLedgerDeviceResult {
+        target: LedgerRepairTarget? = null,
+    ): PairLedgerDeviceResult = bindingMutex.withLock {
+        if (ledgerRepairTargetRepository.current() !== target) return PairLedgerDeviceResult.Superseded
         ledgerPairingRepository.clear()
-        ledgerAccountBindingProvider.save(
-            accountUuid = existing.sdkAccount.accountUuid,
-            deviceIdentityEncoding = pairing.binding.deviceIdentity.encoding,
-            zip32AccountIndex = pairing.binding.zip32AccountIndex.index,
-        )
-        return PairLedgerDeviceResult.Rebound(existing)
+        withContext(NonCancellable) {
+            ledgerAccountBindingProvider.save(
+                accountUuid = existing.sdkAccount.accountUuid,
+                deviceIdentityEncoding = pairing.binding.deviceIdentity.encoding,
+                zip32AccountIndex = pairing.binding.zip32AccountIndex.index,
+            )
+            val ownsResult = if (target == null) {
+                ledgerRepairTargetRepository.current() == null
+            } else {
+                ledgerRepairTargetRepository.clear(target)
+            }
+            if (ownsResult) PairLedgerDeviceResult.Rebound(existing) else PairLedgerDeviceResult.Superseded
+        }
     }
 }
 
 sealed interface PairLedgerDeviceResult {
     data object Paired : PairLedgerDeviceResult
+
+    data object Superseded : PairLedgerDeviceResult
 
     data class AlreadyAdded(
         val account: WalletAccount

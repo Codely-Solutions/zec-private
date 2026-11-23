@@ -247,6 +247,8 @@ class LedgerHandshakeVM(
             val result = pairLedgerDevice(device, zip32AccountIndex)
             currentCoroutineContext().ensureActive()
             when (result) {
+                PairLedgerDeviceResult.Superseded -> Unit
+
                 is PairLedgerDeviceResult.Paired -> {
                     navigationRouter.replace(HWNewOrActiveArgs(HWWalletEnrollment.Ledger))
                 }
@@ -266,20 +268,31 @@ class LedgerHandshakeVM(
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (e: LedgerPairingTimedOutException) {
-            Twig.warn { "Ledger enrollment failed: ${e.javaClass.simpleName}" }
-            showIssue(LedgerIssue.disconnectedDuringSetup)
-        } catch (e: LedgerException) {
-            showIssue(e.toEnrollmentIssue(LedgerIssueContext.ENROLLMENT))
         } catch (e: Exception) {
-            internalState.update {
-                it.copy(
-                    phase = LedgerHandshakePhase.IDLE,
-                    issue = LedgerIssue.unknown,
-                    isSheetShown = false,
-                )
+            currentCoroutineContext().ensureActive()
+            showHandshakeFailure(e)
+        }
+    }
+
+    private fun showHandshakeFailure(failure: Exception) {
+        when (failure) {
+            is LedgerPairingTimedOutException -> {
+                Twig.warn { "Ledger enrollment failed: ${failure.javaClass.simpleName}" }
+                showIssue(LedgerIssue.disconnectedDuringSetup)
             }
-            navigateToError(ErrorArgs.General(e))
+
+            is LedgerException -> showIssue(failure.toEnrollmentIssue(LedgerIssueContext.ENROLLMENT))
+
+            else -> {
+                internalState.update {
+                    it.copy(
+                        phase = LedgerHandshakePhase.IDLE,
+                        issue = LedgerIssue.unknown,
+                        isSheetShown = false,
+                    )
+                }
+                navigateToError(ErrorArgs.General(failure))
+            }
         }
     }
 

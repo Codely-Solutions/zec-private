@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.common.repository
 import androidx.compose.ui.graphics.Color
 import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.BlockHeight
+import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,6 +61,9 @@ internal data class PendingViewOnlyImport(
     val birthday: BlockHeight? = null,
     val importedAccount: Account? = null,
 ) {
+    val committedBirthday: CommittedEnrollmentBirthday?
+        get() = importedAccount?.let { CommittedEnrollmentBirthday(birthday, it) }
+
     /**
      * Overridden so the viewing key is never printed.
      */

@@ -1,5 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import android.content.SharedPreferences
+
 import cash.z.ecc.android.sdk.ledger.LedgerAccountBinding
 import cash.z.ecc.android.sdk.ledger.LedgerAccountPairing
 import cash.z.ecc.android.sdk.ledger.LedgerBluetoothDevice
@@ -9,12 +11,15 @@ import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.UnifiedFullViewingKey
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
+import co.electriccoin.zcash.preference.AndroidPreferenceProvider
+import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.LedgerDeviceDataSource
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
+import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProviderImpl
 import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepository
 import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.LedgerRepairTargetRepository
@@ -23,9 +28,19 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
@@ -37,6 +52,7 @@ import kotlin.test.assertTrue
  * is stored with it. Pairing an account again, and pairing a second Ledger, report any other viewing
  * key as the wrong Ledger and import nothing.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class PairLedgerDeviceUseCaseTest {
     private val bindingProvider = mockk<LedgerAccountBindingProvider>(relaxed = true)
 
@@ -181,6 +197,114 @@ class PairLedgerDeviceUseCaseTest {
         }
 
     @Test
+    fun aFailedWriteToAnAlreadyBoundAccountCanBeRetried() = runTest {
+        val pairing = pairing(ufvk = "ufvk-known")
+        val target = ledgerAccount(ufvk = "ufvk-known", bound = true)
+        val accountUuid = target.sdkAccount.accountUuid
+        val repository = LedgerPairingRepositoryImpl()
+        val repairTarget = repairTarget(target)
+        val useCase = useCase(pairing, repository, existing = listOf(target), repairTarget = repairTarget)
+        coEvery { bindingProvider.save(any(), any(), any()) } throws IOException() andThen Unit
+
+        assertFailsWith<IOException> { useCase(device, firstAccount) }
+
+        assertEquals(accountUuid, repairTarget.get())
+        assertEquals(PairLedgerDeviceResult.Rebound(target), useCase(device, firstAccount))
+        assertNull(repairTarget.get())
+        coVerify(exactly = 2) { bindingProvider.save(accountUuid, IDENTITY, 0L) }
+    }
+
+    @Test
+    fun aFailedAndroidCommitKeepsThePreviousBindingInMemoryAndOnDiskUntilRetry() = runTest {
+        val storage = PublishingPreferenceFixture("tpk0-previous|3")
+        val android = AndroidPreferenceProvider(storage.preferences, StandardTestDispatcher(testScheduler))
+        val provider = LedgerAccountBindingProviderImpl(mockk<EncryptedPreferenceProvider> {
+            coEvery { this@mockk.invoke() } returns android
+        })
+        val target = ledgerAccount(ufvk = "ufvk-known", bound = true)
+        val accountUuid = target.sdkAccount.accountUuid
+        val pairing = pairing(ufvk = "ufvk-known", zip32AccountIndex = 4L)
+        val repair = repairTarget(target)
+        val useCase = useCase(dataSource(pairing), LedgerPairingRepositoryImpl(), listOf(target), repair, provider)
+        val observed = mutableListOf<String>()
+        backgroundScope.launch {
+            provider.observe(accountUuid).collect { binding ->
+                binding?.let { observed.add(it.deviceIdentityEncoding) }
+            }
+        }
+        runCurrent()
+
+        storage.failNextCommit = true
+        assertFailsWith<IOException> { useCase(device, firstAccount) }
+        runCurrent()
+
+        assertEquals(accountUuid, repair.get())
+        assertEquals("tpk0-previous|3", storage.durable)
+        assertEquals("tpk0-previous", provider.observe(accountUuid).first()?.deviceIdentityEncoding)
+        assertEquals(listOf("tpk0-previous"), observed.distinct())
+
+        assertEquals(PairLedgerDeviceResult.Rebound(target), useCase(device, firstAccount))
+        runCurrent()
+        assertEquals("$IDENTITY|4", storage.durable)
+        assertEquals(IDENTITY, provider.observe(accountUuid).first()?.deviceIdentityEncoding)
+        assertEquals(listOf("tpk0-previous", IDENTITY), observed.distinct())
+        assertNull(repair.get())
+    }
+
+    @Test
+    fun anEnteredRepairCannotRetireANewerRepairOfTheSameAccount() = runTest {
+        val pairing = pairing(ufvk = "ufvk-known")
+        val target = ledgerAccount(ufvk = "ufvk-known", bound = true)
+        val repair = repairTarget(target)
+        val useCase = useCase(pairing, LedgerPairingRepositoryImpl(), listOf(target), repair)
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        coEvery { bindingProvider.save(any(), any(), any()) } coAnswers {
+            entered.complete(Unit)
+            release.await()
+        }
+
+        val oldAttempt = async { useCase(device, firstAccount) }
+        entered.await()
+        repair.set(target.sdkAccount.accountUuid, target.zip32AccountIndex)
+        val newer = assertNotNull(repair.current())
+        release.complete(Unit)
+
+        assertEquals(PairLedgerDeviceResult.Superseded, oldAttempt.await())
+        assertSame(newer, repair.current())
+        assertEquals(PairLedgerDeviceResult.Rebound(target), useCase(device, firstAccount))
+        assertNull(repair.get())
+    }
+
+    @Test
+    fun aSupersededBindingFailureLeavesTheNewRepairInControl() = runTest {
+        val pairing = pairing(ufvk = "ufvk-known")
+        val target = ledgerAccount(ufvk = "ufvk-known", bound = true)
+        val repair = repairTarget(target)
+        val useCase = useCase(pairing, LedgerPairingRepositoryImpl(), listOf(target), repair)
+        val writing = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        coEvery { bindingProvider.save(any(), any(), any()) } coAnswers {
+            writing.complete(Unit)
+            release.await()
+            throw IOException("Binding write failed")
+        }
+
+        val superseded = async { useCase(device, firstAccount) }
+        writing.await()
+        repair.set(target.sdkAccount.accountUuid, target.zip32AccountIndex)
+        val newer = assertNotNull(repair.current())
+        release.complete(Unit)
+
+        assertEquals(PairLedgerDeviceResult.Superseded, superseded.await())
+        assertSame(newer, repair.current())
+
+        coEvery { bindingProvider.save(any(), any(), any()) } returns Unit
+        assertEquals(PairLedgerDeviceResult.Rebound(target), useCase(device, firstAccount))
+        assertNull(repair.get())
+    }
+
+    @Test
     fun pairingTheTargetAgainWithAnotherLedgerIsTheWrongLedgerAndImportsNothing() =
         runTest {
             val target = ledgerAccount(ufvk = "ufvk-known", bound = false)
@@ -312,6 +436,7 @@ class PairLedgerDeviceUseCaseTest {
         repository: LedgerPairingRepository,
         existing: List<WalletAccount>,
         repairTarget: LedgerRepairTargetRepository = LedgerRepairTargetRepositoryImpl(),
+        provider: LedgerAccountBindingProvider = bindingProvider,
     ) = PairLedgerDeviceUseCase(
         ledgerDeviceDataSource = dataSource,
         ledgerPairingRepository = repository,
@@ -320,7 +445,7 @@ class PairLedgerDeviceUseCaseTest {
             mockk<AccountDataSource> {
                 coEvery { getAllAccounts() } returns existing
             },
-        ledgerAccountBindingProvider = bindingProvider,
+        ledgerAccountBindingProvider = provider,
     )
 
     private fun dataSource(pairing: LedgerAccountPairing) =
@@ -372,3 +497,37 @@ class PairLedgerDeviceUseCaseTest {
 }
 
 private const val IDENTITY = "tpk0-identity"
+
+internal class PublishingPreferenceFixture(initial: String) {
+    var durable: String? = initial
+        private set
+    var failNextCommit = false
+    private var cached: String? = initial
+    private val listeners = mutableSetOf<SharedPreferences.OnSharedPreferenceChangeListener>()
+    val preferences = mockk<SharedPreferences> {
+        every { getString(any(), null) } answers { cached }
+        every { registerOnSharedPreferenceChangeListener(any()) } answers { listeners.add(firstArg()) }
+        every { unregisterOnSharedPreferenceChangeListener(any()) } answers { listeners.remove(firstArg()) }
+    }
+
+    init {
+        var key: String? = null
+        var staged: String? = null
+        val editor = mockk<SharedPreferences.Editor> {
+            every { putString(any(), any()) } answers {
+                key = firstArg()
+                staged = secondArg()
+                this@mockk
+            }
+            every { commit() } answers {
+                cached = staged
+                listeners.forEach { it.onSharedPreferenceChanged(preferences, checkNotNull(key)) }
+                val fail = failNextCommit
+                failNextCommit = false
+                if (!fail) durable = staged
+                !fail
+            }
+        }
+        every { preferences.edit() } returns editor
+    }
+}

@@ -4,7 +4,9 @@ import androidx.annotation.DrawableRes
 import androidx.navigation.NavGraphBuilder
 import cash.z.ecc.android.sdk.model.BlockHeight
 import co.electriccoin.zcash.ui.design.util.StringResource
+import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
 import co.electriccoin.zcash.ui.screen.connecthw.HWWalletBranding
+import kotlinx.coroutines.flow.Flow
 
 /**
  * The seam between ui-lib and the feature-viewing-key module, shaped like LedgerContracts.kt: ui-lib
@@ -42,6 +44,9 @@ interface ViewOnlyNavContributor {
  * birthday screens come before the name, so they never import the account themselves.
  */
 interface ViewOnlyAccountImporter {
+    val committedBirthdays: Flow<CommittedEnrollmentBirthday?>
+
+    fun committedBirthday(): CommittedEnrollmentBirthday?
     /**
      * False after process death emptied the in-memory pending import; the screens then return to
      * the root.
@@ -56,6 +61,8 @@ interface ViewOnlyAccountImporter {
      *         nothing is pending.
      */
     fun continueWithBirthday(birthday: BlockHeight?)
+
+    suspend fun finishImport()
 }
 
 /**

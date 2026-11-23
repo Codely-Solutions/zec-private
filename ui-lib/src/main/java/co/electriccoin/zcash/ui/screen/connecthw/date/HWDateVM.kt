@@ -6,6 +6,7 @@ import cash.z.ecc.android.sdk.SdkSynchronizer
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.LceState
+import co.electriccoin.zcash.ui.common.model.guardLoading
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.model.stateIn
@@ -19,6 +20,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.fixture.WalletFixture
 import co.electriccoin.zcash.ui.screen.common.BirthdayPickerState
 import co.electriccoin.zcash.ui.screen.connecthw.brandingOf
+import co.electriccoin.zcash.ui.screen.connecthw.observeEnrollmentFinalization
 import co.electriccoin.zcash.ui.screen.connecthw.estimation.HWEstimationArgs
 import co.electriccoin.zcash.ui.screen.connecthw.height.HWHeightArgs
 import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
@@ -37,7 +39,7 @@ import kotlin.time.toKotlinInstant
  */
 class HWDateVM(
     private val args: HWDateArgs,
-    createHWWalletAccount: CreateHWWalletAccountUseCase,
+    private val createHWWalletAccount: CreateHWWalletAccountUseCase,
     private val navigationRouter: NavigationRouter,
     private val application: Application,
     private val errorStateMapper: ErrorMapperUseCase,
@@ -46,6 +48,8 @@ class HWDateVM(
     private val branding = brandingOf(args.enrollment, viewOnlyContent)
     private val selection = MutableStateFlow(WalletFixture.SAPLING_ACTIVATION_YEAR_MONTH)
     private val estimateLce = mutableLce<Unit>()
+
+    internal val finalization = observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, estimateLce)
 
     val state: StateFlow<LceState<BirthdayPickerState>> =
         combine(selection, estimateLce.state) { yearMonth, estimate ->
@@ -89,33 +93,49 @@ class HWDateVM(
         )
 
     private fun onEstimateClick(yearMonth: YearMonth) =
-        estimateLce.execute {
-            val instant =
-                yearMonth
-                    .atDay(1)
-                    .atStartOfDay()
-                    .atZone(ZoneId.systemDefault())
-                    .toInstant()
-                    .toKotlinInstant()
-            val bday =
-                SdkSynchronizer.estimateBirthdayHeight(
-                    context = application,
-                    date = instant,
-                    network = VersionInfo.NETWORK,
-                )
-            navigationRouter.forward(
-                HWEstimationArgs(
-                    enrollment = args.enrollment,
-                    blockHeight = bday.value,
-                )
-            )
+        estimateLce.guardLoading {
+            if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return@guardLoading
+            estimateLce.execute { estimateBirthday(yearMonth) }
         }
 
-    private fun onEnterBlockHeightClick() = navigationRouter.forward(HWHeightArgs(args.enrollment))
+    private suspend fun estimateBirthday(yearMonth: YearMonth) {
+        if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return
+        val instant =
+            yearMonth
+                .atDay(1)
+                .atStartOfDay()
+                .atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toKotlinInstant()
+        val bday =
+            SdkSynchronizer.estimateBirthdayHeight(
+                context = application,
+                date = instant,
+                network = VersionInfo.NETWORK,
+            )
+        if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return
+        navigationRouter.forward(
+            HWEstimationArgs(
+                enrollment = args.enrollment,
+                blockHeight = bday.value,
+            )
+        )
+    }
 
-    private fun onBack() = navigationRouter.back()
+    private fun onEnterBlockHeightClick() =
+        estimateLce.guardLoading {
+            if (createHWWalletAccount.committedBirthday(args.enrollment) == null) {
+                navigationRouter.forward(HWHeightArgs(args.enrollment))
+            }
+        }
 
-    private fun onInfoClick() = navigationRouter.forward(HeightInfoArgs)
+    private fun onBack() = estimateLce.guardLoading { navigationRouter.back() }
 
-    private fun onYearMonthChange(yearMonth: YearMonth) = selection.update { yearMonth }
+    private fun onInfoClick() {
+        if (createHWWalletAccount.committedBirthday(args.enrollment) == null) navigationRouter.forward(HeightInfoArgs)
+    }
+
+    private fun onYearMonthChange(yearMonth: YearMonth) {
+        if (createHWWalletAccount.committedBirthday(args.enrollment) == null) selection.update { yearMonth }
+    }
 }

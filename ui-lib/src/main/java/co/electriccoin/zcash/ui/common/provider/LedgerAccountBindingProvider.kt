@@ -91,7 +91,7 @@ private class LedgerBindingPreferenceDefault(
     override suspend fun putValue(
         preferenceProvider: PreferenceProvider,
         newValue: LedgerAccountBindingData?
-    ) = preferenceProvider.putString(
+    ) = preferenceProvider.putStringWithRollback(
         key,
         newValue?.let { "${it.deviceIdentityEncoding}$SEPARATOR${it.zip32AccountIndex.index}" }
     )

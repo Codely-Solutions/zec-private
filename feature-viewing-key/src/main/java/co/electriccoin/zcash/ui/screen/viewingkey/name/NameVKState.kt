@@ -9,6 +9,7 @@ import co.electriccoin.zcash.ui.common.model.AccountNameLimit
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
 import co.electriccoin.zcash.ui.screen.viewingkey.vkAvatar
 import co.electriccoin.zcash.viewingkey.R
 
@@ -51,15 +52,19 @@ internal data class NameVKState(
             color: Color?,
             isDuplicate: Boolean,
             isImporting: Boolean,
-            isFinalizing: Boolean = false,
+            committedBirthday: CommittedEnrollmentBirthday? = null,
             onAvatarEditClick: () -> Unit,
             onValueChange: (String) -> Unit,
             onContinueClick: () -> Unit,
             onBack: () -> Unit,
         ): NameVKState {
+            val isFinalizing = committedBirthday != null
             val continueButton =
                 ButtonState(
-                    text = stringRes(R.string.view_only_continue),
+                    text = stringRes(
+                        if (isFinalizing) co.electriccoin.zcash.ui.R.string.enrollment_finish_setup
+                        else R.string.view_only_continue
+                    ),
                     style = ButtonStyle.PRIMARY,
                     isEnabled = name.isNotBlank() && !isDuplicate && !isImporting,
                     isLoading = isImporting,
@@ -76,7 +81,10 @@ internal data class NameVKState(
                                     color = color,
                                     onEditClick = onAvatarEditClick.takeUnless { isFinalizing },
                                 )
-                            ),
+                            ).let { header ->
+                                if (committedBirthday == null) header else
+                                    header.copy(message = committedBirthday.message())
+                            },
                     ),
                 nameField =
                     AccountNameFieldState.create(

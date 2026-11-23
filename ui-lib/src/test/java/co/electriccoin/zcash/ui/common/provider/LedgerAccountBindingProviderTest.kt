@@ -119,6 +119,8 @@ private class FakePreferenceProvider : PreferenceProvider {
         flowFor(key).value = value
     }
 
+    override suspend fun putStringWithRollback(key: PreferenceKey, value: String?) = putString(key, value)
+
     override suspend fun putStringSet(
         key: PreferenceKey,
         value: Set<String>?

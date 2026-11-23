@@ -15,6 +15,8 @@ import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
 import co.electriccoin.zcash.ui.common.model.SwapQuote
 import co.electriccoin.zcash.ui.common.repository.SubmitProposalState
+import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -75,6 +77,9 @@ interface LedgerProposalPipeline {
  * device just produced is still held, and the import of its account once the birthday is known.
  */
 interface LedgerAccountImporter {
+    val committedBirthdays: Flow<CommittedEnrollmentBirthday?>
+
+    fun committedBirthday(): CommittedEnrollmentBirthday?
     /**
      * False after process death emptied the in-memory pairing; the screens then return to the root.
      */

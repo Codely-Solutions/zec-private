@@ -25,7 +25,7 @@ class CreateKeystoneAccountUseCase(
         account: ZcashAccount,
         birthday: BlockHeight? = null,
     ): BlockHeight? {
-        val imported = pending.imported ?: KeystoneEnrollmentSession.Imported(
+        val imported = pending.imported.value ?: KeystoneEnrollmentSession.Imported(
             account = accountDataSource.importKeystoneAccount(
                 ufvk = account.ufvk,
                 seedFingerprint = pending.accounts.seedFingerprint,
@@ -33,7 +33,7 @@ class CreateKeystoneAccountUseCase(
                 birthday = birthday,
             ),
             birthday = birthday,
-        ).also { pending.imported = it }
+        ).also { pending.imported.value = it }
         accountDataSource.selectAccount(imported.account)
         synchronizerProvider.resetSynchronizer()
         return imported.birthday

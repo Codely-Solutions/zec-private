@@ -13,6 +13,7 @@ import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.screen.connecthw.brandingOf
+import co.electriccoin.zcash.ui.screen.connecthw.observeEnrollmentFinalization
 import co.electriccoin.zcash.ui.screen.connecthw.date.HWDateArgs
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -33,6 +34,8 @@ class HWNewOrActiveVM(
     private val branding = brandingOf(args.enrollment, viewOnlyContent)
     private val newOrActive = branding.newOrActive
     private val createAccountLce = mutableLce<Unit>()
+
+    internal val finalization = observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, createAccountLce)
 
     val state: StateFlow<LceState<HWNewOrActiveState>> =
         createAccountLce.state
@@ -76,6 +79,7 @@ class HWNewOrActiveVM(
      */
     private fun onNewDeviceClick() =
         createAccountLce.guardLoading {
+            if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return@guardLoading
             createAccountLce.execute {
                 createHWWalletAccount(args.enrollment, birthday = null)
             }
@@ -83,7 +87,9 @@ class HWNewOrActiveVM(
 
     private fun onActiveDeviceClick() =
         createAccountLce.guardLoading {
-            navigationRouter.forward(HWDateArgs(args.enrollment))
+            if (createHWWalletAccount.committedBirthday(args.enrollment) == null) {
+                navigationRouter.forward(HWDateArgs(args.enrollment))
+            }
         }
 
     private fun onBack() =

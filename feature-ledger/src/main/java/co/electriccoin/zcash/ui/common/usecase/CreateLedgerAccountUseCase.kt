@@ -42,6 +42,7 @@ class CreateLedgerAccountUseCase(
         val pairing = ledgerPairingRepository.get() ?: throw LedgerPairingMissingException()
         mutex.withLock {
             if (ledgerPairingRepository.get() !== pairing) return
+            if (ledgerPairingRepository.importedAccount(pairing)?.let { it.birthday != birthday } == true) return
             val route = withContext(NonCancellable) { importAndSelect(pairing, birthday) }
             currentCoroutineContext().ensureActive()
             route?.let { navigationRouter.forward(it) }

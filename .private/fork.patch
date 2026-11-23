@@ -2020,15 +2020,35 @@ index d6c40f3d0..1f3c96f8f 100644
 -        kotlinCompilerExtensionVersion = libs.androidx.compose.compiler.get().versionConstraint.displayName
 -    }
 -
+diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ledger/FeatureLedgerImpls.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ledger/FeatureLedgerImpls.kt
+index e25b11096..39635e12d 100644
+--- a/feature-ledger/src/main/java/co/electriccoin/zcash/ledger/FeatureLedgerImpls.kt
++++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ledger/FeatureLedgerImpls.kt
+@@ -16,0 +17 @@ import co.electriccoin.zcash.ui.screen.connectledger.connect.LedgerConnectScreen
++import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
+@@ -28,0 +30 @@ import co.electriccoin.zcash.ui.screen.signledgertransaction.LedgerSignScreen
++import kotlinx.coroutines.flow.map
+@@ -33,0 +36,8 @@ class LedgerAccountImporterImpl(
++    override val committedBirthdays = ledgerPairingRepository.imported.map {
++        it?.let { account -> CommittedEnrollmentBirthday(account.birthday, account.account) }
++    }
++
++    override fun committedBirthday() = ledgerPairingRepository.get()
++        ?.let(ledgerPairingRepository::importedAccount)
++        ?.let { CommittedEnrollmentBirthday(it.birthday, it.account) }
++
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ledger/di/FeatureLedgerModule.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ledger/di/FeatureLedgerModule.kt
-index cad440546..5b2d2d0d2 100644
+index cad440546..3fbff86eb 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ledger/di/FeatureLedgerModule.kt
 +++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ledger/di/FeatureLedgerModule.kt
 @@ -74 +74 @@ val featureLedgerModule =
 -        factoryOf(::CreateLedgerAccountUseCase)
 +        singleOf(::CreateLedgerAccountUseCase)
+@@ -76 +76 @@ val featureLedgerModule =
+-        factoryOf(::PairLedgerDeviceUseCase)
++        singleOf(::PairLedgerDeviceUseCase)
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerPairingRepository.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerPairingRepository.kt
-index d13db1a11..d509157d0 100644
+index d13db1a11..01e49c080 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerPairingRepository.kt
 +++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerPairingRepository.kt
 @@ -3,0 +4,2 @@ import cash.z.ecc.android.sdk.ledger.LedgerAccountPairing
@@ -2036,41 +2056,45 @@ index d13db1a11..d509157d0 100644
 +import cash.z.ecc.android.sdk.model.BlockHeight
 @@ -7 +8,0 @@ import kotlinx.coroutines.flow.asStateFlow
 -import kotlinx.coroutines.flow.update
-@@ -21,0 +23,6 @@ interface LedgerPairingRepository {
+@@ -16,0 +18,2 @@ interface LedgerPairingRepository {
++    val imported: StateFlow<ImportedLedgerAccount?>
++
+@@ -21,0 +25,6 @@ interface LedgerPairingRepository {
 +
 +    fun importedAccount(pairing: LedgerAccountPairing): ImportedLedgerAccount?
 +
 +    fun recordImport(pairing: LedgerAccountPairing, account: ImportedLedgerAccount): Boolean
 +
 +    fun clear(pairing: LedgerAccountPairing): Boolean
-@@ -23,0 +31,2 @@ interface LedgerPairingRepository {
+@@ -23,0 +33,2 @@ interface LedgerPairingRepository {
 +data class ImportedLedgerAccount(val account: Account, val birthday: BlockHeight?)
 +
-@@ -25,0 +35 @@ class LedgerPairingRepositoryImpl : LedgerPairingRepository {
-+    private var importedAccount: ImportedLedgerAccount? = null
-@@ -29 +39,5 @@ class LedgerPairingRepositoryImpl : LedgerPairingRepository {
+@@ -25,0 +37,2 @@ class LedgerPairingRepositoryImpl : LedgerPairingRepository {
++    private val mutableImported = MutableStateFlow<ImportedLedgerAccount?>(null)
++    override val imported = mutableImported.asStateFlow()
+@@ -29 +42,5 @@ class LedgerPairingRepositoryImpl : LedgerPairingRepository {
 -    override fun set(pairing: LedgerAccountPairing) = mutablePairing.update { pairing }
 +    @Synchronized
 +    override fun set(pairing: LedgerAccountPairing) {
-+        importedAccount = null
++        mutableImported.value = null
 +        mutablePairing.value = pairing
 +    }
-@@ -33 +47,23 @@ class LedgerPairingRepositoryImpl : LedgerPairingRepository {
+@@ -33 +50,23 @@ class LedgerPairingRepositoryImpl : LedgerPairingRepository {
 -    override fun clear() = mutablePairing.update { null }
 +    @Synchronized
 +    override fun clear() {
-+        importedAccount = null
++        mutableImported.value = null
 +        mutablePairing.value = null
 +    }
 +
 +    @Synchronized
 +    override fun importedAccount(pairing: LedgerAccountPairing) =
-+        importedAccount.takeIf { mutablePairing.value === pairing }
++        mutableImported.value.takeIf { mutablePairing.value === pairing }
 +
 +    @Synchronized
 +    override fun recordImport(pairing: LedgerAccountPairing, account: ImportedLedgerAccount): Boolean {
 +        if (mutablePairing.value !== pairing) return false
-+        importedAccount = account
++        mutableImported.value = account
 +        return true
 +    }
 +
@@ -2260,8 +2284,43 @@ index 683867b58..4b43a0a8f 100644
 -    val pczt: Pczt?,
 -    val error: Exception? = null
 -)
+diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerRepairTargetRepository.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerRepairTargetRepository.kt
+index 4f4201a1a..70210c7cf 100644
+--- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerRepairTargetRepository.kt
++++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/repository/LedgerRepairTargetRepository.kt
+@@ -23 +23,5 @@ interface LedgerRepairTargetRepository {
+-    fun get(): AccountUuid?
++    fun get(): AccountUuid? = current()?.accountUuid
++
++    fun current(): LedgerRepairTarget?
++
++    fun clear(expected: LedgerRepairTarget): Boolean
+@@ -34 +38 @@ class LedgerRepairTargetRepositoryImpl : LedgerRepairTargetRepository {
+-    private val target = MutableStateFlow<Target?>(null)
++    private val target = MutableStateFlow<LedgerRepairTarget?>(null)
+@@ -39 +43,3 @@ class LedgerRepairTargetRepositoryImpl : LedgerRepairTargetRepository {
+-    ) = target.update { Target(accountUuid, zip32AccountIndex) }
++    ) = target.update { LedgerRepairTarget(accountUuid, zip32AccountIndex) }
++
++    override fun current(): LedgerRepairTarget? = target.value
+@@ -41 +47 @@ class LedgerRepairTargetRepositoryImpl : LedgerRepairTargetRepository {
+-    override fun get(): AccountUuid? = target.value?.accountUuid
++    override fun clear(expected: LedgerRepairTarget): Boolean = target.compareAndSet(expected, null)
+@@ -46,5 +51,0 @@ class LedgerRepairTargetRepositoryImpl : LedgerRepairTargetRepository {
+-
+-    private data class Target(
+-        val accountUuid: AccountUuid,
+-        val zip32AccountIndex: Zip32AccountIndex?,
+-    )
+@@ -51,0 +53,6 @@ class LedgerRepairTargetRepositoryImpl : LedgerRepairTargetRepository {
++
++/** Each repair launch owns a distinct target, including repeated launches for the same account. */
++class LedgerRepairTarget(
++    val accountUuid: AccountUuid,
++    val zip32AccountIndex: Zip32AccountIndex?,
++)
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt
-index 291d24903..6d706de6c 100644
+index 291d24903..ee45e2446 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt
 +++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCase.kt
 @@ -3,0 +4 @@ import cash.z.ecc.android.sdk.exception.InitializeException
@@ -2278,12 +2337,13 @@ index 291d24903..6d706de6c 100644
 @@ -19,0 +28,2 @@ class CreateLedgerAccountUseCase(
 +    private val mutex = Mutex()
 +
-@@ -33,3 +43,12 @@ class CreateLedgerAccountUseCase(
+@@ -33,3 +43,13 @@ class CreateLedgerAccountUseCase(
 -        val createdAccount = accountDataSource.importLedgerAccount(pairing, birthday)
 -        accountDataSource.selectAccount(createdAccount)
 -        ledgerPairingRepository.clear()
 +        mutex.withLock {
 +            if (ledgerPairingRepository.get() !== pairing) return
++            if (ledgerPairingRepository.importedAccount(pairing)?.let { it.birthday != birthday } == true) return
 +            val route = withContext(NonCancellable) { importAndSelect(pairing, birthday) }
 +            currentCoroutineContext().ensureActive()
 +            route?.let { navigationRouter.forward(it) }
@@ -2294,7 +2354,7 @@ index 291d24903..6d706de6c 100644
 +        val imported = ledgerPairingRepository.importedAccount(pairing) ?: importAccount(pairing, birthday)
 +        if (imported == null) return null
 +        accountDataSource.selectAccount(imported.account)
-@@ -37,4 +56,4 @@ class CreateLedgerAccountUseCase(
+@@ -37,4 +57,4 @@ class CreateLedgerAccountUseCase(
 -        if (birthday != null) {
 -            navigationRouter.forward(KeepOpenArgs(KeepOpenFlow.LEDGER))
 -        } else {
@@ -2303,7 +2363,7 @@ index 291d24903..6d706de6c 100644
 +            !ledgerPairingRepository.clear(pairing) -> null
 +            imported.birthday == null -> LedgerConnectedArgs
 +            else -> KeepOpenArgs(KeepOpenFlow.LEDGER)
-@@ -42,0 +62,10 @@ class CreateLedgerAccountUseCase(
+@@ -42,0 +63,10 @@ class CreateLedgerAccountUseCase(
 +
 +    private suspend fun importAccount(pairing: LedgerAccountPairing, birthday: BlockHeight?): ImportedLedgerAccount? {
 +        val imported = ImportedLedgerAccount(
@@ -2314,6 +2374,86 @@ index 291d24903..6d706de6c 100644
 +        synchronizerProvider.resetSynchronizer()
 +        return null
 +    }
+diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/PairLedgerDeviceUseCase.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/PairLedgerDeviceUseCase.kt
+index bdac82535..a17d67385 100644
+--- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/PairLedgerDeviceUseCase.kt
++++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/PairLedgerDeviceUseCase.kt
+@@ -5 +4,0 @@ import cash.z.ecc.android.sdk.ledger.LedgerBluetoothDevice
+-import cash.z.ecc.android.sdk.model.AccountUuid
+@@ -12,0 +12 @@ import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepository
++import co.electriccoin.zcash.ui.common.repository.LedgerRepairTarget
+@@ -13,0 +14,7 @@ import co.electriccoin.zcash.ui.common.repository.LedgerRepairTargetRepository
++import kotlinx.coroutines.CancellationException
++import kotlinx.coroutines.NonCancellable
++import kotlinx.coroutines.currentCoroutineContext
++import kotlinx.coroutines.ensureActive
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++import kotlinx.coroutines.withContext
+@@ -34,0 +42,3 @@ class PairLedgerDeviceUseCase(
++    private val bindingMutex = Mutex()
++
++    @Suppress("TooGenericExceptionCaught")
+@@ -37,0 +48,17 @@ class PairLedgerDeviceUseCase(
++    ): PairLedgerDeviceResult {
++        val target = ledgerRepairTargetRepository.current()
++        return try {
++            pairForTarget(device, zip32AccountIndex, target)
++        } catch (e: CancellationException) {
++            throw e
++        } catch (e: Exception) {
++            currentCoroutineContext().ensureActive()
++            if (ledgerRepairTargetRepository.current() === target) throw e
++            PairLedgerDeviceResult.Superseded
++        }
++    }
++
++    private suspend fun pairForTarget(
++        device: LedgerBluetoothDevice,
++        zip32AccountIndex: Zip32AccountIndex,
++        target: LedgerRepairTarget?,
+@@ -42 +68,0 @@ class PairLedgerDeviceUseCase(
+-        val target = ledgerRepairTargetRepository.get()
+@@ -43,0 +70,2 @@ class PairLedgerDeviceUseCase(
++            ledgerRepairTargetRepository.current() !== target -> PairLedgerDeviceResult.Superseded
++
+@@ -70 +98 @@ class PairLedgerDeviceUseCase(
+-        target: AccountUuid,
++        target: LedgerRepairTarget,
+@@ -74,3 +102,2 @@ class PairLedgerDeviceUseCase(
+-        if (existing != null && existing.sdkAccount.accountUuid == target) {
+-            ledgerRepairTargetRepository.clear()
+-            rebind(existing, pairing)
++        if (existing != null && existing.sdkAccount.accountUuid == target.accountUuid) {
++            rebind(existing, pairing, target)
+@@ -85 +112,3 @@ class PairLedgerDeviceUseCase(
+-    ): PairLedgerDeviceResult {
++        target: LedgerRepairTarget? = null,
++    ): PairLedgerDeviceResult = bindingMutex.withLock {
++        if (ledgerRepairTargetRepository.current() !== target) return PairLedgerDeviceResult.Superseded
+@@ -87,6 +116,13 @@ class PairLedgerDeviceUseCase(
+-        ledgerAccountBindingProvider.save(
+-            accountUuid = existing.sdkAccount.accountUuid,
+-            deviceIdentityEncoding = pairing.binding.deviceIdentity.encoding,
+-            zip32AccountIndex = pairing.binding.zip32AccountIndex.index,
+-        )
+-        return PairLedgerDeviceResult.Rebound(existing)
++        withContext(NonCancellable) {
++            ledgerAccountBindingProvider.save(
++                accountUuid = existing.sdkAccount.accountUuid,
++                deviceIdentityEncoding = pairing.binding.deviceIdentity.encoding,
++                zip32AccountIndex = pairing.binding.zip32AccountIndex.index,
++            )
++            val ownsResult = if (target == null) {
++                ledgerRepairTargetRepository.current() == null
++            } else {
++                ledgerRepairTargetRepository.clear(target)
++            }
++            if (ownsResult) PairLedgerDeviceResult.Rebound(existing) else PairLedgerDeviceResult.Superseded
++        }
+@@ -98,0 +135,2 @@ sealed interface PairLedgerDeviceResult {
++    data object Superseded : PairLedgerDeviceResult
++
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCase.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCase.kt
 index a2d66d9fb..6980c57a8 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCase.kt
@@ -2321,6 +2461,51 @@ index a2d66d9fb..6980c57a8 100644
 @@ -49 +49 @@ class SubmitLedgerProposalUseCase(
 -                val result = ledgerProposalRepository.submit()
 +                val result = ledgerProposalRepository.submit(proposal)
+diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVM.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVM.kt
+index b80b58884..250ce96d3 100644
+--- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVM.kt
++++ b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVM.kt
+@@ -249,0 +250,2 @@ class LedgerHandshakeVM(
++                PairLedgerDeviceResult.Superseded -> Unit
++
+@@ -269,5 +270,0 @@ class LedgerHandshakeVM(
+-        } catch (e: LedgerPairingTimedOutException) {
+-            Twig.warn { "Ledger enrollment failed: ${e.javaClass.simpleName}" }
+-            showIssue(LedgerIssue.disconnectedDuringSetup)
+-        } catch (e: LedgerException) {
+-            showIssue(e.toEnrollmentIssue(LedgerIssueContext.ENROLLMENT))
+@@ -275,6 +272,23 @@ class LedgerHandshakeVM(
+-            internalState.update {
+-                it.copy(
+-                    phase = LedgerHandshakePhase.IDLE,
+-                    issue = LedgerIssue.unknown,
+-                    isSheetShown = false,
+-                )
++            currentCoroutineContext().ensureActive()
++            showHandshakeFailure(e)
++        }
++    }
++
++    private fun showHandshakeFailure(failure: Exception) {
++        when (failure) {
++            is LedgerPairingTimedOutException -> {
++                Twig.warn { "Ledger enrollment failed: ${failure.javaClass.simpleName}" }
++                showIssue(LedgerIssue.disconnectedDuringSetup)
++            }
++
++            is LedgerException -> showIssue(failure.toEnrollmentIssue(LedgerIssueContext.ENROLLMENT))
++
++            else -> {
++                internalState.update {
++                    it.copy(
++                        phase = LedgerHandshakePhase.IDLE,
++                        issue = LedgerIssue.unknown,
++                        isSheetShown = false,
++                    )
++                }
++                navigateToError(ErrorArgs.General(failure))
+@@ -282 +295,0 @@ class LedgerHandshakeVM(
+-            navigateToError(ErrorArgs.General(e))
 diff --git a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVM.kt b/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVM.kt
 index af6a0fa1d..ad55c1d2f 100644
 --- a/feature-ledger/src/main/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVM.kt
@@ -2583,35 +2768,41 @@ index 457a98c1b..521cb1a80 100644
 @@ -95,0 +102 @@ abstract class LedgerProposalRepositoryTestBase {
 +        repository.approveForSigning(repository.getTransactionProposal())
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt
-index bed02742e..a5c855967 100644
+index bed02742e..2405a5131 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.usecase
 +import cash.z.ecc.android.sdk.Synchronizer
-@@ -7,0 +9 @@ import cash.z.ecc.android.sdk.model.BlockHeight
+@@ -7,0 +9,3 @@ import cash.z.ecc.android.sdk.model.BlockHeight
 +import cash.z.ecc.android.sdk.model.Zip32AccountIndex
-@@ -9,0 +12 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.preference.AndroidPreferenceProvider
++import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
+@@ -9,0 +14 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 +import co.electriccoin.zcash.ui.common.datasource.AccountDataSourceImpl
-@@ -10,0 +14 @@ import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
+@@ -10,0 +16,2 @@ import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
 +import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
-@@ -12,0 +17 @@ import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepository
++import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
+@@ -12,0 +20 @@ import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepository
 +import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepositoryImpl
-@@ -20,0 +26,3 @@ import io.mockk.verify
+@@ -20,0 +29,3 @@ import io.mockk.verify
++import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.flow.MutableStateFlow
-+import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.runBlocking
-@@ -21,0 +30 @@ import kotlinx.coroutines.test.runTest
+@@ -21,0 +33,2 @@ import kotlinx.coroutines.test.runTest
 +import java.io.IOException
-@@ -23,0 +33,2 @@ import kotlin.test.assertFailsWith
++import java.util.Base64
+@@ -22,0 +36 @@ import kotlin.test.Test
++import kotlin.test.assertEquals
+@@ -23,0 +38,2 @@ import kotlin.test.assertFailsWith
 +import kotlin.test.assertNull
 +import kotlin.test.assertSame
-@@ -45 +56 @@ class CreateLedgerAccountUseCaseTest {
+@@ -45 +61 @@ class CreateLedgerAccountUseCaseTest {
 -            verify(exactly = 1) { ledgerPairingRepository.clear() }
 +            verify(exactly = 1) { ledgerPairingRepository.clear(any()) }
-@@ -94 +105 @@ class CreateLedgerAccountUseCaseTest {
+@@ -94 +110 @@ class CreateLedgerAccountUseCaseTest {
 -            verify(exactly = 0) { ledgerPairingRepository.clear() }
 +            verify(exactly = 0) { ledgerPairingRepository.clear(any()) }
-@@ -97,0 +109,51 @@ class CreateLedgerAccountUseCaseTest {
+@@ -97,0 +114,91 @@ class CreateLedgerAccountUseCaseTest {
 +    @Test
 +    fun selectionRetryUsesTheImportedAccountAndKeepsItsLedgerBinding() = runBlocking {
 +        val pairing = mockk<LedgerAccountPairing>(relaxed = true) {
@@ -2629,12 +2820,16 @@ index bed02742e..a5c855967 100644
 +            coEvery { getSynchronizer() } returns nativeSync
 +        }
 +        val binding = mockk<LedgerAccountBindingProvider>(relaxed = true)
++        val previous = AccountUuid.new(ByteArray(16) { 9 })
++        val previousEncoding = Base64.getEncoder().encodeToString(previous.value)
++        val storage = PublishingPreferenceFixture(previousEncoding)
++        val androidPreferences = AndroidPreferenceProvider(storage.preferences, Dispatchers.Unconfined)
++        val selected = SelectedAccountUUIDProviderImpl(mockk<EncryptedPreferenceProvider> {
++            coEvery { this@mockk.invoke() } returns androidPreferences
++        })
 +        val accountDataSource = AccountDataSourceImpl(
 +            synchronizerProvider = synchronizerProvider,
-+            selectedAccountUUIDProvider = mockk {
-+                every { uuid } returns flowOf(null)
-+                coEvery { setUUID(createdAccount.accountUuid) } throws IOException() andThen Unit
-+            },
++            selectedAccountUUIDProvider = selected,
 +            persistableWalletProvider = mockk {
 +                every { persistableWallet } returns MutableStateFlow(null)
 +            },
@@ -2646,14 +2841,24 @@ index bed02742e..a5c855967 100644
 +        val useCase = CreateLedgerAccountUseCase(accountDataSource, pairings, synchronizerProvider, router)
 +        val approvedBirthday = BlockHeight.new(2_500_000L)
 +
++        storage.failNextCommit = true
 +        assertFailsWith<IOException> { useCase(approvedBirthday) }
++        assertEquals(previousEncoding, storage.durable)
++        assertEquals(previous, selected.getUUID())
 +        assertSame(pairing, pairings.get())
 +        coVerify(exactly = 1) { binding.save(createdAccount.accountUuid, "tpk0-synthetic", 4L) }
 +        verify(exactly = 0) { synchronizerProvider.resetSynchronizer() }
 +        verify(exactly = 0) { router.forward(*anyVararg()) }
 +
 +        useCase(birthday = null)
++        useCase(BlockHeight.new(2_000_000L))
++        assertSame(pairing, pairings.get())
++        verify(exactly = 0) { synchronizerProvider.resetSynchronizer() }
 +
++        useCase(approvedBirthday)
++
++        assertEquals(createdAccount.accountUuid, selected.getUUID())
++        assertEquals(Base64.getEncoder().encodeToString(createdAccount.accountUuid.value), storage.durable)
 +        assertNull(pairings.get())
 +        coVerify(exactly = 1) { nativeSync.importAccountByUfvk(any()) }
 +        coVerify(exactly = 1) { binding.save(createdAccount.accountUuid, "tpk0-synthetic", 4L) }
@@ -2663,10 +2868,212 @@ index bed02742e..a5c855967 100644
 +        verify(exactly = 1) { router.forward(KeepOpenArgs(KeepOpenFlow.LEDGER)) }
 +    }
 +
-@@ -105,0 +168,3 @@ class CreateLedgerAccountUseCaseTest {
++    @Test
++    fun retryingARestartFailureFromTheTipKeepsTheCommittedBirthday() = runTest {
++        val accounts = accountDataSource()
++        val pairings = LedgerPairingRepositoryImpl().apply { set(mockk()) }
++        val synchronizer = mockk<SynchronizerProvider>(relaxed = true) {
++            every { resetSynchronizer() } throws IOException() andThen Unit
++        }
++        val router = mockk<NavigationRouter>(relaxed = true)
++        val useCase = CreateLedgerAccountUseCase(accounts, pairings, synchronizer, router)
++        val historicalHeight = BlockHeight.new(2_000_000L)
++
++        assertFailsWith<IOException> { useCase() }
++        useCase(historicalHeight)
++        assertSame(createdAccount, pairings.imported.value?.account)
++        assertNull(pairings.imported.value?.birthday)
++        verify(exactly = 0) { router.forward(*anyVararg()) }
++
++        useCase()
++
++        coVerify(exactly = 1) { accounts.importLedgerAccount(any(), null) }
++        coVerify(exactly = 0) { accounts.importLedgerAccount(any(), historicalHeight) }
++        coVerify(exactly = 2) { accounts.selectAccount(createdAccount) }
++        verify(exactly = 2) { synchronizer.resetSynchronizer() }
++        verify(exactly = 1) { router.forward(LedgerConnectedArgs) }
++    }
++
+@@ -105,0 +213,3 @@ class CreateLedgerAccountUseCaseTest {
 +            every { importedAccount(any()) } returns null
 +            every { recordImport(any(), any()) } returns true
 +            every { clear(any()) } returns true
+diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/PairLedgerDeviceUseCaseTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/PairLedgerDeviceUseCaseTest.kt
+index 0e6af0f6c..1e772d653 100644
+--- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/PairLedgerDeviceUseCaseTest.kt
++++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/PairLedgerDeviceUseCaseTest.kt
+@@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.usecase
++import android.content.SharedPreferences
++
+@@ -11,0 +14,2 @@ import cash.z.ecc.android.sdk.model.Zip32AccountIndex
++import co.electriccoin.zcash.preference.AndroidPreferenceProvider
++import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
+@@ -17,0 +22 @@ import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
++import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProviderImpl
+@@ -25,0 +31,7 @@ import io.mockk.mockk
++import kotlinx.coroutines.CompletableDeferred
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.async
++import kotlinx.coroutines.flow.first
++import kotlinx.coroutines.launch
++import kotlinx.coroutines.test.StandardTestDispatcher
++import kotlinx.coroutines.test.runCurrent
+@@ -26,0 +39 @@ import kotlinx.coroutines.test.runTest
++import java.io.IOException
+@@ -28,0 +42,2 @@ import kotlin.test.assertEquals
++import kotlin.test.assertFailsWith
++import kotlin.test.assertNotNull
+@@ -39,0 +55 @@ import kotlin.test.assertTrue
++@OptIn(ExperimentalCoroutinesApi::class)
+@@ -182,0 +199,108 @@ class PairLedgerDeviceUseCaseTest {
++    @Test
++    fun aFailedWriteToAnAlreadyBoundAccountCanBeRetried() = runTest {
++        val pairing = pairing(ufvk = "ufvk-known")
++        val target = ledgerAccount(ufvk = "ufvk-known", bound = true)
++        val accountUuid = target.sdkAccount.accountUuid
++        val repository = LedgerPairingRepositoryImpl()
++        val repairTarget = repairTarget(target)
++        val useCase = useCase(pairing, repository, existing = listOf(target), repairTarget = repairTarget)
++        coEvery { bindingProvider.save(any(), any(), any()) } throws IOException() andThen Unit
++
++        assertFailsWith<IOException> { useCase(device, firstAccount) }
++
++        assertEquals(accountUuid, repairTarget.get())
++        assertEquals(PairLedgerDeviceResult.Rebound(target), useCase(device, firstAccount))
++        assertNull(repairTarget.get())
++        coVerify(exactly = 2) { bindingProvider.save(accountUuid, IDENTITY, 0L) }
++    }
++
++    @Test
++    fun aFailedAndroidCommitKeepsThePreviousBindingInMemoryAndOnDiskUntilRetry() = runTest {
++        val storage = PublishingPreferenceFixture("tpk0-previous|3")
++        val android = AndroidPreferenceProvider(storage.preferences, StandardTestDispatcher(testScheduler))
++        val provider = LedgerAccountBindingProviderImpl(mockk<EncryptedPreferenceProvider> {
++            coEvery { this@mockk.invoke() } returns android
++        })
++        val target = ledgerAccount(ufvk = "ufvk-known", bound = true)
++        val accountUuid = target.sdkAccount.accountUuid
++        val pairing = pairing(ufvk = "ufvk-known", zip32AccountIndex = 4L)
++        val repair = repairTarget(target)
++        val useCase = useCase(dataSource(pairing), LedgerPairingRepositoryImpl(), listOf(target), repair, provider)
++        val observed = mutableListOf<String>()
++        backgroundScope.launch {
++            provider.observe(accountUuid).collect { binding ->
++                binding?.let { observed.add(it.deviceIdentityEncoding) }
++            }
++        }
++        runCurrent()
++
++        storage.failNextCommit = true
++        assertFailsWith<IOException> { useCase(device, firstAccount) }
++        runCurrent()
++
++        assertEquals(accountUuid, repair.get())
++        assertEquals("tpk0-previous|3", storage.durable)
++        assertEquals("tpk0-previous", provider.observe(accountUuid).first()?.deviceIdentityEncoding)
++        assertEquals(listOf("tpk0-previous"), observed.distinct())
++
++        assertEquals(PairLedgerDeviceResult.Rebound(target), useCase(device, firstAccount))
++        runCurrent()
++        assertEquals("$IDENTITY|4", storage.durable)
++        assertEquals(IDENTITY, provider.observe(accountUuid).first()?.deviceIdentityEncoding)
++        assertEquals(listOf("tpk0-previous", IDENTITY), observed.distinct())
++        assertNull(repair.get())
++    }
++
++    @Test
++    fun anEnteredRepairCannotRetireANewerRepairOfTheSameAccount() = runTest {
++        val pairing = pairing(ufvk = "ufvk-known")
++        val target = ledgerAccount(ufvk = "ufvk-known", bound = true)
++        val repair = repairTarget(target)
++        val useCase = useCase(pairing, LedgerPairingRepositoryImpl(), listOf(target), repair)
++        val entered = CompletableDeferred<Unit>()
++        val release = CompletableDeferred<Unit>()
++        coEvery { bindingProvider.save(any(), any(), any()) } coAnswers {
++            entered.complete(Unit)
++            release.await()
++        }
++
++        val oldAttempt = async { useCase(device, firstAccount) }
++        entered.await()
++        repair.set(target.sdkAccount.accountUuid, target.zip32AccountIndex)
++        val newer = assertNotNull(repair.current())
++        release.complete(Unit)
++
++        assertEquals(PairLedgerDeviceResult.Superseded, oldAttempt.await())
++        assertSame(newer, repair.current())
++        assertEquals(PairLedgerDeviceResult.Rebound(target), useCase(device, firstAccount))
++        assertNull(repair.get())
++    }
++
++    @Test
++    fun aSupersededBindingFailureLeavesTheNewRepairInControl() = runTest {
++        val pairing = pairing(ufvk = "ufvk-known")
++        val target = ledgerAccount(ufvk = "ufvk-known", bound = true)
++        val repair = repairTarget(target)
++        val useCase = useCase(pairing, LedgerPairingRepositoryImpl(), listOf(target), repair)
++        val writing = CompletableDeferred<Unit>()
++        val release = CompletableDeferred<Unit>()
++        coEvery { bindingProvider.save(any(), any(), any()) } coAnswers {
++            writing.complete(Unit)
++            release.await()
++            throw IOException("Binding write failed")
++        }
++
++        val superseded = async { useCase(device, firstAccount) }
++        writing.await()
++        repair.set(target.sdkAccount.accountUuid, target.zip32AccountIndex)
++        val newer = assertNotNull(repair.current())
++        release.complete(Unit)
++
++        assertEquals(PairLedgerDeviceResult.Superseded, superseded.await())
++        assertSame(newer, repair.current())
++
++        coEvery { bindingProvider.save(any(), any(), any()) } returns Unit
++        assertEquals(PairLedgerDeviceResult.Rebound(target), useCase(device, firstAccount))
++        assertNull(repair.get())
++    }
++
+@@ -314,0 +439 @@ class PairLedgerDeviceUseCaseTest {
++        provider: LedgerAccountBindingProvider = bindingProvider,
+@@ -323 +448 @@ class PairLedgerDeviceUseCaseTest {
+-        ledgerAccountBindingProvider = bindingProvider,
++        ledgerAccountBindingProvider = provider,
+@@ -374,0 +500,34 @@ private const val IDENTITY = "tpk0-identity"
++
++internal class PublishingPreferenceFixture(initial: String) {
++    var durable: String? = initial
++        private set
++    var failNextCommit = false
++    private var cached: String? = initial
++    private val listeners = mutableSetOf<SharedPreferences.OnSharedPreferenceChangeListener>()
++    val preferences = mockk<SharedPreferences> {
++        every { getString(any(), null) } answers { cached }
++        every { registerOnSharedPreferenceChangeListener(any()) } answers { listeners.add(firstArg()) }
++        every { unregisterOnSharedPreferenceChangeListener(any()) } answers { listeners.remove(firstArg()) }
++    }
++
++    init {
++        var key: String? = null
++        var staged: String? = null
++        val editor = mockk<SharedPreferences.Editor> {
++            every { putString(any(), any()) } answers {
++                key = firstArg()
++                staged = secondArg()
++                this@mockk
++            }
++            every { commit() } answers {
++                cached = staged
++                listeners.forEach { it.onSharedPreferenceChanged(preferences, checkNotNull(key)) }
++                val fail = failNextCommit
++                failNextCommit = false
++                if (!fail) durable = staged
++                !fail
++            }
++        }
++        every { preferences.edit() } returns editor
++    }
++}
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCaseTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCaseTest.kt
 index 018fa19f5..f7f72f102 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/SubmitLedgerProposalUseCaseTest.kt
@@ -2686,6 +3093,111 @@ index 018fa19f5..f7f72f102 100644
 @@ -117 +117 @@ class SubmitLedgerProposalUseCaseTest {
 -        coEvery { ledgerProposalRepository.submit() } returns submitResult
 +        coEvery { ledgerProposalRepository.submit(any()) } returns submitResult
+diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt
+index 817fc5154..98f8d1d61 100644
+--- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt
++++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/connectledger/handshake/LedgerHandshakeVMTest.kt
+@@ -41,0 +42 @@ import kotlinx.coroutines.withContext
++import java.io.IOException
+@@ -61,23 +62 @@ import kotlin.test.assertTrue
+-class LedgerHandshakeVMTest {
+-    private val dispatcher = StandardTestDispatcher()
+-
+-    private val device =
+-        LedgerBluetoothDevice(
+-            model = LedgerDeviceModel.NANO_X,
+-            name = "Ledger Device",
+-            identifier = "AA",
+-            rssi = -40,
+-        )
+-
+-    private val account = Zip32AccountIndex.new(3)
+-
+-    @BeforeTest
+-    fun setUp() {
+-        Dispatchers.setMain(dispatcher)
+-    }
+-
+-    @AfterTest
+-    fun tearDown() {
+-        Dispatchers.resetMain()
+-    }
+-
++class LedgerHandshakeVMTest : LedgerHandshakeVMFixture() {
+@@ -497,0 +477 @@ class LedgerHandshakeVMTest {
++}
+@@ -498,0 +479,2 @@ class LedgerHandshakeVMTest {
++@OptIn(ExperimentalCoroutinesApi::class)
++class LedgerHandshakeLifecycleVMTest : LedgerHandshakeVMFixture() {
+@@ -672,0 +655,27 @@ class LedgerHandshakeVMTest {
++    @Test
++    fun aBindingFailureThatCompletesAfterBackDoesNotShowAnError() = runTest(dispatcher) {
++        val router = mockk<NavigationRouter>(relaxed = true)
++        val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
++        val pending = CompletableDeferred<Unit>()
++        val pairLedgerDevice = mockk<PairLedgerDeviceUseCase> {
++            coEvery { this@mockk.invoke(any(), any()) } coAnswers {
++                withContext(NonCancellable) {
++                    pending.await()
++                    throw IOException("Binding write failed")
++                }
++            }
++        }
++        val vm = vm(pairLedgerDevice = pairLedgerDevice, navigationRouter = router, navigateToError = navigateToError)
++        collect(vm)
++        runCurrent()
++        assertTrue(vm.state.value.isConnecting)
++
++        vm.state.value.onBack()
++        pending.complete(Unit)
++        runCurrent()
++
++        verify(exactly = 1) { router.back() }
++        verify(exactly = 0) { navigateToError.invoke(any(), any()) }
++        assertNull(vm.state.value.errorSheet)
++    }
++
+@@ -696,0 +706,25 @@ class LedgerHandshakeVMTest {
++}
++
++@OptIn(ExperimentalCoroutinesApi::class)
++abstract class LedgerHandshakeVMFixture {
++    protected val dispatcher = StandardTestDispatcher()
++
++    protected val device =
++        LedgerBluetoothDevice(
++            model = LedgerDeviceModel.NANO_X,
++            name = "Ledger Device",
++            identifier = "AA",
++            rssi = -40,
++        )
++
++    protected val account = Zip32AccountIndex.new(3)
++
++    @BeforeTest
++    fun setUp() {
++        Dispatchers.setMain(dispatcher)
++    }
++
++    @AfterTest
++    fun tearDown() {
++        Dispatchers.resetMain()
++    }
+@@ -698 +732 @@ class LedgerHandshakeVMTest {
+-    private fun TestScope.failingWith(
++    protected fun TestScope.failingWith(
+@@ -712 +746 @@ class LedgerHandshakeVMTest {
+-    private fun StringResource.resourceId(): Int = (this as StringResource.ByResource).resource
++    protected fun StringResource.resourceId(): Int = (this as StringResource.ByResource).resource
+@@ -718 +752 @@ class LedgerHandshakeVMTest {
+-    private fun LedgerHandshakeVM.triggerOnCleared() {
++    protected fun LedgerHandshakeVM.triggerOnCleared() {
+@@ -725 +759 @@ class LedgerHandshakeVMTest {
+-    private fun TestScope.collect(vm: LedgerHandshakeVM) {
++    protected fun TestScope.collect(vm: LedgerHandshakeVM) {
+@@ -729 +763 @@ class LedgerHandshakeVMTest {
+-    private fun vm(
++    protected fun vm(
 diff --git a/feature-migration/build.gradle.kts b/feature-migration/build.gradle.kts
 index 459ac8e4e..6d1aa04df 100644
 --- a/feature-migration/build.gradle.kts
@@ -3023,44 +3535,50 @@ index 4f0cf7924..5e2925ccb 100644
 +        }
 +
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/repository/ViewOnlyPendingImportRepository.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/repository/ViewOnlyPendingImportRepository.kt
-index 725b23d17..577ddf13f 100644
+index 725b23d17..e515ad850 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/repository/ViewOnlyPendingImportRepository.kt
 +++ b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/repository/ViewOnlyPendingImportRepository.kt
 @@ -3,0 +4 @@ import androidx.compose.ui.graphics.Color
 +import cash.z.ecc.android.sdk.model.Account
-@@ -6 +7,2 @@ import kotlinx.coroutines.flow.MutableStateFlow
+@@ -4,0 +6 @@ import cash.z.ecc.android.sdk.model.BlockHeight
++import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
+@@ -6 +8,2 @@ import kotlinx.coroutines.flow.MutableStateFlow
 -import kotlinx.coroutines.flow.update
 +import kotlinx.coroutines.flow.StateFlow
 +import kotlinx.coroutines.flow.asStateFlow
-@@ -13,0 +16,2 @@ internal interface ViewOnlyPendingImportRepository {
+@@ -13,0 +17,2 @@ internal interface ViewOnlyPendingImportRepository {
 +    val pendingImport: StateFlow<PendingViewOnlyImport?>
 +
-@@ -18,0 +23,2 @@ internal interface ViewOnlyPendingImportRepository {
+@@ -18,0 +24,2 @@ internal interface ViewOnlyPendingImportRepository {
 +
 +    fun replace(expected: PendingViewOnlyImport, replacement: PendingViewOnlyImport?): Boolean
-@@ -22,0 +29 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
+@@ -22,0 +30 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
 +    override val pendingImport = pending.asStateFlow()
-@@ -26 +33,9 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
+@@ -26 +34,4 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
 -    override fun set(pendingImport: PendingViewOnlyImport) = pending.update { pendingImport }
 +    @Synchronized
 +    override fun set(pendingImport: PendingViewOnlyImport) {
 +        pending.value = pendingImport
 +    }
-+
+@@ -28 +39,11 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
+-    override fun clear() = pending.update { null }
 +    @Synchronized
 +    override fun clear() {
 +        pending.value = null
 +    }
-@@ -28 +43,6 @@ internal class ViewOnlyPendingImportRepositoryImpl : ViewOnlyPendingImportReposi
--    override fun clear() = pending.update { null }
++
 +    @Synchronized
 +    override fun replace(expected: PendingViewOnlyImport, replacement: PendingViewOnlyImport?): Boolean {
 +        if (pending.value !== expected) return false
 +        pending.value = replacement
 +        return true
 +    }
-@@ -40,0 +61 @@ internal data class PendingViewOnlyImport(
+@@ -40,0 +62 @@ internal data class PendingViewOnlyImport(
 +    val importedAccount: Account? = null,
+@@ -41,0 +64,3 @@ internal data class PendingViewOnlyImport(
++    val committedBirthday: CommittedEnrollmentBirthday?
++        get() = importedAccount?.let { CommittedEnrollmentBirthday(birthday, it) }
++
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCase.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCase.kt
 index 373ecf3ca..b825fa2d2 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCase.kt
@@ -3222,25 +3740,45 @@ index 94b4257dc..228c2f096 100644
 +            modifier = Modifier.align(Alignment.End).testTag(ImportVKTag.PASTE_BUTTON),
 +        )
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKState.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKState.kt
-index 81241a8a6..2888b7d96 100644
+index 81241a8a6..06602bf47 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKState.kt
 +++ b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKState.kt
-@@ -53,0 +54 @@ internal data class NameVKState(
-+            isFinalizing: Boolean = false,
-@@ -74 +75,4 @@ internal data class NameVKState(
+@@ -11,0 +12 @@ import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
+@@ -53,0 +55 @@ internal data class NameVKState(
++            committedBirthday: CommittedEnrollmentBirthday? = null,
+@@ -58,0 +61 @@ internal data class NameVKState(
++            val isFinalizing = committedBirthday != null
+@@ -61 +64,4 @@ internal data class NameVKState(
+-                    text = stringRes(R.string.view_only_continue),
++                    text = stringRes(
++                        if (isFinalizing) co.electriccoin.zcash.ui.R.string.enrollment_finish_setup
++                        else R.string.view_only_continue
++                    ),
+@@ -74,2 +80,8 @@ internal data class NameVKState(
 -                                avatar = vkAvatar(color = color, onEditClick = onAvatarEditClick)
+-                            ),
 +                                avatar = vkAvatar(
 +                                    color = color,
 +                                    onEditClick = onAvatarEditClick.takeUnless { isFinalizing },
 +                                )
-@@ -84 +88 @@ internal data class NameVKState(
++                            ).let { header ->
++                                if (committedBirthday == null) header else
++                                    header.copy(message = committedBirthday.message())
++                            },
+@@ -84 +96 @@ internal data class NameVKState(
 -                        isEnabled = !isImporting,
 +                        isEnabled = !isImporting && !isFinalizing,
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt
-index a958b4ec7..754ecf42b 100644
+index a958b4ec7..e22ab35fa 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt
 +++ b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/name/NameVKVM.kt
-@@ -61,2 +61,11 @@ internal class NameVKVM(
+@@ -18,0 +19 @@ import co.electriccoin.zcash.ui.common.usecase.NavigateToColorPickerUseCase
++import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
+@@ -55,0 +57,2 @@ internal class NameVKVM(
++    private var leaving = false
++
+@@ -61,2 +64,11 @@ internal class NameVKVM(
 -        combine(isAccountNameTaken.observe(name), color, importLce.state) { check, color, lce ->
 -            createState(check.name, color, isDuplicate = check.isTaken, isImporting = lce.loading)
 +        combine(
@@ -3252,34 +3790,57 @@ index a958b4ec7..754ecf42b 100644
 +                if (approved != null) approved.color else color,
 +                isDuplicate = approved == null && check.isTaken,
 +                isImporting = lce.loading,
-+                isFinalizing = approved != null,
++                committedBirthday = approved?.committedBirthday,
 +            )
-@@ -68 +77,4 @@ internal class NameVKVM(
+@@ -68 +80,4 @@ internal class NameVKVM(
 -                        content = createState(name.value, color.value, isDuplicate = false, isImporting = false)
 +                        content = createState(
 +                            name.value, color.value, isDuplicate = false, isImporting = false,
-+                            isFinalizing = pendingImportRepository.get()?.importedAccount != null,
++                            committedBirthday = pendingImportRepository.get()?.committedBirthday,
 +                        )
-@@ -82,0 +95 @@ internal class NameVKVM(
-+        isFinalizing: Boolean,
-@@ -87,0 +101 @@ internal class NameVKVM(
-+        isFinalizing = isFinalizing,
-@@ -95,0 +110 @@ internal class NameVKVM(
-+            if (pendingImportRepository.get()?.importedAccount != null) return@guardLoading
-@@ -105 +120,3 @@ internal class NameVKVM(
+@@ -82,0 +98 @@ internal class NameVKVM(
++        committedBirthday: CommittedEnrollmentBirthday?,
+@@ -87,0 +104 @@ internal class NameVKVM(
++        committedBirthday = committedBirthday,
+@@ -90 +107 @@ internal class NameVKVM(
+-        onContinueClick = ::onContinueClick,
++        onContinueClick = { onContinueClick(committedBirthday) },
+@@ -95,0 +113 @@ internal class NameVKVM(
++            if (leaving || pendingImportRepository.get()?.importedAccount != null) return@guardLoading
+@@ -105 +123,3 @@ internal class NameVKVM(
 -            name.update { AccountNameLimit.cap(value) }
-+            if (pendingImportRepository.get()?.importedAccount == null) {
++            if (!leaving && pendingImportRepository.get()?.importedAccount == null) {
 +                name.update { AccountNameLimit.cap(value) }
 +            }
-@@ -119 +135,0 @@ internal class NameVKVM(
+@@ -112 +132 @@ internal class NameVKVM(
+-    private fun onContinueClick() =
++    private fun onContinueClick(committedBirthday: CommittedEnrollmentBirthday?) =
+@@ -114 +134,3 @@ internal class NameVKVM(
+-            if (continueJob?.isActive == true) return@guardLoading
++            if (leaving || continueJob?.isActive == true) return@guardLoading
++            val pending = pendingImportRepository.get()
++            if (pending?.committedBirthday != committedBirthday) return@guardLoading
+@@ -119,2 +141 @@ internal class NameVKVM(
 -                    if (isAccountNameTaken(normalized)) return@launch
-@@ -125 +141,5 @@ internal class NameVKVM(
+-                    val pending = pendingImportRepository.get()
++                    if (pendingImportRepository.get() !== pending) return@launch
+@@ -125 +146,5 @@ internal class NameVKVM(
 -                    pendingImportRepository.set(pending.copy(name = normalized, color = color.value))
 +                    if (pending.importedAccount == null) {
 +                        if (isAccountNameTaken(normalized)) return@launch
 +                        val approved = pending.copy(name = normalized, color = color.value)
 +                        if (!pendingImportRepository.replace(pending, approved)) return@launch
 +                    }
+@@ -136,5 +161 @@ internal class NameVKVM(
+-    /**
+-     * Returns to the birthday screen underneath, which still needs the pending key and birthday, so
+-     * both are kept; the name and the colour are dropped, since they are only stored on Continue.
+-     * Ignored while the import runs.
+-     */
++    /** Returns to the birthday screen, retaining any import the SDK has already completed. */
+@@ -142,0 +164,2 @@ internal class NameVKVM(
++            if (leaving) return@guardLoading
++            leaving = true
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/scan/ScanVKVM.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/scan/ScanVKVM.kt
 index 3fcfe6745..aa68ccf14 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/ui/screen/viewingkey/scan/ScanVKVM.kt
@@ -3295,16 +3856,35 @@ index 3fcfe6745..aa68ccf14 100644
 -        viewModelScope.launch(checkJob) {
 +        checkScope.launch {
 diff --git a/feature-viewing-key/src/main/java/co/electriccoin/zcash/viewingkey/FeatureViewingKeyImpls.kt b/feature-viewing-key/src/main/java/co/electriccoin/zcash/viewingkey/FeatureViewingKeyImpls.kt
-index 38c9b840b..14a4d4843 100644
+index 38c9b840b..e34f969ea 100644
 --- a/feature-viewing-key/src/main/java/co/electriccoin/zcash/viewingkey/FeatureViewingKeyImpls.kt
 +++ b/feature-viewing-key/src/main/java/co/electriccoin/zcash/viewingkey/FeatureViewingKeyImpls.kt
-@@ -104 +104,5 @@ internal class ViewOnlyAccountImporterImpl(
+@@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepositor
++import co.electriccoin.zcash.ui.common.usecase.ImportViewOnlyAccountUseCase
+@@ -15,0 +17 @@ import co.electriccoin.zcash.ui.dialogComposable
++import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
+@@ -30,0 +33 @@ import co.electriccoin.zcash.ui.screen.viewingkey.scan.ScanVKScreen
++import kotlinx.coroutines.flow.map
+@@ -98,0 +102 @@ internal class ViewOnlyAccountImporterImpl(
++    private val importViewOnlyAccount: ImportViewOnlyAccountUseCase,
+@@ -99,0 +104,6 @@ internal class ViewOnlyAccountImporterImpl(
++    override val committedBirthdays = pendingImportRepository.pendingImport.map {
++        it?.committedBirthday
++    }
++
++    override fun committedBirthday() = pendingImportRepository.get()?.committedBirthday
++
+@@ -104 +114,4 @@ internal class ViewOnlyAccountImporterImpl(
 -        pendingImportRepository.set(pending.copy(birthday = birthday))
-+        if (pending.importedAccount == null) {
-+            if (!pendingImportRepository.replace(pending, pending.copy(birthday = birthday))) {
-+                throw ViewOnlyPendingImportMissingException()
-+            }
++        if (pending.importedAccount != null) return
++        if (!pendingImportRepository.replace(pending, pending.copy(birthday = birthday))) {
++            throw ViewOnlyPendingImportMissingException()
 +        }
+@@ -106,0 +120,4 @@ internal class ViewOnlyAccountImporterImpl(
++
++    override suspend fun finishImport() {
++        if (pendingImportRepository.get()?.importedAccount != null) importViewOnlyAccount()
++    }
 diff --git a/feature-viewing-key/src/main/res/values-es/strings.xml b/feature-viewing-key/src/main/res/values-es/strings.xml
 index 466001360..51396c2ac 100644
 --- a/feature-viewing-key/src/main/res/values-es/strings.xml
@@ -3367,12 +3947,33 @@ index bab9de9e3..8d308063a 100644
 @@ -77,0 +79 @@ class ViewingKeyKoinGraphSmokeTest {
 +                factory { mockk<ReadClipboardTextUseCase>(relaxed = true) }
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt
-index e528212fd..72270ba33 100644
+index e528212fd..99c9209b7 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt
 +++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ImportViewOnlyAccountUseCaseTest.kt
 @@ -35,0 +36 @@ import kotlinx.coroutines.test.runTest
 +import java.io.IOException
-@@ -241,0 +243,36 @@ class ImportViewOnlyAccountUseCaseTest {
+@@ -142,0 +144,20 @@ class ImportViewOnlyAccountUseCaseTest {
++    @Test
++    fun aFailedViewOnlyFinalizationRejectsAnEarlierBirthdayAndRetriesTheCommittedHeight() = runTest {
++        val importedHeight = BlockHeight.new(2_500_000L)
++        val correctedHeight = BlockHeight.new(2_000_000L)
++        repository.set(PendingViewOnlyImport(ufvk = UFVK, name = "Savings", birthday = importedHeight))
++        coEvery { accountDataSource.selectAccount(created) } throws IOException() andThen Unit
++        assertFailsWith<IOException> { useCase() }
++
++        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
++        importer.continueWithBirthday(correctedHeight)
++
++        verify(exactly = 0) { navigationRouter.forward(NameVKArgs) }
++        assertEquals(importedHeight, importer.committedBirthday()?.height)
++        assertEquals(importedHeight, repository.get()?.birthday)
++        importer.finishImport()
++        coVerify(exactly = 1) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", importedHeight) }
++        coVerify(exactly = 0) { accountDataSource.importViewOnlyAccount(UFVK, "Savings", correctedHeight) }
++        verify(exactly = 1) { navigationRouter.forward(KeepOpenArgs(KeepOpenFlow.VIEW_ONLY)) }
++    }
++
+@@ -241,0 +263,36 @@ class ImportViewOnlyAccountUseCaseTest {
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun cancellationDuringAFailedSelectionKeepsTheCreatedAccountAvailableForRetry() = runTest {
@@ -3409,6 +4010,15 @@ index e528212fd..72270ba33 100644
 +        assertNull(repository.get())
 +    }
 +
+@@ -253 +310 @@ class ImportViewOnlyAccountUseCaseTest {
+-        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter)
++        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
+@@ -263 +320 @@ class ImportViewOnlyAccountUseCaseTest {
+-        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter)
++        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
+@@ -279 +336 @@ class ImportViewOnlyAccountUseCaseTest {
+-        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter)
++        val importer = ViewOnlyAccountImporterImpl(repository, navigationRouter, useCase)
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCaseTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCaseTest.kt
 index a9300de58..9b8c05014 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/common/usecase/ValidateUfvkUseCaseTest.kt
@@ -3633,8 +4243,189 @@ index 3b9ca0b94..668e2d83e 100644
 +            ) {
 @@ -69,0 +157 @@ class ImportVKViewTest {
 +                        onPasteClick = { text = KEY },
+diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKFinalizationCaptureTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKFinalizationCaptureTest.kt
+new file mode 100644
+index 000000000..99de90350
+--- /dev/null
++++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKFinalizationCaptureTest.kt
+@@ -0,0 +1,175 @@
++package co.electriccoin.zcash.ui.screen.viewingkey
++
++import android.graphics.Bitmap
++import android.os.Build
++import androidx.activity.ComponentActivity
++import androidx.compose.runtime.key
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.ui.semantics.SemanticsActions
++import androidx.compose.ui.semantics.SemanticsProperties
++import androidx.compose.ui.test.SemanticsMatcher
++import androidx.compose.ui.test.assertIsDisplayed
++import androidx.compose.ui.test.assertIsEnabled
++import androidx.compose.ui.test.assertIsNotEnabled
++import androidx.compose.ui.test.isDisplayed
++import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
++import androidx.compose.ui.test.onNodeWithTag
++import androidx.compose.ui.test.onNodeWithText
++import androidx.compose.ui.test.performScrollTo
++import androidx.compose.ui.test.performSemanticsAction
++import androidx.compose.ui.text.TextLayoutResult
++import androidx.test.platform.app.InstrumentationRegistry
++import cash.z.ecc.android.sdk.model.Account
++import cash.z.ecc.android.sdk.model.AccountUuid
++import cash.z.ecc.android.sdk.model.BlockHeight
++import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.compose.AccountNameFieldTag
++import co.electriccoin.zcash.ui.design.theme.AppearanceMode
++import co.electriccoin.zcash.ui.design.theme.ZcashTheme
++import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
++import co.electriccoin.zcash.ui.screen.viewingkey.name.NameVKState
++import co.electriccoin.zcash.ui.screen.viewingkey.name.NameVKTag
++import co.electriccoin.zcash.ui.screen.viewingkey.name.NameVKView
++import org.json.JSONObject
++import org.junit.Assume.assumeTrue
++import org.junit.Rule
++import org.junit.Test
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.RuntimeEnvironment
++import org.robolectric.annotation.Config
++import org.robolectric.annotation.GraphicsMode
++import java.io.File
++import java.security.MessageDigest
++import kotlin.test.assertEquals
++import kotlin.test.assertTrue
++
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [28], qualifiers = "en-rUS-w360dp-h640dp-port-xxhdpi")
++@GraphicsMode(GraphicsMode.Mode.NATIVE)
++class NameVKFinalizationCaptureTest {
++    @get:Rule
++    val compose = createAndroidComposeRule<ComponentActivity>()
++
++    // Keep the existing JUnit case identity for the regular theme rerun.
++    @Test
++    fun captureCommittedNameInAllThemesAndAtLargeFontScale() =
++        captureCommittedName(listOf("light", "dark", "oled"), 1f)
++
++    @Test
++    fun captureLargeCommittedName() = captureCommittedName(listOf("dark"), 2f)
++
++    private fun captureCommittedName(themes: List<String>, scale: Float) {
++        val path = System.getProperty("private.review.captureDir")
++        assumeTrue("Opt in with the private review capture directory", !path.isNullOrBlank())
++        val directory = File(checkNotNull(path)).also { check(it.isDirectory || it.mkdirs()) }
++        val app = RuntimeEnvironment.getApplication()
++        val account = Account.new(AccountUuid.new(ByteArray(16)))
++        val tip = Birthday("tip", null, app.getString(R.string.enrollment_committed_tip))
++        val height = Birthday(
++            "height",
++            BlockHeight.new(3_000_000),
++            app.getString(R.string.enrollment_committed_height, "3,000,000"),
++        )
++        val scenes = themes.flatMap { theme -> listOf(Scene(theme, scale, tip), Scene(theme, scale, height)) }
++        compose.runOnUiThread { RuntimeEnvironment.setFontScale(scale) }
++        val active = mutableStateOf(scenes.first())
++        compose.setContent {
++            val scene = active.value
++            key(scene) {
++                ZcashTheme(
++                    appearanceMode = if (scene.theme == "light") AppearanceMode.LIGHT else AppearanceMode.DARK,
++                    isOledEnabled = scene.theme == "oled",
++                ) {
++                    NameVKView(
++                        NameVKState.create(
++                            name = "Review Vault",
++                            color = null,
++                            isDuplicate = false,
++                            isImporting = false,
++                            committedBirthday = CommittedEnrollmentBirthday(scene.birthday.height, account),
++                            onAvatarEditClick = {},
++                            onValueChange = {},
++                            onContinueClick = {},
++                            onBack = {},
++                        )
++                    )
++                }
++            }
++        }
++
++        for (scene in scenes) {
++            compose.runOnIdle { active.value = scene }
++            val message = compose.onNodeWithText(scene.birthday.message).performScrollTo().assertIsDisplayed()
++            val layouts = mutableListOf<TextLayoutResult>()
++            message.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { read ->
++                assertTrue(read(layouts))
++            }
++            val renderedScale = layouts.single().layoutInput.density.fontScale
++            assertEquals(scene.scale, renderedScale)
++            compose.onNodeWithTag(AccountNameFieldTag.FIELD).performScrollTo().assertIsDisplayed()
++            compose.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.EditableText))
++                .assertIsDisplayed().assertIsNotEnabled()
++            val finish = compose.onNodeWithTag(NameVKTag.CONTINUE_BUTTON).performScrollTo()
++                .assertIsDisplayed().assertIsEnabled()
++            compose.onNodeWithText(app.getString(R.string.enrollment_finish_setup)).assertIsDisplayed()
++            val node = finish.fetchSemanticsNode()
++            assertEquals(node.size.height.toFloat(), node.boundsInRoot.height, 1f)
++            val messageNode = message.fetchSemanticsNode()
++            val messageFullyVisible = message.isDisplayed() &&
++                messageNode.boundsInRoot.height == messageNode.size.height.toFloat()
++            capture(directory, scene, renderedScale, if (messageFullyVisible) "screen" else "finish")
++            if (!messageFullyVisible) {
++                message.performScrollTo().assertIsDisplayed()
++                capture(directory, scene, renderedScale, "birthday")
++            }
++        }
++    }
++
++    private fun capture(directory: File, scene: Scene, renderedScale: Float, state: String) {
++        compose.waitForIdle()
++        val bitmap = checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
++        try {
++            val background = bitmap.getPixel(0, 0)
++            val hasContent = (0 until bitmap.height step PIXEL_SAMPLE_STEP).any { y ->
++                (0 until bitmap.width step PIXEL_SAMPLE_STEP).any { x -> bitmap.getPixel(x, y) != background }
++            }
++            val name = "view-only-name-committed-${scene.birthday.label}-${scene.theme}-${scene.scale}-$state.png"
++            val target = File(directory, name)
++            check(target.createNewFile()) { "Capture already exists: $name" }
++            target.outputStream().use { check(bitmap.compress(Bitmap.CompressFormat.PNG, PNG_QUALITY, it)) }
++            val digest = MessageDigest.getInstance("SHA-256").digest(target.readBytes())
++            val receipt = JSONObject()
++                .put("file", name)
++                .put("screen", "view-only-name-committed-${scene.birthday.label}")
++                .put("state", state)
++                .put("theme", scene.theme)
++                .put("requestedFontScale", scene.scale.toDouble())
++                .put("fontScale", renderedScale.toDouble())
++                .put("width", bitmap.width)
++                .put("height", bitmap.height)
++                .put("density", compose.density.density.toDouble())
++                .put("expected", scene.birthday.message)
++                .put("sdk", Build.VERSION.SDK_INT)
++                .put("validViewport", bitmap.width == VIEWPORT_WIDTH && bitmap.height == VIEWPORT_HEIGHT && hasContent)
++                .put("sha256", digest.joinToString("") { "%02x".format(it) })
++            File(directory, "captures.jsonl").appendText("$receipt\n")
++            assertEquals(VIEWPORT_WIDTH, bitmap.width)
++            assertEquals(VIEWPORT_HEIGHT, bitmap.height)
++            assertTrue(hasContent)
++        } finally {
++            bitmap.recycle()
++        }
++    }
++
++    private data class Birthday(val label: String, val height: BlockHeight?, val message: String)
++
++    private data class Scene(val theme: String, val scale: Float, val birthday: Birthday)
++
++    private companion object {
++        const val PIXEL_SAMPLE_STEP = 8
++        const val PNG_QUALITY = 100
++        const val VIEWPORT_WIDTH = 1_080
++        const val VIEWPORT_HEIGHT = 1_920
++    }
++}
 diff --git a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
-index 5faf35c95..10e73d19a 100644
+index 5faf35c95..1b06bea40 100644
 --- a/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
 +++ b/feature-viewing-key/src/test/java/co/electriccoin/zcash/ui/screen/viewingkey/NameVKVMTest.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.viewingkey
@@ -3647,17 +4438,188 @@ index 5faf35c95..10e73d19a 100644
 @@ -11,0 +16,2 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 +import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
 +import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
-@@ -21,0 +28,3 @@ import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerArgs
+@@ -13,0 +20 @@ import co.electriccoin.zcash.ui.common.repository.ViewOnlyPendingImportRepositor
++import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
+@@ -21,0 +29,5 @@ import co.electriccoin.zcash.ui.screen.colorpicker.ColorPickerArgs
++import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
++import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 +import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
 +import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenFlow
 +import co.electriccoin.zcash.ui.screen.viewingkey.alreadyimported.AlreadyImportedVKArgs
-@@ -25,0 +35 @@ import io.mockk.coVerify
+@@ -23,0 +36 @@ import co.electriccoin.zcash.ui.screen.viewingkey.name.NameVKVM
++import co.electriccoin.zcash.viewingkey.ViewOnlyAccountImporterImpl
+@@ -25,0 +39 @@ import io.mockk.coVerify
 +import io.mockk.coVerifyOrder
-@@ -40,0 +51 @@ import kotlinx.coroutines.test.setMain
+@@ -40,0 +55 @@ import kotlinx.coroutines.test.setMain
 +import java.util.Base64
-@@ -467,0 +479,56 @@ class NameVKVMTest {
+@@ -51,13 +65,0 @@ import kotlin.test.assertTrue
+-/**
+- * The name is capped at twelve characters as it is typed, the counter follows it, and Continue needs
+- * a name that is not blank. Naming is the last step: Continue stores the trimmed name and the picked
+- * colour with the pending key and birthday and imports, showing its progress, once however often it
+- * is tapped; without a pending key or birthday it returns to the root, and a failed import shows the
+- * error, from which it is tried again. While it imports, the name field is disabled with its counter
+- * still shown, and back, the name and the colour are ignored;
+- * otherwise back returns to the birthday screen and keeps the pending key and birthday. The avatar's
+- * pencil badge opens the colour picker; the avatar follows the picks live and keeps the last one
+- * however the picker closes. A name another account shows, in any case, disables Continue and says
+- * so under the field, never next to another name, and Continue checks the name again when tapped.
+- * The keyboard's Done key continues only while Continue is enabled.
+- */
+@@ -65,46 +67 @@ import kotlin.test.assertTrue
+-class NameVKVMTest {
+-    private val navigationRouter = mockk<NavigationRouter>(relaxed = true)
+-
+-    private val pickerRequests = mutableListOf<ColorPickerArgs>()
+-
+-    private val navigateToColorPicker =
+-        NavigateToColorPickerUseCase(
+-            mockk(relaxed = true) {
+-                every { forward(*anyVararg()) } answers {
+-                    (args[0] as Array<*>).filterIsInstance<ColorPickerArgs>().forEach { pickerRequests.add(it) }
+-                }
+-            }
+-        )
+-
+-    private val accounts =
+-        MutableStateFlow<List<WalletAccount>?>(
+-            listOf(ViewOnlyAccountFixtures.zodl(), ViewOnlyAccountFixtures.viewOnly(customName = "Keystone"))
+-        )
+-
+-    private val isAccountNameTaken = ViewOnlyAccountFixtures.isAccountNameTaken(accounts)
+-
+-    private val repository = ViewOnlyPendingImportRepositoryImpl().apply { set(pending()) }
+-
+-    private var importAnswer: suspend () -> Unit = {}
+-
+-    private val importViewOnlyAccount =
+-        mockk<ImportViewOnlyAccountUseCase> {
+-            coEvery { this@mockk.invoke() } coAnswers { importAnswer() }
+-        }
+-
+-    private val errorStateMapper =
+-        ErrorMapperUseCase(
+-            sendEmail = mockk(relaxed = true),
+-            viewOnlyContent = mockk(relaxed = true),
+-        )
+-
+-    @BeforeTest
+-    fun setUp() {
+-        Dispatchers.setMain(StandardTestDispatcher())
+-    }
+-
+-    @AfterTest
+-    fun tearDown() {
+-        Dispatchers.resetMain()
+-    }
+-
++internal class NameVKVMTest : NameVKVMFixture() {
+@@ -325,0 +283,102 @@ class NameVKVMTest {
 +    @Test
-+    fun sameNameContinuesAfterTheImportedAccountAppearsAndItsSelectionCommitFailed() = runTest {
++    fun withoutAPendingKeyTheFlowReturnsToTheRoot() =
++        runTest {
++            repository.clear()
++
++            vm()
++
++            verify(exactly = 1) { navigationRouter.backToRoot() }
++        }
++
++    @Test
++    fun aPickedColorShowsOnTheAvatarAndContinueKeepsItWithThePendingImport() =
++        runTest {
++            val vm = vm()
++            collect(vm)
++            assertNull(vm.content().avatarColor())
++
++            openPicker(vm)
++            val request = pickerRequests.single()
++            assertNull(request.initialArgb)
++            navigateToColorPicker.onPicked(Color(PICKED), request)
++            navigateToColorPicker.onClosed(request)
++            runCurrent()
++
++            assertEquals(Color(PICKED), vm.content().avatarColor())
++            assertEquals(pending(), repository.get())
++
++            type(vm, "Savings")
++            vm
++                .content()
++                .continueButton
++                .onClick()
++            runCurrent()
++
++            assertEquals(pending(name = "Savings", color = Color(PICKED)), repository.get())
++        }
++
++    @Test
++    fun theColorOfThePendingImportShowsWhenTheScreenOpensAgain() =
++        runTest {
++            repository.set(pending(name = "Savings", color = Color(PICKED)))
++            val vm = vm()
++            collect(vm)
++
++            assertEquals(Color(PICKED), vm.content().avatarColor())
++        }
++
++    @Test
++    fun aPickerClosedWithoutAPickKeepsTheColorAndReopensWithIt() =
++        runTest {
++            val vm = vm()
++            collect(vm)
++            openPicker(vm)
++            navigateToColorPicker.onPicked(Color(PICKED), pickerRequests.last())
++            navigateToColorPicker.onClosed(pickerRequests.last())
++            runCurrent()
++
++            openPicker(vm)
++            val second = pickerRequests.last()
++            assertEquals(Color(PICKED), Color(assertNotNull(second.initialArgb)))
++            navigateToColorPicker.onClosed(second)
++            runCurrent()
++
++            assertEquals(Color(PICKED), vm.content().avatarColor())
++        }
++
++    @Test
++    fun theAvatarFollowsLivePicksAndKeepsTheLastOneWhenThePickerCloses() =
++        runTest {
++            val vm = vm()
++            collect(vm)
++            openPicker(vm)
++            val request = pickerRequests.single()
++
++            navigateToColorPicker.onPicked(Color(OTHER), request)
++            runCurrent()
++            assertEquals(Color(OTHER), vm.content().avatarColor())
++
++            navigateToColorPicker.onPicked(Color(PICKED), request)
++            navigateToColorPicker.onClosed(request)
++            runCurrent()
++            assertEquals(Color(PICKED), vm.content().avatarColor())
++
++            openPicker(vm)
++            assertEquals(2, pickerRequests.size)
++        }
++
++    @Test
++    fun aSecondTapWhileThePickerIsOpenOpensNothing() =
++        runTest {
++            val vm = vm()
++            collect(vm)
++
++            openPicker(vm)
++            openPicker(vm)
++
++            assertEquals(1, pickerRequests.size)
++        }
++}
++
++@OptIn(ExperimentalCoroutinesApi::class)
++internal class NameVKImportVMTest : NameVKVMFixture() {
+@@ -467,0 +527,73 @@ class NameVKVMTest {
++    @Test
++    fun backFromNameCanFinishTheCommittedImportAfterSelectionCommitFailed() = runTest {
 +        val previous = ViewOnlyAccountFixtures.zodlUuid
 +        val previousEncoding = Base64.getEncoder().encodeToString(previous.value)
 +        val storage = SelectionStorage(previousEncoding)
@@ -3695,7 +4657,24 @@ index 5faf35c95..10e73d19a 100644
 +        verify(exactly = 0) { synchronizer.resetSynchronizer() }
 +        verify(exactly = 0) { navigationRouter.forward(*anyVararg()) }
 +
-+        vm.content().continueButton.onClick()
++        val committed = checkNotNull(repository.get()?.committedBirthday)
++        assertEquals(committed.message(), vm.content().form.header.message)
++        val oldFinish = vm.content().continueButton
++        vm.content().onBack()
++        oldFinish.onClick()
++        runCurrent()
++        verify(exactly = 1) { navigationRouter.back() }
++        coVerify(exactly = 1) { accountDataSource.selectAccount(created) }
++
++        val shared = CreateHWWalletAccountUseCase(
++            keystoneSession = KeystoneEnrollmentSession(),
++            createKeystoneAccount = mockk(),
++            ledgerAccountImporter = mockk(),
++            viewOnlyAccountImporter = ViewOnlyAccountImporterImpl(repository, navigationRouter, importer),
++            navigationRouter = navigationRouter,
++        )
++        assertEquals(committed, shared.committedBirthday(HWWalletEnrollment.ViewOnly))
++        shared.finish(HWWalletEnrollment.ViewOnly, committed)
 +        runCurrent()
 +
 +        assertEquals(created.accountUuid, selected.getUUID())
@@ -3712,45 +4691,215 @@ index 5faf35c95..10e73d19a 100644
 +        }
 +    }
 +
-@@ -698 +765 @@ class NameVKVMTest {
--    private fun vm() =
-+    private fun vm(importer: ImportViewOnlyAccountUseCase = importViewOnlyAccount) =
-@@ -704 +771 @@ class NameVKVMTest {
--            importViewOnlyAccount = importViewOnlyAccount,
-+            importViewOnlyAccount = importer,
-@@ -716,0 +784,32 @@ class NameVKVMTest {
-+    private class SelectionStorage(initial: String) {
-+        var durable: String? = initial
-+            private set
-+        private var cached: String? = initial
-+        private var staged: String? = initial
-+        private var failed = false
-+
-+        val preferences = mockk<SharedPreferences> {
-+            every { getString("selected_account_uuid", null) } answers { cached }
-+        }
-+
-+        init {
-+            val editor = mockk<SharedPreferences.Editor> {
-+                every { putString("selected_account_uuid", any()) } answers {
-+                    staged = secondArg()
-+                    this@mockk
-+                }
-+                every { commit() } answers {
-+                    cached = staged
-+                    if (failed) {
-+                        durable = staged
-+                        true
-+                    } else {
-+                        failed = true
-+                        false
-+                    }
+@@ -556,0 +689 @@ class NameVKVMTest {
++}
+@@ -558,43 +691,3 @@ class NameVKVMTest {
+-    @Test
+-    fun withoutAPendingKeyTheFlowReturnsToTheRoot() =
+-        runTest {
+-            repository.clear()
+-
+-            vm()
+-
+-            verify(exactly = 1) { navigationRouter.backToRoot() }
+-        }
+-
+-    @Test
+-    fun aPickedColorShowsOnTheAvatarAndContinueKeepsItWithThePendingImport() =
+-        runTest {
+-            val vm = vm()
+-            collect(vm)
+-            assertNull(vm.content().avatarColor())
+-
+-            openPicker(vm)
+-            val request = pickerRequests.single()
+-            assertNull(request.initialArgb)
+-            navigateToColorPicker.onPicked(Color(PICKED), request)
+-            navigateToColorPicker.onClosed(request)
+-            runCurrent()
+-
+-            assertEquals(Color(PICKED), vm.content().avatarColor())
+-            assertEquals(pending(), repository.get())
+-
+-            type(vm, "Savings")
+-            vm
+-                .content()
+-                .continueButton
+-                .onClick()
+-            runCurrent()
+-
+-            assertEquals(pending(name = "Savings", color = Color(PICKED)), repository.get())
+-        }
+-
+-    @Test
+-    fun theColorOfThePendingImportShowsWhenTheScreenOpensAgain() =
+-        runTest {
+-            repository.set(pending(name = "Savings", color = Color(PICKED)))
+-            val vm = vm()
+-            collect(vm)
++@OptIn(ExperimentalCoroutinesApi::class)
++internal abstract class NameVKVMFixture {
++    protected val navigationRouter = mockk<NavigationRouter>(relaxed = true)
+@@ -602,2 +695 @@ class NameVKVMTest {
+-            assertEquals(Color(PICKED), vm.content().avatarColor())
+-        }
++    protected val pickerRequests = mutableListOf<ColorPickerArgs>()
+@@ -605,15 +697,8 @@ class NameVKVMTest {
+-    @Test
+-    fun aPickerClosedWithoutAPickKeepsTheColorAndReopensWithIt() =
+-        runTest {
+-            val vm = vm()
+-            collect(vm)
+-            openPicker(vm)
+-            navigateToColorPicker.onPicked(Color(PICKED), pickerRequests.last())
+-            navigateToColorPicker.onClosed(pickerRequests.last())
+-            runCurrent()
+-
+-            openPicker(vm)
+-            val second = pickerRequests.last()
+-            assertEquals(Color(PICKED), Color(assertNotNull(second.initialArgb)))
+-            navigateToColorPicker.onClosed(second)
+-            runCurrent()
++    protected val navigateToColorPicker =
++        NavigateToColorPickerUseCase(
++            mockk(relaxed = true) {
++                every { forward(*anyVararg()) } answers {
++                    (args[0] as Array<*>).filterIsInstance<ColorPickerArgs>().forEach { pickerRequests.add(it) }
 +                }
 +            }
-+            every { preferences.edit() } returns editor
-+        }
++        )
+@@ -621,2 +706,4 @@ class NameVKVMTest {
+-            assertEquals(Color(PICKED), vm.content().avatarColor())
+-        }
++    protected val accounts =
++        MutableStateFlow<List<WalletAccount>?>(
++            listOf(ViewOnlyAccountFixtures.zodl(), ViewOnlyAccountFixtures.viewOnly(customName = "Keystone"))
++        )
+@@ -624,7 +711 @@ class NameVKVMTest {
+-    @Test
+-    fun theAvatarFollowsLivePicksAndKeepsTheLastOneWhenThePickerCloses() =
+-        runTest {
+-            val vm = vm()
+-            collect(vm)
+-            openPicker(vm)
+-            val request = pickerRequests.single()
++    private val isAccountNameTaken = ViewOnlyAccountFixtures.isAccountNameTaken(accounts)
+@@ -632,3 +713 @@ class NameVKVMTest {
+-            navigateToColorPicker.onPicked(Color(OTHER), request)
+-            runCurrent()
+-            assertEquals(Color(OTHER), vm.content().avatarColor())
++    protected val repository = ViewOnlyPendingImportRepositoryImpl().apply { set(pending()) }
+@@ -636,4 +715 @@ class NameVKVMTest {
+-            navigateToColorPicker.onPicked(Color(PICKED), request)
+-            navigateToColorPicker.onClosed(request)
+-            runCurrent()
+-            assertEquals(Color(PICKED), vm.content().avatarColor())
++    protected var importAnswer: suspend () -> Unit = {}
+@@ -641,2 +717,3 @@ class NameVKVMTest {
+-            openPicker(vm)
+-            assertEquals(2, pickerRequests.size)
++    protected val importViewOnlyAccount =
++        mockk<ImportViewOnlyAccountUseCase> {
++            coEvery { this@mockk.invoke() } coAnswers { importAnswer() }
+@@ -645,5 +722,5 @@ class NameVKVMTest {
+-    @Test
+-    fun aSecondTapWhileThePickerIsOpenOpensNothing() =
+-        runTest {
+-            val vm = vm()
+-            collect(vm)
++    private val errorStateMapper =
++        ErrorMapperUseCase(
++            sendEmail = mockk(relaxed = true),
++            viewOnlyContent = mockk(relaxed = true),
++        )
+@@ -651,2 +728,4 @@ class NameVKVMTest {
+-            openPicker(vm)
+-            openPicker(vm)
++    @BeforeTest
++    fun setUp() {
++        Dispatchers.setMain(StandardTestDispatcher())
++    }
+@@ -654,2 +733,4 @@ class NameVKVMTest {
+-            assertEquals(1, pickerRequests.size)
+-        }
++    @AfterTest
++    fun tearDown() {
++        Dispatchers.resetMain()
++    }
+@@ -657 +738 @@ class NameVKVMTest {
+-    private fun NameVKState.avatarColor() =
++    protected fun NameVKState.avatarColor() =
+@@ -660 +741 @@ class NameVKVMTest {
+-    private fun TestScope.openPicker(vm: NameVKVM) {
++    protected fun TestScope.openPicker(vm: NameVKVM) {
+@@ -669 +750 @@ class NameVKVMTest {
+-    private fun TestScope.pickColor(
++    protected fun TestScope.pickColor(
+@@ -680 +761 @@ class NameVKVMTest {
+-    private fun NameVKVM.content() = assertNotNull(state.value.content)
++    protected fun NameVKVM.content() = assertNotNull(state.value.content)
+@@ -682 +763 @@ class NameVKVMTest {
+-    private fun pending(
++    protected fun pending(
+@@ -687 +768 @@ class NameVKVMTest {
+-    private fun TestScope.type(
++    protected fun TestScope.type(
+@@ -698 +779 @@ class NameVKVMTest {
+-    private fun vm() =
++    protected fun vm(importer: ImportViewOnlyAccountUseCase = importViewOnlyAccount) =
+@@ -704 +785 @@ class NameVKVMTest {
+-            importViewOnlyAccount = importViewOnlyAccount,
++            importViewOnlyAccount = importer,
+@@ -708 +789 @@ class NameVKVMTest {
+-    private fun TestScope.collect(vm: NameVKVM) {
++    protected fun TestScope.collect(vm: NameVKVM) {
+@@ -713 +794 @@ class NameVKVMTest {
+-    private fun StringResource.text() = (this as StringResource.ByString).value
++    protected fun StringResource.text() = (this as StringResource.ByString).value
+@@ -715 +796,2 @@ class NameVKVMTest {
+-    private fun StringResource.args() = (this as StringResource.ByResource).args.toList()
++    protected fun StringResource.args() = (this as StringResource.ByResource).args.toList()
++}
+@@ -717,5 +799,34 @@ class NameVKVMTest {
+-    private companion object {
+-        const val UFVK = "uview1namefixture"
+-        const val PICKED = 0x80BE38F3
+-        const val OTHER = 0xFF0088FF
+-        val BIRTHDAY = BlockHeight.new(2_500_000L)
++private const val UFVK = "uview1namefixture"
++private const val PICKED = 0x80BE38F3
++private const val OTHER = 0xFF0088FF
++private val BIRTHDAY = BlockHeight.new(2_500_000L)
++
++private class SelectionStorage(initial: String) {
++    var durable: String? = initial
++        private set
++    private var cached: String? = initial
++    private var staged: String? = initial
++    private var failed = false
++
++    val preferences = mockk<SharedPreferences> {
++        every { getString("selected_account_uuid", null) } answers { cached }
 +    }
 +
++    init {
++        val editor = mockk<SharedPreferences.Editor> {
++            every { putString("selected_account_uuid", any()) } answers {
++                staged = secondArg()
++                this@mockk
++            }
++            every { commit() } answers {
++                cached = staged
++                if (failed) {
++                    durable = staged
++                    true
++                } else {
++                    failed = true
++                    false
++                }
++            }
++        }
++        every { preferences.edit() } returns editor
 diff --git a/gradle.properties b/gradle.properties
 index ec56161b5..b8cf53ec2 100644
 --- a/gradle.properties
@@ -24888,12 +26037,19 @@ index 13e9d0788..d1112a657 100644
 -    @Throws(ResponseException::class, AssetNotFoundException::class)
 +    @Throws(AssetNotFoundException::class)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/ledger/LedgerContracts.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/ledger/LedgerContracts.kt
-index 996645a58..ba92b3806 100644
+index 996645a58..2fcccbd86 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/ledger/LedgerContracts.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/ledger/LedgerContracts.kt
-@@ -65,0 +66,2 @@ interface LedgerProposalPipeline {
+@@ -17,0 +18,2 @@ import co.electriccoin.zcash.ui.common.repository.SubmitProposalState
++import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
++import kotlinx.coroutines.flow.Flow
+@@ -65,0 +68,2 @@ interface LedgerProposalPipeline {
 +    fun approveForSigning(expectedProposal: TransactionProposal? = null)
 +
+@@ -75,0 +80,3 @@ interface LedgerAccountImporter {
++    val committedBirthdays: Flow<CommittedEnrollmentBirthday?>
++
++    fun committedBirthday(): CommittedEnrollmentBirthday?
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
 index b7227e48f..b4e8a2e65 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
@@ -27442,6 +28598,13 @@ index 000000000..ddecf716f
 +private const val OBSERVATION_LIFETIME_MILLIS = 120_000L
 +private const val REQUEST_INTERVAL_MILLIS = 1_000L
 +private const val FAILURE_BACKOFF_MILLIS = 60_000L
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/LedgerAccountBindingProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/LedgerAccountBindingProvider.kt
+index 5d402994b..32a28ba33 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/LedgerAccountBindingProvider.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/LedgerAccountBindingProvider.kt
+@@ -94 +94 @@ private class LedgerBindingPreferenceDefault(
+-    ) = preferenceProvider.putString(
++    ) = preferenceProvider.putStringWithRollback(
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/MarketData.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/MarketData.kt
 new file mode 100644
 index 000000000..0a1aa94f3
@@ -30969,12 +32132,14 @@ index 572bbb6b4..000000000
 -        is SubmitResult.Error -> null
 -    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCase.kt
-index a2a749ea9..e91ae15db 100644
+index a2a749ea9..c84f28212 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCase.kt
 @@ -3 +2,0 @@ package co.electriccoin.zcash.ui.common.usecase
 -import cash.z.ecc.android.sdk.exception.InitializeException
-@@ -10,0 +10,10 @@ import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
+@@ -9,0 +9 @@ import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyAccountImporter
++import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
+@@ -10,0 +11,13 @@ import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
 +import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 +import co.electriccoin.zcash.ui.screen.connectkeystone.connected.KeystoneConnectedArgs
 +import co.electriccoin.zcash.ui.screen.keepopen.KeepOpenArgs
@@ -30983,30 +32148,64 @@ index a2a749ea9..e91ae15db 100644
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
++import kotlinx.coroutines.flow.Flow
++import kotlinx.coroutines.flow.flowOf
++import kotlinx.coroutines.flow.map
 +import kotlinx.coroutines.sync.withLock
 +import kotlinx.coroutines.withContext
-@@ -17 +26 @@ class CreateHWWalletAccountUseCase(
+@@ -17 +30 @@ class CreateHWWalletAccountUseCase(
 -    private val parseKeystoneUrToZashiAccounts: ParseKeystoneUrToZashiAccountsUseCase,
 +    private val keystoneSession: KeystoneEnrollmentSession,
-@@ -24,4 +33 @@ class CreateHWWalletAccountUseCase(
+@@ -24,4 +37 @@ class CreateHWWalletAccountUseCase(
 -     * Whether [enrollment] still carries what the import needs. A Ledger pairing and a pending
 -     * view-only key live in memory only and are gone after process death; a Keystone UR travels in
 -     * the route but can be unusable. Either way the screens have nothing to offer, and send the user back to the root
 -     * instead of a form that cannot be submitted.
 +     * Pending account data is held in memory and expires when the process ends.
-@@ -32,5 +38 @@ class CreateHWWalletAccountUseCase(
+@@ -32,5 +42 @@ class CreateHWWalletAccountUseCase(
 -                try {
 -                    parseKeystoneUrToZashiAccounts(enrollment.ur).accounts.isNotEmpty()
 -                } catch (_: InvalidKeystoneSignInQRException) {
 -                    false
 -                }
 +                keystoneSession.resolve(enrollment.sessionId)?.accounts?.isNotEmpty() == true
-@@ -61,3 +63 @@ class CreateHWWalletAccountUseCase(
+@@ -47,0 +54,28 @@ class CreateHWWalletAccountUseCase(
++    fun committedBirthday(enrollment: HWWalletEnrollment): CommittedEnrollmentBirthday? =
++        when (enrollment) {
++            is HWWalletEnrollment.Keystone ->
++                keystoneSession.enrollment(enrollment.sessionId)?.imported?.value
++                    ?.let { CommittedEnrollmentBirthday(it.birthday, it.account) }
++            HWWalletEnrollment.Ledger -> ledgerAccountImporter.committedBirthday()
++            HWWalletEnrollment.ViewOnly -> viewOnlyAccountImporter.committedBirthday()
++        }
++
++    fun observeCommittedBirthday(enrollment: HWWalletEnrollment): Flow<CommittedEnrollmentBirthday?> =
++        when (enrollment) {
++            is HWWalletEnrollment.Keystone ->
++                keystoneSession.enrollment(enrollment.sessionId)?.imported?.map { imported ->
++                    imported?.let { CommittedEnrollmentBirthday(it.birthday, it.account) }
++                } ?: flowOf(null)
++            HWWalletEnrollment.Ledger -> ledgerAccountImporter.committedBirthdays
++            HWWalletEnrollment.ViewOnly -> viewOnlyAccountImporter.committedBirthdays
++        }
++
++    suspend fun finish(enrollment: HWWalletEnrollment, birthday: CommittedEnrollmentBirthday) {
++        if (committedBirthday(enrollment) != birthday) return
++        if (enrollment == HWWalletEnrollment.ViewOnly) {
++            viewOnlyAccountImporter.finishImport()
++        } else {
++            invoke(enrollment, birthday.height)
++        }
++    }
++
+@@ -58,0 +93 @@ class CreateHWWalletAccountUseCase(
++        if (committedBirthday(enrollment)?.let { it.height != birthday } == true) return
+@@ -61,3 +96 @@ class CreateHWWalletAccountUseCase(
 -                val accounts = parseKeystoneUrToZashiAccounts(enrollment.ur)
 -                val account = accounts.accounts.firstOrNull() ?: throw InitializeException.NoAccountLoaded
 -                createKeystoneAccount(accounts, account, birthday)
 +                importKeystone(enrollment.sessionId, birthday)
-@@ -82,0 +83,21 @@ class CreateHWWalletAccountUseCase(
+@@ -82,0 +116,23 @@ class CreateHWWalletAccountUseCase(
 +
 +    private suspend fun importKeystone(sessionId: String, birthday: BlockHeight?) {
 +        val pending = keystoneSession.enrollment(sessionId)
@@ -31016,7 +32215,9 @@ index a2a749ea9..e91ae15db 100644
 +            return
 +        }
 +        keystoneSession.importMutex.withLock {
-+            if (keystoneSession.enrollment(sessionId) !== pending) return
++            val imported = pending.imported.value
++            val birthdayChanged = imported != null && imported.birthday != birthday
++            if (birthdayChanged || keystoneSession.enrollment(sessionId) !== pending) return@withLock
 +            val approvedBirthday = withContext(NonCancellable) {
 +                createKeystoneAccount(pending, account, birthday)
 +            }
@@ -31029,7 +32230,7 @@ index a2a749ea9..e91ae15db 100644
 +        }
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateKeystoneAccountUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateKeystoneAccountUseCase.kt
-index 27977ac75..016fe6117 100644
+index 27977ac75..2158aade8 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateKeystoneAccountUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/CreateKeystoneAccountUseCase.kt
 @@ -5 +4,0 @@ import cash.z.ecc.android.sdk.model.BlockHeight
@@ -31053,7 +32254,7 @@ index 27977ac75..016fe6117 100644
 -        val createdAccount =
 -            accountDataSource.importKeystoneAccount(
 +    ): BlockHeight? {
-+        val imported = pending.imported ?: KeystoneEnrollmentSession.Imported(
++        val imported = pending.imported.value ?: KeystoneEnrollmentSession.Imported(
 +            account = accountDataSource.importKeystoneAccount(
 @@ -36 +31 @@ class CreateKeystoneAccountUseCase(
 -                seedFingerprint = accounts.seedFingerprint,
@@ -31063,7 +32264,7 @@ index 27977ac75..016fe6117 100644
 -        accountDataSource.selectAccount(createdAccount)
 +            ),
 +            birthday = birthday,
-+        ).also { pending.imported = it }
++        ).also { pending.imported.value = it }
 +        accountDataSource.selectAccount(imported.account)
 @@ -42,5 +39 @@ class CreateKeystoneAccountUseCase(
 -        if (birthday != null) {
@@ -32831,6 +34032,21 @@ index 7e103c534..3d4724c78 100644
 +    fun retryWalletInitialization() = walletRepository.retryWalletInitialization()
 @@ -91,0 +95 @@ enum class SecretState {
 +    INCOMPLETE,
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/viewonly/ViewOnlyContracts.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/viewonly/ViewOnlyContracts.kt
+index e348d65c6..615a4ed94 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/viewonly/ViewOnlyContracts.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/viewonly/ViewOnlyContracts.kt
+@@ -6,0 +7 @@ import co.electriccoin.zcash.ui.design.util.StringResource
++import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
+@@ -7,0 +9 @@ import co.electriccoin.zcash.ui.screen.connecthw.HWWalletBranding
++import kotlinx.coroutines.flow.Flow
+@@ -44,0 +47,3 @@ interface ViewOnlyAccountImporter {
++    val committedBirthdays: Flow<CommittedEnrollmentBirthday?>
++
++    fun committedBirthday(): CommittedEnrollmentBirthday?
+@@ -58,0 +64,2 @@ interface ViewOnlyAccountImporter {
++
++    suspend fun finishImport()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/wallet/StaleLock.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/wallet/StaleLock.kt
 index a0886229e..973a1ab81 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/wallet/StaleLock.kt
@@ -33641,11 +34857,119 @@ index cc829b5e8..ef8018b93 100644
 -                    )
 -                }
 -            },
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/EnrollmentFinalization.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/EnrollmentFinalization.kt
+new file mode 100644
+index 000000000..f74d9f754
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/EnrollmentFinalization.kt
+@@ -0,0 +1,82 @@
++package co.electriccoin.zcash.ui.screen.connecthw
++
++import androidx.compose.foundation.layout.Column
++import androidx.compose.foundation.layout.fillMaxSize
++import androidx.compose.foundation.layout.fillMaxWidth
++import androidx.compose.foundation.rememberScrollState
++import androidx.compose.foundation.verticalScroll
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.ui.Modifier
++import androidx.compose.ui.unit.dp
++import androidx.lifecycle.ViewModel
++import androidx.lifecycle.viewModelScope
++import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
++import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.model.MutableLce
++import co.electriccoin.zcash.ui.common.model.guardLoading
++import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
++import co.electriccoin.zcash.ui.design.component.BlankBgScaffold
++import co.electriccoin.zcash.ui.design.component.ButtonState
++import co.electriccoin.zcash.ui.design.component.VerticalSpacer
++import co.electriccoin.zcash.ui.design.component.ZashiButton
++import co.electriccoin.zcash.ui.design.component.ZashiSmallTopAppBar
++import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarBackNavigation
++import co.electriccoin.zcash.ui.design.theme.colors.ZashiColors
++import co.electriccoin.zcash.ui.design.theme.typography.ZashiTypography
++import co.electriccoin.zcash.ui.design.util.getValue
++import co.electriccoin.zcash.ui.design.util.scaffoldPadding
++import co.electriccoin.zcash.ui.design.util.stringRes
++import kotlinx.coroutines.flow.SharingStarted
++import kotlinx.coroutines.flow.WhileSubscribed
++import kotlinx.coroutines.flow.combine
++import kotlinx.coroutines.flow.stateIn
++
++internal fun ViewModel.observeEnrollmentFinalization(
++    enrollment: HWWalletEnrollment,
++    createAccount: CreateHWWalletAccountUseCase,
++    lce: MutableLce<Unit>,
++) = combine(createAccount.observeCommittedBirthday(enrollment), lce.state) { birthday, operation ->
++    birthday?.let { committed ->
++        EnrollmentFinalizationState(
++            birthday = committed,
++            finish = ButtonState(
++                text = stringRes(R.string.enrollment_finish_setup),
++                isEnabled = !operation.loading,
++                isLoading = operation.loading,
++                onClick = {
++                    lce.guardLoading {
++                        lce.execute { createAccount.finish(enrollment, committed) }
++                    }
++                },
++            ),
++        )
++    }
++}.stateIn(viewModelScope, SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT), null)
++
++@Composable
++internal fun EnrollmentFinalizationView(state: EnrollmentFinalizationState, onBack: () -> Unit) {
++    BlankBgScaffold(
++        topBar = {
++            ZashiSmallTopAppBar(navigationAction = { ZashiTopAppBarBackNavigation(onBack = onBack) })
++        }
++    ) { padding ->
++        Column(
++            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).scaffoldPadding(padding),
++        ) {
++            Text(
++                text = stringRes(R.string.enrollment_finish_setup).getValue(),
++                style = ZashiTypography.header6,
++                color = ZashiColors.Text.textPrimary,
++            )
++            VerticalSpacer(8.dp)
++            Text(
++                text = state.birthday.message().getValue(),
++                style = ZashiTypography.textSm,
++                color = ZashiColors.Text.textPrimary,
++            )
++            VerticalSpacer(24.dp)
++            ZashiButton(state = state.finish, modifier = Modifier.fillMaxWidth())
++        }
++    }
++}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/EnrollmentFinalizationState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/EnrollmentFinalizationState.kt
+new file mode 100644
+index 000000000..887e3a77a
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/EnrollmentFinalizationState.kt
+@@ -0,0 +1,8 @@
++package co.electriccoin.zcash.ui.screen.connecthw
++
++import co.electriccoin.zcash.ui.design.component.ButtonState
++
++internal data class EnrollmentFinalizationState(
++    val birthday: CommittedEnrollmentBirthday,
++    val finish: ButtonState,
++)
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/HWWalletEnrollment.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/HWWalletEnrollment.kt
-index 263cf2572..3e3f6fc51 100644
+index 263cf2572..d0afabca8 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/HWWalletEnrollment.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/HWWalletEnrollment.kt
-@@ -11,7 +11,3 @@ import kotlin.reflect.typeOf
+@@ -5,0 +6,5 @@ import androidx.navigation.NavType
++import cash.z.ecc.android.sdk.model.Account
++import cash.z.ecc.android.sdk.model.BlockHeight
++import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.design.util.stringRes
++import co.electriccoin.zcash.ui.design.util.stringResByNumber
+@@ -11,7 +16,3 @@ import kotlin.reflect.typeOf
 - * Which hardware wallet is being enrolled, and everything the shared enrollment screens need to
 - * finish it. Keystone carries the UR its QR flow scanned; Ledger carries nothing, because its
 - * pairing is held by the Ledger feature (see `LedgerAccountImporter`) until the account is imported.
@@ -33656,20 +34980,31 @@ index 263cf2572..3e3f6fc51 100644
 + * Identifies the enrollment using the shared birthday screens. Keystone carries an opaque ID for
 + * its process-local session. The Ledger and view-only features keep their pending data in memory.
 + * View-only enrollment goes directly to the birthday question, then to the account name.
-@@ -23 +19 @@ sealed interface HWWalletEnrollment {
+@@ -23 +24 @@ sealed interface HWWalletEnrollment {
 -        val ur: String
 +        val sessionId: String
+@@ -32,0 +34,9 @@ sealed interface HWWalletEnrollment {
++/** Birthday already used by the SDK. A null height means the chain tip at import. */
++data class CommittedEnrollmentBirthday(val height: BlockHeight?, private val account: Account) {
++    fun message() = height?.let {
++        stringRes(R.string.enrollment_committed_height, stringResByNumber(it.value, 0))
++    } ?: stringRes(R.string.enrollment_committed_tip)
++
++    override fun toString() = "CommittedEnrollmentBirthday(height=$height)"
++}
++
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/KeystoneEnrollmentSession.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/KeystoneEnrollmentSession.kt
 new file mode 100644
-index 000000000..7b8db35f3
+index 000000000..f32ec232c
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/KeystoneEnrollmentSession.kt
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,31 @@
 +package co.electriccoin.zcash.ui.screen.connecthw
 +
 +import cash.z.ecc.android.sdk.model.Account
 +import cash.z.ecc.android.sdk.model.BlockHeight
 +import com.keystone.module.ZcashAccounts
++import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.sync.Mutex
 +import java.util.UUID
 +
@@ -33690,11 +35025,211 @@ index 000000000..7b8db35f3
 +    }
 +
 +    internal class Pending(val id: String, val accounts: ZcashAccounts) {
-+        var imported: Imported? = null
++        val imported = MutableStateFlow<Imported?>(null)
 +    }
 +
 +    internal data class Imported(val account: Account, val birthday: BlockHeight?)
 +}
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/date/HWDateScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/date/HWDateScreen.kt
+index 2fbf91395..01c9f93d2 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/date/HWDateScreen.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/date/HWDateScreen.kt
+@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.screen.common.LceRenderer
++import co.electriccoin.zcash.ui.screen.connecthw.EnrollmentFinalizationView
+@@ -15,0 +17 @@ fun HWFirstTransactionScreen(args: HWDateArgs) {
++    val finalization by vm.finalization.collectAsStateWithLifecycle()
+@@ -18 +20,6 @@ fun HWFirstTransactionScreen(args: HWDateArgs) {
+-        BirthdayPickerView(it)
++        val committed = finalization
++        if (committed == null) {
++            BirthdayPickerView(it)
++        } else {
++            EnrollmentFinalizationView(committed, it.onBack)
++        }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/date/HWDateVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/date/HWDateVM.kt
+index 32493930f..1a0dc2218 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/date/HWDateVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/date/HWDateVM.kt
+@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.common.model.LceState
++import co.electriccoin.zcash.ui.common.model.guardLoading
+@@ -21,0 +23 @@ import co.electriccoin.zcash.ui.screen.connecthw.brandingOf
++import co.electriccoin.zcash.ui.screen.connecthw.observeEnrollmentFinalization
+@@ -40 +42 @@ class HWDateVM(
+-    createHWWalletAccount: CreateHWWalletAccountUseCase,
++    private val createHWWalletAccount: CreateHWWalletAccountUseCase,
+@@ -49,0 +52,2 @@ class HWDateVM(
++    internal val finalization = observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, estimateLce)
++
+@@ -92,20 +96,3 @@ class HWDateVM(
+-        estimateLce.execute {
+-            val instant =
+-                yearMonth
+-                    .atDay(1)
+-                    .atStartOfDay()
+-                    .atZone(ZoneId.systemDefault())
+-                    .toInstant()
+-                    .toKotlinInstant()
+-            val bday =
+-                SdkSynchronizer.estimateBirthdayHeight(
+-                    context = application,
+-                    date = instant,
+-                    network = VersionInfo.NETWORK,
+-                )
+-            navigationRouter.forward(
+-                HWEstimationArgs(
+-                    enrollment = args.enrollment,
+-                    blockHeight = bday.value,
+-                )
+-            )
++        estimateLce.guardLoading {
++            if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return@guardLoading
++            estimateLce.execute { estimateBirthday(yearMonth) }
+@@ -114 +101,30 @@ class HWDateVM(
+-    private fun onEnterBlockHeightClick() = navigationRouter.forward(HWHeightArgs(args.enrollment))
++    private suspend fun estimateBirthday(yearMonth: YearMonth) {
++        if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return
++        val instant =
++            yearMonth
++                .atDay(1)
++                .atStartOfDay()
++                .atZone(ZoneId.systemDefault())
++                .toInstant()
++                .toKotlinInstant()
++        val bday =
++            SdkSynchronizer.estimateBirthdayHeight(
++                context = application,
++                date = instant,
++                network = VersionInfo.NETWORK,
++            )
++        if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return
++        navigationRouter.forward(
++            HWEstimationArgs(
++                enrollment = args.enrollment,
++                blockHeight = bday.value,
++            )
++        )
++    }
++
++    private fun onEnterBlockHeightClick() =
++        estimateLce.guardLoading {
++            if (createHWWalletAccount.committedBirthday(args.enrollment) == null) {
++                navigationRouter.forward(HWHeightArgs(args.enrollment))
++            }
++        }
+@@ -116 +132 @@ class HWDateVM(
+-    private fun onBack() = navigationRouter.back()
++    private fun onBack() = estimateLce.guardLoading { navigationRouter.back() }
+@@ -118 +134,3 @@ class HWDateVM(
+-    private fun onInfoClick() = navigationRouter.forward(HeightInfoArgs)
++    private fun onInfoClick() {
++        if (createHWWalletAccount.committedBirthday(args.enrollment) == null) navigationRouter.forward(HeightInfoArgs)
++    }
+@@ -120 +138,3 @@ class HWDateVM(
+-    private fun onYearMonthChange(yearMonth: YearMonth) = selection.update { yearMonth }
++    private fun onYearMonthChange(yearMonth: YearMonth) {
++        if (createHWWalletAccount.committedBirthday(args.enrollment) == null) selection.update { yearMonth }
++    }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/estimation/HWEstimationScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/estimation/HWEstimationScreen.kt
+index 488492620..f94571441 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/estimation/HWEstimationScreen.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/estimation/HWEstimationScreen.kt
+@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.screen.common.LceRenderer
++import co.electriccoin.zcash.ui.screen.connecthw.EnrollmentFinalizationView
+@@ -15,0 +17 @@ fun HWFirstTransactionEstimationScreen(args: HWEstimationArgs) {
++    val finalization by vm.finalization.collectAsStateWithLifecycle()
+@@ -18 +20,6 @@ fun HWFirstTransactionEstimationScreen(args: HWEstimationArgs) {
+-        EstimatedBlockHeightView(it)
++        val committed = finalization
++        if (committed == null) {
++            EstimatedBlockHeightView(it)
++        } else {
++            EnrollmentFinalizationView(committed, it.onBack)
++        }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/estimation/HWEstimationVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/estimation/HWEstimationVM.kt
+index caf69fa83..e2068799c 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/estimation/HWEstimationVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/estimation/HWEstimationVM.kt
+@@ -21,0 +22 @@ import co.electriccoin.zcash.ui.screen.connecthw.brandingOf
++import co.electriccoin.zcash.ui.screen.connecthw.observeEnrollmentFinalization
+@@ -39,0 +41,2 @@ class HWEstimationVM(
++    internal val finalization = observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, createAccountLce)
++
+@@ -85,0 +89 @@ class HWEstimationVM(
++            if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return@guardLoading
+@@ -91 +95,3 @@ class HWEstimationVM(
+-    private fun onInfoClick() = navigationRouter.forward(HeightInfoArgs)
++    private fun onInfoClick() {
++        if (createHWWalletAccount.committedBirthday(args.enrollment) == null) navigationRouter.forward(HeightInfoArgs)
++    }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/height/HWHeightScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/height/HWHeightScreen.kt
+index 879e26d5f..f97dcbeb3 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/height/HWHeightScreen.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/height/HWHeightScreen.kt
+@@ -8,0 +9 @@ import co.electriccoin.zcash.ui.screen.common.LceRenderer
++import co.electriccoin.zcash.ui.screen.connecthw.EnrollmentFinalizationView
+@@ -15,0 +17 @@ fun HWWBHScreen(args: HWHeightArgs) {
++    val finalization by vm.finalization.collectAsStateWithLifecycle()
+@@ -18 +20,6 @@ fun HWWBHScreen(args: HWHeightArgs) {
+-        BlockHeightView(it)
++        val committed = finalization
++        if (committed == null) {
++            BlockHeightView(it)
++        } else {
++            EnrollmentFinalizationView(committed, it.onBack)
++        }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/height/HWHeightVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/height/HWHeightVM.kt
+index 5c54cac5d..015b46e07 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/height/HWHeightVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/height/HWHeightVM.kt
+@@ -22,0 +23 @@ import co.electriccoin.zcash.ui.screen.connecthw.brandingOf
++import co.electriccoin.zcash.ui.screen.connecthw.observeEnrollmentFinalization
+@@ -43,0 +45,2 @@ class HWHeightVM(
++    internal val finalization = observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, createAccountLce)
++
+@@ -88,0 +92 @@ class HWHeightVM(
++            if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return@guardLoading
+@@ -94 +98,3 @@ class HWHeightVM(
+-    private fun onInfoClick() = navigationRouter.forward(HeightInfoArgs)
++    private fun onInfoClick() {
++        if (createHWWalletAccount.committedBirthday(args.enrollment) == null) navigationRouter.forward(HeightInfoArgs)
++    }
+@@ -98 +104,3 @@ class HWHeightVM(
+-    private fun onValueChanged(state: NumberTextFieldInnerState) = blockHeightText.update { state }
++    private fun onValueChanged(state: NumberTextFieldInnerState) {
++        if (createHWWalletAccount.committedBirthday(args.enrollment) == null) blockHeightText.update { state }
++    }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/neworactive/HWNewOrActiveScreen.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/neworactive/HWNewOrActiveScreen.kt
+index 8b249116f..7b71d3479 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/neworactive/HWNewOrActiveScreen.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/neworactive/HWNewOrActiveScreen.kt
+@@ -7,0 +8 @@ import co.electriccoin.zcash.ui.screen.common.LceRenderer
++import co.electriccoin.zcash.ui.screen.connecthw.EnrollmentFinalizationView
+@@ -14,0 +16 @@ fun HWNewOrActiveScreen(args: HWNewOrActiveArgs) {
++    val finalization by vm.finalization.collectAsStateWithLifecycle()
+@@ -17 +19,6 @@ fun HWNewOrActiveScreen(args: HWNewOrActiveArgs) {
+-        HWNewOrActiveView(it)
++        val committed = finalization
++        if (committed == null) {
++            HWNewOrActiveView(it)
++        } else {
++            EnrollmentFinalizationView(committed, it.onBack)
++        }
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/neworactive/HWNewOrActiveVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/neworactive/HWNewOrActiveVM.kt
+index 6da1a9652..d5e0e75fd 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/neworactive/HWNewOrActiveVM.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/connecthw/neworactive/HWNewOrActiveVM.kt
+@@ -15,0 +16 @@ import co.electriccoin.zcash.ui.screen.connecthw.brandingOf
++import co.electriccoin.zcash.ui.screen.connecthw.observeEnrollmentFinalization
+@@ -36,0 +38,2 @@ class HWNewOrActiveVM(
++    internal val finalization = observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, createAccountLce)
++
+@@ -78,0 +82 @@ class HWNewOrActiveVM(
++            if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return@guardLoading
+@@ -86 +90,3 @@ class HWNewOrActiveVM(
+-            navigationRouter.forward(HWDateArgs(args.enrollment))
++            if (createHWWalletAccount.committedBirthday(args.enrollment) == null) {
++                navigationRouter.forward(HWDateArgs(args.enrollment))
++            }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/contact/ABContactState.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/contact/ABContactState.kt
 index 31c48cfce..f962cc91f 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/contact/ABContactState.kt
@@ -43321,6 +44856,18 @@ index 000000000..72b89c557
 +<resources>
 +    <string name="authentication_unavailable_remedy">Authentication unavailable. Check your device screen lock in Android Settings, then try again.</string>
 +</resources>
+diff --git a/ui-lib/src/main/res/ui/common/values/enrollment_strings.xml b/ui-lib/src/main/res/ui/common/values/enrollment_strings.xml
+new file mode 100644
+index 000000000..e59b205f6
+--- /dev/null
++++ b/ui-lib/src/main/res/ui/common/values/enrollment_strings.xml
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <string name="enrollment_finish_setup">Finish setup</string>
++    <string name="enrollment_committed_height">The account was imported with block height %1$s. Finish setup to use it.</string>
++    <string name="enrollment_committed_tip">The account was imported from the chain tip. Finish setup to use it.</string>
++</resources>
 diff --git a/ui-lib/src/main/res/ui/common/values/storage_recovery_strings.xml b/ui-lib/src/main/res/ui/common/values/storage_recovery_strings.xml
 new file mode 100644
 index 000000000..02d8bde68
@@ -51604,6 +53151,13 @@ index cffe4775f..06102dd3c 100644
 @@ -155 +218 @@ class KtorNearApiProviderTest {
 -            appFees = listOf(AppFee(recipient = "affiliate", fee = 75))
 +            appFees = emptyList()
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/LedgerAccountBindingProviderTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/LedgerAccountBindingProviderTest.kt
+index 41bd5bab5..cf054bd69 100644
+--- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/LedgerAccountBindingProviderTest.kt
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/LedgerAccountBindingProviderTest.kt
+@@ -121,0 +122,2 @@ private class FakePreferenceProvider : PreferenceProvider {
++    override suspend fun putStringWithRollback(key: PreferenceKey, value: String?) = putString(key, value)
++
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/MetadataStorageProviderTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/MetadataStorageProviderTest.kt
 index a771c0f05..85380cd9b 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/MetadataStorageProviderTest.kt
@@ -54700,7 +56254,7 @@ index 0a57ab991..000000000
 -    }
 -}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCaseTest.kt
-index 1a8bb1b8b..537548839 100644
+index 1a8bb1b8b..8c4505d3c 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateHWWalletAccountUseCaseTest.kt
 @@ -3,0 +4 @@ import cash.z.ecc.android.sdk.exception.InitializeException
@@ -54737,7 +56291,7 @@ index 1a8bb1b8b..537548839 100644
 @@ -51 +65 @@ class CreateHWWalletAccountUseCaseTest {
 -            coVerify(exactly = 1) { createKeystoneAccount.invoke(accounts, account, birthday) }
 +            coVerify(exactly = 1) { createKeystoneAccount.invoke(pending, account, birthday) }
-@@ -52,0 +67,24 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -52,0 +67,40 @@ class CreateHWWalletAccountUseCaseTest {
 +            assertFalse(useCase.isReady(enrollment))
 +            verify(exactly = 1) {
 +                navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, KeepOpenArgs(KeepOpenFlow.KEYSTONE))
@@ -54756,13 +56310,17 @@ index 1a8bb1b8b..537548839 100644
 +        verify(exactly = 0) { fixture.router.replaceFrom(any(), any()) }
 +
 +        fixture.useCase(fixture.enrollment, birthday = null)
++        fixture.useCase(fixture.enrollment, BlockHeight.new(2_000_000L))
++        coVerify(exactly = 1) { fixture.accountDataSource.selectAccount(fixture.created) }
++
++        fixture.useCase(fixture.enrollment, birthday)
 +
 +        coVerify(exactly = 1) { fixture.accountDataSource.importKeystoneAccount(any(), any(), any(), birthday) }
 +        coVerify(exactly = 2) { fixture.accountDataSource.selectAccount(fixture.created) }
 +        verify(exactly = 1) { fixture.synchronizer.resetSynchronizer() }
 +        verify(exactly = 1) {
 +            fixture.router.replaceFrom(ScanKeystoneSignInRequest::class, KeepOpenArgs(KeepOpenFlow.KEYSTONE))
-@@ -53,0 +92,18 @@ class CreateHWWalletAccountUseCaseTest {
++        }
 +        assertFalse(fixture.useCase.isReady(fixture.enrollment))
 +    }
 +
@@ -54774,35 +56332,35 @@ index 1a8bb1b8b..537548839 100644
 +
 +        assertFailsWith<InitializeException.ImportAccountCollisionException> {
 +            fixture.useCase(fixture.enrollment, birthday)
-+        }
-+
+@@ -54,0 +109,6 @@ class CreateHWWalletAccountUseCaseTest {
 +        assertTrue(fixture.useCase.isReady(fixture.enrollment))
 +        coVerify(exactly = 0) { fixture.accountDataSource.selectAccount(any<Account>()) }
 +        verify(exactly = 0) { fixture.synchronizer.resetSynchronizer() }
 +        verify(exactly = 0) { fixture.router.replaceFrom(any(), any()) }
 +    }
-@@ -137 +193 @@ class CreateHWWalletAccountUseCaseTest {
++
+@@ -137 +197 @@ class CreateHWWalletAccountUseCaseTest {
 -    fun aKeystoneUrWithNoAccountsFailsInsteadOfImportingNothing() =
 +    fun aLostKeystoneSessionRestartsScanningWithoutImporting() =
-@@ -139,2 +195,4 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -139,2 +199,6 @@ class CreateHWWalletAccountUseCaseTest {
 -            val accounts = mockk<ZcashAccounts> { every { this@mockk.accounts } returns emptyList() }
 -            val useCase = useCase(accountsForUr = accounts)
 +            val createKeystoneAccount = mockk<CreateKeystoneAccountUseCase>(relaxed = true)
 +            val navigationRouter = mockk<NavigationRouter>(relaxed = true)
 +            val useCase =
 +                useCase(createKeystoneAccount = createKeystoneAccount, navigationRouter = navigationRouter)
-@@ -142,2 +200,5 @@ class CreateHWWalletAccountUseCaseTest {
++
++            useCase(HWWalletEnrollment.Keystone("expired"), birthday = null)
+@@ -142,2 +206,3 @@ class CreateHWWalletAccountUseCaseTest {
 -            assertFailsWith<InitializeException.NoAccountLoaded> {
 -                useCase(HWWalletEnrollment.Keystone(UR), birthday = null)
-+            useCase(HWWalletEnrollment.Keystone("expired"), birthday = null)
-+
 +            coVerify(exactly = 0) { createKeystoneAccount.invoke(any(), any(), any()) }
 +            verify(exactly = 1) {
 +                navigationRouter.replaceFrom(ScanKeystoneSignInRequest::class, ScanKeystoneSignInRequest)
-@@ -150,0 +212,2 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -150,0 +216,2 @@ class CreateHWWalletAccountUseCaseTest {
 +        val session = KeystoneEnrollmentSession()
 +        val useCase = useCase(keystoneSession = session)
-@@ -152,5 +215,3 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -152,5 +219,3 @@ class CreateHWWalletAccountUseCaseTest {
 -        assertTrue(useCase(accountsForUr = withAccounts).isReady(HWWalletEnrollment.Keystone(UR)))
 -        assertFalse(useCase(accountsForUr = withoutAccounts).isReady(HWWalletEnrollment.Keystone(UR)))
 -        assertFalse(
@@ -54811,11 +56369,11 @@ index 1a8bb1b8b..537548839 100644
 +        assertTrue(useCase.isReady(HWWalletEnrollment.Keystone(session.start(withAccounts))))
 +        assertFalse(useCase.isReady(HWWalletEnrollment.Keystone(session.start(withoutAccounts))))
 +        assertFalse(useCase.isReady(HWWalletEnrollment.Keystone("expired")))
-@@ -166,2 +227 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -166,2 +231 @@ class CreateHWWalletAccountUseCaseTest {
 -        accountsForUr: ZcashAccounts = mockk { every { accounts } returns listOf(mockk()) },
 -        parseThrows: Boolean = false,
 +        keystoneSession: KeystoneEnrollmentSession = KeystoneEnrollmentSession(),
-@@ -175,9 +235 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -175,9 +239 @@ class CreateHWWalletAccountUseCaseTest {
 -        parseKeystoneUrToZashiAccounts =
 -            mockk {
 -                if (parseThrows) {
@@ -54826,9 +56384,13 @@ index 1a8bb1b8b..537548839 100644
 -                }
 -            },
 +        keystoneSession = keystoneSession,
-@@ -195 +246,0 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -187,0 +244 @@ class CreateHWWalletAccountUseCaseTest {
++                every { it.committedBirthday() } returns null
+@@ -191,0 +249 @@ class CreateHWWalletAccountUseCaseTest {
++                every { it.committedBirthday() } returns null
+@@ -195 +252,0 @@ class CreateHWWalletAccountUseCaseTest {
 -}
-@@ -197 +248,19 @@ class CreateHWWalletAccountUseCaseTest {
+@@ -197 +254,19 @@ class CreateHWWalletAccountUseCaseTest {
 -private const val UR = "ur:zcash-accounts/fixture"
 +    private inner class KeystoneFixture {
 +        val created = mockk<Account>()
@@ -58311,21 +59873,110 @@ index b110e1944..ec8456617 100644
 -import androidx.compose.ui.test.junit4.createComposeRule
 +import androidx.compose.ui.test.junit4.v2.createComposeRule
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/connecthw/HWEnrollmentVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/connecthw/HWEnrollmentVMTest.kt
-index 34f86a64f..a8b8cec2c 100644
+index 34f86a64f..52733defc 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/connecthw/HWEnrollmentVMTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/connecthw/HWEnrollmentVMTest.kt
-@@ -60 +60 @@ class HWEnrollmentVMTest {
+@@ -2,0 +3 @@ package co.electriccoin.zcash.ui.screen.connecthw
++import cash.z.ecc.android.sdk.model.Account
+@@ -5,0 +7,3 @@ import co.electriccoin.zcash.ui.R
++import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
++import co.electriccoin.zcash.ui.common.model.LceError
++import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
+@@ -6,0 +11 @@ import co.electriccoin.zcash.ui.common.usecase.CreateHWWalletAccountUseCase
++import co.electriccoin.zcash.ui.common.usecase.CreateKeystoneAccountUseCase
+@@ -20,0 +26 @@ import co.electriccoin.zcash.ui.screen.connecthw.neworactive.HWNewOrActiveVM
++import co.electriccoin.zcash.ui.screen.connectkeystone.connected.KeystoneConnectedArgs
+@@ -21,0 +28,2 @@ import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
++import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
++import com.keystone.module.ZcashAccounts
+@@ -30,0 +39 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.flow.flowOf
+@@ -38,0 +48 @@ import kotlinx.serialization.json.Json
++import java.io.IOException
+@@ -60 +70 @@ class HWEnrollmentVMTest {
 -            HWWalletEnrollment.Keystone(ur = "ur:zcash-accounts/fixture"),
 +            HWWalletEnrollment.Keystone(sessionId = "fixture-session"),
-@@ -67 +67 @@ class HWEnrollmentVMTest {
+@@ -67 +77 @@ class HWEnrollmentVMTest {
 -            HWWalletEnrollment.Keystone(ur = "ur:zcash-accounts/fixture"),
 +            HWWalletEnrollment.Keystone(sessionId = "fixture-session"),
-@@ -99 +99 @@ class HWEnrollmentVMTest {
+@@ -99 +109 @@ class HWEnrollmentVMTest {
 -        val keystone = brandingOf(HWWalletEnrollment.Keystone(ur = "ur"), viewOnlyContent)
 +        val keystone = brandingOf(HWWalletEnrollment.Keystone(sessionId = "fixture-session"), viewOnlyContent)
-@@ -124 +124 @@ class HWEnrollmentVMTest {
+@@ -124 +134 @@ class HWEnrollmentVMTest {
 -        val keystone = brandingOf(HWWalletEnrollment.Keystone(ur = "ur"), viewOnlyContent)
 +        val keystone = brandingOf(HWWalletEnrollment.Keystone(sessionId = "fixture-session"), viewOnlyContent)
+@@ -200,0 +211 @@ class HWEnrollmentVMTest {
++                        every { observeCommittedBirthday(any()) } returns flowOf(null)
+@@ -211,0 +223 @@ class HWEnrollmentVMTest {
++                        every { observeCommittedBirthday(any()) } returns flowOf(null)
+@@ -407,0 +420,61 @@ class HWEnrollmentVMTest {
++    @Test
++    fun retryingKeystoneFromTheTipKeepsTheCommittedBirthdayAcrossBackAndOlderCallbacks() =
++        runTest {
++            val created = mockk<Account>()
++            val accountsDataSource = mockk<AccountDataSource> {
++                coEvery { importKeystoneAccount(any(), any(), any(), null) } returns created
++                coEvery { selectAccount(created) } throws IOException() andThen Unit
++            }
++            val synchronizer = mockk<SynchronizerProvider>(relaxed = true)
++            val router = mockk<NavigationRouter>(relaxed = true)
++            val session = KeystoneEnrollmentSession()
++            val accounts = mockk<ZcashAccounts>(relaxed = true) {
++                every { accounts } returns listOf(mockk(relaxed = true))
++            }
++            val enrollment = HWWalletEnrollment.Keystone(session.start(accounts))
++            val createAccount = CreateHWWalletAccountUseCase(
++                keystoneSession = session,
++                createKeystoneAccount = CreateKeystoneAccountUseCase(accountsDataSource, synchronizer),
++                ledgerAccountImporter = mockk(relaxed = true),
++                viewOnlyAccountImporter = mockk(relaxed = true),
++                navigationRouter = router,
++            )
++            val question = newOrActiveVM(enrollment, createAccount, router)
++            val height = heightVM(enrollment, createAccount, router)
++            collect { question.state.collect { } }
++            collect { question.finalization.collect { } }
++            collect { height.state.collect { } }
++            collect { height.finalization.collect { } }
++            val originalQuestion = assertNotNull(question.state.value.content)
++            assertNotNull(height.state.value.content).blockHeight.onValueChange(heightText(VALID_HEIGHT))
++            runCurrent()
++            val originalHeight = assertNotNull(height.state.value.content)
++            assertTrue(originalHeight.primaryButton.isEnabled)
++
++            originalQuestion.newDevice.onClick()
++            runCurrent()
++            val failure = question.state.value.error as LceError.BottomSheet
++            failure.state.onBack()
++            runCurrent()
++            assertTrue(createAccount.isReady(enrollment))
++
++            originalQuestion.activeDevice.onClick()
++            originalHeight.primaryButton.onClick()
++            runCurrent()
++            verify(exactly = 0) { router.forward(HWDateArgs(enrollment)) }
++            coVerify(exactly = 1) { accountsDataSource.selectAccount(created) }
++
++            assertNull(assertNotNull(height.finalization.value).birthday.height)
++            originalHeight.onBack()
++            verify(exactly = 1) { router.back() }
++            val finalization = assertNotNull(question.finalization.value)
++            assertNull(finalization.birthday.height)
++            finalization.finish.onClick()
++            runCurrent()
++
++            coVerify(exactly = 1) { accountsDataSource.importKeystoneAccount(any(), any(), any(), any()) }
++            coVerify(exactly = 1) { accountsDataSource.importKeystoneAccount(any(), any(), any(), null) }
++            coVerify(exactly = 2) { accountsDataSource.selectAccount(created) }
++            verify(exactly = 1) { router.replaceFrom(ScanKeystoneSignInRequest::class, KeystoneConnectedArgs) }
++        }
++
+@@ -410,0 +484,2 @@ class HWEnrollmentVMTest {
++            every { committedBirthday(any()) } returns null
++            every { observeCommittedBirthday(any()) } returns flowOf(null)
+@@ -419,0 +495,2 @@ class HWEnrollmentVMTest {
++            every { committedBirthday(any()) } returns null
++            every { observeCommittedBirthday(any()) } returns flowOf(null)
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/contact/ContactGiftCardLinkRefusalTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/contact/ContactGiftCardLinkRefusalTest.kt
 index 514e2b2bc..23da3fe6b 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/contact/ContactGiftCardLinkRefusalTest.kt

@@ -3,6 +3,11 @@ package co.electriccoin.zcash.ui.screen.connecthw
 import android.net.Uri
 import android.os.Bundle
 import androidx.navigation.NavType
+import cash.z.ecc.android.sdk.model.Account
+import cash.z.ecc.android.sdk.model.BlockHeight
+import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.reflect.typeOf
@@ -24,6 +29,15 @@ sealed interface HWWalletEnrollment {
 
     @Serializable
     data object ViewOnly : HWWalletEnrollment
+}
+
+/** Birthday already used by the SDK. A null height means the chain tip at import. */
+data class CommittedEnrollmentBirthday(val height: BlockHeight?, private val account: Account) {
+    fun message() = height?.let {
+        stringRes(R.string.enrollment_committed_height, stringResByNumber(it.value, 0))
+    } ?: stringRes(R.string.enrollment_committed_tip)
+
+    override fun toString() = "CommittedEnrollmentBirthday(height=$height)"
 }
 
 /**

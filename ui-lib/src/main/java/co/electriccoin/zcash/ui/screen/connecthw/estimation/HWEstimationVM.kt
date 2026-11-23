@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.screen.common.EstimatedBlockHeightState
 import co.electriccoin.zcash.ui.screen.connecthw.brandingOf
+import co.electriccoin.zcash.ui.screen.connecthw.observeEnrollmentFinalization
 import co.electriccoin.zcash.ui.screen.heightinfo.HeightInfoArgs
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
@@ -36,6 +37,8 @@ class HWEstimationVM(
 ) : ViewModel() {
     private val branding = brandingOf(args.enrollment, viewOnlyContent)
     private val createAccountLce = mutableLce<Unit>()
+
+    internal val finalization = observeEnrollmentFinalization(args.enrollment, createHWWalletAccount, createAccountLce)
 
     val state: StateFlow<LceState<EstimatedBlockHeightState>> =
         createAccountLce.state
@@ -83,12 +86,15 @@ class HWEstimationVM(
      */
     private fun onConfirmClick() =
         createAccountLce.guardLoading {
+            if (createHWWalletAccount.committedBirthday(args.enrollment) != null) return@guardLoading
             createAccountLce.execute {
                 createHWWalletAccount(args.enrollment, BlockHeight.new(args.blockHeight))
             }
         }
 
-    private fun onInfoClick() = navigationRouter.forward(HeightInfoArgs)
+    private fun onInfoClick() {
+        if (createHWWalletAccount.committedBirthday(args.enrollment) == null) navigationRouter.forward(HeightInfoArgs)
+    }
 
     private fun onBack() = createAccountLce.guardLoading { navigationRouter.back() }
 }

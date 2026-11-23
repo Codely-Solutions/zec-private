@@ -7,11 +7,14 @@ import cash.z.ecc.android.sdk.model.Account
 import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.BlockHeight
 import cash.z.ecc.android.sdk.model.Zip32AccountIndex
+import co.electriccoin.zcash.preference.AndroidPreferenceProvider
+import co.electriccoin.zcash.preference.EncryptedPreferenceProvider
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSourceImpl
 import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
 import co.electriccoin.zcash.ui.common.provider.LedgerAccountBindingProvider
+import co.electriccoin.zcash.ui.common.provider.SelectedAccountUUIDProviderImpl
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepository
 import co.electriccoin.zcash.ui.common.repository.LedgerPairingRepositoryImpl
@@ -23,12 +26,14 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import java.io.IOException
+import java.util.Base64
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 import kotlin.test.assertSame
@@ -123,12 +128,16 @@ class CreateLedgerAccountUseCaseTest {
             coEvery { getSynchronizer() } returns nativeSync
         }
         val binding = mockk<LedgerAccountBindingProvider>(relaxed = true)
+        val previous = AccountUuid.new(ByteArray(16) { 9 })
+        val previousEncoding = Base64.getEncoder().encodeToString(previous.value)
+        val storage = PublishingPreferenceFixture(previousEncoding)
+        val androidPreferences = AndroidPreferenceProvider(storage.preferences, Dispatchers.Unconfined)
+        val selected = SelectedAccountUUIDProviderImpl(mockk<EncryptedPreferenceProvider> {
+            coEvery { this@mockk.invoke() } returns androidPreferences
+        })
         val accountDataSource = AccountDataSourceImpl(
             synchronizerProvider = synchronizerProvider,
-            selectedAccountUUIDProvider = mockk {
-                every { uuid } returns flowOf(null)
-                coEvery { setUUID(createdAccount.accountUuid) } throws IOException() andThen Unit
-            },
+            selectedAccountUUIDProvider = selected,
             persistableWalletProvider = mockk {
                 every { persistableWallet } returns MutableStateFlow(null)
             },
@@ -140,14 +149,24 @@ class CreateLedgerAccountUseCaseTest {
         val useCase = CreateLedgerAccountUseCase(accountDataSource, pairings, synchronizerProvider, router)
         val approvedBirthday = BlockHeight.new(2_500_000L)
 
+        storage.failNextCommit = true
         assertFailsWith<IOException> { useCase(approvedBirthday) }
+        assertEquals(previousEncoding, storage.durable)
+        assertEquals(previous, selected.getUUID())
         assertSame(pairing, pairings.get())
         coVerify(exactly = 1) { binding.save(createdAccount.accountUuid, "tpk0-synthetic", 4L) }
         verify(exactly = 0) { synchronizerProvider.resetSynchronizer() }
         verify(exactly = 0) { router.forward(*anyVararg()) }
 
         useCase(birthday = null)
+        useCase(BlockHeight.new(2_000_000L))
+        assertSame(pairing, pairings.get())
+        verify(exactly = 0) { synchronizerProvider.resetSynchronizer() }
 
+        useCase(approvedBirthday)
+
+        assertEquals(createdAccount.accountUuid, selected.getUUID())
+        assertEquals(Base64.getEncoder().encodeToString(createdAccount.accountUuid.value), storage.durable)
         assertNull(pairings.get())
         coVerify(exactly = 1) { nativeSync.importAccountByUfvk(any()) }
         coVerify(exactly = 1) { binding.save(createdAccount.accountUuid, "tpk0-synthetic", 4L) }
@@ -155,6 +174,32 @@ class CreateLedgerAccountUseCaseTest {
         coVerify(exactly = 0) { nativeSync.deleteAccount(any()) }
         verify(exactly = 1) { synchronizerProvider.resetSynchronizer() }
         verify(exactly = 1) { router.forward(KeepOpenArgs(KeepOpenFlow.LEDGER)) }
+    }
+
+    @Test
+    fun retryingARestartFailureFromTheTipKeepsTheCommittedBirthday() = runTest {
+        val accounts = accountDataSource()
+        val pairings = LedgerPairingRepositoryImpl().apply { set(mockk()) }
+        val synchronizer = mockk<SynchronizerProvider>(relaxed = true) {
+            every { resetSynchronizer() } throws IOException() andThen Unit
+        }
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val useCase = CreateLedgerAccountUseCase(accounts, pairings, synchronizer, router)
+        val historicalHeight = BlockHeight.new(2_000_000L)
+
+        assertFailsWith<IOException> { useCase() }
+        useCase(historicalHeight)
+        assertSame(createdAccount, pairings.imported.value?.account)
+        assertNull(pairings.imported.value?.birthday)
+        verify(exactly = 0) { router.forward(*anyVararg()) }
+
+        useCase()
+
+        coVerify(exactly = 1) { accounts.importLedgerAccount(any(), null) }
+        coVerify(exactly = 0) { accounts.importLedgerAccount(any(), historicalHeight) }
+        coVerify(exactly = 2) { accounts.selectAccount(createdAccount) }
+        verify(exactly = 2) { synchronizer.resetSynchronizer() }
+        verify(exactly = 1) { router.forward(LedgerConnectedArgs) }
     }
 
     private fun accountDataSource() =

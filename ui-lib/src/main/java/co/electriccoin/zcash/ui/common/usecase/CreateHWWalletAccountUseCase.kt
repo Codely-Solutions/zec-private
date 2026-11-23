@@ -6,6 +6,7 @@ import co.electriccoin.zcash.ui.common.ledger.LedgerAccountImporter
 import co.electriccoin.zcash.ui.common.model.LedgerPairingMissingException
 import co.electriccoin.zcash.ui.common.model.ViewOnlyPendingImportMissingException
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyAccountImporter
+import co.electriccoin.zcash.ui.screen.connecthw.CommittedEnrollmentBirthday
 import co.electriccoin.zcash.ui.screen.connecthw.HWWalletEnrollment
 import co.electriccoin.zcash.ui.screen.connecthw.KeystoneEnrollmentSession
 import co.electriccoin.zcash.ui.screen.connectkeystone.connected.KeystoneConnectedArgs
@@ -15,6 +16,9 @@ import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystoneSignInRequest
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
@@ -47,6 +51,34 @@ class CreateHWWalletAccountUseCase(
             }
         }
 
+    fun committedBirthday(enrollment: HWWalletEnrollment): CommittedEnrollmentBirthday? =
+        when (enrollment) {
+            is HWWalletEnrollment.Keystone ->
+                keystoneSession.enrollment(enrollment.sessionId)?.imported?.value
+                    ?.let { CommittedEnrollmentBirthday(it.birthday, it.account) }
+            HWWalletEnrollment.Ledger -> ledgerAccountImporter.committedBirthday()
+            HWWalletEnrollment.ViewOnly -> viewOnlyAccountImporter.committedBirthday()
+        }
+
+    fun observeCommittedBirthday(enrollment: HWWalletEnrollment): Flow<CommittedEnrollmentBirthday?> =
+        when (enrollment) {
+            is HWWalletEnrollment.Keystone ->
+                keystoneSession.enrollment(enrollment.sessionId)?.imported?.map { imported ->
+                    imported?.let { CommittedEnrollmentBirthday(it.birthday, it.account) }
+                } ?: flowOf(null)
+            HWWalletEnrollment.Ledger -> ledgerAccountImporter.committedBirthdays
+            HWWalletEnrollment.ViewOnly -> viewOnlyAccountImporter.committedBirthdays
+        }
+
+    suspend fun finish(enrollment: HWWalletEnrollment, birthday: CommittedEnrollmentBirthday) {
+        if (committedBirthday(enrollment) != birthday) return
+        if (enrollment == HWWalletEnrollment.ViewOnly) {
+            viewOnlyAccountImporter.finishImport()
+        } else {
+            invoke(enrollment, birthday.height)
+        }
+    }
+
     /**
      * Imports the hardware-wallet account being enrolled at [birthday]. A view-only import is not
      * imported here: its birthday is stored with the pending key and the flow goes on to name the
@@ -58,6 +90,7 @@ class CreateHWWalletAccountUseCase(
         enrollment: HWWalletEnrollment,
         birthday: BlockHeight?
     ) {
+        if (committedBirthday(enrollment)?.let { it.height != birthday } == true) return
         when (enrollment) {
             is HWWalletEnrollment.Keystone -> {
                 importKeystone(enrollment.sessionId, birthday)
@@ -89,7 +122,9 @@ class CreateHWWalletAccountUseCase(
             return
         }
         keystoneSession.importMutex.withLock {
-            if (keystoneSession.enrollment(sessionId) !== pending) return
+            val imported = pending.imported.value
+            val birthdayChanged = imported != null && imported.birthday != birthday
+            if (birthdayChanged || keystoneSession.enrollment(sessionId) !== pending) return@withLock
             val approvedBirthday = withContext(NonCancellable) {
                 createKeystoneAccount(pending, account, birthday)
             }

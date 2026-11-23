@@ -20,7 +20,11 @@ interface LedgerRepairTargetRepository {
         zip32AccountIndex: Zip32AccountIndex?,
     )
 
-    fun get(): AccountUuid?
+    fun get(): AccountUuid? = current()?.accountUuid
+
+    fun current(): LedgerRepairTarget?
+
+    fun clear(expected: LedgerRepairTarget): Boolean
 
     /**
      * The target's stored index; null when there is no target or its binding holds no index.
@@ -31,21 +35,24 @@ interface LedgerRepairTargetRepository {
 }
 
 class LedgerRepairTargetRepositoryImpl : LedgerRepairTargetRepository {
-    private val target = MutableStateFlow<Target?>(null)
+    private val target = MutableStateFlow<LedgerRepairTarget?>(null)
 
     override fun set(
         accountUuid: AccountUuid,
         zip32AccountIndex: Zip32AccountIndex?,
-    ) = target.update { Target(accountUuid, zip32AccountIndex) }
+    ) = target.update { LedgerRepairTarget(accountUuid, zip32AccountIndex) }
 
-    override fun get(): AccountUuid? = target.value?.accountUuid
+    override fun current(): LedgerRepairTarget? = target.value
+
+    override fun clear(expected: LedgerRepairTarget): Boolean = target.compareAndSet(expected, null)
 
     override fun getZip32AccountIndex(): Zip32AccountIndex? = target.value?.zip32AccountIndex
 
     override fun clear() = target.update { null }
-
-    private data class Target(
-        val accountUuid: AccountUuid,
-        val zip32AccountIndex: Zip32AccountIndex?,
-    )
 }
+
+/** Each repair launch owns a distinct target, including repeated launches for the same account. */
+class LedgerRepairTarget(
+    val accountUuid: AccountUuid,
+    val zip32AccountIndex: Zip32AccountIndex?,
+)

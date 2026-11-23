@@ -39,6 +39,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
+import java.io.IOException
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
@@ -58,29 +59,7 @@ import kotlin.test.assertTrue
  * instances rather than building them.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class LedgerHandshakeVMTest {
-    private val dispatcher = StandardTestDispatcher()
-
-    private val device =
-        LedgerBluetoothDevice(
-            model = LedgerDeviceModel.NANO_X,
-            name = "Ledger Device",
-            identifier = "AA",
-            rssi = -40,
-        )
-
-    private val account = Zip32AccountIndex.new(3)
-
-    @BeforeTest
-    fun setUp() {
-        Dispatchers.setMain(dispatcher)
-    }
-
-    @AfterTest
-    fun tearDown() {
-        Dispatchers.resetMain()
-    }
-
+class LedgerHandshakeVMTest : LedgerHandshakeVMFixture() {
     @Test
     fun theHandshakeStartsOnItsOwnAndAFreshPairingReplacesTheScreenWithNewOrActive() =
         runTest(dispatcher) {
@@ -495,7 +474,10 @@ class LedgerHandshakeVMTest {
             )
             assertFalse(vm.state.value.primaryButton.isEnabled)
         }
+}
 
+@OptIn(ExperimentalCoroutinesApi::class)
+class LedgerHandshakeLifecycleVMTest : LedgerHandshakeVMFixture() {
     @Test
     fun aResumeWhileTheHandshakeRunsDoesNotStartASecondOne() =
         runTest(dispatcher) {
@@ -671,6 +653,33 @@ class LedgerHandshakeVMTest {
         }
 
     @Test
+    fun aBindingFailureThatCompletesAfterBackDoesNotShowAnError() = runTest(dispatcher) {
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val navigateToError = mockk<NavigateToErrorUseCase>(relaxed = true)
+        val pending = CompletableDeferred<Unit>()
+        val pairLedgerDevice = mockk<PairLedgerDeviceUseCase> {
+            coEvery { this@mockk.invoke(any(), any()) } coAnswers {
+                withContext(NonCancellable) {
+                    pending.await()
+                    throw IOException("Binding write failed")
+                }
+            }
+        }
+        val vm = vm(pairLedgerDevice = pairLedgerDevice, navigationRouter = router, navigateToError = navigateToError)
+        collect(vm)
+        runCurrent()
+        assertTrue(vm.state.value.isConnecting)
+
+        vm.state.value.onBack()
+        pending.complete(Unit)
+        runCurrent()
+
+        verify(exactly = 1) { router.back() }
+        verify(exactly = 0) { navigateToError.invoke(any(), any()) }
+        assertNull(vm.state.value.errorSheet)
+    }
+
+    @Test
     fun leavingTheScreenCancelsARunningHandshake() =
         runTest(dispatcher) {
             var isCancelled = false
@@ -694,8 +703,33 @@ class LedgerHandshakeVMTest {
 
             assertTrue(isCancelled)
         }
+}
 
-    private fun TestScope.failingWith(
+@OptIn(ExperimentalCoroutinesApi::class)
+abstract class LedgerHandshakeVMFixture {
+    protected val dispatcher = StandardTestDispatcher()
+
+    protected val device =
+        LedgerBluetoothDevice(
+            model = LedgerDeviceModel.NANO_X,
+            name = "Ledger Device",
+            identifier = "AA",
+            rssi = -40,
+        )
+
+    protected val account = Zip32AccountIndex.new(3)
+
+    @BeforeTest
+    fun setUp() {
+        Dispatchers.setMain(dispatcher)
+    }
+
+    @AfterTest
+    fun tearDown() {
+        Dispatchers.resetMain()
+    }
+
+    protected fun TestScope.failingWith(
         exception: Exception,
         navigationRouter: NavigationRouter = mockk(relaxed = true),
     ): LedgerHandshakeVM {
@@ -709,24 +743,24 @@ class LedgerHandshakeVMTest {
         return vm
     }
 
-    private fun StringResource.resourceId(): Int = (this as StringResource.ByResource).resource
+    protected fun StringResource.resourceId(): Int = (this as StringResource.ByResource).resource
 
     /**
      * `onCleared` is protected on `ViewModel`, and the test needs the real disposal path rather
      * than a stand-in for it.
      */
-    private fun LedgerHandshakeVM.triggerOnCleared() {
+    protected fun LedgerHandshakeVM.triggerOnCleared() {
         LedgerHandshakeVM::class.java
             .getDeclaredMethod("onCleared")
             .apply { isAccessible = true }
             .invoke(this)
     }
 
-    private fun TestScope.collect(vm: LedgerHandshakeVM) {
+    protected fun TestScope.collect(vm: LedgerHandshakeVM) {
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
     }
 
-    private fun vm(
+    protected fun vm(
         pairLedgerDevice: PairLedgerDeviceUseCase = mockk(relaxed = true),
         selectWalletAccount: SelectWalletAccountUseCase = mockk(relaxed = true),
         navigateToError: NavigateToErrorUseCase = mockk(relaxed = true),
