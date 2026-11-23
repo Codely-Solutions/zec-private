@@ -33782,7 +33782,7 @@ index 4ed2d4b85..d1190f026 100644
 -    network == other.network && seedPhrase == other.seedPhrase
 -
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
-index 76c590a49..9caca8dff 100644
+index 76c590a49..3c16d07cd 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/RequestSwapQuoteUseCase.kt
 @@ -9,0 +10 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -33966,7 +33966,7 @@ index 76c590a49..9caca8dff 100644
 @@ -136 +250 @@ class RequestSwapQuoteUseCase(
 -            return@withContext
 +            return
-@@ -139,19 +253,26 @@ class RequestSwapQuoteUseCase(
+@@ -139,19 +253,25 @@ class RequestSwapQuoteUseCase(
 -        if (result is SwapQuoteData.Success && createProposal) {
 -            try {
 -                createProposal(result.quote)
@@ -34001,8 +34001,7 @@ index 76c590a49..9caca8dff 100644
 +    ): Boolean {
 +        if (rejectUnsupportedFunding(funding, result, canNavigate)) return false
 +        currentCoroutineContext().ensureActive()
-+        if (swapRepository.quote.value !== result) return false
-+        return validateComposition(result, canNavigate) &&
++        return swapRepository.quote.value === result && validateComposition(result, canNavigate) &&
 +            (funding != FundingCapability.LOCAL_TRANSACTION || prepareProposal(result, canNavigate))
 +    }
 +
@@ -34012,15 +34011,15 @@ index 76c590a49..9caca8dff 100644
 +            true
 +        } catch (e: IllegalArgumentException) {
 +            if (canNavigate()) {
-@@ -159,3 +279,0 @@ class RequestSwapQuoteUseCase(
+@@ -159,3 +278,0 @@ class RequestSwapQuoteUseCase(
 -                zashiProposalRepository.clear()
 -                keystoneProposalRepository.clear()
 -                ledgerProposalPipeline.clear()
-@@ -163 +280,0 @@ class RequestSwapQuoteUseCase(
+@@ -163 +279,0 @@ class RequestSwapQuoteUseCase(
 -                return@withContext
-@@ -164,0 +282 @@ class RequestSwapQuoteUseCase(
+@@ -164,0 +281 @@ class RequestSwapQuoteUseCase(
 +            false
-@@ -167 +285,41 @@ class RequestSwapQuoteUseCase(
+@@ -167 +284,41 @@ class RequestSwapQuoteUseCase(
 -        if (canNavigateToSwapQuote()) {
 +    @Suppress("TooGenericExceptionCaught")
 +    private suspend fun prepareProposal(

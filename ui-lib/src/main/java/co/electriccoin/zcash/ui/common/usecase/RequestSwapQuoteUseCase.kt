@@ -265,8 +265,7 @@ class RequestSwapQuoteUseCase(
     ): Boolean {
         if (rejectUnsupportedFunding(funding, result, canNavigate)) return false
         currentCoroutineContext().ensureActive()
-        if (swapRepository.quote.value !== result) return false
-        return validateComposition(result, canNavigate) &&
+        return swapRepository.quote.value === result && validateComposition(result, canNavigate) &&
             (funding != FundingCapability.LOCAL_TRANSACTION || prepareProposal(result, canNavigate))
     }
 
