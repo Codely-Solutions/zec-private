@@ -511,7 +511,7 @@ class MetadataDataSourceFileTest {
     @Test
     fun incomingTrackingUsesTheAccountThatReservedTheAddressAcrossSelectionAndReset() = runTest {
         val refund = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
-        val quote = fundingQuote(SwapType.FLEX_INPUT, refundAddress = refund)
+        val quote = fundingQuote(SwapType.FLEX_INPUT, refundAddress = refund, deadline = "2100-01-01T00:00:00Z")
         val originalUuid = AccountUuid.new(ByteArray(16))
         val otherUuid = AccountUuid.new(ByteArray(16) { 1 })
         val original = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(originalUuid) }
@@ -1049,6 +1049,7 @@ class MetadataDataSourceFileTest {
         mode: SwapType,
         evidence: NearSignedQuoteEvidence? = null,
         refundAddress: String = "refund",
+        deadline: String = "2026-11-22T13:00:00Z",
     ): NearSwapQuote {
         val btc = SwapCatalogTestFixture.externalAssets.single { it.assetId == "nep141:btc.omft.near" }
         val zec = SwapCatalogTestFixture.nativeZec
@@ -1062,13 +1063,13 @@ class MetadataDataSourceFileTest {
                     "originAsset": "${origin.assetId}", "destinationAsset": "${destination.assetId}",
                     "depositType": "ORIGIN_CHAIN", "amount": "100000000", "refundTo": "$refundAddress",
                     "refundType": "ORIGIN_CHAIN", "recipient": "recipient", "recipientType": "DESTINATION_CHAIN",
-                    "deadline": "2026-11-22T13:00:00Z", "appFees": []
+                    "deadline": "$deadline", "appFees": []
                 },
                 "quote": {
                     "depositAddress": "deposit", "amountIn": "100000000", "amountInFormatted": "1",
                     "amountInUsd": "100", "minAmountIn": "99000000", "amountOut": "100000000",
                     "amountOutFormatted": "1", "amountOutUsd": "99", "minAmountOut": "99000000",
-                    "deadline": "2026-11-22T13:00:00Z"
+                    "deadline": "$deadline"
                 }
             }
             """.trimIndent()

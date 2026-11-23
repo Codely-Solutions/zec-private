@@ -51785,7 +51785,7 @@ index 000000000..cbabece9c
 +    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
-index aa5a81f8c..342a7ca06 100644
+index aa5a81f8c..9782133e5 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MetadataDataSourceFileTest.kt
 @@ -3,0 +4,13 @@ import android.content.Context
@@ -52246,7 +52246,7 @@ index aa5a81f8c..342a7ca06 100644
 +    @Test
 +    fun incomingTrackingUsesTheAccountThatReservedTheAddressAcrossSelectionAndReset() = runTest {
 +        val refund = "1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
-+        val quote = fundingQuote(SwapType.FLEX_INPUT, refundAddress = refund)
++        val quote = fundingQuote(SwapType.FLEX_INPUT, refundAddress = refund, deadline = "2100-01-01T00:00:00Z")
 +        val originalUuid = AccountUuid.new(ByteArray(16))
 +        val otherUuid = AccountUuid.new(ByteArray(16) { 1 })
 +        val original = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(originalUuid) }
@@ -52597,7 +52597,7 @@ index aa5a81f8c..342a7ca06 100644
 @@ -262 +1021 @@ class MetadataDataSourceFileTest {
 -            metadataProvider = metadataProvider,
 +            metadataProvider = provider,
-@@ -264 +1023,61 @@ class MetadataDataSourceFileTest {
+@@ -264 +1023,62 @@ class MetadataDataSourceFileTest {
 -            ioDispatcher = StandardTestDispatcher(testScheduler)
 +            ioDispatcher = StandardTestDispatcher(testScheduler),
 +            walletWriteAccess = ownership
@@ -52628,6 +52628,7 @@ index aa5a81f8c..342a7ca06 100644
 +        mode: SwapType,
 +        evidence: NearSignedQuoteEvidence? = null,
 +        refundAddress: String = "refund",
++        deadline: String = "2026-11-22T13:00:00Z",
 +    ): NearSwapQuote {
 +        val btc = SwapCatalogTestFixture.externalAssets.single { it.assetId == "nep141:btc.omft.near" }
 +        val zec = SwapCatalogTestFixture.nativeZec
@@ -52641,13 +52642,13 @@ index aa5a81f8c..342a7ca06 100644
 +                    "originAsset": "${origin.assetId}", "destinationAsset": "${destination.assetId}",
 +                    "depositType": "ORIGIN_CHAIN", "amount": "100000000", "refundTo": "$refundAddress",
 +                    "refundType": "ORIGIN_CHAIN", "recipient": "recipient", "recipientType": "DESTINATION_CHAIN",
-+                    "deadline": "2026-11-22T13:00:00Z", "appFees": []
++                    "deadline": "$deadline", "appFees": []
 +                },
 +                "quote": {
 +                    "depositAddress": "deposit", "amountIn": "100000000", "amountInFormatted": "1",
 +                    "amountInUsd": "100", "minAmountIn": "99000000", "amountOut": "100000000",
 +                    "amountOutFormatted": "1", "amountOutUsd": "99", "minAmountOut": "99000000",
-+                    "deadline": "2026-11-22T13:00:00Z"
++                    "deadline": "$deadline"
 +                }
 +            }
 +            """.trimIndent()
@@ -52660,7 +52661,7 @@ index aa5a81f8c..342a7ca06 100644
 +            destinationAddress = DynamicSwapAddress("recipient"),
 +            refundAddress = DynamicSwapAddress(refundAddress),
 +            expectedSlippageToleranceBps = 100,
-@@ -265,0 +1085,13 @@ class MetadataDataSourceFileTest {
+@@ -265,0 +1086,13 @@ class MetadataDataSourceFileTest {
 +    }
 +
 +    private class TrackingSync {
@@ -52674,7 +52675,7 @@ index aa5a81f8c..342a7ca06 100644
 +            }
 +        )
 +    }
-@@ -280 +1112,8 @@ class MetadataDataSourceFileTest {
+@@ -280 +1113,8 @@ class MetadataDataSourceFileTest {
 -    private suspend fun markSwap(dataSource: MetadataDataSourceImpl, provider: String, mode: SwapMode) =
 +    private suspend fun markSwap(
 +        dataSource: MetadataDataSourceImpl,
@@ -52684,15 +52685,15 @@ index aa5a81f8c..342a7ca06 100644
 +        signedQuoteEvidence: NearSignedQuoteEvidence? = null,
 +        depositAddress: String = "deposit",
 +    ) =
-@@ -282 +1121 @@ class MetadataDataSourceFileTest {
+@@ -282 +1122 @@ class MetadataDataSourceFileTest {
 -            depositAddress = "deposit",
 +            depositAddress = depositAddress,
-@@ -291 +1130,3 @@ class MetadataDataSourceFileTest {
+@@ -291 +1131,3 @@ class MetadataDataSourceFileTest {
 -            key = key
 +            key = key,
 +            reviewedIdentity = reviewedIdentity,
 +            signedQuoteEvidence = signedQuoteEvidence,
-@@ -309,3 +1150,5 @@ class MetadataDataSourceFileTest {
+@@ -309,3 +1151,5 @@ class MetadataDataSourceFileTest {
 -            mockk<SimpleSwapAsset> {
 -                every { tokenTicker } returns token
 -                every { chainTicker } returns chain
@@ -63130,10 +63131,10 @@ index 1d445dd11..1c3a07e3d 100644
 +                    walletServerSelectionProvider = mockk(),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
 new file mode 100644
-index 000000000..1c2724756
+index 000000000..d69d25f03
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/Zip321MemoScanTest.kt
-@@ -0,0 +1,511 @@
+@@ -0,0 +1,524 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import android.os.Parcel
@@ -63146,6 +63147,9 @@ index 000000000..1c2724756
 +import cash.z.ecc.android.sdk.Synchronizer
 +import cash.z.ecc.android.sdk.exception.TransactionEncoderException
 +import cash.z.ecc.android.sdk.model.Proposal
++import cash.z.ecc.android.sdk.model.Memo
++import cash.z.ecc.android.sdk.model.WalletAddress
++import cash.z.ecc.android.sdk.model.ZecSend
 +import cash.z.ecc.android.sdk.model.Zatoshi
 +import cash.z.ecc.android.sdk.type.AddressType
 +import co.electriccoin.zcash.ui.NavigationRouter
@@ -63170,6 +63174,7 @@ index 000000000..1c2724756
 +import co.electriccoin.zcash.ui.screen.error.ErrorVM
 +import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 +import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsArgs
++import co.electriccoin.zcash.ui.screen.home.HomeArgs
 +import co.electriccoin.zcash.ui.screen.redeemgift.navigateToRedeemGiftCard
 +import co.electriccoin.zcash.ui.screen.reviewtransaction.MessageState
 +import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionArgs
@@ -63194,6 +63199,7 @@ index 000000000..1c2724756
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.runBlocking
 +import kotlinx.coroutines.test.StandardTestDispatcher
++import kotlinx.coroutines.test.TestScope
 +import kotlinx.coroutines.test.UnconfinedTestDispatcher
 +import kotlinx.coroutines.test.resetMain
 +import kotlinx.coroutines.test.runCurrent
@@ -63215,9 +63221,6 @@ index 000000000..1c2724756
 +import kotlin.test.assertNotNull
 +import kotlin.test.assertNull
 +import kotlin.test.assertSame
-+
-+@kotlinx.serialization.Serializable
-+private data object ScanTestHome
 +
 +@RunWith(RobolectricTestRunner::class)
 +@Config(sdk = [34])
@@ -63303,12 +63306,23 @@ index 000000000..1c2724756
 +    }
 +
 +    @Test
-+    fun restoredReviewOffersBackThroughTheActualRestoredStack() = runTest {
++    fun restoredReviewOffersBackForRegularSendAndSendOriginZip321() = runTest {
++        for (fromScan in listOf(false, true)) assertRestoredSendReview(fromScan)
++    }
++
++    private suspend fun TestScope.assertRestoredSendReview(fromScan: Boolean) {
 +        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
 +        val store = ViewModelStore()
 +        try {
 +            val original = sendNavigationController().also { it.graph = sendReviewGraph(it) }
-+            scan(parse(fixture.TEXT.encodeToByteArray()), ScanArgs(ScanFlow.SEND))
++            if (fromScan) {
++                scan(parse(fixture.TEXT.encodeToByteArray()), ScanArgs(ScanFlow.SEND))
++            } else {
++                coEvery { synchronizer.proposeSend(account.sdkAccount, any()) } returns sdkProposal
++                repository.createProposal(
++                    ZecSend(WalletAddress.Unified.new(fixture.RECIPIENT), Zatoshi(100_000), Memo(""), null)
++                )
++            }
 +            assertNotNull(repository.transactionProposal.value)
 +            original.navigate(ReviewTransactionArgs)
 +
@@ -63361,8 +63375,8 @@ index 000000000..1c2724756
 +            for (hardware in listOf(EditAccountFixtures.keystone(), EditAccountFixtures.ledger())) {
 +                every { accounts.selectedAccount } returns flowOf(hardware)
 +                val navigation = sendNavigationController().apply {
-+                    graph = createGraph(startDestination = ScanTestHome) {
-+                        composable<ScanTestHome> { }
++                    graph = createGraph(startDestination = HomeArgs) {
++                        composable<HomeArgs> { }
 +                        composable<ReviewTransactionArgs> { }
 +                    }
 +                    navigate(ReviewTransactionArgs)
@@ -63382,7 +63396,7 @@ index 000000000..1c2724756
 +                val state = assertNotNull(vm.state.value)
 +                assertIs<MessageState>(state.items.single())
 +                state.onBack()
-+                assertEquals(ScanTestHome, navigation.currentBackStackEntry?.toRoute<ScanTestHome>())
++                assertEquals(HomeArgs, navigation.currentBackStackEntry?.toRoute<HomeArgs>())
 +                watcher.cancel()
 +            }
 +        } finally {
@@ -67631,7 +67645,7 @@ index 73415ae6a..cdb0070a5 100644
 +                requestSwapQuote.requestExactOutput(any(), any(), any(), any(), any(), any())
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/SwapRequestCancellationTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/SwapRequestCancellationTest.kt
 new file mode 100644
-index 000000000..2abfd0586
+index 000000000..57792e7ac
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/SwapRequestCancellationTest.kt
 @@ -0,0 +1,397 @@
@@ -67804,7 +67818,7 @@ index 000000000..2abfd0586
 +            val replacementAddress = CompletableDeferred<Unit>()
 +            val accountSource = mockk<AccountDataSource> {
 +                var freshAddressRequests = 0
-+                coEvery { requestNextShieldedAddress(requireFresh = true) } coAnswers {
++                coEvery { requestNextShieldedAddress(requireFresh = true, account = any()) } coAnswers {
 +                    if (freshAddressRequests++ > 0) replacementAddress.await()
 +                    refund
 +                }

@@ -167,7 +167,7 @@ class SwapRequestCancellationTest {
             val replacementAddress = CompletableDeferred<Unit>()
             val accountSource = mockk<AccountDataSource> {
                 var freshAddressRequests = 0
-                coEvery { requestNextShieldedAddress(requireFresh = true) } coAnswers {
+                coEvery { requestNextShieldedAddress(requireFresh = true, account = any()) } coAnswers {
                     if (freshAddressRequests++ > 0) replacementAddress.await()
                     refund
                 }

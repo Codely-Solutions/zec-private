@@ -10,6 +10,9 @@ import androidx.navigation.toRoute
 import cash.z.ecc.android.sdk.Synchronizer
 import cash.z.ecc.android.sdk.exception.TransactionEncoderException
 import cash.z.ecc.android.sdk.model.Proposal
+import cash.z.ecc.android.sdk.model.Memo
+import cash.z.ecc.android.sdk.model.WalletAddress
+import cash.z.ecc.android.sdk.model.ZecSend
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.type.AddressType
 import co.electriccoin.zcash.ui.NavigationRouter
@@ -34,6 +37,7 @@ import co.electriccoin.zcash.ui.screen.error.ErrorDialog
 import co.electriccoin.zcash.ui.screen.error.ErrorVM
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsArgs
+import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.redeemgift.navigateToRedeemGiftCard
 import co.electriccoin.zcash.ui.screen.reviewtransaction.MessageState
 import co.electriccoin.zcash.ui.screen.reviewtransaction.ReviewTransactionArgs
@@ -58,6 +62,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -79,9 +84,6 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertSame
-
-@kotlinx.serialization.Serializable
-private data object ScanTestHome
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -167,12 +169,23 @@ class Zip321MemoScanTest {
     }
 
     @Test
-    fun restoredReviewOffersBackThroughTheActualRestoredStack() = runTest {
+    fun restoredReviewOffersBackForRegularSendAndSendOriginZip321() = runTest {
+        for (fromScan in listOf(false, true)) assertRestoredSendReview(fromScan)
+    }
+
+    private suspend fun TestScope.assertRestoredSendReview(fromScan: Boolean) {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val store = ViewModelStore()
         try {
             val original = sendNavigationController().also { it.graph = sendReviewGraph(it) }
-            scan(parse(fixture.TEXT.encodeToByteArray()), ScanArgs(ScanFlow.SEND))
+            if (fromScan) {
+                scan(parse(fixture.TEXT.encodeToByteArray()), ScanArgs(ScanFlow.SEND))
+            } else {
+                coEvery { synchronizer.proposeSend(account.sdkAccount, any()) } returns sdkProposal
+                repository.createProposal(
+                    ZecSend(WalletAddress.Unified.new(fixture.RECIPIENT), Zatoshi(100_000), Memo(""), null)
+                )
+            }
             assertNotNull(repository.transactionProposal.value)
             original.navigate(ReviewTransactionArgs)
 
@@ -225,8 +238,8 @@ class Zip321MemoScanTest {
             for (hardware in listOf(EditAccountFixtures.keystone(), EditAccountFixtures.ledger())) {
                 every { accounts.selectedAccount } returns flowOf(hardware)
                 val navigation = sendNavigationController().apply {
-                    graph = createGraph(startDestination = ScanTestHome) {
-                        composable<ScanTestHome> { }
+                    graph = createGraph(startDestination = HomeArgs) {
+                        composable<HomeArgs> { }
                         composable<ReviewTransactionArgs> { }
                     }
                     navigate(ReviewTransactionArgs)
@@ -246,7 +259,7 @@ class Zip321MemoScanTest {
                 val state = assertNotNull(vm.state.value)
                 assertIs<MessageState>(state.items.single())
                 state.onBack()
-                assertEquals(ScanTestHome, navigation.currentBackStackEntry?.toRoute<ScanTestHome>())
+                assertEquals(HomeArgs, navigation.currentBackStackEntry?.toRoute<HomeArgs>())
                 watcher.cancel()
             }
         } finally {
