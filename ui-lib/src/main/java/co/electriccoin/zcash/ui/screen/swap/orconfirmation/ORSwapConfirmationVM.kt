@@ -42,6 +42,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
+import kotlin.time.Duration
 
 class ORSwapConfirmationVM(
     private val swapRepository: SwapRepository,
@@ -137,7 +138,10 @@ class ORSwapConfirmationVM(
                 )
             }.stateIn(
                 scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = kotlin.time.Duration.ZERO),
+                started = SharingStarted.WhileSubscribed(
+                    stopTimeout = ANDROID_STATE_FLOW_TIMEOUT,
+                    replayExpiration = Duration.ZERO,
+                ),
                 initialValue = null
             )
 
