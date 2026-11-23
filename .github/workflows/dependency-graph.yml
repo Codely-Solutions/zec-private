@@ -6,6 +6,7 @@ on:
       - '**/*.gradle.kts'
       - '**/*.gradle'
       - '**/gradle.lockfile'
+      - '**/buildscript-gradle.lockfile'
       - buildSrc/**
       - gradle/**
       - gradle.properties
@@ -14,7 +15,7 @@ on:
   workflow_dispatch:
 permissions: {}
 concurrency:
-  group: dependency-graph-main
+  group: ${{ github.ref == 'refs/heads/main' && 'dependency-graph-main' || 'dependency-graph-diagnostic' }}
   cancel-in-progress: false
 jobs:
   resolve:

@@ -13,6 +13,7 @@ TITLE = 'ZEC Private update blocked: review required'
 HISTORY_TITLE = 'ZEC Private verified recovery history'
 START = '<!-- zec-private-blocker-current -->'
 END = '<!-- /zec-private-blocker-current -->'
+CLOSE_PENDING = '<!-- zec-private-blocker-close-pending -->'
 SECTION = re.compile(re.escape(START)+r'\r?\n<!-- state: ([^\r\n]+) -->\r?\n'
                      r'(?:(?!'+re.escape(START)+r').)*?'+re.escape(END), re.S)
 RECOVERY_HISTORY = re.compile(r'<!-- zec-private-verified-recoveries: ([^\r\n]+) -->')
@@ -145,6 +146,15 @@ def with_recoveries(body, history):
     return body+('\n\n' if body else '')+marker
 
 
+def finish_pending_close(repo, number, body):
+    if CLOSE_PENDING not in body or START in body:
+        return
+    current = json.loads(gh('issue', 'view', str(number), '--repo', repo, '--json', 'body,state'))
+    current_body = current.get('body') or ''
+    if current['state'] == 'OPEN' and CLOSE_PENDING in current_body and START not in current_body:
+        gh('issue', 'close', str(number), '--repo', repo, '--reason', 'completed')
+
+
 def acknowledge(repo, number, revision):
     issue = json.loads(gh('issue', 'view', str(number), '--repo', repo, '--json', 'body,state'))
     body = issue.get('body') or ''
@@ -195,23 +205,25 @@ def main(message):
         if recovery:
             history = recent_recoveries(history, [revision])
             if number is not None:
-                resolved = [match for state, match in blockers.values()
-                            if run_order(revision) >= run_order(state) and matches_recovery(state, revision)]
-                if resolved:
+                exact = [match for state, match in blockers.values()
+                         if run_order(revision) >= run_order(state) and matches_recovery(state, revision)]
+                if exact:
                     gh('issue', 'comment', str(number), '--repo', repo, '--body',
                        'Verified recovery: '+message+'\nWorkflow evidence: '+evidence)
-                    close = len(resolved) == body.count(START)
-                    if not close:
-                        for match in reversed(resolved):
-                            body = body[:match.start()]+body[match.end():]
-                    issue_body(repo, number, with_recoveries(body, history))
-                    if close:
-                        gh('issue', 'close', str(number), '--repo', repo, '--reason', 'completed')
-                else:
-                    updated = with_recoveries(body, history)
-                    if updated != body:
-                        issue_body(repo, number, updated)
-                    print('Preserved the open blocker because its operation or revision is unresolved.')
+                resolved = [match for state, match in blockers.values()
+                            if match in exact or any(run_order(saved) >= run_order(state)
+                                                     and matches_recovery(state, saved) for saved in history)]
+                updated = body
+                for match in sorted(resolved, key=lambda match: match.start(), reverse=True):
+                    updated = updated[:match.start()]+updated[match.end():]
+                if resolved and START not in updated and CLOSE_PENDING not in updated:
+                    updated += '\n\n'+CLOSE_PENDING
+                updated = with_recoveries(updated, history)
+                if updated != body:
+                    issue_body(repo, number, updated)
+                finish_pending_close(repo, number, updated)
+                if START in updated:
+                    print('Preserved unresolved blocker sections.')
             elif carrier:
                 updated = with_recoveries(carrier_body, history)
                 if updated != carrier_body:
@@ -224,6 +236,8 @@ def main(message):
                 gh('issue', 'close', str(carrier['number']), '--repo', repo, '--reason', 'completed')
         else:
             if any(run_order(revision) <= run_order(saved) and matches_recovery(revision, saved) for saved in history):
+                if number is not None:
+                    finish_pending_close(repo, number, body)
                 print('Preserved verified recovery from a later workflow run or attempt.')
                 return
             state, match = blockers.get(blocker_scope(revision), ({}, None))
@@ -235,6 +249,7 @@ def main(message):
                          and state.get('fingerprint') == fingerprint and state.get('delivery') == 'accepted')
             revision.update(fingerprint=fingerprint, delivery='accepted' if delivered else 'pending')
             updated = with_recoveries(with_current(body, match, revision, message, diagnosis, evidence), history)
+            updated = updated.replace(CLOSE_PENDING, '')
             if number is None:
                 number = issue_body(repo, None, updated)
             elif updated != body:

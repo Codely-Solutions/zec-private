@@ -16,6 +16,7 @@ REPOSITORY = 'Codely-Solutions/zec-private'
 CONTROL_ROOTS = {'.github', '.private'}
 DEPENDENCY_FILES = {'gradle.properties', 'gradle/verification-metadata.xml',
                     'gradle/wrapper/gradle-wrapper.properties', 'gradle/wrapper/gradle-wrapper.jar'}
+GRADLE_LOCK_FILES = {'gradle.lockfile', 'buildscript-gradle.lockfile'}
 WRAPPER_PROPERTIES = 'gradle/wrapper/gradle-wrapper.properties'
 WRAPPER_VERSION = r'([1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)'
 RELEASE_EVIDENCE = Path(__file__).resolve().parent / 'release-evidence'
@@ -38,7 +39,7 @@ def classify_paths(files, count):
         return 'controller change requires review'
     if any(file['status'] != 'modified' for file in files):
         return 'file creation, removal or rename requires review'
-    if any(path not in DEPENDENCY_FILES and PurePosixPath(path).name != 'gradle.lockfile' for path in paths):
+    if any(path not in DEPENDENCY_FILES and PurePosixPath(path).name not in GRADLE_LOCK_FILES for path in paths):
         return 'change outside dependency declarations requires review'
     return 'dependency proposal needs provenance and acceptance'
 

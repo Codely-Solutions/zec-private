@@ -13,7 +13,7 @@ on:
         type: string
 permissions: {}
 concurrency:
-  group: preserve-hosted-fixture
+  group: ${{ github.ref == 'refs/heads/main' && 'preserve-hosted-fixture' || 'preserve-hosted-fixture-diagnostic' }}
   cancel-in-progress: false
 env:
   FIXTURE_REGISTRY: ghcr.io/codely-solutions/zec-private-upgrade-fixtures

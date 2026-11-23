@@ -1,3 +1,4 @@
+import fnmatch
 import json
 import re
 from pathlib import Path
@@ -130,6 +131,44 @@ class MaintenanceWatchTest(unittest.TestCase):
                                      ('refs/tags/example', 'workflow_dispatch')]]
         self.assertEqual(routes[:3], ['zec-private-sync'] * 3)
         self.assertEqual(routes[3:], ['zec-private-sync-diagnostic'] * 2)
+
+    def test_graph_and_fixture_dispatches_leave_the_main_pending_slot_available(self):
+        main, branch = 'refs/heads/main', 'refs/heads/review/test'
+        for workflow, entry in (('dependency-graph.yml', 'resolve'), ('preserve-hosted-fixture.yml', 'select')):
+            with self.subTest(workflow=workflow):
+                header, jobs = workflow_blocks(workflow)
+                settings = concurrency_settings(header)
+                admission = re.search(r'^    if: (.+)$', jobs[entry], re.M)[1]
+                pending = {}
+                for ref, label in [(main, 'pending-main'), (branch, 'dispatch'), (branch, 'repeat')]:
+                    values = {'github.ref': ref, 'github.repository': 'Codely-Solutions/zec-private'}
+                    group = evaluate_expression(settings['group'], values)
+                    pending[group] = label
+                    self.assertEqual(evaluate_expression(admission, values), ref == main)
+                main_group = evaluate_expression(settings['group'], {'github.ref': main})
+                self.assertEqual(pending[main_group], 'pending-main')
+                self.assertEqual(settings['cancel-in-progress'], 'false')
+                self.assertIn('  workflow_dispatch:', header)
+                self.assertIn('    branches: [main]', header)
+                self.assertEqual(group, evaluate_expression(settings['group'], {'github.ref': 'refs/tags/example'}))
+                self.assertIn('    needs: '+entry, jobs['submit' if entry == 'resolve' else 'store'])
+
+    def test_graph_push_filters_and_classifier_cover_retained_lockfiles(self):
+        repository = Path(__file__).resolve().parents[1]
+        paths = subprocess.check_output(['git', 'ls-files', '*.lockfile'], cwd=repository, text=True).splitlines()
+        self.assertIn('buildscript-gradle.lockfile', paths)
+        self.assertIn('buildSrc/buildscript-gradle.lockfile', paths)
+        header, _ = workflow_blocks('dependency-graph.yml')
+        patterns = re.findall(r"^      - '?([^'\n]+)'?$", header, re.M)
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertTrue(any(fnmatch.fnmatchcase(path, pattern) or
+                                    pattern.startswith('**/') and fnmatch.fnmatchcase(path, pattern[3:])
+                                    for pattern in patterns))
+                self.assertIn('needs provenance', classify_paths([{'filename': path, 'status': 'modified'}], 1))
+        historic = subprocess.check_output(['git', 'diff-tree', '--no-commit-id', '--name-only', '-r', '68abf115f'],
+                                           cwd=repository, text=True).splitlines()
+        self.assertEqual([path for path in historic if path in paths], ['buildscript-gradle.lockfile'])
 
     def test_all_protected_signing_jobs_share_one_non_replacing_queue(self):
         jobs = {}

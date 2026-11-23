@@ -115,6 +115,37 @@ class NotifyTest(unittest.TestCase):
                 notify.main('Blocked')
             post.assert_not_called()
 
+    def test_interrupted_recovery_at_each_issue_write_can_finish(self):
+        verified = dict(MAKE_ISSUE='', RECOVERY_VERIFIED='true', NTFY_URL='')
+        for method, applied in (('comment', False), ('edit', False), ('edit', True),
+                                ('close', False), ('close', True)):
+            with self.subTest(method=method, applied=applied):
+                self.setUp()
+                self.run_notice(NTFY_URL='')
+                call = self.gh
+
+                def interrupt(*args):
+                    if args[:2] != ('issue', method):
+                        return call(*args)
+                    if applied:
+                        call(*args)
+                    raise RuntimeError('simulated interrupted GH response')
+
+                with patch.object(self, 'gh', side_effect=interrupt), self.assertRaises(RuntimeError):
+                    self.run_notice('Verified', GITHUB_RUN_ID='21', **verified)
+
+                if method == 'close' and not applied:
+                    self.assertEqual(self.blockers(), {})
+                    self.assertIn(notify.CLOSE_PENDING, self.issue['body'])
+                    # Different controllers can finish the recorded close.
+                    self.run_notice('Discovery passed', GITHUB_RUN_ID='22', BLOCKER_OPERATION='discovery', **verified)
+                self.run_notice('Verified retry', GITHUB_RUN_ID='21', GITHUB_RUN_ATTEMPT='2', **verified)
+                self.run_notice('Old failure', GITHUB_RUN_ATTEMPT='2')
+                self.assertIsNone(self.issue)
+                self.assertIn('Original diagnosis and operator notes.', self.closed[0]['body'])
+                self.assertNotIn(notify.START, self.closed[0]['body'])
+                self.assertEqual(self.messages, [])
+
     def test_first_blocker_creates_one_issue_with_exact_body_file(self):
         self.issue = None
         self.run_notice(message='Blocked\nwith literal `text` and $content')
