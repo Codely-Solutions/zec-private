@@ -2034,7 +2034,7 @@
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/onboarding/view/OnboardingTags.kt": "0adfcdaafaf94eb138e8e77ea0d2f3dae490d7ebc725ee4ecfc6a4c50fe44e4b",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/onboarding/view/OnboardingView.kt": "1b28a89ec9a8938e97297280b16e37ea0f99733ec2208fc61cc352ae8fc45c3a",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapper.kt": "8fbe1a6fddc7b39720e54db2ace0f9e0202d0c150498732276b9eeb5c2e15126",
-  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayAmountTextFields.kt": "8fe8b8459e3ce6f4f7d3b30df25dfd5d96e40efb69dcb81322fb7a2ddb3f16ad",
+  "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayAmountTextFields.kt": "0261144b787f01e45fd2f0328c5422bfb776251a403ad2c4fced6629926ba549",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayScreen.kt": "c2d786c2bf48428ab357519603df15ec3f815cf50a9ba3b3700b87c3d031ee0f",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayState.kt": "d6833fca7bb09510a41530d010c09f05f7a604eda003dc7cafa52c0873ea3c86",
   "ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayTag.kt": "430e543b3d0f5362d305b08e56f56a51fda8c6ed6ca4cf71e71a509d70acdd76",

@@ -32,6 +32,7 @@ import co.electriccoin.zcash.ui.design.util.getValue
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
 
 private const val STACKED_AMOUNT_FONT_SCALE = 1.5f
+private const val VERTICAL_CONVERSION_ROTATION_DEGREES = 90f
 
 @Composable
 internal fun PayAmountTextFields(token: NumberTextFieldState, fiat: NumberTextFieldState, ticker: StringResource?) {
@@ -39,7 +40,7 @@ internal fun PayAmountTextFields(token: NumberTextFieldState, fiat: NumberTextFi
     if (LocalDensity.current.fontScale >= STACKED_AMOUNT_FONT_SCALE) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(gap)) {
             TokenAmountField(token, ticker, Modifier.fillMaxWidth())
-            ConversionIndicator(Modifier.rotate(90f))
+            ConversionIndicator(Modifier.rotate(VERTICAL_CONVERSION_ROTATION_DEGREES))
             FiatAmountField(fiat, Modifier.fillMaxWidth())
         }
     } else {

@@ -38583,10 +38583,10 @@ index b6549dd8b..6604dfc04 100644
 +    val onFiatAmountChange: (NumberTextFieldInnerState) -> Unit,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayAmountTextFields.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayAmountTextFields.kt
 new file mode 100644
-index 000000000..d71e30a94
+index 000000000..f40b21f55
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/pay/PayAmountTextFields.kt
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,106 @@
 +package co.electriccoin.zcash.ui.screen.pay
 +
 +import androidx.compose.foundation.Image
@@ -38621,6 +38621,7 @@ index 000000000..d71e30a94
 +import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
 +
 +private const val STACKED_AMOUNT_FONT_SCALE = 1.5f
++private const val VERTICAL_CONVERSION_ROTATION_DEGREES = 90f
 +
 +@Composable
 +internal fun PayAmountTextFields(token: NumberTextFieldState, fiat: NumberTextFieldState, ticker: StringResource?) {
@@ -38628,7 +38629,7 @@ index 000000000..d71e30a94
 +    if (LocalDensity.current.fontScale >= STACKED_AMOUNT_FONT_SCALE) {
 +        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(gap)) {
 +            TokenAmountField(token, ticker, Modifier.fillMaxWidth())
-+            ConversionIndicator(Modifier.rotate(90f))
++            ConversionIndicator(Modifier.rotate(VERTICAL_CONVERSION_ROTATION_DEGREES))
 +            FiatAmountField(fiat, Modifier.fillMaxWidth())
 +        }
 +    } else {
