@@ -75,13 +75,13 @@ class GetSwapStatusUseCase(
                         throw e
                     } catch (e: Exception) {
                         val latest = (e as? SwapRefreshNotSavedException)?.savedMetadata
-                        data.update {
-                            it.copy(
+                        data.update { current ->
+                            current.copy(
                                 isLoading = false,
                                 error = e,
-                                savedMetadata = latest ?: it.savedMetadata,
-                                status = it.status?.takeIf {
-                                    latest == null || it.savedMetadata?.matchesSavedStatus(latest) == true
+                                savedMetadata = latest ?: current.savedMetadata,
+                                status = current.status?.takeIf {
+                                    latest == null || current.savedMetadata?.matchesSavedStatus(latest) == true
                                 },
                             )
                         }
