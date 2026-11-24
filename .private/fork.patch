@@ -63149,10 +63149,10 @@ index 000000000..0e58358e4
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt
 new file mode 100644
-index 000000000..6d67cde91
+index 000000000..e1bf03815
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapRecoveryBoundaryTest.kt
-@@ -0,0 +1,370 @@
+@@ -0,0 +1,371 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -63438,7 +63438,8 @@ index 000000000..6d67cde91
 +
 +            // A unique catalog recovers both quote admission and status using the real decoder/resolver.
 +            coEvery { api.getSupportedTokens() } returns listOf(eth.dto(), zec.dto())
-+            coEvery { api.requestQuote(any()) } returns response("tracked-deposit").quoteResponse
++            val validEvmDeposit = "0x76b4c56085ED136a8744D52bE956396624a730E8"
++            coEvery { api.requestQuote(any()) } returns response(validEvmDeposit).quoteResponse
 +            repository.requestRefreshAssetsOnce()
 +            repository.requestFlexInputIntoZec(BigDecimal.ONE, "synthetic-external-refund",
 +                "synthetic-zec-recipient", eth, BigDecimal.ONE)

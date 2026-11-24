@@ -283,7 +283,8 @@ class SwapRecoveryBoundaryTest {
 
             // A unique catalog recovers both quote admission and status using the real decoder/resolver.
             coEvery { api.getSupportedTokens() } returns listOf(eth.dto(), zec.dto())
-            coEvery { api.requestQuote(any()) } returns response("tracked-deposit").quoteResponse
+            val validEvmDeposit = "0x76b4c56085ED136a8744D52bE956396624a730E8"
+            coEvery { api.requestQuote(any()) } returns response(validEvmDeposit).quoteResponse
             repository.requestRefreshAssetsOnce()
             repository.requestFlexInputIntoZec(BigDecimal.ONE, "synthetic-external-refund",
                 "synthetic-zec-recipient", eth, BigDecimal.ONE)
