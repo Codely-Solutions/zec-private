@@ -4339,7 +4339,7 @@ index c2045aa9b..4bae99de4 100644
 +        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
 +        sdk.lockRemainingOrchardBalance()
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
-index b76ce6c65..5453eb052 100644
+index b76ce6c65..b4d622d9b 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/common/usecase/MigrationHomeMessageSourceImpl.kt
 @@ -16,0 +17 @@ import co.electriccoin.zcash.ui.common.model.migration.MigrationAttentionKind
@@ -4532,14 +4532,20 @@ index b76ce6c65..5453eb052 100644
 +                attentionRangeText = attentionRangeText,
 +                isUpgradeNoticePending = isUpgradeNoticePending,
 +            )?.copy(accountKeyId = accountKeyId)
-@@ -165,0 +189,2 @@ class MigrationHomeMessageSourceImpl(
-+        if (data.isAwaitingFinalization) return finalizationMessage(checkNotNull(data.accountKeyId))
-+        if (data.isAwaitingSignatures) return signingRecoveryMessage(checkNotNull(data.accountKeyId))
-@@ -257,0 +283 @@ class MigrationHomeMessageSourceImpl(
+@@ -165,0 +189,8 @@ class MigrationHomeMessageSourceImpl(
++        return when {
++            data.isAwaitingFinalization -> finalizationMessage(checkNotNull(data.accountKeyId))
++            data.isAwaitingSignatures -> signingRecoveryMessage(checkNotNull(data.accountKeyId))
++            else -> standardMessage(data)
++        }
++    }
++
++    private fun standardMessage(data: MigrationHomeMessageData): HomeMessageState {
+@@ -257,0 +289 @@ class MigrationHomeMessageSourceImpl(
 +                    accountKeyId = data.accountKeyId,
-@@ -266,0 +293 @@ class MigrationHomeMessageSourceImpl(
+@@ -266,0 +299 @@ class MigrationHomeMessageSourceImpl(
 +                    accountKeyId = data.accountKeyId,
-@@ -271,0 +299,31 @@ class MigrationHomeMessageSourceImpl(
+@@ -271,0 +305,31 @@ class MigrationHomeMessageSourceImpl(
 +    private fun finalizationMessage(accountKeyId: String): HomeMessageState {
 +        val resume = { navigationRouter.forward(MigrationScheduledArgs(accountKeyId)) }
 +        return MigrationMessageState(
@@ -4571,18 +4577,18 @@ index b76ce6c65..5453eb052 100644
 +        )
 +    }
 +
-@@ -277,0 +336 @@ class MigrationHomeMessageSourceImpl(
+@@ -277,0 +342 @@ class MigrationHomeMessageSourceImpl(
 +        accountKeyId: String? = null,
-@@ -287 +346 @@ class MigrationHomeMessageSourceImpl(
+@@ -287 +352 @@ class MigrationHomeMessageSourceImpl(
 -            isComplete -> navigationRouter.forward(MigrationCompleteArgs(isResidueOnly = isResidueOnly))
 +            isComplete -> navigationRouter.forward(MigrationCompleteArgs(isResidueOnly, accountKeyId))
-@@ -292 +351 @@ class MigrationHomeMessageSourceImpl(
+@@ -292 +357 @@ class MigrationHomeMessageSourceImpl(
 -            isReadyToSend -> navigationRouter.forward(MigrationProgressArgs)
 +            isReadyToSend -> navigationRouter.forward(MigrationProgressArgs(accountKeyId))
-@@ -294 +353 @@ class MigrationHomeMessageSourceImpl(
+@@ -294 +359 @@ class MigrationHomeMessageSourceImpl(
 -            isRunActive -> navigationRouter.forward(MigrationProgressArgs)
 +            isRunActive -> navigationRouter.forward(MigrationProgressArgs(accountKeyId))
-@@ -380,12 +439,2 @@ internal fun migrationMessageFor(
+@@ -380,12 +445,2 @@ internal fun migrationMessageFor(
 -    // A committed schedule that never received its external (Keystone) signature can NEVER
 -    // self-resolve — unlike SCHEDULE/ANCHOR_BOUNDARY/DEPENDENCIES, which clear as blocks mine,
 -    // SIGNATURE only clears when a human hands the device a QR to sign. There is no "wait longer"
@@ -4597,7 +4603,7 @@ index b76ce6c65..5453eb052 100644
 -    // leaving a schedule permanently stuck exactly like this.
 +    // An unsigned committed step needs user action. The banner uses the retained reviewed
 +    // plan when available and offers explicit recovery if this process no longer has it.
-@@ -433 +482,2 @@ internal fun migrationMessageFor(
+@@ -433 +488,2 @@ internal fun migrationMessageFor(
 -                isRunActive = !hasSignatureBlock,
 +                isRunActive = true,
 +                isAwaitingSignatures = hasSignatureBlock,
@@ -4712,7 +4718,7 @@ index 3c54b5657..ec4662494 100644
 +
 +    private fun notificationArgs() = MigrationNotificationArgs(args.accountKeyId, args.useTor)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt
-index 8d9ded4e7..7452abe0b 100644
+index 8d9ded4e7..329dd61bb 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteScreen.kt
 @@ -62 +62 @@ data class MigrationCompleteState(
@@ -4727,14 +4733,12 @@ index 8d9ded4e7..7452abe0b 100644
 -    val isResidueOnly: Boolean = false
 +    val isResidueOnly: Boolean = false,
 +    val accountKeyId: String? = null
-@@ -178,2 +179,4 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
+@@ -178 +178,0 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
 -                Spacer(Modifier.height(24.dp))
--                SummaryCard(state)
-+                if (state.totalTransferred != null || state.remainingDust != null || state.transfersProgress != null) {
-+                    Spacer(Modifier.height(24.dp))
-+                    SummaryCard(state)
-+                }
-@@ -281,13 +284,5 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -271,0 +272,2 @@ private fun SummaryCard(state: MigrationCompleteState) {
++    if (state.totalTransferred == null && state.remainingDust == null && state.transfersProgress == null) return
++    Spacer(Modifier.height(24.dp))
+@@ -281,13 +283,5 @@ private fun SummaryCard(state: MigrationCompleteState) {
 -        if (state.isResidueOnly) {
 -            // MOB-1750: reduced summary — no Transfers/Duration rows, since a residue not tied
 -            // to an unseen in-app celebration has no round-trip campaign to report on (whether
@@ -4753,7 +4757,7 @@ index 8d9ded4e7..7452abe0b 100644
 +                DesignR.string.migrationComplete_inIronwoodLabel
 +            } else {
 +                DesignR.string.migrationComplete_totalTransferredLabel
-@@ -295,10 +290,7 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -295,10 +289,7 @@ private fun SummaryCard(state: MigrationCompleteState) {
 -        } else {
 -            SummaryRow(
 -                label = stringRes(DesignR.string.migrationComplete_totalTransferredLabel).getValue(),
@@ -4771,17 +4775,17 @@ index 8d9ded4e7..7452abe0b 100644
 +                DesignR.string.migrationComplete_leftInOrchardLabel
 +            } else {
 +                DesignR.string.migrationComplete_remainingDustLabel
-@@ -305,0 +298,3 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -305,0 +297,3 @@ private fun SummaryCard(state: MigrationCompleteState) {
 +            SummaryRow(label = stringRes(label).getValue(), value = dust.getValue())
 +        }
 +        state.transfersProgress?.let {
-@@ -308 +303 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -308 +302 @@ private fun SummaryCard(state: MigrationCompleteState) {
 -                value = state.transfersProgress.getValue(),
 +                value = it.getValue(),
-@@ -309,0 +305,2 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -309,0 +304,2 @@ private fun SummaryCard(state: MigrationCompleteState) {
 +        }
 +        state.duration?.let {
-@@ -312 +309 @@ private fun SummaryCard(state: MigrationCompleteState) {
+@@ -312 +308 @@ private fun SummaryCard(state: MigrationCompleteState) {
 -                value = state.duration.getValue(),
 +                value = it.getValue(),
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/complete/MigrationCompleteVM.kt
@@ -5507,7 +5511,7 @@ index f9f586912..db9963319 100644
 +    val accountKeyId: String? = null,
 +    val useTor: Boolean? = null,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
-index ccdc9db31..ae02af8c1 100644
+index ccdc9db31..c9bff9b45 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 @@ -5,0 +6,2 @@ import cash.z.ecc.android.sdk.MigrationSchedule
@@ -5709,7 +5713,7 @@ index ccdc9db31..ae02af8c1 100644
 +            sdk.signAndStoreMigrationSchedule(reviewed.schedule, spendingKey)
 +            finalizeMigrationSchedule(reviewed.schedule, args.mode, accountKeyId, startLiveDriverImmediately = false)
 +            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
-@@ -457,17 +459,32 @@ class MigrationReviewVM(
+@@ -457,17 +459,29 @@ class MigrationReviewVM(
 -            val retryable =
 -                e.message?.contains("StalePlan") == true ||
 -                    e.message?.contains("BoundaryCheckpointMissing") == true
@@ -5727,10 +5731,7 @@ index ccdc9db31..ae02af8c1 100644
 -            sdk.signAndStoreMigrationSchedule(fresh, zashiSpendingKeyDataSource.getZashiSpendingKey())
 -            finalizeMigrationSchedule(fresh, args.mode, startLiveDriverImmediately = false)
 -            navigationRouter.forward(MigrationScheduledArgs)
-+            val needsNewReview = e.message?.contains("StalePlan") == true ||
-+                e.message?.contains("BoundaryCheckpointMissing") == true ||
-+                e.message?.contains("plan superseded", ignoreCase = true) == true
-+            if (!needsNewReview) throw e
++            if (!e.requiresNewMigrationReview()) throw e
 +            if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress) {
 +                // The SDK owns the already-committed plan. Do not draw or sign a replacement.
 +                navigationRouter.backToRoot()
@@ -5759,7 +5760,7 @@ index ccdc9db31..ae02af8c1 100644
 +            }
 +            pendingMigrationScheduleRepository.set(accountKeyId, reviewed)
 +            navigationRouter.forward(MigrationKeystoneSignArgs(args.mode, accountKeyId))
-@@ -484,5 +501,2 @@ class MigrationReviewVM(
+@@ -484,5 +498,2 @@ class MigrationReviewVM(
 -            if (getSelectedWalletAccount() is LedgerAccount) {
 -                throw AccountOperationUnsupportedException.ledger()
 -            }
@@ -5767,19 +5768,19 @@ index ccdc9db31..ae02af8c1 100644
 -            if (getSelectedWalletAccount() is KeystoneAccount) {
 +            val account = requireReviewAccount()
 +            if (account is KeystoneAccount) {
-@@ -509,0 +524 @@ class MigrationReviewVM(
+@@ -509,0 +521 @@ class MigrationReviewVM(
 +                requireReviewAccount()
-@@ -514 +529,3 @@ class MigrationReviewVM(
+@@ -514 +526,3 @@ class MigrationReviewVM(
 -                keystoneProposalRepository.createPCZTFromProposal()
 +                keystoneProposalRepository.createPCZTFromProposal(account)
 +                requireReviewAccount()
 +                keystoneProposalRepository.approveForSigning()
-@@ -517,2 +534,2 @@ class MigrationReviewVM(
+@@ -517,2 +531,2 @@ class MigrationReviewVM(
 -                zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
 -                submitProposal()
 +                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
 +                submitProposal(reviewed)
-@@ -521,0 +539,10 @@ class MigrationReviewVM(
+@@ -521,0 +536,10 @@ class MigrationReviewVM(
 +    private suspend fun requireReviewAccount() = getSelectedWalletAccount().also { account ->
 +        check(account.sdkAccount.accountUuid.toStorageKeyId() == reviewedOwnerKey) {
 +            "The migration review belongs to a different account"
@@ -5790,7 +5791,12 @@ index ccdc9db31..ae02af8c1 100644
 +
 +    private class PrivateNoteSplitUnavailable : IllegalStateException("The SDK cannot submit this preparation over Tor")
 +
-@@ -636,0 +664,24 @@ class MigrationReviewVM(
+@@ -636,0 +661,29 @@ class MigrationReviewVM(
++
++private fun RuntimeException.requiresNewMigrationReview(): Boolean =
++    message?.contains("StalePlan") == true ||
++        message?.contains("BoundaryCheckpointMissing") == true ||
++        message?.contains("plan superseded", ignoreCase = true) == true
 +
 +private const val MAX_MIGRATION_PROPOSAL_ATTEMPTS = 8
 +

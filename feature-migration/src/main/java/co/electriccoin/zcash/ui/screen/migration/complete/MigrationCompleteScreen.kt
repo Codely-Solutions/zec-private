@@ -176,10 +176,7 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
                     color = ZashiColors.Text.textTertiary,
                     textAlign = TextAlign.Center,
                 )
-                if (state.totalTransferred != null || state.remainingDust != null || state.transfersProgress != null) {
-                    Spacer(Modifier.height(24.dp))
-                    SummaryCard(state)
-                }
+                SummaryCard(state)
                 Spacer(Modifier.weight(1f))
                 when {
                     state.remainingDust == null -> {
@@ -272,6 +269,8 @@ fun MigrationCompleteView(state: MigrationCompleteState) {
 
 @Composable
 private fun SummaryCard(state: MigrationCompleteState) {
+    if (state.totalTransferred == null && state.remainingDust == null && state.transfersProgress == null) return
+    Spacer(Modifier.height(24.dp))
     Column(
         modifier =
             Modifier

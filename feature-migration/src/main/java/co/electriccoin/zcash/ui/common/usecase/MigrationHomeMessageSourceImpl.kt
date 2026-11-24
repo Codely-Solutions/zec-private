@@ -186,8 +186,14 @@ class MigrationHomeMessageSourceImpl(
 
     override fun createMessageState(data: MigrationHomeMessage): HomeMessageState {
         data as MigrationHomeMessageData
-        if (data.isAwaitingFinalization) return finalizationMessage(checkNotNull(data.accountKeyId))
-        if (data.isAwaitingSignatures) return signingRecoveryMessage(checkNotNull(data.accountKeyId))
+        return when {
+            data.isAwaitingFinalization -> finalizationMessage(checkNotNull(data.accountKeyId))
+            data.isAwaitingSignatures -> signingRecoveryMessage(checkNotNull(data.accountKeyId))
+            else -> standardMessage(data)
+        }
+    }
+
+    private fun standardMessage(data: MigrationHomeMessageData): HomeMessageState {
         val percent =
             if (data.totalCount > 0) {
                 (data.completedCount * PERCENT_MULTIPLIER) / data.totalCount

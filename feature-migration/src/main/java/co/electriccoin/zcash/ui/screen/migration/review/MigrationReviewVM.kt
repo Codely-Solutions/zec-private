@@ -456,10 +456,7 @@ class MigrationReviewVM(
             finalizeMigrationSchedule(reviewed.schedule, args.mode, accountKeyId, startLiveDriverImmediately = false)
             navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
         } catch (e: RuntimeException) {
-            val needsNewReview = e.message?.contains("StalePlan") == true ||
-                e.message?.contains("BoundaryCheckpointMissing") == true ||
-                e.message?.contains("plan superseded", ignoreCase = true) == true
-            if (!needsNewReview) throw e
+            if (!e.requiresNewMigrationReview()) throw e
             if (sdk.getMigrationStateUnreconciled() is MigrationState.InProgress) {
                 // The SDK owns the already-committed plan. Do not draw or sign a replacement.
                 navigationRouter.backToRoot()
@@ -661,6 +658,11 @@ class MigrationReviewVM(
         )
     }
 }
+
+private fun RuntimeException.requiresNewMigrationReview(): Boolean =
+    message?.contains("StalePlan") == true ||
+        message?.contains("BoundaryCheckpointMissing") == true ||
+        message?.contains("plan superseded", ignoreCase = true) == true
 
 private const val MAX_MIGRATION_PROPOSAL_ATTEMPTS = 8
 
