@@ -161,6 +161,8 @@ class NearSwapCatalogTest {
     fun quoteRejectsInvalidMinimumsAndFractionalAtomicAmounts() = runBlocking {
         val route = Route(bitcoin, zec, SwapType.FLEX_INPUT)
         val quote = quoteJson(route)
+        val fractional = route.destinationAmount.atomic.add(BigDecimal("0.5"))
+        val formattedFractional = fractional.movePointLeft(route.destination.decimals).toPlainString()
         val cases = listOf(
             quote.replace(
                 "\"minAmountOut\": \"${route.destinationAmount.atomic}\"",
@@ -168,10 +170,10 @@ class NearSwapCatalogTest {
             ),
             quote.replace(
                 "\"amountOut\": \"${route.destinationAmount.atomic}\"",
-                "\"amountOut\": \"${route.destinationAmount.atomic}.5\""
+                "\"amountOut\": \"$fractional\""
             ).replace(
                 "\"amountOutFormatted\": \"${route.destinationAmount.formatted}\"",
-                "\"amountOutFormatted\": \"${route.destinationAmount.formatted}5\""
+                "\"amountOutFormatted\": \"$formattedFractional\""
             ),
             quote.replace("\"minAmountIn\": \"${route.originAmount.atomic}\"", "\"minAmountIn\": \"0\""),
             quote.replace("\"minAmountIn\": \"${route.originAmount.atomic}\"", "\"minAmountIn\": \"0.5\""),

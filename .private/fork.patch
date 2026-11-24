@@ -58437,10 +58437,10 @@ index 6cb0997ff..5cc74da4e 100644
 +            SubmitResult.GrpcFailure(txIds = listOf(firstTransaction.txIdString(), secondTransaction.txIdString())),
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt
 new file mode 100644
-index 000000000..d05a65c2c
+index 000000000..67f50842c
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapCatalogTest.kt
-@@ -0,0 +1,470 @@
+@@ -0,0 +1,472 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -58604,6 +58604,8 @@ index 000000000..d05a65c2c
 +    fun quoteRejectsInvalidMinimumsAndFractionalAtomicAmounts() = runBlocking {
 +        val route = Route(bitcoin, zec, SwapType.FLEX_INPUT)
 +        val quote = quoteJson(route)
++        val fractional = route.destinationAmount.atomic.add(BigDecimal("0.5"))
++        val formattedFractional = fractional.movePointLeft(route.destination.decimals).toPlainString()
 +        val cases = listOf(
 +            quote.replace(
 +                "\"minAmountOut\": \"${route.destinationAmount.atomic}\"",
@@ -58611,10 +58613,10 @@ index 000000000..d05a65c2c
 +            ),
 +            quote.replace(
 +                "\"amountOut\": \"${route.destinationAmount.atomic}\"",
-+                "\"amountOut\": \"${route.destinationAmount.atomic}.5\""
++                "\"amountOut\": \"$fractional\""
 +            ).replace(
 +                "\"amountOutFormatted\": \"${route.destinationAmount.formatted}\"",
-+                "\"amountOutFormatted\": \"${route.destinationAmount.formatted}5\""
++                "\"amountOutFormatted\": \"$formattedFractional\""
 +            ),
 +            quote.replace("\"minAmountIn\": \"${route.originAmount.atomic}\"", "\"minAmountIn\": \"0\""),
 +            quote.replace("\"minAmountIn\": \"${route.originAmount.atomic}\"", "\"minAmountIn\": \"0.5\""),
@@ -58920,7 +58922,7 @@ index da0613aca..d1521bb2d 100644
 -        affiliateAddress = "affiliate"
 +        slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
-index c0be20563..2bce9cf12 100644
+index c0be20563..7014842da 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.datasource
@@ -59041,11 +59043,17 @@ index c0be20563..2bce9cf12 100644
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -235,2 +300 @@ class NearSwapDataSourceTest {
+@@ -221 +286,4 @@ class NearSwapDataSourceTest {
+-                    every { quoteRequest } returns mockk { every { swapType } returns SwapType.EXACT_OUTPUT }
++                    every { quoteRequest } returns mockk {
++                        every { dry } returns false
++                        every { swapType } returns SwapType.EXACT_OUTPUT
++                    }
+@@ -235,2 +303 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -244,0 +309,32 @@ class NearSwapDataSourceTest {
+@@ -244,0 +312,35 @@ class NearSwapDataSourceTest {
 +    @Test
 +    fun outgoingQuotesRejectTexDepositsBeforeCreatingAProposal() =
 +        runBlocking {
@@ -59058,7 +59066,10 @@ index c0be20563..2bce9cf12 100644
 +            )) {
 +                val response =
 +                    mockk<QuoteResponseDto> {
-+                        every { quoteRequest } returns mockk { every { swapType } returns type }
++                        every { quoteRequest } returns mockk {
++                            every { dry } returns false
++                            every { swapType } returns type
++                        }
 +                        every { quote } returns mockk { every { depositAddress } returns "tex-deposit" }
 +                    }
 +                coEvery { nearApiProvider.requestQuote(any()) } returns response
@@ -59078,19 +59089,19 @@ index c0be20563..2bce9cf12 100644
 +            }
 +        }
 +
-@@ -260,2 +356 @@ class NearSwapDataSourceTest {
+@@ -260,2 +362 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -285,2 +380 @@ class NearSwapDataSourceTest {
+@@ -285,2 +386 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -311,2 +405 @@ class NearSwapDataSourceTest {
+@@ -311,2 +411 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -335,2 +428,21 @@ class NearSwapDataSourceTest {
+@@ -335,2 +434,21 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
@@ -59114,7 +59125,7 @@ index c0be20563..2bce9cf12 100644
 +                    destinationAddress = "destination",
 +                    destinationAsset = zec,
 +                    slippage = BigDecimal("2")
-@@ -353,0 +466,50 @@ class NearSwapDataSourceTest {
+@@ -353,0 +472,50 @@ class NearSwapDataSourceTest {
 +    @Test
 +    fun incomingBitcoinStatusUsesExactIdentityWhenBothCatalogEntriesExist() = runBlocking {
 +        val btc = (origin as NearSwapAsset).copy(assetId = "nep141:btc.omft.near", tokenTicker = "BTC")
@@ -59165,7 +59176,7 @@ index c0be20563..2bce9cf12 100644
 +        }
 +    }
 +
-@@ -389,0 +552 @@ class NearSwapDataSourceTest {
+@@ -389,0 +558 @@ class NearSwapDataSourceTest {
 +                    every { quote } returns mockk { every { depositAddress } returns "deposit" }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/OptionalTransparentReceiverTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/OptionalTransparentReceiverTest.kt
 new file mode 100644

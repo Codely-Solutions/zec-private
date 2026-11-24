@@ -283,7 +283,10 @@ class NearSwapDataSourceTest {
         runBlocking {
             val response =
                 mockk<QuoteResponseDto> {
-                    every { quoteRequest } returns mockk { every { swapType } returns SwapType.EXACT_OUTPUT }
+                    every { quoteRequest } returns mockk {
+                        every { dry } returns false
+                        every { swapType } returns SwapType.EXACT_OUTPUT
+                    }
                     every { quote } returns mockk { every { depositAddress } returns "deposit-address" }
                 }
             coEvery { nearApiProvider.requestQuote(any()) } returns response
@@ -318,7 +321,10 @@ class NearSwapDataSourceTest {
             )) {
                 val response =
                     mockk<QuoteResponseDto> {
-                        every { quoteRequest } returns mockk { every { swapType } returns type }
+                        every { quoteRequest } returns mockk {
+                            every { dry } returns false
+                            every { swapType } returns type
+                        }
                         every { quote } returns mockk { every { depositAddress } returns "tex-deposit" }
                     }
                 coEvery { nearApiProvider.requestQuote(any()) } returns response
