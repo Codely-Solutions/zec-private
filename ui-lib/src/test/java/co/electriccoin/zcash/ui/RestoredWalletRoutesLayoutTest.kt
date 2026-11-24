@@ -56,6 +56,7 @@ import kotlinx.coroutines.flow.flowOf
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.KoinApplication
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.koinConfiguration
@@ -207,7 +208,7 @@ class RestoredWalletRoutesLayoutTest {
                             composable<ORSwapConfirmationArgs> { ORSwapConfirmationScreen() }
                             composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
                             composable<ScanKeystonePCZTRequest> {
-                                KeystoneSignatureScanner(it.toRoute(), org.koin.androidx.compose.koinViewModel(), true) {
+                                KeystoneSignatureScanner(it.toRoute(), koinViewModel(), true) {
                                     controller.popBackStack()
                                 }
                             }
