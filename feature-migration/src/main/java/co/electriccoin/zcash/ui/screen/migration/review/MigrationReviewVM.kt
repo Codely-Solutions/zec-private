@@ -412,18 +412,7 @@ class MigrationReviewVM(
             !requestedTor && sdk.getMigrationStateUnreconciled() is MigrationState.InProgress
         }
         if (account is KeystoneAccount) {
-            newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
-            // Keystone can't sign in-process — hand the unsigned schedule off to the QR
-            // sign/scan detour; FinalizeMigrationScheduleUseCase runs after a successful scan
-            // instead (MigrationKeystoneScanVM), not here.
-            if (pendingKeystone.peek(accountKeyId)?.isFullySigned == true &&
-                pendingMigrationScheduleRepository.peek(accountKeyId) != null
-            ) {
-                navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
-            } else {
-                pendingMigrationScheduleRepository.set(accountKeyId, sched)
-                navigationRouter.forward(MigrationKeystoneSignArgs(args.mode, accountKeyId))
-            }
+            confirmKeystone(sched, accountKeyId, newTorPreference)
             return
         }
         // Note-split is the first step of this confirm action (design spec §7) — a schedule with
@@ -501,6 +490,25 @@ class MigrationReviewVM(
             sdk.signAndStoreMigrationSchedule(fresh, zashiSpendingKeyDataSource.getZashiSpendingKey())
             finalizeMigrationSchedule(fresh, args.mode, accountKeyId, startLiveDriverImmediately = false)
             navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
+        }
+    }
+
+    private suspend fun confirmKeystone(
+        schedule: MigrationSchedule,
+        accountKeyId: String,
+        newTorPreference: Boolean?,
+    ) {
+        newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
+        // Keystone can't sign in-process — hand the unsigned schedule off to the QR
+        // sign/scan detour; FinalizeMigrationScheduleUseCase runs after a successful scan
+        // instead (MigrationKeystoneScanVM), not here.
+        if (pendingKeystone.peek(accountKeyId)?.isFullySigned == true &&
+            pendingMigrationScheduleRepository.peek(accountKeyId) != null
+        ) {
+            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
+        } else {
+            pendingMigrationScheduleRepository.set(accountKeyId, schedule)
+            navigationRouter.forward(MigrationKeystoneSignArgs(args.mode, accountKeyId))
         }
     }
 

@@ -107,10 +107,10 @@ class SwapSupportMapper {
         reviewedIdentity: String?,
     ): ZashiMessageState {
         val missingAmount = quoteStatus.depositedAmountFormatted?.takeIf { it.signum() > 0 }
-            ?.let { quoteStatus.quotedAmountIn - it }
-        if (!reviewedIdentity.bindsReviewedFundingTerms() || missingAmount == null ||
-            missingAmount.signum() <= 0 || quoteStatus.deadline <= Clock.System.now()
-        ) {
+            ?.let { quoteStatus.quotedAmountIn - it }?.takeIf { it.signum() > 0 }
+        val quoteStillValid = reviewedIdentity.bindsReviewedFundingTerms() &&
+            quoteStatus.deadline > Clock.System.now()
+        if (!quoteStillValid || missingAmount == null) {
             return ZashiMessageState(
                 title = stringRes(R.string.swapAndPay_status_incompleteDeposit),
                 text = styledStringResource(R.string.private_swap_incomplete_check_support),

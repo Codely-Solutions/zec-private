@@ -5229,7 +5229,7 @@ index f9f586912..db9963319 100644
 +    val accountKeyId: String? = null,
 +    val useTor: Boolean? = null,
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
-index ccdc9db31..5b6f7d881 100644
+index ccdc9db31..c64ee91ed 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/review/MigrationReviewVM.kt
 @@ -5,0 +6 @@ import cash.z.ecc.android.sdk.MigrationSchedule
@@ -5281,45 +5281,58 @@ index ccdc9db31..5b6f7d881 100644
 +        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
 +        val newTorPreference = args.useTor?.takeUnless { requestedTor ->
 +            !requestedTor && sdk.getMigrationStateUnreconciled() is MigrationState.InProgress
-@@ -393,2 +414,2 @@ class MigrationReviewVM(
+@@ -393,8 +414,2 @@ class MigrationReviewVM(
 -        getSelectedWalletAccount().requireSpendable()
 -        if (getSelectedWalletAccount() is KeystoneAccount) {
-+        if (account is KeystoneAccount) {
-+            newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
-@@ -398,3 +419,8 @@ class MigrationReviewVM(
+-            // Keystone can't sign in-process — hand the unsigned schedule off to the QR
+-            // sign/scan detour; FinalizeMigrationScheduleUseCase runs after a successful scan
+-            // instead (MigrationKeystoneScanVM), not here.
 -            val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 -            pendingMigrationScheduleRepository.set(accountKeyId, sched)
 -            navigationRouter.forward(MigrationKeystoneSignArgs(mode = args.mode))
-+            if (pendingKeystone.peek(accountKeyId)?.isFullySigned == true &&
-+                pendingMigrationScheduleRepository.peek(accountKeyId) != null
-+            ) {
-+                navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
-+            } else {
-+                pendingMigrationScheduleRepository.set(accountKeyId, sched)
-+                navigationRouter.forward(MigrationKeystoneSignArgs(args.mode, accountKeyId))
-+            }
-@@ -403 +428,0 @@ class MigrationReviewVM(
++        if (account is KeystoneAccount) {
++            confirmKeystone(sched, accountKeyId, newTorPreference)
+@@ -403 +417,0 @@ class MigrationReviewVM(
 -        val sdk = getOrchardMigrationSdk()
-@@ -419,0 +445,5 @@ class MigrationReviewVM(
+@@ -419,0 +434,5 @@ class MigrationReviewVM(
 +        val needsSplit = sdk.isNoteSplitNeeded()
 +        if (needsSplit && (newTorPreference ?: migrationTorEnabled.get(accountKeyId))) {
 +            throw PrivateNoteSplitUnavailable()
 +        }
 +        newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
-@@ -421 +451 @@ class MigrationReviewVM(
+@@ -421 +440 @@ class MigrationReviewVM(
 -            if (sdk.isNoteSplitNeeded()) {
 +            if (needsSplit) {
-@@ -454,2 +484,2 @@ class MigrationReviewVM(
+@@ -454,2 +473,2 @@ class MigrationReviewVM(
 -            finalizeMigrationSchedule(scheduleToSign, args.mode, startLiveDriverImmediately = false)
 -            navigationRouter.forward(MigrationScheduledArgs)
 +            finalizeMigrationSchedule(scheduleToSign, args.mode, accountKeyId, startLiveDriverImmediately = false)
 +            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
-@@ -472,2 +502,2 @@ class MigrationReviewVM(
+@@ -472,2 +491,21 @@ class MigrationReviewVM(
 -            finalizeMigrationSchedule(fresh, args.mode, startLiveDriverImmediately = false)
 -            navigationRouter.forward(MigrationScheduledArgs)
 +            finalizeMigrationSchedule(fresh, args.mode, accountKeyId, startLiveDriverImmediately = false)
 +            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
-@@ -484,5 +514,2 @@ class MigrationReviewVM(
++        }
++    }
++
++    private suspend fun confirmKeystone(
++        schedule: MigrationSchedule,
++        accountKeyId: String,
++        newTorPreference: Boolean?,
++    ) {
++        newTorPreference?.let { migrationTorEnabled.store(accountKeyId, it) }
++        // Keystone can't sign in-process — hand the unsigned schedule off to the QR
++        // sign/scan detour; FinalizeMigrationScheduleUseCase runs after a successful scan
++        // instead (MigrationKeystoneScanVM), not here.
++        if (pendingKeystone.peek(accountKeyId)?.isFullySigned == true &&
++            pendingMigrationScheduleRepository.peek(accountKeyId) != null
++        ) {
++            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
++        } else {
++            pendingMigrationScheduleRepository.set(accountKeyId, schedule)
++            navigationRouter.forward(MigrationKeystoneSignArgs(args.mode, accountKeyId))
+@@ -484,5 +522,2 @@ class MigrationReviewVM(
 -            if (getSelectedWalletAccount() is LedgerAccount) {
 -                throw AccountOperationUnsupportedException.ledger()
 -            }
@@ -5327,19 +5340,19 @@ index ccdc9db31..5b6f7d881 100644
 -            if (getSelectedWalletAccount() is KeystoneAccount) {
 +            val account = requireReviewAccount()
 +            if (account is KeystoneAccount) {
-@@ -509,0 +537 @@ class MigrationReviewVM(
+@@ -509,0 +545 @@ class MigrationReviewVM(
 +                requireReviewAccount()
-@@ -514 +542,3 @@ class MigrationReviewVM(
+@@ -514 +550,3 @@ class MigrationReviewVM(
 -                keystoneProposalRepository.createPCZTFromProposal()
 +                keystoneProposalRepository.createPCZTFromProposal(account)
 +                requireReviewAccount()
 +                keystoneProposalRepository.approveForSigning()
-@@ -517,2 +547,2 @@ class MigrationReviewVM(
+@@ -517,2 +555,2 @@ class MigrationReviewVM(
 -                zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
 -                submitProposal()
 +                val reviewed = zashiProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
 +                submitProposal(reviewed)
-@@ -521,0 +552,10 @@ class MigrationReviewVM(
+@@ -521,0 +560,10 @@ class MigrationReviewVM(
 +    private suspend fun requireReviewAccount() = getSelectedWalletAccount().also { account ->
 +        check(account.sdkAccount.accountUuid.toStorageKeyId() == reviewedOwnerKey) {
 +            "The migration review belongs to a different account"
@@ -5404,7 +5417,7 @@ index d80cbcdb3..05da60f40 100644
 +
 +        else -> LceRenderer(
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
-index c53b8b4a0..42bae9430 100644
+index c53b8b4a0..661169a45 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
 @@ -4,0 +5,3 @@ import androidx.lifecycle.viewModelScope
@@ -5497,7 +5510,7 @@ index c53b8b4a0..42bae9430 100644
 -            pendingSchedule.clear()
 -            pendingKeystonePczts.clear()
 -            isFinalizing.value = false
-@@ -138,16 +101,69 @@ class MigrationScheduledVM(
+@@ -138,16 +101,71 @@ class MigrationScheduledVM(
 -            // An unguarded failure here (e.g. a transient "database is locked" from the migration
 -            // engine mutex) would otherwise crash the app right after the user completes a
 -            // physical Keystone signing ceremony, with the signed batch already applied. Surface
@@ -5556,20 +5569,22 @@ index c53b8b4a0..42bae9430 100644
 +        val split = checkNotNull(states.singleOrNull { !it.isTransfer && it.prepLayer == 0 && it.prepIndex == 0 }) {
 +            "The reviewed note split is unavailable"
 +        }
-+        if (!split.needsSignature()) return true
++        return if (split.needsSignature()) {
++            val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
++            val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
++            when (result) {
++                is TransferResult.Success -> {
++                    synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
++                    true
++                }
 +
-+        val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
-+        val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
-+        return when (result) {
-+            is TransferResult.Success -> {
-+                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
-+                true
++                else -> {
++                    showFinalizationError(migrationFailureMessage(result))
++                    false
++                }
 +            }
-+
-+            else -> {
-+                showFinalizationError(migrationFailureMessage(result))
-+                false
-+            }
++        } else {
++            true
 +        }
 +    }
 +
@@ -5583,7 +5598,7 @@ index c53b8b4a0..42bae9430 100644
 +                    "A reviewed migration step is unavailable"
 +                }
 +                if (state.needsSignature()) id to Pczt(bytes) else null
-@@ -154,0 +171,13 @@ class MigrationScheduledVM(
+@@ -154,0 +173,13 @@ class MigrationScheduledVM(
 +        return awaiting(accumulatedPrepSigned, isTransfer = false) +
 +            awaiting(accumulatedTransferSigned, isTransfer = true)
 +    }
@@ -5597,7 +5612,7 @@ index c53b8b4a0..42bae9430 100644
 +                false
 +            }
 +            else -> error("The reviewed migration step cannot be reconciled")
-@@ -155,0 +185,8 @@ class MigrationScheduledVM(
+@@ -155,0 +187,8 @@ class MigrationScheduledVM(
 +
 +    private fun showFinalizationError(message: StringResource) {
 +        finalizationError.value = message
@@ -5606,7 +5621,7 @@ index c53b8b4a0..42bae9430 100644
 +            onRetry = ::retryFinalization,
 +            onDismiss = { failureSheet.value = null },
 +        )
-@@ -157,0 +195,19 @@ class MigrationScheduledVM(
+@@ -157,0 +197,19 @@ class MigrationScheduledVM(
 +    fun retryFinalization() {
 +        if (finalizationError.value == null) return
 +        finalizationError.value = null
@@ -5626,7 +5641,7 @@ index c53b8b4a0..42bae9430 100644
 +
 +    fun navigateBack() = navigationRouter.backToRoot()
 +
-@@ -162,2 +217,0 @@ class MigrationScheduledVM(
+@@ -162,2 +219,0 @@ class MigrationScheduledVM(
 -                // Transient null (still loading, or SDK not resolved yet) keeps the LCE loading
 -                // instead of rendering zeroed stats (review L3).
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingArgs.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingArgs.kt
@@ -30676,7 +30691,7 @@ index b7227e48f..72ad78075 100644
 +    }
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt
-index befe3b652..88c034847 100644
+index befe3b652..45f115d87 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/SwapSupportMapper.kt
 @@ -6,0 +7,2 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus
@@ -30714,10 +30729,10 @@ index befe3b652..88c034847 100644
 +        reviewedIdentity: String?,
 +    ): ZashiMessageState {
 +        val missingAmount = quoteStatus.depositedAmountFormatted?.takeIf { it.signum() > 0 }
-+            ?.let { quoteStatus.quotedAmountIn - it }
-+        if (!reviewedIdentity.bindsReviewedFundingTerms() || missingAmount == null ||
-+            missingAmount.signum() <= 0 || quoteStatus.deadline <= Clock.System.now()
-+        ) {
++            ?.let { quoteStatus.quotedAmountIn - it }?.takeIf { it.signum() > 0 }
++        val quoteStillValid = reviewedIdentity.bindsReviewedFundingTerms() &&
++            quoteStatus.deadline > Clock.System.now()
++        if (!quoteStillValid || missingAmount == null) {
 +            return ZashiMessageState(
 +                title = stringRes(R.string.swapAndPay_status_incompleteDeposit),
 +                text = styledStringResource(R.string.private_swap_incomplete_check_support),
@@ -32038,7 +32053,7 @@ index f301e0286..980ca5f78 100644
 @@ -16,0 +17 @@ data class NearSwapAsset(
 +    override val contractAddress: String? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
-index e5b3ebffe..b57015287 100644
+index e5b3ebffe..324aa7d2a 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapQuote.kt
 @@ -3,6 +2,0 @@ package co.electriccoin.zcash.ui.common.model.near
@@ -32051,19 +32066,17 @@ index e5b3ebffe..b57015287 100644
 @@ -16,2 +9,0 @@ import co.electriccoin.zcash.ui.common.model.SwapQuoteMismatchType
 -import co.electriccoin.zcash.ui.common.model.isSame
 -import co.electriccoin.zcash.ui.common.model.isZCashAsset
-@@ -20,0 +13 @@ import java.math.RoundingMode
-+import java.security.MessageDigest
-@@ -41 +34,5 @@ data class NearSwapQuote(
+@@ -41 +33,5 @@ data class NearSwapQuote(
 -        // Guards zecExchangeRate (= amountInUsd / amountInFormatted) and the fee math below it against a
 +        requireNearAssetIdentity(originAsset, response.quoteRequest.originAsset, SwapQuoteMismatchType.ORIGIN_ASSET)
 +        requireNearAssetIdentity(
 +            destinationAsset, response.quoteRequest.destinationAsset, SwapQuoteMismatchType.DESTINATION_ASSET
 +        )
 +        // Guards input USD unit pricing (= amountInUsd / amountInFormatted) against a
-@@ -43 +40 @@ data class NearSwapQuote(
+@@ -43 +39 @@ data class NearSwapQuote(
 -        // clear message rather than letting an ArithmeticException surface from the property initializers.
 +        // clear message before presentation attempts to calculate a unit price.
-@@ -76,0 +74,11 @@ data class NearSwapQuote(
+@@ -76,0 +73,11 @@ data class NearSwapQuote(
 +        if (expectedSlippageToleranceBps != null) {
 +            response.quote.requireFundingAmounts(expectedSlippageToleranceBps)
 +            if (response.quoteRequest.swapType == SwapType.FLEX_INPUT) {
@@ -32075,23 +32088,17 @@ index e5b3ebffe..b57015287 100644
 +                )
 +            }
 +        }
-@@ -101,4 +108,0 @@ data class NearSwapQuote(
+@@ -101,4 +107,0 @@ data class NearSwapQuote(
 -    override val zecExchangeRate: BigDecimal =
 -        response.quote.amountInUsd
 -            .divide(response.quote.amountInFormatted, MathContext.DECIMAL128)
 -
-@@ -111,0 +116,4 @@ data class NearSwapQuote(
+@@ -111,0 +115,13 @@ data class NearSwapQuote(
 +    override val minimumAmountIn: BigDecimal?
 +        get() = response.quote.minAmountIn.takeIf {
 +            mode == SwapMode.FLEX_INPUT && it.isPositiveAtomic() && it <= amountIn
 +        }?.movePointLeft(originAsset.decimals)
-@@ -113,6 +121,8 @@ data class NearSwapQuote(
--    override val affiliateFee: BigDecimal =
--        response.quote.amountInFormatted
--            .multiply(
--                BigDecimal(AFFILIATE_FEE_BPS).divide(BigDecimal("10000"), MathContext.DECIMAL128),
--                MathContext.DECIMAL128
--            )
++
 +    override val minimumAmountOut: BigDecimal = response.quote.minAmountOut.movePointLeft(destinationAsset.decimals)
 +    override val inputAllowance: BigDecimal?
 +        get() =
@@ -32100,7 +32107,14 @@ index e5b3ebffe..b57015287 100644
 +            } else {
 +                null
 +            }
-@@ -120,17 +130 @@ data class NearSwapQuote(
+@@ -113,24 +129 @@ data class NearSwapQuote(
+-    override val affiliateFee: BigDecimal =
+-        response.quote.amountInFormatted
+-            .multiply(
+-                BigDecimal(AFFILIATE_FEE_BPS).divide(BigDecimal("10000"), MathContext.DECIMAL128),
+-                MathContext.DECIMAL128
+-            )
+-
 -    override val affiliateFeeZatoshi: Zatoshi =
 -        if (originAsset.isZCashAsset) {
 -            response.quote.amountInFormatted
@@ -32119,7 +32133,7 @@ index e5b3ebffe..b57015287 100644
 -                .convertZecToZatoshi()
 -        }
 +    override val affiliateFee: BigDecimal = BigDecimal.ZERO
-@@ -138,7 +132 @@ data class NearSwapQuote(
+@@ -138,7 +131 @@ data class NearSwapQuote(
 -    override val affiliateFeeUsd: BigDecimal =
 -        response.quote.amountInUsd
 -            .coerceAtLeast(BigDecimal(0))
@@ -32128,58 +32142,33 @@ index e5b3ebffe..b57015287 100644
 -                MathContext.DECIMAL128
 -            )
 +    override val affiliateFeeUsd: BigDecimal = BigDecimal.ZERO
-@@ -148,0 +137 @@ data class NearSwapQuote(
-+}
-@@ -150 +139,2 @@ data class NearSwapQuote(
+@@ -149,14 +135,0 @@ data class NearSwapQuote(
+-
 -    override fun getTotal(proposal: Proposal?) = amountInFormatted + (getZecFee(proposal) ?: BigDecimal.ZERO)
-+internal fun SwapQuote.reviewedIdentity(): String? =
-+    (this as? NearSwapQuote)?.response?.reviewedIdentity()
-@@ -152 +142,11 @@ data class NearSwapQuote(
+-
 -    override fun getTotalUsd(proposal: Proposal?) = amountInUsd + getZecFeeUsd(proposal)
-+/** Bind the funding terms without storing a second copy of the route or quote. */
-+internal fun QuoteResponseDto.reviewedIdentity(): String {
-+    val approvedAmounts = listOf(
-+        quote.amountIn, quote.amountInFormatted, quote.minAmountIn,
-+        quote.amountOut, quote.amountOutFormatted, quote.minAmountOut, quoteRequest.amount
-+    ).map { it.stripTrailingZeros().toPlainString() }
-+    val approvedTerms = approvedAmounts + listOf(quote.deadline.toString(), quoteRequest.slippageTolerance.toString())
-+    return REVIEWED_FUNDING_TERMS_PREFIX + hashReviewedFields(reviewedRouteFields() + approvedTerms)
-+}
-+
-+private const val REVIEWED_FUNDING_TERMS_PREFIX = "v2:"
-@@ -154 +154 @@ data class NearSwapQuote(
+-
 -    override fun getTotalFeesUsd(proposal: Proposal?) = affiliateFeeUsd + getZecFeeUsd(proposal)
-+internal fun String?.bindsReviewedFundingTerms(): Boolean = this?.startsWith(REVIEWED_FUNDING_TERMS_PREFIX) == true
-@@ -156,2 +156,3 @@ data class NearSwapQuote(
+-
 -    override fun getTotalFeesZatoshi(proposal: Proposal?): Zatoshi =
 -        (proposal?.totalFeeRequired() ?: Zatoshi.ZERO) + affiliateFeeZatoshi
-+internal fun QuoteResponseDto.matchesReviewedIdentity(expected: String): Boolean =
-+    if (expected.bindsReviewedFundingTerms()) reviewedIdentity() == expected
-+    else hashReviewedFields(reviewedRouteFields()) == expected
-@@ -159 +160,4 @@ data class NearSwapQuote(
+-
 -    private fun getZecFee(proposal: Proposal?): BigDecimal? = proposal?.totalFeeRequired()?.convertZatoshiToZec()
-+private fun QuoteResponseDto.reviewedRouteFields() = listOf(
-+    "near-swap-v1", quote.depositAddress, quoteRequest.originAsset, quoteRequest.destinationAsset,
-+    requireNotNull(quoteRequest.swapType).apiValue, quoteRequest.recipient, quoteRequest.refundTo
-+)
-@@ -161,2 +165,3 @@ data class NearSwapQuote(
+-
 -    private fun getZecFeeUsd(proposal: Proposal?): BigDecimal =
 -        zecExchangeRate.multiply(getZecFee(proposal) ?: BigDecimal.ZERO, MathContext.DECIMAL128)
-+private fun hashReviewedFields(fields: List<String>): String {
-+    val framed = fields.joinToString("") { "${it.length}:$it" }
-+    return MessageDigest.getInstance("SHA-256").digest(framed.encodeToByteArray()).toHexString()
-@@ -172,2 +177,4 @@ internal fun requireConsistent(
+@@ -172,2 +145,4 @@ internal fun requireConsistent(
 -    if (raw == null || formatted == null) return
 -    if (raw.compareTo(formatted.movePointRight(decimals)) != 0) {
 +    requireNearTokenDecimals(decimals)
 +    if (formatted == null) return
 +    val representable = formatted.stripTrailingZeros().scale() <= decimals
 +    if (!representable || raw != null && raw.compareTo(formatted.movePointRight(decimals)) != 0) {
-@@ -179,2 +186 @@ internal fun requireConsistent(
+@@ -179,2 +154 @@ internal fun requireConsistent(
 -                "Swap amount inconsistency: $name ($raw) does not match " +
 -                    "${name}Formatted ($formatted) at $decimals decimals"
 +                "Swap amount inconsistency for $name at $decimals decimals"
-@@ -204,17 +209,0 @@ internal fun requireQuoteMatchesUserAmount(quoted: BigDecimal, requested: BigDec
+@@ -204,17 +177,0 @@ internal fun requireQuoteMatchesUserAmount(quoted: BigDecimal, requested: BigDec
 -internal fun requireMatchingAsset(
 -    name: String,
 -    type: SwapQuoteMismatchType,
@@ -32197,7 +32186,7 @@ index e5b3ebffe..b57015287 100644
 -    }
 -}
 -
-@@ -222,7 +211,2 @@ internal fun requireMatchingAsset(
+@@ -222,7 +179,2 @@ internal fun requireMatchingAsset(
 - * Fail-closed slippage check on the server-determined (floating) side of the quote. The user-fixed side
 - * is already pinned by requireQuoteMatchesUserAmount in the use case; this asserts the server's own
 - * worst-case guarantee (minAmountOut / minAmountIn) does not exceed the slippage the user requested.
@@ -32207,7 +32196,7 @@ index e5b3ebffe..b57015287 100644
 - * bound that would silently skip the assertion.
 + * Checks the slippage guarantees also required when reconstructing saved quotes. Fresh FLEX_INPUT
 + * funding admission checks the input floor separately so older observations remain readable.
-@@ -238,7 +221,0 @@ internal fun requireWithinSlippage(
+@@ -238,7 +189,0 @@ internal fun requireWithinSlippage(
 -    // Both bounds are computed in integer base units to match the server's integer arithmetic.
 -    // Using full-precision (DECIMAL128) arithmetic here would leave a fractional remainder that
 -    // gets compared against the server's already-truncated integer guarantee, rejecting valid
@@ -32215,11 +32204,11 @@ index e5b3ebffe..b57015287 100644
 -    // server returns 6928160 — would throw if we didn't round).
 -    val bps = BigDecimal(slippageToleranceBps)
 -    val basisPointsDenominator = BigDecimal("10000")
-@@ -246,3 +222,0 @@ internal fun requireWithinSlippage(
+@@ -246,3 +190,0 @@ internal fun requireWithinSlippage(
 -        // Output floats: the guaranteed minimum out must not be worse than amountOut * (1 - slippage).
 -        // Round DOWN — the server's worst-case minAmountOut is truncated DOWN for its own safety, so the
 -        // wallet's floor must do the same to accept the boundary case.
-@@ -250,12 +224 @@ internal fun requireWithinSlippage(
+@@ -250,12 +192 @@ internal fun requireWithinSlippage(
 -            val floor =
 -                amountOut
 -                    .multiply(basisPointsDenominator.subtract(bps))
@@ -32233,13 +32222,13 @@ index e5b3ebffe..b57015287 100644
 -                )
 -            }
 +            requireSlippageFloor("minAmountOut", amountOut, minAmountOut, slippageToleranceBps)
-@@ -263,5 +225,0 @@ internal fun requireWithinSlippage(
+@@ -263,5 +193,0 @@ internal fun requireWithinSlippage(
 -
 -        // Input floats: the guaranteed input must not exceed amountIn * (1 + slippage).
 -        // Note: the server names this field `minAmountIn`, but for EXACT_OUTPUT it is the worst-case
 -        // *maximum* input you may pay, hence `maxInputGuarantee`. Round UP — the server's worst-case
 -        // maxInput is truncated UP for its own safety, so the wallet's ceiling must do the same.
-@@ -269,13 +227,2 @@ internal fun requireWithinSlippage(
+@@ -269,13 +195,2 @@ internal fun requireWithinSlippage(
 -            val maxInputGuarantee = minAmountIn
 -            val ceiling =
 -                amountIn
@@ -32255,9 +32244,9 @@ index e5b3ebffe..b57015287 100644
 -            }
 +            requireExactOutputAmounts(amountIn, minAmountIn, slippageToleranceBps)
 +            requireSlippageFloor("minAmountIn", amountIn, minAmountIn, slippageToleranceBps)
-@@ -283 +229,0 @@ internal fun requireWithinSlippage(
+@@ -283 +197,0 @@ internal fun requireWithinSlippage(
 -
-@@ -286,0 +233,48 @@ internal fun requireWithinSlippage(
+@@ -286,0 +201,48 @@ internal fun requireWithinSlippage(
 +
 +private fun requireSlippageFloor(field: String, amount: BigDecimal, minimum: BigDecimal, toleranceBps: Int) {
 +    // 1Click rounds its guarantees down to whole base units on both sides of FLEX_INPUT.
@@ -32421,6 +32410,47 @@ index b2c6505ad..387bd027f 100644
 +        ?: response.swapDetails?.depositedAmount?.movePointLeft(origin.decimals)
 @@ -118,0 +153 @@ data class NearSwapQuoteStatus(
 +        ?: response.swapDetails?.refundedAmount?.movePointLeft(origin.decimals)
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapReviewedIdentity.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapReviewedIdentity.kt
+new file mode 100644
+index 000000000..06a597e65
+--- /dev/null
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearSwapReviewedIdentity.kt
+@@ -0,0 +1,35 @@
++package co.electriccoin.zcash.ui.common.model.near
++
++import co.electriccoin.zcash.ui.common.model.SwapQuote
++import java.security.MessageDigest
++
++internal fun SwapQuote.reviewedIdentity(): String? =
++    (this as? NearSwapQuote)?.response?.reviewedIdentity()
++
++/** Bind the funding terms without storing a second copy of the route or quote. */
++internal fun QuoteResponseDto.reviewedIdentity(): String {
++    val approvedAmounts = listOf(
++        quote.amountIn, quote.amountInFormatted, quote.minAmountIn,
++        quote.amountOut, quote.amountOutFormatted, quote.minAmountOut, quoteRequest.amount
++    ).map { it.stripTrailingZeros().toPlainString() }
++    val approvedTerms = approvedAmounts + listOf(quote.deadline.toString(), quoteRequest.slippageTolerance.toString())
++    return REVIEWED_FUNDING_TERMS_PREFIX + hashReviewedFields(reviewedRouteFields() + approvedTerms)
++}
++
++private const val REVIEWED_FUNDING_TERMS_PREFIX = "v2:"
++
++internal fun String?.bindsReviewedFundingTerms(): Boolean = this?.startsWith(REVIEWED_FUNDING_TERMS_PREFIX) == true
++
++internal fun QuoteResponseDto.matchesReviewedIdentity(expected: String): Boolean =
++    if (expected.bindsReviewedFundingTerms()) reviewedIdentity() == expected
++    else hashReviewedFields(reviewedRouteFields()) == expected
++
++private fun QuoteResponseDto.reviewedRouteFields() = listOf(
++    "near-swap-v1", quote.depositAddress, quoteRequest.originAsset, quoteRequest.destinationAsset,
++    requireNotNull(quoteRequest.swapType).apiValue, quoteRequest.recipient, quoteRequest.refundTo
++)
++
++private fun hashReviewedFields(fields: List<String>): String {
++    val framed = fields.joinToString("") { "${it.length}:$it" }
++    return MessageDigest.getInstance("SHA-256").digest(framed.encodeToByteArray()).toHexString()
++}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearTokenDto.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearTokenDto.kt
 index 620de4db6..9186493a6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/model/near/NearTokenDto.kt

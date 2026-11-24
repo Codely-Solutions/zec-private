@@ -140,20 +140,22 @@ class MigrationScheduledVM(
         val split = checkNotNull(states.singleOrNull { !it.isTransfer && it.prepLayer == 0 && it.prepIndex == 0 }) {
             "The reviewed note split is unavailable"
         }
-        if (!split.needsSignature()) return true
+        return if (split.needsSignature()) {
+            val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
+            val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
+            when (result) {
+                is TransferResult.Success -> {
+                    synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
+                    true
+                }
 
-        val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
-        val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
-        return when (result) {
-            is TransferResult.Success -> {
-                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
-                true
+                else -> {
+                    showFinalizationError(migrationFailureMessage(result))
+                    false
+                }
             }
-
-            else -> {
-                showFinalizationError(migrationFailureMessage(result))
-                false
-            }
+        } else {
+            true
         }
     }
 
