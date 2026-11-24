@@ -27006,28 +27006,34 @@ index 996645a58..0a3659205 100644
 +
 +    fun committedBirthday(): CommittedEnrollmentBirthday?
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
-index b7227e48f..450f695a6 100644
+index b7227e48f..4052c9dc5 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
-@@ -76,2 +76,8 @@ class ActivityMapper {
+@@ -24,0 +25 @@ import co.electriccoin.zcash.ui.design.util.StyledStringStyle
++import co.electriccoin.zcash.ui.design.util.TickerLocation
+@@ -76,2 +77,12 @@ class ActivityMapper {
 -    private fun getSwapValue(data: ActivityData.BySwap): StyledStringResource =
 -        stringResByCurrencyNumber(data.swap.amountOutFormatted, CURRENCY_TICKER).withStyle(
 +    private fun getSwapValue(data: ActivityData.BySwap): StyledStringResource {
-+        val amount = stringResByCurrencyNumber(data.swap.amountOutFormatted, data.swap.destination.tokenTicker)
++        val amount = stringResByCurrencyNumber(
++            data.swap.amountOutFormatted,
++            data.swap.destination.tokenTicker,
++            tickerLocation = TickerLocation.AFTER,
++        )
 +        val label = when {
 +            data.swap.executedAmountOut != null -> null
 +            data.swap.quotedAmountOut != null -> R.string.private_activity_quoted_amount
 +            else -> R.string.private_activity_saved_amount
 +        }
 +        return (label?.let { stringRes(it, amount) } ?: amount).withStyle(
-@@ -85,0 +92 @@ class ActivityMapper {
+@@ -85,0 +97 @@ class ActivityMapper {
 +    }
-@@ -88 +95,3 @@ class ActivityMapper {
+@@ -88 +100,3 @@ class ActivityMapper {
 -        stringRes(
 +        if (data.swap.mode != FLEX_INPUT) {
 +            stringRes(getUnmatchedFundingTitle(data))
 +        } else stringRes(
-@@ -99 +108,7 @@ class ActivityMapper {
+@@ -99 +113,7 @@ class ActivityMapper {
 -        when (data.swap.status) {
 +        if (data.swap.mode != FLEX_INPUT) {
 +            when (data.swap.status) {
@@ -27036,7 +27042,7 @@ index b7227e48f..450f695a6 100644
 +                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_send_failed
 +            }
 +        } else when (data.swap.status) {
-@@ -166,13 +181,7 @@ class ActivityMapper {
+@@ -166,13 +186,7 @@ class ActivityMapper {
 -                    if (transaction is SendTransaction.Failed) {
 -                        when (data.metadata.swapMetadata.mode) {
 -                            EXACT_INPUT, FLEX_INPUT -> R.drawable.ic_transaction_send_failed
@@ -27057,9 +27063,9 @@ index b7227e48f..450f695a6 100644
 +                                INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_send_pending
 +                                SUCCESS -> R.drawable.ic_transaction_sent
 +                                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_send_failed
-@@ -179,0 +189 @@ class ActivityMapper {
+@@ -179,0 +194 @@ class ActivityMapper {
 +                        }
-@@ -181,6 +191,5 @@ class ActivityMapper {
+@@ -181,6 +196,5 @@ class ActivityMapper {
 -                            EXACT_OUTPUT -> {
 -                                when (data.metadata.swapMetadata.status) {
 -                                    INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_paying
@@ -27071,7 +27077,7 @@ index b7227e48f..450f695a6 100644
 +                                INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_paying
 +                                SUCCESS -> R.drawable.ic_transaction_paid
 +                                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_pay_failed
-@@ -249,12 +258,7 @@ class ActivityMapper {
+@@ -249,12 +263,7 @@ class ActivityMapper {
 -                    if (transaction is SendTransaction.Failed) {
 -                        when (data.metadata.swapMetadata.mode) {
 -                            EXACT_INPUT, FLEX_INPUT -> stringRes(R.string.swapStatus_swapFailed)
@@ -27091,22 +27097,22 @@ index b7227e48f..450f695a6 100644
 +                                INCOMPLETE_DEPOSIT,
 +                                PROCESSING,
 +                                PENDING -> stringRes(R.string.transaction_history_swapping)
-@@ -262 +266 @@ class ActivityMapper {
+@@ -262 +271 @@ class ActivityMapper {
 -                                    SUCCESS -> stringRes(R.string.swapStatus_swapped)
 +                                SUCCESS -> stringRes(R.string.swapStatus_swapped)
-@@ -264 +268 @@ class ActivityMapper {
+@@ -264 +273 @@ class ActivityMapper {
 -                                    REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
 +                                REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
-@@ -266 +270 @@ class ActivityMapper {
+@@ -266 +275 @@ class ActivityMapper {
 -                                    FAILED -> stringRes(R.string.swapStatus_swapFailed)
 +                                FAILED -> stringRes(R.string.swapStatus_swapFailed)
-@@ -268,2 +272 @@ class ActivityMapper {
+@@ -268,2 +277 @@ class ActivityMapper {
 -                                    EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
 -                                }
 +                                EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
-@@ -270,0 +274 @@ class ActivityMapper {
+@@ -270,0 +279 @@ class ActivityMapper {
 +                        }
-@@ -272,5 +276,5 @@ class ActivityMapper {
+@@ -272,5 +281,5 @@ class ActivityMapper {
 -                            EXACT_OUTPUT -> {
 -                                when (data.metadata.swapMetadata.status) {
 -                                    INCOMPLETE_DEPOSIT,
@@ -27117,28 +27123,28 @@ index b7227e48f..450f695a6 100644
 +                                INCOMPLETE_DEPOSIT,
 +                                PROCESSING,
 +                                PENDING -> stringRes(R.string.transaction_history_paying)
-@@ -278 +282 @@ class ActivityMapper {
+@@ -278 +287 @@ class ActivityMapper {
 -                                    SUCCESS -> stringRes(R.string.swapStatus_paid)
 +                                SUCCESS -> stringRes(R.string.swapStatus_paid)
-@@ -280 +284 @@ class ActivityMapper {
+@@ -280 +289 @@ class ActivityMapper {
 -                                    REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
 +                                REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
-@@ -282 +286 @@ class ActivityMapper {
+@@ -282 +291 @@ class ActivityMapper {
 -                                    FAILED -> stringRes(R.string.swapStatus_paymentFailed)
 +                                FAILED -> stringRes(R.string.swapStatus_paymentFailed)
-@@ -284,2 +288 @@ class ActivityMapper {
+@@ -284,2 +293 @@ class ActivityMapper {
 -                                    EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
 -                                }
 +                                EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
-@@ -386,4 +388,0 @@ class ActivityMapper {
+@@ -386,4 +393,0 @@ class ActivityMapper {
 -                        data.transaction is SendTransaction.Failed -> {
 -                            StringResourceColor.NEGATIVE
 -                        }
 -
-@@ -391 +390 @@ class ActivityMapper {
+@@ -391 +395 @@ class ActivityMapper {
 -                            when (data.metadata.swapMetadata.status) {
 +                            when (data.metadata.swapMetadata.outgoingStatus(data.transaction)) {
-@@ -410,0 +410,15 @@ private const val MONTH_THRESHOLD = 30
+@@ -410,0 +415,15 @@ private const val MONTH_THRESHOLD = 30
 +
 +private fun getUnmatchedFundingTitle(data: ActivityData.BySwap): Int {
 +    val isPayment = data.swap.mode == EXACT_OUTPUT
@@ -44485,7 +44491,7 @@ index 22fac8c3b..1bbebad53 100644
 +    val showLiveDetails: Boolean = true,
 +    val supportButton: ButtonState? = null,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
-index a874453ef..e48aa9af7 100644
+index a874453ef..70f97335d 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVM.kt
 @@ -8,0 +9,3 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -44590,7 +44596,7 @@ index a874453ef..e48aa9af7 100644
 @@ -111 +153,11 @@ class SwapDetailVM(
 -    private fun createTotalFeesState(swapData: SwapData): TransactionDetailInfoRowState =
 +    private val SwapData.isOutgoing: Boolean
-+        get() = (status?.mode ?: savedMetadata?.mode)?.let { it != FLEX_INPUT } == true
++        get() = (savedMetadata?.mode ?: status?.mode)?.let { it != FLEX_INPUT } == true
 +
 +    private val SwapData.statusRowMode: TransactionDetailSwapStatusRowState.Mode
 +        get() = if (isOutgoing) {
@@ -46264,7 +46270,7 @@ index a7daa6d5b..fa86faf35 100644
 @@ -15,0 +16 @@ data class TransactionDetailState(
 +    val explorerLinks: List<TransactionExplorerLink> = emptyList(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-index 00fe60557..a0bc787ad 100644
+index 00fe60557..290d8a7fa 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 @@ -12,0 +13,2 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -46289,7 +46295,7 @@ index 00fe60557..a0bc787ad 100644
 -            .mapLatest { transaction ->
 +            .mapLatest { snapshot ->
 +                val recorded = snapshot.metadata.swapMetadata
-+                val transaction = if (recorded != null && snapshot.swap != null) {
++                val transaction = if (recorded != null && snapshot.swap?.savedMetadata != null) {
 +                    snapshot.copy(swap = snapshot.swap.withSavedObservation(recorded))
 +                } else {
 +                    snapshot
@@ -63918,7 +63924,7 @@ index f0dc3ea70..18d6269c4 100644
 +        assertNull(emissions.last().status)
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
-index 40bfe60a6..ceae8ad65 100644
+index 40bfe60a6..98c60c3eb 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
 @@ -3,0 +4 @@ import co.electriccoin.zcash.ui.common.model.SwapAsset
@@ -63965,7 +63971,7 @@ index 40bfe60a6..ceae8ad65 100644
 +
 @@ -42,0 +79 @@ class GetSwapStatusUseCaseTest {
 +                    coEvery { updateSwap(any(), any()) } coAnswers { firstArg() }
-@@ -55,9 +92,11 @@ class GetSwapStatusUseCaseTest {
+@@ -55,9 +92,12 @@ class GetSwapStatusUseCaseTest {
 -            verify(exactly = 1) {
 -                metadataRepository.updateSwap(
 -                    depositAddress = "deposit",
@@ -63986,7 +63992,8 @@ index 40bfe60a6..ceae8ad65 100644
 +            val saved = mockk<TransactionSwapMetadata> { every { this@mockk.status } returns status }
 +            val metadata = mockk<MetadataRepository>(relaxed = true) {
 +                coEvery { getSwapMetadata("deposit") } returns saved
-@@ -64,0 +104,42 @@ class GetSwapStatusUseCaseTest {
++                coEvery { reloadSwapMetadata(saved) } returns saved
+@@ -64,0 +105,42 @@ class GetSwapStatusUseCaseTest {
 +            val failure = AssetNotFoundException("nep141:btc.omft.near")
 +            val repository = mockk<SwapRepository> {
 +                coEvery { checkSwapStatus(saved) } throws failure
@@ -64029,7 +64036,7 @@ index 40bfe60a6..ceae8ad65 100644
 +        val states = mutableListOf<SwapQuoteStatusData>()
 +        val observer = backgroundScope.launch {
 +            GetSwapStatusUseCase(metadata, repository).observe("deposit").collect { states.add(it) }
-@@ -65,0 +147,8 @@ class GetSwapStatusUseCaseTest {
+@@ -65,0 +148,8 @@ class GetSwapStatusUseCaseTest {
 +        runCurrent()
 +        assertSame(saved, states.last().savedMetadata)
 +        assertEquals(true, states.last().isLoading)
@@ -64038,10 +64045,16 @@ index 40bfe60a6..ceae8ad65 100644
 +        runCurrent()
 +        coVerify(exactly = 1) { repository.checkSwapStatus(saved) }
 +    }
-@@ -85 +174 @@ class GetSwapStatusUseCaseTest {
+@@ -69,0 +160 @@ class GetSwapStatusUseCaseTest {
++            val saved = mockk<TransactionSwapMetadata>()
+@@ -72 +163,2 @@ class GetSwapStatusUseCaseTest {
+-                    coEvery { getSwapMetadata("deposit") } returns mockk<TransactionSwapMetadata>()
++                    coEvery { getSwapMetadata("deposit") } returns saved
++                    coEvery { reloadSwapMetadata(saved) } returns null
+@@ -85 +177 @@ class GetSwapStatusUseCaseTest {
 -            verify(exactly = 0) { metadataRepository.updateSwap(any(), any(), any(), any(), any(), any()) }
 +            coVerify(exactly = 0) { metadataRepository.updateSwap(any(), any()) }
-@@ -103 +192,69 @@ class GetSwapStatusUseCaseTest {
+@@ -103 +195,70 @@ class GetSwapStatusUseCaseTest {
 -            verify(exactly = 0) { metadataRepository.updateSwap(any(), any(), any(), any(), any(), any()) }
 +            coVerify(exactly = 0) { metadataRepository.updateSwap(any(), any()) }
 +        }
@@ -64096,6 +64109,7 @@ index 40bfe60a6..ceae8ad65 100644
 +        val metadata = mockk<MetadataRepository>(relaxed = true) {
 +            coEvery { getSwapMetadata("deposit") } returns saved
 +            coEvery { updateSwap(saved, any()) } returns saved
++            coEvery { reloadSwapMetadata(saved) } returns saved
 +        }
 +        val pending = swapStatusResult(swapStatus = SwapStatus.PENDING)
 +        val success = swapStatusResult(swapStatus = SwapStatus.SUCCESS)
@@ -64112,7 +64126,7 @@ index 40bfe60a6..ceae8ad65 100644
 +        val states = mutableListOf<SwapQuoteStatusData>()
 +        backgroundScope.launch {
 +            GetSwapStatusUseCase(metadata, repository).observe("deposit").collect { states.add(it) }
-@@ -104,0 +262,13 @@ class GetSwapStatusUseCaseTest {
+@@ -104,0 +266,13 @@ class GetSwapStatusUseCaseTest {
 +        runCurrent()
 +        advanceTimeBy(30_000)
 +        runCurrent()
@@ -75879,10 +75893,10 @@ index 000000000..f12495eaa
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVMTest.kt
 new file mode 100644
-index 000000000..f1d6b7f75
+index 000000000..3ce23091b
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/swap/detail/SwapDetailVMTest.kt
-@@ -0,0 +1,498 @@
+@@ -0,0 +1,503 @@
 +package co.electriccoin.zcash.ui.screen.swap.detail
 +
 +import androidx.lifecycle.viewModelScope
@@ -75980,7 +75994,11 @@ index 000000000..f1d6b7f75
 +
 +    @Test
 +    fun trackedOutgoingSwapShowsUnconfirmedFundingAndOffersStatusRetry() = runTest {
-+        val saved = saved(SwapStatus.PENDING).copy(mode = SwapMode.EXACT_OUTPUT)
++        val saved = saved(
++            SwapStatus.PENDING,
++            origin = SwapAssetTestFixture.zecSimpleAsset(),
++            destination = SwapAssetTestFixture.simpleAsset(),
++        ).copy(mode = SwapMode.EXACT_OUTPUT)
 +        val harness = harness(SwapQuoteStatusData(isLoading = false, error = unavailable(), savedMetadata = saved))
 +
 +        val detail = harness.state()
@@ -76344,7 +76362,7 @@ index 000000000..f1d6b7f75
 +        lastUpdated = Instant.EPOCH,
 +        origin = origin,
 +        destination = destination,
-+        mode = SwapMode.EXACT_INPUT,
++        mode = SwapMode.FLEX_INPUT,
 +        recordedStatus = status,
 +        amountOutFormatted = OUTPUT,
 +    )
@@ -76361,6 +76379,7 @@ index 000000000..f1d6b7f75
 +        every { destinationAddress } returns mockk { every { address } returns "test-zec-recipient" }
 +        every { timestamp } returns Instant.EPOCH
 +        every { status } returns value
++        every { mode } returns SwapMode.FLEX_INPUT
 +        every { isSlippageRealized } returns false
 +        every { maxSlippage } returns BigDecimal.ONE
 +        every { amountOutFormatted } returns output

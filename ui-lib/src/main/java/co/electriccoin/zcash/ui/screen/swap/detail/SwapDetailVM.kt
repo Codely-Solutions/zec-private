@@ -151,7 +151,7 @@ class SwapDetailVM(
     }
 
     private val SwapData.isOutgoing: Boolean
-        get() = (status?.mode ?: savedMetadata?.mode)?.let { it != FLEX_INPUT } == true
+        get() = (savedMetadata?.mode ?: status?.mode)?.let { it != FLEX_INPUT } == true
 
     private val SwapData.statusRowMode: TransactionDetailSwapStatusRowState.Mode
         get() = if (isOutgoing) {

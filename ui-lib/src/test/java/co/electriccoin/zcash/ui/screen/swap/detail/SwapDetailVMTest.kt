@@ -95,7 +95,11 @@ class SwapDetailVMTest {
 
     @Test
     fun trackedOutgoingSwapShowsUnconfirmedFundingAndOffersStatusRetry() = runTest {
-        val saved = saved(SwapStatus.PENDING).copy(mode = SwapMode.EXACT_OUTPUT)
+        val saved = saved(
+            SwapStatus.PENDING,
+            origin = SwapAssetTestFixture.zecSimpleAsset(),
+            destination = SwapAssetTestFixture.simpleAsset(),
+        ).copy(mode = SwapMode.EXACT_OUTPUT)
         val harness = harness(SwapQuoteStatusData(isLoading = false, error = unavailable(), savedMetadata = saved))
 
         val detail = harness.state()
@@ -459,7 +463,7 @@ class SwapDetailVMTest {
         lastUpdated = Instant.EPOCH,
         origin = origin,
         destination = destination,
-        mode = SwapMode.EXACT_INPUT,
+        mode = SwapMode.FLEX_INPUT,
         recordedStatus = status,
         amountOutFormatted = OUTPUT,
     )
@@ -476,6 +480,7 @@ class SwapDetailVMTest {
         every { destinationAddress } returns mockk { every { address } returns "test-zec-recipient" }
         every { timestamp } returns Instant.EPOCH
         every { status } returns value
+        every { mode } returns SwapMode.FLEX_INPUT
         every { isSlippageRealized } returns false
         every { maxSlippage } returns BigDecimal.ONE
         every { amountOutFormatted } returns output

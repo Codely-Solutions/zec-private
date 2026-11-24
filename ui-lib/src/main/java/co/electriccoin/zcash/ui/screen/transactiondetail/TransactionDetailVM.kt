@@ -99,7 +99,7 @@ class TransactionDetailVM(
             .filterNotNull()
             .mapLatest { snapshot ->
                 val recorded = snapshot.metadata.swapMetadata
-                val transaction = if (recorded != null && snapshot.swap != null) {
+                val transaction = if (recorded != null && snapshot.swap?.savedMetadata != null) {
                     snapshot.copy(swap = snapshot.swap.withSavedObservation(recorded))
                 } else {
                     snapshot

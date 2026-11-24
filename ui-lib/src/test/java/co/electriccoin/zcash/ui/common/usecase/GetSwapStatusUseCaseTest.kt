@@ -100,6 +100,7 @@ class GetSwapStatusUseCaseTest {
             val saved = mockk<TransactionSwapMetadata> { every { this@mockk.status } returns status }
             val metadata = mockk<MetadataRepository>(relaxed = true) {
                 coEvery { getSwapMetadata("deposit") } returns saved
+                coEvery { reloadSwapMetadata(saved) } returns saved
             }
             val failure = AssetNotFoundException("nep141:btc.omft.near")
             val repository = mockk<SwapRepository> {
@@ -156,9 +157,11 @@ class GetSwapStatusUseCaseTest {
     @Test
     fun surfacesErrorAndSkipsMetadataWhenStatusLookupFails() =
         runTest {
+            val saved = mockk<TransactionSwapMetadata>()
             val metadataRepository =
                 mockk<MetadataRepository>(relaxed = true) {
-                    coEvery { getSwapMetadata("deposit") } returns mockk<TransactionSwapMetadata>()
+                    coEvery { getSwapMetadata("deposit") } returns saved
+                    coEvery { reloadSwapMetadata(saved) } returns null
                 }
             val failure = SwapAssetsUnavailableException()
             val swapRepository =
@@ -242,6 +245,7 @@ class GetSwapStatusUseCaseTest {
         val metadata = mockk<MetadataRepository>(relaxed = true) {
             coEvery { getSwapMetadata("deposit") } returns saved
             coEvery { updateSwap(saved, any()) } returns saved
+            coEvery { reloadSwapMetadata(saved) } returns saved
         }
         val pending = swapStatusResult(swapStatus = SwapStatus.PENDING)
         val success = swapStatusResult(swapStatus = SwapStatus.SUCCESS)

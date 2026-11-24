@@ -22,6 +22,7 @@ import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.StringResourceColor
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
 import co.electriccoin.zcash.ui.design.util.StyledStringStyle
+import co.electriccoin.zcash.ui.design.util.TickerLocation
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByDateTime
@@ -74,7 +75,11 @@ class ActivityMapper {
         }
 
     private fun getSwapValue(data: ActivityData.BySwap): StyledStringResource {
-        val amount = stringResByCurrencyNumber(data.swap.amountOutFormatted, data.swap.destination.tokenTicker)
+        val amount = stringResByCurrencyNumber(
+            data.swap.amountOutFormatted,
+            data.swap.destination.tokenTicker,
+            tickerLocation = TickerLocation.AFTER,
+        )
         val label = when {
             data.swap.executedAmountOut != null -> null
             data.swap.quotedAmountOut != null -> R.string.private_activity_quoted_amount
