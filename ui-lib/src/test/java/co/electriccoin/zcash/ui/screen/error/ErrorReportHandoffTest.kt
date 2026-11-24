@@ -79,6 +79,8 @@ class ErrorReportHandoffTest {
         requireNotNull(mapper.mapToState(failure, walletlessOnboarding = true).state.secondaryAction).onClick()
         val chooser = shadowOf(application).nextStartedActivity
         assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+        val draft = requireNotNull(chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java))
+        assertEquals("", draft.getStringExtra(Intent.EXTRA_TEXT))
         coVerify(exactly = 0) { diagnostics() }
     }
 

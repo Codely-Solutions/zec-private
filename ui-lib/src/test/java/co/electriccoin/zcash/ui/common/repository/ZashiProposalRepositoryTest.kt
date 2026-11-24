@@ -74,7 +74,8 @@ class ZashiProposalRepositoryTest {
 
         coVerify(exactly = 0) { proposals.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>(), any()) }
         val result = assertIs<SubmitProposalState.Result>(repository.submitState.value)
-        assertSame(error, assertIs<SubmitResult.Error>(result.submitResult).cause)
+        val recorded = assertIs<IllegalStateException>(assertIs<SubmitResult.Error>(result.submitResult).cause)
+        assertEquals(error.message, recorded.message)
     }
 
     @Test

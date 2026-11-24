@@ -15,6 +15,7 @@ import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -69,12 +70,22 @@ class ExportPrivateDataUseCaseTest {
             assertFalse(checkNotNull(staged).exists())
             assertNull(shadowOf(application).nextStartedActivity)
 
+            every { FileProvider.getUriForFile(application, any(), any()) } answers {
+                runBlocking { wallet.beginReset() }
+                Uri.parse("content://synthetic/export")
+            }
+            assertFalse(export { source })
+            assertFalse(checkNotNull(staged).exists())
+            assertNull(shadowOf(application).nextStartedActivity)
+            wallet.finishReset()
+            wallet.replaceWallet {}
+
             every { FileProvider.getUriForFile(application, any(), any()) } returns
                 Uri.parse("content://synthetic/export")
             assertTrue(export { source })
             assertEquals(source.readText(), checkNotNull(staged).readText())
             assertEquals(Intent.ACTION_CHOOSER, shadowOf(application).nextStartedActivity.action)
-            coVerify(exactly = 3) { biometrics.requestBiometrics(any()) }
+            coVerify(exactly = 4) { biometrics.requestBiometrics(any()) }
         } finally {
             unmockkStatic(FileProvider::class)
             Dispatchers.resetMain()

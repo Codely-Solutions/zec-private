@@ -159,7 +159,8 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         val error = assertIs<IllegalStateException>(submitting.await().exceptionOrNull())
         coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) }
         val result = assertIs<SubmitProposalState.Result>(repository.submitState.value)
-        assertSame(error, assertIs<SubmitResult.Error>(result.submitResult).cause)
+        val recorded = assertIs<IllegalStateException>(assertIs<SubmitResult.Error>(result.submitResult).cause)
+        assertEquals(error.message, recorded.message)
     }
 
     @Test

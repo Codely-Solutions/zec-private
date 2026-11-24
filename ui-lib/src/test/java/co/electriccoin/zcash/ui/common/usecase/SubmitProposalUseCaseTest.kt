@@ -40,7 +40,9 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.Instant
 
 /**
  * [SubmitProposalUseCase] is gated by a biometric prompt and then branches on account type:
@@ -255,15 +257,15 @@ class SubmitProposalUseCaseTest {
         val fx = useCase()
         val proposal = swapProposal("eth", "eth")
         fx.givenZashi(proposal)
-        var wall = kotlin.time.Instant.fromEpochMilliseconds(10_000)
+        var wall = Instant.parse("2099-12-31T23:59:59Z")
         val clock = object : kotlin.time.Clock { override fun now() = wall }
         var elapsed = 10_000L
-        every { proposal.quote.deadline } returns kotlin.time.Instant.fromEpochMilliseconds(11_000)
+        every { proposal.quote.deadline } returns Instant.parse("2100-01-01T00:00:00Z")
         val publication = SwapQuoteData.Success(proposal.quote, fundingClock = clock, elapsedRealtime = { elapsed })
         fx.publication.value = publication
-        publication.canFund()
+        assertTrue(publication.canFund())
         coEvery { fx.biometricRepository.requestBiometrics(any()) } coAnswers {
-            wall = kotlin.time.Instant.fromEpochMilliseconds(9_000)
+            wall -= 2.seconds
             elapsed = 11_000L
         }
         fx.useCase(proposal, publication)
