@@ -7,7 +7,7 @@ on:
         type: string
         required: true
       operation:
-        description: Check admission, run release preflight, or authorize publication after acceptance
+        description: Check, preflight, publish a prepared custom candidate, or recover an original run
         type: choice
         options: [check, preflight, publish, recover]
         default: check
@@ -32,6 +32,8 @@ jobs:
   admit:
     runs-on: ubuntu-24.04
     timeout-minutes: 2
+    permissions:
+      contents: read
     outputs:
       main: ${{ steps.ref.outputs.main }}
     steps:
@@ -43,6 +45,14 @@ jobs:
           if os.environ["GITHUB_REF"] == "refs/heads/main":
               with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
                   output.write("main=true\n")
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        if: steps.ref.outputs.main == 'true'
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Validate the custom operation and selectors
+        if: steps.ref.outputs.main == 'true'
+        run: python3 -B .private/custom_release.py
   review:
     needs: admit
     if: github.repository == 'Codely-Solutions/zec-private' && needs.admit.outputs.main == 'true' && inputs.operation == 'check'
@@ -86,6 +96,7 @@ jobs:
     uses: ./.github/workflows/build-release.yml
     with:
       hosted: true
+      custom_caller: true
       preflight_only: ${{ inputs.operation == 'preflight' }}
       source_sha: ${{ inputs.source_sha }}
       recover_run: ${{ inputs.recover_run }}

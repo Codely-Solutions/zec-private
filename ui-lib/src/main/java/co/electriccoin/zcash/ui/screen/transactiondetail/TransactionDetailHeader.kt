@@ -34,6 +34,7 @@ import co.electriccoin.zcash.ui.design.util.loadingImageRes
 import co.electriccoin.zcash.ui.design.util.orHiddenString
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.withStyle
+import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 
 @Suppress("MagicNumber")
 @Composable
@@ -65,24 +66,22 @@ fun TransactionDetailHeader(
             fontWeight = FontWeight.Medium,
             color = ZashiColors.Text.textTertiary
         )
-        Spacer(Modifier.height(2.dp))
-        SelectionContainer {
-            Row {
-                ZashiTextOrShimmer(
-                    text =
-                        if (state.amount == null) {
-                            null
-                        } else {
-                            val header =
-                                state.amount.withStyle() +
-                                    stringRes(" ZEC").withStyle(StyledStringStyle(color = QUARTERNARY))
-                            header orHiddenString stringRes(R.string.general_hideBalancesMost)
+        if (state.showAmount) {
+            Spacer(Modifier.height(2.dp))
+            SelectionContainer {
+                Row {
+                    ZashiTextOrShimmer(
+                        text = state.amount?.let {
+                            val ticker = stringRes(" ${state.amountTicker}")
+                                .withStyle(StyledStringStyle(color = QUARTERNARY))
+                            (it.withStyle() + ticker) orHiddenString stringRes(R.string.general_hideBalancesMost)
                         },
-                    shimmerWidth = 178.dp,
-                    style = ZashiTypography.header3,
-                    fontWeight = FontWeight.SemiBold,
-                    color = ZashiColors.Text.textPrimary
-                )
+                        shimmerWidth = 178.dp,
+                        style = ZashiTypography.header3,
+                        fontWeight = FontWeight.SemiBold,
+                        color = ZashiColors.Text.textPrimary
+                    )
+                }
             }
         }
     }
@@ -92,7 +91,9 @@ data class TransactionDetailHeaderState(
     val title: StringResource?,
     val amount: StringResource?,
     val icons: List<ImageResource>,
-    val onLongClick: (() -> Unit)? = null
+    val onLongClick: (() -> Unit)? = null,
+    val amountTicker: String = CURRENCY_TICKER,
+    val showAmount: Boolean = true,
 )
 
 @PreviewScreens

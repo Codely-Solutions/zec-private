@@ -61,9 +61,11 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SwapDetailVMTest {
@@ -270,6 +272,9 @@ class SwapDetailVMTest {
 
             assertEquals(settlement, harness.state().status.status)
             assertEquals(type, assertNotNull(harness.state().message).type)
+            assertFalse(harness.state().transactionHeader.showAmount)
+            assertNull(harness.state().transactionHeader.amount)
+            assertNotNull(harness.state().totalFees.message)
             assertEquals(
                 stringRes(R.string.errorPage_action_contactSupport),
                 assertNotNull(harness.state().primaryButton).text,
@@ -277,6 +282,36 @@ class SwapDetailVMTest {
             harness.state().primaryButton!!.onClick()
             verify(exactly = 1) { harness.router.forward(SwapSupportArgs(DEPOSIT)) }
         }
+    }
+
+    @Test
+    fun outgoingHeadlineUsesTheDestinationUnitForSavedQuotesAndLiveExecution() = runTest {
+        val asset = SwapCatalogTestFixture.externalAssets.first { it.tokenTicker.equals("BTC", ignoreCase = true) }
+        val origin = SwapCatalogTestFixture.nativeZec
+        val stored = saved(
+            SwapStatus.PENDING,
+            origin = SwapAssetTestFixture.zecSimpleAsset(),
+            destination = SwapAssetTestFixture.simpleAsset(
+                tokenTicker = asset.tokenTicker,
+                chainTicker = asset.chainTicker,
+            ),
+        ).copy(mode = SwapMode.EXACT_OUTPUT, quotedAmountOut = OUTPUT)
+        val harness = harness(SwapQuoteStatusData(isLoading = false, error = unavailable(), savedMetadata = stored))
+        val savedHeader = harness.state().transactionHeader
+        assertTrue(savedHeader.showAmount)
+        assertEquals("BTC", savedHeader.amountTicker)
+        assertEquals(stringResByNumber(OUTPUT), savedHeader.amount)
+
+        val completedAmount = BigDecimal("0.1")
+        val completed = status(SwapStatus.SUCCESS, origin, asset, completedAmount)
+        every { completed.mode } returns SwapMode.EXACT_OUTPUT
+        harness.emit(SwapQuoteStatusData(isLoading = false, status = completed, savedMetadata = stored))
+        runCurrent()
+        val liveHeader = harness.state().transactionHeader
+        assertTrue(liveHeader.showAmount)
+        assertEquals("BTC", liveHeader.amountTicker)
+        assertEquals(stringResByNumber(completedAmount), liveHeader.amount)
+        assertEquals(stringRes(R.string.private_provider_output), liveHeader.title)
     }
 
     @Test
@@ -377,6 +412,8 @@ class SwapDetailVMTest {
         val harness = harness(SwapQuoteStatusData(isLoading = false, error = unavailable(), savedMetadata = saved))
         assertEquals(SwapStatus.REFUNDED, harness.state().status.status)
         assertEquals(stringRes(R.string.private_swap_saved_status), harness.state().status.title)
+        assertFalse(harness.state().transactionHeader.showAmount)
+        assertNull(harness.state().transactionHeader.amount)
         assertNull(harness.state().refundedAmount)
 
         val live = status(SwapStatus.REFUNDED)
@@ -386,6 +423,8 @@ class SwapDetailVMTest {
         runCurrent()
         val refund = assertNotNull(harness.state().refundedAmount)
         assertEquals(stringResByCurrencyNumber(amount, live.originAsset.tokenTicker).withStyle(), refund.message)
+        assertFalse(harness.state().transactionHeader.showAmount)
+        assertNotNull(harness.state().totalFees.message)
     }
 
     @Test

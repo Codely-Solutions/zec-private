@@ -50,6 +50,9 @@ on:
       hosted:
         type: boolean
         default: false
+      custom_caller:
+        type: boolean
+        default: false
       recover_run:
         type: string
         default: ''
@@ -169,6 +172,7 @@ jobs:
           CORE_RUN: ${{ inputs.core_run }}
           PRECLAIM_RUN: ${{ inputs.preclaim_run }}
           PREFLIGHT_ONLY: ${{ inputs.preflight_only }}
+          CUSTOM_CALLER: ${{ inputs.custom_caller }}
         run: |
           [[ "$SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           if [[ "$PREFLIGHT_ONLY" != true ]]; then
@@ -192,7 +196,8 @@ jobs:
           else:
               if any(os.environ[name] for name in ('CORE_RUN', 'QUOTE_RUN', 'PRECLAIM_RUN')):
                   raise ValueError('Receipt selectors require an original recovery run')
-              admit(source, controller, metadata, preflight_only=os.environ['PREFLIGHT_ONLY'] == 'true')
+              admit(source, controller, metadata, preflight_only=os.environ['PREFLIGHT_ONLY'] == 'true',
+                    custom_caller=os.environ['CUSTOM_CALLER'] == 'true')
               evidence = select(source, controller, metadata)
               result = {'reuse_funded': 'true'} if evidence else {}
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:

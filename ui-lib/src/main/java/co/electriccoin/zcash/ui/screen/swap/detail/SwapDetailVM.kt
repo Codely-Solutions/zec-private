@@ -256,8 +256,14 @@ class SwapDetailVM(
         }
     }
 
-    private fun createTransactionHeaderState(swapData: SwapData): TransactionDetailHeaderState =
-        TransactionDetailHeaderState(
+    private fun createTransactionHeaderState(swapData: SwapData): TransactionDetailHeaderState {
+        val settlement = swapData.status?.status ?: swapData.savedMetadata?.status
+        val showAmount = when (settlement) {
+            EXPIRED, REFUNDED, FAILED -> false
+            PENDING -> swapData.savedMetadata?.fundingNotSubmitted != true
+            else -> true
+        }
+        return TransactionDetailHeaderState(
             title = createHeaderTitle(swapData),
             amount =
                 (swapData.status?.executedAmountOut
@@ -265,6 +271,7 @@ class SwapDetailVM(
                     ?: swapData.savedMetadata?.legacySuccessfulOutput
                     ?: swapData.status?.amountOutFormatted
                     ?: swapData.savedMetadata?.amountOutFormatted?.takeIf { it.signum() > 0 })
+                    ?.takeIf { showAmount }
                     ?.let { stringResByNumber(it) },
             icons =
                 listOf(
@@ -277,7 +284,11 @@ class SwapDetailVM(
                     swapData.status?.destinationAsset?.tokenIcon ?: swapData.savedMetadata?.destination?.tokenIcon
                         ?: imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_zec),
                 ),
+            amountTicker = (swapData.status?.destinationAsset?.tokenTicker
+                ?: swapData.savedMetadata?.destination?.tokenTicker)?.uppercase() ?: CURRENCY_TICKER,
+            showAmount = showAmount,
         )
+    }
 
     private fun createHeaderTitle(swapData: SwapData): StringResource? =
         when (swapData.status?.status ?: swapData.savedMetadata?.status) {

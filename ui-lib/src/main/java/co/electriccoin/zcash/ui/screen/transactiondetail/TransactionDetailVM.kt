@@ -58,7 +58,6 @@ import co.electriccoin.zcash.ui.screen.transactiondetail.info.TransactionDetailM
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.TransactionDetailMemosState
 import co.electriccoin.zcash.ui.screen.transactionnote.TransactionNote
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
-import co.electriccoin.zcash.ui.util.loggableNot
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -84,7 +83,6 @@ class TransactionDetailVM(
     private val mapper: CommonTransactionDetailMapper,
     private val getSwapMessage: SwapSupportMapper,
 ) : ViewModel() {
-    val log = loggableNot("TransactionDetailVM")
     private var bookmarkJob: Job? = null
     private val transaction =
         getTransactionDetailById
@@ -232,7 +230,6 @@ class TransactionDetailVM(
 
     @Suppress("CyclomaticComplexMethod")
     private fun createTransactionInfoState(transaction: DetailedTransactionData): TransactionDetailInfoState {
-        log("createTransactionInfoState ${transaction.transaction}")
         return when (transaction.transaction) {
             is SendTransaction -> {
                 when {

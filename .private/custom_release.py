@@ -14,6 +14,20 @@ REPOSITORY = 'Codely-Solutions/zec-private'
 OPERATOR_ID = 63964062  # Sammy-Lastre
 
 
+def validate_inputs(inputs):
+    source, operation = inputs.get('source_sha', ''), inputs.get('operation', '')
+    require(isinstance(source, str) and re.fullmatch(r'[a-f0-9]{40}', source),
+            'Select the exact reviewed candidate commit')
+    require(operation in ('check', 'preflight', 'publish', 'recover'), 'Select a supported custom release operation')
+    selectors = [inputs.get(name, '') for name in ('recover_run', 'quote_run', 'preclaim_run', 'core_run')]
+    require(all(isinstance(value, str) and (not value or re.fullmatch(r'[1-9][0-9]*', value))
+                for value in selectors), 'Recovery selectors require exact positive GitHub run IDs')
+    if operation == 'recover':
+        require(selectors[0], 'Recovery requires the original APK-producing run')
+    else:
+        require(not any(selectors), 'Use recovery selectors only with the recover operation')
+
+
 def verify_custom_child(source, controller, root):
     from acceptance_policy import verify_canonical_patch
 
@@ -60,6 +74,7 @@ def require_dispatch(source, controller, metadata, *, publish, recover_run='', q
             and run['head_repository']['full_name'] == REPOSITORY
             and run['actor']['id'] == OPERATOR_ID, 'Expected the authorized custom release operator and workflow')
     inputs = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_bytes())['inputs']
+    validate_inputs(inputs)
     operation = 'recover' if recover_run else ('publish' if publish else ('preflight' if preflight_only else 'check'))
     require(inputs.get('source_sha') == source and inputs.get('operation') == operation
             and inputs.get('recover_run', '') == recover_run and inputs.get('quote_run', '') == quote_run
@@ -67,3 +82,7 @@ def require_dispatch(source, controller, metadata, *, publish, recover_run='', q
             'Dispatch does not authorize this exact custom candidate and operation')
     require(metadata.api('/git/ref/heads/main')['object']['sha'] == controller,
             'Protected main advanced; prepare and review a new candidate')
+
+
+if __name__ == '__main__':
+    validate_inputs(json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_bytes())['inputs'])

@@ -13,6 +13,34 @@ SOURCE, MAIN = 'a' * 40, 'b' * 40
 
 
 class CustomReleaseTests(unittest.TestCase):
+    def test_custom_input_modes_require_the_matching_shape(self):
+        for operation in ('check', 'preflight', 'publish'):
+            with self.subTest(operation=operation):
+                inputs = dict(source_sha=SOURCE, operation=operation)
+                custom_release.validate_inputs(inputs)
+                for selector in ('recover_run', 'quote_run', 'core_run', 'preclaim_run'):
+                    with self.assertRaisesRegex(ValueError, 'only with the recover operation'):
+                        custom_release.validate_inputs(dict(inputs, **{selector: '7'}))
+        recovery = dict(source_sha=SOURCE, operation='recover')
+        with self.assertRaisesRegex(ValueError, 'requires the original'):
+            custom_release.validate_inputs(recovery)
+        for invalid in (' ', '0', '011', '11.0', '11\n', 11):
+            with self.subTest(selector=invalid), self.assertRaisesRegex(ValueError, 'positive GitHub run IDs'):
+                custom_release.validate_inputs(dict(recovery, recover_run=invalid))
+        custom_release.validate_inputs(dict(recovery, recover_run='9'))
+        custom_release.validate_inputs(dict(recovery, recover_run='9', core_run='10', quote_run='11'))
+        custom_release.validate_inputs(dict(recovery, recover_run='9', preclaim_run='10'))
+        with self.assertRaisesRegex(ValueError, 'exact reviewed candidate'):
+            custom_release.validate_inputs(dict(recovery, source_sha='HEAD', recover_run='9'))
+
+    def test_fresh_custom_caller_cannot_prepare_a_maintenance_candidate(self):
+        with patch('maintenance_cadence.changed_marker', return_value={}) as marker:
+            metadata = Mock()
+            with self.assertRaisesRegex(ValueError, 'requires a prepared custom candidate'):
+                admit_cadence(Path('.'), SOURCE, MAIN, metadata, Mock(), custom_caller=True)
+            marker.assert_called_once_with(Path('.'), SOURCE, MAIN, custom_release.MARKER)
+            metadata.api.assert_not_called()
+
     def test_dispatch_binds_actor_workflow_operation_source_and_current_main(self):
         run = dict(id=7, path=custom_release.WORKFLOW, event='workflow_dispatch', head_branch='main',
                    head_sha=MAIN, head_repository={'full_name': custom_release.REPOSITORY},

@@ -499,6 +499,11 @@ class MaintenanceWatchTest(unittest.TestCase):
         self.assertFalse(job_activates(preflight, dict(admit='failure'), **{'inputs.hosted': False}))
         self.assertTrue(job_activates(preflight, dict(admit='success'), **{'inputs.hosted': False}))
         custom = workflow_job('custom-release.yml', 'build')
+        custom_admission = workflow_blocks('custom-release.yml')[1]['admit']
+        self.assertIn('Validate the custom operation and selectors', custom_admission)
+        self.assertIn('run: python3 -B .private/custom_release.py', custom_admission)
+        self.assertIn('      custom_caller: true\n', custom['block'])
+        self.assertIn('admit', custom['needs'])
         for operation in ('publish', 'recover', 'preflight'):
             self.assertTrue(job_activates(custom, dict(admit='success'), **{
                 'inputs.operation': operation, 'vars.PRODUCTION_SIGNING_READY': '',

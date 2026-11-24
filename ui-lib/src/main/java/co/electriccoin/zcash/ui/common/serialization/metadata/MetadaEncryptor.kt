@@ -94,7 +94,7 @@ class MetadataEncryptorImpl(
             val plaintext = cipher.decrypt(ciphertext, null)
             plaintext.inputStream().use { stream -> deserialize(stream) }
         }.onFailure {
-            Twig.error(it) { "Failed to deserialize metadata" }
+            Twig.error { "Failed to decrypt or decode metadata (${it.javaClass.simpleName})" }
         }.getOrNull()
     }
 

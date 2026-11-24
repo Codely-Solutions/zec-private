@@ -146,7 +146,7 @@ class SynchronizerProviderImpl(
         //     false
         // }
         synchronizer.onProcessorErrorHandler = { error ->
-            Twig.error { "Wallet processor failed (${error.javaClass.simpleName})" }
+            Twig.error { "Wallet processor failed" }
             pipeline.update { SynchronizerError.Processor(error) }
             true
         }
@@ -155,7 +155,7 @@ class SynchronizerProviderImpl(
             pipeline.update { null }
         }
         synchronizer.onSetupErrorHandler = { error ->
-            Twig.error { "Wallet synchronizer setup failed (${error.javaClass.simpleName})" }
+            Twig.error { "Wallet synchronizer setup failed" }
             pipeline.update { SynchronizerError.Setup(error) }
             false
         }

@@ -266,13 +266,14 @@ def verify_recovered_receipts(root, source, controller, run, outputs, metadata, 
         validate_quotes(quote, input_fingerprint(source, root=root, profile='production-quotes'), use_tor=use_tor)
 
 
-def admit(source, controller, metadata, *, preflight_only=False):
+def admit(source, controller, metadata, *, preflight_only=False, custom_caller=False):
     require(source != controller, 'Hosted automatic releases require a prepared child candidate')
     verify_promotion_revision(source, controller)
     from maintenance_cadence import admit_cadence
     from maintenance_watch import api
     from release_changelog import hosted_changes
-    admit_cadence(ROOT, source, controller, metadata, api, preflight_only=preflight_only)
+    admit_cadence(ROOT, source, controller, metadata, api,
+                  preflight_only=preflight_only, custom_caller=custom_caller)
     hosted_changes(ROOT, source, controller)
     version = version_code(ROOT, source)
     baseline = json.loads((ROOT / '.private/hosted-fixture.json').read_text())['version_code']

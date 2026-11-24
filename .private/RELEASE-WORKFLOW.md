@@ -12,7 +12,7 @@ gh workflow run custom-release.yml --repo Codely-Solutions/zec-private --ref mai
 gh workflow run custom-release.yml --repo Codely-Solutions/zec-private --ref main -f operation=publish -f source_sha=FULL_REVIEWED_SHA
 ```
 
-Use `publish` after the user authorizes releasing the reviewed change. Bind the dispatch to the exact prepared SHA and use the allowlisted GitHub account. An authorized dispatch runs the shared hosted build and wallet/quote acceptance, then signs and publishes if all gates pass. The custom path runs outside the monthly cadence and leaves the routine slot available.
+Use `publish` after the user authorizes releasing the reviewed change. Publish and preflight require a prepared custom candidate. Use recovery selectors only with `recover` and supply the original APK-producing run. Recovery can select an eligible discovery run. Bind the dispatch to the exact prepared SHA and use the allowlisted GitHub account. An authorized dispatch runs the shared hosted build and wallet/quote acceptance, then signs and publishes if all gates pass. The custom path runs outside the monthly cadence and leaves the routine slot available.
 
 If preparation or recovery changes the SHA, compare the replacement with the approved change and inspect the intervening controller diff. Carry approval forward for the same reviewed release after routine build fixes, version preparation or rebasing onto a compatible controller. Record the comparison, bind the new dispatch to its exact SHA and run the required checks. Get fresh approval if the release scope changes materially, signing or acceptance safeguards change, or the user expressly limits approval to a particular SHA.
 

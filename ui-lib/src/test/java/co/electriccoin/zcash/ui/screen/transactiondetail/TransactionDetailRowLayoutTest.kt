@@ -24,6 +24,7 @@ import co.electriccoin.zcash.ui.design.component.BlankSurface
 import co.electriccoin.zcash.ui.design.theme.AppearanceMode
 import co.electriccoin.zcash.ui.design.theme.balances.LocalBalancesAvailable
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.withStyle
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRow
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRowState
@@ -50,6 +51,33 @@ import kotlin.test.assertTrue
 class TransactionDetailRowLayoutTest {
     @get:Rule
     val compose = createComposeRule()
+
+    @Test
+    fun outgoingHeaderRendersTheDestinationUnitAndHidesAmountsForTerminalFailures() {
+        val outgoing = TransactionDetailHeaderState(
+            title = stringRes("Provider output"),
+            amount = stringRes("0.1"),
+            icons = listOf(
+                imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_chain_zec),
+                imageRes(R.drawable.ic_transaction_sent),
+                imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_chain_zec),
+            ),
+            amountTicker = "BTC",
+        )
+        val current = mutableStateOf(outgoing)
+        compose.setContent {
+            CompositionLocalProvider(LocalBalancesAvailable provides true) {
+                ZcashTheme { BlankSurface { TransactionDetailHeader(current.value) } }
+            }
+        }
+        compose.onNodeWithText("0.1 BTC").assertIsDisplayed()
+        compose.onNodeWithText("0.1 ZEC").assertDoesNotExist()
+        capture("standalone-outgoing-header")
+        compose.runOnIdle { current.value = outgoing.copy(title = stringRes("Swap refunded"), showAmount = false) }
+        compose.onNodeWithText("Swap refunded").assertIsDisplayed()
+        compose.onNodeWithText("0.1 BTC").assertDoesNotExist()
+        capture("standalone-refund-header")
+    }
 
     @Test
     fun outgoingDetailsRenderSavedStatusAndUnavailableWithoutHidingFunding() {

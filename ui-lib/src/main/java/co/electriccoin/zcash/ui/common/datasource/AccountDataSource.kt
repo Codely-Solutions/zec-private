@@ -283,7 +283,7 @@ class AccountDataSourceImpl(
             } catch (e: Exception) {
                 withContext(NonCancellable) {
                     runCatching { synchronizer.deleteAccount(created.accountUuid) }
-                        .onFailure { log("failed to roll back the Ledger account import", it) }
+                        .onFailure { log("failed to roll back the Ledger account import (${it.javaClass.simpleName})") }
                 }
                 throw e
             }
@@ -360,19 +360,20 @@ class AccountDataSourceImpl(
         scope
             .launch {
                 val accountUuid = (account ?: getSelectedAccount()).sdkAccount.accountUuid
-                log("requestNextShieldedAddress for $accountUuid")
+                log("requesting a fresh shielded address")
                 val responseChannel = Channel<String>(1)
                 requestNextShieldedAddressChannel.emit(AddressRequest(accountUuid, responseChannel))
                 try {
                     val address = withTimeoutOrNull(ADDRESS_REQUEST_TIMEOUT) { responseChannel.receive() }
                     if (address == null) {
-                        log("timed out waiting for address for $accountUuid")
+                        log("timed out waiting for a shielded address")
                     } else {
-                        log("received address $address for $accountUuid")
+                        log("received a shielded address")
                     }
                     result = address
                 } catch (e: Exception) {
-                    log("failed to receive address for $accountUuid", e)
+                    if (e is CancellationException) throw e
+                    log("failed to receive a shielded address (${e.javaClass.simpleName})")
                 }
             }.join()
         return result ?: if (requireFresh) {
@@ -447,7 +448,7 @@ class AccountDataSourceImpl(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            log(failureMessage, e)
+            log("$failureMessage (${e.javaClass.simpleName})")
         }
     }
 
@@ -566,7 +567,7 @@ class AccountDataSourceImpl(
     @Suppress("TooGenericExceptionCaught")
     private fun observeUnifiedAddress(synchronizer: Synchronizer, sdkAccount: Account): Flow<String> {
         suspend fun rotateAddress(): String {
-            log("deriving unified address for ${sdkAccount.accountUuid}")
+            log("deriving a unified address")
 
             val addressRequest =
                 if (isOrchardOnlyAccount(sdkAccount)) {
@@ -577,7 +578,7 @@ class AccountDataSourceImpl(
 
             val address = synchronizer.getCustomUnifiedAddress(sdkAccount, addressRequest)
 
-            log("derived address $address for ${sdkAccount.accountUuid}")
+            log("derived a unified address")
 
             return address
         }
@@ -611,8 +612,7 @@ class AccountDataSourceImpl(
             awaitClose()
         }.retryWhen { cause, attempt ->
             log(
-                "retrying address derivation for ${sdkAccount.accountUuid}, attempt $attempt",
-                cause as? Exception
+                "retrying address derivation (${cause.javaClass.simpleName}), attempt $attempt"
             )
             delay(attempt.coerceAtMost(RETRY_DELAY).seconds)
             true
