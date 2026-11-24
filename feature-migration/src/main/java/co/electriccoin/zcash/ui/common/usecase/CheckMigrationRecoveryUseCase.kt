@@ -72,6 +72,7 @@ class CheckMigrationRecoveryUseCase(
     private val scheduleNow: suspend (String) -> Unit = { MigrationScheduler(context).schedule(it, Duration.ZERO) },
     private val resetPending: () -> Boolean = { false },
 ) {
+    @Suppress("TooGenericExceptionCaught") // Foreground recovery handles native SDK and storage failures together.
     suspend operator fun invoke(
         requestSendingScreen: () -> Unit = { navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs) },
     ) {

@@ -55,10 +55,11 @@ class LaunchNavigationRequests {
         }
     }
 
-    internal fun saveMigrationNotice(): String? = pending.value.firstNotNullOfOrNull { it.migrationNotice?.ownerKey }
+    internal val migrationNoticeToSave: String?
+        get() = pending.value.firstNotNullOfOrNull { it.migrationNotice?.ownerKey }
 
-    internal fun pendingMigrationLookup(): String? =
-        pending.value.firstOrNull { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }
+    internal val pendingMigrationLookup: String?
+        get() = pending.value.firstOrNull { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }
             ?.migrationNotice?.ownerKey
 
     fun requestMigrationRecovery(command: NavigationCommand.ReplaceAll) = offer(Kind.MIGRATION_RECOVERY, command)

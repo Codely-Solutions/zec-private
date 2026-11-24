@@ -99,23 +99,15 @@ class GetTransactionDetailByIdUseCase(
                 requestSwipeReloadPipeline
                     .onStart { emit(Unit) }
                     .flatMapLatest {
-                        metadataFlow
-                            .map { it.swapMetadata != null }
+                        kotlinx.coroutines.flow.combine(metadataFlow, scopedTransaction) { metadata, current ->
+                            current?.recipient?.takeIf { it == metadata.swapMetadata?.depositAddress }
+                        }
                             .distinctUntilChanged()
-                            .flatMapLatest { hasMetadata ->
-                                if (!hasMetadata) {
+                            .flatMapLatest { depositAddress ->
+                                if (depositAddress == null) {
                                     flowOf(null)
                                 } else {
-                                    transactionFlow
-                                        .map { it.recipient }
-                                        .distinctUntilChanged()
-                                        .flatMapLatest { depositAddress ->
-                                            if (depositAddress == null) {
-                                                flowOf(null)
-                                            } else {
-                                                getSwapStatus.observeForAccount(depositAddress, account)
-                                            }
-                                        }
+                                    getSwapStatus.observeForAccount(depositAddress, account)
                                 }
                             }.distinctUntilChanged()
                     }

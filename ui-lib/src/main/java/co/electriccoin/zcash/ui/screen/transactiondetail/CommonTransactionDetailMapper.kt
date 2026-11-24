@@ -37,29 +37,21 @@ class CommonTransactionDetailMapper {
 
     fun createTransactionDetailErrorFooter(error: Exception?): ErrorFooter? {
         if (error == null) return null
-        if (error is ActivityDetailUnavailableException) {
-            return ErrorFooter(
+        val isServiceUnavailableError = error is ResponseException && error.response.status.isServiceUnavailable()
+        return when {
+            error is ActivityDetailUnavailableException -> ErrorFooter(
                 title = stringRes(R.string.private_activity_details_unavailable),
                 subtitle = stringRes(R.string.private_activity_details_return),
             )
+            isServiceUnavailableError -> ErrorFooter(
+                title = stringRes(co.electriccoin.zcash.ui.design.R.string.swapAndPay_failure_laterTitle),
+                subtitle = stringRes(co.electriccoin.zcash.ui.design.R.string.swapAndPay_failure_laterDesc),
+            )
+            else -> ErrorFooter(
+                title = stringRes(co.electriccoin.zcash.ui.design.R.string.swapAndPay_failure_retryTitle),
+                subtitle = stringRes(co.electriccoin.zcash.ui.design.R.string.swapAndPay_failure_retryDesc),
+            )
         }
-
-        val isServiceUnavailableError = error is ResponseException && error.response.status.isServiceUnavailable()
-
-        return ErrorFooter(
-            title =
-                if (isServiceUnavailableError) {
-                    stringRes(co.electriccoin.zcash.ui.design.R.string.swapAndPay_failure_laterTitle)
-                } else {
-                    stringRes(co.electriccoin.zcash.ui.design.R.string.swapAndPay_failure_retryTitle)
-                },
-            subtitle =
-                if (isServiceUnavailableError) {
-                    stringRes(co.electriccoin.zcash.ui.design.R.string.swapAndPay_failure_laterDesc)
-                } else {
-                    stringRes(co.electriccoin.zcash.ui.design.R.string.swapAndPay_failure_retryDesc)
-                }
-        )
     }
 
     fun createTransactionDetailErrorButtonState(error: Exception?, reloadHandle: ReloadHandle): ButtonState? {

@@ -192,6 +192,7 @@ class MigrationAppHooksImpl(
     override fun restoreNotificationProgress(ownerKey: String?, scope: CoroutineScope) =
         openNotificationProgress(ownerKey, scope, runStep = false)
 
+    @Suppress("TooGenericExceptionCaught") // Keep account storage and scheduler failures recoverable at entry.
     private fun openNotificationProgress(ownerKey: String?, scope: CoroutineScope, runStep: Boolean) {
         if (resetProgress.isPending.value) return
         val key = ownerKey?.takeIf(ACCOUNT_KEY::matches) ?: return

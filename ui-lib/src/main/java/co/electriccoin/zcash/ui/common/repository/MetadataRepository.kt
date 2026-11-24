@@ -302,9 +302,10 @@ class MetadataRepositoryImpl(
     }
 
     override suspend fun markSwapFundingNotSubmitted(expected: TransactionSwapMetadata): Boolean {
-        val account = expected.ownerAccount ?: return false
-        val token = expected.walletWriteToken ?: return false
-        val identity = expected.reviewedIdentity ?: return false
+        val account = expected.ownerAccount
+        val token = expected.walletWriteToken
+        val identity = expected.reviewedIdentity
+        if (account == null || token == null || identity == null) return false
         return updateMetadataAndAwait(account, token) { key ->
             metadataDataSource.markSwapFundingNotSubmitted(expected.depositAddress, expected.lastUpdated, identity, key)
         }

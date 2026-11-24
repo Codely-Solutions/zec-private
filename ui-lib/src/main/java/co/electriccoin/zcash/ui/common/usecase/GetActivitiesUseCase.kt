@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
@@ -31,11 +32,10 @@ class GetActivitiesUseCase(
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observe() =
         combine(
-            accountDataSource.selectedAccount,
+            accountDataSource.selectedAccount.map { it?.sdkAccount?.accountUuid }.distinctUntilChanged(),
             observeTransactions(),
             metadataRepository.observeSwapMetadata(),
-        ) { selected, transactions, swaps ->
-            val owner = selected?.sdkAccount?.accountUuid
+        ) { owner, transactions, swaps ->
             if (owner == null || transactions == null || swaps == null) {
                 null
             } else {

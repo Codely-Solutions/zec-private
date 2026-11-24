@@ -93,7 +93,7 @@ class MainActivity : FragmentActivity() {
         val migrationOwner = if (restoredInNewProcess) {
             savedInstanceState?.getString(PENDING_MIGRATION_NOTICE)
         } else {
-            launchNavigation.pendingMigrationLookup()
+            launchNavigation.pendingMigrationLookup
         }
         migrationOwner?.let { migrationAppHooks.restoreNotificationProgress(it, lifecycleScope) }
 
@@ -113,7 +113,7 @@ class MainActivity : FragmentActivity() {
         super.onSaveInstanceState(outState)
         outState.putInt(NAVIGATION_STATE_VERSION_KEY, NAVIGATION_STATE_VERSION)
         outState.putStringArrayList(PENDING_EXTERNAL_SCANS, launchNavigation.saveExternalScans())
-        launchNavigation.saveMigrationNotice()?.let { outState.putString(PENDING_MIGRATION_NOTICE, it) }
+        launchNavigation.migrationNoticeToSave?.let { outState.putString(PENDING_MIGRATION_NOTICE, it) }
     }
 
     override fun onNewIntent(intent: Intent) {
