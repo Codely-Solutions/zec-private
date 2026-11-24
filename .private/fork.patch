@@ -37179,6 +37179,28 @@ index 4b2a09ed5..78ef2e276 100644
 +            contractAddress = contractAddress,
 @@ -77,0 +80 @@ class SwapAssetCacheProviderImpl(
 +        val contractAddress: String? = null,
+diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt
+index 5ca17bee4..8e784b2d1 100644
+--- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt
++++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProvider.kt
+@@ -64,0 +65 @@ class SynchronizerProviderImpl(
++    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
+@@ -66,2 +66,0 @@ class SynchronizerProviderImpl(
+-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+-
+@@ -109,2 +108,4 @@ class SynchronizerProviderImpl(
+-                        runCatching { migrationSyncedHook.value.onSynced() }
+-                            .onFailure { Twig.warn { "MIGRATION_DIAG foreground SYNCED hook: ${it.message}" } }
++                        runCatchingRecoverable { migrationSyncedHook.value.onSynced() }
++                            .onFailure {
++                                Twig.warn { "Migration sync hook failed (${it.javaClass.simpleName})" }
++                            }
+@@ -148 +149 @@ class SynchronizerProviderImpl(
+-            Twig.error { "WALLET - Error Processor: $error" }
++            Twig.error { "Wallet processor failed (${error.javaClass.simpleName})" }
+@@ -157 +158 @@ class SynchronizerProviderImpl(
+-            Twig.error { "WALLET - Error Setup: $error" }
++            Twig.error { "Wallet synchronizer setup failed (${error.javaClass.simpleName})" }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletWriteAccess.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/provider/WalletWriteAccess.kt
 new file mode 100644
 index 000000000..913bf4b05
@@ -68620,6 +68642,69 @@ index 000000000..11bcf733f
 +            }
 +            assertSame(cancelled, thrown)
 +        }
++}
+diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProviderMigrationDiagnosticsTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProviderMigrationDiagnosticsTest.kt
+new file mode 100644
+index 000000000..6ea5212a9
+--- /dev/null
++++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/provider/SynchronizerProviderMigrationDiagnosticsTest.kt
+@@ -0,0 +1,57 @@
++package co.electriccoin.zcash.ui.common.provider
++
++import cash.z.ecc.android.sdk.Synchronizer
++import cash.z.ecc.android.sdk.WalletCoordinator
++import co.electriccoin.zcash.ui.common.migration.MigrationSyncedHook
++import io.mockk.coEvery
++import io.mockk.coVerify
++import io.mockk.every
++import io.mockk.mockk
++import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.test.runCurrent
++import kotlinx.coroutines.test.runTest
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import org.robolectric.shadows.ShadowLog
++import kotlin.test.Test
++import kotlin.test.assertTrue
++
++@OptIn(ExperimentalCoroutinesApi::class)
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
++class SynchronizerProviderMigrationDiagnosticsTest {
++    @Test
++    fun syncedHookFailureKeepsRawDetailsPrivateAndNextSyncRetries() = runTest {
++        val status = MutableStateFlow(Synchronizer.Status.SYNCING)
++        val synchronizer = mockk<Synchronizer>(relaxed = true) {
++            every { this@mockk.status } returns status
++        }
++        val coordinator = mockk<WalletCoordinator> {
++            every { this@mockk.synchronizer } returns MutableStateFlow<Synchronizer?>(synchronizer)
++            every { isSeedMismatch } returns MutableStateFlow(false)
++        }
++        val detail = "synthetic wallet database detail"
++        val hook = mockk<MigrationSyncedHook> {
++            coEvery { onSynced() } throws IllegalStateException(detail)
++        }
++        ShadowLog.clear()
++        SynchronizerProviderImpl(coordinator, mockk(), lazyOf(hook), backgroundScope)
++        runCurrent()
++
++        status.value = Synchronizer.Status.SYNCED
++        runCurrent()
++        coVerify(exactly = 1) { hook.onSynced() }
++        val logs = ShadowLog.getLogs()
++        assertTrue(logs.any { "Migration sync hook failed (IllegalStateException)" in it.msg })
++        assertTrue(logs.none { detail in it.msg || detail in it.throwable?.stackTraceToString().orEmpty() })
++
++        coEvery { hook.onSynced() } returns Unit
++        status.value = Synchronizer.Status.SYNCING
++        runCurrent()
++        status.value = Synchronizer.Status.SYNCED
++        runCurrent()
++        coVerify(exactly = 2) { hook.onSynced() }
++    }
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AddressBookRepositoryGiftCardGuardTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/AddressBookRepositoryGiftCardGuardTest.kt
 index dd9e18236..5d8637365 100644

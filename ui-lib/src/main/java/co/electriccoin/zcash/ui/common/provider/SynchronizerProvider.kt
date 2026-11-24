@@ -62,9 +62,8 @@ class SynchronizerProviderImpl(
     // crashes startup with a StackOverflowError (caught on-emulator 2026-07-28). Resolved at
     // first hook fire instead, when the graph is fully built.
     private val migrationSyncedHook: Lazy<MigrationSyncedHook>,
+    private val scope: CoroutineScope = CoroutineScope(Dispatchers.Default + SupervisorJob()),
 ) : SynchronizerProvider {
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
-
     override val error = MutableStateFlow<SynchronizerError?>(null)
 
     override val isSeedMismatch: StateFlow<Boolean> = walletCoordinator.isSeedMismatch
@@ -106,8 +105,10 @@ class SynchronizerProviderImpl(
                 .distinctUntilChanged()
                 .collect { status ->
                     if (status == Synchronizer.Status.SYNCED) {
-                        runCatching { migrationSyncedHook.value.onSynced() }
-                            .onFailure { Twig.warn { "MIGRATION_DIAG foreground SYNCED hook: ${it.message}" } }
+                        runCatchingRecoverable { migrationSyncedHook.value.onSynced() }
+                            .onFailure {
+                                Twig.warn { "Migration sync hook failed (${it.javaClass.simpleName})" }
+                            }
                     }
                 }
         }
@@ -145,7 +146,7 @@ class SynchronizerProviderImpl(
         //     false
         // }
         synchronizer.onProcessorErrorHandler = { error ->
-            Twig.error { "WALLET - Error Processor: $error" }
+            Twig.error { "Wallet processor failed (${error.javaClass.simpleName})" }
             pipeline.update { SynchronizerError.Processor(error) }
             true
         }
@@ -154,7 +155,7 @@ class SynchronizerProviderImpl(
             pipeline.update { null }
         }
         synchronizer.onSetupErrorHandler = { error ->
-            Twig.error { "WALLET - Error Setup: $error" }
+            Twig.error { "Wallet synchronizer setup failed (${error.javaClass.simpleName})" }
             pipeline.update { SynchronizerError.Setup(error) }
             false
         }
