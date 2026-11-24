@@ -10,3 +10,10 @@ internal suspend fun WalletAccount.fromReceiveAddressType(receiveAddressType: Re
         ReceiveAddressType.Sapling -> saplingAddress?.let { WalletAddress.Sapling.new(it) }
         ReceiveAddressType.Transparent -> transparentAddress?.let { WalletAddress.Transparent.new(it) }
     }
+
+internal fun WalletAccount.receiveAddress(type: ReceiveAddressType): String? =
+    when (type) {
+        ReceiveAddressType.Unified -> unifiedAddress
+        ReceiveAddressType.Sapling -> saplingAddress
+        ReceiveAddressType.Transparent -> transparentAddress
+    }

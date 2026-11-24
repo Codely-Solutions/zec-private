@@ -47,6 +47,11 @@ Use the [development session](DEVELOPMENT.md) for incremental checks and the [pr
 
 ## Build and validation
 
+Dependency-graph submission and hosted fixture preservation admit the exact `refs/heads/main` before entering their production concurrency queues. The permission-free admission jobs perform a case-sensitive comparison. Only an admitted job calls the reusable workflow for the complete production sequence. The fixture gate also checks the exact repository identity. GitHub's expression string equality is case-insensitive. [GitHub expressions](https://docs.github.com/en/actions/reference/workflows-and-actions/expressions#operators)
+
+The monthly SDK readiness gate checks POM and AAR for the selected upstream tag's exact stable version. The reviewed fork runtime includes the SDK, backend, incubator, Lightwallet client and Slipstream. Reconcile the required coordinates with the forked candidate whenever module ownership or the supported SDK changes. A required-artifact 404 leaves upstream pending and keeps a verified Gradle patch independently eligible.
+
+
 Use the checked-in Gradle 9.9.1 wrapper, AGP 9.5.1, Kotlin 2.4.21, Temurin JDK 25.0.5+8 and Android SDK platform 37 (`platforms;android-37.0`). Keep Android target SDK 36, minimum SDK 27 and Java/Kotlin output 17. Preserve dependency locks and wrapper checksums. The fork uses stable Zcash SDK `6.0.0` in place of the upstream app tag's `6.0.0-SNAPSHOT`.
 
 ```sh

@@ -24,6 +24,7 @@ import co.electriccoin.zcash.ui.common.usecase.DisconnectUseCase
 import co.electriccoin.zcash.ui.common.usecase.EnsureSwapAssetsLoadedUseCase
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.ExportTaxUseCase
+import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
 import co.electriccoin.zcash.ui.common.usecase.FilterSwapAssetsUseCase
 import co.electriccoin.zcash.ui.common.usecase.FilterSwapBlockchainsUseCase
 import co.electriccoin.zcash.ui.common.usecase.FixEnhancementUseCase
@@ -246,6 +247,7 @@ val useCaseModule =
         factoryOf(::CreateOrUpdateTransactionNoteUseCase)
         factoryOf(::MarkTxMemoAsReadUseCase)
         factoryOf(::ExportTaxUseCase)
+        factoryOf(::WalletReportAccess)
         factoryOf(::NavigateToTaxExportUseCase)
         factoryOf(::IsRestoreSuccessDialogVisibleUseCase)
         factoryOf(::ValidateSeedUseCase)

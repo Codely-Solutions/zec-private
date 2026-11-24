@@ -82,6 +82,7 @@ class SignKeystoneTransactionVM(
             wallets,
             preparation
         ) { proposal, wallets, prepared ->
+            if (proposal == null) return@combine null
             val wallet = wallets.selectedKeystone() ?: return@combine null
             val account = wallet.sdkAccount.accountUuid
             if (signingAccount != null && signingAccount != account) return@combine null
@@ -127,7 +128,7 @@ class SignKeystoneTransactionVM(
                 negativeButton =
                     ButtonState(
                         text = stringRes(R.string.keystone_signWith_reject),
-                        onClick = { reject(attempt, proposal, wallet) }
+                        onClick = { reject(attempt) }
                     ),
                 secondaryButton =
                     ButtonState(
@@ -139,7 +140,7 @@ class SignKeystoneTransactionVM(
                         },
                         isEnabled = ready
                     ).takeIf { BuildConfig.DEBUG },
-                onBack = { reject(attempt, proposal, wallet) },
+                onBack = { reject(attempt) },
             )
         }.stateIn(
             scope = viewModelScope,
@@ -193,15 +194,13 @@ class SignKeystoneTransactionVM(
         }
     }
 
-    private fun reject(attempt: Attempt?, proposal: TransactionProposal?, wallet: KeystoneAccount) {
+    private fun reject(attempt: Attempt?) {
         if (attempt != null && isCurrent(attempt) && preparation.value?.isRejecting == false) {
             rejection.value = attempt
-        } else if (
-            proposal == null && proposals.value == null && isActiveSigningAccount(wallet.sdkAccount.accountUuid)
-        ) {
-            navigationRouter.back()
         }
     }
+
+    internal fun leaveSigning() = navigationRouter.back()
 
     private fun confirmRejection(attempt: Attempt) {
         if (rejection.value !== attempt || !isCurrent(attempt)) return

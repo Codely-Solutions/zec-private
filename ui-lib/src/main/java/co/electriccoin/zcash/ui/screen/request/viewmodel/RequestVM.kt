@@ -9,6 +9,8 @@ import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.spackle.Twig
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.zcash.MAX_ZCASH_SUPPLY
 import co.electriccoin.zcash.ui.common.provider.GetZcashCurrencyProvider
@@ -24,6 +26,7 @@ import co.electriccoin.zcash.ui.design.util.StringResource.Companion.NUMBER_FORM
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.qrcode.ext.fromReceiveAddressType
+import co.electriccoin.zcash.ui.screen.qrcode.ext.receiveAddress
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
 import co.electriccoin.zcash.ui.screen.request.ext.toBigDecimalLocalized
 import co.electriccoin.zcash.ui.screen.request.model.AmountState
@@ -58,6 +61,8 @@ class RequestVM(
     private val navigationRouter: NavigationRouter,
     private val shareQR: ShareQRUseCase,
     private val observeAccountIcon: ObserveAccountIconUseCase,
+    private val appAccessSession: AppAccessSession,
+    private val walletWriteAccess: WalletWriteAccess,
 ) : ViewModel() {
     companion object {
         private const val DEFAULT_MEMO = ""
@@ -89,21 +94,25 @@ class RequestVM(
             )
         )
 
-    private class Step(val stage: RequestStage)
+    private class Step(val stage: RequestStage, val recipient: String? = null)
 
     private val step = MutableStateFlow(Step(RequestStage.AMOUNT))
+
+    private val selectedAccount =
+        observeSelectedWalletAccount().stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     internal val state =
         combine(
             request,
             step,
             exchangeRateRepository.state,
-            observeSelectedWalletAccount.require(),
+            combine(selectedAccount, appAccessSession.grant, walletWriteAccess.version, ::Triple),
             observeAccountIcon.observeAll()
-        ) { draft, currentStep, exchangeRate, account, colors ->
-            val walletAddress =
-                account.fromReceiveAddressType(ReceiveAddressType.fromOrdinal(addressTypeOrdinal))
-                    ?: return@combine RequestState.Loading
+        ) { draft, currentStep, exchangeRate, access, colors ->
+            val (account, grant, token) = access
+            val addressType = ReceiveAddressType.fromOrdinal(addressTypeOrdinal)
+            val walletAddress = account?.fromReceiveAddressType(addressType)
+            if (account == null || walletAddress == null) return@combine RequestState.Loading
 
             when (currentStep.stage) {
                 RequestStage.AMOUNT -> {
@@ -162,7 +171,18 @@ class RequestVM(
                         walletAddress = walletAddress,
                         request = draft,
                         onQrCodeShare = { _, _, uri ->
+                            val permitted = {
+                                val current = selectedAccount.value
+                                appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
+                                    current != null &&
+                                    current.sdkAccount.accountUuid == account.sdkAccount.accountUuid &&
+                                    current.receiveAddress(addressType) == currentStep.recipient &&
+                                    step.value === currentStep && uri.isNotBlank() &&
+                                    request.value.qrCodeState === draft.qrCodeState &&
+                                    uri == draft.qrCodeState.requestUri
+                            }
                             viewModelScope.launch {
+                                if (!permitted()) return@launch
                                 shareQR(
                                     qrData = uri,
                                     shareText = stringRes(R.string.request_qr_code_share_chooser_text, CURRENCY_TICKER),
@@ -174,7 +194,8 @@ class RequestVM(
                                             R.drawable.ic_zec_qr_transparent
                                         } else {
                                             R.drawable.ic_zec_qr_shielded
-                                        }
+                                        },
+                                    isAllowed = permitted,
                                 )
                             }
                         },
@@ -383,7 +404,10 @@ class RequestVM(
         }
     }
 
-    private fun onClose() = navigationRouter.back()
+    private fun onClose() {
+        step.value = Step(RequestStage.AMOUNT)
+        navigationRouter.back()
+    }
 
     private fun onAmountDone(zecAmount: String) {
         request.update { it.copy(memoState = MemoState.new(DEFAULT_MEMO, zecAmount)) }
@@ -408,7 +432,7 @@ class RequestVM(
                     )
             )
         }
-        step.value = Step(RequestStage.QR_CODE)
+        step.value = Step(RequestStage.QR_CODE, address)
     }
 
     private fun onAmountAndMemoDone(
@@ -433,7 +457,7 @@ class RequestVM(
             )
         }
 
-        step.value = Step(RequestStage.QR_CODE)
+        step.value = Step(RequestStage.QR_CODE, address)
     }
 
     private fun onSwitch(

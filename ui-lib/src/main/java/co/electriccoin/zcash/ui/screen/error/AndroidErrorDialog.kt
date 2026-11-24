@@ -9,12 +9,17 @@ import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 
 @Composable
-fun AndroidErrorDialog() {
+fun AndroidErrorDialog(route: ErrorDialog) {
     val useCase = koinInject<NavigateToErrorUseCase>()
-    val vm = koinViewModel<ErrorVM> { parametersOf(useCase.requireCurrentArgs()) }
+    val args = useCase.argsFor(route)
+    if (args == null) {
+        UnavailableErrorView()
+        return
+    }
+    val vm = koinViewModel<ErrorVM> { parametersOf(args, route) }
     val state by vm.state.collectAsStateWithLifecycle()
     DialogView(state)
 }
 
 @Serializable
-data object ErrorDialog
+data class ErrorDialog(val id: String) : ErrorRoute

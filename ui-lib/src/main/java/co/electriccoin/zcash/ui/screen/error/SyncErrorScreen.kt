@@ -13,15 +13,17 @@ import org.koin.core.parameter.parametersOf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SyncErrorScreen() {
-    val navigateToErrorUseCase = koinInject<NavigateToErrorUseCase>()
-    val vm =
-        koinViewModel<SyncErrorVM> {
-            parametersOf(navigateToErrorUseCase.requireCurrentArgs() as ErrorArgs.SyncError)
-        }
+internal fun SyncErrorScreen(route: SyncErrorArgs) {
+    val useCase = koinInject<NavigateToErrorUseCase>()
+    val args = useCase.argsFor(route) as? ErrorArgs.SyncError
+    if (args == null) {
+        UnavailableErrorView()
+        return
+    }
+    val vm = koinViewModel<SyncErrorVM> { parametersOf(args, route) }
     val state by vm.state.collectAsStateWithLifecycle()
     SyncErrorView(state = state)
 }
 
 @Serializable
-data object SyncErrorArgs
+data class SyncErrorArgs(val id: String) : ErrorRoute

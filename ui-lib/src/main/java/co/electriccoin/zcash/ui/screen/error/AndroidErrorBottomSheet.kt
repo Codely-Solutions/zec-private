@@ -11,12 +11,17 @@ import org.koin.core.parameter.parametersOf
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AndroidErrorBottomSheet() {
+fun AndroidErrorBottomSheet(route: ErrorBottomSheet) {
     val useCase = koinInject<NavigateToErrorUseCase>()
-    val vm = koinViewModel<ErrorVM> { parametersOf(useCase.requireCurrentArgs()) }
+    val args = useCase.argsFor(route)
+    if (args == null) {
+        UnavailableErrorView()
+        return
+    }
+    val vm = koinViewModel<ErrorVM> { parametersOf(args, route) }
     val state by vm.state.collectAsStateWithLifecycle()
     BottomSheetErrorView(state)
 }
 
 @Serializable
-data object ErrorBottomSheet
+data class ErrorBottomSheet(val id: String) : ErrorRoute

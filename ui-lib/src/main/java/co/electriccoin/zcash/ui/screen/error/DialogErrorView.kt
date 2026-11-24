@@ -1,12 +1,15 @@
 package co.electriccoin.zcash.ui.screen.error
 
 import androidx.compose.runtime.Composable
+import co.electriccoin.zcash.ui.NavigationRouter
+import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.component.DialogState
 import co.electriccoin.zcash.ui.design.component.ZashiScreenDialog
 import co.electriccoin.zcash.ui.design.newcomponent.PreviewScreens
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.design.util.stringRes
+import org.koin.compose.koinInject
 
 @Composable
 fun DialogView(state: ErrorState?) {
@@ -21,6 +24,20 @@ fun DialogView(state: ErrorState?) {
                     onDismissRequest = it.onBack
                 )
             },
+    )
+}
+
+@Composable
+internal fun UnavailableErrorView() {
+    val router = koinInject<NavigationRouter>()
+    DialogView(
+        ErrorState(
+            title = stringRes(R.string.private_error_unavailable_title),
+            message = stringRes(R.string.private_error_unavailable_message),
+            positive = ButtonState(text = stringRes(R.string.general_close), onClick = router::back),
+            negative = null,
+            onBack = router::back,
+        )
     )
 }
 

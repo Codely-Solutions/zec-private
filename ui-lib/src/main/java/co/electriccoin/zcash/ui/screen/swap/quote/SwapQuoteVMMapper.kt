@@ -34,8 +34,10 @@ internal class SwapQuoteVMMapper {
         onSubmitQuoteClick: () -> Unit,
         onNavigateToOnRampSwap: () -> Unit,
         priceCheck: IndependentPriceCheck? = null,
+        canFund: () -> Boolean = { Clock.System.now() < state.quote.deadline },
     ): SwapQuoteState.Success =
         with(state) {
+            val expired = !canFund()
             return SwapQuoteState.Success(
                 title =
                     when {
@@ -56,15 +58,17 @@ internal class SwapQuoteVMMapper {
                 primaryButton =
                     ButtonState(
                         text = when {
-                            Clock.System.now() >= quote.deadline -> stringRes(R.string.private_swap_fresh_quote)
+                            expired -> stringRes(R.string.private_swap_fresh_quote)
                             priceCheck is IndependentPriceCheck.Compared && priceCheck.poor ->
                                 stringRes(if (quote.mode == EXACT_OUTPUT) R.string.private_pay_anyway
                                 else R.string.private_swap_anyway)
                             else -> stringRes(co.electriccoin.zcash.ui.design.R.string.general_confirm)
                         },
                         isEnabled =
-                            Clock.System.now() >= quote.deadline || canReview(priceCheck),
-                        onClick = { reviewAction(onBack, onNavigateToOnRampSwap, onSubmitQuoteClick) }
+                            expired || canReview(priceCheck),
+                        onClick = {
+                            if (canFund()) reviewAction(onNavigateToOnRampSwap, onSubmitQuoteClick) else onBack()
+                        }
                     )
             )
         }
@@ -73,9 +77,8 @@ internal class SwapQuoteVMMapper {
         (quote.destinationAsset.isZCashAsset || proposal?.quote === quote) &&
             priceCheck != IndependentPriceCheck.Checking
 
-    private fun SwapQuoteInternalState.reviewAction(onBack: () -> Unit, onIncoming: () -> Unit, onLocal: () -> Unit) {
+    private fun SwapQuoteInternalState.reviewAction(onIncoming: () -> Unit, onLocal: () -> Unit) {
         when {
-            Clock.System.now() >= quote.deadline -> onBack()
             quote.destinationAsset.isZCashAsset -> onIncoming()
             proposal?.quote === quote -> onLocal()
         }

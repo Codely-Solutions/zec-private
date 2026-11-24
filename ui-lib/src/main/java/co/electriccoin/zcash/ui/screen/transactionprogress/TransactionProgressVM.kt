@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.exception.TransactionEncoderException
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.ExactInputSwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ExactOutputSwapTransactionProposal
@@ -32,6 +33,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByAddress
 import co.electriccoin.zcash.ui.design.util.styledStringResource
 import co.electriccoin.zcash.ui.design.util.withStyle
+import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressState.Background.ERROR
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressState.Background.PENDING
 import co.electriccoin.zcash.ui.screen.transactionprogress.TransactionProgressState.Background.SUCCESS
@@ -49,10 +51,13 @@ class TransactionProgressVM(
     private val viewTransactionsAfterSuccessfulProposal: ViewTransactionsAfterSuccessfulProposalUseCase,
     private val viewTransactionDetailAfterSuccessfulProposal: ViewTransactionDetailAfterSuccessfulProposalUseCase,
     private val sendEmail: SendEmailUseCase,
-    private val copyToClipboard: CopyToClipboardUseCase
+    private val copyToClipboard: CopyToClipboardUseCase,
+    private val navigationRouter: NavigationRouter,
 ) : ViewModel() {
     val state: StateFlow<TransactionProgressState?> =
-        combine(observeTransactionProposal(), observeTransactionSubmitState()) { proposal, submitState ->
+        combine(observeTransactionProposal.observeNullable(), observeTransactionSubmitState()) {
+                proposal, submitState ->
+            if (proposal == null) return@combine createUnavailableState(submitState)
             when (submitState) {
                 null, SubmitProposalState.Submitting -> {
                     createSendingState(proposal)
@@ -81,8 +86,35 @@ class TransactionProgressVM(
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
-            initialValue = null
+            initialValue = createUnavailableState(null)
         )
+
+    private fun createUnavailableState(submitState: SubmitProposalState?): TransactionProgressState {
+        val result = (submitState as? SubmitProposalState.Result)?.submitResult
+        val transactionIds = when (result) {
+            is SubmitResult.Success -> result.txIds
+            is SubmitResult.GrpcFailure -> result.txIds
+            is SubmitResult.Partial -> result.txIds
+            else -> emptyList()
+        }
+        return TransactionProgressState(
+            onBack = ::onOpenActivity,
+            background = null,
+            title = stringRes(R.string.private_progress_unavailable_title),
+            subtitle = stringRes(R.string.private_progress_unavailable_message).withStyle(),
+            primaryButton = ButtonState(
+                text = stringRes(R.string.private_recovery_open_activity),
+                onClick = ::onOpenActivity,
+            ),
+            middleButton = null,
+            secondaryButton = null,
+            image = imageRes(R.drawable.ic_swap_quote_error),
+            transactionIds = transactionIds.map { stringRes(it) },
+            showAppBar = true,
+        )
+    }
+
+    private fun onOpenActivity() = navigationRouter.replaceAll(ActivityHistoryArgs)
 
     private fun createFundsStuckState(result: SubmitResult.Partial): TransactionProgressState =
         TransactionProgressState(

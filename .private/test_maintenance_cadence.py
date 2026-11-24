@@ -29,7 +29,7 @@ def release(date):
 
 class CadenceTest(unittest.TestCase):
     def test_sdk_gate_reads_the_tagged_version_and_requires_every_stable_artifact(self):
-        tag = '3.21.0-3881'
+        tag = '3.21.1-3903'
         properties = b'# ZCASH_SDK_VERSION=6.0.0\nZCASH_SDK_VERSION=8.1.0-SNAPSHOT\n'
         encoded = base64.b64encode(properties).decode('ascii')
         contents = dict(encoding='base64', content=encoded)
@@ -56,9 +56,18 @@ class CadenceTest(unittest.TestCase):
                 f'repos/zodl-inc/zodl-android/commits/{tag}',
                 f'repos/zodl-inc/zodl-android/contents/gradle.properties?ref={SHA}',
             ])
-            self.assertEqual(maven.call_count, 2 * len(cadence.SDK_ARTIFACTS))
-            failure = ('lightwallet-client-8.1.0.aar', 404)
-            self.assertIsNone(cadence.sdk_ready_commit(tag, api))
+            requested = {call.args[0].full_url for call in maven.call_args_list}
+            required = (
+                'zcash-android-sdk', 'zcash-android-backend', 'zcash-android-sdk-incubator',
+                'lightwallet-client', 'zcash-android-sdk-slipstream',
+            )
+            self.assertEqual(requested, {
+                f'https://repo.maven.apache.org/maven2/com/zodl/android/{module}/8.1.0/{module}-8.1.0.{extension}'
+                for module in required for extension in ('pom', 'aar')
+            })
+            for extension in ('pom', 'aar'):
+                failure = (f'zcash-android-sdk-slipstream-8.1.0.{extension}', 404)
+                self.assertIsNone(cadence.sdk_ready_commit(tag, api))
             failure = ('lightwallet-client-8.1.0.aar', 503)
             with self.assertRaises(HTTPError):
                 cadence.sdk_ready_commit(tag, api)
@@ -73,7 +82,19 @@ class CadenceTest(unittest.TestCase):
             maven.assert_not_called()
 
     def test_sdk_deferral_leaves_due_gradle_proposal_independent(self):
-        latest = dict(tag_name='3.21.0-3881', published_at='2026-11-18T11:11:00Z')
+        latest = dict(tag_name='3.21.1-3903', published_at='2026-11-23T11:11:00Z')
+        properties = dict(encoding='base64',
+                          content=base64.b64encode(b'ZCASH_SDK_VERSION=8.1.0-SNAPSHOT\n').decode())
+        slipstream_missing = True
+
+        def central(request, *, timeout):
+            url = request.full_url
+            if slipstream_missing and url.endswith('zcash-android-sdk-slipstream-8.1.0.aar'):
+                raise HTTPError(url, 404, 'synthetic incomplete publication', {}, None)
+            response = MagicMock()
+            response.__enter__.return_value = Mock(status=200, geturl=Mock(return_value=url))
+            return response
+
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             state = root / '.private/upstream.json'
@@ -84,12 +105,13 @@ class CadenceTest(unittest.TestCase):
                     patch('sync.ROOT', root), patch('sync.discover', return_value=latest), \
                     patch('maintenance_cadence.security_review', return_value=None), \
                     patch('maintenance_cadence.routine_window', return_value=None) as window, \
-                    patch('maintenance_cadence.sdk_ready_commit', return_value=None) as readiness, \
+                    patch('sync.gh', side_effect=lambda path: properties if '/contents/' in path else {'sha': SHA}), \
+                    patch('maintenance_cadence.urlopen', side_effect=central) as maven, \
                     patch('prepare_maintenance.prepare', return_value=SHA) as wrapper, \
                     patch('maintenance_watch.verified_wrapper', return_value=('9.9.2', 'verified properties')), \
                     patch('release_metadata.Metadata'), patch('sync.main') as upstream, patch('sync.output') as output:
                 cadence.main()
-                readiness.assert_not_called()
+                maven.assert_not_called()
                 wrapper.assert_not_called()
                 window.return_value = cadence.FIRST_WINDOW
                 cadence.main()
@@ -100,7 +122,7 @@ class CadenceTest(unittest.TestCase):
                     cadence.main()
                 wrapper.assert_called_once()
                 output.assert_called_once()
-                readiness.return_value = SHA
+                slipstream_missing = False
                 upstream.side_effect = RuntimeError('Critical upstream changes require review')
                 with self.assertRaisesRegex(RuntimeError, 'Critical upstream changes'):
                     cadence.main()

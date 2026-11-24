@@ -11,7 +11,17 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.FakeSwapQuote
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.SwapMode
+import co.electriccoin.zcash.ui.common.repository.MetadataRepository
+import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
+import co.electriccoin.zcash.ui.common.model.SwapStatus
+import co.electriccoin.zcash.ui.common.model.near.SwapOutputProvenanceFixture
+import co.electriccoin.zcash.ui.common.model.near.SwapType
+import co.electriccoin.zcash.ui.common.model.near.reviewedIdentity
+import co.electriccoin.zcash.ui.common.repository.IncomingSwapOwner
+import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
+import kotlinx.coroutines.test.advanceTimeBy
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
@@ -133,11 +143,88 @@ class ORSwapConfirmationVMTest {
         }
 
     @Test
-    fun trackingIsSavedBeforeFundingInstructionsAppear() = runTest(dispatcher) {
-        val save = mockk<SaveORSwapUseCase>(relaxed = true)
-        val vm = startedVm(saveORSwap = save)
-        requireNotNull(vm.state.value)
-        coVerify(exactly = 1) { save.persistBeforeFunding(any(), null) }
+    fun sentReusesOnlyTheAcknowledgedNearPublicationAndOpensActivity() = runTest(dispatcher) {
+        val quote = SwapOutputProvenanceFixture.status(
+            origin = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
+            destination = SwapAssetTestFixture.zecAsset(),
+            deposit = DEPOSIT_ADDRESS,
+            mode = SwapType.FLEX_INPUT,
+            hasExecutedAmount = false,
+            hasExecutedUsd = false,
+        ).quote
+        val writeAccess = WalletWriteAccess()
+        val owner = IncomingSwapOwner(EditAccountFixtures.zodl(), writeAccess.token())
+        val publication = SwapQuoteData.Success(quote, owner)
+        val replacementOwner = owner.copy(account = EditAccountFixtures.keystone())
+        val replacement = publication.copy(incomingOwner = replacementOwner)
+        val quotes = MutableStateFlow<SwapQuoteData?>(publication)
+        val writes = trackingStorage(true, false, true)
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val vm = startedVm(metadata = writes, router = router, quotes = quotes, walletWriteAccess = writeAccess)
+
+        val originalSent = requireNotNull(vm.state.value).primaryButton.onClick
+        quotes.value = replacement
+        originalSent()
+        verify(exactly = 0) { router.replaceAll(ActivityHistoryArgs) }
+        runCurrent()
+        // Replacement needs its own acknowledgement. The first refused write leaves it retryable.
+        assertNull(vm.state.value)
+        requireNotNull(vm.dialogState.value?.positive).onClick()
+        runCurrent()
+
+        val sent = requireNotNull(vm.state.value).primaryButton.onClick
+        sent()
+        sent()
+        coVerify(exactly = 1) {
+            writes.markTxAsSwap(
+                DEPOSIT_ADDRESS, "near", any(), any(), any(), any(), any(), SwapMode.FLEX_INPUT,
+                SwapStatus.PENDING, quote.reviewedIdentity(), null, owner.account, owner.walletWriteToken,
+            )
+        }
+        coVerify(exactly = 2) {
+            writes.markTxAsSwap(
+                DEPOSIT_ADDRESS, "near", any(), any(), any(), any(), any(), SwapMode.FLEX_INPUT,
+                SwapStatus.PENDING, quote.reviewedIdentity(), null, replacementOwner.account, owner.walletWriteToken,
+            )
+        }
+        verify(exactly = 1) { router.replaceAll(ActivityHistoryArgs) }
+    }
+
+    @Test
+    fun sentUsesTheFirstAcknowledgementEvenWhenAnotherWriteWouldBeRefused() = runTest(dispatcher) {
+        val writes = trackingStorage(true, false)
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val vm = startedVm(metadata = writes, router = router)
+        requireNotNull(vm.state.value).primaryButton.onClick()
+        verify(exactly = 1) { router.replaceAll(ActivityHistoryArgs) }
+        coVerify(exactly = 1) {
+            writes.markTxAsSwap(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any<String>(), any(), any(), any(),
+            )
+        }
+    }
+
+    @Test
+    fun rollingTheClockBackCannotRestoreObservedOrElapsedFunding() = runTest(dispatcher) {
+        val deadline = Instant.parse("2100-01-01T00:00:00Z")
+        var now = deadline - 2_000.milliseconds
+        val clock = object : Clock { override fun now() = now }
+        val copy = mockk<CopyToClipboardUseCase>(relaxed = true)
+        val vm = startedVm(copyToClipboard = copy, deadline = deadline, clock = clock,
+            elapsed = { testScheduler.currentTime })
+        val beforeExpiry = requireNotNull(vm.state.value)
+        assertTrue(beforeExpiry.fundingEnabled)
+        now -= 10_000.milliseconds
+        advanceTimeBy(2_001)
+        runCurrent()
+        assertFalse(requireNotNull(vm.state.value).fundingEnabled)
+        beforeExpiry.copyButton.onClick()
+        verify(exactly = 0) { copy(any<String>()) }
+
+        val observed = SwapQuoteData.Success(depositQuote(deadline))
+        assertTrue(observed.canFund(deadline - 2_000.milliseconds, 0))
+        assertFalse(observed.canFund(deadline, 1))
+        assertFalse(observed.canFund(now, 2))
     }
 
     @Test
@@ -173,6 +260,7 @@ class ORSwapConfirmationVMTest {
         val shareImage = ShareImageUseCase(context, versionInfo, WalletWriteAccess())
         val deadline = Instant.parse("2100-01-01T00:00:00Z")
         val clock = AtomicReference(deadline - 1.milliseconds)
+        val access = AppAccessSession().apply { unlock() }
         val shared = CompletableDeferred<Boolean>()
         val bitmap = mockk<Bitmap> {
             every { compress(any(), any(), any()) } answers {
@@ -181,6 +269,10 @@ class ORSwapConfirmationVMTest {
                     StageChange.CLEAR -> quotes.value = null
                     StageChange.REPLACE -> quotes.value = SwapQuoteData.Success(depositQuote(deadline))
                     StageChange.EXPIRE -> clock.set(deadline)
+                    StageChange.RELOCK -> {
+                        access.lock()
+                        access.unlock()
+                    }
                     StageChange.NONE -> Unit
                 }
                 true
@@ -208,7 +300,9 @@ class ORSwapConfirmationVMTest {
             val stagingClock = object : Clock {
                 override fun now() = clock.get()
             }
-            val vm = startedVm(shareQR = share, quotes = quotes, deadline = deadline, clock = stagingClock)
+            val vm = startedVm(
+                shareQR = share, quotes = quotes, deadline = deadline, clock = stagingClock, access = access,
+            )
             requireNotNull(vm.state.value).shareButton.onClick()
 
             val allowed = change == StageChange.NONE
@@ -229,16 +323,23 @@ class ORSwapConfirmationVMTest {
     private fun TestScope.startedVm(
         copyToClipboard: CopyToClipboardUseCase = mockk(relaxed = true),
         shareQR: ShareQRUseCase = mockk(relaxed = true),
-        router: FakeNavigationRouter = FakeNavigationRouter(),
-        saveORSwap: SaveORSwapUseCase = mockk(relaxed = true),
+        router: co.electriccoin.zcash.ui.NavigationRouter = FakeNavigationRouter(),
+        metadata: MetadataRepository = trackingStorage(true),
         deadline: Instant = Instant.parse("2100-01-01T00:00:00Z"),
         quotes: MutableStateFlow<SwapQuoteData?> = MutableStateFlow(null),
         clock: Clock = Clock.System,
+        access: AppAccessSession = AppAccessSession().apply { unlock() },
+        elapsed: () -> Long = { 0L },
+        walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
     ): ORSwapConfirmationVM {
-        quotes.value = SwapQuoteData.Success(depositQuote(deadline))
+        if (quotes.value == null) quotes.value = SwapQuoteData.Success(depositQuote(deadline))
         val swapRepository =
             mockk<SwapRepository> {
                 every { this@mockk.quote } returns quotes
+                every { clearIfCurrent(any()) } answers {
+                    val expected = firstArg<SwapQuoteData.Success>()
+                    quotes.value === expected && quotes.compareAndSet(expected, null)
+                }
             }
         val vm =
             ORSwapConfirmationVM(
@@ -246,21 +347,30 @@ class ORSwapConfirmationVMTest {
                 cancelSwapQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true),
                 copyToClipboard = copyToClipboard,
                 navigationRouter = router,
-                saveORSwap = saveORSwap,
+                saveORSwap = SaveORSwapUseCase(swapRepository, metadata, router, walletWriteAccess),
                 shareQR = shareQR,
-            ).also { it.clock = clock }
+                appAccessSession = access,
+            ).also { it.clock = clock; it.elapsedRealtime = elapsed }
         backgroundScope.launch { vm.state.collect { } }
         runCurrent()
         return vm
     }
 
-    private enum class StageChange { CLEAR, REPLACE, EXPIRE, NONE }
+    private enum class StageChange { CLEAR, REPLACE, EXPIRE, RELOCK, NONE }
+
+    private fun trackingStorage(vararg results: Boolean) = mockk<MetadataRepository> {
+        coEvery { getSwapMetadata(any(), any()) } returns null
+        coEvery {
+            markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), SwapStatus.PENDING,
+                any<String>(), any(), any(), any())
+        } returnsMany results.toList()
+    }
 
     private fun depositQuote(deadline: Instant) =
             FakeSwapQuote(
                 originAsset = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc"),
                 destinationAsset = SwapAssetTestFixture.zecAsset(),
-                mode = SwapMode.EXACT_INPUT,
+                mode = SwapMode.FLEX_INPUT,
                 amountIn = AMOUNT_IN,
                 amountInFormatted = AMOUNT_IN,
                 amountOutFormatted = BigDecimal.ONE,

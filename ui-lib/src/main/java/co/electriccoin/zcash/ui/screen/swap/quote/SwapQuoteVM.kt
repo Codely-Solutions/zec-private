@@ -45,7 +45,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -81,23 +80,24 @@ internal class SwapQuoteVM(
 
     val state: StateFlow<SwapQuoteState?> =
         combine(
-            swapRepository.quote.filterNotNull(),
+            swapRepository.quote,
             proposals,
-            observeSelectedWalletAccount.require(),
+            observeSelectedWalletAccount(),
             priceCheck,
             clock,
         ) { quote, proposal, account, check, now ->
             when (quote) {
+                null -> unavailableState()
                 SwapQuoteData.Loading -> null
                 is SwapQuoteData.Error -> createErrorState(quote)
-                is SwapQuoteData.Success -> if (quote.quote.requiresLocalProposal &&
-                    (proposal as? SwapTransactionProposal)?.quote !== quote.quote) null
+                is SwapQuoteData.Success -> if (account == null || quote.quote.requiresLocalProposal &&
+                    (proposal as? SwapTransactionProposal)?.quote !== quote.quote) unavailableState()
                 else createState(proposal, quote, account, check, now)
             }
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
-            initialValue = null
+            initialValue = if (swapRepository.quote.value == null) unavailableState() else null
         )
 
     init {
@@ -138,10 +138,10 @@ internal class SwapQuoteVM(
             .convertZatoshiToZec()
         val assessment = check.current(quote.quote, fee, nowMillis)
         fun reviewedAction(action: () -> Unit) {
-            val currentQuote = (swapRepository.quote.value as? SwapQuoteData.Success)?.quote
+            val currentPublication = swapRepository.quote.value
             val now = Clock.System.now()
             val proposalChanged = quote.quote.requiresLocalProposal && proposals.value !== proposal
-            val invalidReview = currentQuote !== quote.quote || now >= quote.quote.deadline || proposalChanged
+            val invalidReview = currentPublication !== quote || !quote.canFund(now) || proposalChanged
             if (isClosing || invalidReview) return
             val current = priceCheck.value.current(quote.quote, fee, now.toEpochMilliseconds())
             if (current != assessment || current == IndependentPriceCheck.Checking) return
@@ -149,10 +149,11 @@ internal class SwapQuoteVM(
         }
         return swapQuoteSuccessMapper.createState(
             state = SwapQuoteInternalState(proposal as? SwapTransactionProposal, quote.quote, account),
-            onBack = ::onBack,
+            onBack = { if (swapRepository.quote.value === quote) onBack() },
             onSubmitQuoteClick = { reviewedAction { onSubmitQuoteClick(proposal) } },
             onNavigateToOnRampSwap = { reviewedAction { onNavigateToOnRampSwap() } },
             priceCheck = assessment,
+            canFund = { quote.canFund(Clock.System.now()) },
         )
     }
 
@@ -213,23 +214,30 @@ internal class SwapQuoteVM(
                             EXACT_INPUT, FLEX_INPUT -> stringRes(R.string.swapAndPay_editSwap)
                             EXACT_OUTPUT -> stringRes(R.string.swapAndPay_editPayment)
                         },
-                    onClick = ::onEditPaymentClick
+                    onClick = ::onBack
                 ),
-            onBack = ::onBackDuringError
+            onBack = ::onBack
         )
     }
 
-    private fun onEditPaymentClick() = onBack()
+    internal fun unavailableState() = SwapQuoteState.Error(
+        icon = imageRes(R.drawable.ic_swap_quote_error),
+        title = stringRes(R.string.swapAndPay_quoteUnavailable),
+        subtitle = stringRes(R.string.private_quote_unavailable_message),
+        negativeButton = null,
+        positiveButton = ButtonState(text = stringRes(R.string.general_back), onClick = ::dismissUnavailable),
+        onBack = ::dismissUnavailable,
+    )
 
-    private fun onBack() = closeQuote { cancelSwapQuote() }
+    private fun dismissUnavailable() = closeQuote { navigationRouter.back() }
+
+    internal fun onBack() = closeQuote { cancelSwapQuote() }
 
     private fun closeQuote(action: () -> Unit) {
         if (isClosing) return
         isClosing = true
         action()
     }
-
-    private fun onBackDuringError() = onBack()
 
     private fun onSubmitQuoteClick(proposal: TransactionProposal?) = viewModelScope.launch { submitProposal(proposal) }
 

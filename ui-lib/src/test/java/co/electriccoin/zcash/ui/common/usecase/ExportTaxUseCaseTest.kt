@@ -16,7 +16,12 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.unmockkStatic
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -28,11 +33,12 @@ import java.time.Instant
 import java.time.Year
 import kotlin.test.assertEquals
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ExportTaxUseCaseTest {
     @Test
-    fun exportedReceiptsSendsAndFeesKeepEightColumnsAndExactAmounts() = runBlocking {
+    fun exportedReceiptsSendsAndFeesKeepEightColumnsAndExactAmounts() = runTest {
         val context = RuntimeEnvironment.getApplication()
         val year = Year.now().minusYears(1).value
         val transactionTime = Instant.parse("$year-06-15T12:00:00Z")
@@ -69,14 +75,17 @@ class ExportTaxUseCaseTest {
         }
         lateinit var output: File
         mockkStatic(FileProvider::class)
+        Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         try {
             every { FileProvider.getUriForFile(context, any(), any()) } answers {
                 output = thirdArg()
                 Uri.parse("content://synthetic/tax.csv")
             }
-            ExportTaxUseCase(transactions, accounts, versions, context, mockk(relaxed = true), mockk())()
+            ExportTaxUseCase(transactions, accounts, versions, context, mockk(relaxed = true), mockk())
+                .apply { scheduleCleanup = {} }(accounts.getSelectedAccount()) { true }
         } finally {
             unmockkStatic(FileProvider::class)
+            Dispatchers.resetMain()
         }
 
         val rows = output.readLines().map { it.split(',') }

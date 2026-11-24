@@ -74,7 +74,20 @@ UI JVM regressions run in `release_checks.sh`; Python controller/catalog regress
 `automation-test.yml` suite. Optional layout captures follow [UI review](UI-REVIEW.md). These checks substitute external
 storage, provider, navigation or SDK I/O at the stated ports; they establish no funded settlement or native power-loss behavior.
 
-### Corrections after 22efbb9a
+### Corrections after 7dbd5eef
+
+| Boundary | Regression evidence |
+| --- | --- |
+| Tax CSV | `TaxExportViewModelTest`, `TaxExportFailureTest` and `ExportTaxUseCaseTest` exercise the actual export, selected account, original grant, wallet reset, staging cleanup, retention scheduling and chooser intent. |
+| Restored navigation | `ReviewRestorationBoundaryTest` parcels real Compose and dialog navigator state. `RestoredWalletRoutesLayoutTest` exercises the real recovery surfaces and quote Back in the dialog host. Transaction Progress opens Activity with fresh repositories. Keystone and deposit recovery expose no signing or funding controls. |
+| Incoming tracking | `ORSwapConfirmationVMTest` composes the VM with the real tracking use case and external storage fixture. It checks the first acknowledgement, no repeat on Sent, replacement, refused-write retry, and Activity. Existing metadata file tests cover durable route conflicts and owner isolation. |
+| Funding and related shares | `ORSwapConfirmationVMTest` checks wall-clock rollback and elapsed expiry and refuses staged shares after relock, replacement or expiry. `QrCodeVMTest`, `RequestVMTest` and `ErrorReportHandoffTest` cover the bound Receive address, Request URI and general/sync reports. |
+| SDK readiness | `test_maintenance_cadence` checks independent complete POM/AAR coordinates and drives Gradle eligibility through the real gate when Slipstream is incomplete. |
+| Release blocker and exact refs | `test_notify` and `test_maintenance_watch` preserve an exact publisher through a later failure and reconcile only that archive. The exact-ref test executes both checked-in admission programs and checks that case-variant refs, tags and ordinary branch dispatches leave the production queue alone. |
+
+Parcel and Robolectric evidence covers Android state transfer and composed recovery. It cannot establish physical Keystone signing, recipient-app behavior, Android background work timing or funded swap settlement. Local controller fixtures model production queue admission and archive matching with synthetic GitHub responses.
+
+## Corrections after 22efbb9a
 
 | Area | Automatic regression |
 |---|---|

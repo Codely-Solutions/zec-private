@@ -43,16 +43,24 @@ def issue_body(repo, number, body, *, title=TITLE):
 
 
 def blocker_scope(state):
-    return state.get('operation'), state.get('candidate'), state.get('validation_emulator', '')
+    operation = state.get('operation')
+    # A publisher archive can remain unresolved while the same candidate fails a new build.
+    candidate = state.get('candidate')
+    attestation = state.get('attestation', '') if operation in PUBLICATION_OPERATIONS else ''
+    if operation == 'reconciliation' and attestation == '' and isinstance(candidate, str):
+        publisher = EXACT_PUBLISHER.fullmatch(candidate)
+        if publisher:
+            attestation = publisher[2]
+    return operation, candidate, state.get('validation_emulator', ''), attestation
 
 
 def valid_scope(state):
     if not isinstance(state, dict):
         return False
-    operation, candidate, emulator = blocker_scope(state)
+    operation, candidate, emulator, attestation = blocker_scope(state)
     return (isinstance(operation, str) and operation in BLOCKER_OPERATIONS
             and isinstance(candidate, str) and bool(candidate) and emulator in ('', 'false', 'true')
-            and (operation == 'validation' or not emulator))
+            and (operation == 'validation' or not emulator) and isinstance(attestation, str))
 
 
 def current_blockers(body):
@@ -94,19 +102,16 @@ def run_order(state):
 
 
 def matches_recovery(state, revision):
-    operation, candidate, emulator = blocker_scope(revision)
-    previous_operation, previous_candidate, previous_emulator = blocker_scope(state)
+    operation, candidate, emulator, attestation = blocker_scope(revision)
+    previous_operation, previous_candidate, previous_emulator, previous_attestation = blocker_scope(state)
     same_scope = (bool(candidate) and (operation, candidate) == (previous_operation, previous_candidate)
                   and (emulator == previous_emulator or (operation == 'validation' and emulator == 'true')))
-    if operation in PUBLICATION_OPERATIONS and state.get('attestation') and revision['attestation']:
-        same_scope = same_scope and state['attestation'] == revision['attestation']
-    same_attestation = (revision['operation'] in PUBLICATION_OPERATIONS
-                        and state['operation'] in PUBLICATION_OPERATIONS
-                        and bool(revision['attestation']) and state.get('attestation') == revision['attestation'])
-    if same_scope or same_attestation:
+    if previous_attestation:
+        return bool(attestation) and previous_attestation == attestation
+    if same_scope and (not attestation or operation == 'release'):
         return True
     publisher = EXACT_PUBLISHER.fullmatch(candidate) if operation == previous_operation == 'reconciliation' else None
-    return (publisher is not None and publisher[2] == revision['attestation'] and not state.get('attestation')
+    return (publisher is not None and publisher[2] == attestation and not previous_attestation
             and previous_candidate == f'publisher:{publisher[1]}::')
 
 
@@ -128,7 +133,7 @@ def recent_recoveries(*histories):
     newest = {}
     for history in histories:
         for state in history:
-            key = (*blocker_scope(state), state['attestation'])
+            key = blocker_scope(state)
             if key not in newest or run_order(newest[key]) < run_order(state):
                 newest[key] = state
     ordered = sorted(newest.values(), key=run_order, reverse=True)

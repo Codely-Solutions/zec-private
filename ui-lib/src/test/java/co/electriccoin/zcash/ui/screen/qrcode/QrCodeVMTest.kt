@@ -19,6 +19,9 @@ import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
@@ -41,6 +44,8 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 import kotlin.test.assertIs
 
 /**
@@ -83,7 +88,8 @@ class QrCodeVMTest {
                     shareText = stringRes(R.string.qr_code_share_chooser_text, CURRENCY_TICKER),
                     sharePickerText = stringRes(R.string.qr_code_share_chooser_title, CURRENCY_TICKER),
                     filenamePrefix = "zcash_address_qr_",
-                    centerIcon = R.drawable.ic_zec_qr_shielded
+                    centerIcon = R.drawable.ic_zec_qr_shielded,
+                    isAllowed = any(),
                 )
             }
         }
@@ -106,10 +112,33 @@ class QrCodeVMTest {
                     shareText = any(),
                     sharePickerText = any(),
                     filenamePrefix = any(),
-                    centerIcon = R.drawable.ic_zec_qr_transparent
+                    centerIcon = R.drawable.ic_zec_qr_transparent,
+                    isAllowed = any(),
                 )
             }
         }
+
+    @Test
+    fun stagedReceiveQrRetainsTheDisplayedPayloadAndOriginalGrant() = runTest(dispatcher) {
+        val access = AppAccessSession().apply { unlock() }
+        val share = mockk<ShareQRUseCase> {
+            coEvery { this@mockk(any(), any(), any(), any(), any(), any()) } coAnswers {
+                val allowed = arg<() -> Boolean>(5)
+                assertEquals(UNIFIED, firstArg())
+                assertTrue(allowed())
+                access.lock()
+                access.unlock()
+                assertFalse(allowed())
+                false
+            }
+        }
+        val vm = startedVm(shareQR = share, access = access)
+        val state = assertIs<QrCodeState.Prepared>(vm.state.value)
+        state.onQrCodeShare("other-address")
+        state.onQrCodeShare(UNIFIED)
+        advanceUntilIdle()
+        coVerify(exactly = 1) { share(any(), any(), any(), any(), any(), any()) }
+    }
 
     @Test
     fun copyPutsTheAddressOnTheClipboard() =
@@ -228,10 +257,11 @@ class QrCodeVMTest {
         shareQR: ShareQRUseCase = mockk(relaxed = true),
         router: FakeNavigationRouter = FakeNavigationRouter(),
         viewOnlyContent: ViewOnlyContent = mockk(relaxed = true),
+        access: AppAccessSession = AppAccessSession().apply { unlock() },
     ): QrCodeVM {
         val observeSelectedWalletAccount =
             mockk<ObserveSelectedWalletAccountUseCase> {
-                every { require() } returns flowOf(account)
+                every { this@mockk() } returns flowOf(account)
             }
         val vm =
             QrCodeVM(
@@ -241,6 +271,8 @@ class QrCodeVMTest {
                 navigationRouter = router,
                 shareQR = shareQR,
                 viewOnlyContent = viewOnlyContent,
+                appAccessSession = access,
+                walletWriteAccess = WalletWriteAccess(),
             )
         backgroundScope.launch { vm.state.collect { } }
         advanceUntilIdle()

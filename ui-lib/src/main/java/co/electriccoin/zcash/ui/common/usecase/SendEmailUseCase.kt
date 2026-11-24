@@ -16,6 +16,8 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.support.model.SupportInfoType
 import co.electriccoin.zcash.ui.screen.swap.mismatch.SwapQuoteMismatchArgs
 import co.electriccoin.zcash.ui.util.EmailUtil
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Suppress("TooManyFunctions")
 class SendEmailUseCase(
@@ -48,38 +50,36 @@ class SendEmailUseCase(
     /**
      * Sends a support email for an exception with full stack trace and support info.
      */
-    suspend operator fun invoke(exception: Exception) {
-        sendSupportEmail(
-            subject = context.getString(R.string.app_name),
-            messageBody =
+    suspend operator fun invoke(exception: Exception, isAllowed: () -> Boolean = { true }): Boolean {
+        val messageBody =
                 EmailUtil.formatMessage(
                     body = exception.stackTraceToString(),
                     supportInfo = getSupport().toSupportString(SupportInfoType.entries.toSet())
                 )
-        )
+        return withContext(Dispatchers.Main.immediate) {
+            sendSupportEmail(context.getString(R.string.app_name), messageBody, isAllowed)
+        }
     }
 
     /**
      * Sends a support email for a synchronizer error.
      */
-    suspend operator fun invoke(synchronizerError: SynchronizerError) {
-        sendSupportEmail(
-            subject = context.getString(R.string.app_name),
-            messageBody =
+    suspend operator fun invoke(synchronizerError: SynchronizerError, isAllowed: () -> Boolean = { true }): Boolean {
+        val messageBody =
                 EmailUtil.formatMessage(
                     body = synchronizerError.getStackTrace(null),
                     supportInfo = getSupport().toSupportString(SupportInfoType.entries.toSet())
                 )
-        )
+        return withContext(Dispatchers.Main.immediate) {
+            sendSupportEmail(context.getString(R.string.app_name), messageBody, isAllowed)
+        }
     }
 
     /**
      * Sends a support email for partial transaction submission results.
      */
-    suspend operator fun invoke(submitResult: SubmitResult.Partial) {
-        sendSupportEmail(
-            subject = context.getString(R.string.app_name),
-            messageBody =
+    suspend operator fun invoke(submitResult: SubmitResult.Partial, isAllowed: () -> Boolean = { true }): Boolean {
+        val messageBody =
                 EmailUtil.formatMessage(
                     prefix = context.getString(R.string.send_confirmation_multiple_report_text),
                     supportInfo = getSupport().toSupportString(SupportInfoType.entries.toSet()),
@@ -89,7 +89,9 @@ class SendEmailUseCase(
                             appendLine(submitResult.statuses.joinToString())
                         }
                 )
-        )
+        return withContext(Dispatchers.Main.immediate) {
+            sendSupportEmail(context.getString(R.string.app_name), messageBody, isAllowed)
+        }
     }
 
     /**
@@ -101,9 +103,10 @@ class SendEmailUseCase(
      * [submitResult.code] is the real status code. Contrast with [SubmitResult.Error] below, which
      * never reached the server at all and must not be reported this way (MOB-1744).
      */
-    operator fun invoke(submitResult: SubmitResult.Failure) {
+    operator fun invoke(submitResult: SubmitResult.Failure, isAllowed: () -> Boolean = { true }): Boolean {
         val status = submitFailureReportStatus(submitResult)
-        sendSupportEmail(
+        return sendSupportEmail(
+            isAllowed = isAllowed,
             subject = context.getString(R.string.app_name),
             messageBody =
                 EmailUtil.formatMessage(
@@ -132,7 +135,7 @@ class SendEmailUseCase(
     /**
      * Sends a support email for gRPC failure.
      */
-    operator fun invoke(submitResult: SubmitResult.GrpcFailure) {
+    operator fun invoke(submitResult: SubmitResult.GrpcFailure, isAllowed: () -> Boolean = { true }): Boolean {
         val reportDescription =
             grpcFailureReportDescription(
                 reason = submitResult.reason,
@@ -140,7 +143,8 @@ class SendEmailUseCase(
                 timeoutCopy = { context.getString(R.string.send_pendingTimeoutInfo) }
             )
 
-        sendSupportEmail(
+        return sendSupportEmail(
+            isAllowed = isAllowed,
             subject = context.getString(R.string.app_name),
             messageBody =
                 EmailUtil.formatMessage(
@@ -161,9 +165,10 @@ class SendEmailUseCase(
      * thinking a real protocol status was involved when gRPC was never reached (MOB-1744). Report it
      * as a distinct pre-submission category instead, carrying the real exception type and detail.
      */
-    operator fun invoke(submitResult: SubmitResult.Error) {
+    operator fun invoke(submitResult: SubmitResult.Error, isAllowed: () -> Boolean = { true }): Boolean {
         val detail = submitErrorPreSubmissionDetail(submitResult.cause)
-        sendSupportEmail(
+        return sendSupportEmail(
+            isAllowed = isAllowed,
             subject = context.getString(R.string.app_name),
             messageBody =
                 EmailUtil.formatMessage(

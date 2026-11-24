@@ -25,6 +25,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorBottomSheet
 import co.electriccoin.zcash.ui.screen.error.ErrorVM
+import co.electriccoin.zcash.ui.screen.error.noReportAccess
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.scan.ScanValidationState
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
@@ -167,10 +168,10 @@ class ScanKeystonePCZTViewModelTest {
     @Test
     fun closingFirmwareSheetReturnsToSigning() = runTest {
         val routes = mutableListOf<Any>(SignKeystoneTransactionArgs, ScanKeystonePCZTRequest)
-        every { router.forward(ErrorBottomSheet) } answers { routes.add(ErrorBottomSheet) }
-        every { router.replace(ErrorBottomSheet) } answers {
+        every { router.forward(ofType<ErrorBottomSheet>()) } answers { routes.add(firstArg<Array<Any>>().single()) }
+        every { router.replace(ofType<ErrorBottomSheet>()) } answers {
             routes.removeAt(routes.lastIndex)
-            routes.add(ErrorBottomSheet)
+            routes.add(firstArg<Array<Any>>().single())
         }
         every { router.back() } answers { routes.removeAt(routes.lastIndex) }
         val obsolete = KeystoneFirmwareBelowMinimumException(detected = null)
@@ -179,11 +180,12 @@ class ScanKeystonePCZTViewModelTest {
 
         vm.onScanned("legacy-signer-qr").join()
 
-        assertEquals(listOf(SignKeystoneTransactionArgs, ErrorBottomSheet), routes)
+        assertEquals(SignKeystoneTransactionArgs, routes.first())
+        val errorRoute = assertIs<ErrorBottomSheet>(routes.last())
         assertEquals(ScanValidationState.NONE, vm.validationState.value)
-        val args = assertIs<ErrorArgs.KeystoneFirmwareUpdateRequired>(navigateToError.requireCurrentArgs())
+        val args = assertIs<ErrorArgs.KeystoneFirmwareUpdateRequired>(navigateToError.argsFor(errorRoute))
         assertSame(obsolete, args.exception)
-        val sheet = ErrorVM(args, navigateToError, router, mockk(), mockk()).state.value
+        val sheet = ErrorVM(args, navigateToError, router, mockk(), mockk(), noReportAccess()).state.value
         assertEquals(stringRes(R.string.error_keystone_firmware_title), sheet.title)
         sheet.positive.onClick()
 

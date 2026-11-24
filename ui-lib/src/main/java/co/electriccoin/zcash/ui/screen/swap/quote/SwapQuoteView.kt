@@ -143,12 +143,14 @@ private fun Error(
             color = ZashiColors.Text.textTertiary
         )
         Spacer(36.dp)
-        ZashiButton(
-            state = state.negativeButton,
-            modifier = Modifier.fillMaxWidth(),
-            defaultPrimaryColors = ZashiButtonDefaults.destructive1Colors()
-        )
-        Spacer(8.dp)
+        state.negativeButton?.let {
+            ZashiButton(
+                state = it,
+                modifier = Modifier.fillMaxWidth(),
+                defaultPrimaryColors = ZashiButtonDefaults.destructive1Colors()
+            )
+            Spacer(8.dp)
+        }
         ZashiButton(
             state = state.positiveButton,
             modifier = Modifier.fillMaxWidth()

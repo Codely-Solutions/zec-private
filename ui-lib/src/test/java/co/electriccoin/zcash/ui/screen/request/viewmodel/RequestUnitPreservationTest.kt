@@ -15,6 +15,8 @@ import co.electriccoin.zcash.ui.screen.request.model.MemoState
 import co.electriccoin.zcash.ui.screen.request.model.OnAmount
 import co.electriccoin.zcash.ui.screen.request.model.RequestCurrency
 import co.electriccoin.zcash.ui.screen.request.model.RequestState
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
@@ -382,7 +384,7 @@ class RequestUnitPreservationTest {
                 getZcashCurrency = mockk(relaxed = true),
                 zip321BuildUriUseCase = builder,
                 observeSelectedWalletAccount = mockk<ObserveSelectedWalletAccountUseCase> {
-                    every { require() } returns flowOf(
+                    every { this@mockk() } returns flowOf(
                         EditAccountFixtures.zodl().copy(
                             // Public mainnet fixtures. The shielded addresses use unified test vector row 0.
                             transparentAddress = "t1Rv4exT7bqhZqi2j7xz8bUHDMxwosrjADU",
@@ -396,6 +398,8 @@ class RequestUnitPreservationTest {
                 navigationRouter = mockk(relaxed = true),
                 shareQR = mockk(relaxed = true),
                 observeAccountIcon = AccountIconFixtures.useCase(),
+                appAccessSession = AppAccessSession().apply { unlock() },
+                walletWriteAccess = WalletWriteAccess(),
             )
             store.put("request", vm)
             backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }

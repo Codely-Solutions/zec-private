@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.usecase.ExportTaxUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.design.component.ButtonState
@@ -19,6 +21,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.stateIn
@@ -28,29 +32,47 @@ class TaxExportViewModel(
     getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
     private val exportTax: ExportTaxUseCase,
     private val navigationRouter: NavigationRouter,
+    private val appAccessSession: AppAccessSession,
+    private val walletWriteAccess: WalletWriteAccess,
 ) : ViewModel() {
     private val exporting = MutableStateFlow(false)
     private val failed = MutableStateFlow(false)
     private var exportJob: Job? = null
     private var leaving = false
+    private class Selection(val account: WalletAccount?)
+
+    private val selectedAccount = getSelectedWalletAccount.observe()
+        .distinctUntilChangedBy { it?.sdkAccount?.accountUuid }
+        .map(::Selection)
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     val state: StateFlow<TaxExportState> =
-        combine(getSelectedWalletAccount.observe(), exporting, failed) { account, loading, error ->
-                createState(account, loading, error)
+        combine(selectedAccount, exporting, failed, appAccessSession.grant, walletWriteAccess.version) {
+                selection, loading, error, grant, token ->
+            createState(selection?.account, loading, error) {
+                selectedAccount.value === selection && appAccessSession.permits(grant) &&
+                    walletWriteAccess.permits(token)
+            }
             }.stateIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
                 initialValue = createState(null)
             )
 
-    private fun createState(selectedAccount: WalletAccount?, loading: Boolean = false, error: Boolean = false) =
+    private fun createState(
+        selectedAccount: WalletAccount?,
+        loading: Boolean = false,
+        error: Boolean = false,
+        isAllowed: () -> Boolean = { false },
+    ) =
         TaxExportState(
             exportButton =
                 ButtonState(
                     text = stringRes(R.string.taxExport_download),
                     hapticFeedbackType = HapticFeedbackType.Confirm,
-                    isEnabled = !loading && selectedAccount != null,
+                    isEnabled = !loading && selectedAccount != null && isAllowed(),
                     isLoading = loading,
-                    onClick = { selectedAccount?.let(::onExportClick) }
+                    onClick = { selectedAccount?.let { onExportClick(it, isAllowed) } }
                 ),
             onBack = ::onBack,
             error = stringRes(R.string.taxExport_error).takeIf { error },
@@ -66,12 +88,12 @@ class TaxExportViewModel(
                 )
         )
 
-    private fun onExportClick(selectedAccount: WalletAccount) {
-        if (leaving || !exporting.compareAndSet(expect = false, update = true)) return
+    private fun onExportClick(selectedAccount: WalletAccount, isAllowed: () -> Boolean) {
+        if (leaving || !isAllowed() || !exporting.compareAndSet(expect = false, update = true)) return
         failed.value = false
         exportJob = viewModelScope.launch {
             try {
-                exportTax(selectedAccount)
+                exportTax(selectedAccount, isAllowed)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {

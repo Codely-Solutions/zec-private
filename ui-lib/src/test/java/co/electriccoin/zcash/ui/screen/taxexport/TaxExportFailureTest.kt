@@ -14,6 +14,8 @@ import co.electriccoin.zcash.ui.common.repository.TransactionRepository
 import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import co.electriccoin.zcash.ui.common.usecase.ExportTaxUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -50,20 +52,23 @@ import kotlin.test.assertTrue
 @Config(sdk = [34])
 class TaxExportFailureTest {
     @Test
-    fun downloadKeepsTheAccountShownByItsCallback() = runTest {
+    fun downloadRefusesTheCallbackFromAnotherAccount() = runTest {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         val approved = EditAccountFixtures.zodl()
         val selected = MutableStateFlow<WalletAccount?>(approved)
         val accounts = mockk<AccountDataSource> { every { selectedAccount } returns selected }
-        val export = mockk<ExportTaxUseCase> { coEvery { this@mockk(any()) } returns Unit }
-        val vm = TaxExportViewModel(GetSelectedWalletAccountUseCase(accounts), export, mockk(relaxed = true))
+        val export = mockk<ExportTaxUseCase> { coEvery { this@mockk(any(), any()) } returns Unit }
+        val vm = TaxExportViewModel(
+            GetSelectedWalletAccountUseCase(accounts), export, mockk(relaxed = true),
+            AppAccessSession().apply { unlock() }, WalletWriteAccess(),
+        )
         val store = ViewModelStore().apply { put("tax", vm) }
         val observer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
         try {
             val approvedCallback = vm.state.value.exportButton.onClick
             selected.value = EditAccountFixtures.keystone()
             approvedCallback()
-            coVerify(exactly = 1) { export(approved) }
+            coVerify(exactly = 0) { export(any(), any()) }
         } finally {
             observer.cancel()
             store.clear()
@@ -93,9 +98,12 @@ class TaxExportFailureTest {
         val export = ExportTaxUseCase(
             mockk<TransactionRepository> { coEvery { getTransactions(any()) } returns emptyList() },
             accounts, mockk { every { this@mockk() } returns version }, context, navigation, mockk(),
-        )
+        ).apply { scheduleCleanup = {} }
         val store = ViewModelStore()
-        val vm = TaxExportViewModel(GetSelectedWalletAccountUseCase(accounts), export, navigation)
+        val vm = TaxExportViewModel(
+            GetSelectedWalletAccountUseCase(accounts), export, navigation,
+            AppAccessSession().apply { unlock() }, WalletWriteAccess(),
+        )
         store.put("tax", vm)
         val observer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
         mockkStatic(FileProvider::class)
@@ -136,13 +144,16 @@ class TaxExportFailureTest {
         val export = mockk<ExportTaxUseCase>()
         val entered = CompletableDeferred<Unit>()
         val cancelled = CompletableDeferred<Unit>()
-        coEvery { export(any()) } coAnswers {
+        coEvery { export(any(), any()) } coAnswers {
             entered.complete(Unit)
             try { awaitCancellation() } finally { cancelled.complete(Unit) }
         }
         val navigation = mockk<NavigationRouter>(relaxed = true)
         val store = ViewModelStore()
-        val vm = TaxExportViewModel(GetSelectedWalletAccountUseCase(accounts()), export, navigation)
+        val vm = TaxExportViewModel(
+            GetSelectedWalletAccountUseCase(accounts()), export, navigation,
+            AppAccessSession().apply { unlock() }, WalletWriteAccess(),
+        )
         store.put("tax", vm)
         val observer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
         try {
@@ -152,7 +163,7 @@ class TaxExportFailureTest {
             assertTrue(vm.state.value.exportButton.isLoading)
             assertFalse(vm.state.value.exportButton.isEnabled)
             staleClick()
-            coVerify(exactly = 1) { export(any()) }
+            coVerify(exactly = 1) { export(any(), any()) }
             store.clear()
             cancelled.await()
             assertNull(vm.state.value.error)
@@ -182,7 +193,10 @@ class TaxExportFailureTest {
         val accounts = accounts()
         val navigation = mockk<NavigationRouter>(relaxed = true)
         val export = ExportTaxUseCase(transactions, accounts, mockk(), context, navigation, mockk())
-        val vm = TaxExportViewModel(GetSelectedWalletAccountUseCase(accounts), export, navigation)
+        val vm = TaxExportViewModel(
+            GetSelectedWalletAccountUseCase(accounts), export, navigation,
+            AppAccessSession().apply { unlock() }, WalletWriteAccess(),
+        )
         val store = ViewModelStore().apply { put("tax", vm) }
         val observer = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect {} }
         try {

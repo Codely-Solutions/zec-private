@@ -9,9 +9,11 @@ import cash.z.ecc.android.sdk.model.ZcashNetwork
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.DistributionDimension
 import co.electriccoin.zcash.ui.common.model.VersionInfo
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.TransactionRepository
@@ -32,8 +34,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -71,6 +75,29 @@ class TaxExportViewModelTest {
 
     @Test
     fun downloadSharesTheSelectedAccountCsvBeforeReturning() = runTest {
+        assertDownloadSharesCsv(Change.NONE)
+    }
+
+    @Test
+    fun downloadCannotOpenChooserAfterRelock() = runTest { assertDownloadSharesCsv(Change.LOCK) }
+
+    @Test
+    fun unlockingAgainDoesNotAuthorizeTheOldDownload() = runTest { assertDownloadSharesCsv(Change.REUNLOCK) }
+
+    @Test
+    fun changingAccountsRefusesTheStagedDownload() = runTest { assertDownloadSharesCsv(Change.ACCOUNT) }
+
+    @Test
+    fun walletResetRefusesTheStagedDownload() = runTest { assertDownloadSharesCsv(Change.RESET) }
+
+    @Test
+    fun revokingTheGrantAfterStagingDeletesTheFileWithoutOpeningTheChooser() = runTest {
+        assertDownloadSharesCsv(Change.HANDOFF)
+    }
+
+    private enum class Change { NONE, LOCK, REUNLOCK, ACCOUNT, RESET, HANDOFF }
+
+    private suspend fun TestScope.assertDownloadSharesCsv(change: Change) {
         val application = RuntimeEnvironment.getApplication()
         val authority = FileShareUtil.ZASHI_INTERNAL_DATA_FOSS_AUTHORITY_DEBUG
         val year = Year.now().minusYears(1).value
@@ -86,8 +113,16 @@ class TaxExportViewModelTest {
             every { selectedAccount } returns selection
             coEvery { getSelectedAccount() } coAnswers { requireNotNull(selection.value) }
         }
+        val appAccessSession = AppAccessSession().apply { unlock() }
+        val walletWriteAccess = WalletWriteAccess()
+        val readStarted = CompletableDeferred<Unit>()
+        val releaseRead = CompletableDeferred<Unit>()
         val repository = mockk<TransactionRepository> {
-            coEvery { getTransactions(any()) } returns listOf(transaction)
+            coEvery { getTransactions(any()) } coAnswers {
+                readStarted.complete(Unit)
+                releaseRead.await()
+                listOf(transaction)
+            }
         }
         val version = mockk<VersionInfo> {
             every { network } returns ZcashNetwork.Mainnet
@@ -107,7 +142,17 @@ class TaxExportViewModelTest {
             navigation,
             mockk(),
         )
-        val vm = TaxExportViewModel(GetSelectedWalletAccountUseCase(accountDataSource), export, navigation)
+        val scheduled = mutableListOf<File>()
+        export.scheduleCleanup = {
+            scheduled.add(it)
+            if (change == Change.HANDOFF) {
+                appAccessSession.lock()
+                appAccessSession.unlock()
+            }
+        }
+        val vm = TaxExportViewModel(
+            GetSelectedWalletAccountUseCase(accountDataSource), export, navigation, appAccessSession, walletWriteAccess
+        )
         val subscription = backgroundScope.launch { vm.state.collect {} }
 
         // FileProvider matches Android paths using '/', while Robolectric uses the host file system.
@@ -130,6 +175,27 @@ class TaxExportViewModelTest {
             assertNull(shadowOf(application).nextStartedActivity)
             screen.exportButton.onClick()
 
+            readStarted.await()
+            runCurrent()
+            when (change) {
+                Change.NONE, Change.HANDOFF -> Unit
+                Change.LOCK -> appAccessSession.lock()
+                Change.REUNLOCK -> {
+                    appAccessSession.lock()
+                    appAccessSession.unlock()
+                }
+                Change.ACCOUNT -> selection.value = EditAccountFixtures.zodl()
+                Change.RESET -> walletWriteAccess.beginReset()
+            }
+            releaseRead.complete(Unit)
+            if (change != Change.NONE) {
+                vm.state.first { !it.exportButton.isLoading }
+                assertNull(shadowOf(application).nextStartedActivity)
+                verify(exactly = 0) { navigation.back() }
+                assertTrue(File(application.cacheDir, "tax_exports").listFiles().orEmpty().isEmpty())
+                if (change == Change.HANDOFF) assertEquals(listOf(output.parentFile), scheduled)
+                return
+            }
             val chooser = assertNotNull(launchedOnBack.await())
             assertEquals(Intent.ACTION_CHOOSER, chooser.action)
             assertEquals(
@@ -144,6 +210,8 @@ class TaxExportViewModelTest {
             assertEquals(uri, shared.clipData?.getItemAt(0)?.uri)
             assertContains(output.readLines(), "06/15/$year 12:00:00,1.25,ZEC,,,,,")
             assertEquals(name, output.name)
+            assertEquals(listOf(output.parentFile), scheduled)
+            output.parentFile?.deleteRecursively()
             verify(exactly = 1) { FileProvider.getUriForFile(application, authority, output) }
             verify(exactly = 1) { navigation.back() }
         } finally {

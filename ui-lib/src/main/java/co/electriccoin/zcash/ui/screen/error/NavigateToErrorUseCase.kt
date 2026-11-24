@@ -8,22 +8,27 @@ import co.electriccoin.zcash.ui.common.model.SynchronizerError
 import co.electriccoin.zcash.ui.common.repository.HomeMessageData
 import co.electriccoin.zcash.ui.common.repository.KeystoneFirmwareBelowMinimumException
 import co.electriccoin.zcash.ui.design.util.getCausesAsSequence
+import java.util.UUID
 
 class NavigateToErrorUseCase(
     private val navigationRouter: NavigationRouter,
 ) {
-    private var args: ErrorArgs? = null
+    private val pending = linkedMapOf<ErrorRoute, ErrorArgs>()
 
     operator fun invoke(args: ErrorArgs, navigate: NavigationRouter.(Any) -> Unit = { forward(it) }) {
-        this.args = args
-        when (args) {
-            is ErrorArgs.ShieldingError -> navigationRouter.navigate(ErrorDialog)
-            is ErrorArgs.SyncError -> navigateToSyncError(args, navigate)
-            is ErrorArgs.General -> navigationRouter.navigate(ErrorDialog)
-            is ErrorArgs.ShieldingGeneralError -> navigationRouter.navigate(ErrorDialog)
-            is ErrorArgs.KeystoneFirmwareUpdateRequired -> navigationRouter.navigate(ErrorBottomSheet)
-            is ErrorArgs.KeystoneAccountUnsupported -> navigationRouter.navigate(ErrorBottomSheet)
+        val id = UUID.randomUUID().toString()
+        val route = when (args) {
+            is ErrorArgs.ShieldingError, is ErrorArgs.General, is ErrorArgs.ShieldingGeneralError -> ErrorDialog(id)
+            is ErrorArgs.SyncError -> {
+                if (isSyncError(args.synchronizerError)) SyncErrorArgs(id) else ErrorBottomSheet(id)
+            }
+            is ErrorArgs.KeystoneFirmwareUpdateRequired, is ErrorArgs.KeystoneAccountUnsupported -> ErrorBottomSheet(id)
         }
+        synchronized(pending) {
+            if (pending.size >= MAX_PENDING_ERRORS) pending.remove(pending.keys.first())
+            pending[route] = args
+        }
+        navigationRouter.navigate(route)
     }
 
     /**
@@ -31,21 +36,11 @@ class NavigateToErrorUseCase(
      */
     fun navigateToSyncError(message: HomeMessageData.Error): Boolean =
         if (isSyncError(message.synchronizerError)) {
-            this.args = ErrorArgs.SyncError(message.synchronizerError)
-            navigationRouter.forward(SyncErrorArgs)
+            invoke(ErrorArgs.SyncError(message.synchronizerError))
             true
         } else {
             false
         }
-
-    @Suppress("MagicNumber")
-    private fun navigateToSyncError(args: ErrorArgs.SyncError, navigate: NavigationRouter.(Any) -> Unit) {
-        if (isSyncError(args.synchronizerError)) {
-            navigationRouter.navigate(SyncErrorArgs)
-        } else {
-            navigationRouter.navigate(ErrorBottomSheet)
-        }
-    }
 
     @Suppress("MagicNumber")
     private fun isSyncError(synchronizerError: SynchronizerError): Boolean =
@@ -73,12 +68,18 @@ class NavigateToErrorUseCase(
                 }
             }
 
-    fun requireCurrentArgs() = args as ErrorArgs
+    internal fun argsFor(route: ErrorRoute): ErrorArgs? = synchronized(pending) { pending[route] }
 
-    fun clear() {
-        args = null
+    internal fun clear(route: ErrorRoute) {
+        synchronized(pending) { pending.remove(route) }
+    }
+
+    private companion object {
+        const val MAX_PENDING_ERRORS = 16
     }
 }
+
+sealed interface ErrorRoute
 
 sealed interface ErrorArgs {
     data class SyncError(

@@ -11,6 +11,7 @@ import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
 import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityHistoryArgs
 import java.math.BigDecimal
 
 class SaveORSwapUseCase(
@@ -19,11 +20,20 @@ class SaveORSwapUseCase(
     private val navigationRouter: NavigationRouter,
     private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) {
-    suspend operator fun invoke(expected: SwapQuoteData.Success) {
-        if (swapRepository.quote.value !== expected || !isWalletCurrent(expected)) return
+    internal suspend fun acknowledgeFunding(expected: SwapQuoteData.Success): FundingAcknowledgement? {
+        if (swapRepository.quote.value !== expected || !isWalletCurrent(expected)) return null
         persistBeforeFunding(expected.quote, expected.incomingOwner)
-        if (isWalletCurrent(expected) && swapRepository.clearIfCurrent(expected)) navigationRouter.backToRoot()
+        return FundingAcknowledgement(expected)
     }
+
+    internal fun finishFunding(acknowledgement: FundingAcknowledgement) {
+        val expected = acknowledgement.publication
+        if (isWalletCurrent(expected) && swapRepository.clearIfCurrent(expected)) {
+            navigationRouter.replaceAll(ActivityHistoryArgs)
+        }
+    }
+
+    internal class FundingAcknowledgement(val publication: SwapQuoteData.Success)
 
     internal fun isWalletCurrent(publication: SwapQuoteData.Success): Boolean =
         publication.incomingOwner?.let { walletWriteAccess.permits(it.walletWriteToken) } ?: true

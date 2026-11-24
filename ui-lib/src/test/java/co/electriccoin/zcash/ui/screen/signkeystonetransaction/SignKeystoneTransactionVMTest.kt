@@ -152,8 +152,9 @@ class SignKeystoneTransactionVMTest {
         ready.positiveButton.onClick()
         ready.generateNextQrCode()
         runCurrent()
-        assertNull(h.vm.state.value?.qrData)
-        assertFalse(assertNotNull(h.vm.state.value).positiveButton.isEnabled)
+        assertNull(h.vm.state.value)
+        h.vm.leaveSigning()
+        verify(exactly = 1) { h.router.back() }
         coVerify(exactly = 1) { h.repository.createPCZTEncoder() }
         verify(exactly = 0) { h.router.forward(any()) }
     }

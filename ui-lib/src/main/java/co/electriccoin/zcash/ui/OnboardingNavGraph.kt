@@ -91,8 +91,8 @@ fun NavGraphBuilder.onboardingNavGraph(
         }
         restoreScreens()
         composable<ThirdPartyScan> { AndroidThirdPartyScan() }
-        dialogComposable<ErrorDialog> { AndroidErrorDialog() }
-        dialogComposable<ErrorBottomSheet> { AndroidErrorBottomSheet() }
+        dialogComposable<ErrorDialog> { AndroidErrorDialog(it.toRoute()) }
+        dialogComposable<ErrorBottomSheet> { AndroidErrorBottomSheet(it.toRoute()) }
     }
 }
 

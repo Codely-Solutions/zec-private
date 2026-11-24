@@ -48,7 +48,8 @@ class NotifyTest(unittest.TestCase):
         return self.response
 
     def blockers(self):
-        return {scope: state for scope, (state, _) in notify.current_blockers(self.issue['body']).items()}
+        return {scope if scope[-1] else scope[:-1]: state
+                for scope, (state, _) in notify.current_blockers(self.issue['body']).items()}
 
     def run_notice(self, message='Blocked at build', **environment):
         values = dict(GITHUB_REPOSITORY='example/wallet', GITHUB_RUN_ID='20', MAKE_ISSUE='true',
@@ -307,7 +308,7 @@ class NotifyTest(unittest.TestCase):
         self.run_notice('Reconciliation and integration passed', **reconciliation, GITHUB_RUN_ID='21',
                         MAKE_ISSUE='', RECOVERY_VERIFIED='true', NTFY_URL='',
                         BLOCKER_CANDIDATE='publisher:7:1:73', BLOCKER_ATTESTATION='73')
-        expected = {('reconciliation', 'publisher:8::', ''), ('reconciliation', 'publisher:7:2:74', '')}
+        expected = {('reconciliation', 'publisher:8::', ''), ('reconciliation', 'publisher:7:2:74', '', '74')}
         self.assertEqual(set(self.blockers()), expected)
         self.run_notice('Could not resolve the publisher', **reconciliation, BLOCKER_CANDIDATE='publisher:7::',
                         GITHUB_RUN_ATTEMPT='2')
@@ -323,7 +324,7 @@ class NotifyTest(unittest.TestCase):
         self.run_notice('Delayed first archive failure', BLOCKER_ATTESTATION='73', GITHUB_RUN_ATTEMPT='2')
         self.assertIsNone(self.issue)
         self.run_notice('Another archive failed', BLOCKER_ATTESTATION='74', GITHUB_RUN_ATTEMPT='2')
-        self.assertEqual(self.blockers()['release', 'candidate-a', '']['attestation'], '74')
+        self.assertEqual(self.blockers()['release', 'candidate-a', '', '74']['attestation'], '74')
         self.assertEqual(len(self.messages), 1)
 
     def test_older_recovery_preserves_later_failure(self):
@@ -379,14 +380,14 @@ class NotifyTest(unittest.TestCase):
         self.issue['body'] += '\n\nRetain these operator notes between diagnoses.'
         self.run_notice('Discovery failed', BLOCKER_OPERATION='discovery', GITHUB_RUN_ID='22')
         self.assertIn('Release failed after publication', self.issue['body'])
-        self.assertEqual(self.blockers()['release', 'candidate-a', '']['attestation'], '73')
+        self.assertEqual(self.blockers()['release', 'candidate-a', '', '73']['attestation'], '73')
         self.run_notice('Validation passed', BLOCKER_OPERATION='validation', GITHUB_RUN_ID='23',
                         MAKE_ISSUE='', RECOVERY_VERIFIED='true', NTFY_URL='')
         self.assertNotIn(('validation', 'candidate-a', ''), self.blockers())
         self.assertIn('Retain these operator notes between diagnoses.', self.issue['body'])
         self.run_notice('Discovery passed', BLOCKER_OPERATION='discovery', GITHUB_RUN_ID='24',
                         MAKE_ISSUE='', RECOVERY_VERIFIED='true', NTFY_URL='')
-        self.assertEqual(set(self.blockers()), {('release', 'candidate-a', '')})
+        self.assertEqual(set(self.blockers()), {('release', 'candidate-a', '', '73')})
         self.assertEqual(len(self.messages), 2)
         self.run_notice('Original release verified', BLOCKER_OPERATION='reconciliation', BLOCKER_ATTESTATION='73',
                         BLOCKER_CANDIDATE='publisher:20:1:73', GITHUB_RUN_ID='25', MAKE_ISSUE='',
@@ -424,6 +425,23 @@ class NotifyTest(unittest.TestCase):
             self.run_notice('Unrelated publication verified', MAKE_ISSUE='', RECOVERY_VERIFIED='true',
                             GITHUB_RUN_ID='21')
             self.assertIsNotNone(self.issue)
+
+    def test_later_build_failure_preserves_unresolved_publisher_until_exact_recovery(self):
+        self.run_notice('Independent public verification failed', BLOCKER_ATTESTATION='73',
+                        BLOCKER_DIAGNOSIS='verify=failure', NTFY_URL='')
+        self.run_notice('Later admission failed', GITHUB_RUN_ID='21', NTFY_URL='',
+                        BLOCKER_DIAGNOSIS='admission=failure')
+        build = ('release', 'candidate-a', '')
+        publisher = (*build, '73')
+        self.assertEqual(set(self.blockers()), {build, publisher})
+        self.run_notice('Build verified', MAKE_ISSUE='', RECOVERY_VERIFIED='true', NTFY_URL='', GITHUB_RUN_ID='22')
+        self.assertEqual(set(self.blockers()), {publisher})
+        self.run_notice('New build failed', GITHUB_RUN_ID='23', NTFY_URL='')
+        self.run_notice('Original publisher verified', MAKE_ISSUE='', RECOVERY_VERIFIED='true', NTFY_URL='',
+                        BLOCKER_OPERATION='reconciliation', BLOCKER_CANDIDATE='publisher:20:1:73',
+                        BLOCKER_ATTESTATION='73', GITHUB_RUN_ID='24')
+        self.assertEqual(set(self.blockers()), {build})
+        self.assertIn('/actions/runs/23', self.blockers()[build]['run'])
 
     def test_verified_original_attestation_retires_its_publication_blocker(self):
         self.run_notice('Recording failed', BLOCKER_ATTESTATION='123')

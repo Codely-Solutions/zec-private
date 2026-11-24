@@ -18,7 +18,9 @@ REVIEW = '.private/security-maintenance.json'
 PATCH = '.private/security-maintenance.patch'
 MARKER = '.private/maintenance-candidate.json'
 WALLET_TAG = re.compile(r'v\d+\.\d+\.\d+-private\.[1-9]\d*')
-SDK_ARTIFACTS = ('zcash-android-sdk', 'zcash-android-backend', 'zcash-android-sdk-incubator', 'lightwallet-client')
+# Keep this in sync with the forked candidate's SDK runtime, including direct Slipstream.
+SDK_ARTIFACTS = ('zcash-android-sdk', 'zcash-android-backend', 'zcash-android-sdk-incubator',
+                 'lightwallet-client', 'zcash-android-sdk-slipstream')
 SDK_REPOSITORY = 'https://repo.maven.apache.org/maven2/com/zodl/android'
 
 

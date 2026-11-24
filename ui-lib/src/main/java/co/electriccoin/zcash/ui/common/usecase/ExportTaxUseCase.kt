@@ -21,6 +21,7 @@ import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 import co.electriccoin.zcash.ui.util.FileShareUtil
 import co.electriccoin.zcash.ui.util.FileShareUtil.ZASHI_INTERNAL_DATA_MIME_TYPE
+import co.electriccoin.zcash.work.DeleteDiagnosticExportWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.currentCoroutineContext
@@ -41,8 +42,13 @@ class ExportTaxUseCase(
     private val navigationRouter: NavigationRouter,
     private val viewOnlyContent: ViewOnlyContent,
 ) {
-    suspend operator fun invoke(approvedAccount: WalletAccount? = null) =
+    internal var scheduleCleanup: (File) -> Unit = {
+        DeleteDiagnosticExportWorker.scheduleTax(context, it).result.get()
+    }
+
+    suspend operator fun invoke(approvedAccount: WalletAccount, isAllowed: () -> Boolean) =
         withContext(Dispatchers.IO) {
+            if (!isAllowed()) return@withContext
             val previousYear =
                 Year
                     .now()
@@ -52,13 +58,12 @@ class ExportTaxUseCase(
                         it.format(formatter)
                     }
 
-            val selectedAccount = approvedAccount ?: accountDataSource.getSelectedAccount()
-            val directory = File(context.cacheDir, "tax_exports").apply { mkdirs() }
+            val directory = File(context.cacheDir, DeleteDiagnosticExportWorker.TAX_DIRECTORY).apply { mkdirs() }
             val staging = Files.createTempDirectory(directory.toPath(), "tax-").toFile()
             val outputFile =
                 File(
                     staging,
-                    when (selectedAccount) {
+                    when (approvedAccount) {
                         is KeystoneAccount -> {
                             "Keystone_Transaction_History_$previousYear.csv"
                         }
@@ -79,11 +84,8 @@ class ExportTaxUseCase(
 
             var shared = false
             try {
-                val entries = getCsvEntries(selectedAccount.sdkAccount.accountUuid)
-                val currentAccount = accountDataSource.getSelectedAccount()
-                check(
-                    currentAccount.sdkAccount.accountUuid == selectedAccount.sdkAccount.accountUuid
-                )
+                val entries = getCsvEntries(approvedAccount.sdkAccount.accountUuid)
+                if (!isAllowed()) return@withContext
                 writeCsvToFile(outputFile = outputFile, data = entries)
                 val intent =
                     FileShareUtil.newShareContentIntent(
@@ -95,9 +97,17 @@ class ExportTaxUseCase(
                         fileType = ZASHI_INTERNAL_DATA_MIME_TYPE
                     )
 
-                currentCoroutineContext().ensureActive()
-                context.startActivity(intent)
-                shared = true
+                scheduleCleanup(staging)
+                withContext(Dispatchers.Main.immediate) handoff@{
+                    if (!isAllowed()) return@handoff
+                    check(accountDataSource.getSelectedAccount().sdkAccount.accountUuid ==
+                        approvedAccount.sdkAccount.accountUuid)
+                    if (!isAllowed()) return@handoff
+                    currentCoroutineContext().ensureActive()
+                    context.startActivity(intent)
+                    shared = true
+                    navigationRouter.back()
+                }
             } finally {
                 if (!shared) {
                     outputFile.delete()
@@ -105,8 +115,6 @@ class ExportTaxUseCase(
                 }
             }
 
-            currentCoroutineContext().ensureActive()
-            navigationRouter.back()
         }
 
     private fun writeCsvToFile(

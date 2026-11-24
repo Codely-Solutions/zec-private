@@ -35,6 +35,7 @@ import co.electriccoin.zcash.ui.fixture.Zip321MemoFixture
 import co.electriccoin.zcash.ui.screen.error.ErrorArgs
 import co.electriccoin.zcash.ui.screen.error.ErrorDialog
 import co.electriccoin.zcash.ui.screen.error.ErrorVM
+import co.electriccoin.zcash.ui.screen.error.noReportAccess
 import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.insufficientfunds.InsufficientFundsArgs
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
@@ -300,7 +301,7 @@ class Zip321MemoScanTest {
             assertNull(repository.transactionProposal.value)
         }
 
-        verify(exactly = 2) { router.forward(ErrorDialog) }
+        verify(exactly = 2) { router.forward(ofType<ErrorDialog>()) }
         verify(exactly = 0) { router.replace(Send()) }
         verify(exactly = 0) { router.back() }
         assertNoDraft()
@@ -372,14 +373,14 @@ class Zip321MemoScanTest {
             store.put("scanner", scanner)
             scanner.onScanned(uri).join()
             assertUneditableError()
-            verify(exactly = 1) { router.forward(ErrorDialog) }
+            verify(exactly = 1) { router.forward(ofType<ErrorDialog>()) }
 
             scanner.onScanned(uri).join()
             scanner.onImageScanned(ImageToQrCodeResult.SingleCode(fixture.RECIPIENT)).join()
-            verify(exactly = 1) { router.forward(ErrorDialog) }
+            verify(exactly = 1) { router.forward(ofType<ErrorDialog>()) }
             verify(exactly = 0) { router.back() }
 
-            val dialog = ErrorVM(error.requireCurrentArgs(), error, router, mockk(), mockk())
+            val dialog = ErrorVM(errorArgs(), error, router, mockk(), mockk(), noReportAccess())
             dialog.state.value.onBack()
             verify(exactly = 1) { router.back() }
 
@@ -464,7 +465,7 @@ class Zip321MemoScanTest {
         scan(parse(fixture.TEXT.encodeToByteArray()), ScanArgs(ScanFlow.HOMEPAGE))
         assertEquals(expectedTextDraft, withTimeout(5_000) { prefill().first() })
         verify(exactly = 1) { router.replace(Send()) }
-        verify(exactly = 0) { router.forward(ErrorDialog) }
+        verify(exactly = 0) { router.forward(ofType<ErrorDialog>()) }
     }
 
     private suspend fun parse(bytes: ByteArray) = assertIs<Zip321ParseUriValidation.Valid>(
@@ -514,10 +515,16 @@ class Zip321MemoScanTest {
         )
     }
 
+    private fun errorArgs(): ErrorArgs {
+        val routes = mutableListOf<ErrorDialog>()
+        verify(atLeast = 1) { router.forward(capture(routes)) }
+        return requireNotNull(error.argsFor(routes.last()))
+    }
+
     private fun assertUneditableError() {
-        val args = assertIs<ErrorArgs.General>(error.requireCurrentArgs())
+        val args = assertIs<ErrorArgs.General>(errorArgs())
         assertIs<UneditableZip321MemoException>(args.exception)
-        val state = ErrorVM(args, error, router, mockk(), mockk()).state.value
+        val state = ErrorVM(args, error, router, mockk(), mockk(), noReportAccess()).state.value
         assertEquals(stringRes(R.string.zip321_non_text_memo_edit_error), state.message)
         assertNull(state.negative)
     }

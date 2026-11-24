@@ -6,6 +6,8 @@ import cash.z.ecc.android.sdk.model.WalletAddress
 import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
@@ -20,11 +22,12 @@ import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByAddress
 import co.electriccoin.zcash.ui.screen.qrcode.ext.fromReceiveAddressType
+import co.electriccoin.zcash.ui.screen.qrcode.ext.receiveAddress
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -35,14 +38,18 @@ class QrCodeVM(
     private val navigationRouter: NavigationRouter,
     private val shareQR: ShareQRUseCase,
     private val viewOnlyContent: ViewOnlyContent,
+    private val appAccessSession: AppAccessSession,
+    private val walletWriteAccess: WalletWriteAccess,
 ) : ViewModel() {
-    internal val state =
-        observeSelectedWalletAccount
-            .require()
-            .map { account ->
-                val walletAddress = account.fromReceiveAddressType(ReceiveAddressType.fromOrdinal(addressTypeOrdinal))
+    private val selectedAccount =
+        observeSelectedWalletAccount().stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-                if (walletAddress == null) {
+    internal val state =
+        combine(selectedAccount, appAccessSession.grant, walletWriteAccess.version) { account, grant, token ->
+                val addressType = ReceiveAddressType.fromOrdinal(addressTypeOrdinal)
+                val walletAddress = account?.fromReceiveAddressType(addressType)
+
+                if (account == null || walletAddress == null) {
                     QrCodeState.Loading
                 } else {
                     QrCodeState.Prepared(
@@ -53,10 +60,19 @@ class QrCodeVM(
                                 if (walletAddress is WalletAddress.Transparent) Ellipsize.NONE else Ellipsize.MIDDLE
                             ),
                         onAddressCopy = { address -> onAddressCopyClick(address) },
-                        onQrCodeShare = {
+                        onQrCodeShare = { address ->
+                            val permitted = {
+                                val current = selectedAccount.value
+                                appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
+                                    current != null &&
+                                    current.sdkAccount.accountUuid == account.sdkAccount.accountUuid &&
+                                    current.receiveAddress(addressType) == address &&
+                                    address == walletAddress.address
+                            }
                             viewModelScope.launch {
+                                if (!permitted()) return@launch
                                 shareQR(
-                                    qrData = it,
+                                    qrData = address,
                                     shareText = stringRes(R.string.qr_code_share_chooser_text, CURRENCY_TICKER),
                                     sharePickerText = stringRes(R.string.qr_code_share_chooser_title, CURRENCY_TICKER),
                                     filenamePrefix = "zcash_address_qr_",
@@ -66,6 +82,7 @@ class QrCodeVM(
                                         } else {
                                             R.drawable.ic_zec_qr_shielded
                                         },
+                                    isAllowed = permitted,
                                 )
                             }
                         },

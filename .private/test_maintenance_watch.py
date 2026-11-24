@@ -1,4 +1,7 @@
+import ast
 import fnmatch
+import os
+import sys
 import json
 import re
 from pathlib import Path
@@ -35,6 +38,21 @@ def workflow_job(workflow, name):
     return fields
 
 
+def github_equal(left, right):
+    if isinstance(left, str) and isinstance(right, str):
+        return left.casefold() == right.casefold()
+    return left == right
+
+
+class GithubStringComparisons(ast.NodeTransformer):
+    def visit_Compare(self, node):
+        if len(node.ops) != 1 or not isinstance(node.ops[0], (ast.Eq, ast.NotEq)):
+            raise ValueError('Unsupported comparison in workflow fixture')
+        match = ast.Call(func=ast.Name(id='equal', ctx=ast.Load()),
+                         args=[self.visit(node.left), self.visit(node.comparators[0])], keywords=[])
+        return ast.UnaryOp(op=ast.Not(), operand=match) if isinstance(node.ops[0], ast.NotEq) else match
+
+
 def evaluate_expression(expression, values):
     expression = expression.removeprefix('${{').removesuffix('}}').strip()
     expression = expression.replace('always()', 'True').replace('cancelled()', repr(values.get('workflow_cancelled', False)))
@@ -43,8 +61,11 @@ def evaluate_expression(expression, values):
                         lambda match: repr(values.get(match[0], 'skipped')), expression)
     expression = expression.replace('&&', ' and ').replace('||', ' or ')
     expression = re.sub(r'!(?!=)', ' not ', expression)
-    return eval(expression.strip(),
-                {'__builtins__': {}, 'contains': lambda items, value: value in items, 'format': str.format}, {})
+    syntax = GithubStringComparisons().visit(ast.parse(expression.strip(), mode='eval'))
+    return eval(compile(ast.fix_missing_locations(syntax), '<workflow expression>', 'eval'),
+                {'__builtins__': {}, 'equal': github_equal,
+                 'contains': lambda items, value: value.casefold() in items.casefold() if isinstance(items, str)
+                 else any(github_equal(item, value) for item in items), 'format': str.format}, {})
 
 
 def job_activates(job, results, **overrides):
@@ -133,31 +154,56 @@ class MaintenanceWatchTest(unittest.TestCase):
         self.assertEqual(routes[3:], ['zec-private-sync-diagnostic'] * 2)
 
     def test_graph_and_fixture_dispatches_leave_the_main_pending_slot_available(self):
-        main, branch = 'refs/heads/main', 'refs/heads/review/test'
+        main, repo = 'refs/heads/main', 'Codely-Solutions/zec-private'
+        self.assertTrue(evaluate_expression("github.ref == 'refs/heads/main'", {'github.ref': 'refs/heads/Main'}))
         for workflow, entry in (('dependency-graph.yml', 'resolve'), ('preserve-hosted-fixture.yml', 'select')):
-            with self.subTest(workflow=workflow):
+            with self.subTest(workflow=workflow), tempfile.TemporaryDirectory() as temp:
                 header, jobs = workflow_blocks(workflow)
-                settings = concurrency_settings(header)
-                admission = re.search(r'^    if: (.+)$', jobs[entry], re.M)[1]
+                self.assertFalse(concurrency_settings(header))
+                self.assertIn('permissions: {}', header)
+                self.assertNotIn('permissions:', jobs['admit'])
+                self.assertNotIn('uses:', jobs['admit'])
+                self.assertIn('shell: python', jobs['admit'])
+                gate = re.search(r'(?ms)^        run: \|\n(.*)', jobs['admit'])[1]
+                gate = '\n'.join(line[10:] for line in gate.splitlines())
+                protected = workflow_job(workflow, 'run_main')
+                self.assertEqual(protected['needs'], ['admit'])
+                settings = concurrency_settings(protected['block'], indent=4)
+                group = settings['group']
                 pending = {}
-                for ref, label in [(main, 'pending-main'), (branch, 'dispatch'), (branch, 'repeat')]:
-                    values = {'github.ref': ref, 'github.repository': 'Codely-Solutions/zec-private'}
-                    group = evaluate_expression(settings['group'], values)
-                    pending[group] = label
-                    self.assertEqual(evaluate_expression(admission, values), ref == main)
-                main_group = evaluate_expression(settings['group'], {'github.ref': main})
-                self.assertEqual(pending[main_group], 'pending-main')
+                variants = [main, 'refs/heads/review/test', 'refs/heads/Main', 'REFS/HEADS/MAIN', 'refs/tags/main', main]
+                for ref, label in zip(variants, ['pending-main', 'branch', 'variant', 'caps', 'tag', 'later-main']):
+                    output = Path(temp, 'output')
+                    output.write_text('')
+                    subprocess.run([sys.executable, '-B', '-c', gate], check=True, timeout=15,
+                                   env=dict(os.environ, GITHUB_REF=ref, GITHUB_REPOSITORY=repo,
+                                            GITHUB_OUTPUT=str(output)))
+                    expected = ref == main
+                    self.assertEqual(output.read_text(), 'main=true\n' if expected else '')
+                    allowed = evaluate_expression(protected['if'], {
+                        'needs.admit.outputs.main': 'true' if expected else '',
+                    })
+                    self.assertEqual(allowed, expected)
+                    if allowed:
+                        pending[group] = label
+                    if label not in ('pending-main', 'later-main'):
+                        self.assertEqual(pending[group], 'pending-main')
+                self.assertEqual(pending[group], 'later-main')
                 self.assertEqual(settings['cancel-in-progress'], 'false')
                 self.assertIn('  workflow_dispatch:', header)
                 self.assertIn('    branches: [main]', header)
-                self.assertEqual(group, evaluate_expression(settings['group'], {'github.ref': 'refs/tags/example'}))
-                self.assertIn('    needs: '+entry, jobs['submit' if entry == 'resolve' else 'store'])
+                called = re.search(r'^    uses: \./\.github/workflows/(.+)$', jobs['run_main'], re.M)[1]
+                called_header, called_jobs = workflow_blocks(called)
+                self.assertIn('  workflow_call:', called_header)
+                self.assertIn(entry, called_jobs)
+                self.assertIn('    needs: '+entry, called_jobs['submit' if entry == 'resolve' else 'store'])
                 if entry == 'select':
                     self.assertIn('  schedule:', header)
-                main_values = {'github.ref': main, 'github.repository': 'Codely-Solutions/zec-private'}
-                self.assertTrue(evaluate_expression(admission, main_values))
-                pending[evaluate_expression(settings['group'], main_values)] = 'later-main'
-                self.assertEqual(pending[main_group], 'later-main')
+                    output.write_text('')
+                    subprocess.run([sys.executable, '-B', '-c', gate], check=True, timeout=15,
+                                   env=dict(os.environ, GITHUB_REF=main, GITHUB_REPOSITORY='another/zec-private',
+                                            GITHUB_OUTPUT=str(output)))
+                    self.assertEqual(output.read_text(), '')
 
     def test_graph_push_filters_and_classifier_cover_retained_lockfiles(self):
         repository = Path(__file__).resolve().parents[1]
@@ -527,9 +573,12 @@ class MaintenanceWatchTest(unittest.TestCase):
         target = dict(release_tag=tag, attestation_attempt=2, attestation_id=42)
         archived = {'artifacts': [dict(id=41, name='release-attestation-1', expired=False, workflow_run={'id': 4}),
                                   dict(id=42, name='release-attestation-2', expired=False, workflow_run={'id': 4})]}
-        state = dict(operation='release', candidate=proof['source_sha'], attestation='42')
-        issue = dict(title=notify.TITLE, state='open',
-                     body=notify.with_current('', None, state, 'Integration failed', '', 'run'))
+        from test_notify import NotifyTest
+        notices = NotifyTest()
+        notices.setUp()
+        notices.run_notice('Integration failed', BLOCKER_CANDIDATE=proof['source_sha'], BLOCKER_ATTESTATION='42')
+        notices.run_notice('Admission failed', BLOCKER_CANDIDATE=proof['source_sha'], GITHUB_RUN_ID='21')
+        issue = dict(notices.issue)
         unrelated = dict(issue, body=notify.with_current('', None,
                                                          dict(operation='discovery', candidate='main'),
                                                          'Discovery failed', '', 'run'))
@@ -545,6 +594,13 @@ class MaintenanceWatchTest(unittest.TestCase):
                 self.assertEqual(pending_recovery('repos/fork/wallet', directory),
                                  dict(reconciliation_run='4', reconciliation_attempt='2', reconciliation_artifact='42'))
                 lookup.assert_called_once_with('4', '2', '42', target=latest)
+            notices.run_notice('Original publisher verified', MAKE_ISSUE='', RECOVERY_VERIFIED='true',
+                               NTFY_URL='', BLOCKER_OPERATION='reconciliation', BLOCKER_CANDIDATE='publisher:4:2:42',
+                               BLOCKER_ATTESTATION='42', GITHUB_RUN_ID='22')
+            with patch('maintenance_watch.api', side_effect=[latest, [[notices.issue]], archived]), \
+                    patch('reconcile_release.lookup') as lookup:
+                self.assertIsNone(pending_recovery('repos/fork/wallet', directory))
+                lookup.assert_not_called()
             with patch('maintenance_watch.api', side_effect=[latest, [[issue]], archived]), \
                     patch('reconcile_release.lookup', return_value=(target, dict(proof, production_job_id=99), latest)):
                 self.assertIsNone(pending_recovery('repos/fork/wallet', directory))

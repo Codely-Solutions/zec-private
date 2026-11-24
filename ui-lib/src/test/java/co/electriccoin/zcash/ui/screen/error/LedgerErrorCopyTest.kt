@@ -56,6 +56,7 @@ class LedgerErrorCopyTest {
                 navigationRouter = mockk<NavigationRouter>(relaxed = true),
                 sendEmailUseCase = mockk(relaxed = true),
                 viewOnlyContent = mockk(relaxed = true),
+                reportAccess = noReportAccess(),
             )
 
         assertEquals(
@@ -79,6 +80,7 @@ class LedgerErrorCopyTest {
                 navigationRouter = mockk<NavigationRouter>(relaxed = true),
                 sendEmailUseCase = mockk(relaxed = true),
                 viewOnlyContent = mockk(relaxed = true),
+                reportAccess = noReportAccess(),
             )
 
         assertEquals(

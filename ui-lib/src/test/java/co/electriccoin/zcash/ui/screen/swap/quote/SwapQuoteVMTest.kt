@@ -198,7 +198,7 @@ class SwapQuoteVMTest {
         val vm = vm(zashi(), proposals = proposals, quoteData = SwapQuoteData.Success(quote),
             submit = submit, prices = prices)
         collect(vm)
-        kotlin.test.assertNull(vm.state.value)
+        kotlin.test.assertIs<SwapQuoteState.Error>(vm.state.value)
         coVerify(exactly = 0) { prices.check(any(), any()) }
         val sdkProposal = mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(10_000) }
         val prepared = mockk<SwapTransactionProposal> {
@@ -211,7 +211,7 @@ class SwapQuoteVMTest {
         proposals.value = null
         reviewed.primaryButton.onClick()
         coVerify(exactly = 0) { submit(any()) }
-        kotlin.test.assertNull(vm.state.value)
+        kotlin.test.assertIs<SwapQuoteState.Error>(vm.state.value)
         proposals.value = prepared
         (vm.state.value as SwapQuoteState.Success).primaryButton.onClick()
         coVerify(exactly = 1) { submit(prepared) }
@@ -312,7 +312,7 @@ class SwapQuoteVMTest {
                 },
             observeSelectedWalletAccount =
                 mockk {
-                    every { require() } returns flowOf(account)
+                    every { this@mockk() } returns flowOf(account)
                 },
             applicationStateProvider =
                 mockk<ApplicationStateProvider> {

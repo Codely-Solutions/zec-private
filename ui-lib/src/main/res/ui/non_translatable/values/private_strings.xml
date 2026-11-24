@@ -36,6 +36,16 @@
     <string name="private_updates_current">You’re up to date</string>
     <string name="private_updates_failed">Couldn’t check for updates. Try again.</string>
     <string name="private_updates_obtainium">Automatic updates with Obtainium</string>
+    <string name="private_progress_unavailable_title">Payment status unavailable</string>
+    <string name="private_progress_unavailable_message">Check Activity for the payment before trying again.</string>
+    <string name="private_recovery_open_activity">Open Activity</string>
+    <string name="private_quote_unavailable_message">Go back to request a fresh quote.</string>
+    <string name="private_deposit_unavailable_title">Deposit instructions expired</string>
+    <string name="private_deposit_unavailable_message">If you already sent funds, check Activity for your swap. Start a new swap for fresh deposit instructions.</string>
+    <string name="private_keystone_unavailable_title">Signing session expired</string>
+    <string name="private_keystone_unavailable_message">Go back to prepare and review the transaction before signing again.</string>
+    <string name="private_error_unavailable_title">Error details unavailable</string>
+    <string name="private_error_unavailable_message">Close this message to return to the previous screen.</string>
     <string name="private_review_unavailable_title">Payment review expired</string>
     <string name="private_review_unavailable_message">Go back to prepare the payment again.</string>
 </resources>

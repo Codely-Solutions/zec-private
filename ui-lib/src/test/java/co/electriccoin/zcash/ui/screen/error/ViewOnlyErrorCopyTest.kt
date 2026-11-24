@@ -54,6 +54,7 @@ class ViewOnlyErrorCopyTest {
                 navigationRouter = mockk<NavigationRouter>(relaxed = true),
                 sendEmailUseCase = mockk(relaxed = true),
                 viewOnlyContent = viewOnlyContent,
+                reportAccess = noReportAccess(),
             )
 
         assertEquals(title, vm.state.value.title)

@@ -313,10 +313,10 @@ fun NavGraphBuilder.walletNavGraph(
         dialogComposable<WalletSyncingInfo> { AndroidWalletSyncingInfo() }
         dialogComposable<WalletResyncingInfo> { AndroidWalletResyncingInfo() }
         dialogComposable<WalletUpdatingInfo> { AndroidWalletUpdatingInfo() }
-        dialogComposable<ErrorDialog> { AndroidErrorDialog() }
-        dialogComposable<ErrorBottomSheet> { AndroidErrorBottomSheet() }
+        dialogComposable<ErrorDialog> { AndroidErrorDialog(it.toRoute()) }
+        dialogComposable<ErrorBottomSheet> { AndroidErrorBottomSheet(it.toRoute()) }
         dialogComposable<ExchangeRateUnavailableArgs> { ExchangeRateUnavailableScreen() }
-        dialogComposable<SyncErrorArgs> { SyncErrorScreen() }
+        dialogComposable<SyncErrorArgs> { SyncErrorScreen(it.toRoute()) }
         dialogComposable<SpendableBalanceArgs> { SpendableBalanceScreen() }
         dialogComposable<BalanceBreakdownArgs> { BalanceBreakdownScreen() }
         composable<CrashReportOptIn> { AndroidCrashReportOptIn() }

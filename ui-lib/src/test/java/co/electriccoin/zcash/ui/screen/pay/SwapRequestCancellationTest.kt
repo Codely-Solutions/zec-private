@@ -329,7 +329,7 @@ class SwapRequestCancellationTest {
                             router.forward(SwapQuoteArgs)
                             router.forward(InsufficientFundsArgs)
                             router.forward(any<TEXUnsupportedArgs>())
-                            router.forward(ErrorDialog)
+                            router.forward(ErrorDialog("fixture"))
                             router.backToRoot()
                         }
                         advanceTimeBy(350)

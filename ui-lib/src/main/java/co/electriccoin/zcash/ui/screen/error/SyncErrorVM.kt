@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.usecase.IsTorEnabledUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
+import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.chooseserver.ChooseServerArgs
@@ -25,8 +26,18 @@ class SyncErrorVM(
     private val navigationRouter: NavigationRouter,
     private val sendEmailUseCase: SendEmailUseCase,
     private val synchronizerProvider: SynchronizerProvider,
-    isTorEnabledUseCase: IsTorEnabledUseCase
+    isTorEnabledUseCase: IsTorEnabledUseCase,
+    private val errorOwner: NavigateToErrorUseCase,
+    reportAccess: WalletReportAccess,
+    private val route: ErrorRoute? = null,
 ) : ViewModel() {
+    private val reportPermission = reportAccess.bind(viewModelScope)
+
+    override fun onCleared() {
+        route?.let(errorOwner::clear)
+        super.onCleared()
+    }
+
     val state: StateFlow<SyncErrorState> =
         isTorEnabledUseCase
             .observe()
@@ -85,9 +96,11 @@ class SyncErrorVM(
 
     private fun onDisableTorClick() = navigationRouter.forward(TorSettingsArgs)
 
-    private fun sendReportClick() =
+    private fun sendReportClick() {
+        val allowed = reportPermission()
+        if (!allowed()) return
         viewModelScope.launch {
-            navigationRouter.back()
-            sendEmailUseCase(args.synchronizerError)
+            if (sendEmailUseCase(args.synchronizerError, allowed)) navigationRouter.back()
         }
+    }
 }

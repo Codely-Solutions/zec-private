@@ -12,7 +12,7 @@ import org.koin.core.parameter.parametersOf
 fun TransactionProgressScreen(args: TransactionProgressArgs) {
     val vm = koinViewModel<TransactionProgressVM> { parametersOf(args) }
     val state by vm.state.collectAsStateWithLifecycle()
-    BackHandler { state?.onBack?.invoke() }
+    BackHandler(enabled = state != null) { state?.onBack?.invoke() }
     state?.let { TransactionProgressView(it) }
 }
 

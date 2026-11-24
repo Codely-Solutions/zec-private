@@ -1,0 +1,191 @@
+package co.electriccoin.zcash.ui
+
+import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.unit.Density
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
+import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
+import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
+import co.electriccoin.zcash.ui.common.repository.SwapRepository
+import co.electriccoin.zcash.ui.common.usecase.CancelSwapQuoteUseCase
+import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
+import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
+import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
+import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
+import co.electriccoin.zcash.ui.design.theme.ZcashTheme
+import co.electriccoin.zcash.ui.screen.error.AndroidErrorBottomSheet
+import co.electriccoin.zcash.ui.screen.error.AndroidErrorDialog
+import co.electriccoin.zcash.ui.screen.error.ErrorBottomSheet
+import co.electriccoin.zcash.ui.screen.error.ErrorDialog
+import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
+import co.electriccoin.zcash.ui.screen.error.SyncErrorArgs
+import co.electriccoin.zcash.ui.screen.error.SyncErrorScreen
+import co.electriccoin.zcash.ui.screen.home.HomeArgs
+import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
+import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionScreen
+import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionVM
+import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationArgs
+import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationScreen
+import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationVM
+import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteArgs
+import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteVM
+import co.electriccoin.zcash.ui.screen.swap.quote.SwapQuoteView
+import io.mockk.coVerify
+import io.mockk.every
+import io.mockk.mockk
+import io.mockk.verify
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.koin.compose.KoinApplication
+import org.koin.core.module.dsl.viewModel
+import org.koin.dsl.koinConfiguration
+import org.koin.dsl.module
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowDialog
+import kotlin.test.assertEquals
+
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], qualifiers = "w360dp-h780dp")
+class RestoredWalletRoutesLayoutTest {
+    @get:Rule
+    val compose = createComposeRule()
+
+    private lateinit var controller: NavHostController
+    private val context get() = RuntimeEnvironment.getApplication()
+    private val submit = mockk<SubmitProposalUseCase>(relaxed = true)
+    private val cancelQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true)
+    private val router = mockk<NavigationRouter>(relaxed = true)
+
+    @Test
+    fun restoredErrorDialogOffersClose() = assertErrorRecovery(ErrorDialog("old-dialog"))
+
+    @Test
+    fun restoredErrorSheetOffersClose() = assertErrorRecovery(ErrorBottomSheet("old-sheet"))
+
+    @Test
+    fun restoredSyncErrorOffersClose() = assertErrorRecovery(SyncErrorArgs("old-sync"))
+
+    private fun assertErrorRecovery(route: Any) {
+        install()
+        compose.runOnIdle { controller.navigate(route) }
+        val heading = compose.onNodeWithText(context.getString(R.string.private_error_unavailable_title))
+        heading.assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.general_close), ignoreCase = true).assertIsEnabled()
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun restoredQuoteDisplaysRecoveryAndHandlesBackFromItsDialog() {
+        val accounts = emptyAccounts()
+        val swaps = emptySwaps()
+        var backs = 0
+        every { router.back() } answers { backs++ }
+        compose.setContent {
+            ZcashTheme {
+                controller = rememberNavController()
+                val vm = remember {
+                    quoteViewModel(accounts, swaps, mockk())
+                }
+                NavHost(controller, startDestination = HomeArgs) {
+                    composable<HomeArgs> { Text("Wallet home") }
+                    dialogComposable<SwapQuoteArgs> { SwapQuoteView(vm.state.value) }
+                }
+            }
+        }
+        compose.onNodeWithText("Wallet home").assertIsDisplayed()
+        compose.runOnIdle { controller.navigate(SwapQuoteArgs) }
+        compose.onNodeWithText(context.getString(R.string.private_quote_unavailable_message)).assertIsDisplayed()
+        compose.runOnIdle {
+            requireNotNull(ShadowDialog.getLatestDialog()).onBackPressed()
+            assertEquals(1, backs)
+        }
+        coVerify(exactly = 0) { submit(any()) }
+        verify(exactly = 0) { cancelQuote() }
+    }
+
+    @Test
+    fun restoredKeystoneOffersBackAtLargeText() {
+        install()
+        compose.runOnIdle { controller.navigate(SignKeystoneTransactionArgs) }
+        compose.onNodeWithText(context.getString(R.string.private_keystone_unavailable_message)).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.general_back), ignoreCase = true).assertIsEnabled()
+    }
+
+    @Test
+    fun restoredDepositOffersActivityAtLargeText() {
+        install()
+        compose.runOnIdle { controller.navigate(ORSwapConfirmationArgs) }
+        compose.onNodeWithText(context.getString(R.string.private_deposit_unavailable_message)).assertIsDisplayed()
+        compose.onNodeWithText(context.getString(R.string.private_recovery_open_activity)).assertIsEnabled()
+        coVerify(exactly = 0) { submit(any()) }
+    }
+
+    private fun emptyAccounts() = mockk<AccountDataSource> {
+        every { selectedAccount } returns flowOf(null)
+        every { allAccounts } returns MutableStateFlow(null)
+    }
+
+    private fun emptySwaps() = mockk<SwapRepository> {
+        every { quote } returns MutableStateFlow<SwapQuoteData?>(null)
+    }
+
+    private fun quoteViewModel(accounts: AccountDataSource, swaps: SwapRepository, keys: KeystoneProposalRepository) =
+        SwapQuoteVM(
+            ObserveProposalUseCase(keys, mockk(), mockk(), accounts),
+            ObserveSelectedWalletAccountUseCase(accounts), mockk(), swaps,
+            cancelQuote, mockk(), mockk(), submit, router, mockk(),
+        )
+
+    private fun install() {
+        val accounts = emptyAccounts()
+        val swaps = emptySwaps()
+        val keys = mockk<KeystoneProposalRepository> {
+            every { transactionProposal } returns MutableStateFlow(null)
+        }
+        val dependencies = module {
+            single<NavigationRouter> { router }
+            single { NavigateToErrorUseCase(router) }
+            viewModel {
+                ORSwapConfirmationVM(swaps, cancelQuote, mockk(), router, mockk(), mockk(), AppAccessSession())
+            }
+            viewModel {
+                SignKeystoneTransactionVM(GetWalletAccountsUseCase(accounts), keys, router, mockk(), mockk(), mockk())
+            }
+        }
+        compose.setContent {
+            KoinApplication(configuration = koinConfiguration { modules(dependencies) }) {
+                ZcashTheme {
+                    CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
+                        controller = rememberNavController()
+                        NavHost(controller, startDestination = HomeArgs) {
+                            composable<HomeArgs> { Text("Wallet home") }
+                            dialogComposable<ErrorDialog> { AndroidErrorDialog(it.toRoute()) }
+                            dialogComposable<ErrorBottomSheet> { AndroidErrorBottomSheet(it.toRoute()) }
+                            dialogComposable<SyncErrorArgs> { SyncErrorScreen(it.toRoute()) }
+                            composable<ORSwapConfirmationArgs> { ORSwapConfirmationScreen() }
+                            composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
+                        }
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("Wallet home").assertIsDisplayed()
+    }
+}

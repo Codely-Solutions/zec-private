@@ -10,16 +10,15 @@ import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.UneditableZip321MemoException
 import co.electriccoin.zcash.ui.common.model.errorCopy
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
+import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
 import co.electriccoin.zcash.ui.common.viewmodel.STACKTRACE_LIMIT
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
 import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.util.stringRes
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Suppress("TooManyFunctions")
 class ErrorVM(
@@ -28,11 +27,14 @@ class ErrorVM(
     private val navigationRouter: NavigationRouter,
     private val sendEmailUseCase: SendEmailUseCase,
     private val viewOnlyContent: ViewOnlyContent,
+    reportAccess: WalletReportAccess,
+    private val route: ErrorRoute? = null,
 ) : ViewModel() {
+    private val reportPermission = reportAccess.bind(viewModelScope)
     val state: StateFlow<ErrorState> = MutableStateFlow(createState(args)).asStateFlow()
 
     override fun onCleared() {
-        navigateToErrorBottom.clear()
+        route?.let(navigateToErrorBottom::clear)
         super.onCleared()
     }
 
@@ -219,46 +221,26 @@ class ErrorVM(
         )
 
     private fun sendReportClick(args: ErrorArgs.ShieldingError) =
-        viewModelScope.launch {
-            withContext(NonCancellable) {
-                navigationRouter.back()
-                when (args.error) {
-                    is SubmitResult.Failure -> {
-                        sendEmailUseCase(args.error)
-                    }
-
-                    is SubmitResult.GrpcFailure -> {
-                        sendEmailUseCase(args.error)
-                    }
-
-                    is SubmitResult.Partial -> {
-                        sendEmailUseCase(args.error)
-                    }
-
-                    is SubmitResult.Error -> {
-                        sendEmailUseCase(args.error)
-                    }
-
-                    is SubmitResult.Success -> {
-                        // do nothing
-                    }
-                }
+        shareReport { allowed ->
+            when (val result = args.error) {
+                is SubmitResult.Failure -> sendEmailUseCase(result, allowed)
+                is SubmitResult.GrpcFailure -> sendEmailUseCase(result, allowed)
+                is SubmitResult.Partial -> sendEmailUseCase(result, allowed)
+                is SubmitResult.Error -> sendEmailUseCase(result, allowed)
+                is SubmitResult.Success -> false
             }
         }
 
     private fun sendReportClick(args: ErrorArgs.SyncError) =
-        viewModelScope.launch {
-            withContext(NonCancellable) {
-                navigationRouter.back()
-                sendEmailUseCase(args.synchronizerError)
-            }
-        }
+        shareReport { sendEmailUseCase(args.synchronizerError, it) }
 
-    private fun sendReportClick(exception: Exception) =
+    private fun sendReportClick(exception: Exception) = shareReport { sendEmailUseCase(exception, it) }
+
+    private fun shareReport(send: suspend (() -> Boolean) -> Boolean) {
+        val allowed = reportPermission()
+        if (!allowed()) return
         viewModelScope.launch {
-            withContext(NonCancellable) {
-                navigationRouter.back()
-                sendEmailUseCase(exception)
-            }
+            if (send(allowed)) navigationRouter.back()
         }
+    }
 }

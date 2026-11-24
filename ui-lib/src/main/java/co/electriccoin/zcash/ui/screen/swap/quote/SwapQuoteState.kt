@@ -26,7 +26,7 @@ internal sealed interface SwapQuoteState : ModalBottomSheetState {
         val icon: ImageResource,
         val title: StringResource,
         val subtitle: StringResource,
-        val negativeButton: ButtonState,
+        val negativeButton: ButtonState?,
         val positiveButton: ButtonState,
         override val onBack: () -> Unit,
     ) : SwapQuoteState

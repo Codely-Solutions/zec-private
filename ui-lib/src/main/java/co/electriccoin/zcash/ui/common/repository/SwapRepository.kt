@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.repository
 
+import android.os.SystemClock
 import androidx.annotation.RestrictTo
 import androidx.annotation.VisibleForTesting
 import co.electriccoin.zcash.crash.android.GlobalCrashReporter
@@ -112,7 +113,21 @@ sealed interface SwapQuoteData {
     data class Success(
         val quote: SwapQuote,
         val incomingOwner: IncomingSwapOwner? = null,
-    ) : SwapQuoteData
+    ) : SwapQuoteData {
+        private var fundingDeadlineElapsed: Long? = null
+        private var fundingExpired = false
+
+        @Synchronized
+        internal fun canFund(now: kotlin.time.Instant, elapsed: Long = SystemClock.elapsedRealtime()): Boolean {
+            val remaining = quote.deadline - now
+            val previous = fundingDeadlineElapsed
+            val stop = elapsed + remaining.inWholeMilliseconds.coerceIn(0, Long.MAX_VALUE - elapsed)
+            val deadline = previous?.coerceAtMost(stop) ?: stop
+            fundingDeadlineElapsed = deadline
+            fundingExpired = fundingExpired || remaining <= kotlin.time.Duration.ZERO || elapsed >= deadline
+            return !fundingExpired
+        }
+    }
 
     data class Error(
         val mode: SwapMode,
@@ -600,6 +615,7 @@ class SwapRepositoryImpl(
     }
 
     private fun publishQuote(generation: RequestId, result: SwapQuoteData) {
+        if (result is SwapQuoteData.Success) result.canFund(kotlin.time.Clock.System.now())
         synchronized(this) {
             if (quoteGeneration.isCurrent(generation)) {
                 // The result can resume a collector that immediately prepares or consumes it.

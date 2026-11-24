@@ -14,39 +14,28 @@ on:
       - gradlew.bat
   workflow_dispatch:
 permissions: {}
-concurrency:
-  group: ${{ github.ref == 'refs/heads/main' && 'dependency-graph-main' || 'dependency-graph-diagnostic' }}
-  cancel-in-progress: false
 jobs:
-  resolve:
-    if: github.ref == 'refs/heads/main'
+  admit:
     runs-on: ubuntu-24.04
-    timeout-minutes: 18
-    permissions:
-      contents: read
+    timeout-minutes: 2
+    outputs:
+      main: ${{ steps.ref.outputs.main }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78
-        with:
-          distribution: temurin
-          java-version: '25.0.5+8'
-      - uses: gradle/actions/dependency-submission@8da46b539cd8fe6ab27ca75128919a18d757604c
-        with:
-          dependency-graph: generate-and-upload
-          artifact-retention-days: 1
-          cache-read-only: true
-          additional-arguments: --no-daemon --no-watch-fs --no-configuration-cache --max-workers=2
-  submit:
-    needs: resolve
-    runs-on: ubuntu-24.04
-    timeout-minutes: 4
+      - id: ref
+        shell: python
+        run: |
+          import os
+
+          if os.environ["GITHUB_REF"] == "refs/heads/main":
+              with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+                  output.write("main=true\n")
+  run_main:
+    needs: admit
+    if: needs.admit.outputs.main == 'true'
+    concurrency:
+      group: dependency-graph-main
+      cancel-in-progress: false
     permissions:
       actions: read
       contents: write
-    steps:
-      - uses: gradle/actions/dependency-submission@8da46b539cd8fe6ab27ca75128919a18d757604c
-        with:
-          dependency-graph: download-and-submit
-          cache-disabled: true
+    uses: ./.github/workflows/dependency-graph-main.yml
