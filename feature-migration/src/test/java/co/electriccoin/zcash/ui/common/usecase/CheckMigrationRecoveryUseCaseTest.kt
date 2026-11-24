@@ -1,6 +1,7 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import android.content.Context
+import android.content.SharedPreferences
 import cash.z.ecc.android.sdk.AttentionReason
 import cash.z.ecc.android.sdk.MigrationNextAction
 import cash.z.ecc.android.sdk.MigrationState
@@ -13,6 +14,7 @@ import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
@@ -20,11 +22,14 @@ import co.electriccoin.zcash.ui.screen.migration.complete.MigrationCompleteArgs
 import co.electriccoin.zcash.ui.screen.migration.invalid.MigrationTransferInvalidArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingArgs
+import co.electriccoin.zcash.work.MigrationAccountRetirement
 import co.electriccoin.zcash.work.MigrationLiveDriver
+import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -86,6 +91,9 @@ class CheckMigrationRecoveryUseCaseTest {
         accounts: List<WalletAccount> = if (sdk != null) listOf(testWalletAccount) else emptyList(),
         selectedAccountState: MutableStateFlow<WalletAccount?> = MutableStateFlow(testWalletAccount),
         resetState: MutableStateFlow<Boolean> = MutableStateFlow(false),
+        context: Context = mockk(relaxed = true),
+        migrationNotifier: MigrationNotifier = mockk(relaxed = true),
+        cancelRemovedWake: (String) -> Unit = {},
         getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase =
             mockk<GetOrchardMigrationSdkUseCase> {
                 if (sdk != null) {
@@ -108,12 +116,83 @@ class CheckMigrationRecoveryUseCaseTest {
                 coEvery { getAllAccounts() } returns accounts
                 every { selectedAccount } returns selectedAccountState
             },
-        context = mockk<Context>(relaxed = true),
+        context = context,
         getWorkerRunState = getWorkerRunState,
         scheduleNow = scheduleNow,
         migrationLiveDriver = migrationLiveDriver,
+        migrationNotifier = migrationNotifier,
         resetPending = resetState,
+        cancelRemovedWake = cancelRemovedWake,
     )
+
+    @Test
+    fun foregroundRecoveryClearsGoneOwnerNoticesWithoutAWorkerAndRetainsTheSurvivingWake() = runTest {
+        val goneKey = "00000000000000000000000000000002"
+        val heartbeat = removalPreferences(ownerKey, goneKey)
+        val notifier = mockk<MigrationNotifier>(relaxed = true)
+        val cancelled = mutableListOf<String>()
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
+        }
+        val scheduled = mutableListOf<String>()
+        useCase(
+            sdk = sdk,
+            navigationRouter = mockk(relaxed = true),
+            context = heartbeat,
+            migrationNotifier = notifier,
+            cancelRemovedWake = { cancelled += it },
+            getWorkerRunState = { MigrationWorkerRunState.SCHEDULED },
+            scheduleNow = { scheduled += it },
+        ).invoke()
+
+        verify(exactly = 1) { notifier.cancel(goneKey) }
+        verify(exactly = 1) { notifier.cancelStepDue(goneKey) }
+        verify(exactly = 0) { notifier.cancel(ownerKey) }
+        verify(exactly = 0) { notifier.cancelStepDue(ownerKey) }
+        assertEquals(listOf(goneKey), cancelled)
+        assertEquals(emptyList(), scheduled)
+        assertEquals(emptySet(), MigrationWorkerHeartbeat.pendingRemovalAccountKeyIds(heartbeat))
+    }
+
+    @Test
+    fun foregroundRecoveryLeavesLiveRemovalAndUnreadySnapshotAlone() = runTest {
+        val goneKey = "00000000000000000000000000000002"
+        val heartbeat = removalPreferences(goneKey)
+        val notifier = mockk<MigrationNotifier>(relaxed = true)
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
+        useCase(sdk, mockk(relaxed = true), accounts = emptyList(), context = heartbeat).invoke()
+        assertEquals(setOf(goneKey), MigrationWorkerHeartbeat.pendingRemovalAccountKeyIds(heartbeat))
+
+        CheckMigrationRecoveryUseCase.resetRunThrottleForTests()
+        MigrationAccountRetirement.begin(goneKey)
+        try {
+            useCase(sdk, mockk(relaxed = true), context = heartbeat, migrationNotifier = notifier).invoke()
+            assertEquals(setOf(goneKey), MigrationWorkerHeartbeat.pendingRemovalAccountKeyIds(heartbeat))
+            verify(exactly = 0) { notifier.cancel(any()) }
+            verify(exactly = 0) { notifier.cancelStepDue(any()) }
+        } finally {
+            MigrationAccountRetirement.restore(goneKey)
+        }
+    }
+
+    private fun removalPreferences(vararg owners: String): Context {
+        val values = owners.associate { "removal_pending_$it" to true }.toMutableMap()
+        val editor = mockk<SharedPreferences.Editor> {
+            every { remove(any()) } answers {
+                values.remove(firstArg<String>())
+                this@mockk
+            }
+            every { commit() } returns true
+        }
+        val preferences = mockk<SharedPreferences> {
+            every { all } answers { values.toMap() }
+            every { getBoolean(any(), false) } answers { values[firstArg<String>()] ?: false }
+            every { edit() } returns editor
+        }
+        return mockk {
+            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
+        }
+    }
 
     // ── Task 6: auto-navigation removal — only Tor-failure fires on app-open ─────────────
 

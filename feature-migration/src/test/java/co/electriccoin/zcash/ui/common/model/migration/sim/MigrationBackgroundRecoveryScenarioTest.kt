@@ -131,6 +131,7 @@ class MigrationBackgroundRecoveryScenarioTest {
         getWorkerRunState = getWorkerRunState,
         scheduleNow = scheduleNow,
         migrationLiveDriver = migrationLiveDriver,
+        migrationNotifier = mockk(relaxed = true),
     )
 
     @Test

@@ -9,13 +9,17 @@ import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
+import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.provider.PendingMigrationTorFailureStorageProvider
 import co.electriccoin.zcash.ui.common.provider.PersistableWalletProvider
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingArgs
+import co.electriccoin.zcash.work.MigrationAccountRetirement
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationScheduler
+import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -67,6 +71,7 @@ class CheckMigrationRecoveryUseCase(
     private val accountDataSource: AccountDataSource,
     private val context: Context,
     private val migrationLiveDriver: MigrationLiveDriver,
+    private val migrationNotifier: MigrationNotifier,
     /** Extracted for testability — production default checks WorkManager. */
     private val getWorkerRunState: suspend (String) -> MigrationWorkerRunState = {
         migrationWorkerRunState(context, it)
@@ -77,6 +82,7 @@ class CheckMigrationRecoveryUseCase(
      */
     private val scheduleNow: suspend (String) -> Unit = { MigrationScheduler(context).schedule(it, Duration.ZERO) },
     private val resetPending: StateFlow<Boolean> = MutableStateFlow(false),
+    private val cancelRemovedWake: (String) -> Unit = { MigrationScheduler(context).cancel(it) },
 ) {
     @Suppress("TooGenericExceptionCaught") // Foreground recovery handles native SDK and storage failures together.
     suspend operator fun invoke(
@@ -100,9 +106,11 @@ class CheckMigrationRecoveryUseCase(
     private suspend fun recoverPersistedWallet(requestSendingScreen: (String) -> Unit) {
         if (persistableWalletProvider.getPersistableWallet() == null) return
         val ownerKey = awaitOwnerKey() ?: return
+        val accounts = accountDataSource.getAllAccounts()
+        if (accounts.isNotEmpty() && !resetPending.value) reconcileRemovalNotices(accounts)
         val sdk = if (resetPending.value) null else getOrchardMigrationSdk(ownerKey)
         if (sdk != null && !resetPending.value) {
-            reviveAccountWorkers()
+            reviveAccountWorkers(accounts)
             recoverBroadcast(sdk, ownerKey, requestSendingScreen)
             if (!resetPending.value) lastRunMark = TimeSource.Monotonic.markNow()
         }
@@ -114,10 +122,27 @@ class CheckMigrationRecoveryUseCase(
             if (pending) flowOf(null) else accountDataSource.selectedAccount.filterNotNull()
         }.first()?.sdkAccount?.accountUuid?.toStorageKeyId()
 
-    private suspend fun reviveAccountWorkers() {
+    private suspend fun reconcileRemovalNotices(accounts: List<WalletAccount>) = withContext(Dispatchers.IO) {
+        val accountKeys = accounts.map { it.sdkAccount.accountUuid.toStorageKeyId() }.toSet()
+        val pendingKeys = MigrationWorkerHeartbeat.pendingRemovalAccountKeyIds(context)
+        for (key in pendingKeys) {
+            MigrationAccountRetirement.admit(key) {
+                if (!resetPending.value && MigrationWorkerHeartbeat.removalPending(context, key)) {
+                    if (key !in accountKeys) {
+                        migrationNotifier.cancel(key)
+                        migrationNotifier.cancelStepDue(key)
+                        cancelRemovedWake(key)
+                    }
+                    MigrationWorkerHeartbeat.clearRemovalPending(context, key)
+                }
+            }
+        }
+    }
+
+    private suspend fun reviveAccountWorkers(accounts: List<WalletAccount>) {
         // The process-scoped driver accelerates committed migrations. WorkManager keeps the same work
         // alive after process death, reboot or an update. Recover both for every spendable account.
-        for (account in accountDataSource.getAllAccounts().filter { it.isSpendable }) {
+        for (account in accounts.filter { it.isSpendable }) {
             if (resetPending.value) return
             val accountKey = account.sdkAccount.accountUuid.toStorageKeyId()
             val sdk = getOrchardMigrationSdk(accountKey)

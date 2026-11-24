@@ -41,6 +41,12 @@ object MigrationWorkerHeartbeat {
     fun lastRunAt(context: Context, accountKeyId: String): Long? =
         prefs(context).getLong(KEY_LAST_RUN + accountKeyId, -1L).takeIf { it >= 0 }
 
+    internal fun pendingRemovalAccountKeyIds(context: Context): Set<String> =
+        prefs(context).all.mapNotNull { (key, value) ->
+            key.takeIf { it.startsWith(KEY_REMOVAL_PENDING) && value == true }
+                ?.removePrefix(KEY_REMOVAL_PENDING)?.takeIf { it.isNotEmpty() }
+        }.toSet()
+
     internal fun removalPending(context: Context, accountKeyId: String): Boolean =
         prefs(context).getBoolean(KEY_REMOVAL_PENDING + accountKeyId, false)
 
