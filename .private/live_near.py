@@ -138,10 +138,10 @@ def reviewed_quote(result, require_deposit=True):
     quote = result['quote']
     read_timestamp(request['deadline'])
     address = quote['depositAddress'] if require_deposit else quote.get('depositAddress')
-    if not require_deposit and address not in (None, ''):
-        raise RuntimeError('NEAR dry quote issued a deposit address')
     extra_fields = ('virtualChainRecipient', 'virtualChainRefundRecipient', 'customRecipientMsg')
     chain_deposits = quote.get('chainDepositAddresses')
+    if not require_deposit and (address not in (None, '') or chain_deposits):
+        raise RuntimeError('NEAR dry quote issued a deposit address')
     if chain_deposits is not None and (not isinstance(chain_deposits, list) or any(
         not isinstance(item, dict) or type(item.get('address')) is not str
         or (item.get('memo') is not None and type(item['memo']) is not str) for item in chain_deposits

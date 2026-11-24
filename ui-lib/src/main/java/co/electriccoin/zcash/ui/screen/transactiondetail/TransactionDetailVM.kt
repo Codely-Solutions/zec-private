@@ -109,13 +109,17 @@ class TransactionDetailVM(
                     snapshot
                 }
                 val info = createTransactionInfoState(transaction)
+                val retry = transaction.swap?.error?.let {
+                    mapper.createTransactionDetailErrorButtonState(it, transaction.reloadHandle)
+                }
+                val support = createSwapSupportButton(transaction)
                 TransactionDetailState(
                     explorerLinks = createExplorerLinks(transaction),
                     onBack = ::onBack,
                     info = info,
                     header = createTransactionHeaderState(transaction, info),
-                    primaryButton = createPrimaryButtonState(transaction),
-                    secondaryButton = createSecondaryButtonState(transaction),
+                    primaryButton = retry ?: createPrimaryButtonState(transaction, support),
+                    secondaryButton = if (retry != null) support else createSecondaryButtonState(transaction),
                     bookmarkButton =
                         IconButtonState(
                             icon =
@@ -441,26 +445,15 @@ class TransactionDetailVM(
     private fun createErrorFooter(data: DetailedTransactionData): ErrorFooter? =
         mapper.createTransactionDetailErrorFooter(data.swap?.error)
 
-    private fun createPrimaryButtonState(data: DetailedTransactionData): ButtonState? {
-        val supportButton =
-            getSwapMessage.getButton(data.swap?.status) {
-                onContactSupport(it)
-            }
-        return when {
-            supportButton != null -> {
-                supportButton
-            }
+    private fun createSwapSupportButton(data: DetailedTransactionData): ButtonState? {
+        val swap = data.swap ?: return null
+        return getSwapMessage.getButton(swap.status, ::onContactSupport)
+            ?: (swap.savedMetadata ?: data.metadata.swapMetadata)?.savedSwapSupportButton(::onContactSupport)
+    }
 
-            data.swap?.error != null -> {
-                mapper.createTransactionDetailErrorButtonState(
-                    error = data.swap.error,
-                    reloadHandle = data.reloadHandle
-                )
-            }
-
-            data.swap != null -> {
-                data.swap.savedMetadata?.savedSwapSupportButton(::onContactSupport)
-            }
+    private fun createPrimaryButtonState(data: DetailedTransactionData, support: ButtonState?): ButtonState? =
+        when {
+            data.swap != null -> support
 
             data.contact == null -> {
                 if (data.transaction is SendTransaction) {
@@ -484,7 +477,6 @@ class TransactionDetailVM(
                 }
             }
         }
-    }
 
     private fun onContactSupport(depositAddress: String) {
         navigationRouter.forward(SwapSupportArgs(depositAddress))
@@ -511,10 +503,6 @@ class TransactionDetailVM(
         }
 
         return when {
-            transaction.swap?.error != null && transaction.swap.status == null ->
-                (transaction.swap.savedMetadata ?: transaction.metadata.swapMetadata)
-                    ?.savedSwapSupportButton(::onContactSupport)
-
             transaction.swap != null &&
                 transaction.swap.error == null &&
                 transaction.swap.status?.status == SUCCESS

@@ -4,11 +4,10 @@ import android.content.Context
 import androidx.annotation.Keep
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import co.electriccoin.zcash.migration.migrationLog
-import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
-import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.MigrationSdkLookup
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import org.koin.core.component.KoinComponent
@@ -32,51 +31,46 @@ class MigrationWorker(
 ) : CoroutineWorker(context, workerParameters),
     KoinComponent {
     private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase by inject()
-    private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase by inject()
     private val migrationNotifier: MigrationNotifier by inject()
     private val migrationDriveOnce: MigrationDriveOnce by inject()
     private val resetProgress: ResetProgressStore by inject()
 
     override suspend fun doWork(): Result {
-        if (resetProgress.isPending.value) return Result.success()
-        val accountKeyId =
-            inputData.getString(MigrationScheduler.KEY_ACCOUNT_KEY_ID)
-                ?: getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId().also {
-                    migrationLog(
-                        "Worker: no accountKeyId in inputData — falling back to selected account $it " +
-                            "(pre-upgrade job)"
-                    )
-                }
+        // Old unbound work cannot recover an owner from the foreground selection.
+        // Normal startup restores committed work for each actual wallet account.
+        val accountKeyId = inputData.getString(MigrationScheduler.KEY_ACCOUNT_KEY_ID)
+        if (accountKeyId.isNullOrBlank() || resetProgress.isPending.value) return Result.success()
 
-        migrationNotifier.cancelStepDue(accountKeyId)
+        return when (val lookup = getOrchardMigrationSdk.lookup(accountKeyId)) {
+            is MigrationSdkLookup.Ready -> driveMigration(lookup.sdk, accountKeyId)
+            MigrationSdkLookup.RemovalManaged -> Result.success()
+            MigrationSdkLookup.NotReady -> waitForSdk(accountKeyId)
+            MigrationSdkLookup.Gone -> stopMissingAccount(accountKeyId)
+        }
+    }
 
-        val sdk =
-            when (val lookup = getOrchardMigrationSdk.lookup(accountKeyId)) {
-                is MigrationSdkLookup.Ready -> {
-                    lookup.sdk
-                }
+    private fun waitForSdk(accountKeyId: String): Result {
+        MigrationAccountRetirement.admit(accountKeyId) {
+            migrationNotifier.cancelStepDue(accountKeyId)
+            // A pending retry is still a worker wake for the fallback alarm.
+            migrationLog("Worker: SDK not ready — retrying via WorkManager backoff.")
+            MigrationWorkerHeartbeat.stampRun(applicationContext, accountKeyId)
+        } ?: return Result.success()
+        return Result.retry()
+    }
 
-                MigrationSdkLookup.NotReady -> {
-                    // A not-yet-initialized wallet right after an app update/reboot must not
-                    // silently consume (and thereby kill) the self-rechaining loop — retry until
-                    // the SDK is reachable. Stamp the heartbeat here too so the dead-man's-switch
-                    // (MigrationTransferDueReceiver) sees the worker as alive-but-waiting instead
-                    // of mistaking this in-flight WorkManager backoff for a missed run.
-                    migrationLog("Worker: SDK not ready — retrying via WorkManager backoff.")
-                    MigrationWorkerHeartbeat.stampRun(applicationContext, accountKeyId)
-                    return Result.retry()
-                }
+    private fun stopMissingAccount(accountKeyId: String): Result {
+        MigrationAccountRetirement.admit(accountKeyId) {
+            migrationNotifier.cancelStepDue(accountKeyId)
+            migrationLog("Worker: account/wallet gone — cancelling the migration work chain.")
+            MigrationScheduler(applicationContext).cancel(accountKeyId)
+            migrationNotifier.cancel(accountKeyId)
+        }
+        return Result.success()
+    }
 
-                MigrationSdkLookup.Gone -> {
-                    // Kill switch: the wallet was deleted or this (Keystone) account disconnected.
-                    // Retrying would zombie-loop forever for an owner that no longer exists.
-                    migrationLog("Worker: account/wallet gone — cancelling the migration work chain.")
-                    MigrationScheduler(applicationContext).cancel(accountKeyId)
-                    migrationNotifier.cancel(accountKeyId)
-                    return Result.success()
-                }
-            }
-
+    private suspend fun driveMigration(sdk: OrchardMigrationSdk, accountKeyId: String): Result {
+        MigrationAccountRetirement.admit(accountKeyId) { migrationNotifier.cancelStepDue(accountKeyId) }
         when (val result = migrationDriveOnce.run(sdk, accountKeyId)) {
             is DriveOnceResult.ReArmed -> {
                 // Already re-armed the WorkManager chain inside run() — nothing more to do.

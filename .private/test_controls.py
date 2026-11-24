@@ -130,7 +130,7 @@ for clear in (False, True):
         report_time = '2026-11-24T00:00:00Z'
 
         def run_probe(root, change=None, issued_deadline='2099-01-01T00:00:00Z', omit_dry_quote=False,
-                      issue_dry_address=False):
+                      dry_funding_field=None):
             issued = None
 
             def request(path, body=None):
@@ -148,8 +148,9 @@ for clear in (False, True):
                                 'minAmountOut': str(amount_out), 'amountOutUsd': '34.64',
                                 'deadline': body['deadline'],
                             }
-                        if issue_dry_address:
-                            dry_quote['quote']['depositAddress'] = fixture_address
+                        if dry_funding_field is not None:
+                            field, value = dry_funding_field
+                            dry_quote['quote'][field] = value
                         return 200, dry_quote
                     issued = {
                         'timestamp': report_time,
@@ -181,7 +182,7 @@ for clear in (False, True):
                   patch.object(live_near, 'ROOT', root),
                   patch.object(live_near.subprocess, 'check_output', return_value='a' * 40),
                   contextlib.redirect_stdout(StringIO())):
-                if issue_dry_address:
+                if dry_funding_field is not None:
                     with self.assertRaisesRegex(RuntimeError, 'dry quote issued a deposit address'):
                         live_near.main()
                     self.assertEqual(remote.call_count, 1)
@@ -233,7 +234,8 @@ for clear in (False, True):
             self.assertTrue(json.loads(receipt.read_text())['unused_quote_status_passed'])
         with fixture_directory() as temp:
             root = Path(temp)
-            run_probe(root, issue_dry_address=True)
+            run_probe(root, dry_funding_field=('depositAddress', fixture_address))
+            run_probe(root, dry_funding_field=('chainDepositAddresses', [{'address': fixture_address}]))
             run_probe(root, omit_dry_quote=True)
             run_probe(root, issued_deadline='1999-01-01T00:00:00Z')
             self.assertFalse((root / 'artifact' / 'near-contract.json').exists())

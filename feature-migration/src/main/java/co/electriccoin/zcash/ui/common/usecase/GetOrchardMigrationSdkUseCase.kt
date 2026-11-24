@@ -60,19 +60,22 @@ class GetOrchardMigrationSdkUseCase(
      * a worker retrying forever for an account that no longer exists is a zombie).
      */
     suspend fun lookup(accountKeyId: String): MigrationSdkLookup {
-        val canResolve = !MigrationAccountRetirement.blocks(accountKeyId) &&
-            persistableWalletProvider.getPersistableWallet() != null
-        if (!canResolve) return MigrationSdkLookup.Gone
+        if (MigrationAccountRetirement.blocks(accountKeyId)) return MigrationSdkLookup.RemovalManaged
+        val result = if (persistableWalletProvider.getPersistableWallet() == null) {
+            MigrationSdkLookup.Gone
+        } else {
+            lookupPersistedAccount(accountKeyId)
+        }
+        return MigrationAccountRetirement.admit(accountKeyId) { result } ?: MigrationSdkLookup.RemovalManaged
+    }
+
+    private suspend fun lookupPersistedAccount(accountKeyId: String): MigrationSdkLookup {
         val accounts = runCatching { accountDataSource.getAllAccounts() }.getOrNull()
         val account = accounts?.findByAccountKeyId(accountKeyId)
         return when {
             accounts.isNullOrEmpty() -> MigrationSdkLookup.NotReady
             account == null -> MigrationSdkLookup.Gone
-            else -> {
-                val sdk = buildFor(account)
-                MigrationAccountRetirement.admit(accountKeyId) { MigrationSdkLookup.Ready(sdk) }
-                    ?: MigrationSdkLookup.Gone
-            }
+            else -> MigrationSdkLookup.Ready(buildFor(account))
         }
     }
 
@@ -125,6 +128,9 @@ sealed interface MigrationSdkLookup {
     data class Ready(
         val sdk: OrchardMigrationSdk
     ) : MigrationSdkLookup
+
+    /** Account removal owns stop and rollback; the worker must leave its wake record intact. */
+    data object RemovalManaged : MigrationSdkLookup
 
     /** The wallet or this account no longer exists — migration work must cancel itself. */
     data object Gone : MigrationSdkLookup

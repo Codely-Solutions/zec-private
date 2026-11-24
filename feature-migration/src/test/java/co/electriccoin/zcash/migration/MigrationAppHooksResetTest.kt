@@ -13,6 +13,8 @@ import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.repository.MigrationTransferStateRepository
+import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
+import co.electriccoin.zcash.ui.common.usecase.MigrationSdkLookup
 import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
@@ -42,6 +44,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
@@ -49,15 +52,18 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class MigrationAppHooksResetTest {
     @Test
-    fun hardwareRetirementBlocksOnlyItsOwnerUntilDrainAndDeletionComplete() = runTest {
+    fun hardwareRetirementClosesItsOwnerAfterTheEnteredDriveLeaves() = runTest {
         val key = "retirement-owner"
         val drain = CompletableDeferred<Unit>()
         val cancel = CompletableDeferred<Unit>()
         val removed = CompletableDeferred<Unit>()
         val driver = mockk<MigrationLiveDriver>(relaxed = true)
+        var driveEntries = 0
         val drive = mockk<MigrationDriveOnce> {
-            coEvery { awaitIdle() } coAnswers { drain.await() }
-            coEvery { withIdleDrive<Unit>(any()) } coAnswers { firstArg<suspend () -> Unit>().invoke() }
+            coEvery { withIdleDrive<Unit>(any()) } coAnswers {
+                if (++driveEntries == 1) drain.await()
+                firstArg<suspend () -> Unit>().invoke()
+            }
         }
         val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
         val hooks = MigrationAppHooksImpl(
@@ -71,13 +77,15 @@ class MigrationAppHooksResetTest {
             val retirement = launch { hooks.retireHardwareAccount(key) { removed.complete(Unit) } }
             runCurrent()
 
-            assertTrue(MigrationAccountRetirement.blocks(key))
+            assertFalse(MigrationAccountRetirement.blocks(key))
             assertFalse(MigrationAccountRetirement.blocks("other-owner"))
             assertFalse(removed.isCompleted)
             coVerify(exactly = 0) { driver.stopAndJoin(any()) }
 
             drain.complete(Unit)
             runCurrent()
+            assertTrue(MigrationAccountRetirement.blocks(key))
+            assertFalse(MigrationAccountRetirement.blocks("other-owner"))
             coVerify(exactly = 1) { driver.stopAndJoin(key) }
             assertFalse(removed.isCompleted)
 
@@ -107,8 +115,11 @@ class MigrationAppHooksResetTest {
         mockkConstructor(MigrationScheduler::class)
         try {
             val originalWake = 1795560000000L
+            val sdk = GetOrchardMigrationSdkUseCase(mockk(), mockk(), mockk(), mockk(), mockk())
             every { anyConstructed<MigrationScheduler>().nextWakeAt(key) } returns originalWake
-            coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(key) } returns Unit
+            coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(key) } coAnswers {
+                assertEquals(MigrationSdkLookup.RemovalManaged, sdk.lookup(key))
+            }
             coEvery { anyConstructed<MigrationScheduler>().restoreWake(key, originalWake) } coAnswers {
                 assertFalse(MigrationAccountRetirement.blocks(key))
             }

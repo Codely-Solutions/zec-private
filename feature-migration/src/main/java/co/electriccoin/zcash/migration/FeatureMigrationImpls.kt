@@ -253,15 +253,18 @@ class MigrationAppHooksImpl(
 
     override suspend fun retireHardwareAccount(accountKeyId: String, deleteAccount: suspend () -> Unit) {
         val generation = walletWriteAccess.token()
-        MigrationAccountRetirement.begin(accountKeyId)
         val scheduler = MigrationScheduler(context)
         var wakeToRestore: Long? = null
+        var retirementStarted = false
         var deleted = false
         try {
-            // Admission is closed first. Let any already-held native operation finish before deleting.
-            migrationDriveOnce.awaitIdle()
+            migrationDriveOnce.withIdleDrive {
+                // A step already inside the drive finishes arming its successor first.
+                MigrationAccountRetirement.begin(accountKeyId)
+                retirementStarted = true
+                wakeToRestore = scheduler.nextWakeAt(accountKeyId)
+            }
             migrationLiveDriver.stopAndJoin(accountKeyId)
-            wakeToRestore = scheduler.nextWakeAt(accountKeyId)
             withContext(NonCancellable) { scheduler.cancelAndWait(accountKeyId) }
             currentCoroutineContext().ensureActive()
             withContext(NonCancellable) {
@@ -279,7 +282,7 @@ class MigrationAppHooksImpl(
                 migrationNotifier.cancelStepDue(accountKeyId)
             }
         } finally {
-            if (!deleted) {
+            if (retirementStarted && !deleted) {
                 restoreRetirement(accountKeyId, generation, scheduler, wakeToRestore)
             }
         }

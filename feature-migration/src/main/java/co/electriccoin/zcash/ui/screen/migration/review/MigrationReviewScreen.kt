@@ -40,6 +40,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.electriccoin.zcash.ui.R
@@ -256,7 +257,7 @@ internal fun ImmediateDetailsRow(label: String, value: String) {
             Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -266,9 +267,11 @@ internal fun ImmediateDetailsRow(label: String, value: String) {
         )
         Text(
             text = value,
+            modifier = Modifier.weight(1f),
             style = ZashiTypography.textSm,
             fontWeight = FontWeight.Medium,
             color = ZashiColors.Text.textPrimary,
+            textAlign = TextAlign.End,
         )
     }
 }

@@ -37,6 +37,7 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.design.util.stringResByTransactionId
 import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
+import co.electriccoin.zcash.ui.design.R as DesignR
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.ReceiveTransparentState
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendShieldedState
 import co.electriccoin.zcash.ui.screen.transactiondetail.info.SendSwapState
@@ -322,6 +323,37 @@ class TransactionDetailVMTest {
         assertLocalFunding(detail, "failed poll")
         assertNotNull(detail.primaryButton).onClick()
         verify(exactly = 1) { reload.requestReload() }
+    }
+
+    @Test
+    fun failedPollKeepsBothRetryAndSupportForAnIncompleteDeposit() = runTest(dispatcher) {
+        val zec = SwapCatalogTestFixture.nativeZec
+        val destination = SwapCatalogTestFixture.externalAssets.first()
+        val accepted = status(SwapStatus.INCOMPLETE_DEPOSIT, zec, destination)
+        val saved = swapMetadata(SwapStatus.INCOMPLETE_DEPOSIT, SwapCatalogTestFixture.simple(zec))
+        val detail = state(
+            data(
+                sent,
+                saved,
+                SwapQuoteStatusData(
+                    status = accepted,
+                    isLoading = false,
+                    error = IllegalStateException("fixture-poll-unavailable"),
+                    savedMetadata = saved,
+                ),
+            )
+        )
+
+        assertEquals(SwapStatus.INCOMPLETE_DEPOSIT, assertIs<SendSwapState>(detail.info).statusRow.status)
+        assertNotNull(detail.errorFooter)
+        val retry = assertNotNull(detail.primaryButton)
+        val support = assertNotNull(detail.secondaryButton)
+        assertEquals(stringRes(DesignR.string.disconnectHWWallet_tryAgain), retry.text)
+        assertEquals(stringRes(R.string.errorPage_action_contactSupport), support.text)
+        retry.onClick()
+        support.onClick()
+        verify(exactly = 1) { reload.requestReload() }
+        verify(exactly = 1) { router.forward(SwapSupportArgs("fixture-deposit")) }
     }
 
     @Test
