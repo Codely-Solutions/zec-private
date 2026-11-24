@@ -7,7 +7,9 @@ import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
 
 sealed class QrCodeState {
-    data object Loading : QrCodeState()
+    abstract val onBack: () -> Unit
+
+    data class Loading(override val onBack: () -> Unit) : QrCodeState()
 
     data class Prepared(
         val title: StringResource,
@@ -15,7 +17,7 @@ sealed class QrCodeState {
         val walletAddress: WalletAddress,
         val onAddressCopy: (String) -> Unit,
         val onQrCodeShare: (String) -> Unit,
-        val onBack: () -> Unit,
+        override val onBack: () -> Unit,
     ) : QrCodeState() {
         fun toQrState(
             contentDescription: StringResource? = null,

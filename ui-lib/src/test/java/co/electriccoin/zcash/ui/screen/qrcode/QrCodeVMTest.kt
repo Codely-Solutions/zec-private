@@ -152,6 +152,36 @@ class QrCodeVMTest {
         }
 
     @Test
+    fun retainedCopyRefusesChangedPayloadAndRevokedOwnership() = runTest(dispatcher) {
+        val clipboard = mockk<CopyToClipboardUseCase>(relaxed = true)
+        val access = AppAccessSession().apply { unlock() }
+        val ownership = WalletWriteAccess()
+        val original = zashiAccount()
+        val account = kotlinx.coroutines.flow.MutableStateFlow<WalletAccount?>(original)
+        val vm = startedVm(
+            copyToClipboard = clipboard, access = access, accountFlow = account, ownership = ownership
+        )
+        val before = assertIs<QrCodeState.Prepared>(vm.state.value)
+        before.onAddressCopy("other")
+        before.onAddressCopy(UNIFIED)
+
+        access.lock()
+        access.unlock()
+        before.onAddressCopy(UNIFIED)
+        account.value = original.copy(unifiedAddress = "new-address")
+        advanceUntilIdle()
+        val after = assertIs<QrCodeState.Prepared>(vm.state.value)
+        before.onAddressCopy(UNIFIED)
+        after.onAddressCopy("new-address")
+        ownership.beginReset()
+        after.onAddressCopy("new-address")
+
+        verify(exactly = 1) { clipboard(UNIFIED) }
+        verify(exactly = 1) { clipboard("new-address") }
+        verify(exactly = 0) { clipboard("other") }
+    }
+
+    @Test
     fun keystoneAccountMarksTheQrAsKeystone() =
         runTest(dispatcher) {
             val zodl = startedVm(account = zashiAccount())
@@ -193,11 +223,13 @@ class QrCodeVMTest {
         }
 
     @Test
-    fun missingSaplingAddressStaysLoading() =
+    fun missingSaplingAddressStaysLoadingAndStillOffersBack() =
         runTest(dispatcher) {
-            val vm = startedVm(account = keystoneAccount(), addressType = ReceiveAddressType.Sapling)
+            val router = FakeNavigationRouter()
+            val vm = startedVm(account = keystoneAccount(), addressType = ReceiveAddressType.Sapling, router = router)
 
-            assertIs<QrCodeState.Loading>(vm.state.value)
+            assertIs<QrCodeState.Loading>(vm.state.value).onBack()
+            assertEquals(1, router.backCount)
         }
 
     @Test
@@ -258,10 +290,12 @@ class QrCodeVMTest {
         router: FakeNavigationRouter = FakeNavigationRouter(),
         viewOnlyContent: ViewOnlyContent = mockk(relaxed = true),
         access: AppAccessSession = AppAccessSession().apply { unlock() },
+        accountFlow: Flow<WalletAccount?> = flowOf(account),
+        ownership: WalletWriteAccess = WalletWriteAccess(),
     ): QrCodeVM {
         val observeSelectedWalletAccount =
             mockk<ObserveSelectedWalletAccountUseCase> {
-                every { this@mockk() } returns flowOf(account)
+                every { this@mockk() } returns accountFlow
             }
         val vm =
             QrCodeVM(
@@ -272,7 +306,7 @@ class QrCodeVMTest {
                 shareQR = shareQR,
                 viewOnlyContent = viewOnlyContent,
                 appAccessSession = access,
-                walletWriteAccess = WalletWriteAccess(),
+                walletWriteAccess = ownership,
             )
         backgroundScope.launch { vm.state.collect { } }
         advanceUntilIdle()

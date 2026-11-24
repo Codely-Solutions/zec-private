@@ -100,7 +100,7 @@ class RequestSwapQuoteUseCase(
         address: String,
         selectedAsset: SwapAsset,
         slippage: BigDecimal,
-        canNavigateToSwapQuote: () -> Boolean,
+        canNavigateToSwapQuote: suspend () -> Boolean,
         contactNetwork: String? = null
     ) = runRequest {
         val recipient = validatedRecipient(
@@ -129,7 +129,7 @@ class RequestSwapQuoteUseCase(
         address: String,
         selectedAsset: SwapAsset,
         slippage: BigDecimal,
-        canNavigateToSwapQuote: () -> Boolean,
+        canNavigateToSwapQuote: suspend () -> Boolean,
         contactNetwork: String? = null
     ) = runRequest {
         val recipient =
@@ -165,7 +165,7 @@ class RequestSwapQuoteUseCase(
         refundAddress: String,
         selectedAsset: SwapAsset,
         slippage: BigDecimal,
-        canNavigateToSwapQuote: () -> Boolean,
+        canNavigateToSwapQuote: suspend () -> Boolean,
         contactNetwork: String? = null
     ) = runRequest {
         val refund = validatedRecipient(
@@ -187,7 +187,7 @@ class RequestSwapQuoteUseCase(
                         owner = owner,
                     )
             },
-            canNavigateToSwapQuote = { walletWriteAccess.permits(token) && canNavigateToSwapQuote() }
+            canNavigateToSwapQuote = { canNavigateToSwapQuote() && walletWriteAccess.permits(token) }
         )
     }
 
@@ -196,7 +196,7 @@ class RequestSwapQuoteUseCase(
         return FundingOwner(accountDataSource.getSelectedAccount(), token)
     }
 
-    private suspend fun requestFreshAddress(canNavigate: () -> Boolean, account: WalletAccount): String? =
+    private suspend fun requestFreshAddress(canNavigate: suspend () -> Boolean, account: WalletAccount): String? =
         try {
             diagnostics.trace(QuoteRequestStage.FRESH_ADDRESS) {
                 accountDataSource.requestNextShieldedAddress(requireFresh = true, account = account)
@@ -211,7 +211,7 @@ class RequestSwapQuoteUseCase(
         value: String,
         selectedAsset: SwapAsset,
         contactNetwork: String?,
-        canNavigate: () -> Boolean,
+        canNavigate: suspend () -> Boolean,
         allowPaymentAmount: Boolean = true
     ): String? {
         val validation = validateSwapRecipient(
@@ -236,7 +236,7 @@ class RequestSwapQuoteUseCase(
 
     private suspend fun requestQuote(
         requestQuote: suspend () -> Unit,
-        canNavigateToSwapQuote: () -> Boolean,
+        canNavigateToSwapQuote: suspend () -> Boolean,
         fundingOwner: FundingOwner? = null,
     ) {
         currentCoroutineContext().ensureActive()
@@ -259,13 +259,13 @@ class RequestSwapQuoteUseCase(
         }
 
         currentCoroutineContext().ensureActive()
-        navigateToPreparedReview(result, canNavigateToSwapQuote)
+        navigateToPreparedReview(result, fundingOwner, canNavigateToSwapQuote)
     }
 
     private suspend fun prepareForReview(
         result: SwapQuoteData.Success,
         owner: FundingOwner?,
-        canNavigate: () -> Boolean
+        canNavigate: suspend () -> Boolean
     ): Boolean {
         currentCoroutineContext().ensureActive()
         if (owner != null && !owner.account.isSpendable) {
@@ -278,12 +278,15 @@ class RequestSwapQuoteUseCase(
             (owner == null || prepareProposal(result, owner, canNavigate))
     }
 
-    private fun validateComposition(result: SwapQuoteData.Success, canNavigate: () -> Boolean): Boolean =
+    private suspend fun validateComposition(
+        result: SwapQuoteData.Success,
+        canNavigate: suspend () -> Boolean,
+    ): Boolean =
         try {
             ZecSwapComposition.validate(result.quote)
             true
         } catch (e: IllegalArgumentException) {
-            if (canNavigate()) {
+            if (canNavigate() && swapRepository.quote.value === result) {
                 swapRepository.clearQuote()
                 navigateToErrorUseCase(ErrorArgs.General(e))
             }
@@ -294,7 +297,7 @@ class RequestSwapQuoteUseCase(
     private suspend fun prepareProposal(
         result: SwapQuoteData.Success,
         owner: FundingOwner,
-        canNavigate: () -> Boolean
+        canNavigate: suspend () -> Boolean
     ): Boolean =
         try {
             owner.requireCurrent()
@@ -319,7 +322,7 @@ class RequestSwapQuoteUseCase(
 
     private suspend fun onPreparationFailure(
         result: SwapQuoteData,
-        canNavigate: () -> Boolean,
+        canNavigate: suspend () -> Boolean,
         navigate: () -> Unit,
     ) {
         currentCoroutineContext().ensureActive()
@@ -331,7 +334,12 @@ class RequestSwapQuoteUseCase(
         if (canNavigate()) navigate()
     }
 
-    private suspend fun navigateToPreparedReview(result: SwapQuoteData, canNavigateToSwapQuote: () -> Boolean) {
+    private suspend fun navigateToPreparedReview(
+        result: SwapQuoteData,
+        owner: FundingOwner?,
+        canNavigateToSwapQuote: suspend () -> Boolean,
+    ) {
+        if (!canNavigateToSwapQuote() || owner?.isCurrent() == false) return
         if (result is SwapQuoteData.Success && !swapRepository.markReviewReady(result)) {
             if (swapRepository.quote.value === result && !swapRepository.isReviewCurrent(result)) {
                 onPreparationFailure(result, canNavigateToSwapQuote) {
@@ -340,18 +348,20 @@ class RequestSwapQuoteUseCase(
             }
             return
         }
-        if (canNavigateToSwapQuote() && swapRepository.consumeReview(result) != null) {
+        if (swapRepository.consumeReview(result) != null) {
             navigationRouter.forward(SwapQuoteArgs)
         }
     }
 
     private suspend fun FundingOwner.requireCurrent() {
-        check(walletWriteAccess.permits(writeToken)) { "The wallet for this quote was reset." }
+        check(isCurrent()) { "The wallet account for this quote changed. Request a new quote." }
+    }
+
+    private suspend fun FundingOwner.isCurrent(): Boolean {
+        if (!walletWriteAccess.permits(writeToken)) return false
         val current = accountDataSource.getSelectedAccount()
         val sameOwner = current === account || current.sdkAccount.accountUuid == account.sdkAccount.accountUuid
-        check(sameOwner && walletWriteAccess.permits(writeToken)) {
-            "The wallet account for this quote changed. Request a new quote."
-        }
+        return sameOwner && walletWriteAccess.permits(writeToken)
     }
 
     @Suppress("TooGenericExceptionCaught", "ThrowsCount")

@@ -3,7 +3,6 @@ package co.electriccoin.zcash.ui.screen.qrcode
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.model.WalletAddress
-import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
@@ -26,7 +25,6 @@ import co.electriccoin.zcash.ui.screen.qrcode.ext.receiveAddress
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
 import co.electriccoin.zcash.ui.util.CURRENCY_TICKER
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -41,6 +39,8 @@ class QrCodeVM(
     private val appAccessSession: AppAccessSession,
     private val walletWriteAccess: WalletWriteAccess,
 ) : ViewModel() {
+    private val loading = QrCodeState.Loading(::onBack)
+
     private val selectedAccount =
         observeSelectedWalletAccount().stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -49,9 +49,17 @@ class QrCodeVM(
                 val addressType = ReceiveAddressType.fromOrdinal(addressTypeOrdinal)
                 val walletAddress = account?.fromReceiveAddressType(addressType)
 
-                if (account == null || walletAddress == null) {
-                    QrCodeState.Loading
+                if (account == null || walletAddress == null ||
+                    !appAccessSession.permits(grant) || !walletWriteAccess.permits(token)
+                ) {
+                    loading
                 } else {
+                    val permitted = { address: String ->
+                        val current = selectedAccount.value
+                        appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
+                            current?.sdkAccount?.accountUuid == account.sdkAccount.accountUuid &&
+                            current.receiveAddress(addressType) == address && address == walletAddress.address
+                    }
                     QrCodeState.Prepared(
                         walletAddress = walletAddress,
                         formatterAddress =
@@ -59,18 +67,10 @@ class QrCodeVM(
                                 walletAddress.address,
                                 if (walletAddress is WalletAddress.Transparent) Ellipsize.NONE else Ellipsize.MIDDLE
                             ),
-                        onAddressCopy = { address -> onAddressCopyClick(address) },
+                        onAddressCopy = { address -> if (permitted(address)) copyToClipboard(address) },
                         onQrCodeShare = { address ->
-                            val permitted = {
-                                val current = selectedAccount.value
-                                appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
-                                    current != null &&
-                                    current.sdkAccount.accountUuid == account.sdkAccount.accountUuid &&
-                                    current.receiveAddress(addressType) == address &&
-                                    address == walletAddress.address
-                            }
                             viewModelScope.launch {
-                                if (!permitted()) return@launch
+                                if (!permitted(address)) return@launch
                                 shareQR(
                                     qrData = address,
                                     shareText = stringRes(R.string.qr_code_share_chooser_text, CURRENCY_TICKER),
@@ -82,7 +82,7 @@ class QrCodeVM(
                                         } else {
                                             R.drawable.ic_zec_qr_shielded
                                         },
-                                    isAllowed = permitted,
+                                    isAllowed = { permitted(address) },
                                 )
                             }
                         },
@@ -92,8 +92,8 @@ class QrCodeVM(
                 }
             }.stateIn(
                 scope = viewModelScope,
-                started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
-                initialValue = QrCodeState.Loading
+                started = SharingStarted.Eagerly,
+                initialValue = loading
             )
 
     private fun onBack() = navigationRouter.back()
@@ -134,5 +134,4 @@ class QrCodeVM(
             }
         }
 
-    private fun onAddressCopyClick(address: String) = copyToClipboard(address)
 }

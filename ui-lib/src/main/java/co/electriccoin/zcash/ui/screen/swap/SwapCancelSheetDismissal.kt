@@ -5,20 +5,29 @@ import kotlinx.coroutines.CompletableDeferred
 internal class SwapCancelSheetDismissal {
     private var pendingHide: CompletableDeferred<Unit>? = null
 
-    val isPending: Boolean get() = pendingHide != null
+    var isPending: Boolean = false
+        private set
+
+    fun onOpen() {
+        pendingHide = CompletableDeferred()
+    }
 
     suspend fun awaitHidden(startHiding: () -> Unit) {
-        val hide = CompletableDeferred<Unit>()
-        pendingHide = hide
-        try {
-            startHiding()
-            hide.await()
-        } finally {
-            if (pendingHide === hide) pendingHide = null
-        }
+        val hide = checkNotNull(pendingHide)
+        isPending = true
+        startHiding()
+        hide.await()
+    }
+
+    suspend fun awaitClosed() {
+        pendingHide?.await()
     }
 
     fun onHidden() {
-        pendingHide?.complete(Unit)
+        if (!isPending) return
+        isPending = false
+        val hidden = pendingHide
+        pendingHide = null
+        hidden?.complete(Unit)
     }
 }

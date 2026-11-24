@@ -69,7 +69,7 @@ class ShareImageUseCase(
                 val bitmapFile = withContext(Dispatchers.IO) {
                     require(filePrefix.length >= MIN_TEMP_FILE_PREFIX_LENGTH)
                     val cacheDir = context.getInternalCacheDirSuspend(CACHE_SUBDIR)
-                    File.createTempFile(filePrefix, fileSuffix, cacheDir).also { file ->
+                    File.createTempFile("${filePrefix}handoff-", fileSuffix, cacheDir).also { file ->
                         staged = file
                         scheduleCleanup(file)
                         file.storeBitmap(shareImageBitmap)

@@ -34,6 +34,7 @@ fun <T : ModalBottomSheetState> ZashiInScreenModalBottomSheet(
     sheetState: SheetState = rememberInScreenModalBottomSheetState(),
     shape: Shape = ZashiModalBottomSheetDefaults.SheetShape,
     dragHandle: @Composable (() -> Unit)? = { ZashiModalBottomSheetDragHandle() },
+    dismissOnGesture: Boolean = true,
     onHidden: () -> Unit = {},
     content: @Composable ColumnScope.(T) -> Unit = {},
 ) {
@@ -44,9 +45,13 @@ fun <T : ModalBottomSheetState> ZashiInScreenModalBottomSheet(
             onDismissRequest = { it.onBack() },
             modifier = modifier,
             sheetState = sheetState,
+            sheetGesturesEnabled = dismissOnGesture,
             scrimColor = Color.Transparent,
             shape = shape,
-            properties = ModalBottomSheetProperties(shouldDismissOnBackPress = false),
+            properties = ModalBottomSheetProperties(
+                shouldDismissOnBackPress = false,
+                shouldDismissOnClickOutside = dismissOnGesture,
+            ),
             dragHandle = dragHandle
         ) {
             val sheetWindow = currentDialogWindow()

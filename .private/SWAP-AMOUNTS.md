@@ -35,7 +35,7 @@ The fork submits no app fees. Current unauthenticated 1Click requests use EXACT_
 
 The review omits a wallet fee for externally funded incoming swaps. Outgoing swaps retain the wallet proposal fee; completed outgoing details use the actual wallet transaction fee rather than historical aggregate metadata. Legacy stored fee fields remain readable for compatibility.
 
-Provider success becomes review-ready only after local funding preparation succeeds. The request and cancel-sheet dismissal share one navigation claim. Wait for the sheet to report itself hidden with the current catalog still valid. Outgoing review requires the matching prepared proposal, and submission rechecks that exact proposal after authentication. A changed or missing proposal requires a fresh review.
+Provider success becomes review-ready only after local funding preparation succeeds. If the cancellation choices are open, hold the request's result until the sheet reports itself hidden. Continue and Back return to the request or its result. Confirmed cancellation retires the request. Recheck the catalog and owner before opening Review. Outgoing review requires the matching prepared proposal, and submission rechecks that exact proposal after authentication. A changed or missing proposal requires a fresh review.
 
 Incoming confirmation saves tracking for the account that reserved the shielded recipient, using the wallet generation captured before reservation. A wallet reset invalidates this attempt. Copy and QR sharing require the same published quote and a current funding deadline. The chooser checks both again after image staging, and a revoked attempt removes its unshared image. Quote expiry leaves the saved tracking available.
 

@@ -125,7 +125,7 @@ internal class SwapVM(
                                 text = stringRes(R.string.swap_cancel_positive),
                                 onClick = { onDismissCancelClick(owner) }
                             ),
-                        onBack = ::onBack
+                        onBack = { onDismissCancelClick(owner) }
                     )
                 } else {
                     null
@@ -302,6 +302,7 @@ internal class SwapVM(
             when {
                 internalState.value.isRequestingQuote -> {
                     if (owner == null) {
+                        cancelSheetDismissal.onOpen()
                         cancelSheet.value = requestSwapQuote.captureNavigationOwnership(quoteRequestJob)
                     }
                 }
@@ -338,6 +339,11 @@ internal class SwapVM(
 
     private fun canNavigateToReview() =
         !isCancellingQuote && cancelSheet.value == null && !cancelSheetDismissal.isPending
+
+    private suspend fun awaitReviewNavigation(): Boolean {
+        cancelSheetDismissal.awaitClosed()
+        return canNavigateToReview()
+    }
 
     private fun onSwapCurrencyTypeClick(newTextFieldAmount: BigDecimal?) {
         internalState.update {
@@ -406,7 +412,7 @@ internal class SwapVM(
                             address = address,
                             selectedAsset = asset,
                             slippage = slippage,
-                            canNavigateToSwapQuote = ::canNavigateToReview,
+                            canNavigateToSwapQuote = ::awaitReviewNavigation,
                             contactNetwork = contactNetwork
                         )
                     }
@@ -417,7 +423,7 @@ internal class SwapVM(
                             refundAddress = address,
                             selectedAsset = asset,
                             slippage = slippage,
-                            canNavigateToSwapQuote = ::canNavigateToReview,
+                            canNavigateToSwapQuote = ::awaitReviewNavigation,
                             contactNetwork = contactNetwork
                         )
                     }

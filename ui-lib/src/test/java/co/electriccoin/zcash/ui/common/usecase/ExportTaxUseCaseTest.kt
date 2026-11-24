@@ -60,6 +60,12 @@ class ExportTaxUseCaseTest {
             parentFile?.mkdirs()
             writeText("current")
         }
+        val qrCache = File(context.cacheDir, "zodl_qr_images").apply { mkdirs() }
+        val oldQr = File(qrCache, "zip_321_request_qr_123.png").apply { writeText("legacy QR") }
+        val oldVkQr = File(qrCache, "zodl_viewing_key_qr_12345678-1234-1234-1234-123456789abc_123.png")
+            .apply { writeText("legacy viewing-key QR") }
+        val newQr = File(qrCache, "zip_321_request_qr_handoff-123.png").apply { writeText("active QR") }
+        val unrelatedQr = File(qrCache, "unrelated-123.png").apply { writeText("unrelated") }
         val transactionTime = Instant.parse("$year-06-15T12:00:00Z")
         val belowGroupingBoundary = mockk<ReceiveTransaction.Pending> {
             every { timestamp } returns transactionTime
@@ -119,6 +125,10 @@ class ExportTaxUseCaseTest {
         assertTrue(legacy.none { it.exists() })
         assertFalse(oldPczt.exists())
         assertEquals("current", newPczt.readText())
+        assertFalse(oldQr.exists())
+        assertFalse(oldVkQr.exists())
+        assertEquals("active QR", newQr.readText())
+        assertEquals("unrelated", unrelatedQr.readText())
         assertTrue(similarlyNamedDirectory.isDirectory)
         assertEquals("unrelated", unrelated.readText())
         assertEquals(taxCache, output.parentFile?.parentFile)

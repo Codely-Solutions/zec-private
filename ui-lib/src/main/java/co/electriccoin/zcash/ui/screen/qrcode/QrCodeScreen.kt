@@ -13,16 +13,13 @@ import org.koin.core.parameter.parametersOf
 internal fun QrCodeScreen(addressType: Int) {
     val vm = koinViewModel<QrCodeVM> { parametersOf(addressType) }
     val qrCodeState by vm.state.collectAsStateWithLifecycle()
-    val snackbarHostState = remember { SnackbarHostState() }
-    BackHandler {
-        when (val qrCodeState = qrCodeState) {
-            QrCodeState.Loading -> {}
+    QrCodeScreenContent(qrCodeState)
+}
 
-            is QrCodeState.Prepared -> {
-                qrCodeState.onBack.invoke()
-            }
-        }
-    }
+@Composable
+internal fun QrCodeScreenContent(qrCodeState: QrCodeState) {
+    val snackbarHostState = remember { SnackbarHostState() }
+    BackHandler { qrCodeState.onBack() }
     QrCodeView(
         state = qrCodeState,
         snackbarHostState = snackbarHostState

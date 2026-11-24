@@ -29,8 +29,11 @@ import co.electriccoin.zcash.ui.design.util.getValue
 internal fun SwapCancelView(state: SwapCancelState?, onHidden: () -> Unit) {
     ZashiInScreenModalBottomSheet(
         state = state,
+        dismissOnGesture = false,
+        dragHandle = null,
         onHidden = onHidden,
     ) { innerState ->
+        Spacer(16.dp)
         Error(
             modifier =
                 Modifier

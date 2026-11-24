@@ -4,6 +4,7 @@ import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
@@ -15,6 +16,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.unit.Density
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -33,7 +36,10 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarNavigationTag
+import co.electriccoin.zcash.ui.design.component.ButtonState
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
+import co.electriccoin.zcash.ui.design.util.imageRes
+import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.error.AndroidErrorBottomSheet
 import co.electriccoin.zcash.ui.screen.error.AndroidErrorDialog
 import co.electriccoin.zcash.ui.screen.error.ErrorBottomSheet
@@ -42,6 +48,8 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.error.SyncErrorArgs
 import co.electriccoin.zcash.ui.screen.error.SyncErrorScreen
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
+import co.electriccoin.zcash.ui.screen.qrcode.QrCodeScreenContent
+import co.electriccoin.zcash.ui.screen.qrcode.QrCodeState
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
 import co.electriccoin.zcash.ui.screen.request.RequestArgs
 import co.electriccoin.zcash.ui.screen.request.RequestScreenContent
@@ -52,6 +60,8 @@ import co.electriccoin.zcash.ui.screen.scankeystone.viewmodel.ScanKeystonePCZTVi
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionArgs
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionScreen
 import co.electriccoin.zcash.ui.screen.signkeystonetransaction.SignKeystoneTransactionVM
+import co.electriccoin.zcash.ui.screen.swap.SwapCancelState
+import co.electriccoin.zcash.ui.screen.swap.SwapCancelView
 import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationArgs
 import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationScreen
 import co.electriccoin.zcash.ui.screen.swap.orconfirmation.ORSwapConfirmationVM
@@ -164,27 +174,62 @@ class RestoredWalletRoutesLayoutTest {
     }
 
     @Test
-    fun restoredRequestCanExitWhileItsAddressIsStillLoading() {
+    fun restoredRequestCanExitWhileItsAddressIsStillLoading() = assertLoadingBack(
+        label = context.getString(co.electriccoin.zcash.ui.design.R.string.general_back),
+        taggedBack = true,
+    ) { navigate(RequestArgs(ReceiveAddressType.Unified.ordinal)) }
+
+    @Test
+    fun restoredReceiveQrCanExitWithoutAnAvailableAddress() = assertLoadingBack(
+        label = context.getString(R.string.general_close),
+        taggedBack = false,
+    ) { navigate("${NavigationTargets.QR_CODE}/${ReceiveAddressType.Sapling.ordinal}") }
+
+    private fun assertLoadingBack(label: String, taggedBack: Boolean, open: NavHostController.() -> Unit) {
         var backs = 0
         install { backs++ }
-        val request = RequestArgs(ReceiveAddressType.Unified.ordinal)
-        compose.runOnIdle { controller.navigate(request) }
-        val back = context.getString(co.electriccoin.zcash.ui.design.R.string.general_back)
-        compose.onNodeWithContentDescription(back).assertIsDisplayed()
-        compose.onNodeWithTag(ZashiTopAppBarNavigationTag.BACK).assertIsEnabled()
+        compose.runOnIdle { controller.open() }
+        val back = compose.onNodeWithContentDescription(label).assertIsDisplayed()
+        val control = if (taggedBack) compose.onNodeWithTag(ZashiTopAppBarNavigationTag.BACK) else back
+        control.assertIsEnabled()
             .performSemanticsAction(SemanticsActions.OnClick) { action -> assertTrue(action()) }
         compose.runOnIdle {
             assertEquals(1, backs)
             assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>())
         }
 
-        compose.runOnIdle { controller.navigate(request) }
-        compose.onNodeWithContentDescription(back).assertIsDisplayed()
+        compose.runOnIdle { controller.open() }
+        compose.onNodeWithContentDescription(label).assertIsDisplayed()
         compose.runOnIdle { backDispatcher.onBackPressed() }
         compose.runOnIdle {
             assertEquals(2, backs)
             assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>())
         }
+    }
+
+    @Test
+    fun quoteCancellationKeepsTheDecisionVisibleAndReportsActualHide() {
+        val sheet = mutableStateOf<SwapCancelState?>(null)
+        var hidden = 0
+        val continueQuote = { sheet.value = null }
+        sheet.value = SwapCancelState(
+            icon = imageRes(R.drawable.ic_swap_quote_cancel),
+            title = stringRes("Cancel this quote?"),
+            subtitle = stringRes("Synthetic quote"),
+            negativeButton = ButtonState(text = stringRes("Cancel quote"), onClick = {}),
+            positiveButton = ButtonState(text = stringRes("Continue quote"), onClick = continueQuote),
+            onBack = continueQuote,
+        )
+        compose.setContent {
+            ZcashTheme { SwapCancelView(sheet.value) { hidden++ } }
+        }
+        val choice = compose.onNodeWithText("Continue quote").assertIsDisplayed()
+        compose.onNodeWithText("Cancel this quote?").performTouchInput { swipeDown() }
+        choice.assertIsDisplayed()
+        compose.runOnIdle { assertEquals(0, hidden) }
+        choice.performSemanticsAction(SemanticsActions.OnClick) { action -> assertTrue(action()) }
+        choice.assertDoesNotExist()
+        compose.runOnIdle { assertEquals(1, hidden) }
     }
 
     @Test
@@ -212,7 +257,7 @@ class RestoredWalletRoutesLayoutTest {
             cancelQuote, mockk(), mockk(), submit, router, mockk(),
         )
 
-    private fun install(onRequestBack: () -> Unit = {}) {
+    private fun install(onLoadingBack: () -> Unit = {}) {
         val accounts = emptyAccounts()
         val swaps = emptySwaps()
         val keys = mockk<KeystoneProposalRepository> {
@@ -238,6 +283,10 @@ class RestoredWalletRoutesLayoutTest {
                     CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
                         controller = rememberNavController()
                         backDispatcher = checkNotNull(LocalOnBackPressedDispatcherOwner.current).onBackPressedDispatcher
+                        val loadingBack = {
+                            onLoadingBack()
+                            check(controller.popBackStack())
+                        }
                         NavHost(controller, startDestination = HomeArgs) {
                             composable<HomeArgs> { Text("Wallet home") }
                             dialogComposable<ErrorDialog> { AndroidErrorDialog(it.toRoute()) }
@@ -245,10 +294,10 @@ class RestoredWalletRoutesLayoutTest {
                             dialogComposable<SyncErrorArgs> { SyncErrorScreen(it.toRoute()) }
                             composable<ORSwapConfirmationArgs> { ORSwapConfirmationScreen() }
                             composable<RequestArgs> {
-                                RequestScreenContent(RequestState.Loading {
-                                    onRequestBack()
-                                    check(controller.popBackStack())
-                                })
+                                RequestScreenContent(RequestState.Loading(loadingBack))
+                            }
+                            composable("${NavigationTargets.QR_CODE}/{addressType}") {
+                                QrCodeScreenContent(QrCodeState.Loading(loadingBack))
                             }
                             composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
                             composable<ScanKeystonePCZTRequest> {

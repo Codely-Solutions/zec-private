@@ -92,6 +92,18 @@ class SwapRequestCancellationTest {
     fun continuingIncomingSwapOpensExactlyOneReview() = exercise(SwapMode.FLEX_INPUT, shouldContinue = true)
 
     @Test
+    fun continuePreservesThePreparationFailureBeforeAndDuringSheetDismissal() {
+        for (failedWhileOpen in listOf(false, true)) {
+            exercise(
+                SwapMode.EXACT_OUTPUT,
+                InsufficientFundsException(),
+                shouldContinue = true,
+                finishWhileOpen = failedWhileOpen,
+            )
+        }
+    }
+
+    @Test
     fun aCatalogChangeBeforeTheSheetFinishesHidingBlocksCrossPayAndSwapReview() {
         for (mode in listOf(SwapMode.EXACT_OUTPUT, SwapMode.FLEX_INPUT)) {
             exercise(mode, shouldContinue = true, invalidateDuringDismissal = true)
@@ -120,6 +132,7 @@ class SwapRequestCancellationTest {
         replaceBeforeRoot: Boolean = false,
         checkPriceRefresh: Boolean = false,
         invalidateDuringDismissal: Boolean = false,
+        finishWhileOpen: Boolean = false,
     ) = runTest(timeout = 15.seconds) {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         mockkObject(FiatCurrency.USD)
@@ -308,20 +321,38 @@ class SwapRequestCancellationTest {
                         verify(exactly = 1) { router.forward(SwapQuoteArgs) }
                     }
                     shouldContinue -> {
-                        assertNotNull(sheet.positiveButton.onClick).invoke()
+                        if (finishWhileOpen) {
+                            finish.complete(Unit)
+                            runCurrent()
+                            verify(exactly = 0) { router.forward(InsufficientFundsArgs) }
+                        }
+                        if (mode == SwapMode.FLEX_INPUT) {
+                            sheet.onBack()
+                        } else {
+                            assertNotNull(sheet.positiveButton.onClick).invoke()
+                        }
                         runCurrent()
                         assertNull(cancelState.value)
                         finish.complete(Unit)
                         runCurrent()
-                        assertSame(firstQuote, assertIs<SwapQuoteData.Success>(repository.quote.value).quote)
+                        if (failure == null) {
+                            assertSame(firstQuote, assertIs<SwapQuoteData.Success>(repository.quote.value).quote)
+                        } else {
+                            assertNull(repository.quote.value)
+                        }
                         verify(exactly = 0) { router.forward(SwapQuoteArgs) }
+                        verify(exactly = 0) { router.forward(InsufficientFundsArgs) }
                         if (invalidateDuringDismissal) {
                             repository.assets.value = repository.assets.value.copy(data = emptyList())
                         }
                         pay?.onCancelSheetHidden()
                         swap?.onCancelSheetHidden()
                         runCurrent()
-                        verify(exactly = if (invalidateDuringDismissal) 0 else 1) { router.forward(SwapQuoteArgs) }
+                        val admitted = !invalidateDuringDismissal && failure == null
+                        verify(exactly = if (admitted) 1 else 0) { router.forward(SwapQuoteArgs) }
+                        verify(exactly = if (failure is InsufficientFundsException) 1 else 0) {
+                            router.forward(InsufficientFundsArgs)
+                        }
                         if (invalidateDuringDismissal) assertNull(repository.quote.value)
                         verify(exactly = 0) { router.backToRoot() }
                     }

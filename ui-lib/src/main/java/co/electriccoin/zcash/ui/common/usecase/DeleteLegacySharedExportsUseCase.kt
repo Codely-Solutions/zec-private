@@ -31,9 +31,19 @@ class DeleteLegacySharedExportsUseCase(private val context: Context) {
         if (Files.isDirectory(pcztDirectory, NOFOLLOW_LINKS) && Files.isRegularFile(legacyPczt, NOFOLLOW_LINKS)) {
             Files.deleteIfExists(legacyPczt)
         }
+        val qrDirectory = cache.resolve(DeleteDiagnosticExportWorker.QR_DIRECTORY)
+        if (Files.isDirectory(qrDirectory, NOFOLLOW_LINKS)) {
+            Files.newDirectoryStream(qrDirectory) { path ->
+                LEGACY_QR.matches(path.fileName.toString()) && Files.isRegularFile(path, NOFOLLOW_LINKS)
+            }.use { paths -> paths.forEach { Files.deleteIfExists(it) } }
+        }
     }
 
     private companion object {
         val LEGACY_CSV = Regex("(Zodl|Keystone|Ledger|View_Only)_Transaction_History_[0-9]{4}\\.csv")
+        val LEGACY_QR = Regex(
+            "(?:zcash_address_qr_|zip_321_request_qr_|swap_deposit_address_|" +
+                "zodl_viewing_key_qr_(?:[a-f0-9-]{36}_)?)[0-9]+\\.png"
+        )
     }
 }

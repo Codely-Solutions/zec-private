@@ -69,7 +69,7 @@ import kotlinx.coroutines.runBlocking
 private fun QrCodeLoadingPreview() =
     ZcashTheme(appearanceMode = AppearanceMode.DARK) {
         QrCodeView(
-            state = QrCodeState.Loading,
+            state = QrCodeState.Loading {},
             snackbarHostState = SnackbarHostState(),
         )
     }
@@ -118,8 +118,10 @@ internal fun QrCodeView(
     snackbarHostState: SnackbarHostState,
 ) {
     when (state) {
-        QrCodeState.Loading -> {
-            CircularScreenProgressIndicator()
+        is QrCodeState.Loading -> {
+            BlankBgScaffold(topBar = { QrCodeTopAppBar(onBack = state.onBack) }) { padding ->
+                CircularScreenProgressIndicator(modifier = Modifier.padding(padding))
+            }
         }
 
         is QrCodeState.Prepared -> {
