@@ -199,14 +199,15 @@ class MigrationAppHooksImpl(
             val target = key?.let {
                 accountDataSource.getAllAccounts().firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key }
             }
+            val selectedKey = key.takeIf { target != null }
             walletWriteAccess.write(generation) {
                 target?.let { accountDataSource.selectAccount(it) }
-                if (target != null && key != null && runStep) {
-                    MigrationScheduler(context).schedule(key, kotlin.time.Duration.ZERO)
+                if (selectedKey != null && runStep) {
+                    MigrationScheduler(context).schedule(selectedKey, kotlin.time.Duration.ZERO)
                 }
                 launchNavigation.requestMigrationProgress(
                     NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs)),
-                    key.takeIf { target != null },
+                    selectedKey,
                 )
             }
         }

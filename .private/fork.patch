@@ -3382,7 +3382,7 @@ index 459ac8e4e..6d1aa04df 100644
 -    }
 -
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
-index 294506ed1..0fb8753d3 100644
+index 294506ed1..3150dfd92 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.migration
@@ -3454,7 +3454,7 @@ index 294506ed1..0fb8753d3 100644
 +                openNotificationProgress(
 +                    ownerKey, scope, intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false)
 +                )
-@@ -186,23 +187,24 @@ class MigrationAppHooksImpl(
+@@ -186,23 +187,25 @@ class MigrationAppHooksImpl(
 -    /**
 -     * Selects the account the tapped notification belongs to (its storage-key id travels in
 -     * [MigrationNotifier.EXTRA_ACCOUNT_KEY_ID]) before the migration screens — which all read the
@@ -3493,21 +3493,22 @@ index 294506ed1..0fb8753d3 100644
 +            val target = key?.let {
 +                accountDataSource.getAllAccounts().firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key }
 +            }
++            val selectedKey = key.takeIf { target != null }
 +            walletWriteAccess.write(generation) {
 +                target?.let { accountDataSource.selectAccount(it) }
-+                if (target != null && key != null && runStep) {
-+                    MigrationScheduler(context).schedule(key, kotlin.time.Duration.ZERO)
++                if (selectedKey != null && runStep) {
++                    MigrationScheduler(context).schedule(selectedKey, kotlin.time.Duration.ZERO)
 +                }
 +                launchNavigation.requestMigrationProgress(
 +                    NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs)),
-+                    key.takeIf { target != null },
++                    selectedKey,
 +                )
-@@ -210,4 +211,0 @@ class MigrationAppHooksImpl(
+@@ -210,4 +212,0 @@ class MigrationAppHooksImpl(
 -        }.onFailure {
 -            migrationLog(
 -                "AppHooks: notification account switch failed (${it.message}) — navigating on the selected account."
 -            )
-@@ -217 +215,9 @@ class MigrationAppHooksImpl(
+@@ -217 +216,9 @@ class MigrationAppHooksImpl(
 -    override suspend fun checkRecovery() = checkMigrationRecovery()
 +    override suspend fun checkRecovery() {
 +        if (!resetProgress.isPending.value) {
@@ -3518,7 +3519,7 @@ index 294506ed1..0fb8753d3 100644
 +            }
 +        }
 +    }
-@@ -220,5 +226,13 @@ class MigrationAppHooksImpl(
+@@ -220,5 +227,13 @@ class MigrationAppHooksImpl(
 -        val keys =
 -            accountKeyId?.let { listOf(it) }
 -                ?: runCatching {
@@ -3537,14 +3538,14 @@ index 294506ed1..0fb8753d3 100644
 +        } else {
 +            listOf(accountKeyId)
 +        }
-@@ -229,6 +242,0 @@ class MigrationAppHooksImpl(
+@@ -229,6 +243,0 @@ class MigrationAppHooksImpl(
 -        // Belt-and-braces (wallet reset): WorkManager auto-tags every request with its worker
 -        // class name, so a tag sweep also catches jobs whose account key we can no longer resolve.
 -        if (accountKeyId == null) {
 -            val wm = androidx.work.WorkManager.getInstance(context)
 -            wm.cancelAllWorkByTag(MigrationWorker::class.java.name)
 -        }
-@@ -236,0 +245,4 @@ class MigrationAppHooksImpl(
+@@ -236,0 +246,4 @@ class MigrationAppHooksImpl(
 +
 +    private companion object {
 +        val ACCOUNT_KEY = Regex("[0-9a-fA-F]{32}")

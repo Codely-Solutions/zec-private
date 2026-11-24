@@ -536,7 +536,7 @@
   "feature-ledger/src/test/java/co/electriccoin/zcash/ui/screen/signledgertransaction/LedgerSignVMTest.kt": "78e16e9f533ca840d208413d2b79af38e7b4451f2c432f65d4a73549309d0334",
   "feature-migration/build.gradle.kts": "8087a5664b838ae00d4dac589fda73a7c07871d4f25a1fbf5033abf276cbf5a8",
   "feature-migration/src/main/AndroidManifest.xml": "74a6f1a6dd1dc12d2385cbb21859cf2d19d91ca9bcf43e1b6066864b88efd0ae",
-  "feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt": "6618b2eae46b83b926f2de2f433afd43ed5740a3085b1ef473430913dd90329e",
+  "feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt": "e539cfb8849105d31e38f92c130320e0e314c706e62582e3bc13eca668a09f2e",
   "feature-migration/src/main/java/co/electriccoin/zcash/migration/MigrationLogger.kt": "22e49788adbc69e5d431970543e94d334220e79568406152c64fbd7fa1db0eeb",
   "feature-migration/src/main/java/co/electriccoin/zcash/migration/di/FeatureMigrationModule.kt": "ce20a3e62c3f52a5b29c8dfd98e038e2c2f1d9c2e234950839df426d2372a038",
   "feature-migration/src/main/java/co/electriccoin/zcash/ui/common/model/migration/LiveMigrationSnapshot.kt": "fd1dcf414a03c976a0d75e49ea2759359277566c9507f31f010836160b49d0b8",
