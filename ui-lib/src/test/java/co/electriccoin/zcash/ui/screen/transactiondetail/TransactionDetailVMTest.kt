@@ -31,6 +31,7 @@ import co.electriccoin.zcash.ui.common.usecase.GetTransactionDetailByIdUseCase
 import co.electriccoin.zcash.ui.common.usecase.ReloadHandle
 import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 import co.electriccoin.zcash.ui.design.util.TickerLocation.HIDDEN
+import co.electriccoin.zcash.ui.design.component.ButtonStyle
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
@@ -247,7 +248,8 @@ class TransactionDetailVMTest {
             assertEquals(stringRes(R.string.private_swap_saved_status), savedInfo.statusRow.title, assetId)
             assertFalse(savedInfo.statusRow.isLoading, assetId)
             assertNull(savedInfo.donationBasisZec, assetId)
-            assertNotNull(failedRefresh.errorFooter, assetId)
+            assertNull(failedRefresh.errorFooter, assetId)
+            assertEquals(stringRes(R.string.private_swap_refresh_unavailable), failedRefresh.infoFooter, assetId)
             val retry = assertNotNull(failedRefresh.primaryButton, assetId)
             assertEquals(
                 stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
@@ -347,7 +349,9 @@ class TransactionDetailVMTest {
         )
 
         assertEquals(SwapStatus.INCOMPLETE_DEPOSIT, assertIs<SendSwapState>(detail.info).statusRow.status)
-        assertNotNull(detail.errorFooter)
+        assertNull(detail.errorFooter)
+        assertEquals(stringRes(R.string.private_swap_refresh_unavailable), detail.infoFooter)
+        assertEquals(ButtonStyle.SECONDARY, detail.primaryButton?.style)
         val retry = assertNotNull(detail.primaryButton)
         val support = assertNotNull(detail.secondaryButton)
         assertEquals(stringRes(DesignR.string.disconnectHWWallet_tryAgain), retry.text)
@@ -369,7 +373,9 @@ class TransactionDetailVMTest {
         )))
 
         assertEquals(SwapStatus.INCOMPLETE_DEPOSIT, assertIs<SendSwapState>(detail.info).statusRow.status)
-        assertNotNull(detail.errorFooter)
+        assertNull(detail.errorFooter)
+        assertEquals(stringRes(R.string.private_swap_refresh_unavailable), detail.infoFooter)
+        assertEquals(ButtonStyle.SECONDARY, detail.primaryButton?.style)
         assertNotNull(detail.primaryButton).onClick()
         assertNotNull(detail.secondaryButton).onClick()
         verify(exactly = 1) { reload.requestReload() }
@@ -431,7 +437,7 @@ class TransactionDetailVMTest {
                     savedMetadata = metadata,
                 )
             )
-        val failed = vm.state.first { it.errorFooter != null }
+        val failed = vm.state.first { it.infoFooter == stringRes(R.string.private_swap_refresh_unavailable) }
         val info = assertIs<SendSwapState>(failed.info)
         assertNull(info.statusRow.status)
         assertFalse(info.statusRow.isLoading)

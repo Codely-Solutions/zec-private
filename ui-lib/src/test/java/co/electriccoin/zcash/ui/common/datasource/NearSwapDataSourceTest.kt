@@ -186,6 +186,39 @@ class NearSwapDataSourceTest {
         }
 
     @Test
+    fun freshQuoteBindsTheEchoToWhatWasPostedForEveryMode() = runBlocking {
+        val deposit = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
+        val synchronizer = mockk<Synchronizer> {
+            coEvery { validateAddress(any()) } returns AddressType.Unified
+        }
+        coEvery { synchronizerProvider.getSynchronizer() } returns synchronizer
+        for (mode in SwapMode.entries) {
+            val response = SwapInputProvenanceFixture.status(
+                origin, zec, deposit, SwapType.valueOf(mode.name), "{}",
+            ).response.quoteResponse
+            var differingEcho = true
+            coEvery { nearApiProvider.requestQuote(any()) } coAnswers {
+                val posted = firstArg<QuoteRequest>()
+                val echoed = if (differingEcho) posted.amount + BigDecimal.ONE else posted.amount.setScale(2)
+                response.copy(quoteRequest = posted.copy(amount = echoed))
+            }
+            val fixedAmount = if (mode == SwapMode.EXACT_OUTPUT) BigDecimal("2") else BigDecimal.ONE
+
+            val rejection = assertFailsWith<SwapQuoteMismatchException.Rejected> {
+                dataSource.requestQuote(mode, fixedAmount, "refund", origin, "recipient", zec, BigDecimal.ONE)
+            }
+            assertEquals(SwapQuoteMismatchType.REQUESTED_AMOUNT, rejection.type, mode.name)
+            assertEquals(deposit, rejection.depositAddress)
+
+            differingEcho = false
+            val admitted = dataSource.requestQuote(
+                mode, fixedAmount, "refund", origin, "recipient", zec, BigDecimal.ONE,
+            )
+            assertEquals(mode, admitted.mode)
+        }
+    }
+
+    @Test
     fun incomingQuoteChecksTheExternalDepositAgainstTheOriginNetwork() = runBlocking {
         val returned = SwapInputProvenanceFixture.status(
             origin, zec, "t1wrongnetwork", SwapType.FLEX_INPUT, "{}",

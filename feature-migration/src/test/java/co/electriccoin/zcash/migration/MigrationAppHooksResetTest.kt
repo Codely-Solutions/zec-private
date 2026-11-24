@@ -22,6 +22,7 @@ import co.electriccoin.zcash.work.MigrationDriveOnce
 import co.electriccoin.zcash.work.MigrationAccountRetirement
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationWorker
+import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 import co.electriccoin.zcash.work.MigrationScheduler
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 import com.google.common.util.concurrent.Futures
@@ -56,7 +57,9 @@ class MigrationAppHooksResetTest {
         val key = "retirement-owner"
         val drain = CompletableDeferred<Unit>()
         val cancel = CompletableDeferred<Unit>()
+        val cancelStarted = CompletableDeferred<Unit>()
         val removed = CompletableDeferred<Unit>()
+        val context = retirementContext()
         val driver = mockk<MigrationLiveDriver>(relaxed = true)
         var driveEntries = 0
         val drive = mockk<MigrationDriveOnce> {
@@ -67,7 +70,7 @@ class MigrationAppHooksResetTest {
         }
         val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
         val hooks = MigrationAppHooksImpl(
-            mockk(), mockk(), LaunchNavigationRequests(), mockk(), mockk(relaxed = true), mockk(), reset, driver, drive,
+            mockk(), mockk(), LaunchNavigationRequests(), mockk(), mockk(relaxed = true), context, reset, driver, drive,
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
         )
         mockkConstructor(MigrationScheduler::class)
@@ -75,9 +78,16 @@ class MigrationAppHooksResetTest {
             coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(key) } coAnswers {
                 assertTrue(removed.isCompleted)
                 assertTrue(MigrationAccountRetirement.isRemoved(key))
+                assertTrue(MigrationWorkerHeartbeat.removalPending(context, key))
+                cancelStarted.complete(Unit)
                 cancel.await()
             }
-            val retirement = launch { hooks.retireHardwareAccount(key) { removed.complete(Unit) } }
+            val retirement = launch {
+                hooks.retireHardwareAccount(key) {
+                    assertTrue(MigrationWorkerHeartbeat.removalPending(context, key))
+                    removed.complete(Unit)
+                }
+            }
             runCurrent()
 
             assertFalse(MigrationAccountRetirement.blocks(key))
@@ -86,7 +96,7 @@ class MigrationAppHooksResetTest {
             coVerify(exactly = 0) { driver.stopAndJoin(any()) }
 
             drain.complete(Unit)
-            runCurrent()
+            cancelStarted.await()
             assertTrue(MigrationAccountRetirement.blocks(key))
             assertFalse(MigrationAccountRetirement.blocks("other-owner"))
             coVerify(exactly = 1) { driver.stopAndJoin(key) }
@@ -95,8 +105,9 @@ class MigrationAppHooksResetTest {
             assertEquals(null, MigrationAccountRetirement.keepWake(key) { "stale wake" })
 
             cancel.complete(Unit)
-            runCurrent()
-            assertTrue(retirement.isCompleted && removed.isCompleted)
+            retirement.join()
+            assertTrue(removed.isCompleted)
+            assertFalse(MigrationWorkerHeartbeat.removalPending(context, key))
             assertTrue(MigrationAccountRetirement.blocks(key))
             coVerify(exactly = 0) { driver.startIfNotRunning(key) }
         } finally {
@@ -108,13 +119,14 @@ class MigrationAppHooksResetTest {
     @Test
     fun failedDeletionReopensOnlyTheOriginalAccountsMigration() = runTest {
         val key = "failed-retirement-owner"
+        val context = retirementContext()
         val driver = mockk<MigrationLiveDriver>(relaxed = true)
         val drive = mockk<MigrationDriveOnce>(relaxed = true) {
             coEvery { withIdleDrive<Unit>(any()) } coAnswers { firstArg<suspend () -> Unit>().invoke() }
         }
         val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
         val hooks = MigrationAppHooksImpl(
-            mockk(), mockk(), mockk(), mockk(), mockk(), mockk(), reset, driver, drive,
+            mockk(), mockk(), mockk(), mockk(), mockk(), context, reset, driver, drive,
             mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
         )
         mockkConstructor(MigrationScheduler::class)
@@ -125,6 +137,7 @@ class MigrationAppHooksResetTest {
             assertFailsWith<IllegalStateException> {
                 hooks.retireHardwareAccount(key) {
                     assertEquals(MigrationSdkLookup.RemovalManaged, sdk.lookup(key))
+                    assertTrue(MigrationWorkerHeartbeat.removalPending(context, key))
                     assertEquals("existing wake", queuedWake)
                     MigrationAccountRetirement.keepWake(key) { queuedWake = "wake from sync" }
                     error("Synthetic account deletion failed")
@@ -132,11 +145,35 @@ class MigrationAppHooksResetTest {
             }
             assertFalse(MigrationAccountRetirement.blocks(key))
             assertEquals("wake from sync", queuedWake)
+            assertFalse(MigrationWorkerHeartbeat.removalPending(context, key))
             coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().cancelAndWait(any()) }
             coVerify(exactly = 1) { driver.startIfNotRunning(key) }
         } finally {
             MigrationAccountRetirement.restore(key)
             unmockkConstructor(MigrationScheduler::class)
+        }
+    }
+
+    @Test
+    fun retirementRefusesNativeDeletionIfTheDurableGuardCannotBeWritten() = runTest {
+        val key = "failed-removal-checkpoint"
+        val drive = mockk<MigrationDriveOnce> {
+            coEvery { withIdleDrive<Unit>(any()) } coAnswers { firstArg<suspend () -> Unit>().invoke() }
+        }
+        val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
+        val hooks = MigrationAppHooksImpl(
+            mockk(), mockk(), mockk(), mockk(), mockk(), retirementContext(commitSucceeds = false), reset,
+            mockk(relaxed = true), drive, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
+        )
+        var deletionEntered = false
+        try {
+            assertFailsWith<IllegalStateException> {
+                hooks.retireHardwareAccount(key) { deletionEntered = true }
+            }
+            assertFalse(deletionEntered)
+            assertFalse(MigrationAccountRetirement.blocks(key))
+        } finally {
+            MigrationAccountRetirement.restore(key)
         }
     }
 
@@ -155,7 +192,7 @@ class MigrationAppHooksResetTest {
         }
         val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
         val hooks = MigrationAppHooksImpl(
-            mockk(), mockk(), navigation, accounts, mockk(relaxed = true), mockk(), reset,
+            mockk(), mockk(), navigation, accounts, mockk(relaxed = true), retirementContext(), reset,
             mockk(relaxed = true), drive, mockk(relaxed = true), mockk(relaxed = true), readouts,
         )
         mockkConstructor(MigrationScheduler::class)
@@ -230,6 +267,7 @@ class MigrationAppHooksResetTest {
     fun resetCancelsOwnedFallbackAlarmWithoutAnAccountSnapshot() = runTest {
         val preferences = mockk<SharedPreferences> {
             every { all } returns mapOf("next_wake_at_fixture" to 100L, "last_run_at_fixture" to 5L, "other" to 1L)
+            every { getBoolean("removal_pending_fixture", false) } returns false
         }
         val context = mockk<Context> {
             every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
@@ -344,6 +382,28 @@ class MigrationAppHooksResetTest {
         } finally {
             acknowledged.complete(Unit)
             unmockkConstructor(MigrationScheduler::class)
+        }
+    }
+
+    private fun retirementContext(commitSucceeds: Boolean = true): Context {
+        val recorded = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+        val editor = mockk<SharedPreferences.Editor> {
+            every { putBoolean(any(), true) } answers {
+                recorded.add(firstArg())
+                this@mockk
+            }
+            every { remove(any()) } answers {
+                recorded.remove(firstArg())
+                this@mockk
+            }
+            every { commit() } returns commitSucceeds
+        }
+        val preferences = mockk<SharedPreferences> {
+            every { getBoolean(any(), false) } answers { firstArg<String>() in recorded }
+            every { edit() } returns editor
+        }
+        return mockk<Context> {
+            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
         }
     }
 

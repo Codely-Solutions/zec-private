@@ -141,6 +141,9 @@ for clear in (False, True):
         deadline = read_timestamp('2099-01-01T00:00:00.000000001Z')
         self.assertEqual(deadline, read_timestamp('2099-01-01T01:00:00.000000001+01:00'))
         self.assertNotEqual(deadline, read_timestamp('2099-01-01T00:00:00.000000002Z'))
+        self.assertEqual(deadline, read_timestamp('2099-01-01T18:00:00.000000001+18:00'))
+        with self.assertRaisesRegex(RuntimeError, 'response timestamp offset'):
+            read_timestamp('2099-01-01T04:00:00+03:60')
 
     def test_unfunded_near_probe_binds_every_reviewed_term(self):
         import live_near
@@ -237,6 +240,8 @@ for clear in (False, True):
             ('status', 'updatedAt', 'invalid'),
             ('envelope', 'timestamp', '2026-11-24 00:00:00Z'),
             ('quoteRequest', 'deadline', '2099-01-01 00:00:00Z'),
+            ('quoteRequest', 'deadline', '2099-01-01T00:00:00+19:00'),
+            ('status', 'updatedAt', '2026-11-24T00:00:00-18:01'),
             ('status', 'updatedAt', '2026-11-24 00:00:00Z'),
             ('quoteRequest', 'appFees', [{'fee': 0}]),
             ('status', 'swapDetails', {'depositedAmount': '0.5'}),

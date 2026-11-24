@@ -109,11 +109,13 @@ class TransactionDetailVM(
                     snapshot
                 }
                 val info = createTransactionInfoState(transaction)
+                val hasSavedDetails = transaction.swap?.savedMetadata != null || recorded != null
+                val refreshFailed = hasSavedDetails && transaction.swap?.error != null
                 val retry = transaction.swap?.error?.let {
                     mapper.createTransactionDetailErrorButtonState(
                         it,
                         transaction.reloadHandle,
-                        allowServiceRetry = transaction.swap.savedMetadata != null || recorded != null,
+                        hasSavedDetails = hasSavedDetails,
                     )
                 }
                 val support = createSwapSupportButton(transaction)
@@ -143,14 +145,16 @@ class TransactionDetailVM(
                             transaction.transaction.accountUuid != null &&
                                 transaction.metadata.bookmarkWriteToken != null
                         },
-                    errorFooter = createErrorFooter(transaction),
-                    infoFooter =
-                        stringRes(R.string.deposits_info)
-                            .takeIf {
-                                val sendSwap = info as? SendSwapState
-                                transaction.swap?.status?.status == PENDING &&
-                                    sendSwap?.statusRow?.status == PENDING && !sendSwap.statusRow.fundingNotSubmitted
-                            }
+                    errorFooter = if (refreshFailed) null else createErrorFooter(transaction),
+                    infoFooter = if (refreshFailed) {
+                        stringRes(R.string.private_swap_refresh_unavailable)
+                    } else {
+                        val sendSwap = info as? SendSwapState
+                        stringRes(R.string.deposits_info).takeIf {
+                            transaction.swap?.status?.status == PENDING &&
+                                sendSwap?.statusRow?.status == PENDING && !sendSwap.statusRow.fundingNotSubmitted
+                        }
+                    }
                 )
             }.stateIn(
                 scope = viewModelScope,

@@ -75,11 +75,15 @@ def read_positive_atomic(value):
 def read_timestamp(value):
     instant = re.fullmatch(
         r'[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}'
-        r'(?:\.([0-9]{1,9}))?(?:[Zz]|[+-][0-9]{2}:[0-9]{2})',
+        r'(?:\.([0-9]{1,9}))?(?:[Zz]|[+-]([0-9]{2}):([0-9]{2}))',
         value,
     ) if isinstance(value, str) else None
     if instant is None:
         raise RuntimeError('Invalid NEAR response timestamp')
+    if instant[2] is not None:
+        hours, minutes = int(instant[2]), int(instant[3])
+        if minutes > 59 or hours * 60 + minutes > 18 * 60:
+            raise RuntimeError('Invalid NEAR response timestamp offset')
     try:
         timestamp = datetime.datetime.fromisoformat(value.upper()).astimezone(datetime.timezone.utc)
     except ValueError:

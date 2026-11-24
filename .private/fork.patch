@@ -3414,7 +3414,7 @@ index 459ac8e4e..6d1aa04df 100644
 -    }
 -
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
-index 294506ed1..7ffd76db1 100644
+index 294506ed1..4a621cb78 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.migration
@@ -3439,28 +3439,29 @@ index 294506ed1..7ffd76db1 100644
 +import co.electriccoin.zcash.work.MigrationLiveDriver
 @@ -66,0 +80 @@ import co.electriccoin.zcash.work.MigrationWorker
 +import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
-@@ -67,0 +82,6 @@ import kotlinx.coroutines.CoroutineScope
+@@ -67,0 +82,7 @@ import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.guava.await
 +import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.NonCancellable
 +import kotlinx.coroutines.currentCoroutineContext
 +import kotlinx.coroutines.ensureActive
 +import kotlinx.coroutines.withContext
-@@ -118,0 +139 @@ class MigrationSyncedHookImpl(
+@@ -118,0 +140 @@ class MigrationSyncedHookImpl(
 +    private val resetProgress: ResetProgressStore,
-@@ -120,0 +142 @@ class MigrationSyncedHookImpl(
+@@ -120,0 +143 @@ class MigrationSyncedHookImpl(
 +        if (resetProgress.isPending.value) return
-@@ -125,3 +146,0 @@ class MigrationSyncedHookImpl(
+@@ -125,3 +147,0 @@ class MigrationSyncedHookImpl(
 -        val isInProgress =
 -            getOrchardMigrationSdk().getMigrationStateUnreconciled() is cash.z.ecc.android.sdk.MigrationState.InProgress
 -        if (!isInProgress) return
-@@ -128,0 +148,2 @@ class MigrationSyncedHookImpl(
+@@ -128,0 +149,2 @@ class MigrationSyncedHookImpl(
 +        val state = getOrchardMigrationSdk(accountKeyId)?.getMigrationStateUnreconciled()
 +        if (state !is cash.z.ecc.android.sdk.MigrationState.InProgress || resetProgress.isPending.value) return
-@@ -136 +157 @@ class MigrationAppHooksImpl(
+@@ -136 +158 @@ class MigrationAppHooksImpl(
 -    private val navigationRouter: NavigationRouter,
 +    private val launchNavigation: LaunchNavigationRequests,
-@@ -139,0 +161,7 @@ class MigrationAppHooksImpl(
+@@ -139,0 +162,7 @@ class MigrationAppHooksImpl(
 +    private val resetProgress: ResetProgressStore,
 +    private val migrationLiveDriver: MigrationLiveDriver,
 +    private val migrationDriveOnce: MigrationDriveOnce,
@@ -3468,10 +3469,10 @@ index 294506ed1..7ffd76db1 100644
 +    private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
 +    private val migrationReadouts: MigrationTransferStateRepository,
 +    private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(resetProgress),
-@@ -145,0 +174,2 @@ class MigrationAppHooksImpl(
+@@ -145,0 +175,2 @@ class MigrationAppHooksImpl(
 +            resetProgress.isPending.value -> false
 +
-@@ -153,8 +183,7 @@ class MigrationAppHooksImpl(
+@@ -153,8 +184,7 @@ class MigrationAppHooksImpl(
 -            intent.getBooleanExtra(MigrationNotifier.EXTRA_OPEN_MIGRATION, false) -> {
 -                // replaceAll ensures Home is always on the back stack regardless of how the app
 -                // was opened. Account selection first — the migration screens read the SELECTED
@@ -3487,7 +3488,7 @@ index 294506ed1..7ffd76db1 100644
 +                openNotificationProgress(
 +                    ownerKey, scope, intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false)
 +                )
-@@ -164,11 +193,33 @@ class MigrationAppHooksImpl(
+@@ -164,11 +194,33 @@ class MigrationAppHooksImpl(
 -            intent.getBooleanExtra(MigrationNotifier.EXTRA_RUN_STEP, false) -> {
 -                // Dead-man's-switch tap: everything is pre-signed, so no review UI exists — the
 -                // app open exists purely to give the OS a live process. RE-KICK the worker
@@ -3532,9 +3533,9 @@ index 294506ed1..7ffd76db1 100644
 +                            MigrationScheduler(context).runNotificationStep(key)
 +                        }
 +                        NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(key)))
-@@ -176 +226,0 @@ class MigrationAppHooksImpl(
+@@ -176 +227,0 @@ class MigrationAppHooksImpl(
 -                    navigationRouter.replaceAll(HomeArgs, MigrationProgressArgs)
-@@ -178 +228,9 @@ class MigrationAppHooksImpl(
+@@ -178 +229,9 @@ class MigrationAppHooksImpl(
 -                true
 +                val offered = MigrationAccountRetirement.admit(key) {
 +                    launchNavigation.finishMigrationProgress(notice, command)
@@ -3545,10 +3546,10 @@ index 294506ed1..7ffd76db1 100644
 +            } catch (e: Exception) {
 +                launchNavigation.finishMigrationProgress(notice, null)
 +                migrationLog("Migration notification unavailable (${e.javaClass.simpleName}).")
-@@ -179,0 +238,2 @@ class MigrationAppHooksImpl(
+@@ -179,0 +239,2 @@ class MigrationAppHooksImpl(
 +        }
 +    }
-@@ -181,2 +241,9 @@ class MigrationAppHooksImpl(
+@@ -181,2 +242,9 @@ class MigrationAppHooksImpl(
 -            else -> {
 -                false
 +    override suspend fun checkRecovery() {
@@ -3560,9 +3561,9 @@ index 294506ed1..7ffd76db1 100644
 +                        NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs(ownerKey)))
 +                    )
 +                }
-@@ -184,0 +252 @@ class MigrationAppHooksImpl(
+@@ -184,0 +253 @@ class MigrationAppHooksImpl(
 +    }
-@@ -186,23 +254,32 @@ class MigrationAppHooksImpl(
+@@ -186,23 +255,38 @@ class MigrationAppHooksImpl(
 -    /**
 -     * Selects the account the tapped notification belongs to (its storage-key id travels in
 -     * [MigrationNotifier.EXTRA_ACCOUNT_KEY_ID]) before the migration screens — which all read the
@@ -3601,7 +3602,13 @@ index 294506ed1..7ffd76db1 100644
 +            currentCoroutineContext().ensureActive()
 +            withContext(NonCancellable) {
 +                migrationDriveOnce.withIdleDrive {
-+                    checkNotNull(walletWriteAccess.write(generation) { deleteAccount() }) {
++                    checkNotNull(walletWriteAccess.write(generation) {
++                        val recorded = withContext(Dispatchers.IO) {
++                            MigrationWorkerHeartbeat.recordRemovalPending(context, accountKeyId)
++                        }
++                        check(recorded) { "Unable to record migration account removal" }
++                        deleteAccount()
++                    }) {
 +                        "The wallet changed before the account could be removed"
 +                    }
 +                    MigrationAccountRetirement.markRemoved(accountKeyId)
@@ -3618,17 +3625,28 @@ index 294506ed1..7ffd76db1 100644
 +        } finally {
 +            if (retirementStarted && !deleted) {
 +                restoreRetirement(accountKeyId, generation)
-@@ -210,4 +286,0 @@ class MigrationAppHooksImpl(
+@@ -210,4 +293,0 @@ class MigrationAppHooksImpl(
 -        }.onFailure {
 -            migrationLog(
 -                "AppHooks: notification account switch failed (${it.message}) — navigating on the selected account."
 -            )
-@@ -217 +290,15 @@ class MigrationAppHooksImpl(
+@@ -217 +297,27 @@ class MigrationAppHooksImpl(
 -    override suspend fun checkRecovery() = checkMigrationRecovery()
 +    private suspend fun restoreRetirement(accountKeyId: String, generation: Long) {
 +        withContext(NonCancellable) {
-+            MigrationAccountRetirement.restore(accountKeyId)
-+            walletWriteAccess.write(generation) { migrationLiveDriver.startIfNotRunning(accountKeyId) }
++            var reopened = false
++            try {
++                walletWriteAccess.write(generation) {
++                    withContext(Dispatchers.IO) {
++                        MigrationWorkerHeartbeat.clearRemovalPending(context, accountKeyId)
++                    }
++                    MigrationAccountRetirement.restore(accountKeyId)
++                    reopened = true
++                    migrationLiveDriver.startIfNotRunning(accountKeyId)
++                }
++            } finally {
++                if (!reopened) MigrationAccountRetirement.restore(accountKeyId)
++            }
 +        }
 +    }
 +
@@ -3636,11 +3654,12 @@ index 294506ed1..7ffd76db1 100644
 +    private suspend fun cancelRemovedAccountWork(scheduler: MigrationScheduler, accountKeyId: String) {
 +        try {
 +            scheduler.cancelAndWait(accountKeyId)
++            withContext(Dispatchers.IO) { MigrationWorkerHeartbeat.clearRemovalPending(context, accountKeyId) }
 +        } catch (e: Exception) {
 +            migrationLog("Removed account worker cleanup unavailable (${e.javaClass.simpleName}).")
 +        }
 +    }
-@@ -220,5 +307,17 @@ class MigrationAppHooksImpl(
+@@ -220,5 +326,17 @@ class MigrationAppHooksImpl(
 -        val keys =
 -            accountKeyId?.let { listOf(it) }
 -                ?: runCatching {
@@ -3663,7 +3682,9 @@ index 294506ed1..7ffd76db1 100644
 +            pendingKeystone.peek(accountKeyId)?.let { pendingKeystone.clear(accountKeyId, it) }
 +            listOf(accountKeyId)
 +        }
-@@ -228,6 +327 @@ class MigrationAppHooksImpl(
+@@ -226,0 +345 @@ class MigrationAppHooksImpl(
++            withContext(Dispatchers.IO) { MigrationWorkerHeartbeat.clearRemovalPending(context, key) }
+@@ -228,6 +347 @@ class MigrationAppHooksImpl(
 -        }
 -        // Belt-and-braces (wallet reset): WorkManager auto-tags every request with its worker
 -        // class name, so a tag sweep also catches jobs whose account key we can no longer resolve.
@@ -3671,31 +3692,31 @@ index 294506ed1..7ffd76db1 100644
 -            val wm = androidx.work.WorkManager.getInstance(context)
 -            wm.cancelAllWorkByTag(MigrationWorker::class.java.name)
 +            migrationNotifier.cancelStepDue(key)
-@@ -236,0 +331,4 @@ class MigrationAppHooksImpl(
+@@ -236,0 +351,4 @@ class MigrationAppHooksImpl(
 +
 +    private companion object {
 +        val ACCOUNT_KEY = Regex("[0-9a-fA-F]{32}")
 +    }
-@@ -242,3 +340 @@ class MigrationNavigatorImpl(
+@@ -242,3 +360 @@ class MigrationNavigatorImpl(
 -    override fun backToMigrationReview() = navigationRouter.backTo(MigrationReviewArgs::class)
 -
 -    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs)
 +    override fun forwardToRestartMigration() = navigationRouter.forward(MigrationRestartArgs())
-@@ -255,2 +351,2 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -255,2 +371,2 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationBatteryArgs> { MigrationBatteryScreen() }
 -            composable<MigrationNotificationArgs> { MigrationNotificationScreen() }
 +            composable<MigrationBatteryArgs> { MigrationBatteryScreen(it.toRoute()) }
 +            composable<MigrationNotificationArgs> { MigrationNotificationScreen(it.toRoute()) }
-@@ -259 +355 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -259 +375 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            dialogComposable<MigrationTorFailureArgs> { MigrationTorFailureScreen() }
 +            dialogComposable<MigrationTorFailureArgs> { entry -> MigrationTorFailureScreen(entry.toRoute()) }
-@@ -261 +357 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -261 +377 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationSendingArgs> { MigrationSendingScreen() }
 +            composable<MigrationSendingArgs> { entry -> MigrationSendingScreen(entry.toRoute()) }
-@@ -263 +359 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -263 +379 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationScheduledArgs> { MigrationScheduledScreen() }
 +            composable<MigrationScheduledArgs> { entry -> MigrationScheduledScreen(entry.toRoute()) }
-@@ -265,3 +361,3 @@ class MigrationNavContributorImpl : MigrationNavContributor {
+@@ -265,3 +381,3 @@ class MigrationNavContributorImpl : MigrationNavContributor {
 -            composable<MigrationProgressArgs> { MigrationProgressScreen() }
 -            composable<MigrationTransferInvalidArgs> { MigrationTransferInvalidScreen() }
 -            composable<MigrationRestartArgs> { MigrationRestartScreen() }
@@ -7104,10 +7125,21 @@ index 1886de6a8..91a85e381 100644
 @@ -61,0 +88 @@ class MigrationScheduler(
 +        return operation
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt
-index adcdb7013..fad44506a 100644
+index adcdb7013..5b239cefc 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt
-@@ -38,10 +38 @@ class MigrationTransferDueReceiver :
+@@ -7,0 +8 @@ import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
+@@ -21,2 +22,2 @@ import org.koin.core.component.inject
+- * Deliberately does the absolute minimum: two SharedPreferences reads — no network, no wallet DB,
+- * no Synchronizer — so it can run under the exact conditions that killed the worker.
++ * Reads the reset and account-removal guards and the existing heartbeat. It can run without
++ * the network, wallet database or synchronizer.
+@@ -27,0 +29 @@ class MigrationTransferDueReceiver :
++    private val resetProgress: ResetProgressStore by inject()
+@@ -36,11 +38,10 @@ class MigrationTransferDueReceiver :
+-        val expectedRunAt = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
+-        val lastRunAt = MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId)
 -        if (expectedRunAt == null) {
 -            migrationLog("MigrationStepDueReceiver: no expected run recorded — no-op.")
 -            return
@@ -7117,12 +7149,23 @@ index adcdb7013..fad44506a 100644
 -                "MigrationStepDueReceiver: worker ran on time (lastRunAt=$lastRunAt, expected=$expectedRunAt) — no-op."
 -            )
 -            return
--        }
-+        if (!migrationWorkerIsLate(System.currentTimeMillis(), expectedRunAt, lastRunAt)) return
-@@ -52 +43 @@ class MigrationTransferDueReceiver :
++        MigrationAccountRetirement.keepWake(accountKeyId) {
++            if (MigrationWorkerHeartbeat.removalPending(context, accountKeyId) || resetProgress.isPending.value) {
++                return@keepWake
++            }
++            val expectedRunAt = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
++            val lastRunAt = MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId)
++            if (migrationWorkerIsLate(System.currentTimeMillis(), expectedRunAt, lastRunAt)) {
++                migrationLog("MigrationStepDueReceiver: missed worker run — raising the step-due notification.")
++                migrationNotifier.notifyMigrationStepDue(accountKeyId)
++            }
+@@ -48,5 +48,0 @@ class MigrationTransferDueReceiver :
+-        migrationLog(
+-            "MigrationStepDueReceiver: worker MISSED its run (expected=$expectedRunAt, " +
+-                "lastRunAt=$lastRunAt) — raising the step-due fallback notification."
+-        )
 -        migrationNotifier.notifyMigrationStepDue(accountKeyId)
-+        MigrationAccountRetirement.keepWake(accountKeyId) { migrationNotifier.notifyMigrationStepDue(accountKeyId) }
-@@ -55,8 +45,0 @@ class MigrationTransferDueReceiver :
+@@ -55,8 +50,0 @@ class MigrationTransferDueReceiver :
 -    private companion object {
 -        /**
 -         * A run that started slightly BEFORE the recorded expected time (WorkManager dispatching
@@ -7131,7 +7174,7 @@ index adcdb7013..fad44506a 100644
 -         */
 -        const val RUN_TOLERANCE_MILLIS = 30_000L
 -    }
-@@ -63,0 +47,7 @@ class MigrationTransferDueReceiver :
+@@ -63,0 +52,7 @@ class MigrationTransferDueReceiver :
 +
 +private const val EARLY_WORKER_TOLERANCE_MILLIS = 30_000L
 +
@@ -7140,7 +7183,7 @@ index adcdb7013..fad44506a 100644
 +        expectedRunAt <= now - MigrationScheduler.WORKER_LATE_MARGIN.inWholeMilliseconds &&
 +        (lastRunAt == null || lastRunAt < expectedRunAt - EARLY_WORKER_TOLERANCE_MILLIS)
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorker.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorker.kt
-index d7cac7de3..823a29137 100644
+index d7cac7de3..156a52efa 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorker.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorker.kt
 @@ -6,0 +7 @@ import androidx.work.WorkerParameters
@@ -7203,7 +7246,7 @@ index d7cac7de3..823a29137 100644
 +        } ?: return retryWhileRemoving(accountKeyId)
 +        return Result.retry()
 +    }
-@@ -67,9 +62,9 @@ class MigrationWorker(
+@@ -67,9 +62,10 @@ class MigrationWorker(
 -                MigrationSdkLookup.Gone -> {
 -                    // Kill switch: the wallet was deleted or this (Keystone) account disconnected.
 -                    // Retrying would zombie-loop forever for an owner that no longer exists.
@@ -7219,39 +7262,60 @@ index d7cac7de3..823a29137 100644
 +            migrationLog("Worker: account/wallet gone — cancelling the migration work chain.")
 +            MigrationScheduler(applicationContext).cancel(accountKeyId)
 +            migrationNotifier.cancel(accountKeyId)
++            MigrationWorkerHeartbeat.clearRemovalPending(applicationContext, accountKeyId)
 +        } ?: return retryWhileRemoving(accountKeyId)
 +        return Result.success()
 +    }
-@@ -76,0 +72,2 @@ class MigrationWorker(
+@@ -76,0 +73,5 @@ class MigrationWorker(
 +    private suspend fun driveMigration(sdk: OrchardMigrationSdk, accountKeyId: String): Result {
-+        MigrationAccountRetirement.admit(accountKeyId) { migrationNotifier.cancelStepDue(accountKeyId) }
-@@ -85 +82,3 @@ class MigrationWorker(
++        MigrationAccountRetirement.admit(accountKeyId) {
++            MigrationWorkerHeartbeat.clearRemovalPending(applicationContext, accountKeyId)
++            migrationNotifier.cancelStepDue(accountKeyId)
++        }
+@@ -85 +86,3 @@ class MigrationWorker(
 -                MigrationScheduler(applicationContext).schedule(accountKeyId, result.retryDelay)
 +                if (!resetProgress.isPending.value) {
 +                    MigrationScheduler(applicationContext).schedule(accountKeyId, result.retryDelay)
 +                }
-@@ -87,0 +87,2 @@ class MigrationWorker(
+@@ -87,0 +91,2 @@ class MigrationWorker(
 +            DriveOnceResult.RemovalManaged -> return retryWhileRemoving(accountKeyId)
 +
-@@ -94,0 +96,3 @@ class MigrationWorker(
+@@ -94,0 +100,3 @@ class MigrationWorker(
 +
 +    private fun retryWhileRemoving(accountKeyId: String): Result =
 +        if (MigrationAccountRetirement.isRemoved(accountKeyId)) Result.success() else Result.retry()
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorkerHeartbeat.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorkerHeartbeat.kt
-index 5a7def039..b8ec6cf2a 100644
+index 5a7def039..212c61948 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorkerHeartbeat.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationWorkerHeartbeat.kt
-@@ -18,0 +19,10 @@ object MigrationWorkerHeartbeat {
+@@ -18,0 +19,11 @@ object MigrationWorkerHeartbeat {
 +    /** Accounts with app-owned fallback state, including accounts unavailable from the SDK during reset. */
 +    fun accountKeyIds(context: Context): Set<String> =
 +        prefs(context).all.keys.mapNotNull { key ->
 +            when {
 +                key.startsWith(KEY_NEXT_WAKE) -> key.removePrefix(KEY_NEXT_WAKE)
 +                key.startsWith(KEY_LAST_RUN) -> key.removePrefix(KEY_LAST_RUN)
++                key.startsWith(KEY_REMOVAL_PENDING) -> key.removePrefix(KEY_REMOVAL_PENDING)
 +                else -> null
 +            }?.takeIf { it.isNotEmpty() }
 +        }.toSet()
 +
+@@ -32,0 +44,13 @@ object MigrationWorkerHeartbeat {
++    internal fun removalPending(context: Context, accountKeyId: String): Boolean =
++        prefs(context).getBoolean(KEY_REMOVAL_PENDING + accountKeyId, false)
++
++    /** Record before native deletion; a restarted process must resolve ownership before notifying. */
++    internal fun recordRemovalPending(context: Context, accountKeyId: String): Boolean =
++        prefs(context).edit().putBoolean(KEY_REMOVAL_PENDING + accountKeyId, true).commit()
++
++    internal fun clearRemovalPending(context: Context, accountKeyId: String) {
++        if (removalPending(context, accountKeyId)) {
++            prefs(context).edit().remove(KEY_REMOVAL_PENDING + accountKeyId).commit()
++        }
++    }
++
+@@ -44,0 +69 @@ object MigrationWorkerHeartbeat {
++    private const val KEY_REMOVAL_PENDING = "removal_pending_"
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt
 index 698a60fbd..546f89772 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/di/MigrationKoinGraphSmokeTest.kt
@@ -7308,10 +7372,10 @@ index 698a60fbd..546f89772 100644
 +        koin.koin.get<MigrationTransferInvalidVM> { parametersOf(MigrationTransferInvalidArgs("fixture-owner")) }
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
 new file mode 100644
-index 000000000..98dfe30c8
+index 000000000..9aeb20a52
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/migration/MigrationAppHooksResetTest.kt
-@@ -0,0 +1,353 @@
+@@ -0,0 +1,413 @@
 +package co.electriccoin.zcash.migration
 +
 +import android.content.Context
@@ -7336,6 +7400,7 @@ index 000000000..98dfe30c8
 +import co.electriccoin.zcash.work.MigrationAccountRetirement
 +import co.electriccoin.zcash.work.MigrationLiveDriver
 +import co.electriccoin.zcash.work.MigrationWorker
++import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 +import co.electriccoin.zcash.work.MigrationScheduler
 +import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
 +import com.google.common.util.concurrent.Futures
@@ -7370,7 +7435,9 @@ index 000000000..98dfe30c8
 +        val key = "retirement-owner"
 +        val drain = CompletableDeferred<Unit>()
 +        val cancel = CompletableDeferred<Unit>()
++        val cancelStarted = CompletableDeferred<Unit>()
 +        val removed = CompletableDeferred<Unit>()
++        val context = retirementContext()
 +        val driver = mockk<MigrationLiveDriver>(relaxed = true)
 +        var driveEntries = 0
 +        val drive = mockk<MigrationDriveOnce> {
@@ -7381,7 +7448,7 @@ index 000000000..98dfe30c8
 +        }
 +        val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
 +        val hooks = MigrationAppHooksImpl(
-+            mockk(), mockk(), LaunchNavigationRequests(), mockk(), mockk(relaxed = true), mockk(), reset, driver, drive,
++            mockk(), mockk(), LaunchNavigationRequests(), mockk(), mockk(relaxed = true), context, reset, driver, drive,
 +            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
 +        )
 +        mockkConstructor(MigrationScheduler::class)
@@ -7389,9 +7456,16 @@ index 000000000..98dfe30c8
 +            coEvery { anyConstructed<MigrationScheduler>().cancelAndWait(key) } coAnswers {
 +                assertTrue(removed.isCompleted)
 +                assertTrue(MigrationAccountRetirement.isRemoved(key))
++                assertTrue(MigrationWorkerHeartbeat.removalPending(context, key))
++                cancelStarted.complete(Unit)
 +                cancel.await()
 +            }
-+            val retirement = launch { hooks.retireHardwareAccount(key) { removed.complete(Unit) } }
++            val retirement = launch {
++                hooks.retireHardwareAccount(key) {
++                    assertTrue(MigrationWorkerHeartbeat.removalPending(context, key))
++                    removed.complete(Unit)
++                }
++            }
 +            runCurrent()
 +
 +            assertFalse(MigrationAccountRetirement.blocks(key))
@@ -7400,7 +7474,7 @@ index 000000000..98dfe30c8
 +            coVerify(exactly = 0) { driver.stopAndJoin(any()) }
 +
 +            drain.complete(Unit)
-+            runCurrent()
++            cancelStarted.await()
 +            assertTrue(MigrationAccountRetirement.blocks(key))
 +            assertFalse(MigrationAccountRetirement.blocks("other-owner"))
 +            coVerify(exactly = 1) { driver.stopAndJoin(key) }
@@ -7409,8 +7483,9 @@ index 000000000..98dfe30c8
 +            assertEquals(null, MigrationAccountRetirement.keepWake(key) { "stale wake" })
 +
 +            cancel.complete(Unit)
-+            runCurrent()
-+            assertTrue(retirement.isCompleted && removed.isCompleted)
++            retirement.join()
++            assertTrue(removed.isCompleted)
++            assertFalse(MigrationWorkerHeartbeat.removalPending(context, key))
 +            assertTrue(MigrationAccountRetirement.blocks(key))
 +            coVerify(exactly = 0) { driver.startIfNotRunning(key) }
 +        } finally {
@@ -7422,13 +7497,14 @@ index 000000000..98dfe30c8
 +    @Test
 +    fun failedDeletionReopensOnlyTheOriginalAccountsMigration() = runTest {
 +        val key = "failed-retirement-owner"
++        val context = retirementContext()
 +        val driver = mockk<MigrationLiveDriver>(relaxed = true)
 +        val drive = mockk<MigrationDriveOnce>(relaxed = true) {
 +            coEvery { withIdleDrive<Unit>(any()) } coAnswers { firstArg<suspend () -> Unit>().invoke() }
 +        }
 +        val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
 +        val hooks = MigrationAppHooksImpl(
-+            mockk(), mockk(), mockk(), mockk(), mockk(), mockk(), reset, driver, drive,
++            mockk(), mockk(), mockk(), mockk(), mockk(), context, reset, driver, drive,
 +            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
 +        )
 +        mockkConstructor(MigrationScheduler::class)
@@ -7439,6 +7515,7 @@ index 000000000..98dfe30c8
 +            assertFailsWith<IllegalStateException> {
 +                hooks.retireHardwareAccount(key) {
 +                    assertEquals(MigrationSdkLookup.RemovalManaged, sdk.lookup(key))
++                    assertTrue(MigrationWorkerHeartbeat.removalPending(context, key))
 +                    assertEquals("existing wake", queuedWake)
 +                    MigrationAccountRetirement.keepWake(key) { queuedWake = "wake from sync" }
 +                    error("Synthetic account deletion failed")
@@ -7446,11 +7523,35 @@ index 000000000..98dfe30c8
 +            }
 +            assertFalse(MigrationAccountRetirement.blocks(key))
 +            assertEquals("wake from sync", queuedWake)
++            assertFalse(MigrationWorkerHeartbeat.removalPending(context, key))
 +            coVerify(exactly = 0) { anyConstructed<MigrationScheduler>().cancelAndWait(any()) }
 +            coVerify(exactly = 1) { driver.startIfNotRunning(key) }
 +        } finally {
 +            MigrationAccountRetirement.restore(key)
 +            unmockkConstructor(MigrationScheduler::class)
++        }
++    }
++
++    @Test
++    fun retirementRefusesNativeDeletionIfTheDurableGuardCannotBeWritten() = runTest {
++        val key = "failed-removal-checkpoint"
++        val drive = mockk<MigrationDriveOnce> {
++            coEvery { withIdleDrive<Unit>(any()) } coAnswers { firstArg<suspend () -> Unit>().invoke() }
++        }
++        val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
++        val hooks = MigrationAppHooksImpl(
++            mockk(), mockk(), mockk(), mockk(), mockk(), retirementContext(commitSucceeds = false), reset,
++            mockk(relaxed = true), drive, mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true),
++        )
++        var deletionEntered = false
++        try {
++            assertFailsWith<IllegalStateException> {
++                hooks.retireHardwareAccount(key) { deletionEntered = true }
++            }
++            assertFalse(deletionEntered)
++            assertFalse(MigrationAccountRetirement.blocks(key))
++        } finally {
++            MigrationAccountRetirement.restore(key)
 +        }
 +    }
 +
@@ -7469,7 +7570,7 @@ index 000000000..98dfe30c8
 +        }
 +        val reset = mockk<ResetProgressStore> { every { isPending } returns MutableStateFlow(false) }
 +        val hooks = MigrationAppHooksImpl(
-+            mockk(), mockk(), navigation, accounts, mockk(relaxed = true), mockk(), reset,
++            mockk(), mockk(), navigation, accounts, mockk(relaxed = true), retirementContext(), reset,
 +            mockk(relaxed = true), drive, mockk(relaxed = true), mockk(relaxed = true), readouts,
 +        )
 +        mockkConstructor(MigrationScheduler::class)
@@ -7544,6 +7645,7 @@ index 000000000..98dfe30c8
 +    fun resetCancelsOwnedFallbackAlarmWithoutAnAccountSnapshot() = runTest {
 +        val preferences = mockk<SharedPreferences> {
 +            every { all } returns mapOf("next_wake_at_fixture" to 100L, "last_run_at_fixture" to 5L, "other" to 1L)
++            every { getBoolean("removal_pending_fixture", false) } returns false
 +        }
 +        val context = mockk<Context> {
 +            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
@@ -7658,6 +7760,28 @@ index 000000000..98dfe30c8
 +        } finally {
 +            acknowledged.complete(Unit)
 +            unmockkConstructor(MigrationScheduler::class)
++        }
++    }
++
++    private fun retirementContext(commitSucceeds: Boolean = true): Context {
++        val recorded = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
++        val editor = mockk<SharedPreferences.Editor> {
++            every { putBoolean(any(), true) } answers {
++                recorded.add(firstArg())
++                this@mockk
++            }
++            every { remove(any()) } answers {
++                recorded.remove(firstArg())
++                this@mockk
++            }
++            every { commit() } returns commitSucceeds
++        }
++        val preferences = mockk<SharedPreferences> {
++            every { getBoolean(any(), false) } answers { firstArg<String>() in recorded }
++            every { edit() } returns editor
++        }
++        return mockk<Context> {
++            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
 +        }
 +    }
 +
@@ -9709,17 +9833,67 @@ index 4a5eda3b1..9caeb9e10 100644
 +
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationTransferDueReceiverTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationTransferDueReceiverTest.kt
 new file mode 100644
-index 000000000..803c3147e
+index 000000000..c6c9c0090
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationTransferDueReceiverTest.kt
-@@ -0,0 +1,18 @@
+@@ -0,0 +1,68 @@
 +package co.electriccoin.zcash.work
 +
++import android.content.Context
++import android.content.Intent
++import android.content.SharedPreferences
++import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
++import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
++import io.mockk.every
++import io.mockk.mockk
++import io.mockk.verify
++import kotlinx.coroutines.flow.MutableStateFlow
++import org.koin.core.context.startKoin
++import org.koin.core.context.stopKoin
++import org.koin.dsl.module
 +import kotlin.test.Test
 +import kotlin.test.assertFalse
 +import kotlin.test.assertTrue
 +
 +class MigrationTransferDueReceiverTest {
++    @Test
++    fun persistedRemovalAndResetDeferAStaleFallbackInAFreshProcess() {
++        val owner = "fixture-owner"
++        val overdue = System.currentTimeMillis() - 300_000L
++        val preferences = mockk<SharedPreferences> {
++            every { getBoolean("removal_pending_$owner", false) } returnsMany listOf(true, false, false)
++            every { getLong("next_wake_at_$owner", -1L) } returns overdue
++            every { getLong("last_run_at_$owner", -1L) } returns -1L
++        }
++        val context = mockk<Context> {
++            every { getSharedPreferences("migration_worker_heartbeat", Context.MODE_PRIVATE) } returns preferences
++        }
++        val intent = mockk<Intent> {
++            every { getStringExtra(MigrationDueAlarmScheduler.EXTRA_ACCOUNT_KEY_ID) } returns owner
++        }
++        val pendingReset = MutableStateFlow(true)
++        val reset = mockk<ResetProgressStore> { every { isPending } returns pendingReset }
++        val notifier = mockk<MigrationNotifier>(relaxed = true)
++        startKoin {
++            modules(module {
++                single { reset }
++                single { notifier }
++            })
++        }
++        try {
++            assertFalse(MigrationAccountRetirement.blocks(owner))
++            MigrationTransferDueReceiver().onReceive(context, intent) // owner removal unresolved
++            MigrationTransferDueReceiver().onReceive(context, intent) // reset still pending
++            verify(exactly = 0) { notifier.notifyMigrationStepDue(owner) }
++
++            pendingReset.value = false
++            MigrationTransferDueReceiver().onReceive(context, intent)
++            verify(exactly = 1) { notifier.notifyMigrationStepDue(owner) }
++        } finally {
++            stopKoin()
++        }
++    }
++
 +    @Test
 +    fun inheritedAlarmCannotDeclareTheRearmedWorkerLateEarly() {
 +        val scheduled = 1_000_000L
@@ -32456,7 +32630,7 @@ index c38424cc6..52be8a5ce 100644
 -            .firstOrNull { !it.grpcError }
 +            .firstOrNull { it.grpcError }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
-index a5bcffdcd..ed99d6562 100644
+index a5bcffdcd..1060431d6 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSource.kt
 @@ -4,0 +5 @@ import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
@@ -32531,22 +32705,32 @@ index a5bcffdcd..ed99d6562 100644
 +                    RecipientAddressPolicy.Validation.Valid) {
 +                "Swap quote deposit address does not match the selected network"
 +            }
-@@ -202,0 +222,2 @@ class NearSwapDataSource(
+@@ -183 +202,8 @@ class NearSwapDataSource(
+-            )
++            ).also {
++                if (response.quoteRequest.amount.compareTo(request.amount) != 0) {
++                    throw SwapQuoteMismatchException.Rejected(
++                        type = SwapQuoteMismatchType.REQUESTED_AMOUNT,
++                        message = "Swap quote echoed a different requested amount",
++                    )
++                }
++            }
+@@ -202,0 +229,2 @@ class NearSwapDataSource(
 +        require(response.quoteResponse.quote.depositAddress == depositAddress) { "Swap status reference mismatch" }
 +        require(!response.quoteResponse.quoteRequest.dry) { "A simulation response cannot settle a swap" }
-@@ -209 +229,0 @@ class NearSwapDataSource(
+@@ -209 +236,0 @@ class NearSwapDataSource(
 -        log("checkSwapStatus $depositAddress")
-@@ -220,3 +239,0 @@ class NearSwapDataSource(
+@@ -220,3 +246,0 @@ class NearSwapDataSource(
 -    // The 1Click API normalises asset IDs for routing (e.g. "nep141:btc.omft.near" →
 -    // "1cs_v1:btc:native:coin"). Try an exact match first; fall back to extracting the ticker
 -    // from the normalised "1cs_v1:<ticker>:..." format and matching by tokenTicker.
-@@ -224,4 +241 @@ class NearSwapDataSource(
+@@ -224,4 +248 @@ class NearSwapDataSource(
 -        supportedTokens.find { it.assetId == echoedId }
 -            ?: echoedId.split(":").getOrNull(1)?.let { ticker ->
 -                supportedTokens.find { it.tokenTicker.equals(ticker, ignoreCase = true) }
 -            }
 +        co.electriccoin.zcash.ui.common.model.near.resolveNearAsset(supportedTokens, echoedId)
-@@ -256,2 +269,0 @@ class NearSwapDataSource(
+@@ -256,2 +276,0 @@ class NearSwapDataSource(
 -const val AFFILIATE_FEE_BPS = 67
 -const val AFFILIATE_ADDRESS = "d78abd5477432c9d9c5e32c4a1a0056cd7b8be6580d3c49e1f97185b786592db"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
@@ -52793,7 +52977,7 @@ index 5b354b6fc..2fa0f8deb 100644
 +        leaving = true
 +        exportJob?.cancel()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
-index c9e6612fa..c37c1782c 100644
+index c9e6612fa..14afc96a9 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/CommonTransactionDetailMapper.kt
 @@ -8,0 +9,2 @@ import co.electriccoin.zcash.ui.common.model.isZCashAsset
@@ -52836,11 +53020,14 @@ index c9e6612fa..c37c1782c 100644
 +    fun createTransactionDetailErrorButtonState(
 +        error: Exception?,
 +        reloadHandle: ReloadHandle,
-+        allowServiceRetry: Boolean = false,
++        hasSavedDetails: Boolean = false,
 +    ): ButtonState? {
 @@ -60 +64 @@ class CommonTransactionDetailMapper {
 -        return if (isServiceUnavailableError) {
-+        return if (error is ActivityDetailUnavailableException || (isServiceUnavailableError && !allowServiceRetry)) {
++        return if (error is ActivityDetailUnavailableException || (isServiceUnavailableError && !hasSavedDetails)) {
+@@ -66 +70 @@ class CommonTransactionDetailMapper {
+-                style = ButtonStyle.DESTRUCTIVE1
++                style = if (hasSavedDetails) ButtonStyle.SECONDARY else ButtonStyle.DESTRUCTIVE1
 @@ -74 +78,2 @@ class CommonTransactionDetailMapper {
 -        destinationAsset: SwapAsset?
 +        destinationAsset: SwapAsset?,
@@ -52884,7 +53071,7 @@ index a7daa6d5b..fa86faf35 100644
 @@ -15,0 +16 @@ data class TransactionDetailState(
 +    val explorerLinks: List<TransactionExplorerLink> = emptyList(),
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
-index 00fe60557..e3e616d2d 100644
+index 00fe60557..e94348667 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVM.kt
 @@ -12,0 +13,2 @@ import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
@@ -52918,7 +53105,7 @@ index 00fe60557..e3e616d2d 100644
 -                initialValue = null
 +                started = SharingStarted.WhileSubscribed(replayExpirationMillis = 0),
 +                replay = 1,
-@@ -93,3 +101,19 @@ class TransactionDetailVM(
+@@ -93,3 +101,21 @@ class TransactionDetailVM(
 -            .filterNotNull()
 -            .mapLatest { transaction ->
 -                var info = createTransactionInfoState(transaction)
@@ -52933,50 +53120,59 @@ index 00fe60557..e3e616d2d 100644
 +                    snapshot
 +                }
 +                val info = createTransactionInfoState(transaction)
++                val hasSavedDetails = transaction.swap?.savedMetadata != null || recorded != null
++                val refreshFailed = hasSavedDetails && transaction.swap?.error != null
 +                val retry = transaction.swap?.error?.let {
 +                    mapper.createTransactionDetailErrorButtonState(
 +                        it,
 +                        transaction.reloadHandle,
-+                        allowServiceRetry = transaction.swap.savedMetadata != null || recorded != null,
++                        hasSavedDetails = hasSavedDetails,
 +                    )
 +                }
 +                val support = createSwapSupportButton(transaction)
-@@ -96,0 +121 @@ class TransactionDetailVM(
+@@ -96,0 +123 @@ class TransactionDetailVM(
 +                    explorerLinks = createExplorerLinks(transaction),
-@@ -100,2 +125,2 @@ class TransactionDetailVM(
+@@ -100,2 +127,2 @@ class TransactionDetailVM(
 -                    primaryButton = createPrimaryButtonState(transaction),
 -                    secondaryButton = createSecondaryButtonState(transaction),
 +                    primaryButton = retry ?: createPrimaryButtonState(transaction, support),
 +                    secondaryButton = if (retry != null) support else createSecondaryButtonState(transaction),
-@@ -110 +135 @@ class TransactionDetailVM(
+@@ -110 +137 @@ class TransactionDetailVM(
 -                            onClick = ::onBookmarkClick,
 +                            onClick = { onBookmarkClick(transaction) },
-@@ -117 +142,4 @@ class TransactionDetailVM(
+@@ -117,5 +144,14 @@ class TransactionDetailVM(
 -                        ),
+-                    errorFooter = createErrorFooter(transaction),
+-                    infoFooter =
+-                        stringRes(R.string.deposits_info)
+-                            .takeIf { transaction.swap?.status?.status == PENDING }
 +                        ).takeIf {
 +                            transaction.transaction.accountUuid != null &&
 +                                transaction.metadata.bookmarkWriteToken != null
 +                        },
-@@ -121 +149,5 @@ class TransactionDetailVM(
--                            .takeIf { transaction.swap?.status?.status == PENDING }
-+                            .takeIf {
-+                                val sendSwap = info as? SendSwapState
-+                                transaction.swap?.status?.status == PENDING &&
-+                                    sendSwap?.statusRow?.status == PENDING && !sendSwap.statusRow.fundingNotSubmitted
-+                            }
-@@ -125 +157,3 @@ class TransactionDetailVM(
++                    errorFooter = if (refreshFailed) null else createErrorFooter(transaction),
++                    infoFooter = if (refreshFailed) {
++                        stringRes(R.string.private_swap_refresh_unavailable)
++                    } else {
++                        val sendSwap = info as? SendSwapState
++                        stringRes(R.string.deposits_info).takeIf {
++                            transaction.swap?.status?.status == PENDING &&
++                                sendSwap?.statusRow?.status == PENDING && !sendSwap.statusRow.fundingNotSubmitted
++                        }
++                    }
+@@ -125 +161,3 @@ class TransactionDetailVM(
 -                started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
 +                started = SharingStarted.WhileSubscribed(
 +                    ANDROID_STATE_FLOW_TIMEOUT, replayExpiration = kotlin.time.Duration.ZERO
 +                ),
-@@ -133,2 +167,4 @@ class TransactionDetailVM(
+@@ -133,2 +171,4 @@ class TransactionDetailVM(
 -                if (transaction.transaction.memoCount > 0) {
 -                    markTxMemoAsRead(transactionDetailArgs.transactionId)
 +                val accountUuid = transaction.transaction.accountUuid
 +                val token = transaction.metadata.bookmarkWriteToken
 +                if (transaction.transaction.memoCount > 0 && accountUuid != null && token != null) {
 +                    markTxMemoAsRead(transactionDetailArgs.transactionId, accountUuid, token)
-@@ -162,2 +198,29 @@ class TransactionDetailVM(
+@@ -162,2 +202,29 @@ class TransactionDetailVM(
 -    private fun onAddOrEditNoteClick() {
 -        navigationRouter.forward(TransactionNote(transactionDetailArgs.transactionId))
 +    private fun createExplorerLinks(data: DetailedTransactionData): List<TransactionExplorerLink> {
@@ -53008,14 +53204,14 @@ index 00fe60557..e3e616d2d 100644
 +            testnet = testnet,
 +            router = navigationRouter
 +        )
-@@ -176,0 +240,6 @@ class TransactionDetailVM(
+@@ -176,0 +244,6 @@ class TransactionDetailVM(
 +                        val saved = transaction.swap.savedMetadata ?: transaction.metadata.swapMetadata
 +                        val statusOverride = saved?.outgoingStatus(
 +                            transaction.transaction, transaction.swap.status?.status
 +                        ).takeIf {
 +                            transaction.transaction is SendTransaction.Failed || saved?.fundingNotSubmitted == true
 +                        }
-@@ -178,2 +247,7 @@ class TransactionDetailVM(
+@@ -178,2 +251,7 @@ class TransactionDetailVM(
 -                            status = transaction.swap.status?.status,
 -                            message = getSwapMessage.getMessage(transaction.swap.status),
 +                            statusRow = transaction.swap.toDetailStatusRow(
@@ -53025,21 +53221,21 @@ index 00fe60557..e3e616d2d 100644
 +                            message = getSwapMessage.getMessage(
 +                                transaction.swap.status, saved, transaction.swap.isFundingWindowOpen
 +                            ),
-@@ -184 +258,2 @@ class TransactionDetailVM(
+@@ -184 +262,2 @@ class TransactionDetailVM(
 -                                    destinationAsset = transaction.swap.destinationAsset
 +                                    destinationAsset = transaction.swap.destinationAsset,
 +                                    savedMetadata = transaction.swap.savedMetadata,
-@@ -191,2 +266 @@ class TransactionDetailVM(
+@@ -191,2 +270 @@ class TransactionDetailVM(
 -                                transaction.metadata.swapMetadata
 -                                    ?.totalFees
 +                                transaction.transaction.fee
-@@ -202 +276 @@ class TransactionDetailVM(
+@@ -202 +280 @@ class TransactionDetailVM(
 -                                    ?.refundedFormatted
 +                                    ?.positiveRefund
-@@ -205,2 +278,0 @@ class TransactionDetailVM(
+@@ -205,2 +282,0 @@ class TransactionDetailVM(
 -                                    }?.takeIf {
 -                                        transaction.swap.status.status == REFUNDED
-@@ -227,0 +300,10 @@ class TransactionDetailVM(
+@@ -227,0 +304,10 @@ class TransactionDetailVM(
 +                            donationBasisZec = transaction.transaction.fee?.let { fee ->
 +                                (transaction.transaction.amount - fee).value
 +                                    .toBigDecimal().movePointLeft(ZEC_DECIMAL_PLACES)
@@ -53050,7 +53246,7 @@ index 00fe60557..e3e616d2d 100644
 +                                            co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
 +                                    }?.toPlainString()
 +                            },
-@@ -370,16 +452,5 @@ class TransactionDetailVM(
+@@ -370,16 +456,5 @@ class TransactionDetailVM(
 -    private fun createPrimaryButtonState(data: DetailedTransactionData): ButtonState? {
 -        val supportButton =
 -            getSwapMessage.getButton(data.swap?.status) {
@@ -53072,16 +53268,16 @@ index 00fe60557..e3e616d2d 100644
 +        return getSwapMessage.getButton(swap.status, ::onContactSupport)
 +            ?: (swap.savedMetadata ?: data.metadata.swapMetadata)?.savedSwapSupportButton(::onContactSupport)
 +    }
-@@ -387,3 +458,3 @@ class TransactionDetailVM(
+@@ -387,3 +462,3 @@ class TransactionDetailVM(
 -            data.swap != null -> {
 -                null
 -            }
 +    private fun createPrimaryButtonState(data: DetailedTransactionData, support: ButtonState?): ButtonState? =
 +        when {
 +            data.swap != null -> support
-@@ -413 +483,0 @@ class TransactionDetailVM(
+@@ -413 +487,0 @@ class TransactionDetailVM(
 -    }
-@@ -420,2 +490,5 @@ class TransactionDetailVM(
+@@ -420,2 +494,5 @@ class TransactionDetailVM(
 -        fun createAddNoteButtonState() =
 -            ButtonState(
 +        fun createAddNoteButtonState(): ButtonState? {
@@ -53089,16 +53285,16 @@ index 00fe60557..e3e616d2d 100644
 +            val token = transaction.metadata.bookmarkWriteToken
 +            if (accountUuid == null || token == null) return null
 +            return ButtonState(
-@@ -428 +501,5 @@ class TransactionDetailVM(
+@@ -428 +505,5 @@ class TransactionDetailVM(
 -                onClick = ::onAddOrEditNoteClick
 +                onClick = {
 +                    navigationRouter.forward(
 +                        TransactionNote(transactionDetailArgs.transactionId, accountUuid.toStorageKeyId(), token)
 +                    )
 +                }
-@@ -429,0 +507 @@ class TransactionDetailVM(
+@@ -429,0 +511 @@ class TransactionDetailVM(
 +        }
-@@ -520,12 +598,14 @@ class TransactionDetailVM(
+@@ -520,12 +602,14 @@ class TransactionDetailVM(
 -                            if (transaction is SendTransaction.Failed) {
 -                                when (data.metadata.swapMetadata.mode) {
 -                                    EXACT_INPUT -> stringRes(R.string.swapStatus_swapFailed)
@@ -53125,25 +53321,25 @@ index 00fe60557..e3e616d2d 100644
 +                                                R.string.swapStatus_swapping
 +                                            }
 +                                        )
-@@ -533 +613 @@ class TransactionDetailVM(
+@@ -533 +617 @@ class TransactionDetailVM(
 -                                            INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
 +                                        INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
-@@ -535 +615 @@ class TransactionDetailVM(
+@@ -535 +619 @@ class TransactionDetailVM(
 -                                            SUCCESS -> stringRes(R.string.swapStatus_swapped)
 +                                        SUCCESS -> stringRes(R.string.swapStatus_swapped)
-@@ -537 +617 @@ class TransactionDetailVM(
+@@ -537 +621 @@ class TransactionDetailVM(
 -                                            REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
 +                                        REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
-@@ -539 +619 @@ class TransactionDetailVM(
+@@ -539 +623 @@ class TransactionDetailVM(
 -                                            FAILED -> stringRes(R.string.swapStatus_swapFailed)
 +                                        FAILED -> stringRes(R.string.swapStatus_swapFailed)
-@@ -541,2 +621 @@ class TransactionDetailVM(
+@@ -541,2 +625 @@ class TransactionDetailVM(
 -                                            EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
 -                                        }
 +                                        EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
-@@ -543,0 +623 @@ class TransactionDetailVM(
+@@ -543,0 +627 @@ class TransactionDetailVM(
 +                                }
-@@ -545,4 +625,3 @@ class TransactionDetailVM(
+@@ -545,4 +629,3 @@ class TransactionDetailVM(
 -                                    EXACT_OUTPUT -> {
 -                                        when (data.metadata.swapMetadata.status) {
 -                                            PROCESSING,
@@ -53151,7 +53347,7 @@ index 00fe60557..e3e616d2d 100644
 +                                EXACT_OUTPUT -> {
 +                                    when (swapStatus) {
 +                                        PROCESSING -> stringRes(R.string.swapStatus_paying)
-@@ -550 +629,7 @@ class TransactionDetailVM(
+@@ -550 +633,7 @@ class TransactionDetailVM(
 -                                            INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_paymentIncomplete)
 +                                        PENDING -> stringRes(
 +                                            if (saved.fundingNotSubmitted) {
@@ -53160,30 +53356,30 @@ index 00fe60557..e3e616d2d 100644
 +                                                R.string.swapStatus_paying
 +                                            }
 +                                        )
-@@ -552 +637 @@ class TransactionDetailVM(
+@@ -552 +641 @@ class TransactionDetailVM(
 -                                            SUCCESS -> stringRes(R.string.swapStatus_paid)
 +                                        INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_paymentIncomplete)
-@@ -554 +639 @@ class TransactionDetailVM(
+@@ -554 +643 @@ class TransactionDetailVM(
 -                                            REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
 +                                        SUCCESS -> stringRes(R.string.swapStatus_paid)
-@@ -556 +641 @@ class TransactionDetailVM(
+@@ -556 +645 @@ class TransactionDetailVM(
 -                                            FAILED -> stringRes(R.string.swapStatus_paymentFailed)
 +                                        REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
-@@ -558,3 +643 @@ class TransactionDetailVM(
+@@ -558,3 +647 @@ class TransactionDetailVM(
 -                                            EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
 -                                        }
 -                                    }
 +                                        FAILED -> stringRes(R.string.swapStatus_paymentFailed)
-@@ -562,2 +645 @@ class TransactionDetailVM(
+@@ -562,2 +649 @@ class TransactionDetailVM(
 -                                    FLEX_INPUT -> {
 -                                        throw UnsupportedOperationException("FLEX_INPUT not supported")
 +                                        EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
-@@ -565,0 +648,4 @@ class TransactionDetailVM(
+@@ -565,0 +652,4 @@ class TransactionDetailVM(
 +
 +                                FLEX_INPUT -> {
 +                                    throw UnsupportedOperationException("FLEX_INPUT not supported")
 +                                }
-@@ -626,3 +712,9 @@ class TransactionDetailVM(
+@@ -626,3 +716,9 @@ class TransactionDetailVM(
 -    private fun onBookmarkClick() =
 -        viewModelScope.launch {
 -            flipTransactionBookmark(transactionDetailArgs.transactionId)
@@ -53196,9 +53392,9 @@ index 00fe60557..e3e616d2d 100644
 +                    data.transaction.id.txIdString(), !data.metadata.isBookmarked, accountUuid, token
 +                )
 +            }
-@@ -629,0 +722 @@ class TransactionDetailVM(
+@@ -629,0 +726 @@ class TransactionDetailVM(
 +    }
-@@ -630,0 +724,2 @@ class TransactionDetailVM(
+@@ -630,0 +728,2 @@ class TransactionDetailVM(
 +
 +private const val ZEC_DECIMAL_PLACES = 8
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailView.kt
@@ -63300,7 +63496,7 @@ index da0613aca..d1521bb2d 100644
 -        affiliateAddress = "affiliate"
 +        slippage = BigDecimal("2")
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
-index c0be20563..7e0de0b60 100644
+index c0be20563..61bcf4693 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/NearSwapDataSourceTest.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.common.datasource
@@ -63401,7 +63597,7 @@ index c0be20563..7e0de0b60 100644
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -111,4 +183,3 @@ class NearSwapDataSourceTest {
+@@ -111,4 +183,35 @@ class NearSwapDataSourceTest {
 -            // The affiliate fee + referral are attached to every request.
 -            assertEquals("zodl", captured.referral)
 -            assertEquals("affiliate", captured.appFees.single().recipient)
@@ -63409,7 +63605,41 @@ index c0be20563..7e0de0b60 100644
 +            // Independent quotes carry no affiliate fee or referral.
 +            assertEquals(null, captured.referral)
 +            assertEquals(emptyList(), captured.appFees)
-@@ -116,0 +188,32 @@ class NearSwapDataSourceTest {
++        }
++
++    @Test
++    fun freshQuoteBindsTheEchoToWhatWasPostedForEveryMode() = runBlocking {
++        val deposit = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh"
++        val synchronizer = mockk<Synchronizer> {
++            coEvery { validateAddress(any()) } returns AddressType.Unified
++        }
++        coEvery { synchronizerProvider.getSynchronizer() } returns synchronizer
++        for (mode in SwapMode.entries) {
++            val response = SwapInputProvenanceFixture.status(
++                origin, zec, deposit, SwapType.valueOf(mode.name), "{}",
++            ).response.quoteResponse
++            var differingEcho = true
++            coEvery { nearApiProvider.requestQuote(any()) } coAnswers {
++                val posted = firstArg<QuoteRequest>()
++                val echoed = if (differingEcho) posted.amount + BigDecimal.ONE else posted.amount.setScale(2)
++                response.copy(quoteRequest = posted.copy(amount = echoed))
++            }
++            val fixedAmount = if (mode == SwapMode.EXACT_OUTPUT) BigDecimal("2") else BigDecimal.ONE
++
++            val rejection = assertFailsWith<SwapQuoteMismatchException.Rejected> {
++                dataSource.requestQuote(mode, fixedAmount, "refund", origin, "recipient", zec, BigDecimal.ONE)
++            }
++            assertEquals(SwapQuoteMismatchType.REQUESTED_AMOUNT, rejection.type, mode.name)
++            assertEquals(deposit, rejection.depositAddress)
++
++            differingEcho = false
++            val admitted = dataSource.requestQuote(
++                mode, fixedAmount, "refund", origin, "recipient", zec, BigDecimal.ONE,
++            )
++            assertEquals(mode, admitted.mode)
+@@ -115,0 +219,33 @@ class NearSwapDataSourceTest {
++    }
++
 +    @Test
 +    fun incomingQuoteChecksTheExternalDepositAgainstTheOriginNetwork() = runBlocking {
 +        val returned = SwapInputProvenanceFixture.status(
@@ -63441,34 +63671,33 @@ index c0be20563..7e0de0b60 100644
 +        }
 +        assertEquals("Unexpected swap app fee", failure.message)
 +    }
-+
-@@ -132,2 +235 @@ class NearSwapDataSourceTest {
+@@ -132,2 +268 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -159,2 +261 @@ class NearSwapDataSourceTest {
+@@ -159,2 +294 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -182,2 +283 @@ class NearSwapDataSourceTest {
+@@ -182,2 +316 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -205,2 +305 @@ class NearSwapDataSourceTest {
+@@ -205,2 +338 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -221 +320,4 @@ class NearSwapDataSourceTest {
+@@ -221 +353,4 @@ class NearSwapDataSourceTest {
 -                    every { quoteRequest } returns mockk { every { swapType } returns SwapType.EXACT_OUTPUT }
 +                    every { quoteRequest } returns mockk {
 +                        every { dry } returns false
 +                        every { swapType } returns SwapType.EXACT_OUTPUT
 +                    }
-@@ -235,2 +337 @@ class NearSwapDataSourceTest {
+@@ -235,2 +370 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -244,0 +346,35 @@ class NearSwapDataSourceTest {
+@@ -244,0 +379,35 @@ class NearSwapDataSourceTest {
 +    @Test
 +    fun outgoingQuotesRejectTexDepositsBeforeCreatingAProposal() =
 +        runBlocking {
@@ -63504,19 +63733,19 @@ index c0be20563..7e0de0b60 100644
 +            }
 +        }
 +
-@@ -260,2 +396 @@ class NearSwapDataSourceTest {
+@@ -260,2 +429 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -285,2 +420 @@ class NearSwapDataSourceTest {
+@@ -285,2 +453 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
-@@ -311,2 +445 @@ class NearSwapDataSourceTest {
+@@ -311,2 +478 @@ class NearSwapDataSourceTest {
 -                        slippage = BigDecimal("2"),
 -                        affiliateAddress = "affiliate"
 +                        slippage = BigDecimal("2")
-@@ -335,2 +468,21 @@ class NearSwapDataSourceTest {
+@@ -335,2 +501,21 @@ class NearSwapDataSourceTest {
 -                    slippage = BigDecimal("2"),
 -                    affiliateAddress = "affiliate"
 +                    slippage = BigDecimal("2")
@@ -63540,7 +63769,7 @@ index c0be20563..7e0de0b60 100644
 +                    destinationAddress = "destination",
 +                    destinationAsset = zec,
 +                    slippage = BigDecimal("2")
-@@ -353,0 +506,50 @@ class NearSwapDataSourceTest {
+@@ -353,0 +539,50 @@ class NearSwapDataSourceTest {
 +    @Test
 +    fun incomingBitcoinStatusUsesExactIdentityWhenBothCatalogEntriesExist() = runBlocking {
 +        val btc = (origin as NearSwapAsset).copy(assetId = "nep141:btc.omft.near", tokenTicker = "BTC")
@@ -63591,9 +63820,9 @@ index c0be20563..7e0de0b60 100644
 +        }
 +    }
 +
-@@ -389,0 +592 @@ class NearSwapDataSourceTest {
+@@ -389,0 +625 @@ class NearSwapDataSourceTest {
 +                    every { quote } returns mockk { every { depositAddress } returns "deposit" }
-@@ -391,0 +595 @@ class NearSwapDataSourceTest {
+@@ -391,0 +628 @@ class NearSwapDataSourceTest {
 +                            every { dry } returns false
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/OptionalTransparentReceiverTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/OptionalTransparentReceiverTest.kt
 new file mode 100644
@@ -86676,10 +86905,10 @@ index 000000000..3b7070542
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
 new file mode 100644
-index 000000000..190a2be70
+index 000000000..d36c49ffd
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/transactiondetail/TransactionDetailVMTest.kt
-@@ -0,0 +1,595 @@
+@@ -0,0 +1,601 @@
 +package co.electriccoin.zcash.ui.screen.transactiondetail
 +
 +import androidx.lifecycle.ViewModelStore
@@ -86713,6 +86942,7 @@ index 000000000..190a2be70
 +import co.electriccoin.zcash.ui.common.usecase.ReloadHandle
 +import co.electriccoin.zcash.ui.common.usecase.SwapQuoteStatusData
 +import co.electriccoin.zcash.ui.design.util.TickerLocation.HIDDEN
++import co.electriccoin.zcash.ui.design.component.ButtonStyle
 +import co.electriccoin.zcash.ui.design.util.stringRes
 +import co.electriccoin.zcash.ui.design.util.StringResource
 +import co.electriccoin.zcash.ui.design.util.stringResByDynamicCurrencyNumber
@@ -86929,7 +87159,8 @@ index 000000000..190a2be70
 +            assertEquals(stringRes(R.string.private_swap_saved_status), savedInfo.statusRow.title, assetId)
 +            assertFalse(savedInfo.statusRow.isLoading, assetId)
 +            assertNull(savedInfo.donationBasisZec, assetId)
-+            assertNotNull(failedRefresh.errorFooter, assetId)
++            assertNull(failedRefresh.errorFooter, assetId)
++            assertEquals(stringRes(R.string.private_swap_refresh_unavailable), failedRefresh.infoFooter, assetId)
 +            val retry = assertNotNull(failedRefresh.primaryButton, assetId)
 +            assertEquals(
 +                stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
@@ -87029,7 +87260,9 @@ index 000000000..190a2be70
 +        )
 +
 +        assertEquals(SwapStatus.INCOMPLETE_DEPOSIT, assertIs<SendSwapState>(detail.info).statusRow.status)
-+        assertNotNull(detail.errorFooter)
++        assertNull(detail.errorFooter)
++        assertEquals(stringRes(R.string.private_swap_refresh_unavailable), detail.infoFooter)
++        assertEquals(ButtonStyle.SECONDARY, detail.primaryButton?.style)
 +        val retry = assertNotNull(detail.primaryButton)
 +        val support = assertNotNull(detail.secondaryButton)
 +        assertEquals(stringRes(DesignR.string.disconnectHWWallet_tryAgain), retry.text)
@@ -87051,7 +87284,9 @@ index 000000000..190a2be70
 +        )))
 +
 +        assertEquals(SwapStatus.INCOMPLETE_DEPOSIT, assertIs<SendSwapState>(detail.info).statusRow.status)
-+        assertNotNull(detail.errorFooter)
++        assertNull(detail.errorFooter)
++        assertEquals(stringRes(R.string.private_swap_refresh_unavailable), detail.infoFooter)
++        assertEquals(ButtonStyle.SECONDARY, detail.primaryButton?.style)
 +        assertNotNull(detail.primaryButton).onClick()
 +        assertNotNull(detail.secondaryButton).onClick()
 +        verify(exactly = 1) { reload.requestReload() }
@@ -87113,7 +87348,7 @@ index 000000000..190a2be70
 +                    savedMetadata = metadata,
 +                )
 +            )
-+        val failed = vm.state.first { it.errorFooter != null }
++        val failed = vm.state.first { it.infoFooter == stringRes(R.string.private_swap_refresh_unavailable) }
 +        val info = assertIs<SendSwapState>(failed.info)
 +        assertNull(info.statusRow.status)
 +        assertFalse(info.statusRow.isLoading)

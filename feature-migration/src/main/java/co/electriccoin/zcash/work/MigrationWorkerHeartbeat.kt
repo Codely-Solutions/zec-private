@@ -22,6 +22,7 @@ object MigrationWorkerHeartbeat {
             when {
                 key.startsWith(KEY_NEXT_WAKE) -> key.removePrefix(KEY_NEXT_WAKE)
                 key.startsWith(KEY_LAST_RUN) -> key.removePrefix(KEY_LAST_RUN)
+                key.startsWith(KEY_REMOVAL_PENDING) -> key.removePrefix(KEY_REMOVAL_PENDING)
                 else -> null
             }?.takeIf { it.isNotEmpty() }
         }.toSet()
@@ -40,6 +41,19 @@ object MigrationWorkerHeartbeat {
     fun lastRunAt(context: Context, accountKeyId: String): Long? =
         prefs(context).getLong(KEY_LAST_RUN + accountKeyId, -1L).takeIf { it >= 0 }
 
+    internal fun removalPending(context: Context, accountKeyId: String): Boolean =
+        prefs(context).getBoolean(KEY_REMOVAL_PENDING + accountKeyId, false)
+
+    /** Record before native deletion; a restarted process must resolve ownership before notifying. */
+    internal fun recordRemovalPending(context: Context, accountKeyId: String): Boolean =
+        prefs(context).edit().putBoolean(KEY_REMOVAL_PENDING + accountKeyId, true).commit()
+
+    internal fun clearRemovalPending(context: Context, accountKeyId: String) {
+        if (removalPending(context, accountKeyId)) {
+            prefs(context).edit().remove(KEY_REMOVAL_PENDING + accountKeyId).commit()
+        }
+    }
+
     fun clear(context: Context, accountKeyId: String) {
         prefs(context).edit {
             remove(KEY_NEXT_WAKE + accountKeyId)
@@ -52,4 +66,5 @@ object MigrationWorkerHeartbeat {
 
     private const val KEY_NEXT_WAKE = "next_wake_at_"
     private const val KEY_LAST_RUN = "last_run_at_"
+    private const val KEY_REMOVAL_PENDING = "removal_pending_"
 }

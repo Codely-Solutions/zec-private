@@ -57,17 +57,17 @@ class CommonTransactionDetailMapper {
     fun createTransactionDetailErrorButtonState(
         error: Exception?,
         reloadHandle: ReloadHandle,
-        allowServiceRetry: Boolean = false,
+        hasSavedDetails: Boolean = false,
     ): ButtonState? {
         val isServiceUnavailableError = error is ResponseException && error.response.status.isServiceUnavailable()
 
-        return if (error is ActivityDetailUnavailableException || (isServiceUnavailableError && !allowServiceRetry)) {
+        return if (error is ActivityDetailUnavailableException || (isServiceUnavailableError && !hasSavedDetails)) {
             null
         } else {
             ButtonState(
                 text = stringRes(co.electriccoin.zcash.ui.design.R.string.disconnectHWWallet_tryAgain),
                 onClick = { reloadHandle.requestReload() },
-                style = ButtonStyle.DESTRUCTIVE1
+                style = if (hasSavedDetails) ButtonStyle.SECONDARY else ButtonStyle.DESTRUCTIVE1
             )
         }
     }

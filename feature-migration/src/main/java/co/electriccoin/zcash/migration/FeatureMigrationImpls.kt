@@ -79,6 +79,7 @@ import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationWorker
 import co.electriccoin.zcash.work.MigrationWorkerHeartbeat
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -266,7 +267,13 @@ class MigrationAppHooksImpl(
             currentCoroutineContext().ensureActive()
             withContext(NonCancellable) {
                 migrationDriveOnce.withIdleDrive {
-                    checkNotNull(walletWriteAccess.write(generation) { deleteAccount() }) {
+                    checkNotNull(walletWriteAccess.write(generation) {
+                        val recorded = withContext(Dispatchers.IO) {
+                            MigrationWorkerHeartbeat.recordRemovalPending(context, accountKeyId)
+                        }
+                        check(recorded) { "Unable to record migration account removal" }
+                        deleteAccount()
+                    }) {
                         "The wallet changed before the account could be removed"
                     }
                     MigrationAccountRetirement.markRemoved(accountKeyId)
@@ -289,8 +296,19 @@ class MigrationAppHooksImpl(
 
     private suspend fun restoreRetirement(accountKeyId: String, generation: Long) {
         withContext(NonCancellable) {
-            MigrationAccountRetirement.restore(accountKeyId)
-            walletWriteAccess.write(generation) { migrationLiveDriver.startIfNotRunning(accountKeyId) }
+            var reopened = false
+            try {
+                walletWriteAccess.write(generation) {
+                    withContext(Dispatchers.IO) {
+                        MigrationWorkerHeartbeat.clearRemovalPending(context, accountKeyId)
+                    }
+                    MigrationAccountRetirement.restore(accountKeyId)
+                    reopened = true
+                    migrationLiveDriver.startIfNotRunning(accountKeyId)
+                }
+            } finally {
+                if (!reopened) MigrationAccountRetirement.restore(accountKeyId)
+            }
         }
     }
 
@@ -298,6 +316,7 @@ class MigrationAppHooksImpl(
     private suspend fun cancelRemovedAccountWork(scheduler: MigrationScheduler, accountKeyId: String) {
         try {
             scheduler.cancelAndWait(accountKeyId)
+            withContext(Dispatchers.IO) { MigrationWorkerHeartbeat.clearRemovalPending(context, accountKeyId) }
         } catch (e: Exception) {
             migrationLog("Removed account worker cleanup unavailable (${e.javaClass.simpleName}).")
         }
@@ -323,6 +342,7 @@ class MigrationAppHooksImpl(
         }
         keys.forEach { key ->
             MigrationScheduler(context).cancel(key)
+            withContext(Dispatchers.IO) { MigrationWorkerHeartbeat.clearRemovalPending(context, key) }
             migrationNotifier.cancel(key)
             migrationNotifier.cancelStepDue(key)
         }

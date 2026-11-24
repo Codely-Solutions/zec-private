@@ -199,7 +199,14 @@ class NearSwapDataSource(
                 destinationAddress = getDestinationAddress(response, originAsset),
                 refundAddress = getRefundAddress(response, originAsset),
                 expectedSlippageToleranceBps = slippageToleranceBps,
-            )
+            ).also {
+                if (response.quoteRequest.amount.compareTo(request.amount) != 0) {
+                    throw SwapQuoteMismatchException.Rejected(
+                        type = SwapQuoteMismatchType.REQUESTED_AMOUNT,
+                        message = "Swap quote echoed a different requested amount",
+                    )
+                }
+            }
         } catch (e: SwapQuoteMismatchException) {
             throw e.withQuoteContext(
                 depositAddress = response.quote.depositAddress,

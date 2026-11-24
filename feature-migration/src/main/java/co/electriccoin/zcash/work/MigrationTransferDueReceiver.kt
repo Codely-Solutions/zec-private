@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
+import co.electriccoin.zcash.ui.screen.deletewallet.ResetProgressStore
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 
@@ -18,13 +19,14 @@ import org.koin.core.component.inject
  * opens the app, which re-kicks the worker; the worker's own next run start cancels the
  * notification again.
  *
- * Deliberately does the absolute minimum: two SharedPreferences reads — no network, no wallet DB,
- * no Synchronizer — so it can run under the exact conditions that killed the worker.
+ * Reads the reset and account-removal guards and the existing heartbeat. It can run without
+ * the network, wallet database or synchronizer.
  */
 class MigrationTransferDueReceiver :
     BroadcastReceiver(),
     KoinComponent {
     private val migrationNotifier: MigrationNotifier by inject()
+    private val resetProgress: ResetProgressStore by inject()
 
     override fun onReceive(context: Context, intent: Intent) {
         val accountKeyId = intent.getStringExtra(MigrationDueAlarmScheduler.EXTRA_ACCOUNT_KEY_ID)
@@ -33,14 +35,17 @@ class MigrationTransferDueReceiver :
             return
         }
 
-        val expectedRunAt = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
-        val lastRunAt = MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId)
-        if (!migrationWorkerIsLate(System.currentTimeMillis(), expectedRunAt, lastRunAt)) return
-        migrationLog(
-            "MigrationStepDueReceiver: worker MISSED its run (expected=$expectedRunAt, " +
-                "lastRunAt=$lastRunAt) — raising the step-due fallback notification."
-        )
-        MigrationAccountRetirement.keepWake(accountKeyId) { migrationNotifier.notifyMigrationStepDue(accountKeyId) }
+        MigrationAccountRetirement.keepWake(accountKeyId) {
+            if (MigrationWorkerHeartbeat.removalPending(context, accountKeyId) || resetProgress.isPending.value) {
+                return@keepWake
+            }
+            val expectedRunAt = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
+            val lastRunAt = MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId)
+            if (migrationWorkerIsLate(System.currentTimeMillis(), expectedRunAt, lastRunAt)) {
+                migrationLog("MigrationStepDueReceiver: missed worker run — raising the step-due notification.")
+                migrationNotifier.notifyMigrationStepDue(accountKeyId)
+            }
+        }
     }
 
 }

@@ -65,12 +65,16 @@ class MigrationWorker(
             migrationLog("Worker: account/wallet gone — cancelling the migration work chain.")
             MigrationScheduler(applicationContext).cancel(accountKeyId)
             migrationNotifier.cancel(accountKeyId)
+            MigrationWorkerHeartbeat.clearRemovalPending(applicationContext, accountKeyId)
         } ?: return retryWhileRemoving(accountKeyId)
         return Result.success()
     }
 
     private suspend fun driveMigration(sdk: OrchardMigrationSdk, accountKeyId: String): Result {
-        MigrationAccountRetirement.admit(accountKeyId) { migrationNotifier.cancelStepDue(accountKeyId) }
+        MigrationAccountRetirement.admit(accountKeyId) {
+            MigrationWorkerHeartbeat.clearRemovalPending(applicationContext, accountKeyId)
+            migrationNotifier.cancelStepDue(accountKeyId)
+        }
         when (val result = migrationDriveOnce.run(sdk, accountKeyId)) {
             is DriveOnceResult.ReArmed -> {
                 // Already re-armed the WorkManager chain inside run() — nothing more to do.
