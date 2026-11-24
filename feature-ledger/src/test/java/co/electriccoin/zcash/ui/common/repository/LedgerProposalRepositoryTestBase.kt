@@ -43,7 +43,14 @@ abstract class LedgerProposalRepositoryTestBase {
     protected val proposalDataSource = mockk<ProposalDataSource>()
     protected val ledgerDeviceDataSource = mockk<LedgerDeviceDataSource>()
     protected val ledgerSigningDataSource = mockk<LedgerSigningDataSource>(relaxed = true)
-    protected val processSwapTransaction = mockk<ProcessSwapTransactionUseCase>(relaxed = true)
+    protected val metadataRepository = mockk<MetadataRepository>(relaxed = true) {
+        coEvery { getSwapMetadata(any(), any()) } returns null
+        coEvery {
+            markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                account = any(), walletWriteToken = 0L)
+        } returns true
+    }
+    protected val processSwapTransaction = ProcessSwapTransactionUseCase(metadataRepository, mockk())
 
     protected val devices = MutableStateFlow<List<LedgerBluetoothDevice>>(emptyList())
 

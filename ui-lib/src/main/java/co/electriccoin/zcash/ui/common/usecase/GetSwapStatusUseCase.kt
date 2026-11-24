@@ -54,13 +54,17 @@ class GetSwapStatusUseCase(
             }
 
             launch {
-                val expectedMetadata = initial ?: metadataRepository.getSwapMetadata(depositAddress, account)
+                val loaded = runCatchingRecoverable {
+                    initial ?: metadataRepository.getSwapMetadata(depositAddress, account)
+                }
+                val expectedMetadata = loaded.getOrNull()
 
                 if (expectedMetadata == null) {
                     data.update {
                         it.copy(
                             isLoading = false,
-                            error = IllegalStateException("No metadata for deposit addr")
+                            error = loaded.exceptionOrNull() as? Exception
+                                ?: IllegalStateException("No metadata for deposit addr"),
                         )
                     }
                     return@launch

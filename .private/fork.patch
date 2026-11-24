@@ -2726,7 +2726,7 @@ index 000000000..701f494b9
 +        ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(100), Memo(""), null)
 +}
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
-index 4ae26a42d..0cf4bb7f6 100644
+index 4ae26a42d..eecbab6c1 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
 @@ -6,0 +7,5 @@ import cash.z.ecc.android.sdk.model.Pczt
@@ -2751,7 +2751,7 @@ index 4ae26a42d..0cf4bb7f6 100644
 @@ -34,0 +49,2 @@ import kotlin.time.Duration.Companion.seconds
 +import kotlin.time.Instant
 +import java.math.BigDecimal
-@@ -42,0 +59,129 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -42,0 +59,133 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 +    @Test
 +    fun recreatedLedgerRepositoryPublishesMissingProposalToReview() = runTest(dispatcher) {
 +        val account = ledgerAccount()
@@ -2784,16 +2784,20 @@ index 4ae26a42d..0cf4bb7f6 100644
 +        }
 +        val quote = object : SwapQuote by mockk<SwapQuote>() {
 +            override val originAsset = origin
++            override val destinationAsset = mockk<SwapAsset>(relaxed = true)
 +            override val mode = SwapMode.EXACT_INPUT
 +            override val provider = "near"
 +            override val depositAddress = DynamicSwapAddress("synthetic-deposit")
 +            override val amountInFormatted = BigDecimal.ONE
++            override val amountInUsd = BigDecimal("100")
++            override val amountOutFormatted = BigDecimal.ONE
++            override val affiliateFeeUsd = BigDecimal.ZERO
 +            override val deadline = Instant.parse("2100-01-01T00:00:00Z")
 +        }
 +        val publication = SwapQuoteData.Success(quote, fundingClock = clock, elapsedRealtime = { elapsed })
 +        val approved = ExactInputSwapTransactionProposal(
 +            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
-+            mockk<Proposal>(), quote, ledgerAccount(),
++            mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi.ZERO }, quote, ledgerAccount(),
 +        )
 +        givenPczt(ledgerAccount(), proposal = approved, publication = publication)
 +        repository.startSigning()
@@ -2881,16 +2885,16 @@ index 4ae26a42d..0cf4bb7f6 100644
 +        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) }
 +    }
 +
-@@ -87 +232 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -87 +236 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { proposalDataSource.submitTransaction(proofsPczt, signed) } returns submitResult
 +            coEvery { proposalDataSource.submitTransaction(proofsPczt, signed, any()) } returns submitResult
-@@ -96 +241 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -96 +245 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coVerify(exactly = 1) { proposalDataSource.submitTransaction(proofsPczt, signed) }
 +            coVerify(exactly = 1) { proposalDataSource.submitTransaction(proofsPczt, signed, any()) }
-@@ -200 +345 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -200 +349 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { proposalDataSource.submitTransaction(proofsPczt, signed) } returns submitResult
 +            coEvery { proposalDataSource.submitTransaction(proofsPczt, signed, any()) } returns submitResult
-@@ -209,0 +355,26 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -209,0 +359,29 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 +    @Test
 +    fun cancelBeforeDeviceSigningAllowsReapprovalWithoutReservingFunding() = runTest(dispatcher) {
 +        val reviewed = ExactInputSwapTransactionProposal(
@@ -2913,31 +2917,41 @@ index 4ae26a42d..0cf4bb7f6 100644
 +        runCurrent()
 +
 +        assertEquals(LedgerSigningState.Signed, repository.signingState.value)
-+        coVerify(exactly = 0) { processSwapTransaction.reserveFunding(any(), any()) }
++        coVerify(exactly = 0) {
++            metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any(),
++                account = any(), walletWriteToken = 0L)
++        }
 +        coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) }
 +    }
 +
-@@ -269 +440 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
+@@ -269 +447 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
 -            coEvery { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>()) } returns submitResult
 +            coEvery { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) } returns submitResult
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTestBase.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTestBase.kt
-index 457a98c1b..16dbd5c78 100644
+index 457a98c1b..45e97d628 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTestBase.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTestBase.kt
 @@ -18,0 +19 @@ import co.electriccoin.zcash.ui.common.datasource.ProposalDataSource
 +import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 @@ -20,0 +22 @@ import co.electriccoin.zcash.ui.common.model.LedgerAccount
 +import co.electriccoin.zcash.ui.common.usecase.ProcessSwapTransactionUseCase
-@@ -43,0 +46 @@ abstract class LedgerProposalRepositoryTestBase {
-+    protected val processSwapTransaction = mockk<ProcessSwapTransactionUseCase>(relaxed = true)
-@@ -52,0 +56 @@ abstract class LedgerProposalRepositoryTestBase {
+@@ -43,0 +46,8 @@ abstract class LedgerProposalRepositoryTestBase {
++    protected val metadataRepository = mockk<MetadataRepository>(relaxed = true) {
++        coEvery { getSwapMetadata(any(), any()) } returns null
++        coEvery {
++            markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any(),
++                account = any(), walletWriteToken = 0L)
++        } returns true
++    }
++    protected val processSwapTransaction = ProcessSwapTransactionUseCase(metadataRepository, mockk())
+@@ -52,0 +63 @@ abstract class LedgerProposalRepositoryTestBase {
 +            processSwapTransaction = processSwapTransaction,
-@@ -66,0 +71,2 @@ abstract class LedgerProposalRepositoryTestBase {
+@@ -66,0 +78,2 @@ abstract class LedgerProposalRepositoryTestBase {
 +        proposal: TransactionProposal? = null,
 +        publication: SwapQuoteData.Success? = null,
-@@ -94,0 +101 @@ abstract class LedgerProposalRepositoryTestBase {
+@@ -94,0 +108 @@ abstract class LedgerProposalRepositoryTestBase {
 +        if (proposal != null) repository.transactionProposal.value = proposal
-@@ -95,0 +103 @@ abstract class LedgerProposalRepositoryTestBase {
+@@ -95,0 +110 @@ abstract class LedgerProposalRepositoryTestBase {
 +        repository.approveForSigning(repository.getTransactionProposal(), publication)
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/usecase/CreateLedgerAccountUseCaseTest.kt
 index bed02742e..2405a5131 100644
@@ -27248,26 +27262,30 @@ index 996645a58..0a3659205 100644
 +
 +    fun committedBirthday(): CommittedEnrollmentBirthday?
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
-index b7227e48f..e9a946a93 100644
+index b7227e48f..71019cf88 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/mapper/ActivityMapper.kt
-@@ -19,0 +20 @@ import co.electriccoin.zcash.ui.common.repository.Transaction
+@@ -15,0 +16 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
++import co.electriccoin.zcash.ui.common.model.ZecSimpleSwapAsset
+@@ -19,0 +21 @@ import co.electriccoin.zcash.ui.common.repository.Transaction
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-@@ -24,0 +26 @@ import co.electriccoin.zcash.ui.design.util.StyledStringStyle
+@@ -24,0 +27 @@ import co.electriccoin.zcash.ui.design.util.StyledStringStyle
 +import co.electriccoin.zcash.ui.design.util.TickerLocation
-@@ -41 +43 @@ class ActivityMapper {
+@@ -41 +44 @@ class ActivityMapper {
 -        onSwapClick: (depositAddress: String) -> Unit,
 +        onSwapClick: (TransactionSwapMetadata) -> Unit,
-@@ -54 +56 @@ class ActivityMapper {
+@@ -54 +57 @@ class ActivityMapper {
 -                    onClick = { onSwapClick(data.swap.depositAddress) },
 +                    onClick = { onSwapClick(data.swap) },
-@@ -76,2 +78,12 @@ class ActivityMapper {
+@@ -76,2 +79,14 @@ class ActivityMapper {
 -    private fun getSwapValue(data: ActivityData.BySwap): StyledStringResource =
 -        stringResByCurrencyNumber(data.swap.amountOutFormatted, CURRENCY_TICKER).withStyle(
 +    private fun getSwapValue(data: ActivityData.BySwap): StyledStringResource {
++        val destination = data.swap.destination
++        val ticker = if (destination is ZecSimpleSwapAsset) CURRENCY_TICKER else destination.tokenTicker
 +        val amount = stringResByCurrencyNumber(
 +            data.swap.amountOutFormatted,
-+            data.swap.destination.tokenTicker,
++            ticker,
 +            tickerLocation = TickerLocation.AFTER,
 +        )
 +        val label = when {
@@ -27276,14 +27294,14 @@ index b7227e48f..e9a946a93 100644
 +            else -> R.string.private_activity_saved_amount
 +        }
 +        return (label?.let { stringRes(it, amount) } ?: amount).withStyle(
-@@ -85,0 +98 @@ class ActivityMapper {
+@@ -85,0 +101 @@ class ActivityMapper {
 +    }
-@@ -88 +101,3 @@ class ActivityMapper {
+@@ -88 +104,3 @@ class ActivityMapper {
 -        stringRes(
 +        if (data.swap.mode != FLEX_INPUT) {
 +            stringRes(getUnmatchedFundingTitle(data))
 +        } else stringRes(
-@@ -99 +114,7 @@ class ActivityMapper {
+@@ -99 +117,7 @@ class ActivityMapper {
 -        when (data.swap.status) {
 +        if (data.swap.mode != FLEX_INPUT) {
 +            when (data.swap.status) {
@@ -27292,7 +27310,7 @@ index b7227e48f..e9a946a93 100644
 +                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_send_failed
 +            }
 +        } else when (data.swap.status) {
-@@ -166,13 +187,7 @@ class ActivityMapper {
+@@ -166,13 +190,7 @@ class ActivityMapper {
 -                    if (transaction is SendTransaction.Failed) {
 -                        when (data.metadata.swapMetadata.mode) {
 -                            EXACT_INPUT, FLEX_INPUT -> R.drawable.ic_transaction_send_failed
@@ -27313,9 +27331,9 @@ index b7227e48f..e9a946a93 100644
 +                                INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_send_pending
 +                                SUCCESS -> R.drawable.ic_transaction_sent
 +                                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_send_failed
-@@ -179,0 +195 @@ class ActivityMapper {
+@@ -179,0 +198 @@ class ActivityMapper {
 +                        }
-@@ -181,6 +197,5 @@ class ActivityMapper {
+@@ -181,6 +200,5 @@ class ActivityMapper {
 -                            EXACT_OUTPUT -> {
 -                                when (data.metadata.swapMetadata.status) {
 -                                    INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_paying
@@ -27327,7 +27345,7 @@ index b7227e48f..e9a946a93 100644
 +                                INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_paying
 +                                SUCCESS -> R.drawable.ic_transaction_paid
 +                                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_pay_failed
-@@ -249,12 +264,7 @@ class ActivityMapper {
+@@ -249,12 +267,7 @@ class ActivityMapper {
 -                    if (transaction is SendTransaction.Failed) {
 -                        when (data.metadata.swapMetadata.mode) {
 -                            EXACT_INPUT, FLEX_INPUT -> stringRes(R.string.swapStatus_swapFailed)
@@ -27347,22 +27365,22 @@ index b7227e48f..e9a946a93 100644
 +                                INCOMPLETE_DEPOSIT,
 +                                PROCESSING,
 +                                PENDING -> stringRes(R.string.transaction_history_swapping)
-@@ -262 +272 @@ class ActivityMapper {
+@@ -262 +275 @@ class ActivityMapper {
 -                                    SUCCESS -> stringRes(R.string.swapStatus_swapped)
 +                                SUCCESS -> stringRes(R.string.swapStatus_swapped)
-@@ -264 +274 @@ class ActivityMapper {
+@@ -264 +277 @@ class ActivityMapper {
 -                                    REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
 +                                REFUNDED -> stringRes(R.string.swapStatus_swapRefunded)
-@@ -266 +276 @@ class ActivityMapper {
+@@ -266 +279 @@ class ActivityMapper {
 -                                    FAILED -> stringRes(R.string.swapStatus_swapFailed)
 +                                FAILED -> stringRes(R.string.swapStatus_swapFailed)
-@@ -268,2 +278 @@ class ActivityMapper {
+@@ -268,2 +281 @@ class ActivityMapper {
 -                                    EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
 -                                }
 +                                EXPIRED -> stringRes(R.string.swapAndPay_expiredTitle)
-@@ -270,0 +280 @@ class ActivityMapper {
+@@ -270,0 +283 @@ class ActivityMapper {
 +                        }
-@@ -272,5 +282,5 @@ class ActivityMapper {
+@@ -272,5 +285,5 @@ class ActivityMapper {
 -                            EXACT_OUTPUT -> {
 -                                when (data.metadata.swapMetadata.status) {
 -                                    INCOMPLETE_DEPOSIT,
@@ -27373,28 +27391,28 @@ index b7227e48f..e9a946a93 100644
 +                                INCOMPLETE_DEPOSIT,
 +                                PROCESSING,
 +                                PENDING -> stringRes(R.string.transaction_history_paying)
-@@ -278 +288 @@ class ActivityMapper {
+@@ -278 +291 @@ class ActivityMapper {
 -                                    SUCCESS -> stringRes(R.string.swapStatus_paid)
 +                                SUCCESS -> stringRes(R.string.swapStatus_paid)
-@@ -280 +290 @@ class ActivityMapper {
+@@ -280 +293 @@ class ActivityMapper {
 -                                    REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
 +                                REFUNDED -> stringRes(R.string.swapStatus_paymentRefunded)
-@@ -282 +292 @@ class ActivityMapper {
+@@ -282 +295 @@ class ActivityMapper {
 -                                    FAILED -> stringRes(R.string.swapStatus_paymentFailed)
 +                                FAILED -> stringRes(R.string.swapStatus_paymentFailed)
-@@ -284,2 +294 @@ class ActivityMapper {
+@@ -284,2 +297 @@ class ActivityMapper {
 -                                    EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
 -                                }
 +                                EXPIRED -> stringRes(R.string.swapStatus_paymentExpired)
-@@ -386,4 +394,0 @@ class ActivityMapper {
+@@ -386,4 +397,0 @@ class ActivityMapper {
 -                        data.transaction is SendTransaction.Failed -> {
 -                            StringResourceColor.NEGATIVE
 -                        }
 -
-@@ -391 +396 @@ class ActivityMapper {
+@@ -391 +399 @@ class ActivityMapper {
 -                            when (data.metadata.swapMetadata.status) {
 +                            when (data.metadata.swapMetadata.outgoingStatus(data.transaction)) {
-@@ -410,0 +416,16 @@ private const val MONTH_THRESHOLD = 30
+@@ -410,0 +419,16 @@ private const val MONTH_THRESHOLD = 30
 +
 +private fun getUnmatchedFundingTitle(data: ActivityData.BySwap): Int {
 +    val isPayment = data.swap.mode == EXACT_OUTPUT
@@ -34689,7 +34707,7 @@ index 9174c2293..5bc75d47f 100644
 @@ -58,0 +102 @@ data class SwapData(
 +    val savedMetadata = data.savedMetadata
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
-index a33c847ad..5e9e387a5 100644
+index a33c847ad..c4ff98adc 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCase.kt
 @@ -2,0 +3,3 @@ package co.electriccoin.zcash.ui.common.usecase
@@ -34728,13 +34746,20 @@ index a33c847ad..5e9e387a5 100644
 +        initial: TransactionSwapMetadata?,
 +        account: WalletAccount? = null,
 +    ): Flow<SwapQuoteStatusData> =
-@@ -32 +57 @@ class GetSwapStatusUseCase(
+@@ -32 +57,4 @@ class GetSwapStatusUseCase(
 -                val expectedMetadata = metadataRepository.getSwapMetadata(depositAddress)
-+                val expectedMetadata = initial ?: metadataRepository.getSwapMetadata(depositAddress, account)
-@@ -43,0 +69,2 @@ class GetSwapStatusUseCase(
++                val loaded = runCatchingRecoverable {
++                    initial ?: metadataRepository.getSwapMetadata(depositAddress, account)
++                }
++                val expectedMetadata = loaded.getOrNull()
+@@ -38 +66,2 @@ class GetSwapStatusUseCase(
+-                            error = IllegalStateException("No metadata for deposit addr")
++                            error = loaded.exceptionOrNull() as? Exception
++                                ?: IllegalStateException("No metadata for deposit addr"),
+@@ -43,0 +73,2 @@ class GetSwapStatusUseCase(
 +                data.update { it.copy(savedMetadata = expectedMetadata) }
 +
-@@ -46,9 +73,4 @@ class GetSwapStatusUseCase(
+@@ -46,9 +77,4 @@ class GetSwapStatusUseCase(
 -                        val result = swapRepository.checkSwapStatus(expectedMetadata)
 -                        metadataRepository.updateSwap(
 -                            depositAddress = depositAddress,
@@ -34748,12 +34773,12 @@ index a33c847ad..5e9e387a5 100644
 +                        if (result.status == SwapStatus.SUCCESS) {
 +                            donationPreferences?.recordSuccessfulTransaction()
 +                        }
-@@ -57,0 +80 @@ class GetSwapStatusUseCase(
+@@ -57,0 +84 @@ class GetSwapStatusUseCase(
 +                                savedMetadata = saved,
-@@ -64,0 +88,2 @@ class GetSwapStatusUseCase(
+@@ -64,0 +92,2 @@ class GetSwapStatusUseCase(
 +                    } catch (e: CancellationException) {
 +                        throw e
-@@ -66,2 +91,11 @@ class GetSwapStatusUseCase(
+@@ -66,2 +95,11 @@ class GetSwapStatusUseCase(
 -                        data.update { it.copy(isLoading = false, error = e) }
 -                        break
 +                        val latest = savedAfterFailure(expectedMetadata, e)
@@ -34767,7 +34792,7 @@ index a33c847ad..5e9e387a5 100644
 +                                },
 +                            )
 +                        }
-@@ -74,0 +109,44 @@ class GetSwapStatusUseCase(
+@@ -74,0 +113,44 @@ class GetSwapStatusUseCase(
 +
 +    private suspend fun savedAfterFailure(
 +        expected: TransactionSwapMetadata,
@@ -34812,9 +34837,9 @@ index a33c847ad..5e9e387a5 100644
 +
 +    private class SwapRefreshNotSavedException(val savedMetadata: TransactionSwapMetadata?) :
 +        IllegalStateException("Swap status refresh was not saved")
-@@ -80,0 +159 @@ data class SwapQuoteStatusData(
+@@ -80,0 +163 @@ data class SwapQuoteStatusData(
 +    val savedMetadata: TransactionSwapMetadata? = null,
-@@ -83,0 +163,16 @@ data class SwapQuoteStatusData(
+@@ -83,0 +167,16 @@ data class SwapQuoteStatusData(
 +
 +    internal fun withSavedObservation(observed: TransactionSwapMetadata): SwapQuoteStatusData {
 +        val saved = savedMetadata ?: return copy(savedMetadata = observed)
@@ -64609,22 +64634,48 @@ index f0dc3ea70..18d6269c4 100644
 +        assertNull(emissions.last().status)
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
-index 40bfe60a6..98c60c3eb 100644
+index 40bfe60a6..444a43948 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/GetSwapStatusUseCaseTest.kt
 @@ -3,0 +4 @@ import co.electriccoin.zcash.ui.common.model.SwapAsset
 +import co.electriccoin.zcash.ui.common.datasource.AssetNotFoundException
-@@ -16 +17,6 @@ import io.mockk.mockk
+@@ -16 +17,7 @@ import io.mockk.mockk
 -import io.mockk.verify
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.flow.collect
++import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.launch
 +import kotlinx.coroutines.test.advanceTimeBy
 +import kotlinx.coroutines.test.runCurrent
-@@ -23,0 +30 @@ import kotlin.test.assertNull
+@@ -23,0 +31 @@ import kotlin.test.assertNull
 +import kotlin.test.assertSame
-@@ -36,0 +44,29 @@ class GetSwapStatusUseCaseTest {
+@@ -36,0 +45,54 @@ class GetSwapStatusUseCaseTest {
++    @Test
++    fun boundDetailRetriesAStorageReadFailureWithoutLookingUpAnUnverifiedReference() = runTest {
++        val account = EditAccountFixtures.zodl()
++        val saved = mockk<TransactionSwapMetadata>()
++        val failure = java.io.IOException("fixture storage unavailable")
++        var reads = 0
++        val metadata = mockk<MetadataRepository> {
++            coEvery { getSwapMetadata("deposit", account) } coAnswers {
++                if (++reads == 1) throw failure
++                saved
++            }
++            coEvery { updateSwap(saved, any()) } returns saved
++        }
++        val settled = swapStatusResult()
++        val provider = mockk<SwapRepository> { coEvery { checkSwapStatus(saved) } returns settled }
++        val useCase = GetSwapStatusUseCase(metadata, provider)
++
++        val failed = useCase.observeForAccount("deposit", account).first { !it.isLoading }
++        assertSame(failure, failed.error)
++        coVerify(exactly = 0) { provider.checkSwapStatus(any()) }
++        val retried = useCase.observeForAccount("deposit", account).first { !it.isLoading }
++        assertSame(settled, retried.status)
++        coVerify(exactly = 1) { provider.checkSwapStatus(saved) }
++    }
++
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun refusingAnOlderResponseKeepsTheAlreadyAcceptedLiveDetails() = runTest {
@@ -64654,9 +64705,9 @@ index 40bfe60a6..98c60c3eb 100644
 +        observer.cancel()
 +    }
 +
-@@ -42,0 +79 @@ class GetSwapStatusUseCaseTest {
+@@ -42,0 +105 @@ class GetSwapStatusUseCaseTest {
 +                    coEvery { updateSwap(any(), any()) } coAnswers { firstArg() }
-@@ -55,9 +92,12 @@ class GetSwapStatusUseCaseTest {
+@@ -55,9 +118,2 @@ class GetSwapStatusUseCaseTest {
 -            verify(exactly = 1) {
 -                metadataRepository.updateSwap(
 -                    depositAddress = "deposit",
@@ -64668,9 +64719,7 @@ index 40bfe60a6..98c60c3eb 100644
 -                )
 +            coVerify(exactly = 1) {
 +                metadataRepository.updateSwap(any(), status)
-+            }
-+        }
-+
+@@ -66,0 +123,60 @@ class GetSwapStatusUseCaseTest {
 +    @Test
 +    fun firstRefreshFailureRetainsSavedMetadataForPendingAndCompletedSwaps() = runTest {
 +        for (status in listOf(SwapStatus.PENDING, SwapStatus.SUCCESS)) {
@@ -64678,7 +64727,7 @@ index 40bfe60a6..98c60c3eb 100644
 +            val metadata = mockk<MetadataRepository>(relaxed = true) {
 +                coEvery { getSwapMetadata("deposit") } returns saved
 +                coEvery { reloadSwapMetadata(saved) } returns saved
-@@ -64,0 +105,42 @@ class GetSwapStatusUseCaseTest {
++            }
 +            val failure = AssetNotFoundException("nep141:btc.omft.near")
 +            val repository = mockk<SwapRepository> {
 +                coEvery { checkSwapStatus(saved) } throws failure
@@ -64721,7 +64770,7 @@ index 40bfe60a6..98c60c3eb 100644
 +        val states = mutableListOf<SwapQuoteStatusData>()
 +        val observer = backgroundScope.launch {
 +            GetSwapStatusUseCase(metadata, repository).observe("deposit").collect { states.add(it) }
-@@ -65,0 +148,8 @@ class GetSwapStatusUseCaseTest {
++        }
 +        runCurrent()
 +        assertSame(saved, states.last().savedMetadata)
 +        assertEquals(true, states.last().isLoading)
@@ -64730,16 +64779,17 @@ index 40bfe60a6..98c60c3eb 100644
 +        runCurrent()
 +        coVerify(exactly = 1) { repository.checkSwapStatus(saved) }
 +    }
-@@ -69,0 +160 @@ class GetSwapStatusUseCaseTest {
++
+@@ -69,0 +186 @@ class GetSwapStatusUseCaseTest {
 +            val saved = mockk<TransactionSwapMetadata>()
-@@ -72 +163,2 @@ class GetSwapStatusUseCaseTest {
+@@ -72 +189,2 @@ class GetSwapStatusUseCaseTest {
 -                    coEvery { getSwapMetadata("deposit") } returns mockk<TransactionSwapMetadata>()
 +                    coEvery { getSwapMetadata("deposit") } returns saved
 +                    coEvery { reloadSwapMetadata(saved) } returns null
-@@ -85 +177 @@ class GetSwapStatusUseCaseTest {
+@@ -85 +203 @@ class GetSwapStatusUseCaseTest {
 -            verify(exactly = 0) { metadataRepository.updateSwap(any(), any(), any(), any(), any(), any()) }
 +            coVerify(exactly = 0) { metadataRepository.updateSwap(any(), any()) }
-@@ -103 +195,70 @@ class GetSwapStatusUseCaseTest {
+@@ -103 +221,70 @@ class GetSwapStatusUseCaseTest {
 -            verify(exactly = 0) { metadataRepository.updateSwap(any(), any(), any(), any(), any(), any()) }
 +            coVerify(exactly = 0) { metadataRepository.updateSwap(any(), any()) }
 +        }
@@ -64811,7 +64861,7 @@ index 40bfe60a6..98c60c3eb 100644
 +        val states = mutableListOf<SwapQuoteStatusData>()
 +        backgroundScope.launch {
 +            GetSwapStatusUseCase(metadata, repository).observe("deposit").collect { states.add(it) }
-@@ -104,0 +266,13 @@ class GetSwapStatusUseCaseTest {
+@@ -104,0 +292,13 @@ class GetSwapStatusUseCaseTest {
 +        runCurrent()
 +        advanceTimeBy(30_000)
 +        runCurrent()
@@ -66788,10 +66838,10 @@ index 2c3089d4f..991ba4920 100644
 +                navigateToError = navigateToError,
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt
 new file mode 100644
-index 000000000..60c84fda7
+index 000000000..f9ea2ebc9
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/SwapActivityStatusTest.kt
-@@ -0,0 +1,281 @@
+@@ -0,0 +1,314 @@
 +package co.electriccoin.zcash.ui.common.usecase
 +
 +import cash.z.ecc.android.sdk.model.TransactionId
@@ -66825,13 +66875,19 @@ index 000000000..60c84fda7
 +import io.mockk.every
 +import io.mockk.mockk
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
++import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.awaitCancellation
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.first
 +import kotlinx.coroutines.flow.flowOf
++import kotlinx.coroutines.flow.onEach
++import kotlinx.coroutines.flow.take
++import kotlinx.coroutines.flow.toList
 +import kotlinx.coroutines.test.advanceTimeBy
 +import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.runTest
++import kotlinx.coroutines.withContext
++import kotlinx.coroutines.withTimeout
 +import java.math.BigDecimal
 +import java.time.Instant
 +import kotlin.test.Test
@@ -67003,6 +67059,33 @@ index 000000000..60c84fda7
 +        val swaps = GetReloadableSwapQuoteUseCase(swapStatus, metadata, accounts)
 +        assertIs<ActivityDetailUnavailableException>(swaps.observe(deposit, firstOwnerKey).first().error)
 +        coVerify(exactly = 0) { swapStatus.observeForAccount(any(), any()) }
++    }
++
++    @Test
++    fun loadedTransactionDetailClearsWhenItsTransactionDisappears() = runTest {
++        val accountId = owner.sdkAccount.accountUuid.toStorageKeyId()
++        val observed = MutableStateFlow<Transaction?>(confirmed)
++        val transactions = mockk<TransactionRepository> {
++            every { observeTransaction(id.txIdString()) } returns observed
++            coEvery { getMemos(confirmed) } returns emptyList()
++            coEvery { resolveWalletAddress(deposit) } returns null
++        }
++        val contacts = mockk<AddressBookRepository> { every { observeContactByAddress(deposit) } returns flowOf(null) }
++        val metadata = mockk<MetadataRepository> {
++            every { observeTransactionMetadata(confirmed) } returns flowOf(TransactionMetadata(false, true, null, null))
++        }
++        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns flowOf(owner) }
++        val details = GetTransactionDetailByIdUseCase(transactions, contacts, metadata, mockk(), accounts)
++
++        // The production observer maps on Dispatchers.Default. Bound the real work in its dispatcher.
++        val stages = withContext(Dispatchers.Default) {
++            withTimeout(2_000) {
++                details.observe(id.txIdString(), accountId).onEach { if (it != null) observed.value = null }
++                    .take(2).toList()
++            }
++        }
++        assertEquals(confirmed, stages.first()?.transaction)
++        assertNull(stages.last())
 +    }
 +
 +    @OptIn(ExperimentalCoroutinesApi::class)

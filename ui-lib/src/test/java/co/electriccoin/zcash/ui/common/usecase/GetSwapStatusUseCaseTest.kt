@@ -17,6 +17,7 @@ import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -40,6 +41,31 @@ import kotlin.test.assertSame
 class GetSwapStatusUseCaseTest {
     private val btc = SwapAssetTestFixture.asset(tokenTicker = "btc", chainTicker = "btc")
     private val zec = SwapAssetTestFixture.zecAsset()
+
+    @Test
+    fun boundDetailRetriesAStorageReadFailureWithoutLookingUpAnUnverifiedReference() = runTest {
+        val account = EditAccountFixtures.zodl()
+        val saved = mockk<TransactionSwapMetadata>()
+        val failure = java.io.IOException("fixture storage unavailable")
+        var reads = 0
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata("deposit", account) } coAnswers {
+                if (++reads == 1) throw failure
+                saved
+            }
+            coEvery { updateSwap(saved, any()) } returns saved
+        }
+        val settled = swapStatusResult()
+        val provider = mockk<SwapRepository> { coEvery { checkSwapStatus(saved) } returns settled }
+        val useCase = GetSwapStatusUseCase(metadata, provider)
+
+        val failed = useCase.observeForAccount("deposit", account).first { !it.isLoading }
+        assertSame(failure, failed.error)
+        coVerify(exactly = 0) { provider.checkSwapStatus(any()) }
+        val retried = useCase.observeForAccount("deposit", account).first { !it.isLoading }
+        assertSame(settled, retried.status)
+        coVerify(exactly = 1) { provider.checkSwapStatus(saved) }
+    }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test

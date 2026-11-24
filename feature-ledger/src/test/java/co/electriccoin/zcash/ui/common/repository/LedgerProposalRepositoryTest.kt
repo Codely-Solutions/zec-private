@@ -88,16 +88,20 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         }
         val quote = object : SwapQuote by mockk<SwapQuote>() {
             override val originAsset = origin
+            override val destinationAsset = mockk<SwapAsset>(relaxed = true)
             override val mode = SwapMode.EXACT_INPUT
             override val provider = "near"
             override val depositAddress = DynamicSwapAddress("synthetic-deposit")
             override val amountInFormatted = BigDecimal.ONE
+            override val amountInUsd = BigDecimal("100")
+            override val amountOutFormatted = BigDecimal.ONE
+            override val affiliateFeeUsd = BigDecimal.ZERO
             override val deadline = Instant.parse("2100-01-01T00:00:00Z")
         }
         val publication = SwapQuoteData.Success(quote, fundingClock = clock, elapsedRealtime = { elapsed })
         val approved = ExactInputSwapTransactionProposal(
             WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
-            mockk<Proposal>(), quote, ledgerAccount(),
+            mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi.ZERO }, quote, ledgerAccount(),
         )
         givenPczt(ledgerAccount(), proposal = approved, publication = publication)
         repository.startSigning()
@@ -374,7 +378,10 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         runCurrent()
 
         assertEquals(LedgerSigningState.Signed, repository.signingState.value)
-        coVerify(exactly = 0) { processSwapTransaction.reserveFunding(any(), any()) }
+        coVerify(exactly = 0) {
+            metadataRepository.markTxAsSwap(any(), any(), any(), any(), any(), any(), any(), any(), any(),
+                account = any(), walletWriteToken = 0L)
+        }
         coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Pczt>(), any<Pczt>(), any()) }
     }
 

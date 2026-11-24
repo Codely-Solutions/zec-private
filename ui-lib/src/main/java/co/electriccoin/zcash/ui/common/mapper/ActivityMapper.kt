@@ -13,6 +13,7 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus.PENDING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.PROCESSING
 import co.electriccoin.zcash.ui.common.model.SwapStatus.REFUNDED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.SUCCESS
+import co.electriccoin.zcash.ui.common.model.ZecSimpleSwapAsset
 import co.electriccoin.zcash.ui.common.repository.ReceiveTransaction
 import co.electriccoin.zcash.ui.common.repository.SendTransaction
 import co.electriccoin.zcash.ui.common.repository.ShieldTransaction
@@ -76,9 +77,11 @@ class ActivityMapper {
         }
 
     private fun getSwapValue(data: ActivityData.BySwap): StyledStringResource {
+        val destination = data.swap.destination
+        val ticker = if (destination is ZecSimpleSwapAsset) CURRENCY_TICKER else destination.tokenTicker
         val amount = stringResByCurrencyNumber(
             data.swap.amountOutFormatted,
-            data.swap.destination.tokenTicker,
+            ticker,
             tickerLocation = TickerLocation.AFTER,
         )
         val label = when {

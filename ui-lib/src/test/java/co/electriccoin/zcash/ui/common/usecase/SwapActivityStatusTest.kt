@@ -31,13 +31,19 @@ import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.math.BigDecimal
 import java.time.Instant
 import kotlin.test.Test
@@ -209,6 +215,33 @@ class SwapActivityStatusTest {
         val swaps = GetReloadableSwapQuoteUseCase(swapStatus, metadata, accounts)
         assertIs<ActivityDetailUnavailableException>(swaps.observe(deposit, firstOwnerKey).first().error)
         coVerify(exactly = 0) { swapStatus.observeForAccount(any(), any()) }
+    }
+
+    @Test
+    fun loadedTransactionDetailClearsWhenItsTransactionDisappears() = runTest {
+        val accountId = owner.sdkAccount.accountUuid.toStorageKeyId()
+        val observed = MutableStateFlow<Transaction?>(confirmed)
+        val transactions = mockk<TransactionRepository> {
+            every { observeTransaction(id.txIdString()) } returns observed
+            coEvery { getMemos(confirmed) } returns emptyList()
+            coEvery { resolveWalletAddress(deposit) } returns null
+        }
+        val contacts = mockk<AddressBookRepository> { every { observeContactByAddress(deposit) } returns flowOf(null) }
+        val metadata = mockk<MetadataRepository> {
+            every { observeTransactionMetadata(confirmed) } returns flowOf(TransactionMetadata(false, true, null, null))
+        }
+        val accounts = mockk<AccountDataSource> { every { selectedAccount } returns flowOf(owner) }
+        val details = GetTransactionDetailByIdUseCase(transactions, contacts, metadata, mockk(), accounts)
+
+        // The production observer maps on Dispatchers.Default. Bound the real work in its dispatcher.
+        val stages = withContext(Dispatchers.Default) {
+            withTimeout(2_000) {
+                details.observe(id.txIdString(), accountId).onEach { if (it != null) observed.value = null }
+                    .take(2).toList()
+            }
+        }
+        assertEquals(confirmed, stages.first()?.transaction)
+        assertNull(stages.last())
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
