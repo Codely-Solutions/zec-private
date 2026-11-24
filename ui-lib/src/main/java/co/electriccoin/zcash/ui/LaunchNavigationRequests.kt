@@ -44,8 +44,8 @@ class LaunchNavigationRequests {
         }
     }
 
-    fun isResolvingMigrationProgress(notice: MigrationNotice): Boolean =
-        pending.value.any { it.migrationNotice === notice && it.command == null }
+    val resolvingMigrationNotice: MigrationNotice?
+        get() = pending.value.firstOrNull { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }?.migrationNotice
 
     fun finishMigrationProgress(notice: MigrationNotice, command: NavigationCommand.ReplaceAll?) {
         pending.update { queue ->
@@ -59,8 +59,7 @@ class LaunchNavigationRequests {
         get() = pending.value.firstNotNullOfOrNull { it.migrationNotice?.ownerKey }
 
     internal val pendingMigrationLookup: String?
-        get() = pending.value.firstOrNull { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }
-            ?.migrationNotice?.ownerKey
+        get() = resolvingMigrationNotice?.ownerKey
 
     fun requestMigrationRecovery(command: NavigationCommand.ReplaceAll) = offer(Kind.MIGRATION_RECOVERY, command)
 

@@ -1869,10 +1869,10 @@ index 000000000..cdadb0a3b
 +See the [wallet guide](WALLET-GUIDE.md) for instructions and [privacy](PRIVACY.md) before sharing diagnostics.
 diff --git a/docs/WALLET-GUIDE.md b/docs/WALLET-GUIDE.md
 new file mode 100644
-index 000000000..fc2666152
+index 000000000..8a506c150
 --- /dev/null
 +++ b/docs/WALLET-GUIDE.md
-@@ -0,0 +1,63 @@
+@@ -0,0 +1,65 @@
 +# ZEC Private: Android Zcash wallet guide
 +
 +## Installation and updates
@@ -1904,6 +1904,8 @@ index 000000000..fc2666152
 +For CrossPay, choose the recipient asset/network, destination and target amount. Confirm that the destination accepts the selected asset and network; separate destination memo/tag fields are not supported. Review the ZEC total before approving. Follow progress in Activity. If a response is delayed, check the existing transaction and swap status before sending again.
 +
 +**Funding unconfirmed** in Activity means the wallet saved the swap or payment details before a funding transaction appeared in its history. Open the entry to check the provider’s status.
++
++**Funding not sent** means the wallet stopped before broadcasting the transaction. The swap reference stays in Activity.
 +
 +Contacts are filtered by the selected network. Changing networks keeps your recipient visible; correct any inline mismatch before requesting a quote.
 +
@@ -3380,7 +3382,7 @@ index 459ac8e4e..6d1aa04df 100644
 -    }
 -
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
-index 294506ed1..b461e759e 100644
+index 294506ed1..787021b77 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/migration/FeatureMigrationImpls.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.migration
@@ -3496,9 +3498,9 @@ index 294506ed1..b461e759e 100644
 +                    .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key }
 +                val command = target?.let { account ->
 +                    walletWriteAccess.write(generation) {
-+                        if (!launchNavigation.isResolvingMigrationProgress(notice)) return@write null
++                        if (launchNavigation.resolvingMigrationNotice !== notice) return@write null
 +                        accountDataSource.selectAccount(account)
-+                        if (runStep && launchNavigation.isResolvingMigrationProgress(notice)) {
++                        if (runStep && launchNavigation.resolvingMigrationNotice === notice) {
 +                            MigrationScheduler(context).schedule(key, kotlin.time.Duration.ZERO)
 +                        }
 +                        NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(key)))
@@ -25713,10 +25715,10 @@ index 000000000..ed0e92273
 +}
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
 new file mode 100644
-index 000000000..f33c9afbe
+index 000000000..3377e49f8
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/LaunchNavigationRequests.kt
-@@ -0,0 +1,106 @@
+@@ -0,0 +1,105 @@
 +package co.electriccoin.zcash.ui
 +
 +import co.electriccoin.zcash.ui.screen.redeemgift.ScanGiftCardArgs
@@ -25763,8 +25765,8 @@ index 000000000..f33c9afbe
 +        }
 +    }
 +
-+    fun isResolvingMigrationProgress(notice: MigrationNotice): Boolean =
-+        pending.value.any { it.migrationNotice === notice && it.command == null }
++    val resolvingMigrationNotice: MigrationNotice?
++        get() = pending.value.firstOrNull { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }?.migrationNotice
 +
 +    fun finishMigrationProgress(notice: MigrationNotice, command: NavigationCommand.ReplaceAll?) {
 +        pending.update { queue ->
@@ -25778,8 +25780,7 @@ index 000000000..f33c9afbe
 +        get() = pending.value.firstNotNullOfOrNull { it.migrationNotice?.ownerKey }
 +
 +    internal val pendingMigrationLookup: String?
-+        get() = pending.value.firstOrNull { it.kind == Kind.MIGRATION_PROGRESS && it.command == null }
-+            ?.migrationNotice?.ownerKey
++        get() = resolvingMigrationNotice?.ownerKey
 +
 +    fun requestMigrationRecovery(command: NavigationCommand.ReplaceAll) = offer(Kind.MIGRATION_RECOVERY, command)
 +

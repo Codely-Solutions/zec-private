@@ -204,9 +204,9 @@ class MigrationAppHooksImpl(
                     .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key }
                 val command = target?.let { account ->
                     walletWriteAccess.write(generation) {
-                        if (!launchNavigation.isResolvingMigrationProgress(notice)) return@write null
+                        if (launchNavigation.resolvingMigrationNotice !== notice) return@write null
                         accountDataSource.selectAccount(account)
-                        if (runStep && launchNavigation.isResolvingMigrationProgress(notice)) {
+                        if (runStep && launchNavigation.resolvingMigrationNotice === notice) {
                             MigrationScheduler(context).schedule(key, kotlin.time.Duration.ZERO)
                         }
                         NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(key)))

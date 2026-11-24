@@ -30,6 +30,8 @@ For CrossPay, choose the recipient asset/network, destination and target amount.
 
 **Funding unconfirmed** in Activity means the wallet saved the swap or payment details before a funding transaction appeared in its history. Open the entry to check the provider’s status.
 
+**Funding not sent** means the wallet stopped before broadcasting the transaction. The swap reference stays in Activity.
+
 Contacts are filtered by the selected network. Changing networks keeps your recipient visible; correct any inline mismatch before requesting a quote.
 
 ZEC Private adds no app or affiliate fee. Provider costs are included in the quote; the NEAR platform percentage is only part of those costs. See [NEAR's fee schedule](https://docs.near-intents.org/resources/fees) for its current terms.
