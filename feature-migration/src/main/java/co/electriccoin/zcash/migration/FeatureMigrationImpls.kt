@@ -256,11 +256,12 @@ class MigrationAppHooksImpl(
     override suspend fun cancelMigrationWork(accountKeyId: String?) {
         val keys = if (accountKeyId == null) {
             launchNavigation.clearMigrationRequests()
+            val cancellation = WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name)
             migrationLiveDriver.stopAll()
+            cancellation.result.await()
             migrationDriveOnce.awaitIdle()
             // Reset must cancel the worker chain even when the synchronizer has no account snapshot.
             val accounts = accountDataSource.allAccounts.value.orEmpty()
-            WorkManager.getInstance(context).cancelAllWorkByTag(MigrationWorker::class.java.name).result.await()
             (accounts.map { it.sdkAccount.accountUuid.toStorageKeyId() } +
                 MigrationWorkerHeartbeat.accountKeyIds(context)).distinct()
         } else {

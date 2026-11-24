@@ -61,17 +61,17 @@ class MigrationAppHooksResetTest {
             runCurrent()
 
             coVerify(exactly = 0) { accounts.getAllAccounts() }
-            coVerifyOrder {
-                driver.stopAll()
-                driveOnce.awaitIdle()
-                workManager.cancelAllWorkByTag(MigrationWorker::class.java.name)
-            }
             verify(exactly = 1) { workManager.cancelAllWorkByTag(MigrationWorker::class.java.name) }
             assertFalse(reset.isCompleted)
 
             cancellation.set(Operation.SUCCESS)
             runCurrent()
             assertTrue(reset.isCompleted)
+            coVerifyOrder {
+                workManager.cancelAllWorkByTag(MigrationWorker::class.java.name)
+                driver.stopAll()
+                driveOnce.awaitIdle()
+            }
         } finally {
             cancellation.cancel(false)
             unmockkObject(WorkManager.Companion)

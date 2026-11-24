@@ -11,6 +11,7 @@ import co.electriccoin.zcash.ui.common.model.SwapAsset
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapCatalogTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
+import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
 import co.electriccoin.zcash.ui.common.model.SwapStatus
 import co.electriccoin.zcash.ui.common.model.near.SwapOutputProvenanceFixture
@@ -89,6 +90,18 @@ class SwapDetailVMTest {
         assertSaved(harness.state(), saved)
         assertEquals(stringRes(R.string.swapAndPay_status_pendingDeposit), harness.state().transactionHeader.title)
         assertNotNull(harness.state().infoFooter)
+        assertNeutralRetry(harness)
+    }
+
+    @Test
+    fun trackedOutgoingSwapShowsUnconfirmedFundingAndOffersStatusRetry() = runTest {
+        val saved = saved(SwapStatus.PENDING).copy(mode = SwapMode.EXACT_OUTPUT)
+        val harness = harness(SwapQuoteStatusData(isLoading = false, error = unavailable(), savedMetadata = saved))
+
+        val detail = harness.state()
+        assertEquals(stringRes(R.string.private_swap_funding_unconfirmed), detail.transactionHeader.title)
+        assertEquals(TransactionDetailSwapStatusRowState.Mode.SWAP_FROM_ZEC, detail.status.mode)
+        assertNull(detail.donationBasisZec)
         assertNeutralRetry(harness)
     }
 

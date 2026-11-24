@@ -8,6 +8,7 @@ import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.mapper.SwapSupportMapper
 import co.electriccoin.zcash.ui.common.mapper.originalQuoteSupportButton
 import co.electriccoin.zcash.ui.common.model.positiveRefund
+import co.electriccoin.zcash.ui.common.model.SwapMode.FLEX_INPUT
 import co.electriccoin.zcash.ui.common.model.SwapStatus.EXPIRED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.FAILED
 import co.electriccoin.zcash.ui.common.model.SwapStatus.INCOMPLETE_DEPOSIT
@@ -33,7 +34,7 @@ import co.electriccoin.zcash.ui.screen.swap.detail.support.SwapSupportArgs
 import co.electriccoin.zcash.ui.screen.transactiondetail.CommonTransactionDetailMapper
 import co.electriccoin.zcash.ui.screen.transactiondetail.TransactionDetailHeaderState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailInfoRowState
-import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState.Mode.SWAP_INTO_ZEC
+import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.TransactionDetailSwapStatusRowState
 import co.electriccoin.zcash.ui.screen.transactiondetail.infoitems.toDetailStatusRow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -66,7 +67,7 @@ class SwapDetailVM(
                                 destinationAsset = swapData.status?.destinationAsset,
                                 savedMetadata = swapData.savedMetadata,
                             ),
-                    status = swapData.data.toDetailStatusRow(mode = SWAP_INTO_ZEC),
+                    status = swapData.data.toDetailStatusRow(mode = swapData.statusRowMode),
                     depositTo =
                         TransactionDetailInfoRowState(
                             title = stringRes(R.string.private_swap_deposit_reference),
@@ -136,7 +137,7 @@ class SwapDetailVM(
                         )
                     },
                     donationBasisZec = swapData.status?.takeIf {
-                        it.status == SUCCESS && it.destinationAsset.tokenTicker == "ZEC"
+                        !swapData.isOutgoing && it.status == SUCCESS && it.destinationAsset.tokenTicker == "ZEC"
                     }?.executedAmountOut?.takeIf { it.signum() > 0 }?.toPlainString(),
                 )
             }.stateIn(
@@ -149,12 +150,24 @@ class SwapDetailVM(
         navigationRouter.forward(SwapSupportArgs(depositAddress))
     }
 
+    private val SwapData.isOutgoing: Boolean
+        get() = (status?.mode ?: savedMetadata?.mode)?.let { it != FLEX_INPUT } == true
+
+    private val SwapData.statusRowMode: TransactionDetailSwapStatusRowState.Mode
+        get() = if (isOutgoing) {
+            TransactionDetailSwapStatusRowState.Mode.SWAP_FROM_ZEC
+        } else {
+            TransactionDetailSwapStatusRowState.Mode.SWAP_INTO_ZEC
+        }
+
     private fun createQuotedOutputState(swapData: SwapData): TransactionDetailInfoRowState =
         TransactionDetailInfoRowState(
             title = stringRes(R.string.private_quoted_output),
             message =
                 (swapData.savedMetadata?.quotedAmountOut ?: swapData.status?.quotedAmountOut)?.let {
-                    stringResByCurrencyNumber(amount = it, ticker = CURRENCY_TICKER).withStyle()
+                    val ticker = swapData.savedMetadata?.destination?.tokenTicker
+                        ?: swapData.status?.destinationAsset?.tokenTicker ?: CURRENCY_TICKER
+                    stringResByCurrencyNumber(amount = it, ticker = ticker).withStyle()
                 }
         )
 
@@ -240,15 +253,21 @@ class SwapDetailVM(
                     swapData.status
                         ?.originAsset
                         ?.tokenIcon ?: swapData.savedMetadata?.origin?.tokenIcon ?: loadingImageRes(),
-                    imageRes(R.drawable.ic_transaction_received),
-                    imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_zec),
+                    imageRes(
+                        if (swapData.isOutgoing) R.drawable.ic_transaction_sent else R.drawable.ic_transaction_received
+                    ),
+                    swapData.status?.destinationAsset?.tokenIcon ?: swapData.savedMetadata?.destination?.tokenIcon
+                        ?: imageRes(co.electriccoin.zcash.ui.design.R.drawable.ic_token_zec),
                 ),
         )
 
     private fun createHeaderTitle(swapData: SwapData): StringResource? =
         when (swapData.status?.status ?: swapData.savedMetadata?.status) {
             EXPIRED -> stringRes(R.string.swapStatus_swapExpired)
-            PENDING -> stringRes(R.string.swapAndPay_status_pendingDeposit)
+            PENDING -> stringRes(
+                if (swapData.isOutgoing) R.string.private_swap_funding_unconfirmed
+                else R.string.swapAndPay_status_pendingDeposit
+            )
             INCOMPLETE_DEPOSIT -> stringRes(R.string.swapStatus_swapIncomplete)
             PROCESSING -> stringRes(R.string.swapToZec_swapProcessing)
             SUCCESS -> createSuccessfulOutputTitle(swapData)

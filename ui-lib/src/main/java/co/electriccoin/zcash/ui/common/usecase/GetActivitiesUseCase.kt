@@ -1,6 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
-import co.electriccoin.zcash.ui.common.model.ZecSimpleSwapAsset
+import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.repository.Transaction
 import co.electriccoin.zcash.ui.common.repository.TransactionMetadata
@@ -21,7 +21,6 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneOffset
-import kotlin.collections.filter
 
 class GetActivitiesUseCase(
     private val transactionRepository: TransactionRepository,
@@ -29,15 +28,22 @@ class GetActivitiesUseCase(
 ) {
     @OptIn(ExperimentalCoroutinesApi::class)
     fun observe() =
-        combine(observeTransactions(), observeIntoZecSwaps()) { transactions, swaps ->
+        combine(observeTransactions(), metadataRepository.observeSwapMetadata()) { transactions, swaps ->
             if (transactions == null || swaps == null) {
                 null
             } else {
+                val reachedWalletHistory = transactions.mapNotNull { entry ->
+                    entry.metadata.swapMetadata?.depositAddress?.let { entry.transaction.accountUuid to it }
+                }.toSet()
+                val standalone = swaps.filter { swap ->
+                    val owner = swap.ownerAccount?.sdkAccount?.accountUuid
+                    swap.mode == SwapMode.FLEX_INPUT || (owner to swap.depositAddress) !in reachedWalletHistory
+                }
                 transactions
                     .sortedWith(
                         compareByDescending<ActivityData.ByTransaction> { it.timestamp }
                             .thenByDescending { it.transaction.id.txIdString() }
-                    ) + swaps
+                    ) + standalone.map { ActivityData.BySwap(it) }
             }
         }.map {
             val endOfDay =
@@ -65,15 +71,6 @@ class GetActivitiesUseCase(
                                 ActivityData.ByTransaction(transaction = it, metadata = metadata)
                             }
                     }?.combineToFlow() ?: flowOf(null)
-            }
-
-    private fun observeIntoZecSwaps(): Flow<List<ActivityData.BySwap>?> =
-        metadataRepository
-            .observeSwapMetadata()
-            .map {
-                it?.filter { metadata -> metadata.destination is ZecSimpleSwapAsset }
-            }.map {
-                it?.map { metadata -> ActivityData.BySwap(swap = metadata) }
             }
 }
 

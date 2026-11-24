@@ -133,6 +133,29 @@ class SwapActivityStatusTest {
         assertEquals(StringResourceColor.NEGATIVE, paymentFailed.amountColor())
     }
 
+    @Test
+    fun outgoingTrackingCanBeOpenedBeforeFundingAppearsInWalletHistory() = runTest {
+        val saved = swap(SwapStatus.PENDING)
+        val stored = TransactionMetadata(false, true, null, saved)
+        val history = MutableStateFlow<List<Transaction>?>(emptyList())
+        val transactions = mockk<TransactionRepository> { every { this@mockk.transactions } returns history }
+        val repository = mockk<MetadataRepository> {
+            every { observeSwapMetadata() } returns flowOf(listOf(saved))
+            every { observeTransactionMetadata(confirmed) } returns flowOf(stored)
+        }
+        val activity = GetActivitiesUseCase(transactions, repository).observe()
+        val onlyTracked = assertIs<ActivityData.BySwap>(activity.first()?.single())
+        var openedReference: String? = null
+        val row = ActivityMapper().createTransactionState(onlyTracked, Instant.EPOCH, {}, { openedReference = it }, {})
+        assertEquals(stringRes(R.string.private_swap_funding_unconfirmed), row.title)
+        row.onClick()
+        assertEquals(deposit, openedReference)
+
+        history.value = listOf(confirmed)
+        val withFunding = assertIs<ActivityData.ByTransaction>(activity.first()?.single())
+        assertEquals(confirmed, withFunding.transaction)
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun activityPollingDeduplicatesRequestsAndDiscardsWorkFromThePreviousAccount() = runTest {

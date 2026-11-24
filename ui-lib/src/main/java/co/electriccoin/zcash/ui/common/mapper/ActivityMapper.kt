@@ -74,7 +74,7 @@ class ActivityMapper {
         }
 
     private fun getSwapValue(data: ActivityData.BySwap): StyledStringResource {
-        val amount = stringResByCurrencyNumber(data.swap.amountOutFormatted, CURRENCY_TICKER)
+        val amount = stringResByCurrencyNumber(data.swap.amountOutFormatted, data.swap.destination.tokenTicker)
         val label = when {
             data.swap.executedAmountOut != null -> null
             data.swap.quotedAmountOut != null -> R.string.private_activity_quoted_amount
@@ -92,7 +92,9 @@ class ActivityMapper {
     }
 
     private fun getSwapTitle(data: ActivityData.BySwap): StringResource =
-        stringRes(
+        if (data.swap.mode != FLEX_INPUT) {
+            stringRes(getUnmatchedFundingTitle(data))
+        } else stringRes(
             when (data.swap.status) {
                 INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.string.transaction_history_swapping
                 SUCCESS -> R.string.swapStatus_swapped
@@ -102,8 +104,29 @@ class ActivityMapper {
             }
         )
 
+    private fun getUnmatchedFundingTitle(data: ActivityData.BySwap): Int {
+        val isPayment = data.swap.mode == EXACT_OUTPUT
+        return when (data.swap.status) {
+            PENDING -> R.string.private_swap_funding_unconfirmed
+            INCOMPLETE_DEPOSIT -> {
+                if (isPayment) R.string.swapStatus_paymentIncomplete else R.string.swapStatus_swapIncomplete
+            }
+            PROCESSING -> if (isPayment) R.string.swapStatus_paying else R.string.transaction_history_swapping
+            SUCCESS -> if (isPayment) R.string.swapStatus_paid else R.string.swapStatus_swapped
+            REFUNDED -> if (isPayment) R.string.swapStatus_paymentRefunded else R.string.swapStatus_swapRefunded
+            FAILED -> if (isPayment) R.string.swapStatus_paymentFailed else R.string.swapStatus_swapFailed
+            EXPIRED -> R.string.swapAndPay_expiredTitle
+        }
+    }
+
     private fun getSwapBigIcon(data: ActivityData.BySwap): Int =
-        when (data.swap.status) {
+        if (data.swap.mode != FLEX_INPUT) {
+            when (data.swap.status) {
+                INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_send_pending
+                SUCCESS -> R.drawable.ic_transaction_sent
+                EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_send_failed
+            }
+        } else when (data.swap.status) {
             INCOMPLETE_DEPOSIT, PROCESSING, PENDING -> R.drawable.ic_transaction_receive_pending
             SUCCESS -> R.drawable.ic_transaction_received
             EXPIRED, REFUNDED, FAILED -> R.drawable.ic_transaction_receive_failed

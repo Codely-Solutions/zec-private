@@ -258,7 +258,8 @@ class GetFilteredActivitiesUseCase(
         when (activity) {
             is InternalState.BySwap -> {
                 val text =
-                    (stringResByNumber(activity.activity.swap.amountOutFormatted) + stringRes(" ZEC"))
+                    (stringResByNumber(activity.activity.swap.amountOutFormatted) +
+                        stringRes(" ${activity.activity.swap.destination.tokenTicker}"))
                         .getString(context)
                 text.contains(fulltextFilter, ignoreCase = true)
             }

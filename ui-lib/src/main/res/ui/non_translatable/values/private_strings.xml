@@ -48,4 +48,5 @@
     <string name="private_error_unavailable_message">Close this message to return to the previous screen.</string>
     <string name="private_review_unavailable_title">Payment review expired</string>
     <string name="private_review_unavailable_message">Go back to prepare the payment again.</string>
+    <string name="private_swap_funding_unconfirmed" translatable="false">Funding unconfirmed</string>
 </resources>
