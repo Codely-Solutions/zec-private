@@ -2781,7 +2781,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/KeystoneEnrollmentSavedStateTest.kt": "885754a28ac0ed7f5323bfe4c8f2839a145db767728884f4b204397c095faaaa",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/NavigationRouterImplTest.kt": "3f7a72823fdef79c76a60053d9303ce85c0ffe0ae6743739b9f798f968bf4407",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoreSavedStateTest.kt": "80da40615e18fe15e87f05bff51d7683d1c9c7d9c83de6f26c398c0b11951b2a",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt": "a1e19544179a375c66041d0a54b1db3bb4f0796fef795c898b205d598558a305",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/RestoredWalletRoutesLayoutTest.kt": "a88d88ee6c95fe0ca69dfab7355052b549d9129352041814cbe1b84a3930a53a",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/ReviewRestorationBoundaryTest.kt": "5c2f2fe9b6bb9597bf46df309465496ffccdca1c51674562bdeef52d288576fe",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/ListExtTest.kt": "b3c3a47ec60432a524cd5339238cf4faab65379a7c720cb9bcf5fa7127bd151c",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/common/appbar/ZashiTopAppBarVMTest.kt": "ed7ae5e9e906d8de42349ccf96d28cc0d48988f6e2682e9aaa806cb6c93fc4e3",

@@ -6,12 +6,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.unit.Density
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -33,6 +36,7 @@ import co.electriccoin.zcash.ui.common.usecase.ObserveAccountIconUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
 import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
+import co.electriccoin.zcash.ui.design.component.ZashiTopAppBarNavigationTag
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.screen.error.AndroidErrorBottomSheet
 import co.electriccoin.zcash.ui.screen.error.AndroidErrorDialog
@@ -171,7 +175,9 @@ class RestoredWalletRoutesLayoutTest {
         val request = RequestArgs(ReceiveAddressType.Unified.ordinal)
         compose.runOnIdle { controller.navigate(request) }
         val back = context.getString(co.electriccoin.zcash.ui.design.R.string.general_back)
-        compose.onNodeWithContentDescription(back).assertIsDisplayed().assertIsEnabled().performClick()
+        compose.onNodeWithContentDescription(back).assertIsDisplayed()
+        compose.onNodeWithTag(ZashiTopAppBarNavigationTag.BACK).assertIsEnabled()
+            .performSemanticsAction(SemanticsActions.OnClick)
         verify(exactly = 1) { router.back() }
         compose.runOnIdle { assertEquals(HomeArgs, controller.currentBackStackEntry?.toRoute<HomeArgs>()) }
 
