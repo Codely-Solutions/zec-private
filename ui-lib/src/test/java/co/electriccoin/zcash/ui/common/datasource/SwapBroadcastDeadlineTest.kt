@@ -118,7 +118,7 @@ class SwapBroadcastDeadlineTest {
             coVerify(exactly = 1) {
                 fixture.metadata.markTxAsSwap(
                     any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                    account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
+                    account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<java.time.Instant>(),
                 )
             }
         }
@@ -165,7 +165,7 @@ class SwapBroadcastDeadlineTest {
             coEvery {
                 metadata.markTxAsSwap(
                     any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                    account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
+                    account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<java.time.Instant>(),
                 )
             } returns true
             coEvery { broadcaster.createProposedTransactions(any(), any()) } coAnswers {

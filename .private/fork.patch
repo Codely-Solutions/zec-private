@@ -66258,7 +66258,7 @@ index 000000000..de5d94cb7
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
 new file mode 100644
-index 000000000..b4c240201
+index 000000000..ac88e5d7a
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
 @@ -0,0 +1,252 @@
@@ -66382,7 +66382,7 @@ index 000000000..b4c240201
 +            coVerify(exactly = 1) {
 +                fixture.metadata.markTxAsSwap(
 +                    any(), any(), any(), any(), any(), any(), any(), any(), any(),
-+                    account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
++                    account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<java.time.Instant>(),
 +                )
 +            }
 +        }
@@ -66429,7 +66429,7 @@ index 000000000..b4c240201
 +            coEvery {
 +                metadata.markTxAsSwap(
 +                    any(), any(), any(), any(), any(), any(), any(), any(), any(),
-+                    account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
++                    account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<java.time.Instant>(),
 +                )
 +            } returns true
 +            coEvery { broadcaster.createProposedTransactions(any(), any()) } coAnswers {
@@ -72858,7 +72858,7 @@ index 0bc7a1124..0d0ca40b4 100644
 +        committedValues.clear()
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 new file mode 100644
-index 000000000..abf2ab0db
+index 000000000..c64bd80e7
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/repository/ZashiProposalRepositoryTest.kt
 @@ -0,0 +1,195 @@
@@ -72985,7 +72985,7 @@ index 000000000..abf2ab0db
 +        coEvery {
 +            metadata.markTxAsSwap(
 +                any(), any(), any(), any(), any(), any(), any(), any(), any(),
-+                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
++                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<java.time.Instant>(),
 +            )
 +        } returns true
 +        coEvery { proposals.submitTransaction(reviewed.proposal, key, any()) } returns expected
@@ -72995,7 +72995,7 @@ index 000000000..abf2ab0db
 +        coVerifyOrder {
 +            metadata.markTxAsSwap(
 +                any(), any(), any(), any(), any(), any(), any(), any(), any(),
-+                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
++                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<java.time.Instant>(),
 +            )
 +            proposals.submitTransaction(reviewed.proposal, key, any())
 +        }
@@ -73012,7 +73012,7 @@ index 000000000..abf2ab0db
 +        coEvery {
 +            metadata.markTxAsSwap(
 +                any(), any(), any(), any(), any(), any(), any(), any(), any(),
-+                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
++                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<java.time.Instant>(),
 +            )
 +        } coAnswers {
 +            trackingStarted.complete(Unit)

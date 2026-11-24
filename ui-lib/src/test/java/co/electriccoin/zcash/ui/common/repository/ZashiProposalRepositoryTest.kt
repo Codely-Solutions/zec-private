@@ -121,7 +121,7 @@ class ZashiProposalRepositoryTest {
         coEvery {
             metadata.markTxAsSwap(
                 any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
+                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<java.time.Instant>(),
             )
         } returns true
         coEvery { proposals.submitTransaction(reviewed.proposal, key, any()) } returns expected
@@ -131,7 +131,7 @@ class ZashiProposalRepositoryTest {
         coVerifyOrder {
             metadata.markTxAsSwap(
                 any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
+                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<java.time.Instant>(),
             )
             proposals.submitTransaction(reviewed.proposal, key, any())
         }
@@ -148,7 +148,7 @@ class ZashiProposalRepositoryTest {
         coEvery {
             metadata.markTxAsSwap(
                 any(), any(), any(), any(), any(), any(), any(), any(), any(),
-                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<Instant>(),
+                account = any(), walletWriteToken = 0L, reservationCreatedAt = ofType<java.time.Instant>(),
             )
         } coAnswers {
             trackingStarted.complete(Unit)
