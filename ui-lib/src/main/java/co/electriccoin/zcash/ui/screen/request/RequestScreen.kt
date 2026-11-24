@@ -8,6 +8,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import co.electriccoin.zcash.ui.screen.request.model.RequestState
 import co.electriccoin.zcash.ui.screen.request.view.RequestView
 import co.electriccoin.zcash.ui.screen.request.viewmodel.RequestVM
 import org.koin.androidx.compose.koinViewModel
@@ -17,6 +18,11 @@ import org.koin.core.parameter.parametersOf
 internal fun RequestScreen(args: RequestArgs) {
     val vm = koinViewModel<RequestVM> { parametersOf(args.addressType) }
     val requestState by vm.state.collectAsStateWithLifecycle()
+    RequestScreenContent(requestState)
+}
+
+@Composable
+internal fun RequestScreenContent(requestState: RequestState) {
     val snackbarHostState = remember { SnackbarHostState() }
     BackHandler { requestState.onBack() }
     RequestView(
