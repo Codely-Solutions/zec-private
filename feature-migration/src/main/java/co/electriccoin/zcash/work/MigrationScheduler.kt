@@ -15,6 +15,7 @@ import co.electriccoin.zcash.ui.common.usecase.MigrationWorkerRunState
 import co.electriccoin.zcash.ui.common.usecase.migrationWorkerRunState
 import kotlinx.coroutines.guava.await
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.toJavaDuration
 
@@ -78,6 +79,13 @@ class MigrationScheduler(
 
     suspend fun cancelAndWait(accountKeyId: String) {
         cancelWork(accountKeyId).result.await()
+    }
+
+    internal fun nextWakeAt(accountKeyId: String): Long? = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
+
+    internal suspend fun restoreWake(accountKeyId: String, dueAtEpochMillis: Long) {
+        val delay = (dueAtEpochMillis - System.currentTimeMillis()).coerceAtLeast(0).milliseconds
+        enqueue(accountKeyId, delay)?.result?.await()
     }
 
     private fun cancelWork(accountKeyId: String): Operation {

@@ -69,6 +69,7 @@ import co.electriccoin.zcash.ui.screen.migration.complete.MigrationCompleteVM
 import co.electriccoin.zcash.ui.screen.migration.customservertor.MigrationCustomServerTorArgs
 import co.electriccoin.zcash.ui.screen.migration.customservertor.MigrationCustomServerTorVM
 import co.electriccoin.zcash.ui.screen.migration.howitworks.MigrationHowItWorksVM
+import co.electriccoin.zcash.ui.screen.migration.invalid.MigrationTransferInvalidArgs
 import co.electriccoin.zcash.ui.screen.migration.invalid.MigrationTransferInvalidVM
 import co.electriccoin.zcash.ui.screen.migration.keystonescan.MigrationKeystoneScanArgs
 import co.electriccoin.zcash.ui.screen.migration.keystonescan.MigrationKeystoneScanVM
@@ -305,6 +306,6 @@ class MigrationKoinGraphSmokeTest {
 
     @Test
     fun migrationTransferInvalidVM_resolvesFromKoin() {
-        koin.koin.get<MigrationTransferInvalidVM>()
+        koin.koin.get<MigrationTransferInvalidVM> { parametersOf(MigrationTransferInvalidArgs("fixture-owner")) }
     }
 }

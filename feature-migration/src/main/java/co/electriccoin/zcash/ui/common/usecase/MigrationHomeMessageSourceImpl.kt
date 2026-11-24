@@ -344,7 +344,7 @@ class MigrationHomeMessageSourceImpl(
         when {
             // A plan needing re-confirmation (spec §6.2/§6.3) always routes to the Transfer Invalid
             // info screen, regardless of its last-known progress/completion state.
-            hasAttention -> navigationRouter.forward(MigrationTransferInvalidArgs)
+            hasAttention -> accountKeyId?.let { navigationRouter.forward(MigrationTransferInvalidArgs(it)) }
 
             // Tapping the widget just opens the celebration screen — MigrationCompleteVM.onDone()
             // owns the seen-flag decision. MOB-1750: isResidueOnly threads which copy/summary

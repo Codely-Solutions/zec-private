@@ -16,6 +16,7 @@ import io.mockk.every
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -396,6 +397,41 @@ class GetSwapStatusUseCaseTest {
 
         assertFalse(states.last().isFundingWindowOpen)
         coVerify(exactly = 1) { repository.checkSwapStatus(saved) }
+    }
+
+    @Test
+    fun slowProviderAndPersistenceConsumeTheOriginalFundingBudgetAfterRestart() = runTest {
+        val issuedAt = Instant.parse("2026-11-24T00:00:00Z")
+        val clock = object : Clock {
+            override fun now() = issuedAt - 600_000.milliseconds + testScheduler.currentTime.milliseconds
+        }
+        val saved = mockk<TransactionSwapMetadata>()
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata("deposit") } returns saved
+            coEvery { updateSwap(saved, any()) } coAnswers {
+                delay(2_000.milliseconds)
+                saved
+            }
+        }
+        val status = swapStatusResult(swapStatus = SwapStatus.INCOMPLETE_DEPOSIT)
+        every { status.observedAtProvider } returns issuedAt
+        val provider = mockk<SwapRepository> {
+            coEvery { checkSwapStatus(saved) } coAnswers {
+                delay(2_000.milliseconds)
+                status
+            }
+        }
+        val useCase = GetSwapStatusUseCase(metadata, provider, clock = clock, timeSource = testScheduler.timeSource)
+
+        // Four seconds of work plus up to one second lost to HTTP Date rounding.
+        every { status.deadline } returns issuedAt + 5_000.milliseconds
+        val expired = useCase("deposit")
+        assertSame(status, expired.status)
+        assertFalse(expired.isFundingWindowOpen)
+
+        every { status.observedAtProvider } returns issuedAt + 4_000.milliseconds
+        every { status.deadline } returns issuedAt + 14_000.milliseconds
+        assertTrue(useCase("deposit").isFundingWindowOpen)
     }
 
     private fun swapStatusResult(

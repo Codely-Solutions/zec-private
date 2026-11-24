@@ -42,23 +42,31 @@ import co.electriccoin.zcash.ui.design.util.getValue
 import co.electriccoin.zcash.ui.design.util.scaffoldPadding
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.LceRenderer
+import co.electriccoin.zcash.ui.screen.migration.component.MigrationUnavailable
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Serializable
-data object MigrationTransferInvalidArgs
+data class MigrationTransferInvalidArgs(val accountKeyId: String)
 
 @Composable
-fun MigrationTransferInvalidScreen() {
-    val vm = koinViewModel<MigrationTransferInvalidVM>()
+fun MigrationTransferInvalidScreen(args: MigrationTransferInvalidArgs) {
+    val vm = koinViewModel<MigrationTransferInvalidVM> { parametersOf(args) }
     val state by vm.state.collectAsStateWithLifecycle()
-    LceRenderer(
-        state = state,
-        loading = { isLoading -> if (isLoading && state.content == null) CircularScreenProgressIndicator() },
-    ) { s ->
-        BackHandler { s.onBack() }
-        MigrationTransferInvalidView(s)
+    BackHandler { vm.onBack() }
+    if (state.content == null && !state.isLoading && state.error == null) {
+        MigrationUnavailable(
+            message = stringRes(DesignR.string.migrationProgress_unavailable),
+            onBack = vm::onBack,
+            onRetry = vm::load,
+        )
+    } else {
+        LceRenderer(
+            state = state,
+            loading = { isLoading -> if (isLoading && state.content == null) CircularScreenProgressIndicator() },
+        ) { MigrationTransferInvalidView(it) }
     }
 }
 

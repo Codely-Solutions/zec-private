@@ -69,6 +69,7 @@ import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessArgs
 import co.electriccoin.zcash.ui.screen.migration.success.MigrationSuccessScreen
 import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureArgs
 import co.electriccoin.zcash.ui.screen.migration.torfailure.MigrationTorFailureScreen
+import co.electriccoin.zcash.ui.common.repository.MigrationTransferStateRepository
 import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsRepository
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepository
 import co.electriccoin.zcash.work.MigrationScheduler
@@ -81,6 +82,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.guava.await
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
@@ -160,6 +163,7 @@ class MigrationAppHooksImpl(
     private val migrationDriveOnce: MigrationDriveOnce,
     private val pendingMigrationSchedule: PendingMigrationScheduleRepository,
     private val pendingKeystone: PendingKeystoneMigrationPcztsRepository,
+    private val migrationReadouts: MigrationTransferStateRepository,
     private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(resetProgress),
 ) : MigrationAppHooks {
     override fun handleIntent(
@@ -203,14 +207,18 @@ class MigrationAppHooksImpl(
         if (resetProgress.isPending.value) return
         val key = ownerKey?.takeIf(ACCOUNT_KEY::matches) ?: return
         val generation = walletWriteAccess.token()
-        val notice = launchNavigation.beginMigrationProgress(key, runStep)
+        val notice = MigrationAccountRetirement.admit(key) {
+            launchNavigation.beginMigrationProgress(key, runStep)
+        } ?: return
         scope.launch {
             try {
                 val target = accountDataSource.getAllAccounts()
                     .firstOrNull { it.sdkAccount.accountUuid.toStorageKeyId() == key }
                 val command = target?.let { account ->
                     walletWriteAccess.write(generation) {
-                        if (launchNavigation.resolvingMigrationNotice !== notice) return@write null
+                        if (launchNavigation.resolvingMigrationNotice !== notice ||
+                            MigrationAccountRetirement.blocks(key)
+                        ) return@write null
                         accountDataSource.selectAccount(account)
                         if (runStep && launchNavigation.resolvingMigrationNotice === notice) {
                             MigrationScheduler(context).runNotificationStep(key)
@@ -218,7 +226,10 @@ class MigrationAppHooksImpl(
                         NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationProgressArgs(key)))
                     }
                 }
-                launchNavigation.finishMigrationProgress(notice, command)
+                val offered = MigrationAccountRetirement.admit(key) {
+                    launchNavigation.finishMigrationProgress(notice, command)
+                }
+                if (offered == null) launchNavigation.finishMigrationProgress(notice, null)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -231,9 +242,12 @@ class MigrationAppHooksImpl(
     override suspend fun checkRecovery() {
         if (!resetProgress.isPending.value) {
             checkMigrationRecovery { ownerKey ->
-                launchNavigation.requestMigrationRecovery(
-                    NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs(ownerKey)))
-                )
+                MigrationAccountRetirement.admit(ownerKey) {
+                    launchNavigation.requestMigrationRecovery(
+                        ownerKey,
+                        NavigationCommand.ReplaceAll(listOf(HomeArgs, MigrationSendingArgs(ownerKey)))
+                    )
+                }
             }
         }
     }
@@ -241,19 +255,25 @@ class MigrationAppHooksImpl(
     override suspend fun retireHardwareAccount(accountKeyId: String, deleteAccount: suspend () -> Unit) {
         val generation = walletWriteAccess.token()
         MigrationAccountRetirement.begin(accountKeyId)
+        val scheduler = MigrationScheduler(context)
+        var wakeToRestore: Long? = null
         var deleted = false
         try {
             // Admission is closed first. Let any already-held native operation finish before deleting.
             migrationDriveOnce.awaitIdle()
             migrationLiveDriver.stopAndJoin(accountKeyId)
-            MigrationScheduler(context).cancelAndWait(accountKeyId)
+            wakeToRestore = scheduler.nextWakeAt(accountKeyId)
+            withContext(NonCancellable) { scheduler.cancelAndWait(accountKeyId) }
+            currentCoroutineContext().ensureActive()
             withContext(NonCancellable) {
                 migrationDriveOnce.withIdleDrive {
                     checkNotNull(walletWriteAccess.write(generation) { deleteAccount() }) {
                         "The wallet changed before the account could be removed"
                     }
                     deleted = true
+                    launchNavigation.clearMigrationRequestsFor(accountKeyId)
                 }
+                migrationReadouts.clear(accountKeyId)
                 pendingMigrationSchedule.peek(accountKeyId)?.let { pendingMigrationSchedule.clear(accountKeyId, it) }
                 pendingKeystone.peek(accountKeyId)?.let { pendingKeystone.clear(accountKeyId, it) }
                 migrationNotifier.cancel(accountKeyId)
@@ -261,10 +281,30 @@ class MigrationAppHooksImpl(
             }
         } finally {
             if (!deleted) {
-                MigrationAccountRetirement.restore(accountKeyId)
-                migrationLiveDriver.startIfNotRunning(accountKeyId)
+                restoreRetirement(accountKeyId, generation, scheduler, wakeToRestore)
             }
         }
+    }
+
+    @Suppress("TooGenericExceptionCaught") // Keep the original removal failure visible if re-enqueue fails.
+    private suspend fun restoreRetirement(
+        accountKeyId: String,
+        generation: Long,
+        scheduler: MigrationScheduler,
+        wakeToRestore: Long?,
+    ) = withContext(NonCancellable) {
+        MigrationAccountRetirement.restore(accountKeyId)
+        walletWriteAccess.write(generation) {
+            wakeToRestore?.let { wake ->
+                try {
+                    scheduler.restoreWake(accountKeyId, wake)
+                } catch (e: Exception) {
+                    migrationLog("Migration background wake restore unavailable (${e.javaClass.simpleName}).")
+                }
+            }
+            migrationLiveDriver.startIfNotRunning(accountKeyId)
+        }
+        Unit
     }
 
     override suspend fun cancelMigrationWork(accountKeyId: String?) {
@@ -323,7 +363,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
             composable<MigrationScheduledArgs> { entry -> MigrationScheduledScreen(entry.toRoute()) }
             composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute()) }
             composable<MigrationProgressArgs> { entry -> MigrationProgressScreen(entry.toRoute()) }
-            composable<MigrationTransferInvalidArgs> { MigrationTransferInvalidScreen() }
+            composable<MigrationTransferInvalidArgs> { MigrationTransferInvalidScreen(it.toRoute()) }
             composable<MigrationRestartArgs> { MigrationRestartScreen(it.toRoute()) }
         }
     }

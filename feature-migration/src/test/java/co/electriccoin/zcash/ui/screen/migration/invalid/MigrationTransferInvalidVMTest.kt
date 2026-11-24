@@ -22,6 +22,7 @@ import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.screen.migration.setup.MigrationSetupArgs
+import co.electriccoin.zcash.work.MigrationDriveOnce
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -42,6 +43,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.time.Clock
 import kotlin.time.Instant
 
@@ -182,7 +184,7 @@ class MigrationTransferInvalidVMTest {
             val collectJob = launch { vm.state.collect {} }
             advanceUntilIdle()
 
-            invokeOnContinue(vm)
+            requireNotNull(vm.state.value.content).onContinue()
             advanceUntilIdle()
 
             coVerify(exactly = 1) { restartRepo.set(any(), restartedSchedule) }
@@ -214,7 +216,7 @@ class MigrationTransferInvalidVMTest {
             val collectJob = launch { vm.state.collect {} }
             advanceUntilIdle()
 
-            invokeOnContinue(vm)
+            requireNotNull(vm.state.value.content).onContinue()
             advanceUntilIdle()
 
             coVerify(exactly = 0) { restartRepo.set(any(), any()) }
@@ -222,10 +224,46 @@ class MigrationTransferInvalidVMTest {
             collectJob.cancel()
         }
 
-    private fun invokeOnContinue(vm: MigrationTransferInvalidVM) {
-        val method = MigrationTransferInvalidVM::class.java.getDeclaredMethod("onContinue", String::class.java)
-        method.isAccessible = true
-        method.invoke(vm, "00000000000000000000000000000001")
+    @Test
+    fun restoredRecoveryForDifferentAccountNeverLoadsTheSelectedAccountsPlan() = runTest {
+        val getSdk = mockk<GetOrchardMigrationSdkUseCase>()
+        val vm = vm(
+            snapshot = null,
+            getOrchardMigrationSdk = getSdk,
+            args = MigrationTransferInvalidArgs("00000000000000000000000000000002"),
+        )
+        val collection = launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.content)
+        coVerify(exactly = 0) { getSdk(any()) }
+        collection.cancel()
+    }
+
+    @Test
+    fun staleAttentionDoesNotRestartMigrationFromAnOldButton() = runTest {
+        val sdk = mockk<OrchardMigrationSdk> {
+            coEvery { getMigrationStateUnreconciled() } returnsMany listOf(
+                MigrationState.RequiresAttention(AttentionReason.TransferExpired),
+                MigrationState.RequiresAttention(AttentionReason.InvalidTransfer(7)),
+            )
+        }
+        val router = FakeNavigationRouter()
+        val vm = vm(
+            snapshot = null,
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any()) } returns sdk },
+            router = router,
+        )
+        val collection = launch { vm.state.collect {} }
+        advanceUntilIdle()
+
+        requireNotNull(vm.state.value.content).onContinue()
+        advanceUntilIdle()
+
+        assertNull(vm.state.value.content)
+        assertEquals(emptyList(), router.replacedRoutes)
+        coVerify(exactly = 0) { sdk.restartCurrentMigrationStep() }
+        collection.cancel()
     }
 
     private fun vm(
@@ -233,6 +271,7 @@ class MigrationTransferInvalidVMTest {
         getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
         restartMigrationScheduleRepository: RestartMigrationScheduleRepository = mockk(relaxed = true),
         router: NavigationRouter = FakeNavigationRouter(),
+        args: MigrationTransferInvalidArgs = MigrationTransferInvalidArgs("00000000000000000000000000000001"),
     ): MigrationTransferInvalidVM {
         val fakeAccount =
             AccountFixture.new(
@@ -247,6 +286,12 @@ class MigrationTransferInvalidVMTest {
                 coEvery { this@mockk() } returns walletAccount
             }
         return MigrationTransferInvalidVM(
+            args = args,
+            migrationDriveOnce = mockk {
+                coEvery { withExclusiveAccess<MigrationRestartOutcome?>(args.accountKeyId, any()) } coAnswers {
+                    secondArg<suspend () -> MigrationRestartOutcome?>().invoke()
+                }
+            },
             getOrchardMigrationSdk = getOrchardMigrationSdk,
             getSelectedWalletAccount = getSelectedWalletAccount,
             getMigrationSnapshot =

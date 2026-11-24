@@ -367,7 +367,7 @@ class MainActivity : FragmentActivity() {
         private const val PENDING_EXTERNAL_SCANS = "pending_external_scans"
         private const val PENDING_MIGRATION_NOTICE = "pending_migration_notice"
         private const val PENDING_MIGRATION_STEP = "pending_migration_step"
-        private const val NAVIGATION_STATE_VERSION = 10
+        private const val NAVIGATION_STATE_VERSION = 11
 
         // Forget older navigation stacks when their routes or saved payloads change.
         // Version 3 adds the transaction note's account and wallet session to its typed route.

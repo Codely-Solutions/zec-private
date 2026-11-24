@@ -102,13 +102,35 @@ for clear in (False, True):
             with self.subTest(malformed=malformed), self.assertRaisesRegex(RuntimeError, 'base units|positive'):
                 read_positive_atomic(malformed)
 
+    def test_unfunded_probe_checks_the_original_decimal_token(self):
+        from live_near import WireDecimal, read_decimal, request
+
+        wire = '0.' + '0' * 510 + '1e512'
+        result = subprocess.CompletedProcess([], 0, stdout=('{"amount":' + wire + '}\n200').encode())
+        with patch.dict(os.environ, {'PRIVATE_TOR_SOCKS': '127.0.0.1:9050'}):
+            with patch('live_near.subprocess.run', return_value=result):
+                status, body = request('/v0/status')
+        self.assertEqual(status, 200)
+        self.assertEqual(body['amount'], WireDecimal(wire))
+        with self.assertRaisesRegex(RuntimeError, 'response decimal'):
+            read_decimal(body['amount'])
+        self.assertEqual(read_decimal(WireDecimal('1.25e-2')), read_decimal('0.0125'))
+
+    def test_unfunded_near_probe_compares_deadlines_at_nanosecond_precision(self):
+        from live_near import deadline_identity
+
+        deadline = deadline_identity('2099-01-01T00:00:00.000000001Z')
+        self.assertEqual(deadline, deadline_identity('2099-01-01T01:00:00.000000001+01:00'))
+        self.assertNotEqual(deadline, deadline_identity('2099-01-01T00:00:00.000000002Z'))
+
     def test_unfunded_near_probe_binds_every_reviewed_term(self):
         import live_near
 
         fixture_address = live_near.FIXTURE['unified']
         report_time = '2026-11-24T00:00:00Z'
 
-        def run_probe(root, change=None, issued_deadline='2099-01-01T00:00:00Z', omit_dry_quote=False):
+        def run_probe(root, change=None, issued_deadline='2099-01-01T00:00:00Z', omit_dry_quote=False,
+                      issue_dry_address=False):
             issued = None
 
             def request(path, body=None):
@@ -126,6 +148,8 @@ for clear in (False, True):
                                 'minAmountOut': str(amount_out), 'amountOutUsd': '34.64',
                                 'deadline': body['deadline'],
                             }
+                        if issue_dry_address:
+                            dry_quote['quote']['depositAddress'] = fixture_address
                         return 200, dry_quote
                     issued = {
                         'timestamp': report_time,
@@ -147,6 +171,8 @@ for clear in (False, True):
                         target[field] = value
                     else:
                         observed['quote']['amountOutFormatted'] = '0.0090'
+                        if issued_deadline == '2099-01-01T00:00:00Z':
+                            observed['quote']['deadline'] = '2099-01-01T00:00:00.000Z'
                     return 200, status
                 self.assertEqual((path, body), ('/v0/deposit/submit', {}))
                 return 400, {}
@@ -155,7 +181,12 @@ for clear in (False, True):
                   patch.object(live_near, 'ROOT', root),
                   patch.object(live_near.subprocess, 'check_output', return_value='a' * 40),
                   contextlib.redirect_stdout(StringIO())):
-                if omit_dry_quote:
+                if issue_dry_address:
+                    with self.assertRaisesRegex(RuntimeError, 'dry quote issued a deposit address'):
+                        live_near.main()
+                    self.assertEqual(remote.call_count, 1)
+                    self.assertFalse((root / 'artifact' / 'near-contract.json').exists())
+                elif omit_dry_quote:
                     with self.assertRaisesRegex(KeyError, 'quote'):
                         live_near.main()
                     self.assertEqual(remote.call_count, 1)
@@ -176,6 +207,7 @@ for clear in (False, True):
             ('quote', 'amountOut', '900001'), ('quote', 'amountInFormatted', '0.99'),
             ('quote', 'amountOutFormatted', '0.0089'), ('quote', 'minAmountIn', '99500000'),
             ('quote', 'minAmountOut', '891000'), ('quote', 'deadline', '2099-01-01T00:01:00Z'),
+            ('quote', 'deadline', '2099-01-01T00:00:00.000000001Z'),
             ('quote', 'depositAddress', 't1different'), ('quote', 'depositMemo', 'unexpected'),
             ('quoteRequest', 'swapType', 'FLEX_INPUT'), ('quoteRequest', 'originAsset', 'different'),
             ('quoteRequest', 'destinationAsset', 'different'), ('quoteRequest', 'amount', '120000000'),
@@ -201,6 +233,7 @@ for clear in (False, True):
             self.assertTrue(json.loads(receipt.read_text())['unused_quote_status_passed'])
         with fixture_directory() as temp:
             root = Path(temp)
+            run_probe(root, issue_dry_address=True)
             run_probe(root, omit_dry_quote=True)
             run_probe(root, issued_deadline='1999-01-01T00:00:00Z')
             self.assertFalse((root / 'artifact' / 'near-contract.json').exists())

@@ -66,7 +66,14 @@ class LaunchNavigationRequests {
     internal val pendingMigrationLookup: SavedMigrationNotice?
         get() = resolvingMigrationNotice?.let { SavedMigrationNotice(it.ownerKey, it.runStepPending) }
 
-    fun requestMigrationRecovery(command: NavigationCommand.ReplaceAll) = offer(Kind.MIGRATION_RECOVERY, command)
+    fun requestMigrationRecovery(ownerKey: String, command: NavigationCommand.ReplaceAll) =
+        offer(Kind.MIGRATION_RECOVERY, command, ownerKey)
+
+    fun clearMigrationRequestsFor(ownerKey: String) {
+        pending.update { queue ->
+            queue.filterNot { it.migrationNotice?.ownerKey == ownerKey || it.recoveryOwnerKey == ownerKey }
+        }
+    }
 
     fun clearMigrationRequests() {
         pending.update { queue ->
@@ -91,9 +98,9 @@ class LaunchNavigationRequests {
         }
     }
 
-    private fun offer(kind: Kind, command: NavigationCommand) {
+    private fun offer(kind: Kind, command: NavigationCommand, recoveryOwnerKey: String? = null) {
         pending.update { queue ->
-            val request = Request(kind, command)
+            val request = Request(kind, command, recoveryOwnerKey = recoveryOwnerKey)
             if (request in queue) queue else queue.filterNot { it.kind == kind } + request
         }
     }
@@ -106,6 +113,7 @@ class LaunchNavigationRequests {
         val kind: Kind,
         val command: NavigationCommand?,
         val migrationNotice: MigrationNotice? = null,
+        val recoveryOwnerKey: String? = null,
     )
 
     internal enum class Kind { THIRD_PARTY_SCAN, GIFT_SCAN, MIGRATION_PROGRESS, MIGRATION_RECOVERY }

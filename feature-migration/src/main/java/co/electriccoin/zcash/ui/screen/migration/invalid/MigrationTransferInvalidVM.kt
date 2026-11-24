@@ -8,7 +8,6 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.LceState
 import co.electriccoin.zcash.ui.common.model.groupLce
 import co.electriccoin.zcash.ui.common.model.migration.LiveMigrationSnapshot
-import co.electriccoin.zcash.ui.common.model.migration.MigrationAttentionKind
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.model.migration.affectedTransferIndices
 import co.electriccoin.zcash.ui.common.model.migration.toMigrationRangeText
@@ -25,12 +24,15 @@ import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
 import co.electriccoin.zcash.ui.screen.migration.setup.MigrationSetupArgs
+import co.electriccoin.zcash.work.MigrationDriveOnce
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlin.time.Clock
 
 class MigrationTransferInvalidVM(
+    private val args: MigrationTransferInvalidArgs,
+    private val migrationDriveOnce: MigrationDriveOnce,
     private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
     private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
     private val getMigrationSnapshot: GetMigrationSnapshotUseCase,
@@ -47,23 +49,26 @@ class MigrationTransferInvalidVM(
     // snapshot is read alongside it (same load pass) so affectedTransferIndices() correlates by
     // the transfer's stable engine id.
     private data class RecoveryInfo(
-        val owner: String,
-        val reason: AttentionReason?,
+        val reason: AttentionReason,
         val snapshot: LiveMigrationSnapshot?
     )
 
     private val recoveryInfo = MutableStateFlow<RecoveryInfo?>(null)
 
     init {
+        load()
+    }
+
+    fun load() {
         loadLce.execute {
-            val owner = selectedOwner()
-            val sdk = checkNotNull(getOrchardMigrationSdk(owner)) { "Migration account is unavailable" }
-            // getMigrationStateUnreconciled(), not getMigrationState(): this screen only reads,
-            // never mutates (2026-08-07 read/write-separation design), and RequiresAttention's
-            // reason doesn't depend on the mark-mined promotion pass — this screen is only
-            // reachable after the state was already observed as RequiresAttention elsewhere.
-            val reason = (sdk.getMigrationStateUnreconciled() as? MigrationState.RequiresAttention)?.reason
-            recoveryInfo.value = RecoveryInfo(owner, reason, getMigrationSnapshot(owner))
+            recoveryInfo.value = null
+            val owner = args.accountKeyId
+            if (selectedOwner() == owner) {
+                val state = getOrchardMigrationSdk(owner)?.getMigrationStateUnreconciled()
+                if (state is MigrationState.RequiresAttention) {
+                    recoveryInfo.value = RecoveryInfo(state.reason, getMigrationSnapshot(owner))
+                }
+            }
         }
     }
 
@@ -78,9 +83,9 @@ class MigrationTransferInvalidVM(
         val completed = snapshot?.completedCount ?: 0
         val total = snapshot?.totalCount ?: 0
         val reason = info.reason
-        val kind = reason?.toUiKind() ?: MigrationAttentionKind.TRANSFER_EXPIRED
+        val kind = reason.toUiKind()
         val affectedIndices =
-            if (snapshot != null && reason != null) {
+            if (snapshot != null) {
                 reason.affectedTransferIndices(snapshot, Clock.System.now())
             } else {
                 emptyList()
@@ -98,20 +103,33 @@ class MigrationTransferInvalidVM(
             totalCount = total,
             remainingCount = affectedIndices.size.takeIf { it > 0 } ?: (total - completed),
             invalidRange = stringRes(rangeText),
-            onContinue = { onContinue(info.owner) },
+            onContinue = { onContinue(info) },
             onBack = ::onBack,
         )
     }
 
-    private fun onContinue(owner: String) =
+    private fun onContinue(info: RecoveryInfo) =
         restartLce.execute {
-            check(selectedOwner() == owner) { "The migration recovery belongs to a different account" }
-            val sdk = checkNotNull(getOrchardMigrationSdk(owner)) { "Migration account is unavailable" }
+            val owner = args.accountKeyId
+            val outcome = migrationDriveOnce.withExclusiveAccess(owner) {
+                check(selectedOwner() == owner) { "The migration recovery belongs to a different account" }
+                val sdk = checkNotNull(getOrchardMigrationSdk(owner)) { "Migration account is unavailable" }
+                val state = sdk.getMigrationStateUnreconciled()
+                if (state is MigrationState.RequiresAttention && state.reason == info.reason) {
+                    sdk.restartCurrentMigrationStep()
+                } else {
+                    null
+                }
+            }
+            if (outcome == null) {
+                recoveryInfo.value = null
+                return@execute
+            }
             // restartCurrentMigrationStep()'s own doc requires its returned schedule to go through the
             // normal user confirmation flow rather than being discarded — hand it to MigrationReviewVM
             // instead of letting it independently re-propose (see RestartMigrationScheduleRepository's
             // doc for why this is a separate slot from the Keystone sign/scan hand-off).
-            when (val outcome = sdk.restartCurrentMigrationStep()) {
+            when (outcome) {
                 is MigrationRestartOutcome.Replanned -> {
                     restartMigrationScheduleRepository.set(owner, outcome.schedule)
                     navigationRouter.replace(MigrationReviewArgs(MigrationMode.AUTOMATIC, owner))
@@ -125,5 +143,5 @@ class MigrationTransferInvalidVM(
 
     private suspend fun selectedOwner() = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
 
-    private fun onBack() = navigationRouter.back()
+    fun onBack() = navigationRouter.back()
 }

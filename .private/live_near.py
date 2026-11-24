@@ -1,11 +1,17 @@
 """Unfunded API contract checks using public SDK addresses, never a real wallet."""
 import datetime,json,os,re,subprocess,time,urllib.parse
+from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
 BASE='https://1click.chaindefuser.com'
 FIXTURE=json.loads((ROOT/'.private/public-api-fixture.json').read_text())
+
+@dataclass(frozen=True)
+class WireDecimal:
+    text: str
+
 
 def request(path,body=None):
     proxy = os.environ.get('PRIVATE_TOR_SOCKS', '')
@@ -34,7 +40,7 @@ def request(path,body=None):
                 time.sleep(attempt+1);continue
         if status>=400:
             return status, {}
-        return status,json.loads(raw, parse_float=Decimal)
+        return status,json.loads(raw, parse_float=WireDecimal)
 
 def quote(mode,incoming,dry=True):
     body=dict(dry=dry,swapType=mode,slippageTolerance=100,
@@ -76,9 +82,17 @@ def read_timestamp(value):
     return timestamp
 
 
+def deadline_identity(value):
+    timestamp = read_timestamp(value).astimezone(datetime.timezone.utc)
+    fractional = re.fullmatch(r'[^.]+(?:\.([0-9]{1,9}))?(?:Z|[+-][0-9]{2}:[0-9]{2})', value)
+    if fractional is None:
+        raise RuntimeError('Invalid NEAR quote deadline precision')
+    return timestamp.replace(microsecond=0), int((fractional[1] or '').ljust(9, '0'))
+
+
 def read_decimal(value):
-    wire = str(value)
-    if type(value) not in (Decimal, int, str) or len(wire) > 512 or not re.fullmatch(
+    wire = value.text if isinstance(value, WireDecimal) else str(value)
+    if type(value) not in (Decimal, int, str, WireDecimal) or len(wire) > 512 or not re.fullmatch(
         r'[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]{1,3})?', wire
     ):
         raise RuntimeError('Invalid NEAR response decimal')
@@ -120,6 +134,8 @@ def reviewed_quote(result, require_deposit=True):
     quote = result['quote']
     read_timestamp(request['deadline'])
     address = quote['depositAddress'] if require_deposit else quote.get('depositAddress')
+    if not require_deposit and address not in (None, ''):
+        raise RuntimeError('NEAR dry quote issued a deposit address')
     extra_fields = ('virtualChainRecipient', 'virtualChainRefundRecipient', 'customRecipientMsg')
     chain_deposits = quote.get('chainDepositAddresses')
     if chain_deposits is not None and (not isinstance(chain_deposits, list) or any(
@@ -148,8 +164,9 @@ def reviewed_quote(result, require_deposit=True):
     if (minimum_in > amount_in or minimum_out > amount_out
             or fixed_amount != read_positive_atomic(request['amount']) or too_low_in or too_low_out):
         raise RuntimeError('NEAR quote has inconsistent amounts or minima')
-    deadline = quote['deadline']
-    if read_timestamp(deadline) <= datetime.datetime.now(datetime.timezone.utc):
+    deadline = deadline_identity(quote['deadline'])
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if deadline <= (now.replace(microsecond=0), now.microsecond * 1000):
         raise RuntimeError('NEAR production quote deadline is not in the future')
     return reviewed_request(request), address, amount_in, minimum_in, amount_out, minimum_out, deadline
 

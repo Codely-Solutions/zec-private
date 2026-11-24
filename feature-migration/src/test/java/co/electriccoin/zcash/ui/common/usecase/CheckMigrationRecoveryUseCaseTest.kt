@@ -268,7 +268,7 @@ class CheckMigrationRecoveryUseCaseTest {
 
             useCase(sdk = sdk, navigationRouter = router, pendingMigrationTorFailure = true).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationTransferInvalidArgs) }
+            coVerify(exactly = 0) { router.replaceAll(HomeArgs, any<MigrationTransferInvalidArgs>()) }
             coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationProgressArgs()) }
             coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationCompleteArgs()) }
         }
@@ -350,7 +350,7 @@ class CheckMigrationRecoveryUseCaseTest {
 
             useCase(sdk = sdk, navigationRouter = router, pendingMigrationTorFailure = false).invoke()
 
-            coVerify(exactly = 0) { router.replaceAll(HomeArgs, MigrationTransferInvalidArgs) }
+            coVerify(exactly = 0) { router.replaceAll(HomeArgs, any<MigrationTransferInvalidArgs>()) }
             coVerify(exactly = 0) { router.replaceAll(any()) }
         }
 

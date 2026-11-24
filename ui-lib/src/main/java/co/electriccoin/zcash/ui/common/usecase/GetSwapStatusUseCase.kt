@@ -14,6 +14,7 @@ import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +25,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Clock
-import kotlin.time.Duration
+import kotlin.time.Instant
 import kotlin.time.TimeSource
 import kotlin.time.Duration.Companion.seconds
 
@@ -84,26 +85,25 @@ class GetSwapStatusUseCase(
                 var fundingExpiry: Job? = null
                 while (true) {
                     try {
+                        val requestStartedAt = fundingClock.now()
                         val (result, saved) = refresh(depositAddress, expectedMetadata)
                         if (result.status == SwapStatus.SUCCESS) {
                             donationPreferences?.recordSuccessfulTransaction()
                         }
-                        val fundingTimeLeft = result.takeIf { it.status == SwapStatus.INCOMPLETE_DEPOSIT }
-                            ?.observedAtProvider?.let { result.deadline - maxOf(it, fundingClock.now()) }
-                            ?.takeIf { it.isPositive() }
-                        fundingExpiry?.cancel()
+                        val fundingUntil = fundingDeadline(result, requestStartedAt)
+                        fundingExpiry?.cancelAndJoin()
                         data.update {
                             it.copy(
                                 status = result,
                                 savedMetadata = saved,
                                 isLoading = false,
                                 error = null,
-                                isFundingWindowOpen = fundingTimeLeft != null,
+                                isFundingWindowOpen = fundingUntil != null && fundingUntil > fundingClock.now(),
                             )
                         }
-                        fundingExpiry = fundingTimeLeft?.let { remaining ->
+                        fundingExpiry = fundingUntil?.let { deadline ->
                             launch {
-                                waitForFundingExpiry(remaining)
+                                waitForFundingExpiry(deadline)
                                 data.update { it.copy(isFundingWindowOpen = false) }
                             }
                         }
@@ -134,8 +134,14 @@ class GetSwapStatusUseCase(
             awaitClose()
         }
 
-    private suspend fun waitForFundingExpiry(remaining: Duration) {
-        val displayUntil = fundingClock.now() + remaining
+    private fun fundingDeadline(status: SwapQuoteStatus, requestStartedAt: Instant): Instant? =
+        status.takeIf { it.status == SwapStatus.INCOMPLETE_DEPOSIT }?.observedAtProvider?.let { issuedAt ->
+            // HTTP Date is only precise to one second. Start its conservative budget before the
+            // request so network, parsing and persistence time cannot extend the funding window.
+            minOf(status.deadline, requestStartedAt + (status.deadline - issuedAt - 1.seconds))
+        }
+
+    private suspend fun waitForFundingExpiry(displayUntil: Instant) {
         var timeLeft = displayUntil - fundingClock.now()
         while (timeLeft.isPositive()) {
             // Re-evaluate device time on resume or after a clock correction.
