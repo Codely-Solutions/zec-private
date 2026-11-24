@@ -5442,7 +5442,7 @@ index d80cbcdb3..af2e04303 100644
 +
 +        else -> LceRenderer(
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
-index c53b8b4a0..3c3aa1416 100644
+index c53b8b4a0..ec2215807 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVM.kt
 @@ -4,0 +5,4 @@ import androidx.lifecycle.viewModelScope
@@ -5537,7 +5537,7 @@ index c53b8b4a0..3c3aa1416 100644
 -            pendingSchedule.clear()
 -            pendingKeystonePczts.clear()
 -            isFinalizing.value = false
-@@ -138,16 +103,33 @@ class MigrationScheduledVM(
+@@ -138,16 +103,31 @@ class MigrationScheduledVM(
 -            // An unguarded failure here (e.g. a transient "database is locked" from the migration
 -            // engine mutex) would otherwise crash the app right after the user completes a
 -            // physical Keystone signing ceremony, with the signed batch already applied. Surface
@@ -5579,28 +5579,17 @@ index c53b8b4a0..3c3aa1416 100644
 +        // After process loss, the engine can drive a signed split without the in-memory batch.
 +        if (remaining.isNotEmpty()) sdk.storeSignedSchedulePczts(remaining)
 +        when (val splitResult = submitSplitIfAwaitingSignature(sdk, pending, states, accountKeyId)) {
-+            null, is TransferResult.Success -> Unit
-+            TransferResult.InvalidNote, TransferResult.Expired -> {
++            null, is TransferResult.Success -> {
++                // The scheduler drives proof work after the signing ceremony has finished.
++                finalizeMigrationSchedule(schedule, MigrationMode.AUTOMATIC, accountKeyId, false)
++                pendingSchedule.clear(accountKeyId, schedule)
++                pendingKeystonePczts.clear(accountKeyId, pending)
++                isFinalizing.value = false
+@@ -154,0 +135,3 @@ class MigrationScheduledVM(
++            TransferResult.InvalidNote, TransferResult.Expired ->
 +                returnToHomeForRecovery(accountKeyId, schedule, pending, migrationFailureMessage(splitResult))
-+                return
-+            }
-+            is TransferResult.NetworkError -> {
-+                showFinalizationError(migrationFailureMessage(splitResult))
-+                return
-@@ -155,0 +138,30 @@ class MigrationScheduledVM(
-+        // Mode doesn't affect this use case's behavior (only routes IMMEDIATE vs AUTOMATIC
-+        // before it), and MigrationScheduledArgs is only ever reached on the AUTOMATIC path.
-+        // startLiveDriverImmediately=false (MOB-1669): a large Keystone batch's whole
-+        // prove-ready note-split set would otherwise run through one blocking
-+        // finalizeReadyTransfers call in the live driver's very first iteration, right as
-+        // this Keystone ceremony finishes. The already-armed migrationScheduler job still
-+        // drives this plan forward — just not synchronously forced open here.
-+        finalizeMigrationSchedule(schedule, MigrationMode.AUTOMATIC, accountKeyId, startLiveDriverImmediately = false)
-+        pendingSchedule.clear(accountKeyId, schedule)
-+        pendingKeystonePczts.clear(accountKeyId, pending)
-+        isFinalizing.value = false
-+    }
-+
++            is TransferResult.NetworkError -> showFinalizationError(migrationFailureMessage(splitResult))
+@@ -157,0 +141,67 @@ class MigrationScheduledVM(
 +    private suspend fun submitSplitIfAwaitingSignature(
 +        sdk: OrchardMigrationSdk,
 +        pending: PendingKeystoneMigrationPczts,
@@ -5611,39 +5600,17 @@ index c53b8b4a0..3c3aa1416 100644
 +        val split = checkNotNull(states.singleOrNull { !it.isTransfer && it.prepLayer == 0 && it.prepIndex == 0 }) {
 +            "The reviewed note split is unavailable"
 +        }
-+        if (!split.needsSignature()) return null
-+        val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
-+        val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
-+        if (result is TransferResult.Success) {
-+            synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
-+        }
-+        return result
-@@ -157,0 +170,71 @@ class MigrationScheduledVM(
-+    private fun PendingKeystoneMigrationPczts.remainingScheduleSignatures(
-+        states: List<MigrationTransferState>,
-+    ): List<Pair<Long, Pczt>> {
-+        val statesById = states.associateBy { it.id }
-+        fun awaiting(items: List<Pair<Long, ByteArray>>, isTransfer: Boolean): List<Pair<Long, Pczt>> =
-+            items.mapNotNull { (id, bytes) ->
-+                val state = checkNotNull(statesById[id]?.takeIf { it.isTransfer == isTransfer }) {
-+                    "A reviewed migration step is unavailable"
-+                }
-+                if (state.needsSignature()) id to Pczt(bytes) else null
++        return if (split.needsSignature()) {
++            val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
++            val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
++            if (result is TransferResult.Success) {
++                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
 +            }
-+        return awaiting(accumulatedPrepSigned, isTransfer = false) +
-+            awaiting(accumulatedTransferSigned, isTransfer = true)
++            result
++        } else {
++            null
++        }
 +    }
-+
-+    private fun MigrationTransferState.needsSignature(): Boolean =
-+        when (blocker) {
-+            MigrationBlocker.SIGNATURE -> true
-+            MigrationBlocker.DEPENDENCIES, MigrationBlocker.SCHEDULE, MigrationBlocker.ANCHOR_BOUNDARY -> false
-+            null -> {
-+                check(isSent || isProved || ready) { "The reviewed migration step cannot be reconciled" }
-+                false
-+            }
-+            else -> error("The reviewed migration step cannot be reconciled")
-+        }
 +
 +    private fun returnToHomeForRecovery(
 +        accountKeyId: String,
@@ -5690,9 +5657,36 @@ index c53b8b4a0..3c3aa1416 100644
 +
 +    fun navigateBack() = navigationRouter.backToRoot()
 +
-@@ -162,2 +244,0 @@ class MigrationScheduledVM(
+@@ -162,2 +211,0 @@ class MigrationScheduledVM(
 -                // Transient null (still loading, or SDK not resolved yet) keeps the LCE loading
 -                // instead of rendering zeroed stats (review L3).
+@@ -191,0 +240,26 @@ class MigrationScheduledVM(
++
++private fun PendingKeystoneMigrationPczts.remainingScheduleSignatures(
++    states: List<MigrationTransferState>,
++): List<Pair<Long, Pczt>> {
++    val statesById = states.associateBy { it.id }
++    fun awaiting(items: List<Pair<Long, ByteArray>>, isTransfer: Boolean): List<Pair<Long, Pczt>> =
++        items.mapNotNull { (id, bytes) ->
++            val state = checkNotNull(statesById[id]?.takeIf { it.isTransfer == isTransfer }) {
++                "A reviewed migration step is unavailable"
++            }
++            if (state.needsSignature()) id to Pczt(bytes) else null
++        }
++    return awaiting(accumulatedPrepSigned, isTransfer = false) +
++        awaiting(accumulatedTransferSigned, isTransfer = true)
++}
++
++private fun MigrationTransferState.needsSignature(): Boolean =
++    when (blocker) {
++        MigrationBlocker.SIGNATURE -> true
++        MigrationBlocker.DEPENDENCIES, MigrationBlocker.SCHEDULE, MigrationBlocker.ANCHOR_BOUNDARY -> false
++        null -> {
++            check(isSent || isProved || ready) { "The reviewed migration step cannot be reconciled" }
++            false
++        }
++        else -> error("The reviewed migration step cannot be reconciled")
++    }
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingArgs.kt b/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingArgs.kt
 index ba85a65de..54ee4d50f 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/ui/screen/migration/sending/MigrationSendingArgs.kt
@@ -7235,7 +7229,7 @@ index d0838db0c..ee72ddcbe 100644
 -        getOrchardBalance = mockk<GetOrchardBalanceUseCase> { coEvery { this@mockk() } returns Zatoshi(500_000L) },
 +        getOrchardBalance = mockk<GetOrchardBalanceUseCase> { coEvery { this@mockk(any()) } returns Zatoshi(500_000L) },
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
-index a914d8998..6fe8d8a67 100644
+index a914d8998..5d64dc21f 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/scheduled/MigrationScheduledVMTest.kt
 @@ -3,0 +4 @@ import androidx.navigation.NavBackStackEntry
@@ -7320,7 +7314,7 @@ index a914d8998..6fe8d8a67 100644
 +            assertNull(vm.finalizationError.value)
 +            assertNull(pendingPczts.peek(testAccountKeyId))
 +            coVerify(exactly = 1) { finalize(any(), any(), testAccountKeyId, false) }
-@@ -257,0 +277,166 @@ class MigrationScheduledVMTest {
+@@ -257,0 +277,167 @@ class MigrationScheduledVMTest {
 +
 +    @Test
 +    fun missingSnapshotCanBeReadAgainWithoutFinalizingThePlan() = runTest {
@@ -7366,6 +7360,7 @@ index a914d8998..6fe8d8a67 100644
 +            }
 +            coEvery { storeSignedNoteSplitPczt(any(), any()) } answers {
 +                check(!splitStored)
++                check(scheduleStored)
 +                splitStored = true
 +                TransferResult.NetworkError(retryable = true)
 +            }
@@ -7487,20 +7482,20 @@ index a914d8998..6fe8d8a67 100644
 +            prepIndex = if (isTransfer) null else 0,
 +        )
 +
-@@ -262,3 +447 @@ class MigrationScheduledVMTest {
+@@ -262,3 +448 @@ class MigrationScheduledVMTest {
 -                // A REAL (empty) snapshot: a null return now means "SDK not ready yet" and keeps
 -                // the LCE loading (review L3) — these tests assert on the rendered state.
 -                coEvery { this@mockk(null) } returns
 +                coEvery { this@mockk(testAccountKeyId) } returns
-@@ -271,2 +454 @@ class MigrationScheduledVMTest {
+@@ -271,2 +455 @@ class MigrationScheduledVMTest {
 -        getSelectedWalletAccount: GetSelectedWalletAccountUseCase = testGetSelectedWalletAccount,
 -        getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase = mockk(relaxed = true),
 +        getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase = mockk { coEvery { this@mockk(any()) } returns null },
-@@ -279,0 +462 @@ class MigrationScheduledVMTest {
+@@ -279,0 +463 @@ class MigrationScheduledVMTest {
 +        args = MigrationScheduledArgs(testAccountKeyId),
-@@ -284 +466,0 @@ class MigrationScheduledVMTest {
+@@ -284 +467,0 @@ class MigrationScheduledVMTest {
 -        getSelectedWalletAccount = getSelectedWalletAccount,
-@@ -290,0 +473,6 @@ class MigrationScheduledVMTest {
+@@ -290,0 +474,6 @@ class MigrationScheduledVMTest {
 +        selectedAccount = mockk<GetSelectedWalletAccountUseCase> {
 +            coEvery { this@mockk() } returns mockk { every { sdkAccount } returns testSdkAccount }
 +        },

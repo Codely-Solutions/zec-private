@@ -319,6 +319,7 @@ class MigrationScheduledVMTest {
             }
             coEvery { storeSignedNoteSplitPczt(any(), any()) } answers {
                 check(!splitStored)
+                check(scheduleStored)
                 splitStored = true
                 TransferResult.NetworkError(retryable = true)
             }

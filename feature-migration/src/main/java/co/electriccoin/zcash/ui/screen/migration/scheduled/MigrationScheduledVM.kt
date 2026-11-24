@@ -125,27 +125,17 @@ class MigrationScheduledVM(
         // After process loss, the engine can drive a signed split without the in-memory batch.
         if (remaining.isNotEmpty()) sdk.storeSignedSchedulePczts(remaining)
         when (val splitResult = submitSplitIfAwaitingSignature(sdk, pending, states, accountKeyId)) {
-            null, is TransferResult.Success -> Unit
-            TransferResult.InvalidNote, TransferResult.Expired -> {
+            null, is TransferResult.Success -> {
+                // The scheduler drives proof work after the signing ceremony has finished.
+                finalizeMigrationSchedule(schedule, MigrationMode.AUTOMATIC, accountKeyId, false)
+                pendingSchedule.clear(accountKeyId, schedule)
+                pendingKeystonePczts.clear(accountKeyId, pending)
+                isFinalizing.value = false
+            }
+            TransferResult.InvalidNote, TransferResult.Expired ->
                 returnToHomeForRecovery(accountKeyId, schedule, pending, migrationFailureMessage(splitResult))
-                return
-            }
-            is TransferResult.NetworkError -> {
-                showFinalizationError(migrationFailureMessage(splitResult))
-                return
-            }
+            is TransferResult.NetworkError -> showFinalizationError(migrationFailureMessage(splitResult))
         }
-        // Mode doesn't affect this use case's behavior (only routes IMMEDIATE vs AUTOMATIC
-        // before it), and MigrationScheduledArgs is only ever reached on the AUTOMATIC path.
-        // startLiveDriverImmediately=false (MOB-1669): a large Keystone batch's whole
-        // prove-ready note-split set would otherwise run through one blocking
-        // finalizeReadyTransfers call in the live driver's very first iteration, right as
-        // this Keystone ceremony finishes. The already-armed migrationScheduler job still
-        // drives this plan forward — just not synchronously forced open here.
-        finalizeMigrationSchedule(schedule, MigrationMode.AUTOMATIC, accountKeyId, startLiveDriverImmediately = false)
-        pendingSchedule.clear(accountKeyId, schedule)
-        pendingKeystonePczts.clear(accountKeyId, pending)
-        isFinalizing.value = false
     }
 
     private suspend fun submitSplitIfAwaitingSignature(
@@ -158,40 +148,17 @@ class MigrationScheduledVM(
         val split = checkNotNull(states.singleOrNull { !it.isTransfer && it.prepLayer == 0 && it.prepIndex == 0 }) {
             "The reviewed note split is unavailable"
         }
-        if (!split.needsSignature()) return null
-        val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
-        val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
-        if (result is TransferResult.Success) {
-            synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
-        }
-        return result
-    }
-
-    private fun PendingKeystoneMigrationPczts.remainingScheduleSignatures(
-        states: List<MigrationTransferState>,
-    ): List<Pair<Long, Pczt>> {
-        val statesById = states.associateBy { it.id }
-        fun awaiting(items: List<Pair<Long, ByteArray>>, isTransfer: Boolean): List<Pair<Long, Pczt>> =
-            items.mapNotNull { (id, bytes) ->
-                val state = checkNotNull(statesById[id]?.takeIf { it.isTransfer == isTransfer }) {
-                    "A reviewed migration step is unavailable"
-                }
-                if (state.needsSignature()) id to Pczt(bytes) else null
+        return if (split.needsSignature()) {
+            val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
+            val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
+            if (result is TransferResult.Success) {
+                synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
             }
-        return awaiting(accumulatedPrepSigned, isTransfer = false) +
-            awaiting(accumulatedTransferSigned, isTransfer = true)
-    }
-
-    private fun MigrationTransferState.needsSignature(): Boolean =
-        when (blocker) {
-            MigrationBlocker.SIGNATURE -> true
-            MigrationBlocker.DEPENDENCIES, MigrationBlocker.SCHEDULE, MigrationBlocker.ANCHOR_BOUNDARY -> false
-            null -> {
-                check(isSent || isProved || ready) { "The reviewed migration step cannot be reconciled" }
-                false
-            }
-            else -> error("The reviewed migration step cannot be reconciled")
+            result
+        } else {
+            null
         }
+    }
 
     private fun returnToHomeForRecovery(
         accountKeyId: String,
@@ -270,3 +237,29 @@ class MigrationScheduledVM(
 
     private fun onDone() = navigationRouter.backToRoot()
 }
+
+private fun PendingKeystoneMigrationPczts.remainingScheduleSignatures(
+    states: List<MigrationTransferState>,
+): List<Pair<Long, Pczt>> {
+    val statesById = states.associateBy { it.id }
+    fun awaiting(items: List<Pair<Long, ByteArray>>, isTransfer: Boolean): List<Pair<Long, Pczt>> =
+        items.mapNotNull { (id, bytes) ->
+            val state = checkNotNull(statesById[id]?.takeIf { it.isTransfer == isTransfer }) {
+                "A reviewed migration step is unavailable"
+            }
+            if (state.needsSignature()) id to Pczt(bytes) else null
+        }
+    return awaiting(accumulatedPrepSigned, isTransfer = false) +
+        awaiting(accumulatedTransferSigned, isTransfer = true)
+}
+
+private fun MigrationTransferState.needsSignature(): Boolean =
+    when (blocker) {
+        MigrationBlocker.SIGNATURE -> true
+        MigrationBlocker.DEPENDENCIES, MigrationBlocker.SCHEDULE, MigrationBlocker.ANCHOR_BOUNDARY -> false
+        null -> {
+            check(isSent || isProved || ready) { "The reviewed migration step cannot be reconciled" }
+            false
+        }
+        else -> error("The reviewed migration step cannot be reconciled")
+    }
