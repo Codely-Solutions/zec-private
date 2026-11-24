@@ -78,7 +78,7 @@ private fun MigrationProgressUnavailable(onBack: () -> Unit, onRetry: () -> Unit
         },
     ) { padding ->
         Column(
-            modifier = Modifier.fillMaxWidth().scaffoldPadding(padding, top = 24.dp),
+            modifier = Modifier.fillMaxWidth().scaffoldPadding(padding).verticalScroll(rememberScrollState()),
         ) {
             Text(
                 text = stringRes(DesignR.string.migrationProgress_unavailable).getValue(),

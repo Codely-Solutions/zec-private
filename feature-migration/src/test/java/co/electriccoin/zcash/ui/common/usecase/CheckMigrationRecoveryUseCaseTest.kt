@@ -25,12 +25,17 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class CheckMigrationRecoveryUseCaseTest {
     // A single test account — mirrors the pattern used across the other migration VM/use-case
     // tests (e.g. MigrationKeystoneScanVMTest) so accountDataSource.getAllAccounts() has exactly
@@ -80,6 +85,7 @@ class CheckMigrationRecoveryUseCaseTest {
         migrationLiveDriver: MigrationLiveDriver = mockk(relaxed = true),
         accounts: List<WalletAccount> = if (sdk != null) listOf(testWalletAccount) else emptyList(),
         selectedAccountState: MutableStateFlow<WalletAccount?> = MutableStateFlow(testWalletAccount),
+        resetState: MutableStateFlow<Boolean> = MutableStateFlow(false),
         getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase =
             mockk<GetOrchardMigrationSdkUseCase> {
                 if (sdk != null) {
@@ -106,9 +112,52 @@ class CheckMigrationRecoveryUseCaseTest {
         getWorkerRunState = getWorkerRunState,
         scheduleNow = scheduleNow,
         migrationLiveDriver = migrationLiveDriver,
+        resetPending = resetState,
     )
 
     // ── Task 6: auto-navigation removal — only Tor-failure fires on app-open ─────────────
+
+    @Test
+    fun foregroundRecoveryWaitsForTheAccountWithoutAnotherLifecycleEvent() = runTest {
+        val selection = MutableStateFlow<WalletAccount?>(null)
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { getMigrationStateUnreconciled() } returns MigrationState.InProgress(mockk(relaxed = true))
+        }
+        val driver = mockk<MigrationLiveDriver>(relaxed = true)
+        val recovery = useCase(
+            sdk, mockk(relaxed = true), migrationLiveDriver = driver, selectedAccountState = selection,
+        )
+        val work = async { recovery() }
+        runCurrent()
+        assertFalse(work.isCompleted)
+        coVerify(exactly = 0) { driver.startIfNotRunning(any()) }
+
+        selection.value = testWalletAccount
+        work.await()
+
+        coVerify(exactly = 1) { driver.startIfNotRunning(ownerKey) }
+    }
+
+    @Test
+    fun resetEndsTheWaitingRecoveryWithoutAnSdkRead() = runTest {
+        val selection = MutableStateFlow<WalletAccount?>(null)
+        val reset = MutableStateFlow(false)
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true)
+        val acquire = mockk<GetOrchardMigrationSdkUseCase>()
+        val recovery = useCase(
+            sdk, mockk(relaxed = true), selectedAccountState = selection, resetState = reset,
+            getOrchardMigrationSdk = acquire,
+        )
+        val work = async { recovery() }
+        runCurrent()
+        assertFalse(work.isCompleted)
+
+        reset.value = true
+        work.await()
+        selection.value = testWalletAccount
+
+        coVerify(exactly = 0) { acquire(any()) }
+    }
 
     @Test
     fun sdkOpenFailureLeavesTheNextForegroundRecoveryAvailable() = runTest {

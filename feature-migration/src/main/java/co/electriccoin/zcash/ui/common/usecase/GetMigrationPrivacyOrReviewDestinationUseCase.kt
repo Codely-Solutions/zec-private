@@ -27,16 +27,13 @@ class GetMigrationPrivacyOrReviewDestinationUseCase(
     private val automaticServerRepository: AutomaticServerRepository,
 ) {
     suspend operator fun invoke(mode: MigrationMode): Any {
-        if (automaticServerRepository.isServerCustom()) return MigrationCustomServerTorArgs(mode = mode)
-        val torAlreadyOn = isTorEnabledStorageProvider.get() == true
-        return when (mode) {
-            MigrationMode.IMMEDIATE -> {
-                if (torAlreadyOn) MigrationReviewArgs(mode = mode) else MigrationPrivacyArgs(mode = mode)
-            }
-
-            MigrationMode.AUTOMATIC -> {
-                if (torAlreadyOn) MigrationBatteryArgs else MigrationPrivacyArgs(mode = mode)
-            }
+        val walletUsesTor = isTorEnabledStorageProvider.get() == true
+        return when {
+            mode == MigrationMode.IMMEDIATE && walletUsesTor -> MigrationReviewArgs(mode = mode)
+            mode == MigrationMode.IMMEDIATE -> MigrationPrivacyArgs(mode = mode)
+            automaticServerRepository.isServerCustom() -> MigrationCustomServerTorArgs(mode = mode)
+            walletUsesTor -> MigrationBatteryArgs
+            else -> MigrationPrivacyArgs(mode = mode)
         }
     }
 }

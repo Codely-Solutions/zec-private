@@ -29,7 +29,11 @@ import io.mockk.slot
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import java.math.BigDecimal
 import java.math.RoundingMode
 import kotlin.test.Test
@@ -245,6 +249,33 @@ class NearSwapCatalogTest {
                 assertEquals(SwapMode.EXACT_INPUT, result.mode, route.label)
             }
         }
+
+    @Test
+    fun missingAndUnsupportedServerStatusesAreRejectedBeforeMapping() = runTest {
+        val route = Route(zec, bitcoin, SwapType.EXACT_INPUT)
+        val known = statusResponse(route, ProviderSwapStatus.PROCESSING)
+        val fields = Json.parseToJsonElement(Json.encodeToString(known)).jsonObject
+        val invalid = listOf(
+            fields - "status",
+            fields + ("status" to JsonPrimitive("UNSUPPORTED_STATUS")),
+        )
+        for (input in invalid) {
+            assertFailsWith<SerializationException> {
+                Json.decodeFromString<SwapStatusResponseDto>(JsonObject(input).toString())
+            }
+        }
+    }
+
+    @Test
+    fun dryEchoWithOtherwiseValidFundingDetailsIsRejectedInBothDirections() = runTest {
+        val incoming = Route(bitcoin, zec, SwapType.FLEX_INPUT)
+        val outgoing = Route(zec, bitcoin, SwapType.EXACT_INPUT)
+        for ((route, mode) in listOf(incoming to SwapMode.FLEX_INPUT, outgoing to SwapMode.EXACT_INPUT)) {
+            val dryEcho = quoteJson(route).replace("\"dry\": false", "\"dry\": true")
+            coEvery { nearApiProvider.requestQuote(any()) } returns Json.decodeFromString<QuoteResponseDto>(dryEcho)
+            assertFailsWith<IllegalArgumentException>(route.label) { requestQuote(route, mode) }
+        }
+    }
 
     @Test
     fun statusRejectsMissingOrDuplicateAssetIdentities() =

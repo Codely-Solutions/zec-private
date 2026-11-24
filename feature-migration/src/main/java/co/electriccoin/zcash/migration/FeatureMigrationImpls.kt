@@ -136,10 +136,9 @@ class MigrationSyncedHookImpl(
         // getMigrationStateUnreconciled(): this gate never mutates (2026-08-07 read/write-
         // separation design) — onMigrationSyncCompleted below still runs the real reconcile pass
         // via the drive loop's own cadence regardless of this gate's staleness.
-        val isInProgress =
-            getOrchardMigrationSdk().getMigrationStateUnreconciled() is cash.z.ecc.android.sdk.MigrationState.InProgress
-        if (!isInProgress || resetProgress.isPending.value) return
         val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
+        val state = getOrchardMigrationSdk(accountKeyId)?.getMigrationStateUnreconciled()
+        if (state !is cash.z.ecc.android.sdk.MigrationState.InProgress || resetProgress.isPending.value) return
         onMigrationSyncCompleted(accountKeyId)
     }
 }
@@ -283,7 +282,7 @@ class MigrationNavContributorImpl : MigrationNavContributor {
             dialogComposable<MigrationLockExplainerArgs> { MigrationLockExplainerScreen() }
             composable<MigrationSendingArgs> { entry -> MigrationSendingScreen(entry.toRoute()) }
             composable<MigrationSuccessArgs> { MigrationSuccessScreen(it.toRoute()) }
-            composable<MigrationScheduledArgs> { MigrationScheduledScreen() }
+            composable<MigrationScheduledArgs> { entry -> MigrationScheduledScreen(entry.toRoute()) }
             composable<MigrationCompleteArgs> { MigrationCompleteScreen(it.toRoute()) }
             composable<MigrationProgressArgs> { entry -> MigrationProgressScreen(entry.toRoute()) }
             composable<MigrationTransferInvalidArgs> { MigrationTransferInvalidScreen() }

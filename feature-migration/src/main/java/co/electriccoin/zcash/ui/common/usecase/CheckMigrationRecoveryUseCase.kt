@@ -18,9 +18,14 @@ import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationScheduler
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -71,53 +76,48 @@ class CheckMigrationRecoveryUseCase(
      * (`Duration.ZERO`), replacing whatever delay the worker last armed for itself.
      */
     private val scheduleNow: suspend (String) -> Unit = { MigrationScheduler(context).schedule(it, Duration.ZERO) },
-    private val resetPending: () -> Boolean = { false },
+    private val resetPending: StateFlow<Boolean> = MutableStateFlow(false),
 ) {
     @Suppress("TooGenericExceptionCaught") // Foreground recovery handles native SDK and storage failures together.
     suspend operator fun invoke(
         requestSendingScreen: (String) -> Unit = { navigationRouter.replaceAll(HomeArgs, MigrationSendingArgs(it)) },
     ) {
-        if (!startRecovery()) return
+        if (!recoveryMutex.tryLock()) return
         try {
-            if (persistableWalletProvider.getPersistableWallet() == null || resetPending()) {
-                throttleMutex.withLock { lastRunMark = null }
-                migrationLog("MigrationRecovery: wallet unavailable. Retry on next foreground trigger.")
-            } else {
-                val ownerKey = accountDataSource.selectedAccount.first()?.sdkAccount?.accountUuid?.toStorageKeyId()
-                val sdk = ownerKey?.let { getOrchardMigrationSdk(it) }
-                if (ownerKey != null && sdk != null && !resetPending()) {
+            val elapsed = lastRunMark?.elapsedNow()
+            if (resetPending.value || (elapsed != null && elapsed < RUN_THROTTLE)) return
+            if (persistableWalletProvider.getPersistableWallet() != null) {
+                val ownerKey = awaitOwnerKey()
+                val sdk = ownerKey?.takeUnless { resetPending.value }?.let { getOrchardMigrationSdk(it) }
+                if (ownerKey != null && sdk != null && !resetPending.value) {
                     reviveAccountWorkers()
                     recoverBroadcast(sdk, ownerKey, requestSendingScreen)
-                } else {
-                    throttleMutex.withLock { lastRunMark = null }
+                    if (!resetPending.value) lastRunMark = TimeSource.Monotonic.markNow()
                 }
             }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             migrationLog("MigrationRecovery: unavailable (${e.javaClass.simpleName}). Retry on next trigger.")
-            throttleMutex.withLock { lastRunMark = null }
+        } finally {
+            recoveryMutex.unlock()
         }
     }
 
-    private suspend fun startRecovery(): Boolean = throttleMutex.withLock {
-        val elapsed = lastRunMark?.elapsedNow()
-        if (resetPending() || (elapsed != null && elapsed < RUN_THROTTLE)) {
-            false
-        } else {
-            lastRunMark = TimeSource.Monotonic.markNow()
-            true
-        }
-    }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private suspend fun awaitOwnerKey(): String? =
+        resetPending.flatMapLatest { pending ->
+            if (pending) flowOf(null) else accountDataSource.selectedAccount.filterNotNull()
+        }.first()?.sdkAccount?.accountUuid?.toStorageKeyId()
 
     private suspend fun reviveAccountWorkers() {
         // The process-scoped driver accelerates committed migrations. WorkManager keeps the same work
         // alive after process death, reboot or an update. Recover both for every spendable account.
         for (account in accountDataSource.getAllAccounts().filter { it.isSpendable }) {
-            if (resetPending()) return
+            if (resetPending.value) return
             val accountKey = account.sdkAccount.accountUuid.toStorageKeyId()
             val sdk = getOrchardMigrationSdk(accountKey)
-            if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && !resetPending()) {
+            if (sdk?.getMigrationStateUnreconciled() is MigrationState.InProgress && !resetPending.value) {
                 migrationLiveDriver.startIfNotRunning(accountKey)
                 reviveScheduledWorker(accountKey)
             }
@@ -125,7 +125,7 @@ class CheckMigrationRecoveryUseCase(
     }
 
     private suspend fun reviveScheduledWorker(accountKey: String) {
-        if (getWorkerRunState(accountKey) == MigrationWorkerRunState.ABSENT && !resetPending()) {
+        if (getWorkerRunState(accountKey) == MigrationWorkerRunState.ABSENT && !resetPending.value) {
             scheduleNow(accountKey)
         }
     }
@@ -135,7 +135,7 @@ class CheckMigrationRecoveryUseCase(
         ownerKey: String,
         requestSendingScreen: (String) -> Unit,
     ) {
-        if (!resetPending() && pendingMigrationTorFailureStorageProvider.get(ownerKey)) {
+        if (!resetPending.value && pendingMigrationTorFailureStorageProvider.get(ownerKey)) {
             // The flag only records THAT a background attempt once failed on Tor, not what the
             // engine's next due transfer needs NOW — the plan moves on (proving, dependency
             // mining, rescheduling) between when it was set and the next app open, and the flag
@@ -163,13 +163,13 @@ class CheckMigrationRecoveryUseCase(
                 // sendOnce() logic already forwards to MigrationTorFailureArgs — no need to duplicate
                 // that routing here.
                 migrationLog("MigrationRecovery: pending background Tor failure — redirecting to Sending.")
-                if (!resetPending()) requestSendingScreen(ownerKey)
+                if (!resetPending.value) requestSendingScreen(ownerKey)
             } else {
                 migrationLog(
                     "MigrationRecovery: pending background Tor failure flag is stale " +
                         "(next transfer action=${nextTransfer?.action}) — clearing."
                 )
-                if (!resetPending()) pendingMigrationTorFailureStorageProvider.store(ownerKey, false)
+                if (!resetPending.value) pendingMigrationTorFailureStorageProvider.store(ownerKey, false)
             }
         }
     }
@@ -177,7 +177,7 @@ class CheckMigrationRecoveryUseCase(
     companion object {
         private val RUN_THROTTLE: Duration = 10_000.milliseconds
 
-        private val throttleMutex = Mutex()
+        private val recoveryMutex = Mutex()
 
         @Volatile
         private var lastRunMark: TimeSource.Monotonic.ValueTimeMark? = null

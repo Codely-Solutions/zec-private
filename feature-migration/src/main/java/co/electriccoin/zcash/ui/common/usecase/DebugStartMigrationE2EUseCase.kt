@@ -93,11 +93,15 @@ class DebugStartMigrationE2EUseCase(
             } else {
                 proposed
             }
-        signAndFinalizeWithStaleRetry(sdk, scheduleToSign)
+        signAndFinalizeWithStaleRetry(sdk, scheduleToSign, accountKeyId)
         migrationLog("E2E: plan committed — worker chain armed")
     }
 
-    private suspend fun signAndFinalizeWithStaleRetry(sdk: OrchardMigrationSdk, schedule: MigrationSchedule) {
+    private suspend fun signAndFinalizeWithStaleRetry(
+        sdk: OrchardMigrationSdk,
+        schedule: MigrationSchedule,
+        accountKeyId: String,
+    ) {
         // Same reasoning as MigrationReviewVM: StalePlan = planning-time note-index snapshot
         // drifted; BoundaryCheckpointMissing = the commit drew a boundary onto a grid height with
         // no retained checkpoint. Both are cured by a fresh propose+commit, never by retrying the
@@ -106,7 +110,7 @@ class DebugStartMigrationE2EUseCase(
         repeat(COMMIT_ATTEMPTS) { attempt ->
             try {
                 sdk.signAndStoreMigrationSchedule(toSign, zashiSpendingKeyDataSource.getZashiSpendingKey())
-                finalizeMigrationSchedule(toSign, MigrationMode.AUTOMATIC)
+                finalizeMigrationSchedule(toSign, MigrationMode.AUTOMATIC, accountKeyId)
                 return
             } catch (e: RuntimeException) {
                 val retryable =

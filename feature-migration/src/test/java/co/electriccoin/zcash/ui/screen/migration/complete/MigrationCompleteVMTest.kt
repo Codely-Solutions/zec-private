@@ -4,6 +4,8 @@ import androidx.navigation.NavBackStackEntry
 import cash.z.ecc.android.sdk.MigrationState
 import cash.z.ecc.android.sdk.MigrationSummary
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
+import cash.z.ecc.android.sdk.model.Account
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Proposal
 import cash.z.ecc.android.sdk.model.UnifiedSpendingKey
 import cash.z.ecc.android.sdk.model.Zatoshi
@@ -18,6 +20,7 @@ import co.electriccoin.zcash.ui.common.model.MutableLce
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
+import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.migration.MIGRATION_DUST_THRESHOLD_ZATOSHI
 import co.electriccoin.zcash.ui.common.model.migration.MIGRATION_RESIDUAL_MIN_ZATOSHI
@@ -41,6 +44,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -93,7 +97,7 @@ class MigrationCompleteVMTest {
             invokeOnDone(vm)
             advanceUntilIdle()
 
-            coVerify(exactly = 0) { seen.store(true) }
+            coVerify(exactly = 0) { seen.store(any(), true) }
             assertEquals(1, router.backToRootCount)
         }
 
@@ -115,7 +119,7 @@ class MigrationCompleteVMTest {
             invokeOnDone(vm)
             advanceUntilIdle()
 
-            coVerify(exactly = 0) { seen.store(true) }
+            coVerify(exactly = 0) { seen.store(any(), true) }
             assertEquals(1, router.backToRootCount)
         }
 
@@ -136,7 +140,7 @@ class MigrationCompleteVMTest {
             invokeOnDone(vm)
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { seen.store(true) }
+            coVerify(exactly = 1) { seen.store(any(), true) }
             assertEquals(1, router.backToRootCount)
         }
 
@@ -159,7 +163,7 @@ class MigrationCompleteVMTest {
             invokeOnDone(vm)
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { seen.store(true) }
+            coVerify(exactly = 1) { seen.store(any(), true) }
             assertEquals(1, router.backToRootCount)
         }
 
@@ -183,7 +187,7 @@ class MigrationCompleteVMTest {
             invokeOnDone(vm)
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { seen.store(true) }
+            coVerify(exactly = 1) { seen.store(any(), true) }
             assertEquals(1, router.backToRootCount)
         }
 
@@ -205,7 +209,7 @@ class MigrationCompleteVMTest {
             invokeOnDone(vm)
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { seen.store(true) }
+            coVerify(exactly = 1) { seen.store(any(), true) }
             assertEquals(1, router.backToRootCount)
         }
 
@@ -241,7 +245,7 @@ class MigrationCompleteVMTest {
             invokeOnDone(vm)
             advanceUntilIdle()
 
-            coVerify(exactly = 1) { seen.store(true) }
+            coVerify(exactly = 1) { seen.store(any(), true) }
 
             val homeMessage =
                 migrationMessageFor(
@@ -272,7 +276,7 @@ class MigrationCompleteVMTest {
                     account = mockk<ZodlAccount>(relaxed = true) { every { isSpendable } returns true },
                     orchardBalanceZatoshi = 500_000L,
                     router = router,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                     zashiSpendingKeyDataSource = mockk { coEvery { getZashiSpendingKey() } returns usk },
                     proposalDataSource = proposalDataSource,
                 )
@@ -303,7 +307,7 @@ class MigrationCompleteVMTest {
                     account = mockk<KeystoneAccount>(relaxed = true) { every { isSpendable } returns true },
                     orchardBalanceZatoshi = 500_000L,
                     router = router,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                     keystoneProposalRepository = keystoneProposalRepository,
                     proposalDataSource = proposalDataSource,
                 )
@@ -313,7 +317,7 @@ class MigrationCompleteVMTest {
             advanceUntilIdle()
 
             coVerify(exactly = 1) { keystoneProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L)) }
-            coVerify(exactly = 1) { keystoneProposalRepository.createPCZTFromProposal() }
+            coVerify(exactly = 1) { keystoneProposalRepository.createPCZTFromProposal(any<WalletAccount>()) }
             coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
             assertEquals(1, router.forwardedRoutes.count { it == SignKeystoneTransactionArgs })
         }
@@ -341,7 +345,7 @@ class MigrationCompleteVMTest {
                     account = mockk<KeystoneAccount>(relaxed = true) { every { isSpendable } returns true },
                     orchardBalanceZatoshi = 500_000L,
                     router = FakeNavigationRouter(),
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                 )
 
             vm.state.value // force lazy init to run (loadLce.execute reads the SDK summary)
@@ -376,7 +380,7 @@ class MigrationCompleteVMTest {
                     router = FakeNavigationRouter(),
                     args = MigrationCompleteArgs(isResidueOnly = true),
                     ironwoodBalanceZatoshi = 12_450_000L,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                 )
 
             val collectJob = launch { vm.state.collect {} }
@@ -417,7 +421,7 @@ class MigrationCompleteVMTest {
                     account = mockk<KeystoneAccount>(relaxed = true) { every { isSpendable } returns true },
                     orchardBalanceZatoshi = 500_000L,
                     router = FakeNavigationRouter(),
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                 )
 
             val collectJob = launch { vm.state.collect {} }
@@ -495,7 +499,7 @@ class MigrationCompleteVMTest {
                     account = mockk<ViewOnlyAccount>(relaxed = true) { every { isSpendable } returns false },
                     orchardBalanceZatoshi = 500_000L,
                     router = router,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                     zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
                     keystoneProposalRepository = keystoneProposalRepository,
                     proposalDataSource = proposalDataSource,
@@ -518,9 +522,38 @@ class MigrationCompleteVMTest {
             coVerify(exactly = 0) { zashiSpendingKeyDataSource.getZashiSpendingKey() }
             coVerify(exactly = 0) { proposalDataSource.submitTransaction(any<Proposal>(), any<UnifiedSpendingKey>()) }
             coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
-            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal() }
+            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any<WalletAccount>()) }
             assertEquals(emptyList(), router.forwardedRoutes)
         }
+
+    @Test
+    fun completionForAStaleOwnerLeavesTheSelectedAccountsScheduleAndPreferencesAlone() = runTest {
+        val reviewed = AccountUuid.new(ByteArray(16))
+        val selected = AccountUuid.new(ByteArray(16) { 1 })
+        val other = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(selected) }
+        val scheduler = mockk<MigrationScheduler>(relaxed = true)
+        val notifier = mockk<MigrationNotifier>(relaxed = true)
+        val seen = mockk<HasSeenMigrationCompleteStorageProvider>(relaxed = true)
+        val access = mockk<GetOrchardMigrationSdkUseCase>()
+        val vm = vm(
+            account = other,
+            orchardBalanceZatoshi = 500_000L,
+            router = FakeNavigationRouter(),
+            args = MigrationCompleteArgs(accountKeyId = reviewed.toStorageKeyId()),
+            getOrchardMigrationSdk = access,
+            migrationScheduler = scheduler,
+            migrationNotifier = notifier,
+            seen = seen,
+        )
+        advanceUntilIdle()
+        invokeOnDone(vm)
+        advanceUntilIdle()
+
+        verify(exactly = 0) { scheduler.cancel(any()) }
+        verify(exactly = 0) { notifier.cancel(any()) }
+        coVerify(exactly = 0) { access(any()) }
+        coVerify(exactly = 0) { seen.store(any(), any()) }
+    }
 
     private fun invokeOnDone(vm: MigrationCompleteVM) {
         val onDone = MigrationCompleteVM::class.java.getDeclaredMethod("onDone")
@@ -544,7 +577,7 @@ class MigrationCompleteVMTest {
         ironwoodBalanceZatoshi: Long = 0L,
         getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase =
             mockk {
-                coEvery { this@mockk() } returns mockk(relaxed = true)
+                coEvery { this@mockk(any<String>()) } returns mockk(relaxed = true)
             },
         zashiSpendingKeyDataSource: ZashiSpendingKeyDataSource = mockk(relaxed = true),
         biometricRepository: BiometricRepository = mockk(relaxed = true),
@@ -556,11 +589,11 @@ class MigrationCompleteVMTest {
         args = args,
         getOrchardBalance =
             mockk<GetOrchardBalanceUseCase> {
-                coEvery { this@mockk() } returns Zatoshi(orchardBalanceZatoshi)
+                coEvery { this@mockk(any<AccountUuid>()) } returns Zatoshi(orchardBalanceZatoshi)
             },
         getIronwoodBalance =
             mockk<GetIronwoodBalanceUseCase> {
-                coEvery { this@mockk() } returns Zatoshi(ironwoodBalanceZatoshi)
+                coEvery { this@mockk(any<AccountUuid>()) } returns Zatoshi(ironwoodBalanceZatoshi)
             },
         hasSeenMigrationCompleteStorageProvider = seen,
         hasLockedOrchardDustStorageProvider =
@@ -568,7 +601,7 @@ class MigrationCompleteVMTest {
                 // A relaxed mock's default Flow return is empty (never emits), which would starve
                 // state's combine() forever -- it only emits once every source has emitted at least
                 // once. Tests that read vm.state.value.content need this to actually fire.
-                every { observe() } returns flowOf(false)
+                every { observe(any<String>()) } returns flowOf(false)
             },
         getSelectedWalletAccount =
             mockk<GetSelectedWalletAccountUseCase> {

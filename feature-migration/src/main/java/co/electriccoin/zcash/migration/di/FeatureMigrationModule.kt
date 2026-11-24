@@ -146,7 +146,7 @@ val featureMigrationModule =
                 accountDataSource = get(),
                 context = get(),
                 migrationLiveDriver = get(),
-                resetPending = { resetProgress.isPending.value },
+                resetPending = resetProgress.isPending,
             )
         }
         factoryOf(::FinalizeMigrationScheduleUseCase)

@@ -36,10 +36,10 @@ class GetActivitiesUseCase(
             observeTransactions(),
             metadataRepository.observeSwapMetadata(),
         ) { owner, transactions, swaps ->
-            if (owner == null || transactions == null || swaps == null) {
+            if (owner == null || swaps == null) {
                 null
             } else {
-                val ownedTransactions = transactions.filter { it.transaction.accountUuid == owner }
+                val ownedTransactions = transactions.orEmpty().filter { it.transaction.accountUuid == owner }
                 val reachedWalletHistory = ownedTransactions.mapNotNull { entry ->
                     entry.metadata.swapMetadata?.depositAddress
                 }.toSet()
@@ -47,6 +47,7 @@ class GetActivitiesUseCase(
                     swap.ownerAccount?.sdkAccount?.accountUuid == owner &&
                         (swap.mode == SwapMode.FLEX_INPUT || swap.depositAddress !in reachedWalletHistory)
                 }
+                if (transactions == null && standalone.isEmpty()) return@combine null
                 ownedTransactions
                     .sortedWith(
                         compareByDescending<ActivityData.ByTransaction> { it.timestamp }

@@ -4,9 +4,12 @@ import cash.z.ecc.android.sdk.model.TransactionId
 import cash.z.ecc.android.sdk.model.TransactionOverview
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.android.sdk.model.Zip318Kind
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
+import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.mapper.ActivityMapper
+import co.electriccoin.zcash.ui.common.model.DynamicSwapAddress
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
 import co.electriccoin.zcash.ui.common.model.SwapMode
 import co.electriccoin.zcash.ui.common.model.SwapQuoteStatus
@@ -25,11 +28,13 @@ import co.electriccoin.zcash.ui.design.util.StringResourceColor
 import co.electriccoin.zcash.ui.design.util.StyledStringResource
 import co.electriccoin.zcash.ui.design.util.StringResource
 import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.swap.detail.SwapDetailArgs
 import co.electriccoin.zcash.ui.screen.transactionhistory.ActivityState
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
@@ -178,7 +183,7 @@ class SwapActivityStatusTest {
     fun outgoingTrackingCanBeOpenedBeforeFundingAppearsInWalletHistory() = runTest {
         val saved = swap(SwapStatus.PENDING)
         val stored = TransactionMetadata(false, true, null, saved)
-        val history = MutableStateFlow<List<Transaction>?>(emptyList())
+        val history = MutableStateFlow<List<Transaction>?>(null)
         val transactions = mockk<TransactionRepository> { every { this@mockk.transactions } returns history }
         val repository = mockk<MetadataRepository> {
             every { observeSwapMetadata() } returns flowOf(listOf(saved))
@@ -195,9 +200,30 @@ class SwapActivityStatusTest {
         row.onClick()
         assertEquals(deposit, openedReference)
 
+        history.value = emptyList()
+        assertEquals(onlyTracked, activity.first()?.single())
         history.value = listOf(confirmed)
         val withFunding = assertIs<ActivityData.ByTransaction>(activity.first()?.single())
         assertEquals(confirmed, withFunding.transaction)
+    }
+
+    @Test
+    fun pendingProgressCanOpenSavedSwapBeforeTheTransactionAppears() {
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val proposal = mockk<SwapTransactionProposal> {
+            every { fundingAccount } returns owner
+            every { quote } returns mockk {
+                every { depositAddress } returns DynamicSwapAddress(deposit)
+            }
+        }
+
+        ViewTransactionDetailAfterSuccessfulProposalUseCase(
+            mockk(relaxed = true), mockk(relaxed = true), mockk(relaxed = true), router,
+        )(proposal)
+
+        verify(exactly = 1) {
+            router.replaceAll(SwapDetailArgs(deposit, owner.sdkAccount.accountUuid.toStorageKeyId()))
+        }
     }
 
     @Test

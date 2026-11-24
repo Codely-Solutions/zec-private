@@ -13,6 +13,7 @@ import co.electriccoin.zcash.ui.common.datasource.RegularTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.SendTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.ShieldTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
+import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
 import co.electriccoin.zcash.ui.common.model.SubmitResult
@@ -264,18 +265,11 @@ class TransactionProgressVM(
                 },
             primaryButton =
                 when (proposal) {
-                    is ExactInputSwapTransactionProposal,
-                    is ExactOutputSwapTransactionProposal -> {
-                        if (txId != null) {
-                            ButtonState(
-                                text = stringRes(R.string.swapAndPay_checkStatus),
-                                onClick = { onViewTransactionDetailClick(txId) },
-                                style = ButtonStyle.PRIMARY
-                            )
-                        } else {
-                            null
-                        }
-                    }
+                    is SwapTransactionProposal -> ButtonState(
+                        text = stringRes(R.string.swapAndPay_checkStatus),
+                        onClick = { viewTransactionDetailAfterSuccessfulProposal(proposal) },
+                        style = ButtonStyle.PRIMARY
+                    )
 
                     is MigrationSweepTransactionProposal -> {
                         ButtonState(
@@ -383,18 +377,11 @@ class TransactionProgressVM(
                 },
             primaryButton =
                 when (proposal) {
-                    is ExactInputSwapTransactionProposal,
-                    is ExactOutputSwapTransactionProposal -> {
-                        if (txId != null) {
-                            ButtonState(
-                                text = stringRes(R.string.swapAndPay_checkStatus),
-                                onClick = { onViewTransactionDetailClick(txId) },
-                                style = ButtonStyle.PRIMARY
-                            )
-                        } else {
-                            null
-                        }
-                    }
+                    is SwapTransactionProposal -> ButtonState(
+                        text = stringRes(R.string.swapAndPay_checkStatus),
+                        onClick = { viewTransactionDetailAfterSuccessfulProposal(proposal) },
+                        style = ButtonStyle.PRIMARY
+                    )
 
                     else -> {
                         ButtonState(

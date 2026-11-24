@@ -960,7 +960,9 @@ private fun SwapMetadataV3.mergeStatus(candidate: SwapMetadataV3): SwapMetadataV
     val sameAssets = fromAsset == candidate.fromAsset && toAsset == candidate.toAsset
     if (!sameRoute || !sameAssets) return this
     val newer = hasNewerStatus(candidate)
-    val preferred = if (newer) candidate else this
+    val preferred = (if (newer) candidate else this).copy(
+        fundingNotSubmitted = fundingNotSubmitted || candidate.fundingNotSubmitted
+    )
     val earlier = if (newer) this else candidate
     val executed = preferred.executedAmountOut ?: earlier.executedAmountOut.takeIf {
         preferred.status == earlier.status || newer

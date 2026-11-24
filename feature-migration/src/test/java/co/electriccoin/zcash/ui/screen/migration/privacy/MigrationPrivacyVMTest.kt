@@ -4,7 +4,10 @@ import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import io.mockk.coVerify
+import co.electriccoin.zcash.ui.design.util.stringRes
+import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -17,6 +20,9 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import co.electriccoin.zcash.ui.design.R as DesignR
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class MigrationPrivacyVMTest {
@@ -106,6 +112,25 @@ class MigrationPrivacyVMTest {
             )
             collectJob.cancel()
         }
+
+    @Test
+    fun immediateDirectReviewDisclosesWalletTorAndLeavesMigrationPreferenceAlone() = runTest {
+        val tor = mockk<IsMigrationTorEnabledStorageProvider>(relaxed = true)
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val vm = vm(mode = MigrationMode.IMMEDIATE, torProvider = tor, router = router)
+        val observer = launch { vm.state.collect {} }
+        advanceUntilIdle()
+        val state = assertNotNull(vm.state.value)
+
+        assertNull(state.checkbox)
+        assertEquals(stringRes(DesignR.string.migration_common_continueWithoutTor), state.confirmLabel)
+        state.onConfirm()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { tor.store(any()) }
+        verify(exactly = 1) { router.forward(MigrationReviewArgs(mode = MigrationMode.IMMEDIATE)) }
+        observer.cancel()
+    }
 
     private fun vm(
         mode: MigrationMode = MigrationMode.AUTOMATIC,

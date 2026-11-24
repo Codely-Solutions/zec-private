@@ -1,9 +1,9 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.MigrationSchedule
+import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import cash.z.ecc.android.sdk.PreparationStep
 import cash.z.ecc.android.sdk.TransferProposal
-import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.work.MigrationScheduler
 import io.mockk.coEvery
@@ -34,11 +34,9 @@ class FinalizeMigrationScheduleUseCaseTest {
     private fun useCase(scheduler: MigrationScheduler = mockk(relaxed = true)) =
         FinalizeMigrationScheduleUseCase(
             migrationScheduler = scheduler,
-            getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase>(relaxed = true),
-            getSelectedWalletAccount =
-                mockk<GetSelectedWalletAccountUseCase> {
-                    coEvery { this@mockk() } returns mockk<ZodlAccount>(relaxed = true)
-                },
+            getOrchardMigrationSdk = mockk<GetOrchardMigrationSdkUseCase> {
+                coEvery { this@mockk("fixture-owner") } returns mockk<OrchardMigrationSdk>(relaxed = true)
+            },
             synchronizerProvider = mockk(relaxed = true),
             migrationLiveDriver = mockk(relaxed = true),
         )
@@ -51,9 +49,9 @@ class FinalizeMigrationScheduleUseCaseTest {
             // persisted app-side anymore — the engine's committed state is the only record.
             val scheduler = mockk<MigrationScheduler>(relaxed = true)
 
-            useCase(scheduler)(schedule(), MigrationMode.AUTOMATIC)
+            useCase(scheduler)(schedule(), MigrationMode.AUTOMATIC, "fixture-owner")
 
-            verify(exactly = 1) { scheduler.schedule(any(), any()) }
+            verify(exactly = 1) { scheduler.schedule("fixture-owner", any()) }
         }
 
     @Test

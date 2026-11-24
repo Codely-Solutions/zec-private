@@ -20,7 +20,11 @@ import kotlinx.coroutines.flow.flowOf
  * Keyed per-account (see [AccountDataSource]) — a Zodl and a Keystone account can each lock their
  * own residual dust independently; locking one must never mark the other as locked too.
  */
-interface HasLockedOrchardDustStorageProvider : BooleanStorageProvider
+interface HasLockedOrchardDustStorageProvider : BooleanStorageProvider {
+    suspend fun store(accountKeyId: String, value: Boolean)
+
+    fun observe(accountKeyId: String): Flow<Boolean>
+}
 
 class HasLockedOrchardDustStorageProviderImpl(
     private val preferenceHolder: StandardPreferenceProvider,
@@ -28,7 +32,10 @@ class HasLockedOrchardDustStorageProviderImpl(
 ) : HasLockedOrchardDustStorageProvider {
     override suspend fun get(): Boolean = default(currentAccountUuid()).getValue(preferenceHolder())
 
-    override suspend fun store(value: Boolean) = default(currentAccountUuid()).putValue(preferenceHolder(), value)
+    override suspend fun store(value: Boolean) = store(currentAccountUuid(), value)
+
+    override suspend fun store(accountKeyId: String, value: Boolean) =
+        default(accountKeyId).putValue(preferenceHolder(), value)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observe(): Flow<Boolean> =
@@ -36,9 +43,12 @@ class HasLockedOrchardDustStorageProviderImpl(
             if (account == null) {
                 flowOf(false)
             } else {
-                flow { emitAll(default(account.sdkAccount.accountUuid.toStorageKeyId()).observe(preferenceHolder())) }
+                observe(account.sdkAccount.accountUuid.toStorageKeyId())
             }
         }
+
+    override fun observe(accountKeyId: String): Flow<Boolean> =
+        flow { emitAll(default(accountKeyId).observe(preferenceHolder())) }
 
     override suspend fun clear() = default(currentAccountUuid()).clear(preferenceHolder())
 

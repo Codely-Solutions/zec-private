@@ -43,6 +43,7 @@ import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.common.LceRenderer
 import co.electriccoin.zcash.ui.screen.migration.component.MigrationFailureBottomSheet
 import org.koin.androidx.compose.koinViewModel
+import org.koin.core.parameter.parametersOf
 import co.electriccoin.zcash.ui.design.R as DesignR
 
 data class MigrationScheduledState(
@@ -54,8 +55,8 @@ data class MigrationScheduledState(
 )
 
 @Composable
-fun MigrationScheduledScreen() {
-    val vm = koinViewModel<MigrationScheduledVM>()
+fun MigrationScheduledScreen(args: MigrationScheduledArgs) {
+    val vm = koinViewModel<MigrationScheduledVM> { parametersOf(args) }
     val state by vm.state.collectAsStateWithLifecycle()
     val isFinalizing by vm.isFinalizing.collectAsStateWithLifecycle()
     val failureSheet by vm.failureSheet.collectAsStateWithLifecycle()

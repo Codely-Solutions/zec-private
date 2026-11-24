@@ -76,7 +76,7 @@ class MigrationHomeMessageSourceImpl(
             if (account == null || !account.isSpendable) return@flatMapLatest flowOf(null)
             val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
             combine(
-                hasSeenMigrationCompleteStorageProvider.observe(),
+                hasSeenMigrationCompleteStorageProvider.observe(accountKeyId),
                 // Published by MigrationLiveDriverImpl's own loop (2026-08-07) instead of this
                 // source independently calling getMigrationState()/getMigrationTransferStates()/
                 // hasOverdueTransfers() on its own 15s poll — those three are on the SDK's
@@ -88,7 +88,7 @@ class MigrationHomeMessageSourceImpl(
                 // Observed, not one-shot: after an IMMEDIATE migration (a plain send-max sweep that
                 // never touches the engine) the balance is the only input that can hide the
                 // "Migrate required" banner once the Orchard funds are spent.
-                getOrchardBalance.observe(),
+                getOrchardBalance.observe(account.sdkAccount.accountUuid),
                 // Mirrors HomeVM's isSyncComplete (iOS: SmartBannerStore.isSyncComplete) — the
                 // RESIDUE branch below reads a live balance/migratable-total pair that can
                 // disagree with each other mid-sync (two different queries against the same,
@@ -121,6 +121,7 @@ class MigrationHomeMessageSourceImpl(
                         completedCount = snapshot.completedCount,
                         totalCount = snapshot.totalCount,
                         attentionKind = MigrationAttentionKind.PLAN_UPDATE,
+                        accountKeyId = accountKeyId,
                     )
                 }
                 // Only computed when actually needed (RequiresAttention) — an extra snapshot
@@ -133,8 +134,8 @@ class MigrationHomeMessageSourceImpl(
                 // readout above (MigrationTransferStateRepository's own kdoc) — but still a real
                 // SDK call, guarded the same way as everything else here.
                 val dustThreshold =
-                    runCatching { getOrchardMigrationSdk().migrationDustThresholdZatoshi() }
-                        .getOrDefault(MIGRATION_DUST_THRESHOLD_ZATOSHI)
+                    runCatching { getOrchardMigrationSdk(accountKeyId)?.migrationDustThresholdZatoshi() }
+                        .getOrNull() ?: MIGRATION_DUST_THRESHOLD_ZATOSHI
                 // Kris Nuttycombe's per-note dust total (Slack, MOB-1750 follow-up): sum of each
                 // spendable Orchard note's value net of MARGINAL_FEE, not the raw aggregate
                 // balance — a wallet can hold a raw balance above dustThreshold made up entirely
@@ -142,8 +143,8 @@ class MigrationHomeMessageSourceImpl(
                 // balance (old behavior) if the SDK call fails, same guard shape as dustThreshold.
                 val orchardBalanceZatoshi = orchardBalance?.value
                 val migratableOrchardTotal =
-                    runCatching { getOrchardMigrationSdk().migratableOrchardTotal() }
-                        .getOrDefault(orchardBalanceZatoshi ?: 0L)
+                    runCatching { getOrchardMigrationSdk(accountKeyId)?.migratableOrchardTotal() }
+                        .getOrNull() ?: (orchardBalanceZatoshi ?: 0L)
                 migrationMessageFor(
                     sdkState = sdkState,
                     snapshot = snapshot,
@@ -157,7 +158,7 @@ class MigrationHomeMessageSourceImpl(
                     attentionKind = attentionKind,
                     attentionRangeText = attentionRangeText,
                     isUpgradeNoticePending = isUpgradeNoticePending,
-                )
+                )?.copy(accountKeyId = accountKeyId)
             }
         }
 
@@ -255,6 +256,7 @@ class MigrationHomeMessageSourceImpl(
                     isReadyToSend = data.isReadyToSend,
                     hasAttention = data.attentionKind != null,
                     isResidueOnly = data.isResidueOnly,
+                    accountKeyId = data.accountKeyId,
                 )
             },
             onButtonClick = {
@@ -264,6 +266,7 @@ class MigrationHomeMessageSourceImpl(
                     isReadyToSend = data.isReadyToSend,
                     hasAttention = data.attentionKind != null,
                     isResidueOnly = data.isResidueOnly,
+                    accountKeyId = data.accountKeyId,
                 )
             },
         )
@@ -275,6 +278,7 @@ class MigrationHomeMessageSourceImpl(
         isReadyToSend: Boolean = false,
         hasAttention: Boolean = false,
         isResidueOnly: Boolean = false,
+        accountKeyId: String? = null,
     ) {
         when {
             // A plan needing re-confirmation (spec §6.2/§6.3) always routes to the Transfer Invalid
@@ -284,14 +288,14 @@ class MigrationHomeMessageSourceImpl(
             // Tapping the widget just opens the celebration screen — MigrationCompleteVM.onDone()
             // owns the seen-flag decision. MOB-1750: isResidueOnly threads which copy/summary
             // variant MigrationCompleteScreen should render.
-            isComplete -> navigationRouter.forward(MigrationCompleteArgs(isResidueOnly = isResidueOnly))
+            isComplete -> navigationRouter.forward(MigrationCompleteArgs(isResidueOnly, accountKeyId))
 
             // Ready-to-send routes to Progress too — everything is pre-signed, there is nothing
             // to review; Progress's foreground broadcast loop executes the step silently while
             // the user watches (TransferReview screen deleted 2026-07-30).
-            isReadyToSend -> navigationRouter.forward(MigrationProgressArgs())
+            isReadyToSend -> navigationRouter.forward(MigrationProgressArgs(accountKeyId))
 
-            isRunActive -> navigationRouter.forward(MigrationProgressArgs())
+            isRunActive -> navigationRouter.forward(MigrationProgressArgs(accountKeyId))
 
             else -> navigationRouter.forward(MigrationSetupArgs)
         }

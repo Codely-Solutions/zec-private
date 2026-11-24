@@ -9,7 +9,6 @@ import cash.z.ecc.android.sdk.fixture.AccountFixture
 import co.electriccoin.zcash.ui.BaseNavigationCommand
 import co.electriccoin.zcash.ui.NavigationCommand
 import co.electriccoin.zcash.ui.NavigationRouter
-import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.IsBackgroundExecutionAvailableProvider
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
@@ -21,7 +20,6 @@ import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
-import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -54,16 +52,6 @@ class MigrationScheduledVMTest {
             accountUuid = UUID.fromString("00000000-0000-0000-0000-000000000001")
         )
     private val testAccountKeyId = testSdkAccount.accountUuid.toStorageKeyId()
-    private val testWalletAccount: WalletAccount =
-        mockk(relaxed = true) {
-            every { sdkAccount } returns testSdkAccount
-        }
-    private val testGetSelectedWalletAccount: GetSelectedWalletAccountUseCase =
-        mockk {
-            coEvery { this@mockk() } returns testWalletAccount
-            every { observe() } returns flowOf(testWalletAccount)
-        }
-
     @BeforeTest
     fun setUp() {
         Dispatchers.setMain(StandardTestDispatcher())
@@ -144,7 +132,7 @@ class MigrationScheduledVMTest {
                 vm(
                     pendingSchedule = pendingSchedule,
                     pendingKeystonePczts = pendingPczts,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
                     finalizeMigrationSchedule = finalize,
                 )
 
@@ -154,7 +142,7 @@ class MigrationScheduledVMTest {
             coVerify(exactly = 1) { sdk.storeSignedSchedulePczts(any()) }
             // MOB-1669: the post-Keystone-scan path opts out of eagerly starting the live driver
             // here — see FinalizeMigrationScheduleUseCase's doc for why.
-            coVerify(exactly = 1) { finalize(any(), any(), startLiveDriverImmediately = false) }
+            coVerify(exactly = 1) { finalize(any(), any(), testAccountKeyId, startLiveDriverImmediately = false) }
             assertNull(pendingSchedule.get(testAccountKeyId))
             assertNull(pendingPczts.get(testAccountKeyId))
         }
@@ -189,18 +177,18 @@ class MigrationScheduledVMTest {
                 vm(
                     pendingSchedule = pendingSchedule,
                     pendingKeystonePczts = pendingPczts,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
                     finalizeMigrationSchedule = finalize,
                     // Relaxed mockk can't safely default a generic suspend fun's return type
                     // (throws ClassCastException on unstubbed call) — stub explicitly.
                     isMigrationTorEnabledStorageProvider =
-                        mockk { coEvery { get() } returns false },
+                        mockk { coEvery { this@mockk.get(testAccountKeyId) } returns false },
                 )
 
             advanceUntilIdle()
 
             assertNotNull(vm.failureSheet.value)
-            coVerify(exactly = 0) { finalize(any(), any()) }
+            coVerify(exactly = 0) { finalize(any(), any(), any()) }
             // Still pending — a retry should be able to pick this back up.
             assertNotNull(pendingSchedule.get(testAccountKeyId))
             assertNotNull(pendingPczts.get(testAccountKeyId))
@@ -241,7 +229,7 @@ class MigrationScheduledVMTest {
                 vm(
                     pendingSchedule = pendingSchedule,
                     pendingKeystonePczts = pendingPczts,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(testAccountKeyId) } returns sdk },
                     finalizeMigrationSchedule = finalize,
                 )
 
@@ -249,7 +237,7 @@ class MigrationScheduledVMTest {
 
             assertNotNull(vm.failureSheet.value)
             assertTrue(vm.isFinalizing.value)
-            coVerify(exactly = 0) { finalize(any(), any()) }
+            coVerify(exactly = 0) { finalize(any(), any(), any()) }
             // Still pending — a retry should be able to pick this back up.
             assertNotNull(pendingSchedule.get(testAccountKeyId))
             assertNotNull(pendingPczts.get(testAccountKeyId))
@@ -261,14 +249,13 @@ class MigrationScheduledVMTest {
             mockk {
                 // A REAL (empty) snapshot: a null return now means "SDK not ready yet" and keeps
                 // the LCE loading (review L3) — these tests assert on the rendered state.
-                coEvery { this@mockk(null) } returns
+                coEvery { this@mockk(testAccountKeyId) } returns
                     co.electriccoin.zcash.ui.common.model.migration
                         .LiveMigrationSnapshot(transfers = emptyList(), preparations = emptyList(), tipHeight = 0L)
             },
         isBackgroundExecutionAvailable: IsBackgroundExecutionAvailableProvider = mockk(relaxed = true),
         navigationRouter: NavigationRouter = FakeNavigationRouter(),
         errorStateMapper: ErrorMapperUseCase = mockk(relaxed = true),
-        getSelectedWalletAccount: GetSelectedWalletAccountUseCase = testGetSelectedWalletAccount,
         getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase = mockk(relaxed = true),
         pendingSchedule: PendingMigrationScheduleRepositoryImpl = PendingMigrationScheduleRepositoryImpl(),
         pendingKeystonePczts: PendingKeystoneMigrationPcztsRepositoryImpl =
@@ -277,11 +264,11 @@ class MigrationScheduledVMTest {
         isMigrationTorEnabledStorageProvider: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
         synchronizerProvider: SynchronizerProvider = mockk(relaxed = true),
     ) = MigrationScheduledVM(
+        args = MigrationScheduledArgs(testAccountKeyId),
         getMigrationSnapshot = getMigrationSnapshot,
         navigationRouter = navigationRouter,
         errorStateMapper = errorStateMapper,
         isBackgroundExecutionAvailableProvider = isBackgroundExecutionAvailable,
-        getSelectedWalletAccount = getSelectedWalletAccount,
         getOrchardMigrationSdk = getOrchardMigrationSdk,
         pendingSchedule = pendingSchedule,
         pendingKeystonePczts = pendingKeystonePczts,

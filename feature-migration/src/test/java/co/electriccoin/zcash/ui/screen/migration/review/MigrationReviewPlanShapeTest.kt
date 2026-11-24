@@ -365,13 +365,14 @@ class MigrationReviewPlanShapeTest {
             }
         return MigrationReviewVM(
             args = MigrationReviewArgs(mode = MigrationMode.AUTOMATIC),
-            getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
             pendingMigrationScheduleRepository = mockk<PendingMigrationScheduleRepository>(relaxed = true),
             restartMigrationScheduleRepository =
                 mockk<RestartMigrationScheduleRepository>(relaxed = true) {
                     every { consume(any()) } returns null
                 },
             finalizeMigrationSchedule = mockk<FinalizeMigrationScheduleUseCase>(relaxed = true),
+            migrationTorEnabled = mockk(relaxed = true),
             navigationRouter = mockk<NavigationRouter>(relaxed = true),
             exchangeRateRepository =
                 mockk<ExchangeRateRepository>(relaxed = true) {
@@ -384,7 +385,7 @@ class MigrationReviewPlanShapeTest {
                 },
             getOrchardBalance =
                 mockk<GetOrchardBalanceUseCase> {
-                    coEvery { this@mockk() } returns Zatoshi(500_000L)
+                    coEvery { this@mockk(any()) } returns Zatoshi(500_000L)
                 },
             errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
             zashiSpendingKeyDataSource = mockk<ZashiSpendingKeyDataSource>(relaxed = true),

@@ -50,7 +50,11 @@ interface PendingKeystoneMigrationPcztsRepository {
 
     fun get(accountKeyId: String): PendingKeystoneMigrationPczts?
 
+    fun peek(accountKeyId: String): PendingKeystoneMigrationPczts?
+
     fun clear()
+
+    fun clear(accountKeyId: String, expected: PendingKeystoneMigrationPczts)
 }
 
 class PendingKeystoneMigrationPcztsRepositoryImpl : PendingKeystoneMigrationPcztsRepository {
@@ -64,6 +68,16 @@ class PendingKeystoneMigrationPcztsRepositoryImpl : PendingKeystoneMigrationPczt
         val current = pending.value ?: return null
         return if (current.first == accountKeyId) current.second else null
     }
+
+    override fun clear(accountKeyId: String, expected: PendingKeystoneMigrationPczts) {
+        val current = pending.value
+        if (current?.first == accountKeyId && current.second === expected) {
+            pending.compareAndSet(current, null)
+        }
+    }
+
+    override fun peek(accountKeyId: String): PendingKeystoneMigrationPczts? =
+        pending.value?.takeIf { it.first == accountKeyId }?.second
 
     override fun clear() {
         pending.value = null

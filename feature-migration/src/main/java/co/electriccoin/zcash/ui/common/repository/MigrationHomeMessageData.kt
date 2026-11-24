@@ -40,4 +40,5 @@ data class MigrationHomeMessageData(
      * and tapping opens the migration entry for what is left.
      */
     val isInterruptedByNetworkUpgrade: Boolean = false,
+    val accountKeyId: String? = null,
 ) : MigrationHomeMessage()

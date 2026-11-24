@@ -171,6 +171,7 @@ class TransactionDetailVMTest {
             assertEquals(stringRes(title), detail.header.title)
             assertEquals(if (unsubmitted) SwapStatus.PENDING else SwapStatus.FAILED, info.statusRow.status)
             assertEquals(unsubmitted, info.statusRow.fundingNotSubmitted)
+            assertEquals(stringRes(R.string.private_swap_funding_status), info.statusRow.title)
             assertNull(detail.infoFooter)
         }
     }

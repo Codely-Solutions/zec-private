@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.extension.ZERO
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -31,11 +32,12 @@ class GetOrchardBalanceUseCase(
     private val accountDataSource: AccountDataSource,
     private val persistableWalletProvider: PersistableWalletProvider,
 ) {
-    suspend operator fun invoke(): Zatoshi {
+    suspend operator fun invoke(): Zatoshi = invoke(accountDataSource.getSelectedAccount().sdkAccount.accountUuid)
+
+    suspend operator fun invoke(accountUuid: AccountUuid): Zatoshi {
         val synchronizer = synchronizerProvider.getSynchronizer()
-        val account = accountDataSource.getSelectedAccount()
         val balances = synchronizer.walletBalances.filterNotNull().first()
-        return balances[account.sdkAccount.accountUuid]?.orchard?.available ?: Zatoshi.ZERO
+        return balances[accountUuid]?.orchard?.available ?: Zatoshi.ZERO
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -45,10 +47,12 @@ class GetOrchardBalanceUseCase(
                 if (account == null) {
                     flowOf(null)
                 } else {
-                    synchronizerProvider
-                        .rawWalletBalances()
-                        .map { balances -> balances?.get(account.sdkAccount.accountUuid)?.orchard?.available }
-                        .retainWhileWalletExists(persistableWalletProvider)
+                    observe(account.sdkAccount.accountUuid)
                 }
             }
+
+    fun observe(accountUuid: AccountUuid): Flow<Zatoshi?> =
+        synchronizerProvider.rawWalletBalances()
+            .map { balances -> balances?.get(accountUuid)?.orchard?.available }
+            .retainWhileWalletExists(persistableWalletProvider)
 }

@@ -28,9 +28,9 @@ For an incoming swap, choose the source asset/network, amount and refund address
 
 For CrossPay, choose the recipient asset/network, destination and target amount. Confirm that the destination accepts the selected asset and network; separate destination memo/tag fields are not supported. Review the ZEC total before approving. Follow progress in Activity. If a response is delayed, check the existing transaction and swap status before sending again.
 
-**Funding unconfirmed** in Activity means the wallet saved the swap or payment details before a funding transaction appeared in its history. Open the entry to check the provider’s status.
+**Funding unconfirmed** in Activity means the wallet saved the swap or payment before funding appeared in wallet history. Open the entry or tap **Check status** to see the provider’s status.
 
-**Funding not sent** means the wallet stopped before broadcasting the transaction. The swap reference stays in Activity.
+**Funding not sent** means the wallet stopped before broadcasting the transaction. The swap reference stays in Activity. **Funding status** describes the wallet’s funding result.
 
 **Pending** after Send, Swap or Pay means the wallet can still submit the original transaction. Check Activity for its final status before sending again.
 

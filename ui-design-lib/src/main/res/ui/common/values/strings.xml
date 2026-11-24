@@ -1256,7 +1256,8 @@
          Localizing them needs that test harness reworked first; tracked as a known gap. -->
     <string name="migration_status_done">Done</string>
 
-    <string name="migrationPrivacy_bodyImmediate">If Tor is available in your region, we strongly recommend enabling it to prevent linking your balance to your IP address. You can also use a trusted VPN if Tor is unavailable in your region.</string>
+    <string name="migrationPrivacy_bodyImmediate">Immediate migration uses your wallet’s Tor setting. Enable Tor in Settings to use it.</string>
+    <string name="migrationReview_privateSplitUnavailable">This plan needs a preparation transaction that can only be sent without Tor. To keep Tor on, choose immediate migration with wallet Tor enabled.</string>
     <string name="migrationPrivacy_bodyAutomatic">If Tor is available in your region, we strongly recommend enabling it to prevent linking the migration amounts to your IP address. You can also use a trusted VPN if Tor is unavailable in your region.</string>
 
     <string name="migrationKeystoneScan_instructions">Scan the QR code shown on your Keystone device after signing.</string>
@@ -1462,6 +1463,7 @@
     <string name="editAccount_save">Save changes</string>
 
     <string name="private_swap_saved_status">Saved status</string>
+    <string name="private_swap_funding_status">Funding status</string>
     <string name="private_swap_status_unavailable">Unavailable</string>
     <string name="private_swap_created_at">Swap created</string>
     <string name="private_swap_saved_output">Saved output</string>

@@ -81,6 +81,7 @@ import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressArgs
 import co.electriccoin.zcash.ui.screen.migration.progress.MigrationProgressVM
 import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewArgs
 import co.electriccoin.zcash.ui.screen.migration.review.MigrationReviewVM
+import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledVM
 import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingArgs
 import co.electriccoin.zcash.ui.screen.migration.sending.MigrationSendingVM
@@ -258,7 +259,7 @@ class MigrationKoinGraphSmokeTest {
 
     @Test
     fun migrationScheduledVM_resolvesFromKoin() {
-        koin.koin.get<MigrationScheduledVM>()
+        koin.koin.get<MigrationScheduledVM> { parametersOf(MigrationScheduledArgs("fixture-owner")) }
     }
 
     @Test

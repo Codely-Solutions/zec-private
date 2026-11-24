@@ -20,7 +20,13 @@ jobs:
           if os.environ["GITHUB_REF"] == "refs/heads/main":
               with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
                   output.write("main=true\n")
+      - name: Require signing readiness for full simulation
+        if: steps.ref.outputs.main == 'true' && vars.PRODUCTION_SIGNING_READY != 'true'
+        run: |
+          echo "::error::Full upgrade simulation is blocked while production signing is paused."
+          exit 1
   prepare:
+    needs: admit
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -161,8 +167,8 @@ jobs:
           python3 .private/notify.py "TEST: fee, malformed quote text and incompatible-upstream regressions blocked publication as expected. Real release state is unchanged."
           python3 .private/notify.py "TEST: ZEC Private simulated stable upgrade passed build, tests and permanent-key signing. No test APK was published."
   failed:
-    if: ${{ always() && (needs.prepare.result == 'failure' || needs.unsigned.result == 'failure' || needs.sign.result == 'failure') }}
-    needs: [prepare, unsigned, sign]
+    if: ${{ always() && (needs.admit.result == 'failure' || needs.prepare.result == 'failure' || needs.unsigned.result == 'failure' || needs.sign.result == 'failure') }}
+    needs: [admit, prepare, unsigned, sign]
     runs-on: ubuntu-24.04
     permissions:
       contents: read

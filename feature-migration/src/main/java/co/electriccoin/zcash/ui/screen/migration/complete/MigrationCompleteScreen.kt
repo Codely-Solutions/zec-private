@@ -79,7 +79,8 @@ data class MigrationCompleteState(
 
 @Serializable
 data class MigrationCompleteArgs(
-    val isResidueOnly: Boolean = false
+    val isResidueOnly: Boolean = false,
+    val accountKeyId: String? = null
 )
 
 @Composable

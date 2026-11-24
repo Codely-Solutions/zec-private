@@ -118,7 +118,7 @@ class MigrationKeystoneScanVMTest {
             advanceUntilIdle()
 
             assertNull(vm.failureSheet.value)
-            assertEquals(listOf<Any>(MigrationScheduledArgs), router.forwardedRoutes)
+            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.forwardedRoutes)
             // The final accumulated batch stays in the repositories — MigrationScheduledVM (the
             // navigation target) is what applies/stores/finalizes and clears them.
             assertNotNull(pendingSchedule.get(testAccountKeyId))
@@ -154,7 +154,7 @@ class MigrationKeystoneScanVMTest {
             advanceUntilIdle()
 
             assertNull(vm.failureSheet.value)
-            assertEquals(listOf<Any>(MigrationScheduledArgs), router.forwardedRoutes)
+            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.forwardedRoutes)
         }
 
     @Test
@@ -182,7 +182,7 @@ class MigrationKeystoneScanVMTest {
             advanceUntilIdle()
 
             coVerify(exactly = 1) { sdk.applyKeystoneBatchSignatures(any(), any(), any()) }
-            assertEquals(listOf<Any>(MigrationScheduledArgs), router.forwardedRoutes)
+            assertEquals(listOf<Any>(MigrationScheduledArgs(testAccountKeyId)), router.forwardedRoutes)
         }
 
     @Test

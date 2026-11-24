@@ -22,7 +22,11 @@ import kotlinx.coroutines.flow.flowOf
  * migrating independently, and completing migration on one account must never mark the other as
  * "seen" too.
  */
-interface HasSeenMigrationCompleteStorageProvider : BooleanStorageProvider
+interface HasSeenMigrationCompleteStorageProvider : BooleanStorageProvider {
+    suspend fun store(accountKeyId: String, value: Boolean)
+
+    fun observe(accountKeyId: String): Flow<Boolean>
+}
 
 class HasSeenMigrationCompleteStorageProviderImpl(
     private val preferenceHolder: StandardPreferenceProvider,
@@ -30,7 +34,10 @@ class HasSeenMigrationCompleteStorageProviderImpl(
 ) : HasSeenMigrationCompleteStorageProvider {
     override suspend fun get(): Boolean = default(currentAccountUuid()).getValue(preferenceHolder())
 
-    override suspend fun store(value: Boolean) = default(currentAccountUuid()).putValue(preferenceHolder(), value)
+    override suspend fun store(value: Boolean) = store(currentAccountUuid(), value)
+
+    override suspend fun store(accountKeyId: String, value: Boolean) =
+        default(accountKeyId).putValue(preferenceHolder(), value)
 
     @OptIn(ExperimentalCoroutinesApi::class)
     override fun observe(): Flow<Boolean> =
@@ -38,9 +45,12 @@ class HasSeenMigrationCompleteStorageProviderImpl(
             if (account == null) {
                 flowOf(false)
             } else {
-                flow { emitAll(default(account.sdkAccount.accountUuid.toStorageKeyId()).observe(preferenceHolder())) }
+                observe(account.sdkAccount.accountUuid.toStorageKeyId())
             }
         }
+
+    override fun observe(accountKeyId: String): Flow<Boolean> =
+        flow { emitAll(default(accountKeyId).observe(preferenceHolder())) }
 
     override suspend fun clear() = default(currentAccountUuid()).clear(preferenceHolder())
 

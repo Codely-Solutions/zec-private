@@ -1121,7 +1121,7 @@
 
     <string name="migration_status_done">Listo</string>
 
-    <string name="migrationPrivacy_bodyImmediate">Si Tor está disponible en tu región, te recomendamos encarecidamente activarlo para evitar vincular tu saldo con tu dirección IP. También puedes usar una VPN de confianza si Tor no está disponible en tu región.</string>
+    <string name="migrationPrivacy_bodyImmediate">La migración inmediata usa el ajuste de Tor de tu monedero. Activa Tor en Ajustes para usarlo.</string>
     <string name="migrationPrivacy_bodyAutomatic">Si Tor está disponible en tu región, te recomendamos encarecidamente activarlo para evitar vincular los montos de la migración con tu dirección IP. También puedes usar una VPN de confianza si Tor no está disponible en tu región.</string>
 
     <string name="migrationKeystoneScan_instructions">Escanea el código QR que aparece en tu dispositivo Keystone después de firmar.</string>

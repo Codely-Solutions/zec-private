@@ -40,12 +40,17 @@ class MigrationPrivacyVM(
                             MigrationMode.AUTOMATIC -> stringRes(DesignR.string.migrationPrivacy_bodyAutomatic)
                         },
                     checkbox =
-                        CheckboxState(
+                        if (args.mode == MigrationMode.AUTOMATIC) CheckboxState(
                             title = stringRes(DesignR.string.migration_common_enableTorProtectionTitle),
                             subtitle = stringRes(DesignR.string.migration_common_torCheckboxSubtitle),
                             isChecked = tor,
                             onClick = { onTorToggle(!tor) },
-                        ),
+                        ) else null,
+                    confirmLabel = if (args.mode == MigrationMode.IMMEDIATE) {
+                        stringRes(DesignR.string.migration_common_continueWithoutTor)
+                    } else {
+                        null
+                    },
                     onConfirm = ::onConfirm,
                     onBack = ::onBack,
                 )
@@ -65,13 +70,16 @@ class MigrationPrivacyVM(
 
     private fun onConfirm() {
         val chosenUseTor = useTor.value
-        viewModelScope.launch { isMigrationTorEnabledStorageProvider.store(chosenUseTor) }
-        navigationRouter.forward(
-            when (args.mode) {
+        viewModelScope.launch {
+            val destination = when (args.mode) {
                 MigrationMode.IMMEDIATE -> MigrationReviewArgs(mode = args.mode)
-                MigrationMode.AUTOMATIC -> MigrationBatteryArgs
+                MigrationMode.AUTOMATIC -> {
+                    isMigrationTorEnabledStorageProvider.store(chosenUseTor)
+                    MigrationBatteryArgs
+                }
             }
-        )
+            navigationRouter.forward(destination)
+        }
     }
 
     private fun onBack() = navigationRouter.back()

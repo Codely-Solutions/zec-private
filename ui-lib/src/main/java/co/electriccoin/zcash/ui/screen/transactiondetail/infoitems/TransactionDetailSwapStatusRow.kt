@@ -182,10 +182,18 @@ internal fun SwapQuoteStatusData.toDetailStatusRow(
     outgoingStatus: SwapStatus? = null,
 ): TransactionDetailSwapStatusRowState {
     val savedStatus = metadata?.recordedStatus ?: metadata?.legacySuccessfulOutput?.let { SUCCESS }
-    val value = outgoingStatus ?: status?.status ?: savedStatus
-    val isSaved = value != null && (status?.status != value || error != null)
+    val providerStatus = status?.status ?: savedStatus
+    val value = outgoingStatus ?: providerStatus
+    val localOutcome = (value == PENDING && metadata?.fundingNotSubmitted == true) ||
+        (outgoingStatus != null && outgoingStatus != providerStatus)
+    val isSaved = value != null && (status == null || error != null)
+    val title = when {
+        localOutcome -> R.string.private_swap_funding_status
+        isSaved -> R.string.private_swap_saved_status
+        else -> R.string.swapAndPay_status
+    }
     return TransactionDetailSwapStatusRowState(
-        title = stringRes(if (isSaved) R.string.private_swap_saved_status else R.string.swapAndPay_status),
+        title = stringRes(title),
         status = value,
         mode = mode,
         isLoading = value == null && isLoading && error == null,

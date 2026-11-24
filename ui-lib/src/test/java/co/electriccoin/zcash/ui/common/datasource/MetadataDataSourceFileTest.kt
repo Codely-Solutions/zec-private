@@ -270,6 +270,30 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
+    fun mergingNewerProviderStatusPreservesTheVerifiedNoSubmissionFact() = runTest {
+        val quote = fundingQuote(SwapType.EXACT_INPUT)
+        SaveORSwapUseCase(mockk(), repository(metadataProvider), mockk()).persistBeforeFunding(quote)
+        val tracked = read(canonicalName)
+        val swap = tracked.accountMetadata.swaps.swapIds.single()
+        fun withSwap(value: SwapMetadataV3) = tracked.copy(
+            accountMetadata = tracked.accountMetadata.copy(swaps = tracked.accountMetadata.swaps.copy(
+                swapIds = listOf(value),
+            )),
+        )
+        write(canonicalName, withSwap(swap.copy(fundingNotSubmitted = true)))
+        val newer = withSwap(swap.copy(
+            status = SwapStatus.PENDING,
+            statusUpdatedAt = kotlin.time.Instant.parse("2026-11-22T12:01:00Z"),
+        ))
+        write(legacyName, newer, metadataKey(1))
+
+        val reopened = assertNotNull(repository(metadataProvider).getSwapMetadata("deposit"))
+
+        assertTrue(reopened.fundingNotSubmitted)
+        assertEquals(SwapStatus.PENDING, reopened.status)
+    }
+
+    @Test
     fun legacySuccessfulAmountKeepsUnknownProvenanceUntilExecutionArrives() = runTest {
         val quote = fundingQuote(SwapType.FLEX_INPUT)
         SaveORSwapUseCase(mockk(), repository(metadataProvider), mockk()).persistBeforeFunding(quote)

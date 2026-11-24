@@ -218,7 +218,7 @@ class MigrationKeystoneScanVM(
                 migrationLog(
                     "KeystoneScan: round ${pending.roundIndex} (final) done — handing off to MigrationScheduledVM"
                 )
-                navigationRouter.forward(MigrationScheduledArgs)
+                navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {

@@ -57,7 +57,7 @@ def evaluate_expression(expression, values):
     expression = expression.removeprefix('${{').removesuffix('}}').strip()
     expression = expression.replace('always()', 'True').replace('cancelled()', repr(values.get('workflow_cancelled', False)))
     expression = expression.replace('needs.*.result', repr(values.get('needs.*.result', [])))
-    expression = re.sub(r'\b(?:github|inputs|needs|vars)(?:\.[a-z_A-Z0-9]+)+\b',
+    expression = re.sub(r'\b(?:github|inputs|needs|steps|vars)(?:\.[a-z_A-Z0-9]+)+\b',
                         lambda match: repr(values.get(match[0], 'skipped')), expression)
     expression = expression.replace('&&', ' and ').replace('||', ' or ')
     expression = re.sub(r'!(?!=)', ' not ', expression)
@@ -142,6 +142,23 @@ class MaintenanceWatchTest(unittest.TestCase):
         for workflow in ('upgrade-acceptance.yml', 'verify-signing-environment.yml'):
             diagnostic = concurrency_settings(workflow_blocks(workflow)[0])
             self.assertNotEqual(production, diagnostic.get('group'))
+
+    def test_full_upgrade_simulation_fails_before_preparation_while_signing_is_paused(self):
+        workflow = 'upgrade-acceptance.yml'
+        _, jobs = workflow_blocks(workflow)
+        blocked = re.search(r'^        if: (.+)$', jobs['admit'], re.M)[1]
+        for main, ready, should_block in (('true', 'false', True), ('true', '', True),
+                                          ('true', 'true', False), ('', 'false', False)):
+            with self.subTest(main=main, ready=ready):
+                self.assertEqual(should_block, evaluate_expression(blocked, {
+                    'steps.ref.outputs.main': main, 'vars.PRODUCTION_SIGNING_READY': ready,
+                }))
+        self.assertIn('          exit 1\n', jobs['admit'])
+        self.assertIn('    needs: admit\n', jobs['prepare'])
+        self.assertTrue(job_activates(workflow_job(workflow, 'failed'), {'admit': 'failure'}))
+        self.assertFalse(job_activates(workflow_job(workflow, 'failed'), {
+            'admit': 'success', 'prepare': 'success', 'unsigned': 'success', 'sign': 'skipped',
+        }))
 
     def test_discovery_dispatch_routes_non_main_away_from_the_main_pending_slot(self):
         header, jobs = workflow_blocks('sync-upstream.yml')

@@ -160,6 +160,7 @@ class NearSwapDataSource(
             }
 
         return try {
+            require(!response.quoteRequest.dry) { "A simulation response cannot authorize swap funding" }
             if (response.quoteRequest.swapType != request.swapType) {
                 throw SwapQuoteMismatchException.Rejected(
                     type = SwapQuoteMismatchType.SWAP_TYPE,

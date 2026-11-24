@@ -6,7 +6,8 @@ import co.electriccoin.zcash.ui.design.util.StringResource
 
 data class MigrationPrivacyState(
     val body: StringResource,
-    val checkbox: CheckboxState,
+    val checkbox: CheckboxState?,
+    val confirmLabel: StringResource? = null,
     val onConfirm: () -> Unit,
     override val onBack: () -> Unit,
 ) : ModalBottomSheetState

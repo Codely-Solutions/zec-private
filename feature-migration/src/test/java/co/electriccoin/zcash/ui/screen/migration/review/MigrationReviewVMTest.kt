@@ -23,6 +23,7 @@ import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
+import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
@@ -132,7 +133,7 @@ class MigrationReviewVMTest {
 
             coVerifyOrder {
                 keystoneProposalRepository.setMigrationSweepProposal(proposal, Zatoshi(500_000L))
-                keystoneProposalRepository.createPCZTFromProposal()
+                keystoneProposalRepository.createPCZTFromProposal(any())
             }
             assertEquals(
                 listOf<Any>(SignKeystoneTransactionArgs),
@@ -170,7 +171,7 @@ class MigrationReviewVMTest {
             val vm =
                 vm(
                     router = router,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                     mode = MigrationMode.AUTOMATIC,
                     restartMigrationScheduleRepository = restartRepo,
                 )
@@ -221,7 +222,7 @@ class MigrationReviewVMTest {
             val vm =
                 vm(
                     router = router,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                     mode = MigrationMode.AUTOMATIC,
                 )
             val collectJob = launch { vm.state.collect {} }
@@ -283,7 +284,7 @@ class MigrationReviewVMTest {
             val vm =
                 vm(
                     router = router,
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                     zashiSpendingKeyDataSource = mockk { coEvery { getZashiSpendingKey() } returns usk },
                     finalizeMigrationSchedule = finalizeMigrationSchedule,
                     mode = MigrationMode.AUTOMATIC,
@@ -299,6 +300,33 @@ class MigrationReviewVMTest {
                 sdk.submitNoteSplit(splitProposal, usk)
             }
         }
+
+    @Test
+    fun torProtectedSoftwarePlanStopsBeforeAnUnsupportedSplit() = runTest {
+        val sdk = mockk<OrchardMigrationSdk>(relaxed = true) {
+            coEvery { isNoteSplitNeeded() } returns true
+        }
+        val review = mockk<MigrationSchedule>(relaxed = true)
+        val tor = mockk<IsMigrationTorEnabledStorageProvider> {
+            coEvery { this@mockk.get(any<String>()) } returns true
+        }
+        val router = FakeNavigationRouter()
+        val vm = vm(
+            router = router,
+            getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
+            migrationTorEnabled = tor,
+            mode = MigrationMode.AUTOMATIC,
+        )
+
+        invokeOnConfirmAutomatic(vm, review)
+        advanceUntilIdle()
+
+        coVerify(exactly = 1) { sdk.isNoteSplitNeeded() }
+        coVerify(exactly = 0) { sdk.prepareNoteSplit() }
+        coVerify(exactly = 0) { sdk.submitNoteSplit(any(), any()) }
+        coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
+        assertEquals(emptyList(), router.forwardedRoutes)
+    }
 
     @Test
     fun immediateConfirmOnAViewOnlyAccountIsRefusedWithoutSigningOrAdopting() =
@@ -323,7 +351,7 @@ class MigrationReviewVMTest {
             assertRefusedAsViewOnly(vm)
             coVerify(exactly = 0) { zashiProposalRepository.setMigrationSweepProposal(any(), any()) }
             coVerify(exactly = 0) { keystoneProposalRepository.setMigrationSweepProposal(any(), any()) }
-            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal() }
+            coVerify(exactly = 0) { keystoneProposalRepository.createPCZTFromProposal(any()) }
             coVerify(exactly = 0) { submitProposal(any()) }
             assertEquals(emptyList(), router.forwardedRoutes)
         }
@@ -342,7 +370,7 @@ class MigrationReviewVMTest {
                 vm(
                     router = router,
                     getSelectedWalletAccount = viewOnlySelected(),
-                    getOrchardMigrationSdk = mockk { coEvery { this@mockk() } returns sdk },
+                    getOrchardMigrationSdk = mockk { coEvery { this@mockk(any<String>()) } returns sdk },
                     finalizeMigrationSchedule = finalizeMigrationSchedule,
                     mode = MigrationMode.AUTOMATIC,
                 )
@@ -359,7 +387,7 @@ class MigrationReviewVMTest {
             coVerify(exactly = 0) { sdk.proposeMigrationTransfersFromSplit(any()) }
             coVerify(exactly = 0) { sdk.submitNoteSplit(any(), any()) }
             coVerify(exactly = 0) { sdk.signAndStoreMigrationSchedule(any(), any()) }
-            coVerify(exactly = 0) { finalizeMigrationSchedule(any(), any(), any()) }
+            coVerify(exactly = 0) { finalizeMigrationSchedule(any(), any(), any(), any()) }
             assertEquals(emptyList(), router.forwardedRoutes)
         }
 
@@ -430,6 +458,7 @@ class MigrationReviewVMTest {
         zashiProposalRepository: ZashiProposalRepository = mockk(relaxed = true),
         submitProposal: SubmitProposalUseCase = mockk(relaxed = true),
         finalizeMigrationSchedule: FinalizeMigrationScheduleUseCase = mockk(relaxed = true),
+        migrationTorEnabled: IsMigrationTorEnabledStorageProvider = mockk(relaxed = true),
         mode: MigrationMode = MigrationMode.IMMEDIATE,
         restartMigrationScheduleRepository: RestartMigrationScheduleRepository =
             mockk<RestartMigrationScheduleRepository>(relaxed = true) { every { consume(any()) } returns null },
@@ -440,13 +469,14 @@ class MigrationReviewVMTest {
         pendingMigrationScheduleRepository = mockk<PendingMigrationScheduleRepository>(relaxed = true),
         restartMigrationScheduleRepository = restartMigrationScheduleRepository,
         finalizeMigrationSchedule = finalizeMigrationSchedule,
+        migrationTorEnabled = migrationTorEnabled,
         navigationRouter = router,
         exchangeRateRepository =
             mockk<ExchangeRateRepository>(relaxed = true) {
                 every { state } returns MutableStateFlow(ExchangeRateState.OptedOut)
             },
         getSelectedWalletAccount = getSelectedWalletAccount,
-        getOrchardBalance = mockk<GetOrchardBalanceUseCase> { coEvery { this@mockk() } returns Zatoshi(500_000L) },
+        getOrchardBalance = mockk<GetOrchardBalanceUseCase> { coEvery { this@mockk(any()) } returns Zatoshi(500_000L) },
         errorStateMapper = mockk<ErrorMapperUseCase>(relaxed = true),
         zashiSpendingKeyDataSource = zashiSpendingKeyDataSource,
         biometricRepository = mockk<BiometricRepository>(relaxed = true),

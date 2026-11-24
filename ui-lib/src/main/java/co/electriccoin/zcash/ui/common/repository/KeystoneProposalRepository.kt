@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposalNotCreatedException
 import co.electriccoin.zcash.ui.common.datasource.Zip321TransactionProposal
+import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.KeystoneFirmwarePolicy
 import co.electriccoin.zcash.ui.common.model.KeystoneFirmwareVersion
 import co.electriccoin.zcash.ui.common.model.SubmitResult
@@ -92,6 +93,8 @@ interface KeystoneProposalRepository {
         TexUnsupportedOnKSException::class
     )
     suspend fun createPCZTFromProposal()
+
+    suspend fun createPCZTFromProposal(account: WalletAccount)
 
     fun approveForSigning(
         expectedProposal: TransactionProposal? = null,
@@ -220,12 +223,17 @@ class KeystoneProposalRepositoryImpl(
         transactionProposal.update { MigrationSweepTransactionProposal(amount, proposal) }
     }
 
-    override suspend fun createPCZTFromProposal() {
+    override suspend fun createPCZTFromProposal() =
+        createAccountBoundPczt { accountDataSource.getSelectedAccount() }
+
+    override suspend fun createPCZTFromProposal(account: WalletAccount) = createAccountBoundPczt { account }
+
+    private suspend fun createAccountBoundPczt(resolveAccount: suspend () -> WalletAccount) {
         val transactionProposal = getTransactionProposal()
         val result =
             try {
                 proposalDataSource.createPcztFromProposal(
-                    account = accountDataSource.getSelectedAccount(),
+                    account = resolveAccount(),
                     proposal = transactionProposal.proposal
                 )
             } catch (e: PcztException.MultiStepProposalUnsupportedException) {

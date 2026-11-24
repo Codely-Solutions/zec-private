@@ -1,11 +1,11 @@
 package co.electriccoin.zcash.ui.common.usecase
 
 import cash.z.ecc.android.sdk.MigrationSchedule
+import cash.z.ecc.android.sdk.OrchardMigrationSdk
 import co.electriccoin.zcash.migration.migrationLog
 import co.electriccoin.zcash.ui.common.model.migration.MigrationMode
 import co.electriccoin.zcash.ui.common.model.migration.estimatedSecondsBetweenHeights
 import co.electriccoin.zcash.ui.common.model.migration.rateReferenceHeight
-import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.work.MigrationLiveDriver
 import co.electriccoin.zcash.work.MigrationScheduler
@@ -51,21 +51,20 @@ import kotlin.time.Duration.Companion.seconds
 class FinalizeMigrationScheduleUseCase(
     private val migrationScheduler: MigrationScheduler,
     private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
-    private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
     private val synchronizerProvider: SynchronizerProvider,
     private val migrationLiveDriver: MigrationLiveDriver,
 ) {
     suspend operator fun invoke(
         sched: MigrationSchedule,
         mode: MigrationMode,
+        accountKeyId: String,
         startLiveDriverImmediately: Boolean = true,
     ) {
         // Measured block rate — the 75s constant grossly overestimates on the bursty testnet,
         // scheduling the first worker run far past the real due heights.
-        val sdk = getOrchardMigrationSdk()
+        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
         val secondsPerBlock = sdk.estimatedSecondsPerBlock()
-        val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
-        logCommittedBoundaries()
+        logCommittedBoundaries(sdk)
         val tipHeight =
             sched.transfers.minOfOrNull { it.anchorHeight }
                 ?: (sched.preparations.minOfOrNull { it.broadcastHeight } ?: 0L)
@@ -113,8 +112,8 @@ class FinalizeMigrationScheduleUseCase(
      * index — ZIP 318 shuffles the two orderings apart). Best-effort: a failed/absent read logs a
      * single warning and is otherwise silent, never blocking the commit's scheduling/navigation.
      */
-    private suspend fun logCommittedBoundaries() {
-        val states = runCatching { getOrchardMigrationSdk().getMigrationTransferStates() }.getOrNull()
+    private suspend fun logCommittedBoundaries(sdk: OrchardMigrationSdk) {
+        val states = runCatching { sdk.getMigrationTransferStates() }.getOrNull()
         if (states == null) {
             migrationLog("committedPlan(app): no live transfer states available post-commit")
             return

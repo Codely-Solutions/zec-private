@@ -47,6 +47,8 @@ interface PendingMigrationScheduleRepository {
     fun peek(accountKeyId: String): MigrationSchedule?
 
     fun clear()
+
+    fun clear(accountKeyId: String, expected: MigrationSchedule)
 }
 
 class PendingMigrationScheduleRepositoryImpl : PendingMigrationScheduleRepository {
@@ -71,6 +73,13 @@ class PendingMigrationScheduleRepositoryImpl : PendingMigrationScheduleRepositor
     override fun peek(accountKeyId: String): MigrationSchedule? {
         val current = pending.value ?: return null
         return if (current.first == accountKeyId) current.second else null
+    }
+
+    override fun clear(accountKeyId: String, expected: MigrationSchedule) {
+        val current = pending.value
+        if (current?.first == accountKeyId && current.second === expected) {
+            pending.compareAndSet(current, null)
+        }
     }
 
     override fun clear() {

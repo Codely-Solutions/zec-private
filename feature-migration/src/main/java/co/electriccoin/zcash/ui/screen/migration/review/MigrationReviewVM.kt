@@ -35,6 +35,7 @@ import co.electriccoin.zcash.ui.common.model.requireSpendable
 import co.electriccoin.zcash.ui.common.model.stateIn
 import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.withLce
+import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
 import co.electriccoin.zcash.ui.common.provider.SynchronizerProvider
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRequest
@@ -87,6 +88,7 @@ class MigrationReviewVM(
     private val keystoneProposalRepository: KeystoneProposalRepository,
     private val submitProposal: SubmitProposalUseCase,
     private val synchronizerProvider: SynchronizerProvider,
+    private val migrationTorEnabled: IsMigrationTorEnabledStorageProvider,
 ) : ViewModel() {
     // proposeImmediateMigration() now returns an ordinary send-max Proposal (bypassing the
     // migration engine entirely — see OrchardMigrationSdk's kdoc), which carries no amount or
@@ -132,6 +134,7 @@ class MigrationReviewVM(
 
     private val proposeLce = mutableLce<ReviewProposal>()
     private val confirmLce = mutableLce<Unit>()
+    private var reviewedOwnerKey: String? = null
     private val isKeystoneAccount = getSelectedWalletAccount.observe().map { it is KeystoneAccount }
     private val failure = MutableStateFlow<TransferResult?>(null)
 
@@ -144,11 +147,14 @@ class MigrationReviewVM(
             // operation) or the Rust computation itself simply taking that long.
             val initStartMs = SystemClock.elapsedRealtime()
             migrationLog("MIGRATION_DIAG ReviewVM: propose start (mode=${args.mode})")
-            val sdk = getOrchardMigrationSdk()
+            val account = getSelectedWalletAccount()
+            val key = account.sdkAccount.accountUuid.toStorageKeyId()
+            reviewedOwnerKey = key
+            val sdk = checkNotNull(getOrchardMigrationSdk(key)) { "Migration account is unavailable" }
             val result =
                 when (args.mode) {
                     MigrationMode.IMMEDIATE -> {
-                        val amount = getOrchardBalance()
+                        val amount = getOrchardBalance(account.sdkAccount.accountUuid)
                         val t0 = SystemClock.elapsedRealtime()
                         migrationLog("MIGRATION_DIAG ReviewVM: proposeImmediateMigration start")
                         val proposal = sdk.proposeImmediateMigration()
@@ -168,8 +174,7 @@ class MigrationReviewVM(
                         // doc: the two calls compute independent guesses over the same balance that
                         // aren't guaranteed to agree). Falls back to a fresh proposal for every
                         // ordinary, non-recovery entry into this screen.
-                        val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
-                        val reused = restartMigrationScheduleRepository.consume(accountKeyId)
+                        val reused = restartMigrationScheduleRepository.consume(key)
                         val schedule =
                             reused ?: run {
                                 val t0 = SystemClock.elapsedRealtime()
@@ -186,7 +191,7 @@ class MigrationReviewVM(
                         // display is AUTOMATIC-only. Stateless preview, called fresh on every Review
                         // entry — never cached.
                         val keystoneRunCount =
-                            if (getSelectedWalletAccount() is KeystoneAccount) {
+                            if (account is KeystoneAccount) {
                                 val t0 = SystemClock.elapsedRealtime()
                                 migrationLog("MIGRATION_DIAG ReviewVM: estimateMigrationRunCount start")
                                 val count = sdk.estimateMigrationRunCount()
@@ -230,7 +235,14 @@ class MigrationReviewVM(
             confirmLce.state
         ) { lce, rate, isKeystone, f, confirmState ->
             lce.success?.let { proposal -> createState(proposal, confirmState.loading, rate, isKeystone, f) }
-        }.withLce(groupLce(proposeLce, confirmLce), errorStateMapper::mapToState)
+        }.withLce(groupLce(proposeLce, confirmLce)) { error ->
+            val message = if (error.cause is PrivateNoteSplitUnavailable) {
+                stringRes(DesignR.string.migrationReview_privateSplitUnavailable)
+            } else {
+                null
+            }
+            errorStateMapper.mapToState(error, message = message)
+        }
             .stateIn(this)
 
     private fun createState(
@@ -387,20 +399,19 @@ class MigrationReviewVM(
         }
 
     private suspend fun confirmAutomatic(sched: MigrationSchedule) {
-        if (getSelectedWalletAccount() is LedgerAccount) {
-            throw AccountOperationUnsupportedException.ledger()
-        }
-        getSelectedWalletAccount().requireSpendable()
-        if (getSelectedWalletAccount() is KeystoneAccount) {
+        val account = requireReviewAccount()
+        val accountKeyId = account.sdkAccount.accountUuid.toStorageKeyId()
+        if (account is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
+        account.requireSpendable()
+        if (account is KeystoneAccount) {
             // Keystone can't sign in-process — hand the unsigned schedule off to the QR
             // sign/scan detour; FinalizeMigrationScheduleUseCase runs after a successful scan
             // instead (MigrationKeystoneScanVM), not here.
-            val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
             pendingMigrationScheduleRepository.set(accountKeyId, sched)
             navigationRouter.forward(MigrationKeystoneSignArgs(mode = args.mode))
             return
         }
-        val sdk = getOrchardMigrationSdk()
+        val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
         // Note-split is the first step of this confirm action (design spec §7) — a schedule with
         // more than one denomination proposed against raw, unsplit notes exhausts the wallet's
         // balance on the first transfer, leaving every subsequent transfer InsufficientFunds. Per
@@ -419,6 +430,7 @@ class MigrationReviewVM(
         // plan makes every crossing value provably match a note this split actually produces.
         val scheduleToSign =
             if (sdk.isNoteSplitNeeded()) {
+                if (migrationTorEnabled.get(accountKeyId)) throw PrivateNoteSplitUnavailable()
                 val proposal = sdk.prepareNoteSplit()
                 // Derive the from-split schedule BEFORE submitting the split, not after: submitNoteSplit()
                 // signs the split through the SDK's commit_or_reuse, which clears the in-memory
@@ -451,8 +463,8 @@ class MigrationReviewVM(
             // startLiveDriverImmediately=false (MOB-1669): matches iOS's commitSoftware, which
             // also never eagerly starts a drive loop right after signAndStoreMigrationSchedule —
             // see FinalizeMigrationScheduleUseCase's doc.
-            finalizeMigrationSchedule(scheduleToSign, args.mode, startLiveDriverImmediately = false)
-            navigationRouter.forward(MigrationScheduledArgs)
+            finalizeMigrationSchedule(scheduleToSign, args.mode, accountKeyId, startLiveDriverImmediately = false)
+            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
         } catch (e: RuntimeException) {
             val retryable =
                 e.message?.contains("StalePlan") == true ||
@@ -469,8 +481,8 @@ class MigrationReviewVM(
             migrationLog("MigrationReview: StalePlan on commit — re-proposing once and retrying")
             val fresh = sdk.proposeMigrationTransfers()
             sdk.signAndStoreMigrationSchedule(fresh, zashiSpendingKeyDataSource.getZashiSpendingKey())
-            finalizeMigrationSchedule(fresh, args.mode, startLiveDriverImmediately = false)
-            navigationRouter.forward(MigrationScheduledArgs)
+            finalizeMigrationSchedule(fresh, args.mode, accountKeyId, startLiveDriverImmediately = false)
+            navigationRouter.forward(MigrationScheduledArgs(accountKeyId))
         }
     }
 
@@ -481,11 +493,10 @@ class MigrationReviewVM(
     // migration-sweep "…migrated to Ironwood" copy). No migration-specific screen or handoff.
     private fun onConfirmImmediate(proposal: Proposal, amountZatoshi: Zatoshi) =
         confirmLce.execute {
-            if (getSelectedWalletAccount() is LedgerAccount) {
-                throw AccountOperationUnsupportedException.ledger()
-            }
-            getSelectedWalletAccount().requireSpendable()
-            if (getSelectedWalletAccount() is KeystoneAccount) {
+            val account = requireReviewAccount()
+            if (account is LedgerAccount) throw AccountOperationUnsupportedException.ledger()
+            account.requireSpendable()
+            if (account is KeystoneAccount) {
                 // Keystone can't sign in-process — adopt the already-built send-max proposal into the
                 // app's existing generic external-signer pipeline exactly as an ordinary Keystone
                 // send does (one ordinary PCZT, same as any regular Keystone send). Biometrics are
@@ -507,11 +518,13 @@ class MigrationReviewVM(
                 } catch (_: BiometricsCancelledException) {
                     return@execute
                 }
+                requireReviewAccount()
                 keystoneProposalRepository.setMigrationSweepProposal(proposal, amountZatoshi)
                 // Required before navigating — SignKeystoneTransactionVM's QR encoder is built from
                 // the already-created PCZT (createPCZTEncoder() reads KeystoneProposalRepository's
                 // cached proposalPczt); it never calls createPCZTFromProposal() itself.
-                keystoneProposalRepository.createPCZTFromProposal()
+                keystoneProposalRepository.createPCZTFromProposal(account)
+                requireReviewAccount()
                 keystoneProposalRepository.approveForSigning()
                 navigationRouter.forward(SignKeystoneTransactionArgs)
             } else {
@@ -519,6 +532,14 @@ class MigrationReviewVM(
                 submitProposal(reviewed)
             }
         }
+
+    private suspend fun requireReviewAccount() = getSelectedWalletAccount().also { account ->
+        check(account.sdkAccount.accountUuid.toStorageKeyId() == reviewedOwnerKey) {
+            "The migration review belongs to a different account"
+        }
+    }
+
+    private class PrivateNoteSplitUnavailable : IllegalStateException("The SDK cannot submit this preparation over Tor")
 
     private fun onBack() = proposeLce.guardLoading { navigationRouter.back() }
 

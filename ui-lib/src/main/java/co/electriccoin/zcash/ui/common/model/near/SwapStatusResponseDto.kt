@@ -16,7 +16,7 @@ data class SwapStatusResponseDto(
     val quoteResponse: QuoteResponseDto,
     @SerialName("status")
     @Serializable(with = NearSwapStatusSerializer::class)
-    val status: SwapStatus? = null,
+    val status: SwapStatus,
     @SerialName("updatedAt")
     val updatedAt: String,
     @SerialName("swapDetails")

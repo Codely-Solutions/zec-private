@@ -1,5 +1,6 @@
 package co.electriccoin.zcash.ui.common.usecase
 
+import cash.z.ecc.android.sdk.model.AccountUuid
 import cash.z.ecc.android.sdk.model.Zatoshi
 import cash.z.ecc.sdk.extension.ZERO
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
@@ -23,11 +24,12 @@ class GetIronwoodBalanceUseCase(
     private val synchronizerProvider: SynchronizerProvider,
     private val accountDataSource: AccountDataSource,
 ) {
-    suspend operator fun invoke(): Zatoshi {
+    suspend operator fun invoke(): Zatoshi = invoke(accountDataSource.getSelectedAccount().sdkAccount.accountUuid)
+
+    suspend operator fun invoke(accountUuid: AccountUuid): Zatoshi {
         val synchronizer = synchronizerProvider.getSynchronizer()
-        val account = accountDataSource.getSelectedAccount()
         val balances = synchronizer.walletBalances.filterNotNull().first()
-        val ironwood = balances[account.sdkAccount.accountUuid]?.ironwood ?: return Zatoshi.ZERO
+        val ironwood = balances[accountUuid]?.ironwood ?: return Zatoshi.ZERO
         return ironwood.total + ironwood.locked
     }
 }

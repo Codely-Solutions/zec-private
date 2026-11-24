@@ -16,7 +16,6 @@ import co.electriccoin.zcash.ui.common.model.migration.formatMigrationDuration
 import co.electriccoin.zcash.ui.common.model.migration.migrationFailureMessage
 import co.electriccoin.zcash.ui.common.model.mutableLce
 import co.electriccoin.zcash.ui.common.model.stateIn
-import co.electriccoin.zcash.ui.common.model.toStorageKeyId
 import co.electriccoin.zcash.ui.common.model.withLce
 import co.electriccoin.zcash.ui.common.provider.IsBackgroundExecutionAvailableProvider
 import co.electriccoin.zcash.ui.common.provider.IsMigrationTorEnabledStorageProvider
@@ -27,7 +26,6 @@ import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
 import co.electriccoin.zcash.ui.common.usecase.FinalizeMigrationScheduleUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetMigrationSnapshotUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
-import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,11 +38,11 @@ import co.electriccoin.zcash.ui.design.R as DesignR
 
 @Suppress("LongParameterList")
 class MigrationScheduledVM(
+    private val args: MigrationScheduledArgs,
     private val getMigrationSnapshot: GetMigrationSnapshotUseCase,
     private val navigationRouter: NavigationRouter,
     private val errorStateMapper: ErrorMapperUseCase,
     private val isBackgroundExecutionAvailableProvider: IsBackgroundExecutionAvailableProvider,
-    private val getSelectedWalletAccount: GetSelectedWalletAccountUseCase,
     private val getOrchardMigrationSdk: GetOrchardMigrationSdkUseCase,
     private val pendingSchedule: PendingMigrationScheduleRepository,
     private val pendingKeystonePczts: PendingKeystoneMigrationPcztsRepository,
@@ -66,25 +64,25 @@ class MigrationScheduledVM(
         // Fires exactly once — isFinalizing only ever transitions true -> false, never back.
         viewModelScope.launch {
             isFinalizing.first { !it }
-            loadLce.execute { getMigrationSnapshot() }
+            loadLce.execute { getMigrationSnapshot(args.accountKeyId) }
         }
     }
 
     private suspend fun finalizeIfPendingKeystoneBatch() {
         try {
-            val accountKeyId = getSelectedWalletAccount().sdkAccount.accountUuid.toStorageKeyId()
-            val sched = pendingSchedule.get(accountKeyId)
-            val pending = pendingKeystonePczts.get(accountKeyId)
+            val accountKeyId = args.accountKeyId
+            val sched = pendingSchedule.peek(accountKeyId)
+            val pending = pendingKeystonePczts.peek(accountKeyId)
             if (sched == null || pending == null) {
                 // Hot-wallet (Zashi) path — FinalizeMigrationScheduleUseCase already ran before
                 // navigating here, so the schedule is already committed. Nothing left to do.
                 isFinalizing.value = false
                 return
             }
-            val sdk = getOrchardMigrationSdk()
+            val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
             val splitSignedPczt = pending.accumulatedSplitSigned
             if (splitSignedPczt != null) {
-                val useTor = isMigrationTorEnabledStorageProvider.get()
+                val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
                 val splitResult =
                     sdk.storeSignedNoteSplitPczt(
                         Pczt(splitSignedPczt),
@@ -128,9 +126,9 @@ class MigrationScheduledVM(
             // finalizeReadyTransfers call in the live driver's very first iteration, right as
             // this Keystone ceremony finishes. The already-armed migrationScheduler job still
             // drives this plan forward — just not synchronously forced open here.
-            finalizeMigrationSchedule(sched, MigrationMode.AUTOMATIC, startLiveDriverImmediately = false)
-            pendingSchedule.clear()
-            pendingKeystonePczts.clear()
+            finalizeMigrationSchedule(sched, MigrationMode.AUTOMATIC, accountKeyId, startLiveDriverImmediately = false)
+            pendingSchedule.clear(accountKeyId, sched)
+            pendingKeystonePczts.clear(accountKeyId, pending)
             isFinalizing.value = false
         } catch (e: CancellationException) {
             throw e

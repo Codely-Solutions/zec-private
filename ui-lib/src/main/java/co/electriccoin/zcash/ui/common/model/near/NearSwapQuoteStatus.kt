@@ -105,7 +105,6 @@ data class NearSwapQuoteStatus(
                 SwapStatus.REFUNDED -> ModelSwapStatus.REFUNDED
                 SwapStatus.FAILED -> ModelSwapStatus.FAILED
                 SwapStatus.EXPIRED -> ModelSwapStatus.EXPIRED
-                null -> ModelSwapStatus.PENDING
             }
 
     override val isSlippageRealized: Boolean = response.swapDetails?.slippage != null

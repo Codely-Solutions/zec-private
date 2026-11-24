@@ -103,13 +103,15 @@ fun MigrationPrivacyView(
                     style = ZashiTypography.textSm,
                     color = ZashiColors.Text.textTertiary,
                 )
-                Spacer(32.dp)
-                TorToggleCard(innerState.checkbox)
+                innerState.checkbox?.let { checkbox ->
+                    Spacer(32.dp)
+                    TorToggleCard(checkbox)
+                }
                 Spacer(36.dp)
                 ZashiButton(
                     state =
                         ButtonState(
-                            text = stringRes(DesignR.string.migration_common_gotIt),
+                            text = innerState.confirmLabel ?: stringRes(DesignR.string.migration_common_gotIt),
                             onClick = innerState.onConfirm
                         ),
                     modifier = Modifier.fillMaxWidth(),
