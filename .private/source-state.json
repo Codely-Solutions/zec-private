@@ -2997,7 +2997,7 @@
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/ironwood/IronwoodAnnouncementStringsTest.kt": "1d0eedac9621f3327e1d90a48ecde6b1212f4929bae3f244a8d44e8559705df6",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/ironwood/IronwoodAnnouncementVMTest.kt": "7446d8ee497896e9f8a6a911fbe02dea98a49c1b689562ed42b128ef7f7908ca",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/keepopen/KeepOpenVMTest.kt": "ab09fc25de2d7a9ecaec37039ddfe74046ecc6cfac81f4ae51230ff78b4d4cb6",
-  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/CrossPayAtomicAmountTest.kt": "67e4f08e3e2c36701d2e217b6ff4486a5ac0e079a4a2eedd3b3c7d0c235f1afd",
+  "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/CrossPayAtomicAmountTest.kt": "e2ffb1442f4721a2a670df1db8051dd11b5839d122df8d60a0bc31a8ad5977f5",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/CrossPayCatalogDriftReviewTest.kt": "e44eb57cf5e4a1e2e8641878ff4faabb1cadace795e269a765994421ec0c13f3",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/ExactOutputVMMapperGiftCardLinkTest.kt": "550c4ae509488257716307841476a5cdb79837a739a23b2961b988b31b880a00",
   "ui-lib/src/test/java/co/electriccoin/zcash/ui/screen/pay/NumberTextFieldEditEventsTest.kt": "6c309a214fed9c18cd4fea0e0691d333b70c8cc9c820a6a3b0ca43e8bddfaf53",

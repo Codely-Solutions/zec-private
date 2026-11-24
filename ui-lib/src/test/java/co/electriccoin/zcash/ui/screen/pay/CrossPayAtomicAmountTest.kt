@@ -39,8 +39,6 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -85,11 +83,13 @@ class CrossPayAtomicAmountTest(private val decimals: Int) {
                     throw IllegalArgumentException("Synthetic quote provider refused request")
                 }
             }
-            val accountDataSource = mockk<AccountDataSource> {
-                coEvery { requestNextShieldedAddress(requireFresh = true) } returns "synthetic-refund-address"
-            }
             val account = mockk<WalletAccount> {
                 every { canSpend(any()) } returns true
+            }
+            val accountDataSource = mockk<AccountDataSource> {
+                coEvery { getSelectedAccount() } returns account
+                coEvery { requestNextShieldedAddress(requireFresh = true, account = account) } returns
+                    "synthetic-refund-address"
             }
             val dataSource = NearSwapDataSource(near, mockk(), mockk(), mockk(), mockk())
             val swapRepository = SwapRepositoryImpl(dataSource, mockk()).also {
@@ -177,7 +177,8 @@ class CrossPayAtomicAmountTest(private val decimals: Int) {
                         )
                     }
                 }
-                coVerify(exactly = 0) { accountDataSource.requestNextShieldedAddress(any()) }
+                coVerify(exactly = 0) { accountDataSource.getSelectedAccount() }
+                coVerify(exactly = 0) { accountDataSource.requestNextShieldedAddress(any(), any()) }
                 coVerify(exactly = 0) { near.requestQuote(any()) }
 
                 val ordinary = enterAmount(BigDecimal("12"))
@@ -189,11 +190,10 @@ class CrossPayAtomicAmountTest(private val decimals: Int) {
                 val review = assertNotNull(payable.primaryButton)
                 assertTrue(review.isEnabled)
                 review.onClick()
-                val amountOnWire = withContext(Dispatchers.Default) {
-                    withTimeoutOrNull(5.seconds) { wireRequest.await() }
-                }
-                assertNotNull(amountOnWire, "1Click request did not reach the synthetic provider")
-                assertEquals("1", amountOnWire)
+                runCurrent()
+                assertTrue(wireRequest.isCompleted, "1Click request did not reach the synthetic provider")
+                assertEquals("1", wireRequest.await())
+                coVerify(exactly = 1) { accountDataSource.requestNextShieldedAddress(true, account) }
             } finally {
                 vm.viewModelScope.cancel()
             }
