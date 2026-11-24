@@ -18,7 +18,8 @@ import io.mockk.mockk
 import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -88,8 +89,8 @@ class MigrationProgressVMTest {
                 assertNotNull(vm.state.value.content)
                 verify(exactly = 2) { observe(owner) }
             } finally {
-                observer.cancel()
-                vm.viewModelScope.cancel()
+                observer.cancelAndJoin()
+                vm.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
             }
         } finally {
             Dispatchers.resetMain()

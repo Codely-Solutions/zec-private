@@ -4762,7 +4762,7 @@ index 420a39203..ce19709b1 100644
 -                    coEvery { this@mockk() } returns sdk
 +                    coEvery { this@mockk("account-1") } returns sdk
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVMTest.kt
-index 431d929ec..2851756a8 100644
+index 431d929ec..2253d6b45 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/progress/MigrationProgressVMTest.kt
 @@ -2,0 +3,2 @@ package co.electriccoin.zcash.ui.screen.migration.progress
@@ -4775,13 +4775,14 @@ index 431d929ec..2851756a8 100644
 +import co.electriccoin.zcash.ui.common.repository.MigrationLiveReadout
 +import co.electriccoin.zcash.ui.common.usecase.ObserveMigrationLiveReadoutUseCase
 +import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
-@@ -8,0 +16,14 @@ import co.electriccoin.zcash.ui.design.util.StringResource
+@@ -8,0 +16,15 @@ import co.electriccoin.zcash.ui.design.util.StringResource
 +import io.mockk.every
 +import io.mockk.mockk
 +import io.mockk.verify
 +import kotlinx.coroutines.Dispatchers
 +import kotlinx.coroutines.ExperimentalCoroutinesApi
-+import kotlinx.coroutines.cancel
++import kotlinx.coroutines.Job
++import kotlinx.coroutines.cancelAndJoin
 +import kotlinx.coroutines.flow.MutableStateFlow
 +import kotlinx.coroutines.flow.flowOf
 +import kotlinx.coroutines.launch
@@ -4790,10 +4791,10 @@ index 431d929ec..2851756a8 100644
 +import kotlinx.coroutines.test.runCurrent
 +import kotlinx.coroutines.test.runTest
 +import kotlinx.coroutines.test.setMain
-@@ -11,0 +33,2 @@ import kotlin.test.assertFalse
+@@ -11,0 +34,2 @@ import kotlin.test.assertFalse
 +import kotlin.test.assertNotNull
 +import kotlin.test.assertNull
-@@ -32,0 +56,43 @@ class MigrationProgressVMTest {
+@@ -32,0 +57,43 @@ class MigrationProgressVMTest {
 +    @OptIn(ExperimentalCoroutinesApi::class)
 +    @Test
 +    fun unavailableOwnerReadoutOffersRecoveryAndRetriesTheSameAccount() = runTest {
@@ -4829,8 +4830,8 @@ index 431d929ec..2851756a8 100644
 +                assertNotNull(vm.state.value.content)
 +                verify(exactly = 2) { observe(owner) }
 +            } finally {
-+                observer.cancel()
-+                vm.viewModelScope.cancel()
++                observer.cancelAndJoin()
++                vm.viewModelScope.coroutineContext[Job]?.cancelAndJoin()
 +            }
 +        } finally {
 +            Dispatchers.resetMain()
@@ -57240,7 +57241,7 @@ index 555126883..1eab9c67b 100644
 -            verify(exactly = 1) { metadataStorageProvider.deleteStorageFiles(key) }
 +            verify(exactly = 1) { metadataStorageProvider.deleteStorageFiles() }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt
-index 6cb0997ff..891dba39d 100644
+index 6cb0997ff..5cc74da4e 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/MultiEndpointTransactionSubmitterTest.kt
 @@ -209 +209 @@ class MultiEndpointTransactionSubmitterTest {
@@ -57263,7 +57264,7 @@ index 6cb0997ff..891dba39d 100644
 +        for (servers in listOf(endpoints.take(1), endpoints)) {
 +            val submitted = Collections.synchronizedList(mutableListOf<LightWalletEndpoint>())
 +            val submitter = MultiEndpointTransactionSubmitter(
-+                closeableScopeHolder = CloseableScopeHolderImpl(backgroundScope),
++                closeableScopeHolder = CloseableScopeHolderImpl(backgroundScope.coroutineContext),
 +                logger = noOpLogger,
 +                submit = { _, server ->
 +                    submitted += server

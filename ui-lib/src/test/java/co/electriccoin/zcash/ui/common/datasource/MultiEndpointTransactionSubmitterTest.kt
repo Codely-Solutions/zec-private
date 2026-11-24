@@ -247,7 +247,7 @@ class MultiEndpointTransactionSubmitterTest {
         for (servers in listOf(endpoints.take(1), endpoints)) {
             val submitted = Collections.synchronizedList(mutableListOf<LightWalletEndpoint>())
             val submitter = MultiEndpointTransactionSubmitter(
-                closeableScopeHolder = CloseableScopeHolderImpl(backgroundScope),
+                closeableScopeHolder = CloseableScopeHolderImpl(backgroundScope.coroutineContext),
                 logger = noOpLogger,
                 submit = { _, server ->
                     submitted += server
