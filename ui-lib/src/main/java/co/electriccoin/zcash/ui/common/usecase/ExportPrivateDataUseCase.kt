@@ -36,9 +36,9 @@ class ExportPrivateDataUseCase(
     }
 
     suspend operator fun invoke(sourceFile: suspend () -> File): Boolean {
-        if (!export.tryLock()) return false
+        val owner = selectedSpendableAccount()
+        if (owner == null || !export.tryLock()) return false
         return try {
-            val owner = selectedSpendableAccount() ?: return false
             val grant = appAccess.grant.value
             val generation = walletAccess.token()
             val isAllowed = {

@@ -24894,7 +24894,7 @@ index 000000000..34c15c27d
 +    }
 +}
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiAddressTextField.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiAddressTextField.kt
-index c084feebb..c5c0f36bb 100644
+index c084feebb..5271cedc7 100644
 --- a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiAddressTextField.kt
 +++ b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiAddressTextField.kt
 @@ -5,0 +6 @@ import androidx.compose.foundation.layout.PaddingValues
@@ -24970,7 +24970,7 @@ index c084feebb..c5c0f36bb 100644
 +            abbreviateAddress(text, fits)
 +        }
 +    }
-@@ -120,8 +110,8 @@ private fun ellipsisVisualTransformation() =
+@@ -120,8 +110,9 @@ private fun ellipsisVisualTransformation() =
 -        TransformedText(
 -            AnnotatedString
 -                .Builder()
@@ -24980,14 +24980,15 @@ index c084feebb..c5c0f36bb 100644
 -                            append(text)
 -                        }
 +private fun abbreviateAddress(text: AnnotatedString, fits: (String) -> Boolean): TransformedText {
-+    val edgeLimit = (text.length / 3).coerceAtMost(ADDRESS_PREVIEW_EDGE_LIMIT)
++    val edgeLimit = ((text.length - ADDRESS_PREVIEW_ELLIPSIS.length).coerceAtLeast(0) / 2)
++        .coerceAtMost(ADDRESS_PREVIEW_EDGE_LIMIT)
 +    fun preview(edge: Int) = text.take(edge).toString() + ADDRESS_PREVIEW_ELLIPSIS + text.takeLast(edge)
 +    val edge = (edgeLimit downTo 0).firstOrNull { fits(preview(it)) } ?: 0
 +    val shortened = preview(edge).takeIf(fits).orEmpty()
 +    val tailStart = edge + ADDRESS_PREVIEW_ELLIPSIS.length
 +    val mapping = object : OffsetMapping {
 +        override fun originalToTransformed(offset: Int) = 0
-@@ -129,9 +119,5 @@ private fun ellipsisVisualTransformation() =
+@@ -129,9 +120,5 @@ private fun ellipsisVisualTransformation() =
 -                        text.isNotBlank() -> {
 -                            append(text.take(maxLength))
 -                            append(ellipsis)
@@ -25002,7 +25003,7 @@ index c084feebb..c5c0f36bb 100644
 +            offset < tailStart -> edge
 +            else -> text.length - (shortened.length - offset)
 +        }.coerceIn(0, text.length)
-@@ -138,0 +125,2 @@ private fun ellipsisVisualTransformation() =
+@@ -138,0 +126,2 @@ private fun ellipsisVisualTransformation() =
 +    return TransformedText(AnnotatedString(shortened), mapping)
 +}
 diff --git a/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiBigIconButton.kt b/ui-design-lib/src/main/java/co/electriccoin/zcash/ui/design/component/ZashiBigIconButton.kt
@@ -40898,7 +40899,7 @@ index 565cd3bea..59eb3f925 100644
 +                onReport()
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCase.kt
 new file mode 100644
-index 000000000..4ff593ab5
+index 000000000..17693a8e1
 --- /dev/null
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ExportPrivateDataUseCase.kt
 @@ -0,0 +1,107 @@
@@ -40940,9 +40941,9 @@ index 000000000..4ff593ab5
 +    }
 +
 +    suspend operator fun invoke(sourceFile: suspend () -> File): Boolean {
-+        if (!export.tryLock()) return false
++        val owner = selectedSpendableAccount()
++        if (owner == null || !export.tryLock()) return false
 +        return try {
-+            val owner = selectedSpendableAccount() ?: return false
 +            val grant = appAccess.grant.value
 +            val generation = walletAccess.token()
 +            val isAllowed = {

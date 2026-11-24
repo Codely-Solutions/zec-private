@@ -108,7 +108,8 @@ private fun ellipsisVisualTransformation(fits: (String) -> Boolean) =
     }
 
 private fun abbreviateAddress(text: AnnotatedString, fits: (String) -> Boolean): TransformedText {
-    val edgeLimit = (text.length / 3).coerceAtMost(ADDRESS_PREVIEW_EDGE_LIMIT)
+    val edgeLimit = ((text.length - ADDRESS_PREVIEW_ELLIPSIS.length).coerceAtLeast(0) / 2)
+        .coerceAtMost(ADDRESS_PREVIEW_EDGE_LIMIT)
     fun preview(edge: Int) = text.take(edge).toString() + ADDRESS_PREVIEW_ELLIPSIS + text.takeLast(edge)
     val edge = (edgeLimit downTo 0).firstOrNull { fits(preview(it)) } ?: 0
     val shortened = preview(edge).takeIf(fits).orEmpty()
