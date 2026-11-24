@@ -23,6 +23,7 @@ interface SwapQuoteStatus {
     val amountInUsd: BigDecimal?
     /** Funding requirement stays quoted even when execution uses a different input. */
     val quotedAmountIn: BigDecimal get() = amountInFormatted
+    val fundingThreshold: BigDecimal? get() = null
     val amountOutFormatted: BigDecimal
     /** USD valuation of [amountOutFormatted], when the provider reported both. */
     val amountOutUsd: BigDecimal?

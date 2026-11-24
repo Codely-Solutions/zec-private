@@ -1,4 +1,7 @@
 import contextlib, importlib.util, json, os, tempfile, unittest
+from copy import deepcopy
+from io import StringIO
+from unittest.mock import patch
 from pathlib import Path
 import shutil
 import re
@@ -98,6 +101,70 @@ for clear in (False, True):
         for malformed in (0, "0", True, False, 100.9, "100.1", "-7", "9" * 129, None):
             with self.subTest(malformed=malformed), self.assertRaisesRegex(RuntimeError, 'base units|positive'):
                 read_positive_atomic(malformed)
+
+    def test_unfunded_near_probe_binds_every_reviewed_term(self):
+        import live_near
+
+        def run_probe(root, change=None):
+            issued = None
+
+            def request(path, body=None):
+                nonlocal issued
+                if path == '/v0/quote':
+                    if body['dry']:
+                        return 200, {'quoteRequest': body}
+                    issued = {
+                        'quoteRequest': body,
+                        'quote': {'depositAddress': 't1fixture', 'amountIn': '100000000', 'amountInFormatted': '1',
+                                  'amountInUsd': '35', 'minAmountIn': '99000000', 'amountOut': '900000',
+                                  'amountOutFormatted': '0.009', 'amountOutUsd': '34.64', 'minAmountOut': '892000',
+                                  'deadline': '2099-01-01T00:00:00Z'},
+                    }
+                    return 200, issued
+                if path == '/v0/status?depositAddress=t1fixture':
+                    observed = deepcopy(issued)
+                    if change:
+                        section, field, value = change
+                        observed[section][field] = value
+                    else:
+                        observed['quote']['amountOutFormatted'] = '0.0090'
+                    return 200, {'status': 'PENDING_DEPOSIT', 'quoteResponse': observed}
+                self.assertEqual((path, body), ('/v0/deposit/submit', {}))
+                return 400, {}
+
+            with (patch.object(live_near, 'request', side_effect=request) as remote,
+                  patch.object(live_near, 'ROOT', root),
+                  patch.object(live_near.subprocess, 'check_output', return_value='a' * 40),
+                  contextlib.redirect_stdout(StringIO())):
+                if change:
+                    with self.assertRaises((RuntimeError, ValueError)):
+                        live_near.main()
+                    self.assertEqual(remote.call_count, 5)
+                else:
+                    live_near.main()
+                    self.assertEqual(remote.call_count, 6)
+
+        mutations = (
+            ('quote', 'amountIn', '100000001'), ('quote', 'amountIn', '100000000.1'),
+            ('quote', 'amountOut', '900001'), ('quote', 'amountInFormatted', '0.99'),
+            ('quote', 'amountOutFormatted', '0.0089'), ('quote', 'minAmountIn', '99500000'),
+            ('quote', 'minAmountOut', '891000'), ('quote', 'deadline', '2099-01-01T00:01:00Z'),
+            ('quote', 'depositAddress', 't1different'), ('quote', 'depositMemo', 'unexpected'),
+            ('quoteRequest', 'swapType', 'FLEX_INPUT'), ('quoteRequest', 'originAsset', 'different'),
+            ('quoteRequest', 'destinationAsset', 'different'), ('quoteRequest', 'amount', '120000000'),
+            ('quoteRequest', 'slippageTolerance', 101), ('quoteRequest', 'recipientType', 'INTENTS'),
+        )
+        with fixture_directory() as temp:
+            root = Path(temp)
+            run_probe(root)
+            receipt = root / 'artifact' / 'near-contract.json'
+            self.assertTrue(json.loads(receipt.read_text())['unused_quote_status_passed'])
+        with fixture_directory() as temp:
+            root = Path(temp)
+            for change in mutations:
+                with self.subTest(change=change):
+                    run_probe(root, change)
+                    self.assertFalse((root / 'artifact' / 'near-contract.json').exists())
 
     def test_current_source(self):
         self.assertEqual([],checks.check())

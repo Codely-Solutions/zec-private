@@ -1,5 +1,6 @@
 """Unfunded API contract checks using public SDK addresses, never a real wallet."""
 import datetime,json,os,re,subprocess,time,urllib.parse
+from decimal import Decimal
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -41,7 +42,7 @@ def request(path,body=None):
                 reason=title[1].strip() if title else text[:200]
             reason=re.sub(r'[A-Za-z0-9_-]{30,}','[redacted]',reason)[:400]
             return status,{'http_error':reason}
-        return status,json.loads(raw)
+        return status,json.loads(raw, parse_float=Decimal)
 
 def quote(mode,incoming,dry=True):
     body=dict(dry=dry,swapType=mode,slippageTolerance=100,
@@ -50,7 +51,7 @@ def quote(mode,incoming,dry=True):
               amount='100000' if mode=='EXACT_OUTPUT' else ('1000000' if incoming else '100000000'),
               refundTo=FIXTURE['bitcoin'] if incoming else FIXTURE['unified'],
               recipient=FIXTURE['unified'] if incoming else FIXTURE['bitcoin'],
-              depositType='ORIGIN_CHAIN',refundType='ORIGIN_CHAIN',recipientType='DESTINATION_CHAIN',
+              depositType='ORIGIN_CHAIN',refundType='ORIGIN_CHAIN',recipientType='DESTINATION_CHAIN',depositMode='SIMPLE',
               deadline=(datetime.datetime.now(datetime.timezone.utc)+datetime.timedelta(hours=1)).isoformat(),
               appFees=[])
     status,result=request('/v0/quote',body)
@@ -58,23 +59,57 @@ def quote(mode,incoming,dry=True):
         reason=result.get('http_error','') if result else ''
         raise RuntimeError('Unauthenticated '+mode+' quote failed: HTTP '+str(status)+' '+reason)
     echo=result['quoteRequest']
-    if (echo['dry'] is not dry or echo['swapType']!=mode or echo['recipient']!=body['recipient']
-            or echo['refundTo']!=body['refundTo']):
+    if reviewed_request(echo) != reviewed_request(body):
         raise RuntimeError('NEAR quote echo is incompatible; publication stopped')
-    if not dry:
-        required=('depositAddress','amountIn','amountInFormatted','amountInUsd','minAmountIn',
-                  'amountOut','amountOutFormatted','amountOutUsd','minAmountOut','deadline')
-        if any(result['quote'].get(field) is None for field in required):
-            raise RuntimeError('NEAR production quote response is incomplete')
     return result
 
 def read_positive_atomic(value):
     if type(value) not in (int, str) or not re.fullmatch(r'[0-9]{1,128}', str(value)):
-        raise RuntimeError('NEAR quote or status output is not a bounded whole number of base units')
+        raise RuntimeError('NEAR quote or status amount is not a bounded whole number of base units')
     amount = int(value)
     if amount <= 0:
-        raise RuntimeError('NEAR quote or status output must be positive')
+        raise RuntimeError('NEAR quote or status amount must be positive')
     return amount
+
+
+def reviewed_request(request):
+    route_fields = ('swapType', 'originAsset', 'destinationAsset', 'depositType', 'refundType',
+                    'recipientType', 'refundTo', 'recipient')
+    if (type(request['dry']) is not bool or type(request['slippageTolerance']) is not int
+            or request.get('depositMode', 'SIMPLE') != 'SIMPLE'):
+        raise RuntimeError('Unsupported NEAR quote request terms')
+    return tuple(request[field] for field in route_fields) + (
+        request['dry'], request['slippageTolerance'], read_positive_atomic(request['amount']),
+    )
+
+
+def reviewed_quote(result):
+    request = result['quoteRequest']
+    quote = result['quote']
+    address = quote['depositAddress']
+    extra_fields = ('virtualChainRecipient', 'virtualChainRefundRecipient', 'customRecipientMsg')
+    if (quote.get('depositMemo') is not None
+            or any(item['address'] == address and item.get('memo') is not None
+                   for item in quote.get('chainDepositAddresses') or [])
+            or any(part.get(field) is not None for part in (request, quote) for field in extra_fields)):
+        raise RuntimeError('Unsupported NEAR deposit or recipient instructions')
+    if quote.get('amountInUsd') is None or quote.get('amountOutUsd') is None:
+        raise RuntimeError('NEAR production quote response is incomplete')
+    amount_in, minimum_in, amount_out, minimum_out = (
+        read_positive_atomic(quote[field]) for field in ('amountIn', 'minAmountIn', 'amountOut', 'minAmountOut')
+    )
+    # The live BTC and ZEC fixtures both use eight decimals. Compare without rounding.
+    for field, atomic in (('amountInFormatted', amount_in), ('amountOutFormatted', amount_out)):
+        if Decimal(str(quote[field])) != Decimal(f'{atomic}e-8'):
+            raise RuntimeError('NEAR formatted amount does not match base units')
+    if (minimum_in > amount_in or minimum_out > amount_out
+            or amount_in != read_positive_atomic(request['amount'])
+            or minimum_out < amount_out * (10_000 - request['slippageTolerance']) // 10_000):
+        raise RuntimeError('NEAR production quote has inconsistent amounts or minima')
+    deadline = quote['deadline']
+    if datetime.datetime.fromisoformat(deadline).tzinfo is None:
+        raise RuntimeError('NEAR quote deadline is missing a timezone')
+    return reviewed_request(request), address, amount_in, minimum_in, amount_out, minimum_out, deadline
 
 
 def main():
@@ -82,6 +117,7 @@ def main():
         quote(mode,incoming)
         print('Unauthenticated '+mode+' dry contract passed.')
     result=quote('EXACT_INPUT',False,dry=False)
+    reviewed = reviewed_quote(result)
     address=result['quote']['depositAddress']
     if address.lower().startswith('tex'):
         raise RuntimeError('Provider requires a TEX transparent intermediate; publication stopped')
@@ -90,12 +126,7 @@ def main():
     status,poll=request('/v0/status?'+urllib.parse.urlencode({'depositAddress':address}))
     if status!=200 or poll['status']!='PENDING_DEPOSIT':
         raise RuntimeError('Unauthenticated unused-quote status contract changed')
-    echoed_quote = poll['quoteResponse']
-    if (echoed_quote['quoteRequest']['dry'] is not False
-            or echoed_quote['quoteRequest']['refundTo'] != FIXTURE['unified']
-            or echoed_quote['quoteRequest']['recipient'] != FIXTURE['bitcoin']
-            or echoed_quote['quote']['depositAddress'] != address
-            or read_positive_atomic(echoed_quote['quote']['amountOut']) != read_positive_atomic(result['quote']['amountOut'])):
+    if reviewed_quote(poll['quoteResponse']) != reviewed:
         raise RuntimeError('NEAR status changed the reviewed funding quote')
     status,_=request('/v0/deposit/submit',{})
     if status not in (400,422):

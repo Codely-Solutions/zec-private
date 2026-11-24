@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import cash.z.ecc.android.sdk.MigrationBlocker
 import cash.z.ecc.android.sdk.MigrationSchedule
+import cash.z.ecc.android.sdk.MigrationState
 import cash.z.ecc.android.sdk.MigrationTransferState
 import cash.z.ecc.android.sdk.NetworkPrivacyOptions
 import cash.z.ecc.android.sdk.OrchardMigrationSdk
@@ -71,13 +72,14 @@ class MigrationScheduledVM(
     val failureSheet = MutableStateFlow<MigrationTransferFailureState?>(null)
     val finalizationError = MutableStateFlow<StringResource?>(null)
     val needsKeystoneSignatures = MutableStateFlow(false)
+    val homeRecoveryMessage = MutableStateFlow<StringResource?>(null)
 
     init {
         viewModelScope.launch { finalizeIfPendingKeystoneBatch() }
         // Fires exactly once — isFinalizing only ever transitions true -> false, never back.
         viewModelScope.launch {
             isFinalizing.first { !it }
-            retrySnapshot()
+            if (homeRecoveryMessage.value == null) retrySnapshot()
         }
     }
 
@@ -113,10 +115,26 @@ class MigrationScheduledVM(
             "The migration schedule belongs to a different account"
         }
         val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
+        if (sdk.getMigrationStateUnreconciled() !is MigrationState.InProgress) {
+            returnToHomeForRecovery(accountKeyId, schedule, pending)
+            return
+        }
         val states = checkNotNull(sdk.getMigrationTransferStates()) { "Migration state is unavailable" }.transfers
         val remaining = pending.remainingScheduleSignatures(states)
-        if (!submitSplitIfAwaitingSignature(sdk, pending, states, accountKeyId)) return
+        // Make all later signatures durable before persisting or broadcasting the split.
+        // After process loss, the engine can drive a signed split without the in-memory batch.
         if (remaining.isNotEmpty()) sdk.storeSignedSchedulePczts(remaining)
+        when (val splitResult = submitSplitIfAwaitingSignature(sdk, pending, states, accountKeyId)) {
+            null, is TransferResult.Success -> Unit
+            TransferResult.InvalidNote, TransferResult.Expired -> {
+                returnToHomeForRecovery(accountKeyId, schedule, pending, migrationFailureMessage(splitResult))
+                return
+            }
+            is TransferResult.NetworkError -> {
+                showFinalizationError(migrationFailureMessage(splitResult))
+                return
+            }
+        }
         // Mode doesn't affect this use case's behavior (only routes IMMEDIATE vs AUTOMATIC
         // before it), and MigrationScheduledArgs is only ever reached on the AUTOMATIC path.
         // startLiveDriverImmediately=false (MOB-1669): a large Keystone batch's whole
@@ -135,28 +153,18 @@ class MigrationScheduledVM(
         pending: PendingKeystoneMigrationPczts,
         states: List<MigrationTransferState>,
         accountKeyId: String,
-    ): Boolean {
-        val signedSplit = pending.accumulatedSplitSigned ?: return true
+    ): TransferResult? {
+        val signedSplit = pending.accumulatedSplitSigned ?: return null
         val split = checkNotNull(states.singleOrNull { !it.isTransfer && it.prepLayer == 0 && it.prepIndex == 0 }) {
             "The reviewed note split is unavailable"
         }
-        return if (split.needsSignature()) {
-            val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
-            val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
-            when (result) {
-                is TransferResult.Success -> {
-                    synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
-                    true
-                }
-
-                else -> {
-                    showFinalizationError(migrationFailureMessage(result))
-                    false
-                }
-            }
-        } else {
-            true
+        if (!split.needsSignature()) return null
+        val useTor = isMigrationTorEnabledStorageProvider.get(accountKeyId)
+        val result = sdk.storeSignedNoteSplitPczt(Pczt(signedSplit), NetworkPrivacyOptions(useTor = useTor))
+        if (result is TransferResult.Success) {
+            synchronizerProvider.getSynchronizerOrNull()?.enhanceTransaction(result.txId)
         }
+        return result
     }
 
     private fun PendingKeystoneMigrationPczts.remainingScheduleSignatures(
@@ -185,6 +193,18 @@ class MigrationScheduledVM(
             else -> error("The reviewed migration step cannot be reconciled")
         }
 
+    private fun returnToHomeForRecovery(
+        accountKeyId: String,
+        schedule: MigrationSchedule,
+        pending: PendingKeystoneMigrationPczts,
+        message: StringResource = stringRes(DesignR.string.migrationProgress_unavailable),
+    ) {
+        pendingSchedule.clear(accountKeyId, schedule)
+        pendingKeystonePczts.clear(accountKeyId, pending)
+        homeRecoveryMessage.value = message
+        isFinalizing.value = false
+    }
+
     private fun showFinalizationError(message: StringResource) {
         finalizationError.value = message
         failureSheet.value = MigrationTransferFailureState(
@@ -202,6 +222,11 @@ class MigrationScheduledVM(
     }
 
     fun retrySnapshot() = loadLce.execute {
+        val nativeState = getOrchardMigrationSdk(args.accountKeyId)?.getMigrationStateUnreconciled()
+        if (nativeState != null && nativeState !is MigrationState.InProgress) {
+            homeRecoveryMessage.value = stringRes(DesignR.string.migrationProgress_unavailable)
+            return@execute null
+        }
         val snapshot = getMigrationSnapshot(args.accountKeyId)
         val needsSignatures = snapshot?.let {
             it.transfers.any { step -> step.blocker == MigrationTransferBlocker.SIGNATURE } ||

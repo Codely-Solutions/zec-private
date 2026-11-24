@@ -476,7 +476,7 @@ class MigrationKeystoneSignVMTest {
                 .onBack
                 .invoke()
 
-            assertEquals(1, router.backCount)
+            assertEquals(1, router.rootCount)
             // Characterization: onReject clears schedule AND pczts repos.
             assertNull(pendingSchedule.peek(testAccountKeyId))
             assertNull(pendingPczts.get(testAccountKeyId))
@@ -503,7 +503,7 @@ class MigrationKeystoneSignVMTest {
             assertNotNull(state.negativeButton)
             state.negativeButton.onClick.invoke()
 
-            assertEquals(1, router.backCount)
+            assertEquals(1, router.rootCount)
 
             collectJob.cancel()
         }
@@ -701,6 +701,8 @@ class MigrationKeystoneSignVMTest {
 
     private class FakeNavigationRouter : NavigationRouter {
         val forwardedRoutes = mutableListOf<Any>()
+        var rootCount = 0
+            private set
         var backCount = 0
             private set
 
@@ -722,7 +724,9 @@ class MigrationKeystoneSignVMTest {
 
         override fun custom(block: (NavBackStackEntry?) -> NavigationCommand?) = Unit
 
-        override fun backToRoot() = Unit
+        override fun backToRoot() {
+            rootCount++
+        }
 
         override fun observePipeline(): Flow<BaseNavigationCommand> = emptyFlow()
     }

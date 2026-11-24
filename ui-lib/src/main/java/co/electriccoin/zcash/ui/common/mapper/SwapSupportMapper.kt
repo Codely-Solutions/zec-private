@@ -26,6 +26,7 @@ class SwapSupportMapper {
     fun getMessage(
         quoteStatus: SwapQuoteStatus?,
         savedMetadata: TransactionSwapMetadata? = null,
+        isFundingWindowOpen: Boolean = false,
     ): ZashiMessageState? =
         when (quoteStatus?.status) {
             SwapStatus.REFUNDED -> {
@@ -53,7 +54,7 @@ class SwapSupportMapper {
             }
 
             SwapStatus.INCOMPLETE_DEPOSIT -> {
-                createIncompleteDepositMessage(quoteStatus, savedMetadata?.reviewedIdentity)
+                createIncompleteDepositMessage(quoteStatus, savedMetadata?.reviewedIdentity, isFundingWindowOpen)
             }
 
             SwapStatus.PROCESSING -> {
@@ -105,11 +106,12 @@ class SwapSupportMapper {
     private fun createIncompleteDepositMessage(
         quoteStatus: SwapQuoteStatus,
         reviewedIdentity: String?,
+        isFundingWindowOpen: Boolean,
     ): ZashiMessageState {
-        val missingAmount = quoteStatus.depositedAmountFormatted?.takeIf { it.signum() > 0 }
-            ?.let { quoteStatus.quotedAmountIn - it }?.takeIf { it.signum() > 0 }
-        val quoteStillValid = reviewedIdentity.bindsReviewedFundingTerms() &&
+        val quoteStillValid = isFundingWindowOpen && reviewedIdentity.bindsReviewedFundingTerms() &&
             quoteStatus.deadline > Clock.System.now()
+        val missingAmount = quoteStatus.depositedAmountFormatted?.takeIf { it.signum() > 0 }
+            ?.let { deposited -> quoteStatus.fundingThreshold?.subtract(deposited) }?.takeIf { it.signum() > 0 }
         if (!quoteStillValid || missingAmount == null) {
             return ZashiMessageState(
                 title = stringRes(R.string.swapAndPay_status_incompleteDeposit),

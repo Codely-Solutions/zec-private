@@ -108,7 +108,9 @@ class SwapDetailVM(
                                         )
                                     }?.withStyle(),
                         ),
-                    message = getSwapMessage.getMessage(swapData.status, swapData.savedMetadata),
+                    message = getSwapMessage.getMessage(
+                        swapData.status, swapData.savedMetadata, swapData.data.isFundingWindowOpen
+                    ),
                     errorFooter = mapper.createTransactionDetailErrorFooter(swapData.error).takeUnless { hasDetails },
                     infoFooter = when {
                         hasDetails && swapData.error != null -> stringRes(R.string.private_swap_refresh_unavailable)

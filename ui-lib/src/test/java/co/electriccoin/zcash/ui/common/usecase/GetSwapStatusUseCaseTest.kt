@@ -29,6 +29,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Instant
 
 /**
  * [GetSwapStatusUseCase.invoke] emits the first non-loading [SwapQuoteStatusData]: it looks up the
@@ -301,6 +305,59 @@ class GetSwapStatusUseCaseTest {
         advanceTimeBy(60_000)
         runCurrent()
         assertEquals(3, attempts)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun incompleteFundingGuidanceClosesOnFailureAndExpiresDuringAnUnchangedPoll() = runTest {
+        val saved = mockk<TransactionSwapMetadata>()
+        val metadata = mockk<MetadataRepository> {
+            coEvery { getSwapMetadata("deposit") } returns saved
+            coEvery { updateSwap(saved, any()) } returns saved
+            coEvery { reloadSwapMetadata(saved) } returns saved
+        }
+        val start = Instant.parse("2026-11-24T00:00:00Z")
+        val clock = object : Clock {
+            override fun now() = start + testScheduler.currentTime.milliseconds
+        }
+        val incomplete = swapStatusResult(swapStatus = SwapStatus.INCOMPLETE_DEPOSIT)
+        every { incomplete.deadline } returns start + 95_000.milliseconds
+        val stalledPoll = CompletableDeferred<SwapQuoteStatus>()
+        var attempts = 0
+        val provider = mockk<SwapRepository> {
+            coEvery { checkSwapStatus(saved) } coAnswers {
+                when (++attempts) {
+                    2 -> throw SwapAssetsUnavailableException()
+                    4 -> stalledPoll.await()
+                    else -> incomplete
+                }
+            }
+        }
+        val states = mutableListOf<SwapQuoteStatusData>()
+        backgroundScope.launch {
+            GetSwapStatusUseCase(metadata, provider, clock = clock).observe("deposit").collect { states += it }
+        }
+        runCurrent()
+        assertTrue(states.last().isFundingWindowOpen)
+
+        advanceTimeBy(30_000)
+        runCurrent()
+        assertFalse(states.last().isFundingWindowOpen)
+        assertSame(incomplete, states.last().status)
+        assertIs<SwapAssetsUnavailableException>(states.last().error)
+
+        advanceTimeBy(60_000)
+        runCurrent()
+        assertTrue(states.last().isFundingWindowOpen)
+        assertEquals(4, attempts)
+
+        advanceTimeBy(5_000)
+        runCurrent()
+        assertFalse(states.last().isFundingWindowOpen)
+        assertSame(incomplete, states.last().status)
+        stalledPoll.complete(incomplete)
+        runCurrent()
+        assertFalse(states.last().isFundingWindowOpen)
     }
 
     private fun swapStatusResult(

@@ -69,13 +69,12 @@ class MigrationKeystoneScanVM(
                 val sched = pendingSchedule.get(accountKeyId)
                 val pending = pendingKeystonePczts.get(accountKeyId)
                 if (sched == null || pending == null) {
-                    // Edge case only (e.g. process death mid-flow) — bounce back to Confirm Transfer
-                    // Plan, which will propose a fresh schedule.
-                    navigationRouter.back()
+                    // A restored Sign screen has no usable request either.
+                    navigationRouter.backToRoot()
                     return@launch
                 }
                 if (pending.isFullySigned) {
-                    navigationRouter.replace(MigrationScheduledArgs(accountKeyId))
+                    navigationRouter.replaceFrom(MigrationKeystoneSignArgs::class, MigrationScheduledArgs(accountKeyId))
                     return@launch
                 }
                 val sdk = checkNotNull(getOrchardMigrationSdk(accountKeyId)) { "Migration account is unavailable" }
@@ -175,12 +174,11 @@ class MigrationKeystoneScanVM(
                     )
                 if (pending.roundIndex + 1 < totalRounds) {
                     // More rounds remain — carry the accumulated signatures forward and hand off to a
-                    // fresh sign-screen instance for the next round. replace() keeps the back stack at
-                    // a constant depth regardless of how many rounds a large migration needs.
+                    // fresh sign-screen instance for the next round. Replace the completed Sign and Scan.
                     //
                     // isProcessing deliberately stays true from here on: the Keystone device doesn't
                     // rotate/clear its response QR after being scanned, and ImageAnalysis keeps
-                    // re-decoding that still-visible frame every frame. navigationRouter.replace()
+                    // re-decoding that still-visible frame every frame. Navigation
                     // isn't synchronous, so without this guard a re-entrant onScanned during the
                     // transition would re-fetch `pending` with roundIndex already advanced past this
                     // round, hand keystoneBatchRoundSlice an out-of-range index, and silently apply the
@@ -201,7 +199,9 @@ class MigrationKeystoneScanVM(
                         "KeystoneScan: round ${pending.roundIndex} done — handing off to round " +
                             "${pending.roundIndex + 1} of $totalRounds"
                     )
-                    navigationRouter.replace(MigrationKeystoneSignArgs(args.mode, accountKeyId))
+                    navigationRouter.replaceFrom(
+                        MigrationKeystoneSignArgs::class, MigrationKeystoneSignArgs(args.mode, accountKeyId)
+                    )
                     return@launch
                 }
 
@@ -226,7 +226,7 @@ class MigrationKeystoneScanVM(
                 migrationLog(
                     "KeystoneScan: round ${pending.roundIndex} (final) done — handing off to MigrationScheduledVM"
                 )
-                navigationRouter.replace(MigrationScheduledArgs(accountKeyId))
+                navigationRouter.replaceFrom(MigrationKeystoneSignArgs::class, MigrationScheduledArgs(accountKeyId))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {

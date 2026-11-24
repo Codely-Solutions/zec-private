@@ -19,6 +19,7 @@ import co.electriccoin.zcash.ui.common.repository.PendingKeystoneMigrationPcztsR
 import co.electriccoin.zcash.ui.common.repository.PendingMigrationScheduleRepositoryImpl
 import co.electriccoin.zcash.ui.common.usecase.GetOrchardMigrationSdkUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSelectedWalletAccountUseCase
+import co.electriccoin.zcash.ui.screen.migration.keystonesign.MigrationKeystoneSignArgs
 import co.electriccoin.zcash.ui.screen.migration.scheduled.MigrationScheduledArgs
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -219,6 +220,29 @@ class MigrationKeystoneScanVMTest {
             coVerify(exactly = 2) { sdk.decodeKeystoneSignBatchPart(any(), any()) }
         }
 
+    @Test
+    fun completingFirstOfTwoRoundsReplacesTheSignAndScanPair() = runTest {
+        val sdk = fakeSdk(firmwareVersion = byteArrayOf(3, 0, 2))
+        coEvery { sdk.keystoneSigningRoundBudget() } returns
+            cash.z.ecc.android.sdk.KeystoneSigningRoundBudget(1, 1, 1)
+        val pendingSchedule = PendingMigrationScheduleRepositoryImpl().apply { set(testAccountKeyId, schedule()) }
+        val pendingPczts = PendingKeystoneMigrationPcztsRepositoryImpl().apply {
+            set(testAccountKeyId, pending(roundIndex = 0).copy(
+                transferUnsignedPczts = listOf(11L to byteArrayOf(9), 12L to byteArrayOf(6)),
+            ))
+        }
+        val router = FakeNavigationRouter()
+        vm(sdk, pendingSchedule, pendingPczts, router).onScanned("frame")
+        advanceUntilIdle()
+
+        val nextSign = MigrationKeystoneSignArgs(MigrationMode.IMMEDIATE, testAccountKeyId)
+        assertEquals(listOf(nextSign), router.replacedRoutes)
+        assertEquals(MigrationKeystoneSignArgs::class, router.replacementOrigin)
+        val next = assertNotNull(pendingPczts.peek(testAccountKeyId))
+        assertEquals(1, next.roundIndex)
+        assertEquals(listOf(11L), next.accumulatedTransferSigned.map { it.first })
+    }
+
     private fun vm(
         sdk: OrchardMigrationSdk,
         pendingSchedule: PendingMigrationScheduleRepositoryImpl,
@@ -280,6 +304,8 @@ class MigrationKeystoneScanVMTest {
             private set
         val forwardedRoutes = mutableListOf<Any>()
         val replacedRoutes = mutableListOf<Any>()
+        var replacementOrigin: KClass<*>? = null
+            private set
 
         override fun forward(vararg routes: Any) {
             forwardedRoutes.addAll(routes)
@@ -289,7 +315,10 @@ class MigrationKeystoneScanVMTest {
 
         override fun replaceAll(vararg routes: Any) = Unit
 
-        override fun replaceFrom(route: KClass<*>, vararg routes: Any) = Unit
+        override fun replaceFrom(route: KClass<*>, vararg routes: Any) {
+            replacementOrigin = route
+            replacedRoutes.addAll(routes)
+        }
 
         override fun back() {
             backCount++

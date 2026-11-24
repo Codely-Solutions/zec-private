@@ -289,7 +289,7 @@ class MigrationKeystoneSignVM(
                 pendingSchedule.peek(owner)?.let { pendingSchedule.clear(owner, it) }
             }
         }
-        navigationRouter.back()
+        navigationRouter.backToRoot()
     }
 
     companion object {

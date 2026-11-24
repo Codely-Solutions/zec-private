@@ -121,6 +121,11 @@ data class NearSwapQuoteStatus(
     override val mode: SwapMode = quote.mode
 
     override val quotedAmountIn: BigDecimal = quote.amountInFormatted
+    override val fundingThreshold: BigDecimal? = when (mode) {
+        SwapMode.EXACT_INPUT -> quotedAmountIn
+        SwapMode.EXACT_OUTPUT -> response.quoteResponse.quote.minAmountIn.movePointLeft(origin.decimals)
+        SwapMode.FLEX_INPUT -> quote.minimumAmountIn
+    }
     override val quotedAmountOut: BigDecimal = quote.amountOutFormatted
 
     override val executedAmountIn: BigDecimal? =

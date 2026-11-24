@@ -11,6 +11,7 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,12 +21,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 
 class GetSwapStatusUseCase(
     private val metadataRepository: MetadataRepository,
     private val swapRepository: SwapRepository,
     context: Context? = null,
+    private val clock: Clock = Clock.System,
 ) {
     private val donationPreferences = context?.let(::DonationPreferences)
     private val refreshes = mutableMapOf<String, RefreshLock>()
@@ -72,19 +75,30 @@ class GetSwapStatusUseCase(
 
                 data.update { it.copy(savedMetadata = expectedMetadata) }
 
+                var fundingExpiry: Job? = null
                 while (true) {
                     try {
                         val (result, saved) = refresh(depositAddress, expectedMetadata)
                         if (result.status == SwapStatus.SUCCESS) {
                             donationPreferences?.recordSuccessfulTransaction()
                         }
+                        val fundingTimeLeft = result.takeIf { it.status == SwapStatus.INCOMPLETE_DEPOSIT }
+                            ?.let { it.deadline - clock.now() }?.takeIf { it.isPositive() }
+                        fundingExpiry?.cancel()
                         data.update {
                             it.copy(
                                 status = result,
                                 savedMetadata = saved,
                                 isLoading = false,
-                                error = null
+                                error = null,
+                                isFundingWindowOpen = fundingTimeLeft != null,
                             )
+                        }
+                        fundingExpiry = fundingTimeLeft?.let { remaining ->
+                            launch {
+                                delay(remaining)
+                                data.update { it.copy(isFundingWindowOpen = false) }
+                            }
                         }
                         if (result.status.isTerminal) {
                             break
@@ -92,6 +106,8 @@ class GetSwapStatusUseCase(
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
+                        fundingExpiry?.cancel()
+                        data.update { it.copy(isFundingWindowOpen = false) }
                         val latest = savedAfterFailure(expectedMetadata, e)
                         data.update { current ->
                             current.copy(
@@ -161,6 +177,7 @@ data class SwapQuoteStatusData(
     val isLoading: Boolean = true,
     val error: Exception? = null,
     val savedMetadata: TransactionSwapMetadata? = null,
+    val isFundingWindowOpen: Boolean = false,
 ) {
     val originAsset = status?.originAsset
     val destinationAsset = status?.destinationAsset
@@ -170,12 +187,15 @@ data class SwapQuoteStatusData(
         val previousAt = saved.statusUpdatedAt
         val observedAt = observed.statusUpdatedAt
         return when {
-            !saved.matchesStoredSwap(observed) -> copy(status = null, savedMetadata = observed)
+            !saved.matchesStoredSwap(observed) -> withoutLiveStatus(observed)
             previousAt != null && (observedAt == null || observedAt < previousAt) -> this
             previousAt == observedAt && saved.matchesDisplayStatus(observed) -> copy(savedMetadata = observed)
-            else -> copy(status = null, savedMetadata = observed)
+            else -> withoutLiveStatus(observed)
         }
     }
+
+    private fun withoutLiveStatus(observed: TransactionSwapMetadata) =
+        copy(status = null, savedMetadata = observed, isFundingWindowOpen = false)
 
     private fun TransactionSwapMetadata.matchesDisplayStatus(other: TransactionSwapMetadata): Boolean =
         recordedStatus == other.recordedStatus && mode == other.mode &&

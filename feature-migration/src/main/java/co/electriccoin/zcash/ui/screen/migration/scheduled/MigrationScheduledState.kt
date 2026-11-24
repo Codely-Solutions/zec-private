@@ -64,12 +64,20 @@ fun MigrationScheduledScreen(args: MigrationScheduledArgs) {
     val failureSheet by vm.failureSheet.collectAsStateWithLifecycle()
     val finalizationError by vm.finalizationError.collectAsStateWithLifecycle()
     val needsKeystoneSignatures by vm.needsKeystoneSignatures.collectAsStateWithLifecycle()
+    val homeRecoveryMessage by vm.homeRecoveryMessage.collectAsStateWithLifecycle()
     BackHandler { vm.navigateBack() }
     when {
         finalizationError != null -> MigrationUnavailable(
             message = checkNotNull(finalizationError),
             onBack = vm::navigateBack,
             onRetry = vm::retryFinalization,
+        )
+
+        homeRecoveryMessage != null -> MigrationUnavailable(
+            message = checkNotNull(homeRecoveryMessage),
+            onBack = vm::navigateBack,
+            onRetry = vm::navigateBack,
+            retryLabel = stringRes(R.string.general_back),
         )
 
         isFinalizing -> MigrationSchedulingView()

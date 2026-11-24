@@ -26,21 +26,32 @@ import kotlin.time.Instant
 @Config(sdk = [34])
 class SwapSupportMapperTest {
     @Test
-    fun decodedExecutionInputDoesNotChangeQuotedIncompleteDepositRequirement() {
+    fun decodedExecutionInputDoesNotChangeTheThresholdForAnyFundingMode() {
+        val expected = mapOf(
+            SwapType.EXACT_INPUT to BigDecimal("0.9"),
+            SwapType.EXACT_OUTPUT to BigDecimal("0.895"),
+            SwapType.FLEX_INPUT to BigDecimal("0.895"),
+        )
+        for ((mode, amount) in expected) assertModeSpecificShortfall(mode, amount)
+    }
+
+    private fun assertModeSpecificShortfall(mode: SwapType, expectedAmount: BigDecimal) {
         val live = SwapInputProvenanceFixture.status(
             SwapCatalogTestFixture.nativeZec, SwapCatalogTestFixture.externalAssets.first(), "synthetic-deposit",
-            SwapType.FLEX_INPUT, """{"amountIn":"80000000","depositedAmount":"10000000"}"""
+            mode, """{"amountIn":"80000000","depositedAmount":"10000000"}"""
         )
         val response = live.response.quoteResponse
         val status = live.copy(response = live.response.copy(
             status = co.electriccoin.zcash.ui.common.model.near.SwapStatus.INCOMPLETE_DEPOSIT,
-            quoteResponse = response.copy(quote = response.quote.copy(deadline = futureDeadline)),
+            quoteResponse = response.copy(quote = response.quote.copy(
+                deadline = futureDeadline, minAmountIn = BigDecimal("99500000")
+            )),
         ))
-        val message = assertNotNull(SwapSupportMapper().getMessage(status, approvedMetadata))
+        val message = assertNotNull(SwapSupportMapper().getMessage(status, approvedMetadata, true))
         val text = message.text as StyledStringResource.ByResource
         val required = text.args.first() as StyledStringResource.ByStringResource
         val amount = required.resource as StringResource.ByCurrencyNumber
-        assertEquals(0, BigDecimal("0.9").compareTo(amount.amount as BigDecimal))
+        assertEquals(0, expectedAmount.compareTo(amount.amount as BigDecimal))
         assertEquals(SwapCatalogTestFixture.nativeZec.tokenTicker, amount.ticker)
     }
 
@@ -48,13 +59,13 @@ class SwapSupportMapperTest {
     fun incompleteDepositKeepsExactRequiredTokenAmount() {
         val quoteStatus = mockk<SwapQuoteStatus> {
             every { status } returns SwapStatus.INCOMPLETE_DEPOSIT
-            every { quotedAmountIn } returns BigDecimal("0.22283949")
+            every { fundingThreshold } returns BigDecimal("0.22283949")
             every { amountInFormatted } returns BigDecimal("0.2")
             every { depositedAmountFormatted } returns BigDecimal("0.1")
             every { originAsset } returns SwapAssetTestFixture.zecAsset()
             every { deadline } returns futureDeadline
         }
-        val message = assertNotNull(SwapSupportMapper().getMessage(quoteStatus, approvedMetadata))
+        val message = assertNotNull(SwapSupportMapper().getMessage(quoteStatus, approvedMetadata, true))
         val text = message.text as StyledStringResource.ByResource
         val required = text.args.first() as StyledStringResource.ByStringResource
         assertEquals(
@@ -67,23 +78,27 @@ class SwapSupportMapperTest {
         val mapper = SwapSupportMapper()
         val demo = mockk<SwapQuoteStatus> {
             every { status } returns SwapStatus.INCOMPLETE_DEPOSIT
-            every { quotedAmountIn } returns BigDecimal.ONE
+            every { fundingThreshold } returns BigDecimal.ONE
             every { deadline } returns futureDeadline
         }
         for (observed in listOf(null, BigDecimal.ZERO, BigDecimal.ONE, BigDecimal.TEN)) {
             every { demo.depositedAmountFormatted } returns observed
-            val message = assertNotNull(mapper.getMessage(demo, approvedMetadata))
+            val message = assertNotNull(mapper.getMessage(demo, approvedMetadata, true))
             val text = message.text as StyledStringResource.ByResource
             assertEquals(R.string.private_swap_incomplete_check_support, text.resource)
             assertEquals(emptyList(), text.args)
         }
         every { demo.depositedAmountFormatted } returns BigDecimal("0.5")
-        val legacy = assertNotNull(mapper.getMessage(demo))
+        val legacy = assertNotNull(mapper.getMessage(demo, isFundingWindowOpen = true))
         assertEquals(
             R.string.private_swap_incomplete_check_support, (legacy.text as StyledStringResource.ByResource).resource
         )
+        val stale = assertNotNull(mapper.getMessage(demo, approvedMetadata))
+        assertEquals(
+            R.string.private_swap_incomplete_check_support, (stale.text as StyledStringResource.ByResource).resource
+        )
         every { demo.deadline } returns Instant.fromEpochSeconds(0)
-        val expired = assertNotNull(mapper.getMessage(demo, approvedMetadata))
+        val expired = assertNotNull(mapper.getMessage(demo, approvedMetadata, true))
         assertEquals(
             R.string.private_swap_incomplete_check_support, (expired.text as StyledStringResource.ByResource).resource
         )
