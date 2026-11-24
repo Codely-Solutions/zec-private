@@ -267,6 +267,12 @@ class RequestSwapQuoteUseCase(
         canNavigate: () -> Boolean
     ): Boolean {
         currentCoroutineContext().ensureActive()
+        if (owner != null && !owner.account.isSpendable) {
+            onPreparationFailure(result, canNavigate) {
+                navigateToErrorUseCase(ErrorArgs.General(AccountOperationUnsupportedException.viewOnly()))
+            }
+            return false
+        }
         return swapRepository.quote.value === result && validateComposition(result, canNavigate) &&
             (owner == null || prepareProposal(result, owner, canNavigate))
     }

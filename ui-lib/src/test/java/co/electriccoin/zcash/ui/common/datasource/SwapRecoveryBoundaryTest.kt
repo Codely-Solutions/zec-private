@@ -53,6 +53,7 @@ class SwapRecoveryBoundaryTest {
     }
     private val metadata = mockk<MetadataRepository>(relaxed = true) {
         coEvery { updateSwap(any(), any()) } coAnswers { firstArg() }
+        coEvery { reloadSwapMetadata(any()) } coAnswers { firstArg() }
     }
     private val stored = TransactionSwapMetadata(
         depositAddress = "tracked-deposit",

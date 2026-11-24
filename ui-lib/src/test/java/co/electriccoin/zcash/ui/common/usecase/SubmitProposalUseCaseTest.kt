@@ -8,10 +8,8 @@ import co.electriccoin.zcash.ui.common.datasource.SwapTransactionProposal
 import co.electriccoin.zcash.ui.common.datasource.TransactionProposal
 import co.electriccoin.zcash.ui.common.ledger.LedgerNavigator
 import co.electriccoin.zcash.ui.common.ledger.LedgerProposalPipeline
-import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.SubmitResult
 import co.electriccoin.zcash.ui.common.model.SwapAssetTestFixture
-import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricsCancelledException
 import co.electriccoin.zcash.ui.common.repository.BiometricsFailureException
@@ -309,7 +307,9 @@ class SubmitProposalUseCaseTest {
     }
 
     private fun Fixtures.givenLedger(proposal: TransactionProposal) {
-        coEvery { accountDataSource.getSelectedAccount() } returns spendable<LedgerAccount>()
+        val account = EditAccountFixtures.ledger()
+        coEvery { accountDataSource.getSelectedAccount() } returns account
+        if (proposal is SwapTransactionProposal) every { proposal.fundingAccount } returns account
         every { ledgerProposalPipeline.transactionProposal } returns MutableStateFlow(proposal)
     }
 
@@ -372,5 +372,4 @@ class SubmitProposalUseCaseTest {
             )
     }
 
-    private inline fun <reified T : WalletAccount> spendable(): T = mockk<T> { every { isSpendable } returns true }
 }
