@@ -2726,7 +2726,7 @@ index 000000000..701f494b9
 +        ZecSend(WalletAddress.Unified.new(recipient), Zatoshi(100), Memo(""), null)
 +}
 diff --git a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
-index 4ae26a42d..eecbab6c1 100644
+index 4ae26a42d..881079b84 100644
 --- a/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
 +++ b/feature-ledger/src/test/java/co/electriccoin/zcash/ui/common/repository/LedgerProposalRepositoryTest.kt
 @@ -6,0 +7,5 @@ import cash.z.ecc.android.sdk.model.Pczt
@@ -2797,7 +2797,7 @@ index 4ae26a42d..eecbab6c1 100644
 +        val publication = SwapQuoteData.Success(quote, fundingClock = clock, elapsedRealtime = { elapsed })
 +        val approved = ExactInputSwapTransactionProposal(
 +            WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
-+            mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi.ZERO }, quote, ledgerAccount(),
++            mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(0L) }, quote, ledgerAccount(),
 +        )
 +        givenPczt(ledgerAccount(), proposal = approved, publication = publication)
 +        repository.startSigning()

@@ -101,7 +101,7 @@ class LedgerProposalRepositoryTest : LedgerProposalRepositoryTestBase() {
         val publication = SwapQuoteData.Success(quote, fundingClock = clock, elapsedRealtime = { elapsed })
         val approved = ExactInputSwapTransactionProposal(
             WalletAddress.Unified.new("synthetic-deposit"), Zatoshi(100000000), Memo(""),
-            mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi.ZERO }, quote, ledgerAccount(),
+            mockk<Proposal> { every { totalFeeRequired() } returns Zatoshi(0L) }, quote, ledgerAccount(),
         )
         givenPczt(ledgerAccount(), proposal = approved, publication = publication)
         repository.startSigning()
