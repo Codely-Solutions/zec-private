@@ -17,6 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ProcessSwapTransactionUseCase(
@@ -32,13 +33,15 @@ class ProcessSwapTransactionUseCase(
     suspend fun reserveFunding(
         transactionProposal: SwapTransactionProposal,
         validateFunding: () -> Unit,
-    ) = reserveFunding(transactionProposal, null, validateFunding)
+    ) {
+        reserveFunding(transactionProposal, null, validateFunding)
+    }
 
     private suspend fun reserveFunding(
         transactionProposal: SwapTransactionProposal,
         walletWriteToken: Long?,
         validateFunding: () -> Unit,
-    ) = fundingMutex.withLock {
+    ): Instant = fundingMutex.withLock {
         validateFunding()
         val reference = transactionProposal.destination.address
         check(
@@ -48,10 +51,11 @@ class ProcessSwapTransactionUseCase(
             "This swap is already tracked. Check its status before funding."
         }
         validateFunding()
+        val createdAt = Instant.now()
         if (walletWriteToken == null) {
             writePendingTracking(transactionProposal)
         } else {
-            writeFundingReservation(transactionProposal, walletWriteToken)
+            writeFundingReservation(transactionProposal, walletWriteToken, createdAt)
         }
         reservedReferences += reference
         val selectedSwapAsset = transactionProposal.quote.destinationAsset
@@ -60,6 +64,7 @@ class ProcessSwapTransactionUseCase(
             chainTicker = selectedSwapAsset.chainTicker,
             account = transactionProposal.fundingAccount,
         )
+        createdAt
     }
 
     suspend fun submitReservedFunding(
@@ -72,7 +77,7 @@ class ProcessSwapTransactionUseCase(
             check(walletWriteAccess.permits(generation)) { "The wallet changed before swap funding" }
             validateFunding()
         }
-        reserveFunding(proposal, generation, validate)
+        val createdAt = reserveFunding(proposal, generation, validate)
         val entryResolved = AtomicBoolean(false)
         try {
             validate()
@@ -83,36 +88,47 @@ class ProcessSwapTransactionUseCase(
         } finally {
             if (entryResolved.compareAndSet(false, true)) {
                 // Only a still-closed gate proves that no SDK endpoint was entered.
-                recordUnsubmittedFundingSafely(proposal, generation)
+                recordUnsubmittedFundingSafely(proposal, generation, createdAt)
             }
         }
     }
 
-    private suspend fun writeFundingReservation(proposal: SwapTransactionProposal, generation: Long) {
+    private suspend fun writeFundingReservation(
+        proposal: SwapTransactionProposal,
+        generation: Long,
+        createdAt: Instant,
+    ) {
         var acknowledged = false
         try {
             // Finish the write before inspecting it if the caller loses its acknowledgement.
-            withContext(NonCancellable) { writePendingTracking(proposal, generation) }
+            withContext(NonCancellable) { writePendingTracking(proposal, generation, createdAt) }
             currentCoroutineContext().ensureActive()
             acknowledged = true
         } finally {
-            if (!acknowledged) recordUnsubmittedFundingSafely(proposal, generation)
+            if (!acknowledged) recordUnsubmittedFundingSafely(proposal, generation, createdAt)
         }
     }
 
-    private suspend fun recordUnsubmittedFundingSafely(proposal: SwapTransactionProposal, generation: Long) =
-        withContext(NonCancellable) {
-            runCatchingRecoverable { recordUnsubmittedFunding(proposal, generation) }.onFailure { error ->
-                Twig.warn { "Unable to record unsubmitted swap funding (${error.javaClass.simpleName})" }
-            }
+    private suspend fun recordUnsubmittedFundingSafely(
+        proposal: SwapTransactionProposal,
+        generation: Long,
+        createdAt: Instant,
+    ): Unit = withContext(NonCancellable) {
+        val identity = proposal.quote.reviewedIdentity() ?: return@withContext
+        repeat(OUTCOME_WRITE_ATTEMPTS) {
+            val saved = runCatchingRecoverable {
+                // Apply the outcome to the exact write without needing a separate synced read.
+                metadataRepository.markSwapFundingNotSubmitted(
+                    depositAddress = proposal.destination.address,
+                    createdAt = createdAt,
+                    reviewedIdentity = identity,
+                    account = proposal.fundingAccount,
+                    walletWriteToken = generation,
+                )
+            }.getOrDefault(false)
+            if (saved) return@withContext
         }
-
-    private suspend fun recordUnsubmittedFunding(proposal: SwapTransactionProposal, generation: Long) {
-        val identity = proposal.quote.reviewedIdentity() ?: return
-        val saved = metadataRepository.getSwapMetadata(proposal.destination.address, proposal.fundingAccount) ?: return
-        if (saved.reviewedIdentity == identity && saved.walletWriteToken == generation) {
-            metadataRepository.markSwapFundingNotSubmitted(saved)
-        }
+        Twig.warn { "Unable to confirm the unsubmitted swap funding outcome was saved" }
     }
 
     suspend operator fun invoke(transactionProposal: SwapTransactionProposal, result: SubmitResult) {
@@ -143,6 +159,7 @@ class ProcessSwapTransactionUseCase(
     private suspend fun writePendingTracking(
         transactionProposal: SwapTransactionProposal,
         walletWriteToken: Long? = null,
+        reservationCreatedAt: Instant? = null,
     ) {
         check(metadataRepository.markTxAsSwap(
             depositAddress = transactionProposal.destination.address,
@@ -158,6 +175,7 @@ class ProcessSwapTransactionUseCase(
             signedQuoteEvidence = (transactionProposal.quote as? NearSwapQuote)?.response?.signedEvidence,
             account = transactionProposal.fundingAccount,
             walletWriteToken = walletWriteToken,
+            reservationCreatedAt = reservationCreatedAt,
         )) { "Unable to save swap tracking before funding" }
     }
 
@@ -174,3 +192,5 @@ class ProcessSwapTransactionUseCase(
             }
     }
 }
+
+private const val OUTCOME_WRITE_ATTEMPTS = 3

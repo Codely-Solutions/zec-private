@@ -26,9 +26,10 @@ import co.electriccoin.zcash.ui.design.util.getValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SwapCancelView(state: SwapCancelState?) {
+internal fun SwapCancelView(state: SwapCancelState?, onHidden: () -> Unit) {
     ZashiInScreenModalBottomSheet(
-        state = state
+        state = state,
+        onHidden = onHidden,
     ) { innerState ->
         Error(
             modifier =

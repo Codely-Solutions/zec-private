@@ -42,7 +42,6 @@ import co.electriccoin.zcash.ui.design.util.stringResByDynamicNumber
 import co.electriccoin.zcash.ui.design.util.stringResByNumber
 import co.electriccoin.zcash.ui.screen.swap.info.SwapRefundAddressInfoArgs
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
@@ -55,7 +54,6 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
 import java.math.RoundingMode
-import kotlin.time.Duration.Companion.milliseconds
 
 private const val ZEC_DECIMALS = 8
 
@@ -97,6 +95,7 @@ internal class SwapVM(
         )
 
     private val cancelSheet = MutableStateFlow<(() -> Boolean)?>(null)
+    private val cancelSheetDismissal = SwapCancelSheetDismissal()
     private var quoteActionInProgress = false
     private var quoteRequestJob: Job? = null
     private var isCancellingQuote = false
@@ -298,7 +297,7 @@ internal class SwapVM(
 
     private fun onBack() =
         viewModelScope.launch {
-            if (isCancellingQuote) return@launch
+            if (isCancellingQuote || cancelSheetDismissal.isPending) return@launch
             val owner = cancelSheet.value
             when {
                 internalState.value.isRequestingQuote -> {
@@ -319,8 +318,7 @@ internal class SwapVM(
             if (isCancellingQuote || cancelSheet.value !== owner || !owner()) return@launch
             isCancellingQuote = true
             quoteRequestJob?.cancel()
-            cancelSheet.value = null
-            cancelSwap.afterDismissal(owner) { awaitCancelSheetDismissal() }
+            cancelSwap.afterDismissal(owner) { dismissCancelSheet() }
         }
 
     private fun onDismissCancelClick(owner: () -> Boolean) =
@@ -330,12 +328,16 @@ internal class SwapVM(
         }
 
     private suspend fun continueQuote(owner: () -> Boolean) {
-        cancelSheet.value = null
-        navigateToSwapQuoteIfAvailable(owner) { awaitCancelSheetDismissal() }
+        dismissCancelSheet()
+        navigateToSwapQuoteIfAvailable(owner) {}
     }
 
-    @Suppress("MagicNumber")
-    private suspend fun awaitCancelSheetDismissal() = delay(350.milliseconds)
+    private suspend fun dismissCancelSheet() = cancelSheetDismissal.awaitHidden { cancelSheet.value = null }
+
+    fun onCancelSheetHidden() = cancelSheetDismissal.onHidden()
+
+    private fun canNavigateToReview() =
+        !isCancellingQuote && cancelSheet.value == null && !cancelSheetDismissal.isPending
 
     private fun onSwapCurrencyTypeClick(newTextFieldAmount: BigDecimal?) {
         internalState.update {
@@ -404,7 +406,7 @@ internal class SwapVM(
                             address = address,
                             selectedAsset = asset,
                             slippage = slippage,
-                            canNavigateToSwapQuote = { !isCancellingQuote && cancelSheet.value == null },
+                            canNavigateToSwapQuote = ::canNavigateToReview,
                             contactNetwork = contactNetwork
                         )
                     }
@@ -415,7 +417,7 @@ internal class SwapVM(
                             refundAddress = address,
                             selectedAsset = asset,
                             slippage = slippage,
-                            canNavigateToSwapQuote = { !isCancellingQuote && cancelSheet.value == null },
+                            canNavigateToSwapQuote = ::canNavigateToReview,
                             contactNetwork = contactNetwork
                         )
                     }
@@ -429,7 +431,7 @@ internal class SwapVM(
 
     private fun currentQuoteDraft(rendered: InternalStateImpl, checkAction: Boolean = true): InternalStateImpl? {
         val current = internalState.value
-        if (current.isRequestingQuote || isCancellingQuote) return null
+        if (current.isRequestingQuote || !canNavigateToReview()) return null
         val ownedAtRender = rendered.copy(account = current.account, swapAssets = current.swapAssets)
         val available = !checkAction || !quoteActionInProgress
         return current.takeIf { available && it == ownedAtRender && hasSameOriginPrice(rendered) }

@@ -3,10 +3,13 @@ package co.electriccoin.zcash.ui.screen.receive
 import androidx.compose.ui.graphics.Color
 import cash.z.ecc.android.sdk.model.AccountUuid
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.usecase.AccountIconFixtures
 import co.electriccoin.zcash.ui.common.usecase.AccountIconFixtures.PICKED
+import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.EditAccountFixtures
 import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.viewonly.ViewOnlyContent
@@ -15,8 +18,10 @@ import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressState.ColorMode
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -30,6 +35,8 @@ import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /**
  * The receive screen's address rows: a view-only account shows its coloured icon, the view-only
@@ -91,14 +98,48 @@ class ReceiveVMTest {
             assertEquals(ColorMode.ZASHI, items.first().colorMode)
         }
 
-    private fun TestScope.items(account: WalletAccount): List<ReceiveAddressState> {
+    @Test
+    fun aResetCannotReplayOrCopyThePreviousWalletAddress() = runTest {
+        val prior = EditAccountFixtures.zodl().copy(unifiedAddress = "original-address")
+        val next = prior.copy(unifiedAddress = "new-address")
+        val selected = MutableStateFlow<WalletAccount?>(prior)
+        val ownership = WalletWriteAccess()
+        val clipboard = mockk<CopyToClipboardUseCase>(relaxed = true)
+        val vm = receiveVm(selected, ownership, clipboard)
+        val previousRow = assertNotNull(vm.state.value.items).first()
+        previousRow.onCopyClicked()
+
+        ownership.beginReset()
+        selected.value = null
+        assertTrue(vm.state.value.isLoading)
+        assertNull(vm.state.value.items)
+        previousRow.onCopyClicked()
+
+        ownership.finishReset()
+        ownership.replaceWallet {}
+        assertTrue(vm.state.value.isLoading)
+        selected.value = next
+        previousRow.onCopyClicked()
+        assertNotNull(vm.state.value.items).first().onCopyClicked()
+        verify(exactly = 1) { clipboard("original-address") }
+        verify(exactly = 1) { clipboard("new-address") }
+    }
+
+    private fun TestScope.items(account: WalletAccount): List<ReceiveAddressState> =
+        assertNotNull(receiveVm(flowOf(account)).state.value.items)
+
+    private fun TestScope.receiveVm(
+        selected: Flow<WalletAccount?>,
+        ownership: WalletWriteAccess = WalletWriteAccess(),
+        clipboard: CopyToClipboardUseCase = mockk(relaxed = true),
+    ): ReceiveVM {
         val vm =
             ReceiveVM(
                 observeSelectedWalletAccount =
                     mockk<ObserveSelectedWalletAccountUseCase> {
-                        every { require() } returns flowOf(account)
+                        every { this@mockk() } returns selected
                     },
-                copyToClipboard = mockk(relaxed = true),
+                copyToClipboard = clipboard,
                 navigationRouter = mockk(relaxed = true),
                 navigateToRequestZec = mockk(relaxed = true),
                 viewOnlyContent =
@@ -107,9 +148,11 @@ class ReceiveVMTest {
                         every { receiveTransparentTitle } returns VIEW_ONLY_TRANSPARENT
                     },
                 observeAccountIcon = AccountIconFixtures.useCase(allMetadata),
+                appAccessSession = AppAccessSession().apply { unlock() },
+                walletWriteAccess = ownership,
             )
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.state.collect { } }
-        return assertNotNull(vm.state.value.items)
+        return vm
     }
 }
 

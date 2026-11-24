@@ -3,6 +3,7 @@ package co.electriccoin.zcash.ui.screen.request.viewmodel
 import android.app.Application
 import androidx.compose.ui.graphics.Color
 import cash.z.ecc.android.sdk.model.AccountUuid
+import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.R
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.metadata.MetadataV3
@@ -25,6 +26,7 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.verify
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -128,6 +130,19 @@ class RequestVMTest {
     }
 
     @Test
+    fun aRequestWaitingForAnAddressCanReturnToThePreviousScreen() = runTest {
+        val account = EditAccountFixtures.zodl()
+        val accounts = MutableStateFlow<WalletAccount?>(account)
+        val router = mockk<NavigationRouter>(relaxed = true)
+        val vm = startedRequest(account, accounts = accounts, router = router)
+        accounts.value = null
+
+        assertIs<RequestState.Loading>(vm.state.value).onBack()
+
+        verify(exactly = 1) { router.back() }
+    }
+
+    @Test
     fun requestSharesOnlyTheDisplayedUriAndRefusesARevokedGrant() = runTest {
         val access = AppAccessSession().apply { unlock() }
         val share = mockk<ShareQRUseCase> {
@@ -159,6 +174,7 @@ class RequestVMTest {
         access: AppAccessSession = AppAccessSession().apply { unlock() },
         accounts: Flow<WalletAccount?> = flowOf(account),
         encode: (String) -> String = { "zcash:fixture" },
+        router: NavigationRouter = mockk(relaxed = true),
     ): RequestVM {
         val vm =
             RequestVM(
@@ -176,7 +192,7 @@ class RequestVMTest {
                     mockk<ObserveSelectedWalletAccountUseCase> {
                         every { this@mockk() } returns accounts
                     },
-                navigationRouter = mockk(relaxed = true),
+                navigationRouter = router,
                 shareQR = share,
                 observeAccountIcon = AccountIconFixtures.useCase(allMetadata),
                 appAccessSession = access,

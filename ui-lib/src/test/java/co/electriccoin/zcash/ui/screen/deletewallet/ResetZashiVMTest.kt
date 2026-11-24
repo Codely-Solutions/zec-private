@@ -19,7 +19,7 @@ import co.electriccoin.zcash.ui.common.repository.AddressBookRepository
 import co.electriccoin.zcash.ui.common.repository.BiometricRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.usecase.ErrorMapperUseCase
-import co.electriccoin.zcash.ui.common.usecase.DeleteLegacyTaxExportsUseCase
+import co.electriccoin.zcash.ui.common.usecase.DeleteLegacySharedExportsUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetSupportUseCase
 import co.electriccoin.zcash.ui.common.usecase.SendEmailUseCase
 import co.electriccoin.zcash.ui.common.usecase.WalletReportAccess
@@ -102,6 +102,14 @@ class ResetZashiVMTest {
             parentFile?.mkdirs()
             writeText("current")
         }
+        val oldPczt = File(directory.root, "pczt_exports/pczt").apply {
+            parentFile?.mkdirs()
+            writeText("legacy")
+        }
+        val newPczt = File(directory.root, "pczt_exports/pczt-123/pczt").apply {
+            parentFile?.mkdirs()
+            writeText("current")
+        }
 
         val initial = assertNotNull(vm.state.value.content)
         assertTrue(initial.checkboxState.isChecked)
@@ -117,6 +125,8 @@ class ResetZashiVMTest {
         awaitState { it.content?.isPending == false && !it.content.buttonState.isLoading }
         assertNull(progress.getStage())
         assertFalse(legacy.exists())
+        assertFalse(oldPczt.exists())
+        assertEquals("current", newPczt.readText())
         assertEquals("current", staged.readText())
         coVerify(exactly = 1) { biometrics.requestBiometrics(any()) }
         verify(exactly = 1) { coordinator.deleteSdkDataFlow() }
@@ -291,7 +301,7 @@ class ResetZashiVMTest {
             giftCardRepository = mockk(relaxed = true),
             progressStore = progress,
             deleteSharedQRImages = mockk(relaxed = true),
-            deleteLegacyTaxExports = DeleteLegacyTaxExportsUseCase(context),
+            deleteLegacySharedExports = DeleteLegacySharedExportsUseCase(context),
             walletWriteAccess = writeAccess,
         )
         val sendEmail = SendEmailUseCase(RuntimeEnvironment.getApplication(), diagnostics, mockk())

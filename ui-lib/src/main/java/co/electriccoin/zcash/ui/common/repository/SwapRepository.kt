@@ -666,8 +666,15 @@ class SwapRepositoryImpl(
     }
 
     override fun consumeReview(expected: SwapQuoteData?): SwapQuoteData? = synchronized(this) {
-        readyReview?.takeIf { (expected == null || it === expected) && isReviewCurrent(it) }
-            ?.also { readyReview = null; consumedReview = it }
+        val ready = readyReview
+        if (ready == null || (expected != null && ready !== expected)) return@synchronized null
+        readyReview = null
+        if (!isReviewCurrent(ready)) {
+            if (ready is SwapQuoteData.Success && quote.value === ready) clearQuote()
+            return@synchronized null
+        }
+        consumedReview = ready
+        ready
     }
 
     override fun isReviewCurrent(result: SwapQuoteData): Boolean {

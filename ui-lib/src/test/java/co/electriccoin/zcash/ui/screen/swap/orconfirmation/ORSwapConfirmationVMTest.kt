@@ -257,7 +257,9 @@ class ORSwapConfirmationVMTest {
         }
         val intent = mockk<Intent>()
         val versionInfo = mockk<GetVersionInfoProvider> { every { this@mockk() } returns mockk() }
-        val shareImage = ShareImageUseCase(context, versionInfo, WalletWriteAccess())
+        val shareImage = ShareImageUseCase(context, versionInfo, WalletWriteAccess()).apply {
+            scheduleCleanup = {}
+        }
         val deadline = Instant.parse("2100-01-01T00:00:00Z")
         val clock = AtomicReference(deadline - 1.milliseconds)
         val access = AppAccessSession().apply { unlock() }

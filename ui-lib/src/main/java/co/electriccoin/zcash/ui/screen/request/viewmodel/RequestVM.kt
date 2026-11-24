@@ -99,6 +99,7 @@ class RequestVM(
     private data class Recipient(val address: WalletAddress, val owner: AccountUuid, val wallet: Long)
 
     private val step = MutableStateFlow(Step(RequestStage.AMOUNT))
+    private val loadingState = RequestState.Loading { navigationRouter.back() }
 
     private val selectedAccount =
         observeSelectedWalletAccount().stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -113,14 +114,14 @@ class RequestVM(
         ) { draft, currentStep, exchangeRate, access, colors ->
             val (account, grant, token) = access
             val addressType = ReceiveAddressType.fromOrdinal(addressTypeOrdinal)
-            if (account == null) return@combine RequestState.Loading
+            if (account == null) return@combine loadingState
             val savedRecipient = currentStep.recipient
             if (savedRecipient != null && !savedRecipient.isCurrent()) {
                 step.compareAndSet(currentStep, Step(RequestStage.AMOUNT))
-                return@combine RequestState.Loading
+                return@combine loadingState
             }
             val walletAddress = savedRecipient?.address ?: account.fromReceiveAddressType(addressType)
-                ?: return@combine RequestState.Loading
+                ?: return@combine loadingState
             val recipient = savedRecipient ?: Recipient(walletAddress, account.sdkAccount.accountUuid, token)
 
             when (currentStep.stage) {
@@ -213,7 +214,7 @@ class RequestVM(
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
-            initialValue = RequestState.Loading
+            initialValue = loadingState
         )
 
     private fun onNextClick(

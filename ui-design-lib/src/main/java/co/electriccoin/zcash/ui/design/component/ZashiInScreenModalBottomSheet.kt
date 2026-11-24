@@ -34,6 +34,7 @@ fun <T : ModalBottomSheetState> ZashiInScreenModalBottomSheet(
     sheetState: SheetState = rememberInScreenModalBottomSheetState(),
     shape: Shape = ZashiModalBottomSheetDefaults.SheetShape,
     dragHandle: @Composable (() -> Unit)? = { ZashiModalBottomSheetDragHandle() },
+    onHidden: () -> Unit = {},
     content: @Composable ColumnScope.(T) -> Unit = {},
 ) {
     var normalizedState: T? by remember { mutableStateOf(state) }
@@ -70,9 +71,11 @@ fun <T : ModalBottomSheetState> ZashiInScreenModalBottomSheet(
     LaunchedEffect(state) {
         if (state == null) {
             sheetState.hide()
+            normalizedState = null
+            onHidden()
+        } else {
+            normalizedState = state
         }
-
-        normalizedState = state
     }
 }
 
@@ -89,7 +92,3 @@ fun rememberInScreenModalBottomSheetState(
     initialValue = initialValue,
     skipHiddenState = skipHiddenState,
 )
-
-interface ModalBottomSheetState {
-    val onBack: () -> Unit
-}

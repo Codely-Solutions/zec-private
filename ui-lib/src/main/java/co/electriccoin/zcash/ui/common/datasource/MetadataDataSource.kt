@@ -88,6 +88,7 @@ interface MetadataDataSource {
         key: MetadataKey,
         reviewedIdentity: String? = null,
         signedQuoteEvidence: NearSignedQuoteEvidence? = null,
+        reservationCreatedAt: Instant? = null,
     ): Boolean
 
     suspend fun updateSwap(
@@ -273,11 +274,13 @@ class MetadataDataSourceImpl(
         key: MetadataKey,
         reviewedIdentity: String?,
         signedQuoteEvidence: NearSignedQuoteEvidence?,
+        reservationCreatedAt: Instant?,
     ) = mutex.withLock {
         updateMetadata(
             key = key,
             transform = { metadata ->
                 val tracked = metadata.swaps.swapIds.firstOrNull { it.depositAddress == depositAddress }
+                if (tracked != null && reservationCreatedAt != null) return@updateMetadata null
                 if (tracked != null && (tracked.reviewedIdentity != null || reviewedIdentity != null)) {
                     // Re-acknowledge the same quote durably without replacing the saved settlement.
                     return@updateMetadata metadata.takeIf { tracked.reviewedIdentity == reviewedIdentity }
@@ -291,7 +294,7 @@ class MetadataDataSourceImpl(
                                     .replaceOrAdd(predicate = { it.depositAddress == depositAddress }) {
                                         SwapMetadataV3(
                                             depositAddress = depositAddress,
-                                            lastUpdated = Instant.now(),
+                                            lastUpdated = reservationCreatedAt ?: Instant.now(),
                                             totalFees = totalFees,
                                             totalUSDFeesInternal = totalFeesUsd,
                                             provider = provider,

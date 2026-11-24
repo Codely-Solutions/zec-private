@@ -54,6 +54,12 @@ class ExportTaxUseCaseTest {
         }
         val similarlyNamedDirectory = File(context.cacheDir, "Zodl_Transaction_History_2000.csv").apply { mkdir() }
         val unrelated = File(taxCache, "Unrelated_Transaction_History_$year.csv").apply { writeText("unrelated") }
+        val pcztCache = File(context.cacheDir, "pczt_exports").apply { mkdirs() }
+        val oldPczt = File(pcztCache, "pczt").apply { writeText("legacy") }
+        val newPczt = File(pcztCache, "pczt-123/pczt").apply {
+            parentFile?.mkdirs()
+            writeText("current")
+        }
         val transactionTime = Instant.parse("$year-06-15T12:00:00Z")
         val belowGroupingBoundary = mockk<ReceiveTransaction.Pending> {
             every { timestamp } returns transactionTime
@@ -109,8 +115,10 @@ class ExportTaxUseCaseTest {
 
         assertTrue(registered)
         assertEquals(android.content.Intent.ACTION_CHOOSER, shadowOf(context).nextStartedActivity.action)
-        DeleteLegacyTaxExportsUseCase(context).onStartup()
+        DeleteLegacySharedExportsUseCase(context).onStartup()
         assertTrue(legacy.none { it.exists() })
+        assertFalse(oldPczt.exists())
+        assertEquals("current", newPczt.readText())
         assertTrue(similarlyNamedDirectory.isDirectory)
         assertEquals("unrelated", unrelated.readText())
         assertEquals(taxCache, output.parentFile?.parentFile)

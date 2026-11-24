@@ -1,5 +1,7 @@
 package co.electriccoin.zcash.ui
 
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
@@ -7,6 +9,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
@@ -17,6 +20,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import co.electriccoin.zcash.ui.common.datasource.AccountDataSource
 import co.electriccoin.zcash.ui.common.model.AppAccessSession
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
+import co.electriccoin.zcash.ui.common.repository.ExchangeRateRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepository
 import co.electriccoin.zcash.ui.common.repository.KeystoneProposalRepositoryImpl
 import co.electriccoin.zcash.ui.common.repository.SwapQuoteData
@@ -24,8 +29,10 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
 import co.electriccoin.zcash.ui.common.usecase.CancelSwapQuoteUseCase
 import co.electriccoin.zcash.ui.common.usecase.GetWalletAccountsUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveProposalUseCase
+import co.electriccoin.zcash.ui.common.usecase.ObserveAccountIconUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveSelectedWalletAccountUseCase
 import co.electriccoin.zcash.ui.common.usecase.SubmitProposalUseCase
+import co.electriccoin.zcash.ui.common.wallet.ExchangeRateState
 import co.electriccoin.zcash.ui.design.theme.ZcashTheme
 import co.electriccoin.zcash.ui.screen.error.AndroidErrorBottomSheet
 import co.electriccoin.zcash.ui.screen.error.AndroidErrorDialog
@@ -35,6 +42,10 @@ import co.electriccoin.zcash.ui.screen.error.NavigateToErrorUseCase
 import co.electriccoin.zcash.ui.screen.error.SyncErrorArgs
 import co.electriccoin.zcash.ui.screen.error.SyncErrorScreen
 import co.electriccoin.zcash.ui.screen.home.HomeArgs
+import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressType
+import co.electriccoin.zcash.ui.screen.request.RequestArgs
+import co.electriccoin.zcash.ui.screen.request.RequestScreen
+import co.electriccoin.zcash.ui.screen.request.viewmodel.RequestVM
 import co.electriccoin.zcash.ui.screen.scankeystone.KeystoneSignatureScanner
 import co.electriccoin.zcash.ui.screen.scankeystone.ScanKeystonePCZTRequest
 import co.electriccoin.zcash.ui.screen.scankeystone.viewmodel.ScanKeystonePCZTViewModel
@@ -74,6 +85,7 @@ class RestoredWalletRoutesLayoutTest {
     val compose = createComposeRule()
 
     private lateinit var controller: NavHostController
+    private lateinit var backDispatcher: OnBackPressedDispatcher
     private val context get() = RuntimeEnvironment.getApplication()
     private val submit = mockk<SubmitProposalUseCase>(relaxed = true)
     private val cancelQuote = mockk<CancelSwapQuoteUseCase>(relaxed = true)
@@ -151,6 +163,25 @@ class RestoredWalletRoutesLayoutTest {
     }
 
     @Test
+    fun restoredRequestCanExitWhileItsAddressIsStillLoading() {
+        every { router.back() } answers {
+            controller.popBackStack()
+        }
+        install()
+        val request = RequestArgs(ReceiveAddressType.Unified.ordinal)
+        compose.runOnIdle { controller.navigate(request) }
+        val back = context.getString(co.electriccoin.zcash.ui.design.R.string.general_back)
+        compose.onNodeWithContentDescription(back).assertIsDisplayed().performClick()
+        compose.onNodeWithText("Wallet home").assertIsDisplayed()
+
+        compose.runOnIdle { controller.navigate(request) }
+        compose.onNodeWithContentDescription(back).assertIsDisplayed()
+        compose.runOnIdle { backDispatcher.onBackPressed() }
+        compose.onNodeWithText("Wallet home").assertIsDisplayed()
+        verify(exactly = 2) { router.back() }
+    }
+
+    @Test
     fun restoredDepositOffersActivityAtLargeText() {
         install()
         compose.runOnIdle { controller.navigate(ORSwapConfirmationArgs) }
@@ -194,18 +225,39 @@ class RestoredWalletRoutesLayoutTest {
                 val fresh = KeystoneProposalRepositoryImpl(accounts, mockk(), mockk(), mockk())
                 ScanKeystonePCZTViewModel(mockk(), get(), fresh)
             }
+            viewModel { parameters ->
+                RequestVM(
+                    addressTypeOrdinal = parameters.get(),
+                    application = context,
+                    exchangeRateRepository = mockk<ExchangeRateRepository> {
+                        every { state } returns MutableStateFlow(ExchangeRateState.OptedOut)
+                    },
+                    getZcashCurrency = mockk(relaxed = true),
+                    zip321BuildUriUseCase = mockk(),
+                    observeSelectedWalletAccount = ObserveSelectedWalletAccountUseCase(accounts),
+                    navigationRouter = router,
+                    shareQR = mockk(),
+                    observeAccountIcon = mockk<ObserveAccountIconUseCase> {
+                        every { observeAll() } returns flowOf(emptyMap())
+                    },
+                    appAccessSession = AppAccessSession(),
+                    walletWriteAccess = WalletWriteAccess(),
+                )
+            }
         }
         compose.setContent {
             KoinApplication(configuration = koinConfiguration { modules(dependencies) }) {
                 ZcashTheme {
                     CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
                         controller = rememberNavController()
+                        backDispatcher = checkNotNull(LocalOnBackPressedDispatcherOwner.current).onBackPressedDispatcher
                         NavHost(controller, startDestination = HomeArgs) {
                             composable<HomeArgs> { Text("Wallet home") }
                             dialogComposable<ErrorDialog> { AndroidErrorDialog(it.toRoute()) }
                             dialogComposable<ErrorBottomSheet> { AndroidErrorBottomSheet(it.toRoute()) }
                             dialogComposable<SyncErrorArgs> { SyncErrorScreen(it.toRoute()) }
                             composable<ORSwapConfirmationArgs> { ORSwapConfirmationScreen() }
+                            composable<RequestArgs> { RequestScreen(it.toRoute()) }
                             composable<SignKeystoneTransactionArgs> { SignKeystoneTransactionScreen() }
                             composable<ScanKeystonePCZTRequest> {
                                 KeystoneSignatureScanner(it.toRoute(), koinViewModel(), true) {

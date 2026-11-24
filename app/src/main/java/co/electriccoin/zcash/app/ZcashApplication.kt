@@ -26,7 +26,7 @@ import co.electriccoin.zcash.ui.common.repository.AutomaticServerRepository
 import co.electriccoin.zcash.ui.common.repository.HomeMessageCacheRepository
 import co.electriccoin.zcash.ui.common.repository.WalletRepository
 import co.electriccoin.zcash.ui.common.repository.WalletSnapshotRepository
-import co.electriccoin.zcash.ui.common.usecase.DeleteLegacyTaxExportsUseCase
+import co.electriccoin.zcash.ui.common.usecase.DeleteLegacySharedExportsUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveKeepScreenOnSyncSessionUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveSeedMismatchUseCase
 import co.electriccoin.zcash.ui.common.usecase.SweepOrphanedGiftCardWalletsUseCase
@@ -54,7 +54,7 @@ class ZcashApplication : CoroutineApplication() {
     private val observeSeedMismatch: ObserveSeedMismatchUseCase by inject()
     private val observeKeepScreenOnSyncSession: ObserveKeepScreenOnSyncSessionUseCase by inject()
     private val sweepOrphanedGiftCardWallets: SweepOrphanedGiftCardWalletsUseCase by inject()
-    private val deleteLegacyTaxExports: DeleteLegacyTaxExportsUseCase by inject()
+    private val deleteLegacySharedExports: DeleteLegacySharedExportsUseCase by inject()
 
     override fun onCreate() {
         super.onCreate()
@@ -105,7 +105,7 @@ class ZcashApplication : CoroutineApplication() {
         applicationScope.launch { observeSeedMismatch() }
         applicationScope.launch { observeKeepScreenOnSyncSession() }
         applicationScope.launch { sweepOrphanedGiftCardWallets() }
-        applicationScope.launch { deleteLegacyTaxExports.onStartup() }
+        applicationScope.launch { deleteLegacySharedExports.onStartup() }
     }
 
     /**

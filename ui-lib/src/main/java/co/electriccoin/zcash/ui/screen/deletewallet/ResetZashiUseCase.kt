@@ -17,7 +17,7 @@ import co.electriccoin.zcash.ui.common.repository.GiftCardRepository
 import co.electriccoin.zcash.ui.common.repository.HomeMessageCacheRepository
 import co.electriccoin.zcash.ui.common.repository.MetadataRepository
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
-import co.electriccoin.zcash.ui.common.usecase.DeleteLegacyTaxExportsUseCase
+import co.electriccoin.zcash.ui.common.usecase.DeleteLegacySharedExportsUseCase
 import co.electriccoin.zcash.ui.common.usecase.DeleteSharedQRImagesUseCase
 import co.electriccoin.zcash.ui.design.util.stringRes
 import kotlinx.coroutines.NonCancellable
@@ -43,7 +43,7 @@ class ResetZashiUseCase(
     private val giftCardRepository: GiftCardRepository,
     private val progressStore: ResetProgressStore,
     private val deleteSharedQRImages: DeleteSharedQRImagesUseCase,
-    private val deleteLegacyTaxExports: DeleteLegacyTaxExportsUseCase,
+    private val deleteLegacySharedExports: DeleteLegacySharedExportsUseCase,
     private val walletWriteAccess: WalletWriteAccess = WalletWriteAccess(),
 ) {
     private val resetMutex = Mutex()
@@ -106,7 +106,7 @@ class ResetZashiUseCase(
             if (stage != ResetStage.CLEAR_PREFERENCES) migrationAppHooks.cancelMigrationWork()
             giftCardRepository.quiesceForWalletReset()
             deleteSharedQRImages.deleteViewingKeyImages()
-            deleteLegacyTaxExports()
+            deleteLegacySharedExports()
             if (stage == ResetStage.DELETE_LOCAL_FILES || (stage == null && !keepFiles)) {
                 addressBookRepository.delete()
                 metadataRepository.delete()

@@ -302,7 +302,7 @@ class ResetWalletReviewProbesTest {
             giftCardRepository = mockk(relaxed = true),
             progressStore = progressStore(),
             deleteSharedQRImages = DeleteSharedQRImagesUseCase(context),
-            deleteLegacyTaxExports = mockk(relaxed = true),
+            deleteLegacySharedExports = mockk(relaxed = true),
             walletWriteAccess = writeAccess,
         )
     }

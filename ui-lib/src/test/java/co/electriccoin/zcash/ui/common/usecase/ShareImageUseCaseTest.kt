@@ -44,6 +44,7 @@ class ShareImageUseCaseTest {
 
     @BeforeTest
     fun setUp() {
+        share.scheduleCleanup = { file -> assertEquals(0L, file.length()) }
         every { context.cacheDir } returns directory.root
         mockkObject(FileShareUtil)
         every {
@@ -88,6 +89,20 @@ class ShareImageUseCaseTest {
         assertTrue(stagedFiles().isEmpty())
         assertEquals("keep", unrelated.readText())
         verify(exactly = 0) { context.startActivity(any()) }
+    }
+
+    @Test
+    fun aDeniedSharePreservesThePreviouslyHandedOffQr() = runTest {
+        Dispatchers.setMain(StandardTestDispatcher(testScheduler))
+        every { context.startActivity(intent) } returns Unit
+        assertTrue(shareKey(bitmap()))
+        val first = stagedFiles().single()
+        val bytes = first.readBytes().toList()
+
+        assertFalse(shareKey(bitmap(), isAllowed = { false }))
+        assertEquals(listOf(first), stagedFiles().toList())
+        assertEquals(bytes, first.readBytes().toList())
+        verify(exactly = 1) { context.startActivity(intent) }
     }
 
     @Test

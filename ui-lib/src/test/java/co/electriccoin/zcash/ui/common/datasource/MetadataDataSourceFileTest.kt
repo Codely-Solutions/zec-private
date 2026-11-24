@@ -696,8 +696,8 @@ class MetadataDataSourceFileTest {
     }
 
     @Test
-    fun lostTrackingAcknowledgementPersistsFundingNotSentAndRejectsReuse() = runTest {
-        val sync = TrackingSync(oneShot = true)
+    fun consecutiveSyncFailuresPreserveTheKnownNoSubmissionOutcomeAndRejectReuse() = runTest {
+        val sync = TrackingSync(failures = 2)
         val quote = fundingQuote(SwapType.EXACT_INPUT)
         val account = mockk<ZodlAccount> { every { sdkAccount } returns Account.new(AccountUuid.new(ByteArray(16))) }
         val proposal = outgoingProposal(quote, account)
@@ -1207,14 +1207,14 @@ class MetadataDataSourceFileTest {
         )
     }
 
-    private class TrackingSync(private val oneShot: Boolean = false) {
+    private class TrackingSync(private val failures: Int = Int.MAX_VALUE) {
         var fail = true
         var attempts = 0
         val provider = MetadataProviderImpl(
             metadataEncryptor = MetadataEncryptorImpl(MetadataSerializer()),
             directorySync = {
                 attempts++
-                if (fail && (!oneShot || attempts == 1)) throw IOException("Synthetic metadata directory sync failure")
+                if (fail && attempts <= failures) throw IOException("Synthetic metadata directory sync failure")
             }
         )
     }

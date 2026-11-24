@@ -103,12 +103,19 @@ interface MetadataRepository {
         signedQuoteEvidence: NearSignedQuoteEvidence? = null,
         account: WalletAccount? = null,
         walletWriteToken: Long? = null,
+        reservationCreatedAt: Instant? = null,
     ): Boolean
 
     /** Persists a refresh for the same account and saved entry that owned the request. */
     suspend fun updateSwap(expected: TransactionSwapMetadata, result: SwapQuoteStatus): TransactionSwapMetadata?
 
-    suspend fun markSwapFundingNotSubmitted(expected: TransactionSwapMetadata): Boolean
+    suspend fun markSwapFundingNotSubmitted(
+        depositAddress: String,
+        createdAt: Instant,
+        reviewedIdentity: String,
+        account: WalletAccount,
+        walletWriteToken: Long,
+    ): Boolean
 
     // fun deleteSwap(depositAddress: String)
 
@@ -251,6 +258,7 @@ class MetadataRepositoryImpl(
         signedQuoteEvidence: NearSignedQuoteEvidence?,
         account: WalletAccount?,
         walletWriteToken: Long?,
+        reservationCreatedAt: Instant?,
     ) = updateMetadataAndAwait(account, walletWriteToken ?: walletWriteAccess.token()) {
         metadataDataSource.markTxAsSwap(
             depositAddress = depositAddress,
@@ -269,6 +277,7 @@ class MetadataRepositoryImpl(
             status = status,
             reviewedIdentity = reviewedIdentity,
             signedQuoteEvidence = signedQuoteEvidence,
+            reservationCreatedAt = reservationCreatedAt,
         )
     }
 
@@ -301,14 +310,14 @@ class MetadataRepositoryImpl(
         }
     }
 
-    override suspend fun markSwapFundingNotSubmitted(expected: TransactionSwapMetadata): Boolean {
-        val account = expected.ownerAccount
-        val token = expected.walletWriteToken
-        val identity = expected.reviewedIdentity
-        if (account == null || token == null || identity == null) return false
-        return updateMetadataAndAwait(account, token) { key ->
-            metadataDataSource.markSwapFundingNotSubmitted(expected.depositAddress, expected.lastUpdated, identity, key)
-        }
+    override suspend fun markSwapFundingNotSubmitted(
+        depositAddress: String,
+        createdAt: Instant,
+        reviewedIdentity: String,
+        account: WalletAccount,
+        walletWriteToken: Long,
+    ): Boolean = updateMetadataAndAwait(account, walletWriteToken) { key ->
+        metadataDataSource.markSwapFundingNotSubmitted(depositAddress, createdAt, reviewedIdentity, key)
     }
 
     // override fun deleteSwap(depositAddress: String) =

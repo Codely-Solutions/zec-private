@@ -53,7 +53,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -93,6 +92,13 @@ class SwapRequestCancellationTest {
     fun continuingIncomingSwapOpensExactlyOneReview() = exercise(SwapMode.FLEX_INPUT, shouldContinue = true)
 
     @Test
+    fun aCatalogChangeBeforeTheSheetFinishesHidingBlocksCrossPayAndSwapReview() {
+        for (mode in listOf(SwapMode.EXACT_OUTPUT, SwapMode.FLEX_INPUT)) {
+            exercise(mode, shouldContinue = true, invalidateDuringDismissal = true)
+        }
+    }
+
+    @Test
     fun lateFailureCannotClearNewerQuoteOrProposal() =
         exercise(SwapMode.EXACT_OUTPUT, InsufficientFundsException(), replace = true)
 
@@ -105,7 +111,7 @@ class SwapRequestCancellationTest {
         exercise(SwapMode.EXACT_OUTPUT, checkPriceRefresh = true)
 
     // Exercises both production screens with the same ports, virtual clock and replacement ordering.
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod", "LongParameterList")
     private fun exercise(
         mode: SwapMode,
         failure: Exception? = null,
@@ -113,6 +119,7 @@ class SwapRequestCancellationTest {
         replace: Boolean = false,
         replaceBeforeRoot: Boolean = false,
         checkPriceRefresh: Boolean = false,
+        invalidateDuringDismissal: Boolean = false,
     ) = runTest(timeout = 15.seconds) {
         Dispatchers.setMain(UnconfinedTestDispatcher(testScheduler))
         mockkObject(FiatCurrency.USD)
@@ -301,16 +308,21 @@ class SwapRequestCancellationTest {
                         verify(exactly = 1) { router.forward(SwapQuoteArgs) }
                     }
                     shouldContinue -> {
+                        assertNotNull(sheet.positiveButton.onClick).invoke()
+                        runCurrent()
+                        assertNull(cancelState.value)
                         finish.complete(Unit)
                         runCurrent()
                         assertSame(firstQuote, assertIs<SwapQuoteData.Success>(repository.quote.value).quote)
                         verify(exactly = 0) { router.forward(SwapQuoteArgs) }
-                        assertNotNull(sheet.positiveButton.onClick).invoke()
+                        if (invalidateDuringDismissal) {
+                            repository.assets.value = repository.assets.value.copy(data = emptyList())
+                        }
+                        pay?.onCancelSheetHidden()
+                        swap?.onCancelSheetHidden()
                         runCurrent()
-                        assertNull(cancelState.value)
-                        advanceTimeBy(350)
-                        runCurrent()
-                        verify(exactly = 1) { router.forward(SwapQuoteArgs) }
+                        verify(exactly = if (invalidateDuringDismissal) 0 else 1) { router.forward(SwapQuoteArgs) }
+                        if (invalidateDuringDismissal) assertNull(repository.quote.value)
                         verify(exactly = 0) { router.backToRoot() }
                     }
                     else -> {
@@ -332,7 +344,8 @@ class SwapRequestCancellationTest {
                             router.forward(ErrorDialog("fixture"))
                             router.backToRoot()
                         }
-                        advanceTimeBy(350)
+                        pay?.onCancelSheetHidden()
+                        swap?.onCancelSheetHidden()
                         runCurrent()
                         verify(exactly = if (replaceBeforeRoot) 0 else 1) { router.backToRoot() }
                         assertNull(repository.quote.value)

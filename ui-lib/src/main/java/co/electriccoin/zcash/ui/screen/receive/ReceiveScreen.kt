@@ -9,10 +9,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import co.electriccoin.zcash.di.koinActivityViewModel
 import co.electriccoin.zcash.ui.common.appbar.ZashiTopAppBarVM
 import kotlinx.serialization.Serializable
+import org.koin.androidx.compose.koinViewModel
 
 @Composable
 internal fun ReceiveScreen() {
-    val receiveVM = koinActivityViewModel<ReceiveVM>()
+    val receiveVM = koinViewModel<ReceiveVM>()
     val state by receiveVM.state.collectAsStateWithLifecycle()
     val topAppBarViewModel = koinActivityViewModel<ZashiTopAppBarVM>()
     val appBarState by topAppBarViewModel.state.collectAsStateWithLifecycle()

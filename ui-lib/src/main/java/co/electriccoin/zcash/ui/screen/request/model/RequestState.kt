@@ -12,10 +12,12 @@ import co.electriccoin.zcash.ui.design.util.QrCodeColors
 import co.electriccoin.zcash.ui.design.util.StringResource
 
 internal sealed class RequestState {
-    data object Loading : RequestState()
+    abstract val onBack: () -> Unit
+
+    data class Loading(override val onBack: () -> Unit) : RequestState()
 
     sealed class Prepared(
-        open val onBack: () -> Unit
+        override val onBack: () -> Unit
     ) : RequestState()
 
     data class Amount(

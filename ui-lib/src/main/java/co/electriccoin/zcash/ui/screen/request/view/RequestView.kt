@@ -56,7 +56,7 @@ import kotlin.math.roundToInt
 private fun RequestLoadingPreview() =
     ZcashTheme(appearanceMode = AppearanceMode.DARK) {
         RequestView(
-            state = RequestState.Loading,
+            state = RequestState.Loading {},
             snackbarHostState = SnackbarHostState(),
         )
     }
@@ -95,8 +95,10 @@ internal fun RequestView(
     snackbarHostState: SnackbarHostState,
 ) {
     when (state) {
-        RequestState.Loading -> {
-            CircularScreenProgressIndicator()
+        is RequestState.Loading -> {
+            BlankBgScaffold(topBar = { RequestTopAppBar(onBack = state.onBack) }) { padding ->
+                CircularScreenProgressIndicator(modifier = Modifier.padding(padding))
+            }
         }
 
         is RequestState.Prepared -> {

@@ -36,9 +36,9 @@ import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.screen.pay.info.PayInfoArgs
 import co.electriccoin.zcash.ui.screen.swap.SwapCancelState
+import co.electriccoin.zcash.ui.screen.swap.SwapCancelSheetDismissal
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.WhileSubscribed
@@ -51,7 +51,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import java.math.BigDecimal
-import kotlin.time.Duration.Companion.milliseconds
 
 @Suppress("TooManyFunctions")
 internal class PayVM(
@@ -91,6 +90,7 @@ internal class PayVM(
         )
 
     private val cancelSheet = MutableStateFlow<(() -> Boolean)?>(null)
+    private val cancelSheetDismissal = SwapCancelSheetDismissal()
     private var quoteActionInProgress = false
     private var quoteRequestJob: Job? = null
     private var isCancellingQuote = false
@@ -233,7 +233,7 @@ internal class PayVM(
 
     private fun onBack() =
         viewModelScope.launch {
-            if (isCancellingQuote) return@launch
+            if (isCancellingQuote || cancelSheetDismissal.isPending) return@launch
             val owner = cancelSheet.value
             when {
                 internalState.value.isRequestingQuote -> {
@@ -254,8 +254,7 @@ internal class PayVM(
             if (isCancellingQuote || cancelSheet.value !== owner || !owner()) return@launch
             isCancellingQuote = true
             quoteRequestJob?.cancel()
-            cancelSheet.value = null
-            cancelSwap.afterDismissal(owner) { awaitCancelSheetDismissal() }
+            cancelSwap.afterDismissal(owner) { dismissCancelSheet() }
         }
 
     private fun onDismissCancelClick(owner: () -> Boolean) =
@@ -265,12 +264,16 @@ internal class PayVM(
         }
 
     private suspend fun continueQuote(owner: () -> Boolean) {
-        cancelSheet.value = null
-        navigateToSwapQuoteIfAvailable(owner) { awaitCancelSheetDismissal() }
+        dismissCancelSheet()
+        navigateToSwapQuoteIfAvailable(owner) {}
     }
 
-    @Suppress("MagicNumber")
-    private suspend fun awaitCancelSheetDismissal() = delay(350.milliseconds)
+    private suspend fun dismissCancelSheet() = cancelSheetDismissal.awaitHidden { cancelSheet.value = null }
+
+    fun onCancelSheetHidden() = cancelSheetDismissal.onHidden()
+
+    private fun canNavigateToReview() =
+        !isCancellingQuote && cancelSheet.value == null && !cancelSheetDismissal.isPending
 
     private fun onTokenAmountChange(amount: NumberTextFieldInnerState) {
         internalState.update { state ->
@@ -332,7 +335,7 @@ internal class PayVM(
                     address = address,
                     selectedAsset = asset,
                     slippage = slippage,
-                    canNavigateToSwapQuote = { !isCancellingQuote && cancelSheet.value == null },
+                    canNavigateToSwapQuote = ::canNavigateToReview,
                     contactNetwork = contactNetwork
                 )
             } finally {
@@ -343,7 +346,8 @@ internal class PayVM(
         }
 
     private fun canStartQuote(snapshot: InternalStateImpl): Boolean =
-        internalState.value === snapshot && !snapshot.isRequestingQuote && !quoteActionInProgress && !isCancellingQuote
+        internalState.value === snapshot && !snapshot.isRequestingQuote &&
+            !quoteActionInProgress && canNavigateToReview()
 
     private fun hasSameQuoteInputs(snapshot: InternalStateImpl): Boolean {
         val current = internalState.value

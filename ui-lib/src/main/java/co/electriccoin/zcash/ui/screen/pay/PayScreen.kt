@@ -32,7 +32,7 @@ fun PayScreen() {
     val cancelState by vm.cancelState.collectAsStateWithLifecycle()
     state?.let { PayView(it, balanceState, appBarState) }
     BackHandler(state != null) { state?.onBack?.invoke() }
-    SwapCancelView(cancelState)
+    SwapCancelView(cancelState, vm::onCancelSheetHidden)
 }
 
 @Serializable

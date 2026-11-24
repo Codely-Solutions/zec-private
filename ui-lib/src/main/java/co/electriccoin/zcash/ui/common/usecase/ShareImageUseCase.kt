@@ -9,19 +9,24 @@ import co.electriccoin.zcash.ui.common.provider.GetVersionInfoProvider
 import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.provider.runCatchingRecoverable
 import co.electriccoin.zcash.ui.util.FileShareUtil
+import co.electriccoin.zcash.work.DeleteDiagnosticExportWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.file.Files
 
-internal const val CACHE_SUBDIR = "zodl_qr_images"
+internal const val CACHE_SUBDIR = DeleteDiagnosticExportWorker.QR_DIRECTORY
 
 class ShareImageUseCase(
     private val context: Context,
     private val versionInfoProvider: GetVersionInfoProvider,
     private val walletWriteAccess: WalletWriteAccess,
 ) {
+    internal var scheduleCleanup: (File) -> Unit = {
+        DeleteDiagnosticExportWorker.scheduleQr(context, it).result.get()
+    }
+
     suspend operator fun invoke(
         shareImageBitmap: Bitmap,
         shareText: String? = null,
@@ -64,11 +69,9 @@ class ShareImageUseCase(
                 val bitmapFile = withContext(Dispatchers.IO) {
                     require(filePrefix.length >= MIN_TEMP_FILE_PREFIX_LENGTH)
                     val cacheDir = context.getInternalCacheDirSuspend(CACHE_SUBDIR)
-                    cacheDir.listFiles { file ->
-                        file.name.startsWith(filePrefix) && file.name.endsWith(fileSuffix)
-                    }?.forEach { it.delete() }
                     File.createTempFile(filePrefix, fileSuffix, cacheDir).also { file ->
                         staged = file
+                        scheduleCleanup(file)
                         file.storeBitmap(shareImageBitmap)
                     }
                 }

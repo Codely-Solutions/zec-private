@@ -41,7 +41,7 @@ fun SwapScreen() {
         )
     }
     BackHandler(state != null) { state?.onBack?.invoke() }
-    SwapCancelView(cancelState)
+    SwapCancelView(cancelState, vm::onCancelSheetHidden)
 }
 
 @Serializable

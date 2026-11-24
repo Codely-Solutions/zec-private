@@ -2,15 +2,16 @@ package co.electriccoin.zcash.ui.screen.receive
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import cash.z.ecc.sdk.ANDROID_STATE_FLOW_TIMEOUT
 import co.electriccoin.zcash.ui.NavigationRouter
 import co.electriccoin.zcash.ui.NavigationTargets
 import co.electriccoin.zcash.ui.R
+import co.electriccoin.zcash.ui.common.model.AppAccessSession
 import co.electriccoin.zcash.ui.common.model.KeystoneAccount
 import co.electriccoin.zcash.ui.common.model.LedgerAccount
 import co.electriccoin.zcash.ui.common.model.ViewOnlyAccount
 import co.electriccoin.zcash.ui.common.model.WalletAccount
 import co.electriccoin.zcash.ui.common.model.ZodlAccount
+import co.electriccoin.zcash.ui.common.provider.WalletWriteAccess
 import co.electriccoin.zcash.ui.common.usecase.CopyToClipboardUseCase
 import co.electriccoin.zcash.ui.common.usecase.NavigateToRequestZecUseCase
 import co.electriccoin.zcash.ui.common.usecase.ObserveAccountIconUseCase
@@ -21,6 +22,7 @@ import co.electriccoin.zcash.ui.design.util.ImageResource
 import co.electriccoin.zcash.ui.design.util.imageRes
 import co.electriccoin.zcash.ui.design.util.stringRes
 import co.electriccoin.zcash.ui.design.util.stringResByAddress
+import co.electriccoin.zcash.ui.screen.qrcode.ext.receiveAddress
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressState.ColorMode.DEFAULT
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressState.ColorMode.HW_WALLET
 import co.electriccoin.zcash.ui.screen.receive.ReceiveAddressState.ColorMode.ZASHI
@@ -31,7 +33,6 @@ import co.electriccoin.zcash.ui.screen.receive.info.ShieldedAddressInfoArgs
 import co.electriccoin.zcash.ui.screen.receive.info.TransparentAddressInfoArgs
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.WhileSubscribed
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -43,15 +44,30 @@ class ReceiveVM(
     private val navigateToRequestZec: NavigateToRequestZecUseCase,
     private val viewOnlyContent: ViewOnlyContent,
     private val observeAccountIcon: ObserveAccountIconUseCase,
+    private val appAccessSession: AppAccessSession,
+    private val walletWriteAccess: WalletWriteAccess,
 ) : ViewModel() {
     private val expandedIndex = MutableStateFlow(0)
+    private val selectedAccount = observeSelectedWalletAccount().stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    private val loading = ReceiveState(items = null, isLoading = true, onBack = ::onBack)
 
     internal val state =
         combine(
             expandedIndex,
-            observeSelectedWalletAccount.require(),
-            observeAccountIcon.observeAll()
-        ) { expandedIndex, account, colors ->
+            selectedAccount,
+            observeAccountIcon.observeAll(),
+            walletWriteAccess.version,
+            appAccessSession.grant,
+        ) { expandedIndex, account, colors, token, grant ->
+            if (account == null || !appAccessSession.permits(grant) || !walletWriteAccess.permits(token)) {
+                return@combine loading
+            }
+            val canAct = { type: ReceiveAddressType, address: String ->
+                val current = selectedAccount.value
+                appAccessSession.permits(grant) && walletWriteAccess.permits(token) &&
+                    current?.sdkAccount?.accountUuid == account.sdkAccount.accountUuid &&
+                    current?.receiveAddress(type) == address
+            }
             val icon =
                 if (account is ZodlAccount) {
                     imageRes(R.drawable.ic_zec_round_full)
@@ -67,7 +83,8 @@ class ReceiveVM(
                             address = account.unifiedAddress,
                             type = Unified,
                             isExpanded = expandedIndex == 0 || account.transparentAddress == null,
-                            onClick = { onAddressClick(0) }
+                            onClick = { onAddressClick(0) },
+                            canAct = canAct,
                         ),
                         account.transparentAddress?.let { address -> createAddressState(
                             account = account,
@@ -75,7 +92,8 @@ class ReceiveVM(
                             address = address,
                             type = Transparent,
                             isExpanded = expandedIndex == 1,
-                            onClick = { onAddressClick(1) }
+                            onClick = { onAddressClick(1) },
+                            canAct = canAct,
                         ) },
                     ),
                 isLoading = false,
@@ -83,18 +101,13 @@ class ReceiveVM(
             )
         }.stateIn(
             scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(ANDROID_STATE_FLOW_TIMEOUT),
-            initialValue =
-                ReceiveState(
-                    items = null,
-                    isLoading = true,
-                    onBack = ::onBack
-                )
+            started = SharingStarted.Eagerly,
+            initialValue = loading,
         )
 
     private fun onBack() = navigationRouter.back()
 
-    @Suppress("CyclomaticComplexMethod")
+    @Suppress("CyclomaticComplexMethod", "LongParameterList")
     private fun createAddressState(
         account: WalletAccount,
         icon: ImageResource,
@@ -102,6 +115,7 @@ class ReceiveVM(
         type: ReceiveAddressType,
         isExpanded: Boolean,
         onClick: () -> Unit,
+        canAct: (ReceiveAddressType, String) -> Boolean,
     ) = ReceiveAddressState(
         icon = icon,
         title =
@@ -141,12 +155,10 @@ class ReceiveVM(
         subtitle = stringResByAddress(value = address),
         isShielded = type == Unified,
         onCopyClicked = {
-            copyToClipboard(
-                value = address
-            )
+            if (canAct(type, address)) copyToClipboard(value = address)
         },
-        onQrClicked = { onQrCodeClick(type) },
-        onRequestClicked = { onRequestClick(type) },
+        onQrClicked = { if (canAct(type, address)) onQrCodeClick(type) },
+        onRequestClicked = { if (canAct(type, address)) onRequestClick(type) },
         onClick = onClick,
         isExpanded = isExpanded,
         colorMode =
@@ -174,7 +186,7 @@ class ReceiveVM(
                         R.drawable.ic_receive_zcash_info
                     }
                 },
-                onClick = { onAddressInfoClick(type) }
+                onClick = { if (canAct(type, address)) onAddressInfoClick(type) }
             )
     )
 
