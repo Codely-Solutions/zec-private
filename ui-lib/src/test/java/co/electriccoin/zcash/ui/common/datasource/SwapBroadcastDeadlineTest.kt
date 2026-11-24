@@ -32,6 +32,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 import java.math.BigDecimal
 import kotlin.test.Test
 import kotlin.test.assertFalse
@@ -41,6 +45,8 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
 /** Real repositories and shared submission pipeline; only SDK, storage and endpoint I/O are mocked. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class SwapBroadcastDeadlineTest {
     @Test
     fun expiryDuringPreparationPreventsFirstSoftwareAndPcztBroadcast() = runBlocking {
@@ -81,8 +87,14 @@ class SwapBroadcastDeadlineTest {
         for (hardware in listOf(false, true)) {
             val fixture = Fixture(hardware)
             fixture.prepare()
-            assertIs<SubmitResult.Success>(fixture.whileSuspended {}.getOrThrow())
+            ShadowLog.clear()
+            val result = assertIs<SubmitResult.Success>(fixture.whileSuspended {}.getOrThrow())
             coVerify(exactly = 1) { fixture.broadcaster.submit(fixture.transactions[0], any()) }
+            val transactionId = result.txIds.single()
+            assertTrue(transactionId.isNotBlank())
+            val messages = ShadowLog.getLogs().map { it.msg }
+            assertTrue(messages.any { "submitting to 1 endpoint(s)" in it })
+            assertFalse(messages.any { transactionId in it })
         }
     }
 
@@ -91,11 +103,14 @@ class SwapBroadcastDeadlineTest {
         for (hardware in listOf(false, true)) {
             val fixture = Fixture(hardware, legs = 2)
             fixture.prepare()
+            val endpointDetail = "synthetic uncertain response"
             coEvery { fixture.broadcaster.submit(fixture.transactions[0], any()) } answers {
                 fixture.expire()
-                TransactionSubmitResult.Failure(fixture.transactions[0].txId, true, -1, "synthetic uncertain response")
+                TransactionSubmitResult.Failure(fixture.transactions[0].txId, true, -1, endpointDetail)
             }
+            ShadowLog.clear()
             assertIs<SubmitResult.GrpcFailure>(fixture.whileSuspended {}.getOrThrow())
+            assertFalse(ShadowLog.getLogs().any { endpointDetail in it.msg })
             for (transaction in fixture.transactions) {
                 coVerify(exactly = 1) { fixture.broadcaster.submit(transaction, any()) }
             }
@@ -114,7 +129,7 @@ class SwapBroadcastDeadlineTest {
         val metadata = mockk<MetadataRepository>(relaxed = true)
         val transactions = (1..legs).map {
             CreatedTransaction(
-                FirstClassByteArray(byteArrayOf(it.toByte())), FirstClassByteArray(byteArrayOf(1, 2)), null
+                FirstClassByteArray(ByteArray(32) { _ -> it.toByte() }), FirstClassByteArray(byteArrayOf(1, 2)), null
             )
         }
         private val endpoint = LightWalletEndpoint("synthetic.invalid", 443, true)

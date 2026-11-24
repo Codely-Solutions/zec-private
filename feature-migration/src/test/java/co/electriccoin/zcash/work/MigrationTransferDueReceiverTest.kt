@@ -21,8 +21,9 @@ class MigrationTransferDueReceiverTest {
     fun overdueFallbackPromptsForStatusWhileRemovalIsUnresolved() {
         val owner = "fixture-owner"
         val overdue = System.currentTimeMillis() - 300_000L
+        var removalPending = true
         val preferences = mockk<SharedPreferences> {
-            every { getBoolean("removal_pending_$owner", false) } returnsMany listOf(true, false)
+            every { getBoolean("removal_pending_$owner", false) } answers { removalPending }
             every { getLong("next_wake_at_$owner", -1L) } returns overdue
             every { getLong("last_run_at_$owner", -1L) } returns -1L
         }
@@ -47,6 +48,13 @@ class MigrationTransferDueReceiverTest {
             verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = true) }
             verify(exactly = 0) { notifier.notifyMigrationFallback(owner, removalUnresolved = false) }
 
+            removalPending = false
+            MigrationAccountRetirement.begin(owner)
+            MigrationTransferDueReceiver().onReceive(context, intent)
+            verify(exactly = 2) { notifier.notifyMigrationFallback(owner, removalUnresolved = true) }
+            verify(exactly = 0) { notifier.notifyMigrationFallback(owner, removalUnresolved = false) }
+            MigrationAccountRetirement.restore(owner)
+
             pendingReset.value = true
             MigrationTransferDueReceiver().onReceive(context, intent)
             pendingReset.value = false
@@ -55,7 +63,7 @@ class MigrationTransferDueReceiverTest {
             MigrationAccountRetirement.begin(owner)
             MigrationAccountRetirement.markRemoved(owner)
             MigrationTransferDueReceiver().onReceive(context, intent)
-            verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = true) }
+            verify(exactly = 2) { notifier.notifyMigrationFallback(owner, removalUnresolved = true) }
             verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = false) }
         } finally {
             MigrationAccountRetirement.restore(owner)

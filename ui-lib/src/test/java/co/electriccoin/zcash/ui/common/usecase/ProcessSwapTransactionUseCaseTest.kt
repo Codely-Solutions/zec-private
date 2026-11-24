@@ -17,15 +17,19 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 import java.math.BigDecimal
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 
 /**
  * [ProcessSwapTransactionUseCase] records a freshly-submitted swap: it writes the swap metadata
@@ -230,13 +234,20 @@ class ProcessSwapTransactionUseCaseTest {
         runTest {
             val fx = Fixtures()
             val proposal = swapProposal()
+            val providerDetail = "synthetic provider detail"
             coEvery {
                 fx.swapRepository.submitDepositTransaction(txId = "tx1", transactionProposal = any())
-            } throws RuntimeException("boom")
+            } throws RuntimeException("Notification failed", IllegalStateException(providerDetail))
 
-            // Must not throw — the failure is logged and the next deposit is still attempted.
+            ShadowLog.clear()
             fx.useCase(proposal, SubmitResult.Success(listOf("tx1", "tx2")))
 
+            val logs = ShadowLog.getLogs()
+            assertEquals(1, logs.count { "Unable to notify swap provider of deposit" in it.msg })
+            for (entry in logs) {
+                assertFalse(providerDetail in entry.msg)
+                assertFalse(providerDetail in entry.throwable?.stackTraceToString().orEmpty())
+            }
             coVerify(exactly = 1) {
                 fx.swapRepository.submitDepositTransaction(txId = "tx1", transactionProposal = proposal)
             }
@@ -244,6 +255,24 @@ class ProcessSwapTransactionUseCaseTest {
                 fx.swapRepository.submitDepositTransaction(txId = "tx2", transactionProposal = proposal)
             }
         }
+
+    @Test
+    fun cancellationStopsDepositNotificationsAndPreservesTracking() = runTest {
+        val fx = Fixtures()
+        val proposal = swapProposal()
+        coEvery { fx.swapRepository.submitDepositTransaction("tx1", proposal) } throws CancellationException()
+
+        assertFailsWith<CancellationException> {
+            fx.useCase(proposal, SubmitResult.Success(listOf("tx1", "tx2")))
+        }
+
+        coVerify(exactly = 1) {
+            fx.metadataRepository.markTxAsSwap(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
+            )
+        }
+        coVerify(exactly = 0) { fx.swapRepository.submitDepositTransaction("tx2", proposal) }
+    }
 
     private suspend fun swapProposal(reviewedAccount: WalletAccount = mockk()): SwapTransactionProposal {
         val walletAddress = WalletAddress.Unified.new("deposit-address")

@@ -140,23 +140,15 @@ class ProcessSwapTransactionUseCase(
         )) { "Unable to save swap tracking before funding" }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private suspend fun submitDepositTransactions(transactionProposal: SwapTransactionProposal, result: SubmitResult) {
-        suspend fun submit(txId: String, transactionProposal: SwapTransactionProposal) {
-            try {
-                swapRepository.submitDepositTransaction(
-                    txId = txId,
-                    transactionProposal = transactionProposal
-                )
-            } catch (e: Exception) {
-                Twig.error(e) { "Unable to submit deposit transaction" }
-            }
-        }
-
         result.txIds
             .filter { it.isNotEmpty() }
-            .forEach {
-                submit(it, transactionProposal)
+            .forEach { txId ->
+                runCatchingRecoverable {
+                    swapRepository.submitDepositTransaction(txId, transactionProposal)
+                }.onFailure {
+                    Twig.warn { "Unable to notify swap provider of deposit" }
+                }
                 yield()
             }
     }

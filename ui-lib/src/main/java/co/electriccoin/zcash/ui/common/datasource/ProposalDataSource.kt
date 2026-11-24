@@ -322,25 +322,20 @@ class ProposalDataSourceImpl(
                 "$logTag Created ${transactions.size} transaction(s); submitting to ${endpoints.size} endpoint(s)."
             }
 
-            val submitResults =
+            val result =
                 submitCreatedTransactions(
                     synchronizer = synchronizer,
                     transactions = transactions,
                     endpoints = endpoints,
                     logTag = logTag,
                     beforeFirstSubmission = beforeFirstSubmission
-                )
-
-            Twig.debug { "Internal transaction submit results: $submitResults" }
-
-            val result = submitResults.toSubmitResult()
+                ).toSubmitResult()
 
             if (synchronizer is SdkSynchronizer) {
                 synchronizer.refreshTransactions()
                 synchronizer.refreshAllBalances()
             }
 
-            Twig.debug { "Transaction submit result: $result" }
             result
         }
 

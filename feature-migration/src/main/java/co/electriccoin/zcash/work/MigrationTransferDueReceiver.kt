@@ -40,7 +40,8 @@ class MigrationTransferDueReceiver :
             val expectedRunAt = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
             val lastRunAt = MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId)
             if (migrationWorkerIsLate(System.currentTimeMillis(), expectedRunAt, lastRunAt)) {
-                val removalUnresolved = MigrationWorkerHeartbeat.removalPending(context, accountKeyId)
+                val removalUnresolved = MigrationAccountRetirement.blocks(accountKeyId) ||
+                    MigrationWorkerHeartbeat.removalPending(context, accountKeyId)
                 migrationLog("MigrationStepDueReceiver: missed worker run — posting migration fallback.")
                 migrationNotifier.notifyMigrationFallback(accountKeyId, removalUnresolved)
             }

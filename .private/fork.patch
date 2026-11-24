@@ -7175,7 +7175,7 @@ index 1886de6a8..91a85e381 100644
 @@ -61,0 +88 @@ class MigrationScheduler(
 +        return operation
 diff --git a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt
-index adcdb7013..e4f1feacc 100644
+index adcdb7013..cb0ef0ec1 100644
 --- a/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt
 +++ b/feature-migration/src/main/java/co/electriccoin/zcash/work/MigrationTransferDueReceiver.kt
 @@ -7,0 +8 @@ import co.electriccoin.zcash.ui.common.provider.MigrationNotifier
@@ -7187,7 +7187,7 @@ index adcdb7013..e4f1feacc 100644
 + * the network, wallet database or synchronizer.
 @@ -27,0 +29 @@ class MigrationTransferDueReceiver :
 +    private val resetProgress: ResetProgressStore by inject()
-@@ -36,11 +38,9 @@ class MigrationTransferDueReceiver :
+@@ -36,11 +38,10 @@ class MigrationTransferDueReceiver :
 -        val expectedRunAt = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
 -        val lastRunAt = MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId)
 -        if (expectedRunAt == null) {
@@ -7204,17 +7204,18 @@ index adcdb7013..e4f1feacc 100644
 +            val expectedRunAt = MigrationWorkerHeartbeat.nextWakeAt(context, accountKeyId)
 +            val lastRunAt = MigrationWorkerHeartbeat.lastRunAt(context, accountKeyId)
 +            if (migrationWorkerIsLate(System.currentTimeMillis(), expectedRunAt, lastRunAt)) {
-+                val removalUnresolved = MigrationWorkerHeartbeat.removalPending(context, accountKeyId)
++                val removalUnresolved = MigrationAccountRetirement.blocks(accountKeyId) ||
++                    MigrationWorkerHeartbeat.removalPending(context, accountKeyId)
 +                migrationLog("MigrationStepDueReceiver: missed worker run — posting migration fallback.")
 +                migrationNotifier.notifyMigrationFallback(accountKeyId, removalUnresolved)
 +            }
-@@ -48,5 +47,0 @@ class MigrationTransferDueReceiver :
+@@ -48,5 +48,0 @@ class MigrationTransferDueReceiver :
 -        migrationLog(
 -            "MigrationStepDueReceiver: worker MISSED its run (expected=$expectedRunAt, " +
 -                "lastRunAt=$lastRunAt) — raising the step-due fallback notification."
 -        )
 -        migrationNotifier.notifyMigrationStepDue(accountKeyId)
-@@ -55,8 +49,0 @@ class MigrationTransferDueReceiver :
+@@ -55,8 +50,0 @@ class MigrationTransferDueReceiver :
 -    private companion object {
 -        /**
 -         * A run that started slightly BEFORE the recorded expected time (WorkManager dispatching
@@ -7223,7 +7224,7 @@ index adcdb7013..e4f1feacc 100644
 -         */
 -        const val RUN_TOLERANCE_MILLIS = 30_000L
 -    }
-@@ -63,0 +51,7 @@ class MigrationTransferDueReceiver :
+@@ -63,0 +52,7 @@ class MigrationTransferDueReceiver :
 +
 +private const val EARLY_WORKER_TOLERANCE_MILLIS = 30_000L
 +
@@ -9987,10 +9988,10 @@ index 4a5eda3b1..9caeb9e10 100644
 +
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationTransferDueReceiverTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationTransferDueReceiverTest.kt
 new file mode 100644
-index 000000000..e0e709240
+index 000000000..6c8ec4f05
 --- /dev/null
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/work/MigrationTransferDueReceiverTest.kt
-@@ -0,0 +1,76 @@
+@@ -0,0 +1,84 @@
 +package co.electriccoin.zcash.work
 +
 +import android.content.Context
@@ -10014,8 +10015,9 @@ index 000000000..e0e709240
 +    fun overdueFallbackPromptsForStatusWhileRemovalIsUnresolved() {
 +        val owner = "fixture-owner"
 +        val overdue = System.currentTimeMillis() - 300_000L
++        var removalPending = true
 +        val preferences = mockk<SharedPreferences> {
-+            every { getBoolean("removal_pending_$owner", false) } returnsMany listOf(true, false)
++            every { getBoolean("removal_pending_$owner", false) } answers { removalPending }
 +            every { getLong("next_wake_at_$owner", -1L) } returns overdue
 +            every { getLong("last_run_at_$owner", -1L) } returns -1L
 +        }
@@ -10040,6 +10042,13 @@ index 000000000..e0e709240
 +            verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = true) }
 +            verify(exactly = 0) { notifier.notifyMigrationFallback(owner, removalUnresolved = false) }
 +
++            removalPending = false
++            MigrationAccountRetirement.begin(owner)
++            MigrationTransferDueReceiver().onReceive(context, intent)
++            verify(exactly = 2) { notifier.notifyMigrationFallback(owner, removalUnresolved = true) }
++            verify(exactly = 0) { notifier.notifyMigrationFallback(owner, removalUnresolved = false) }
++            MigrationAccountRetirement.restore(owner)
++
 +            pendingReset.value = true
 +            MigrationTransferDueReceiver().onReceive(context, intent)
 +            pendingReset.value = false
@@ -10048,7 +10057,7 @@ index 000000000..e0e709240
 +            MigrationAccountRetirement.begin(owner)
 +            MigrationAccountRetirement.markRemoved(owner)
 +            MigrationTransferDueReceiver().onReceive(context, intent)
-+            verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = true) }
++            verify(exactly = 2) { notifier.notifyMigrationFallback(owner, removalUnresolved = true) }
 +            verify(exactly = 1) { notifier.notifyMigrationFallback(owner, removalUnresolved = false) }
 +        } finally {
 +            MigrationAccountRetirement.restore(owner)
@@ -32898,7 +32907,7 @@ index a5bcffdcd..1060431d6 100644
 -const val AFFILIATE_FEE_BPS = 67
 -const val AFFILIATE_ADDRESS = "d78abd5477432c9d9c5e32c4a1a0056cd7b8be6580d3c49e1f97185b786592db"
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
-index bf147a8b5..148341540 100644
+index bf147a8b5..994239f67 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/ProposalDataSource.kt
 @@ -2,0 +3 @@ package co.electriccoin.zcash.ui.common.datasource
@@ -32992,31 +33001,42 @@ index bf147a8b5..148341540 100644
 +        submitTransactionInternal(MULTI_SUBMIT_TAG, beforeFirstSubmission) {
 @@ -263,0 +305 @@ class ProposalDataSourceImpl(
 +        beforeFirstSubmission: () -> Unit,
-@@ -288 +330,2 @@ class ProposalDataSourceImpl(
+@@ -283 +325 @@ class ProposalDataSourceImpl(
+-            val submitResults =
++            val result =
+@@ -288,6 +330,3 @@ class ProposalDataSourceImpl(
 -                    logTag = logTag
+-                )
+-
+-            Twig.debug { "Internal transaction submit results: $submitResults" }
+-
+-            val result = submitResults.toSubmitResult()
 +                    logTag = logTag,
 +                    beforeFirstSubmission = beforeFirstSubmission
-@@ -308 +351,2 @@ class ProposalDataSourceImpl(
++                ).toSubmitResult()
+@@ -300 +338,0 @@ class ProposalDataSourceImpl(
+-            Twig.debug { "Transaction submit result: $result" }
+@@ -308 +346,2 @@ class ProposalDataSourceImpl(
 -        logTag: String
 +        logTag: String,
 +        beforeFirstSubmission: () -> Unit,
-@@ -310,0 +355 @@ class ProposalDataSourceImpl(
+@@ -310,0 +350 @@ class ProposalDataSourceImpl(
 +            beforeFirstSubmission = beforeFirstSubmission,
-@@ -329 +374 @@ class ProposalDataSourceImpl(
+@@ -329 +369 @@ class ProposalDataSourceImpl(
 -        val currentEndpoint = persistableWalletProvider.requirePersistableWallet().endpoint
 +        val selection = checkNotNull(walletServerSelectionProvider.getServerSelection())
-@@ -332,2 +377,2 @@ class ProposalDataSourceImpl(
+@@ -332,2 +372,2 @@ class ProposalDataSourceImpl(
 -                isAutomaticPreference = isServerSelectionAutomaticProvider.get(),
 -                currentEndpoint = currentEndpoint,
 +                isAutomaticPreference = selection.isAutomatic,
 +                currentEndpoint = selection.endpoint,
-@@ -336 +381 @@ class ProposalDataSourceImpl(
+@@ -336 +376 @@ class ProposalDataSourceImpl(
 -        return if (isAutomatic) knownEndpoints else listOf(currentEndpoint)
 +        return if (isAutomatic) knownEndpoints else listOf(selection.endpoint)
-@@ -347,0 +393,2 @@ class ProposalDataSourceImpl(
+@@ -347,0 +388,2 @@ class ProposalDataSourceImpl(
 +        } catch (e: UnsupportedZip321PaymentCountException) {
 +            throw e
-@@ -403,8 +449,0 @@ internal fun List<TransactionSubmitResult>.toSubmitResult(): SubmitResult {
+@@ -403,8 +444,0 @@ internal fun List<TransactionSubmitResult>.toSubmitResult(): SubmitResult {
 -        firstNonGrpcFailure != null && successCount == 0 && failures.all { !it.grpcError } -> {
 -            SubmitResult.Failure(
 -                txIds = txIds,
@@ -33025,21 +33045,21 @@ index bf147a8b5..148341540 100644
 -            )
 -        }
 -
-@@ -464,0 +504 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
+@@ -464,0 +499 @@ sealed interface SwapTransactionProposal : SendTransactionProposal {
 +    val fundingAccount: WalletAccount
-@@ -481 +521,2 @@ data class RegularTransactionProposal(
+@@ -481 +516,2 @@ data class RegularTransactionProposal(
 -    override val proposal: Proposal
 +    override val proposal: Proposal,
 +    val isDonation: Boolean = false,
-@@ -488 +529,2 @@ data class Zip321TransactionProposal(
+@@ -488 +524,2 @@ data class Zip321TransactionProposal(
 -    override val proposal: Proposal
 +    override val proposal: Proposal,
 +    val binaryMemoByteCount: Int? = null,
-@@ -496,0 +539 @@ data class ExactInputSwapTransactionProposal(
+@@ -496,0 +534 @@ data class ExactInputSwapTransactionProposal(
 +    override val fundingAccount: WalletAccount,
-@@ -504,0 +548 @@ data class ExactOutputSwapTransactionProposal(
+@@ -504,0 +543 @@ data class ExactOutputSwapTransactionProposal(
 +    override val fundingAccount: WalletAccount,
-@@ -519 +562,0 @@ data class MigrationSweepTransactionProposal(
+@@ -519 +557,0 @@ data class MigrationSweepTransactionProposal(
 -    val amount: Zatoshi,
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/datasource/SwapDataSource.kt
 index 13e9d0788..d1112a657 100644
@@ -41906,7 +41926,7 @@ index 37853a3b4..454815018 100644
 @@ -60,0 +60 @@ class PrefillSendUseCase {
 +    }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt
-index db95c0420..1ca211548 100644
+index db95c0420..122551b42 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt
 +++ b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCase.kt
 @@ -6,0 +7,4 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus
@@ -42022,6 +42042,29 @@ index db95c0420..1ca211548 100644
 +            account = transactionProposal.fundingAccount,
 +            walletWriteToken = walletWriteToken,
 +        )) { "Unable to save swap tracking before funding" }
+@@ -48 +142,0 @@ class ProcessSwapTransactionUseCase(
+-    @Suppress("TooGenericExceptionCaught")
+@@ -50,11 +143,0 @@ class ProcessSwapTransactionUseCase(
+-        suspend fun submit(txId: String, transactionProposal: SwapTransactionProposal) {
+-            try {
+-                swapRepository.submitDepositTransaction(
+-                    txId = txId,
+-                    transactionProposal = transactionProposal
+-                )
+-            } catch (e: Exception) {
+-                Twig.error(e) { "Unable to submit deposit transaction" }
+-            }
+-        }
+-
+@@ -63,2 +146,6 @@ class ProcessSwapTransactionUseCase(
+-            .forEach {
+-                submit(it, transactionProposal)
++            .forEach { txId ->
++                runCatchingRecoverable {
++                    swapRepository.submitDepositTransaction(txId, transactionProposal)
++                }.onFailure {
++                    Twig.warn { "Unable to notify swap provider of deposit" }
++                }
 diff --git a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ReadClipboardTextUseCase.kt b/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ReadClipboardTextUseCase.kt
 index eb7d61b0d..9a718a545 100644
 --- a/ui-lib/src/main/java/co/electriccoin/zcash/ui/common/usecase/ReadClipboardTextUseCase.kt
@@ -64248,10 +64291,10 @@ index 000000000..de5d94cb7
 +}
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
 new file mode 100644
-index 000000000..0e58358e4
+index 000000000..826ab4150
 --- /dev/null
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/datasource/SwapBroadcastDeadlineTest.kt
-@@ -0,0 +1,231 @@
+@@ -0,0 +1,246 @@
 +package co.electriccoin.zcash.ui.common.datasource
 +
 +import cash.z.ecc.android.sdk.Synchronizer
@@ -64286,6 +64329,10 @@ index 000000000..0e58358e4
 +import kotlinx.coroutines.coroutineScope
 +import kotlinx.coroutines.runBlocking
 +import kotlinx.coroutines.withTimeout
++import org.junit.runner.RunWith
++import org.robolectric.RobolectricTestRunner
++import org.robolectric.annotation.Config
++import org.robolectric.shadows.ShadowLog
 +import java.math.BigDecimal
 +import kotlin.test.Test
 +import kotlin.test.assertFalse
@@ -64295,6 +64342,8 @@ index 000000000..0e58358e4
 +import kotlin.time.Instant
 +
 +/** Real repositories and shared submission pipeline; only SDK, storage and endpoint I/O are mocked. */
++@RunWith(RobolectricTestRunner::class)
++@Config(sdk = [34])
 +class SwapBroadcastDeadlineTest {
 +    @Test
 +    fun expiryDuringPreparationPreventsFirstSoftwareAndPcztBroadcast() = runBlocking {
@@ -64335,8 +64384,14 @@ index 000000000..0e58358e4
 +        for (hardware in listOf(false, true)) {
 +            val fixture = Fixture(hardware)
 +            fixture.prepare()
-+            assertIs<SubmitResult.Success>(fixture.whileSuspended {}.getOrThrow())
++            ShadowLog.clear()
++            val result = assertIs<SubmitResult.Success>(fixture.whileSuspended {}.getOrThrow())
 +            coVerify(exactly = 1) { fixture.broadcaster.submit(fixture.transactions[0], any()) }
++            val transactionId = result.txIds.single()
++            assertTrue(transactionId.isNotBlank())
++            val messages = ShadowLog.getLogs().map { it.msg }
++            assertTrue(messages.any { "submitting to 1 endpoint(s)" in it })
++            assertFalse(messages.any { transactionId in it })
 +        }
 +    }
 +
@@ -64345,11 +64400,14 @@ index 000000000..0e58358e4
 +        for (hardware in listOf(false, true)) {
 +            val fixture = Fixture(hardware, legs = 2)
 +            fixture.prepare()
++            val endpointDetail = "synthetic uncertain response"
 +            coEvery { fixture.broadcaster.submit(fixture.transactions[0], any()) } answers {
 +                fixture.expire()
-+                TransactionSubmitResult.Failure(fixture.transactions[0].txId, true, -1, "synthetic uncertain response")
++                TransactionSubmitResult.Failure(fixture.transactions[0].txId, true, -1, endpointDetail)
 +            }
++            ShadowLog.clear()
 +            assertIs<SubmitResult.GrpcFailure>(fixture.whileSuspended {}.getOrThrow())
++            assertFalse(ShadowLog.getLogs().any { endpointDetail in it.msg })
 +            for (transaction in fixture.transactions) {
 +                coVerify(exactly = 1) { fixture.broadcaster.submit(transaction, any()) }
 +            }
@@ -64368,7 +64426,7 @@ index 000000000..0e58358e4
 +        val metadata = mockk<MetadataRepository>(relaxed = true)
 +        val transactions = (1..legs).map {
 +            CreatedTransaction(
-+                FirstClassByteArray(byteArrayOf(it.toByte())), FirstClassByteArray(byteArrayOf(1, 2)), null
++                FirstClassByteArray(ByteArray(32) { _ -> it.toByte() }), FirstClassByteArray(byteArrayOf(1, 2)), null
 +            )
 +        }
 +        private val endpoint = LightWalletEndpoint("synthetic.invalid", 443, true)
@@ -72443,19 +72501,24 @@ index 5db80f520..0b203e637 100644
 +        assertFailsWith<IOException> { useCase.persistAutomatic() }
 +    }
 diff --git a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt
-index 16244cdf4..9165dcec7 100644
+index 16244cdf4..65cb5eb54 100644
 --- a/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt
 +++ b/ui-lib/src/test/java/co/electriccoin/zcash/ui/common/usecase/ProcessSwapTransactionUseCaseTest.kt
 @@ -11,0 +12 @@ import co.electriccoin.zcash.ui.common.model.SwapStatus
 +import co.electriccoin.zcash.ui.common.model.WalletAccount
 @@ -13,0 +15 @@ import co.electriccoin.zcash.ui.common.repository.SwapRepository
 +import co.electriccoin.zcash.ui.common.repository.TransactionSwapMetadata
-@@ -17,0 +20,2 @@ import io.mockk.mockk
+@@ -17,0 +20,3 @@ import io.mockk.mockk
++import kotlinx.coroutines.CancellationException
 +import kotlinx.coroutines.CompletableDeferred
 +import kotlinx.coroutines.async
-@@ -23,0 +28 @@ import kotlin.test.Test
+@@ -21,0 +27 @@ import org.robolectric.annotation.Config
++import org.robolectric.shadows.ShadowLog
+@@ -23,0 +30,3 @@ import kotlin.test.Test
++import kotlin.test.assertEquals
 +import kotlin.test.assertFailsWith
-@@ -38,0 +44,106 @@ class ProcessSwapTransactionUseCaseTest {
++import kotlin.test.assertFalse
+@@ -38,0 +48,106 @@ class ProcessSwapTransactionUseCaseTest {
 +    @Test
 +    fun existingTrackingIsPreservedWhenProcessingSubmission() = runTest {
 +        val fx = Fixtures()
@@ -72562,26 +72625,59 @@ index 16244cdf4..9165dcec7 100644
 +        }
 +    }
 +
-@@ -43 +154,2 @@ class ProcessSwapTransactionUseCaseTest {
+@@ -43 +158,2 @@ class ProcessSwapTransactionUseCaseTest {
 -            val proposal = swapProposal()
 +            val reviewedAccount = mockk<WalletAccount>()
 +            val proposal = swapProposal(reviewedAccount)
-@@ -46,0 +159 @@ class ProcessSwapTransactionUseCaseTest {
+@@ -46,0 +163 @@ class ProcessSwapTransactionUseCaseTest {
 +            coVerify(exactly = 1) { fx.metadataRepository.getSwapMetadata("deposit-address", reviewedAccount) }
-@@ -57 +170,2 @@ class ProcessSwapTransactionUseCaseTest {
+@@ -57 +174,2 @@ class ProcessSwapTransactionUseCaseTest {
 -                    status = SwapStatus.PENDING
 +                    status = SwapStatus.PENDING,
 +                    account = reviewedAccount,
-@@ -107 +221,2 @@ class ProcessSwapTransactionUseCaseTest {
+@@ -107 +225,2 @@ class ProcessSwapTransactionUseCaseTest {
 -                    any()
 +                    any(),
 +                    account = any(),
-@@ -133 +248 @@ class ProcessSwapTransactionUseCaseTest {
+@@ -117,0 +237 @@ class ProcessSwapTransactionUseCaseTest {
++            val providerDetail = "synthetic provider detail"
+@@ -120 +240 @@ class ProcessSwapTransactionUseCaseTest {
+-            } throws RuntimeException("boom")
++            } throws RuntimeException("Notification failed", IllegalStateException(providerDetail))
+@@ -122 +242 @@ class ProcessSwapTransactionUseCaseTest {
+-            // Must not throw — the failure is logged and the next deposit is still attempted.
++            ShadowLog.clear()
+@@ -124,0 +245,6 @@ class ProcessSwapTransactionUseCaseTest {
++            val logs = ShadowLog.getLogs()
++            assertEquals(1, logs.count { "Unable to notify swap provider of deposit" in it.msg })
++            for (entry in logs) {
++                assertFalse(providerDetail in entry.msg)
++                assertFalse(providerDetail in entry.throwable?.stackTraceToString().orEmpty())
++            }
+@@ -133 +259,19 @@ class ProcessSwapTransactionUseCaseTest {
 -    private suspend fun swapProposal(): SwapTransactionProposal {
++    @Test
++    fun cancellationStopsDepositNotificationsAndPreservesTracking() = runTest {
++        val fx = Fixtures()
++        val proposal = swapProposal()
++        coEvery { fx.swapRepository.submitDepositTransaction("tx1", proposal) } throws CancellationException()
++
++        assertFailsWith<CancellationException> {
++            fx.useCase(proposal, SubmitResult.Success(listOf("tx1", "tx2")))
++        }
++
++        coVerify(exactly = 1) {
++            fx.metadataRepository.markTxAsSwap(
++                any(), any(), any(), any(), any(), any(), any(), any(), any(), account = any(),
++            )
++        }
++        coVerify(exactly = 0) { fx.swapRepository.submitDepositTransaction("tx2", proposal) }
++    }
++
 +    private suspend fun swapProposal(reviewedAccount: WalletAccount = mockk()): SwapTransactionProposal {
-@@ -144,0 +260 @@ class ProcessSwapTransactionUseCaseTest {
+@@ -144,0 +289 @@ class ProcessSwapTransactionUseCaseTest {
 +            every { fundingAccount } returns reviewedAccount
-@@ -154,0 +271,9 @@ class ProcessSwapTransactionUseCaseTest {
+@@ -154,0 +300,9 @@ class ProcessSwapTransactionUseCaseTest {
 +
 +        init {
 +            coEvery { metadataRepository.getSwapMetadata(any(), any()) } returns null
