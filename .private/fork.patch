@@ -6260,7 +6260,7 @@ index 431d929ec..2253d6b45 100644
 +    }
 +
 diff --git a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/restart/MigrationRestartVMTest.kt b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/restart/MigrationRestartVMTest.kt
-index 92b55c664..9972c588f 100644
+index 92b55c664..86fb01fff 100644
 --- a/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/restart/MigrationRestartVMTest.kt
 +++ b/feature-migration/src/test/java/co/electriccoin/zcash/ui/screen/migration/restart/MigrationRestartVMTest.kt
 @@ -3,0 +4,6 @@ import cash.z.ecc.android.sdk.model.Zatoshi
@@ -6274,10 +6274,11 @@ index 92b55c664..9972c588f 100644
 +            val owner = account("00000000-0000-0000-0000-000000000001")
 @@ -56,0 +64 @@ class MigrationRestartVMTest {
 +                    getSelectedWalletAccount = mockk { coEvery { this@mockk() } returns owner },
-@@ -85 +93 @@ class MigrationRestartVMTest {
+@@ -85 +93,2 @@ class MigrationRestartVMTest {
 -            coVerify { restart.invoke() }
-+            coVerify { restart.invoke(owner.sdkAccount.accountUuid.toStorageKeyId()) }
-@@ -88,0 +97,25 @@ class MigrationRestartVMTest {
++            val accountKeyId = owner.sdkAccount.accountUuid.toStorageKeyId()
++            coVerify { restart.invoke(accountKeyId) }
+@@ -88,0 +98,25 @@ class MigrationRestartVMTest {
 +    @Test
 +    fun confirmationRejectsAccountChangeWithoutCancellingTheOtherPlan() = runTest {
 +        var selected = account("00000000-0000-0000-0000-000000000001")
@@ -6303,10 +6304,10 @@ index 92b55c664..9972c588f 100644
 +        verify(exactly = 0) { router.back() }
 +    }
 +
-@@ -110 +143 @@ class MigrationRestartVMTest {
+@@ -110 +144 @@ class MigrationRestartVMTest {
 -        return mockk { coEvery { this@mockk(null) } returns snapshot }
 +        return mockk { coEvery { this@mockk(any()) } returns snapshot }
-@@ -114 +147,5 @@ class MigrationRestartVMTest {
+@@ -114 +148,5 @@ class MigrationRestartVMTest {
 -        mockk { coEvery { this@mockk() } returns zatoshi }
 +        mockk { coEvery { this@mockk(any()) } returns zatoshi }
 +

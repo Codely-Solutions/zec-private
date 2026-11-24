@@ -90,7 +90,8 @@ class MigrationRestartVMTest {
             // Confirm restart runs the use case and pops back.
             dialog.primaryAction.onClick()
             advanceUntilIdle()
-            coVerify { restart.invoke(owner.sdkAccount.accountUuid.toStorageKeyId()) }
+            val accountKeyId = owner.sdkAccount.accountUuid.toStorageKeyId()
+            coVerify { restart.invoke(accountKeyId) }
             verify { router.back() }
         }
 
